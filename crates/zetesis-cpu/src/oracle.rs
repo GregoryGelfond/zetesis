@@ -1,10 +1,9 @@
 //! Synchronous scalar delta rounds and complete ordered source traversal.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use zetesis_core::{
-    Atom, AtomPattern, Filter, Model, ModelAtoms, Predicate, Program, Seed, SeedView, Template,
-    Term, Value,
+    Atom, AtomPattern, Filter, Model, ModelAtoms, Program, Seed, SeedView, Template, Term, Value,
 };
 
 use crate::{Control, Stop};
@@ -13,7 +12,7 @@ mod window;
 mod relations;
 mod prepared;
 pub use prepared::{ClosureWorkspace, PreparationLimits, PreparationStatistics, PreparedQueries};
-use relations::{Catalogs, Relational, RowSet};
+use relations::{Catalogs, Relational, Relations, RowSet, Rows, Slot};
 pub(crate) mod restrictions;
 pub mod source;
 pub(crate) mod worlds;
@@ -220,11 +219,6 @@ impl Work<'_> {
         Ok(())
     }
 }
-
-// The closure's Atom order groups signatures, then orders each relation by the
-// tuple's Value storage order. Window lookup relies on this construction order;
-// ASP term comparison is a different order and must not be used here.
-type Relations<'a> = BTreeMap<&'a Predicate, Vec<&'a Atom>>;
 
 /// Compute the exact least positive closure selected by a sparse frozen seed.
 /// Bootstrap checks every template against empty truth, including zero-positive
@@ -548,8 +542,11 @@ fn visit_round<'source>(
     Ok(result)
 }
 
-// Establish closure ∩ gate_carrier = seed in both directions. Continue charging
-// both complete scans after a mismatch; rejection does not bypass work limits.
+// Establish closure ∩ gate_carrier = seed in both directions by one merge:
+// the closure's rows of each gate predicate, a contiguous range of the model,
+// walked against the seed's atoms, both in canonical order. Charges one unit
+// per gate predicate, per closure gate row and per seed atom left unmatched,
+// and keeps charging after a mismatch; rejection does not bypass work limits.
 // Positive-only atoms do not belong to this comparison's projected carrier.
 fn gate_agreement(
     program: &Program,
@@ -558,17 +555,28 @@ fn gate_agreement(
     work: &mut Work<'_>,
 ) -> Result<bool, Stop> {
     let mut agreement = true;
-    for atom in closure {
+    let mut seed = seed.atoms().peekable();
+    for predicate in program.gate_predicates() {
         work.tick()?;
-        if program.contains_gate_atom(atom) && !seed.contains(atom) {
-            agreement = false;
+        for atom in closure.of_predicate(predicate) {
+            work.tick()?;
+            while seed.peek().is_some_and(|pending| *pending < atom) {
+                // A seed atom the closure never derived.
+                work.tick()?;
+                seed.next();
+                agreement = false;
+            }
+            if seed.peek() == Some(&atom) {
+                seed.next();
+            } else {
+                // A derived gate atom the seed does not hold.
+                agreement = false;
+            }
         }
     }
-    for atom in seed.atoms() {
+    for _ in seed {
         work.tick()?;
-        if !closure.contains(atom) {
-            agreement = false;
-        }
+        agreement = false;
     }
     Ok(agreement)
 }
@@ -640,9 +648,11 @@ fn visit_with<'source, E: From<Stop>>(
     // None means this depth has not yet been opened for the current parent
     // assignment. A retained range advances in the original relation order.
     let cursors = &mut buffers.cursors[..count];
+    let slots = &mut buffers.slots[..count];
     let undo = &mut buffers.undo[..count];
     work.charge(count)?;
     cursors.fill(None);
+    slots.fill(Slot::Unresolved);
     for row in undo.iter_mut() {
         work.tick()?;
         row.clear();
@@ -662,7 +672,18 @@ fn visit_with<'source, E: From<Stop>>(
         }
         let occurrence = selection.occurrence(depth);
         let pattern = &template.positive()[occurrence];
-        let tuples = relations.selected(pattern.predicate(), selection.rows(occurrence))?;
+        // The relation is fixed for the depth: resolve it on first entry and
+        // index it on every later probe.
+        if slots[depth] == Slot::Unresolved {
+            work.tick()?;
+            slots[depth] = relations
+                .resolve(pattern.predicate())
+                .map_or(Slot::Absent, Slot::At);
+        }
+        let tuples = match slots[depth] {
+            Slot::At(handle) => relations.rows_at(handle, selection.rows(occurrence))?,
+            Slot::Absent | Slot::Unresolved => Rows::Borrowed(&[]),
+        };
         let cursor = &mut cursors[depth];
         let window = match cursor {
             Some(window) => window,

@@ -208,3 +208,41 @@ fn retained_bytes_include_the_whole_catalog_record() {
     // Selected-position record: length8+one position8.
     assert_eq!(model.retained_payload_bytes(), Some(8 + 18 + 38 + 16));
 }
+
+#[test]
+fn ordered_atoms_are_adopted_as_the_same_model_without_sorting() {
+    let mut atoms = fixture();
+    atoms.sort();
+    atoms.dedup();
+    let adopted = Model::from_ordered(atoms.clone());
+    assert_eq!(adopted, Model::new(atoms.clone()));
+    assert_eq!(adopted.atoms().iter().cloned().collect::<Vec<_>>(), atoms);
+}
+
+#[test]
+#[cfg(debug_assertions)]
+#[should_panic(expected = "strictly increasing")]
+fn adopting_unordered_atoms_is_a_precondition_violation() {
+    let mut atoms = fixture();
+    atoms.sort();
+    atoms.reverse();
+    let _ = Model::from_ordered(atoms);
+}
+
+#[test]
+fn a_predicate_sub_view_is_the_contiguous_range_of_its_atoms() {
+    let model = Model::new(fixture());
+    for sign in [Sign::Positive, Sign::Negative] {
+        let predicate = Predicate::with_sign("p", 1, sign).unwrap();
+        let range = model.atoms().of_predicate(&predicate);
+        let expected: Vec<_> = model
+            .atoms()
+            .iter()
+            .filter(|atom| atom.predicate() == &predicate)
+            .collect();
+        assert_eq!(range.iter().collect::<Vec<_>>(), expected);
+        assert_eq!(range.len(), expected.len());
+    }
+    let absent = Predicate::with_sign("q", 1, Sign::Positive).unwrap();
+    assert!(model.atoms().of_predicate(&absent).is_empty());
+}

@@ -6,6 +6,14 @@ use crate::ordered_index::position;
 
 use super::{Catalog, CatalogFailure, Failure, Limits, Storage, Work};
 
+/// The complete canonical order of a prepared extent, with the merge's receipt.
+pub struct Canonical {
+    /// Every row ID once, in canonical order.
+    pub ids: Vec<usize>,
+    /// Capacity and charged work of the merge that produced it.
+    pub storage: Storage,
+}
+
 /// The prepared canonical order of one extent as sorted runs of row IDs.
 ///
 /// The runs are the levels, each in canonical order and each less than half
@@ -130,7 +138,7 @@ impl Catalog {
     /// # Errors
     /// Refuses an unprepared extent as [`Failure::Order`], or work and bytes
     /// above `limits`.
-    pub fn canonical(&self, limits: Limits) -> Result<Vec<usize>, CatalogFailure> {
+    pub fn canonical(&self, limits: Limits) -> Result<Canonical, CatalogFailure> {
         let mut work = self.work(limits)?;
         let merge = (|| {
             if self.prepared != self.atoms.len() {
@@ -165,7 +173,13 @@ impl Catalog {
             }
             Ok(merged)
         })();
-        merge.map_err(|error| self.failed(error, &work))
+        match merge {
+            Ok(ids) => Ok(Canonical {
+                ids,
+                storage: self.receipt(&work),
+            }),
+            Err(error) => Err(self.failed(error, &work)),
+        }
     }
 
     /// Build the first run by an in-order traversal of the row index.

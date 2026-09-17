@@ -4,10 +4,7 @@
 //! and after each whole catalog operation, rather than within its comparisons,
 //! reservations and index planning. A stopped operation never returns a closure.
 
-use std::{
-    collections::{BTreeMap, BTreeSet, btree_map::Entry},
-    mem::size_of,
-};
+use std::{collections::BTreeSet, mem::size_of};
 
 mod partition;
 use partition::Partition;
@@ -20,7 +17,7 @@ use zetesis_core::{
     relation::{Catalog, CatalogFailure, Failure, Insertion, Limits, Resource, Runs, Storage},
 };
 
-use super::{Relations, Work};
+use super::Work;
 use crate::Stop;
 
 /// A view is one or more runs, each in complete tuple storage order. A row is
@@ -87,33 +84,99 @@ pub(super) enum RowSet {
     New,
 }
 
+/// A source of rows per predicate. A join resolves a predicate to a handle
+/// once, when it enters a depth, and reads rows by handle on every probe
+/// after that; the handle is valid until the source gains a relation, which
+/// never happens inside one round.
 pub(super) trait Relational {
-    fn rows(&self, predicate: &Predicate) -> Rows<'_>;
+    /// The handle of the predicate's relation, or `None` when it has no rows.
+    fn resolve(&self, predicate: &Predicate) -> Option<usize>;
 
+    /// The rows of a resolved relation in the requested set.
+    fn rows_at(&self, handle: usize, set: RowSet) -> Result<Rows<'_>, Stop>;
+
+    #[cfg(test)]
+    fn rows(&self, predicate: &Predicate) -> Rows<'_> {
+        self.resolve(predicate)
+            .and_then(|handle| self.rows_at(handle, RowSet::Current).ok())
+            .unwrap_or(Rows::Borrowed(&[]))
+    }
+
+    #[cfg(test)]
     fn selected(&self, predicate: &Predicate, set: RowSet) -> Result<Rows<'_>, Stop> {
-        if set == RowSet::Current {
-            Ok(self.rows(predicate))
-        } else {
-            Err(Stop::InvalidProgram)
+        match self.resolve(predicate) {
+            Some(handle) => self.rows_at(handle, set),
+            None => Ok(Rows::Borrowed(&[])),
         }
     }
 }
 
-struct Relation {
+/// A handle resolved for one join depth.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Slot {
+    /// The depth has not been entered in this visit.
+    Unresolved,
+    /// The source has no relation for the depth's predicate.
+    Absent,
+    /// The relation's handle in the source.
+    At(usize),
+}
+
+pub(super) struct Relation {
     catalog: Catalog,
     partition: Partition,
 }
 
+/// Borrowed rows grouped by predicate, in canonical atom order: the groups are
+/// in predicate order and each group's rows in storage order, as a model's
+/// atoms arrive. One run per predicate.
+pub(super) struct Relations<'a>(Vec<(&'a Predicate, Vec<&'a Atom>)>);
+
+impl<'a> Relations<'a> {
+    pub(super) const fn new() -> Self {
+        Self(Vec::new())
+    }
+
+    /// Append the next atom of a canonically ordered sequence.
+    pub(super) fn push(&mut self, atom: &'a Atom) {
+        match self.0.last_mut() {
+            Some((predicate, rows)) if *predicate == atom.predicate() => rows.push(atom),
+            _ => self.0.push((atom.predicate(), vec![atom])),
+        }
+    }
+}
+
+impl<'a, const N: usize> From<[(&'a Predicate, Vec<&'a Atom>); N]> for Relations<'a> {
+    fn from(groups: [(&'a Predicate, Vec<&'a Atom>); N]) -> Self {
+        let mut groups = groups.to_vec();
+        groups.sort_by(|left, right| left.0.cmp(right.0));
+        Self(groups)
+    }
+}
+
 impl Relational for Relations<'_> {
-    fn rows(&self, predicate: &Predicate) -> Rows<'_> {
-        Rows::Borrowed(self.get(predicate).map_or(&[], Vec::as_slice))
+    fn resolve(&self, predicate: &Predicate) -> Option<usize> {
+        self.0
+            .binary_search_by(|(candidate, _)| (*candidate).cmp(predicate))
+            .ok()
+    }
+
+    fn rows_at(&self, handle: usize, set: RowSet) -> Result<Rows<'_>, Stop> {
+        if set != RowSet::Current {
+            return Err(Stop::InvalidProgram);
+        }
+        Ok(Rows::Borrowed(
+            self.0.get(handle).map_or(&[], |(_, rows)| rows),
+        ))
     }
 }
 
 /// The scalar closure owns each atom once until final interpretation assembly.
 /// Views borrow the retained row index; rounds do not rebuild tuple snapshots.
+/// Relations are kept in predicate order, so the final model is their
+/// concatenation and a handle is a position in this vector.
 pub(super) struct Catalogs {
-    relations: BTreeMap<Predicate, Relation>,
+    relations: Vec<Relation>,
     atoms: usize,
     bytes: u128,
     overhead: u128,
@@ -122,7 +185,7 @@ pub(super) struct Catalogs {
 impl Default for Catalogs {
     fn default() -> Self {
         Self {
-            relations: BTreeMap::new(),
+            relations: Vec::new(),
             atoms: 0,
             bytes: (size_of::<Self>() + size_of::<BTreeSet<Atom>>()) as u128,
             overhead: 0,
@@ -131,28 +194,13 @@ impl Default for Catalogs {
 }
 
 impl Relational for Catalogs {
-    fn rows(&self, predicate: &Predicate) -> Rows<'_> {
-        self.relations
-            .get(predicate)
-            .map_or(Rows::Borrowed(&[]), |relation| {
-                let runs = relation
-                    .catalog
-                    .ordered()
-                    .expect("round prepared its published extent");
-                Rows::Runs {
-                    atoms: relation.catalog.atoms(),
-                    levels: runs.levels(),
-                    tail: runs.tail(),
-                }
-            })
+    fn resolve(&self, predicate: &Predicate) -> Option<usize> {
+        self.find(predicate).ok()
     }
 
-    fn selected(&self, predicate: &Predicate, set: RowSet) -> Result<Rows<'_>, Stop> {
-        self.relations
-            .get(predicate)
-            .map_or(Ok(Rows::Borrowed(&[])), |relation| {
-                relation.partition.rows(&relation.catalog, set)
-            })
+    fn rows_at(&self, handle: usize, set: RowSet) -> Result<Rows<'_>, Stop> {
+        let relation = self.relations.get(handle).ok_or(Stop::InvalidProgram)?;
+        relation.partition.rows(&relation.catalog, set)
     }
 }
 
@@ -161,10 +209,21 @@ impl Catalogs {
         self.atoms
     }
 
+    #[cfg(test)]
+    pub(super) fn relation(&self, predicate: &Predicate) -> &Relation {
+        &self.relations[self.find(predicate).expect("relation exists")]
+    }
+
+    /// The relation's position, or where one for the predicate would go.
+    fn find(&self, predicate: &Predicate) -> Result<usize, usize> {
+        self.relations
+            .binary_search_by(|relation| relation.catalog.predicate().cmp(predicate))
+    }
+
     pub(super) fn prepare(&mut self, work: &mut Work<'_>) -> Result<(), Stop> {
         storage::admit(work, self.bytes)?;
         storage::record(work, self.bytes)?;
-        for relation in self.relations.values_mut() {
+        for relation in &mut self.relations {
             let catalog = &mut relation.catalog;
             work.control.poll()?;
             let old = catalog.retained_bytes() as u128;
@@ -183,7 +242,7 @@ impl Catalogs {
 
     pub(super) fn prepare_delta(&mut self, work: &mut Work<'_>) -> Result<(), Stop> {
         self.prepare(work)?;
-        for relation in self.relations.values() {
+        for relation in &self.relations {
             relation.partition.prepare(&relation.catalog, work)?;
         }
         Ok(())
@@ -192,7 +251,7 @@ impl Catalogs {
     /// Advance old truth only after every source partition has completed, and
     /// before appending the new heads. No borrowed round view is still live.
     pub(super) fn advance(&mut self, work: &mut Work<'_>) -> Result<(), Stop> {
-        for relation in self.relations.values_mut() {
+        for relation in &mut self.relations {
             relation
                 .partition
                 .advance(relation.catalog.atoms().len(), work)?;
@@ -205,16 +264,16 @@ impl Catalogs {
     pub(super) fn predicates_with_new(&self) -> impl Iterator<Item = &Predicate> {
         self.relations
             .iter()
-            .filter(|(_, relation)| relation.partition.has_new(relation.catalog.atoms().len()))
-            .map(|(predicate, _)| predicate)
+            .filter(|relation| relation.partition.has_new(relation.catalog.atoms().len()))
+            .map(|relation| relation.catalog.predicate())
     }
 
     pub(super) fn has_new(&self, predicate: &Predicate, work: &mut Work<'_>) -> Result<bool, Stop> {
         work.tick()?;
-        Ok(self
-            .relations
-            .get(predicate)
-            .is_some_and(|relation| relation.partition.has_new(relation.catalog.atoms().len())))
+        Ok(self.find(predicate).ok().is_some_and(|handle| {
+            let relation = &self.relations[handle];
+            relation.partition.has_new(relation.catalog.atoms().len())
+        }))
     }
 
     pub(super) fn contains(
@@ -224,10 +283,10 @@ impl Catalogs {
         work: &mut Work<'_>,
     ) -> Result<bool, Stop> {
         work.control.poll()?;
-        let Some(relation) = self.relations.get(key.predicate()) else {
+        let Ok(handle) = self.find(key.predicate()) else {
             return Ok(false);
         };
-        let catalog = &relation.catalog;
+        let catalog = &self.relations[handle].catalog;
         let other = self
             .bytes
             .checked_sub(catalog.retained_bytes() as u128)
@@ -268,14 +327,14 @@ impl Catalogs {
             work,
             self.bytes.checked_add(held).ok_or(Stop::StorageLimit)?,
         )?;
-        if !self.relations.contains_key(atom.predicate()) {
-            self.create(atom.predicate(), held, work)?;
-        }
-        let catalog = &mut self
-            .relations
-            .get_mut(atom.predicate())
-            .ok_or(Stop::InvalidProgram)?
-            .catalog;
+        let handle = match self.find(atom.predicate()) {
+            Ok(handle) => handle,
+            Err(position) => {
+                self.create(position, atom.predicate(), held, work)?;
+                position
+            }
+        };
+        let catalog = &mut self.relations[handle].catalog;
         let old = catalog.retained_bytes() as u128;
         let other = self
             .bytes
@@ -306,8 +365,11 @@ impl Catalogs {
         self.publish(insertion, work)
     }
 
+    /// Create the relation at its sorted position. The catalog's signature is
+    /// the relation's only copy of the predicate.
     fn create(
         &mut self,
+        position: usize,
         predicate: &Predicate,
         held: u128,
         work: &mut Work<'_>,
@@ -315,7 +377,6 @@ impl Catalogs {
         let base = self
             .bytes
             .checked_add(held)
-            .and_then(|bytes| bytes.checked_add(size_of::<Predicate>() as u128))
             .and_then(|bytes| {
                 bytes.checked_add((size_of::<Relation>() - size_of::<Catalog>()) as u128)
             })
@@ -323,37 +384,28 @@ impl Catalogs {
         let headers = base
             .checked_add(size_of::<Catalog>() as u128)
             .ok_or(Stop::StorageLimit)?;
-        let key = storage::predicate(predicate, headers, work)?;
-        let key_bytes = key.payload_capacity_bytes() as u128;
-        let signature = storage::predicate(
-            predicate,
-            headers.checked_add(key_bytes).ok_or(Stop::StorageLimit)?,
-            work,
-        )?;
-        let names = key_bytes
-            .checked_add(signature.payload_capacity_bytes() as u128)
-            .ok_or(Stop::StorageLimit)?;
+        let signature = storage::predicate(predicate, headers, work)?;
+        let names = signature.payload_capacity_bytes() as u128;
         let other = base.checked_add(names).ok_or(Stop::StorageLimit)?;
         let catalog = completed(Catalog::new(signature, limits(work, other)?), other, work)?;
         account_storage(work, other, catalog.construction())?;
         self.bytes = self
             .bytes
-            .checked_add(size_of::<Predicate>() as u128)
-            .and_then(|bytes| {
-                bytes.checked_add((size_of::<Relation>() - size_of::<Catalog>()) as u128)
-            })
+            .checked_add((size_of::<Relation>() - size_of::<Catalog>()) as u128)
             .and_then(|bytes| bytes.checked_add(names))
             .and_then(|bytes| bytes.checked_add(catalog.retained_bytes() as u128))
             .ok_or(Stop::StorageLimit)?;
-        match self.relations.entry(key) {
-            Entry::Vacant(entry) => {
-                entry.insert(Relation {
-                    catalog,
-                    partition: Partition::default(),
-                });
-            }
-            Entry::Occupied(_) => unreachable!("exclusive absent predicate remains absent"),
-        }
+        self.relations
+            .try_reserve(1)
+            .map_err(|_| Stop::Allocation)?;
+        work.charge(self.relations.len() - position)?;
+        self.relations.insert(
+            position,
+            Relation {
+                catalog,
+                partition: Partition::default(),
+            },
+        );
         Ok(())
     }
 
@@ -390,7 +442,9 @@ impl Catalogs {
         atoms
             .try_reserve_exact(self.atoms)
             .map_err(|_| Stop::Allocation)?;
-        for relation in self.relations.values_mut() {
+        // Relations are in predicate order and each catalog knows its rows'
+        // canonical order, so the model is their concatenation: no sort.
+        for relation in &mut self.relations {
             relation.partition.reset(work)?;
             let catalog = &mut relation.catalog;
             work.tick()?;
@@ -402,6 +456,9 @@ impl Catalogs {
             }
             let old = catalog.retained_bytes() as u128;
             let other = self.bytes.checked_sub(old).ok_or(Stop::InvalidProgram)?;
+            let canonical = completed(catalog.canonical(limits(work, other)?), other, work)?;
+            account_storage(work, other, canonical.storage)?;
+            let order = canonical.ids;
             let result = catalog.take_atoms(limits(work, other)?);
             self.bytes = other
                 .checked_add(catalog.retained_bytes() as u128)
@@ -412,10 +469,27 @@ impl Catalogs {
                 .checked_sub(payload)
                 .ok_or(Stop::InvalidProgram)?;
             account_storage(work, other, extracted.storage)?;
-            atoms.extend(extracted.atoms);
+            // Move each atom to its canonical position; the slots and the
+            // order are transient and released with this loop iteration.
+            storage::admit(
+                work,
+                self.bytes
+                    .checked_add((extracted.atoms.len() * size_of::<Atom>()) as u128)
+                    .ok_or(Stop::StorageLimit)?,
+            )?;
+            work.charge(order.len())?;
+            let mut slots: Vec<Option<Atom>> = extracted.atoms.into_iter().map(Some).collect();
+            for id in order {
+                atoms.push(
+                    slots
+                        .get_mut(id)
+                        .and_then(Option::take)
+                        .ok_or(Stop::InvalidProgram)?,
+                );
+            }
         }
         self.atoms = 0;
-        Ok(Model::new(atoms))
+        Ok(Model::from_ordered(atoms))
     }
 }
 
@@ -540,7 +614,7 @@ mod tests {
             .insert(atom(Value::String("payload".into())), 0, &mut work)
             .unwrap();
         catalogs.prepare(&mut work).unwrap();
-        let original = &catalogs.relations[&predicate].catalog.atoms()[0];
+        let original = &catalogs.relation(&predicate).catalog.atoms()[0];
         let row = catalogs.rows(&predicate).get(0, 0).unwrap();
         assert!(std::ptr::eq(original, row));
     }
@@ -556,7 +630,7 @@ mod tests {
         let mut catalog = Catalog::new(predicate.clone(), limits(&work, 0).unwrap()).unwrap();
         let receipt = catalog.insert(tuple, limits(&work, 0).unwrap()).unwrap();
         catalogs.relations.insert(
-            predicate,
+            0,
             Relation {
                 catalog,
                 partition: Partition::default(),
@@ -568,7 +642,7 @@ mod tests {
             catalogs.len(),
             catalogs
                 .relations
-                .values()
+                .iter()
                 .map(|relation| relation.catalog.atoms().len())
                 .sum::<usize>()
         );

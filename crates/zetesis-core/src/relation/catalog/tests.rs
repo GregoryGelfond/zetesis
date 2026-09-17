@@ -18,7 +18,7 @@ fn owner() -> Catalog {
 
 /// Row IDs of a prepared catalog in canonical order, merged from its runs.
 fn ids(catalog: &Catalog) -> Vec<usize> {
-    catalog.canonical(Limits::default()).expect("prepared")
+    catalog.canonical(Limits::default()).expect("prepared").ids
 }
 
 #[test]

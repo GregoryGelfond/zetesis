@@ -113,6 +113,10 @@ For `N` catalog atoms and `M` supplied selected positions:
 Typed comparisons can inspect predicate names, tuples and structured values.
 `Model::new` consumes an atom iterator, sorts and deduplicates its values, and
 selects its resulting catalog. It remains an infallible allocation door.
+`Model::from_ordered` adopts atoms a producer already holds in canonical order,
+such as the closure's relations merged in predicate order, without sorting; a
+debug build checks the order. `ModelAtoms::of_predicate` borrows one
+predicate's atoms as the contiguous range they occupy.
 `Model::from_positions` returns a typed invalid-position or selection-reservation
 error without a partial model. Arc envelope allocations remain infallible.
 Neither constructor implicitly grounds or solves a program.

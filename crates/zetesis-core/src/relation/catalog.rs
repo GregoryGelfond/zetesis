@@ -9,7 +9,7 @@ use crate::{
 
 mod plan;
 mod ordered;
-pub use ordered::Runs;
+pub use ordered::{Canonical, Runs};
 
 use super::{
     Cell, DictionaryIndex, Failure, Layout, LayoutOwner, Limits, Relation, Resource, Source,

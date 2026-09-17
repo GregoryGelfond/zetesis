@@ -80,12 +80,13 @@ fn gate_agreement_requires_every_derived_gate_atom() {
     let seed = Seed::new(&program, []).unwrap();
     let closure = Model::new([atom("a")]);
     let control = Control::default();
+    // Two gate predicates and one derived gate row: three units.
     assert!(
         !gate_agreement(
             &program,
             seed.view(),
             closure.atoms(),
-            &mut work(&control, 1)
+            &mut work(&control, 3)
         )
         .unwrap()
     );
@@ -96,12 +97,13 @@ fn gate_agreement_requires_every_seed_atom() {
     let program = choices();
     let seed = Seed::new(&program, [atom("a")]).unwrap();
     let control = Control::default();
+    // Two gate predicates and one seed atom left unmatched: three units.
     assert!(
         !gate_agreement(
             &program,
             seed.view(),
             Model::default().atoms(),
-            &mut work(&control, 1)
+            &mut work(&control, 3)
         )
         .unwrap()
     );
@@ -149,9 +151,11 @@ fn gate_mismatch_does_not_truncate_charged_scans() {
         ),
         Err(Stop::WorkLimit)
     );
-    let mut exact = work(&control, 2);
+    // One unit per gate predicate (a, b), one for the closure's row b, and
+    // one for the seed's a, which the walk passes without a match.
+    let mut exact = work(&control, 4);
     assert!(!gate_agreement(&program, seed.view(), closure.atoms(), &mut exact).unwrap());
-    assert_eq!(exact.statistics.work, 2);
+    assert_eq!(exact.statistics.work, 4);
 }
 
 fn chain(constraint: Template) -> Program {

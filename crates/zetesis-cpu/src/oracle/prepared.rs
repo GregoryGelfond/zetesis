@@ -337,6 +337,8 @@ impl ClosureWorkspace {
 #[derive(Default)]
 pub(super) struct Buffers {
     pub(super) cursors: Vec<Option<super::window::Window>>,
+    /// The relation handle of each depth, resolved once per visit.
+    pub(super) slots: Vec<super::relations::Slot>,
     pub(super) undo: Vec<Vec<usize>>,
     /// The templates one incremental round visits, in template order.
     pub(super) rules: Vec<usize>,
@@ -346,6 +348,7 @@ impl Buffers {
     pub(super) fn local(depth: usize) -> Self {
         Self {
             cursors: vec![None; depth],
+            slots: vec![super::relations::Slot::Unresolved; depth],
             undo: vec![Vec::new(); depth],
             rules: Vec::new(),
         }
@@ -354,6 +357,7 @@ impl Buffers {
     fn bytes(&self) -> Result<u128, Stop> {
         let headers = self.cursors.capacity() as u128
             * size_of::<Option<super::window::Window>>() as u128
+            + self.slots.capacity() as u128 * size_of::<super::relations::Slot>() as u128
             + self.undo.capacity() as u128 * size_of::<Vec<usize>>() as u128
             + self.rules.capacity() as u128 * size_of::<usize>() as u128;
         self.undo.iter().try_fold(headers, |bytes, row| {
@@ -374,10 +378,13 @@ impl Buffers {
         storage::admit(work, live)?;
         storage::record(work, live)?;
         reserve(&mut self.cursors, dimensions.depth, &mut live, work)?;
+        reserve(&mut self.slots, dimensions.depth, &mut live, work)?;
         reserve(&mut self.undo, dimensions.depth, &mut live, work)?;
         reserve(&mut self.rules, dimensions.rules, &mut live, work)?;
         work.charge(dimensions.depth.saturating_sub(self.cursors.len()))?;
         self.cursors.resize_with(dimensions.depth, || None);
+        self.slots
+            .resize(dimensions.depth, super::relations::Slot::Unresolved);
         work.charge(dimensions.depth.saturating_sub(self.undo.len()))?;
         self.undo.resize_with(dimensions.depth, Vec::new);
         for row in &mut self.undo {

@@ -147,7 +147,7 @@ fn compile(
     let mut relations = Relations::new();
     for atom in facts.atoms() {
         work.tick()?;
-        relations.entry(atom.predicate()).or_default().push(atom);
+        relations.push(atom);
     }
     let mut forbidden = Vec::new();
     let mut peak_bytes = limits.max_bytes - remaining_bytes;

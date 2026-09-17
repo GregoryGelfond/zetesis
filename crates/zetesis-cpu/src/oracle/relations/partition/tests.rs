@@ -40,7 +40,7 @@ fn mixed(work: &mut Work<'_>) -> Catalogs {
 /// one sequence.
 fn assert_rows(catalogs: &Catalogs, set: RowSet, ids: &[usize], values: &[i32]) {
     let predicate = Predicate::new("p", 1).unwrap();
-    let source = catalogs.relations[&predicate].catalog.atoms();
+    let source = catalogs.relation(&predicate).catalog.atoms();
     let rows = catalogs.selected(&predicate, set).unwrap();
     let mut seen: Vec<usize> = rows
         .all()
@@ -82,7 +82,7 @@ fn age_tracks_insertion_identity_when_canonical_ranks_move() {
     // The views are the catalog's own runs: the partition owns no buffer.
     assert_eq!(catalogs.owned_bytes(), before);
     let predicate = Predicate::new("p", 1).unwrap();
-    assert_eq!(catalogs.relations[&predicate].partition.old_end, 2);
+    assert_eq!(catalogs.relation(&predicate).partition.old_end, 2);
     let charged = work.statistics.catalog_work;
     catalogs.prepare_delta(&mut work).unwrap();
     assert_eq!(work.statistics.catalog_work - charged, 1); // One cutoff check.
@@ -165,7 +165,7 @@ fn extraction_retires_delta_identity_but_retains_empty_capacity() {
     let predicate = Predicate::new("p", 1).unwrap();
     let model = catalogs.take_model(&mut work).unwrap();
     assert_eq!(model, Model::new([1, 2, 3, 4].map(atom)));
-    assert_eq!(catalogs.relations[&predicate].partition.old_end, 0);
+    assert_eq!(catalogs.relation(&predicate).partition.old_end, 0);
     catalogs.insert(atom(9), 0, &mut work).unwrap();
     catalogs.prepare_delta(&mut work).unwrap();
     assert_rows(&catalogs, RowSet::Old, &[], &[]);
@@ -234,7 +234,7 @@ fn signed_typed_rows_keep_their_own_partition() {
                 assert_eq!(actual.values(), &[values[id].clone()]);
                 assert!(std::ptr::eq(
                     actual,
-                    &raw const catalogs.relations[predicate].catalog.atoms()[id]
+                    &raw const catalogs.relation(predicate).catalog.atoms()[id]
                 ));
             }
         }

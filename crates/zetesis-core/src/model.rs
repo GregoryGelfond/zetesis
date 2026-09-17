@@ -2,7 +2,7 @@
 
 use std::{cmp::Ordering, fmt, iter::FusedIterator, slice, sync::Arc};
 
-use crate::{Atom, Value};
+use crate::{Atom, Predicate, Value};
 
 const LENGTH_BYTES: usize = std::mem::size_of::<u64>();
 const TAG_BYTES: usize = 1;
@@ -130,6 +130,27 @@ impl Model {
         let mut atoms: Vec<_> = atoms.into_iter().collect();
         atoms.sort_unstable();
         atoms.dedup();
+        let positions = (0..atoms.len()).collect();
+        Self(Arc::new(Selected {
+            catalog: AtomCatalog::new(atoms),
+            positions,
+        }))
+    }
+
+    /// Adopt atoms already in canonical order, without sorting or
+    /// deduplicating them. This is [`Self::new`] for a producer that holds the
+    /// order already, such as the closure's per-relation catalogs merged in
+    /// predicate order, and it costs only the atom vector and its index.
+    ///
+    /// The atoms must be strictly increasing in canonical order; a debug build
+    /// checks this, a release build trusts the producer, and a violated
+    /// precondition would make membership queries wrong, not merely slow.
+    #[must_use]
+    pub fn from_ordered(atoms: Vec<Atom>) -> Self {
+        debug_assert!(
+            atoms.windows(2).all(|pair| pair[0] < pair[1]),
+            "atoms adopted as a model are strictly increasing"
+        );
         let positions = (0..atoms.len()).collect();
         Self(Arc::new(Selected {
             catalog: AtomCatalog::new(atoms),
@@ -330,6 +351,22 @@ impl<'a> ModelAtoms<'a> {
     #[must_use]
     pub fn last(self) -> Option<&'a Atom> {
         self.positions.last().map(|&position| &self.atoms[position])
+    }
+
+    /// The true atoms of one signed predicate, a contiguous sub-view found by
+    /// two logarithmic searches; empty when the predicate has none.
+    #[must_use]
+    pub fn of_predicate(self, predicate: &Predicate) -> ModelAtoms<'a> {
+        let start = self
+            .positions
+            .partition_point(|&position| self.atoms[position].predicate() < predicate);
+        let end = start
+            + self.positions[start..]
+                .partition_point(|&position| self.atoms[position].predicate() == predicate);
+        ModelAtoms {
+            atoms: self.atoms,
+            positions: &self.positions[start..end],
+        }
     }
 
     /// Borrow the original matching atom using logarithmic typed comparisons.
