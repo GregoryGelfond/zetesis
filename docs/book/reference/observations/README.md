@@ -613,6 +613,65 @@ the first pass and no seed is checked at all. The `in/out` families are
 unchanged, as they must be: nothing in their rules is decided before a
 choice is made, and that is the case for the rest of the cube search.
 
+## The grounding core: the node index, decided comparisons, integer evaluation
+
+Three campaigns on 17 September 2026 between 11:24:11 and 11:36:27 UTC,
+same machine, profile, four workers and clingo as above. `main` is the
+896a5f73 executable rerun as the control, `before` the iterated-narrowing
+executable (`ccdd5ac9`, SHA-256
+`80f014302c1e55949c203e7389a311e4a63c3413c29d47dc221ab749387ffbb6`) and
+`after` is built from `e5828b84` (SHA-256
+`629b682de860f6e1cb19a17ea58444c351ec25c9ffc8b52f1cf04105e4d7a625`), three
+commits from a profile of the `before` executable on send-money: the formula
+node index is placed by a fixed multiplicative hash instead of the standard
+library's randomized one (`77e7d11a`); each comparison is evaluated once, at
+the depth whose occurrence binds its last variable, and deeper prefixes
+inherit the verdict (`7d98f5f5`); and a plan over numbers runs in integer
+cells without constructing a value per node (`e5828b84`).
+[series-e5828b84-cpu-auto.json](series-e5828b84-cpu-auto.json) and its
+[table view](series-e5828b84-cpu-auto-tables.md) are the derived comparison,
+the first to carry each report's median over the reference solver's; raw
+report SHA-256
+`a8452092e4b6478537b976b1996d6e51d6beebe46006a89973b6ef58499238fa` (main),
+`6dedbae2e98fb0e7eb953e5b8035892496d8eb93640e0907e338f16ae158a1eb` (before)
+and `9cb5f2db4c152241822c12d55093f3fce453370f9972d182b396de92559d421d`
+(after).
+
+The profile that chose these three, taken on `before` with `perf` at 4,999
+Hz over the whole send-money run with all answers requested: the search's
+unit propagation took 21 percent of the samples; the formula node index,
+its randomized hashing, rehashing and interning, 16 percent; the atom
+catalog's ordered search with its predicate-name comparison, 21 percent;
+expression evaluation 7 percent; binding-frame and value copies 6 percent.
+Native medians, ms, with clingo on the same cell:
+
+| Cell | before | after | after/before | clingo | after/clingo |
+|---|---:|---:|---:|---:|---:|
+| send-money/send-money | 52.7 | 42.9 | 0.81 | 14.4 | 3.0 |
+| n-queens/variant-01 8→10 | 116.1 | 109.1 | 0.94 | 31.3 | 3.5 |
+| n-queens/variant-01 8→11 | 429.1 | 426.6 | 0.99 | 183.9 | 2.3 |
+| ties-50 | 182.5 | 170.8 | 0.94 | 18.3 | 9.3 |
+| transitive-dense-40 | 41.3 | 34.5 | 0.84 | 7.0 | 5.0 |
+| independent-choice-16 | 202.2 | 190.6 | 0.94 | 27.7 | 6.9 |
+| variant-04/05-larger-mix | 310.8 | 307.0 | 0.99 | 150.2 | 2.0 |
+
+In the problem's words: the grounder built each column test of send-money
+by hashing the identity of every formula node it created with a hash meant
+for keys an author could choose, walked every comparison's expression at
+every join depth to ask whether its variables were bound yet, evaluated
+every bound comparison again at every deeper depth, and built a value for
+every number it added or compared. The node identities are numbers the
+builder itself assigns, the depth at which a comparison is decided is fixed
+by the join order, and a number needs no value. On send-money, whose
+grounding is most of its time, the run is a fifth shorter; on queens the
+gain is a few percent, since its comparisons are decided only at the last
+depth and its time is in the search. The closure-route cells are unchanged
+within their band. After these three, the same profile on `after` puts the
+search at a quarter of the samples and the atom catalog's identity
+comparison, which compares predicate names byte by byte at every visited
+node, at a fifth: that is the next grounding cost, and it is a
+representation decision recorded in the audit as R4.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
