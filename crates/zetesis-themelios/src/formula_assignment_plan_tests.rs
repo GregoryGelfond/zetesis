@@ -32,6 +32,7 @@ fn with_compiler<R>(limits: ExpansionLimits, work: impl FnOnce(&mut Compiler<'_>
         limits: &FormulaLimits::default(),
         budget: &mut budget,
         domain: BTreeSet::new(),
+        predicates: BTreeSet::new(),
         next_aggregate: 0,
         dependency_projection: false,
         location: Location {

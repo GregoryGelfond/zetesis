@@ -577,12 +577,14 @@ fn refused_preparation_publishes_no_partial_order() {
 
 #[test]
 fn nested_capacity_includes_owned_spare_storage() {
+    // The predicate's name is shared and counted by its bytes; the values'
+    // spare storage is owned and counted by capacity.
     let mut name = String::with_capacity(64);
     name.push('p');
     let mut text = String::with_capacity(128);
     text.push('x');
     let mut values = Vec::with_capacity(8);
-    let expected = name.capacity() as u128
+    let expected = name.len() as u128
         + values.capacity() as u128 * std::mem::size_of::<Value>() as u128
         + text.capacity() as u128;
     values.push(Value::String(text));

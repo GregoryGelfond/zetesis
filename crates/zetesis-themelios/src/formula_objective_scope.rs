@@ -166,6 +166,7 @@ impl Compiler<'_> {
             limits: self.limits,
             budget: self.budget,
             domain: BTreeSet::new(),
+            predicates: BTreeSet::new(),
             next_aggregate: self.next_aggregate,
             dependency_projection: false,
             location: self.location,

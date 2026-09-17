@@ -26,7 +26,11 @@ pub(crate) fn predicate<E>(
     before: &mut impl FnMut() -> Result<(), E>,
 ) -> Result<Ordering, E> {
     before()?;
-    let name = bytes(left.name().as_bytes(), right.name().as_bytes(), before)?;
+    let name = if left.shares_name(right) {
+        Ordering::Equal
+    } else {
+        bytes(left.name().as_bytes(), right.name().as_bytes(), before)?
+    };
     Ok(name
         .then_with(|| left.arity().cmp(&right.arity()))
         .then_with(|| left.sign().cmp(&right.sign())))

@@ -361,6 +361,7 @@ pub(crate) fn prepare(
         limits,
         budget,
         domain: BTreeSet::new(),
+        predicates: BTreeSet::new(),
         next_aggregate: 0,
         dependency_projection: false,
         location: fallback,
@@ -612,11 +613,23 @@ pub(super) struct Compiler<'a> {
     pub(super) limits: &'a FormulaLimits,
     pub(super) budget: &'a mut Budget,
     pub(super) domain: BTreeSet<Value>,
+    /// The one shared name per predicate this compilation mints patterns for.
+    pub(super) predicates: BTreeSet<Predicate>,
     pub(super) next_aggregate: usize,
     pub(super) dependency_projection: bool,
     pub(super) location: Location,
 }
 impl Compiler<'_> {
+    /// The compilation's shared name for the predicate: every pattern of one
+    /// predicate refers to one allocation, as an admitted program's do.
+    fn shared(&mut self, predicate: Predicate) -> Predicate {
+        if let Some(shared) = self.predicates.get(&predicate) {
+            return shared.clone();
+        }
+        self.predicates.insert(predicate.clone());
+        predicate
+    }
+
     /// Keep the rewritten owner private until every normalization step has succeeded.
     fn normalize_statement(
         &mut self,
@@ -1142,6 +1155,7 @@ impl Compiler<'_> {
             error,
             location: self.location,
         })?;
+        let predicate = self.shared(predicate);
         AtomPattern::new(predicate, terms).map_err(|error| {
             AdmissionFailure::Construction {
                 error,

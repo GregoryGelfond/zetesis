@@ -771,18 +771,23 @@ impl AtomEntry<'_, '_> {
             }
         }
         checked()?; // Root publication.
-        self.appender.pending.push(self.query.to_atom());
+        let mut atom = self.query.to_atom();
         self.appender.index.publish_nodes();
         match self.relation {
-            Ok(relation) => self.appender.relations[relation].root = root,
+            Ok(relation) => {
+                // Every atom of the relation refers to the relation's one name.
+                atom.share_predicate(self.appender.relations[relation].predicate.clone());
+                self.appender.relations[relation].root = root;
+            }
             Err(at) => self.appender.relations.insert(
                 at,
                 Relation {
-                    predicate: self.query.predicate().clone(),
+                    predicate: atom.predicate().clone(),
                     root,
                 },
             ),
         }
+        self.appender.pending.push(atom);
         Ok(id)
     }
 }

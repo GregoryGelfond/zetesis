@@ -146,7 +146,10 @@ impl Program {
     /// # Errors
     /// Returns [`AdmissionError`] for unsafe/non-dense variables or exceeded
     /// budgets. The original template order is preserved in the admitted value.
-    pub fn new(templates: Vec<Template>, limits: AdmissionLimits) -> Result<Self, AdmissionError> {
+    pub fn new(
+        mut templates: Vec<Template>,
+        limits: AdmissionLimits,
+    ) -> Result<Self, AdmissionError> {
         check_limit(
             AdmissionResource::Templates,
             templates.len(),
@@ -205,6 +208,20 @@ impl Program {
             for pattern in template.gate_true().iter().chain(template.gate_false()) {
                 gate_predicates.insert(pattern.predicate().clone());
             }
+        }
+        // Every pattern of one predicate refers to the program's one name.
+        for template in &mut templates {
+            for pattern in template.patterns_mut() {
+                if let Some(shared) = predicates.get(pattern.predicate()) {
+                    pattern.share_predicate(shared.clone());
+                }
+            }
+        }
+        let gate_predicates: BTreeSet<Predicate> = gate_predicates
+            .into_iter()
+            .map(|predicate| predicates.get(&predicate).cloned().unwrap_or(predicate))
+            .collect();
+        for template in &templates {
             for term in template.all_terms() {
                 if let Term::Constant(value) = term {
                     domain.insert(value.clone());
