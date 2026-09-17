@@ -27,7 +27,14 @@ pub struct Canonical {
 pub struct Runs<'a> {
     levels: &'a [Vec<usize>],
     tail: &'a [usize],
-    storage: Storage,
+}
+
+/// The runs a preparation published, with that preparation's receipt.
+pub struct Preparation<'a> {
+    /// The prepared runs.
+    pub runs: Runs<'a>,
+    /// Current owner capacity and the work of this preparation or reuse.
+    pub storage: Storage,
 }
 
 impl<'a> Runs<'a> {
@@ -65,12 +72,6 @@ impl<'a> Runs<'a> {
             .chain(std::iter::once(self.tail))
             .filter(|run| !run.is_empty())
     }
-
-    /// Current owner capacity and work of the preparation or reuse operation.
-    #[must_use]
-    pub const fn storage(self) -> Storage {
-        self.storage
-    }
 }
 
 impl Catalog {
@@ -93,7 +94,7 @@ impl Catalog {
     /// # Errors
     /// Current shape, bytes and work must fit `limits`. Refused preparation does
     /// not publish a partial run or change atom/equality identity.
-    pub fn prepare_ordered(&mut self, limits: Limits) -> Result<Runs<'_>, CatalogFailure> {
+    pub fn prepare_ordered(&mut self, limits: Limits) -> Result<Preparation<'_>, CatalogFailure> {
         let mut work = self.work(limits)?;
         if self.prepared != self.atoms.len() {
             let prepare = if self.levels.is_empty() && self.tail.is_empty() {
@@ -105,14 +106,17 @@ impl Catalog {
             prepare.map_err(|error| self.failed(error, &work))?;
             self.prepared = self.atoms.len();
         }
-        Ok(Runs {
-            levels: &self.levels,
-            tail: &self.tail,
+        Ok(Preparation {
             storage: self.receipt(&work),
+            runs: Runs {
+                levels: &self.levels,
+                tail: &self.tail,
+            },
         })
     }
 
-    /// Borrow already prepared runs without allocating or traversing rows.
+    /// Borrow already prepared runs without allocating, traversing rows or
+    /// measuring capacity: constant time, fit for every join probe.
     /// `None` means a successful append requires a new preparation. It does not
     /// mean this relation has no tuples. A new empty catalog is already prepared.
     #[must_use]
@@ -120,13 +124,6 @@ impl Catalog {
         (self.prepared == self.atoms.len()).then(|| Runs {
             levels: &self.levels,
             tail: &self.tail,
-            storage: Storage {
-                retained_bytes: self.retained_bytes(),
-                peak_construction_bytes: self.retained_bytes(),
-                referenced_payload_bytes: self.payload,
-                borrowed_mapping_bytes: 0,
-                construction_work: 0,
-            },
         })
     }
 

@@ -40,7 +40,9 @@ mod storage;
 mod selection;
 mod catalog;
 
-pub use catalog::{Canonical, Catalog, CatalogFailure, ExtractedAtoms, Insertion, Lookup, Runs};
+pub use catalog::{
+    Canonical, Catalog, CatalogFailure, ExtractedAtoms, Insertion, Lookup, Preparation, Runs,
+};
 
 pub use selection::{Equality, Mask, Query, QueryAttempt, Selection};
 

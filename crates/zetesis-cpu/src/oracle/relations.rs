@@ -14,7 +14,7 @@ pub(super) use storage::atom_bytes;
 
 use zetesis_core::{
     Atom, AtomKey, Model, Predicate,
-    relation::{Catalog, CatalogFailure, Failure, Insertion, Limits, Resource, Runs, Storage},
+    relation::{Catalog, CatalogFailure, Failure, Insertion, Limits, Resource, Storage},
 };
 
 use super::Work;
@@ -230,7 +230,7 @@ impl Catalogs {
             let other = self.bytes.checked_sub(old).ok_or(Stop::InvalidProgram)?;
             let result = catalog
                 .prepare_ordered(limits(work, other)?)
-                .map(Runs::storage);
+                .map(|prepared| prepared.storage);
             self.bytes = other
                 .checked_add(catalog.retained_bytes() as u128)
                 .ok_or(Stop::StorageLimit)?;

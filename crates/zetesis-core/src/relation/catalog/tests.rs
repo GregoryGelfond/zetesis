@@ -397,10 +397,7 @@ fn prepared_order_reuses_the_published_extent() {
         catalog.insert(atom(value, 0), Limits::default()).unwrap();
     }
     assert!(catalog.ordered().is_none());
-    let preparation = catalog
-        .prepare_ordered(Limits::default())
-        .unwrap()
-        .storage();
+    let preparation = catalog.prepare_ordered(Limits::default()).unwrap().storage;
     assert!(preparation.construction_work > 0);
     let reused = catalog
         .prepare_ordered(Limits {
@@ -408,9 +405,9 @@ fn prepared_order_reuses_the_published_extent() {
             ..Limits::default()
         })
         .unwrap();
-    assert_eq!(reused.storage().construction_work, 0);
-    assert_eq!(reused.storage().retained_bytes, preparation.retained_bytes);
-    assert_eq!(reused.len(), 3);
+    assert_eq!(reused.storage.construction_work, 0);
+    assert_eq!(reused.storage.retained_bytes, preparation.retained_bytes);
+    assert_eq!(reused.runs.len(), 3);
     for (position, value) in [2, 5, 9].into_iter().enumerate() {
         assert_eq!(catalog.atoms()[ids(&catalog)[position]], atom(value, 0));
     }
@@ -435,7 +432,7 @@ fn duplicate_insert_preserves_prepared_order() {
                 ..Limits::default()
             })
             .unwrap()
-            .storage()
+            .storage
             .construction_work,
         0
     );
@@ -542,7 +539,7 @@ fn refused_preparation_publishes_no_partial_order() {
     let required = reference
         .prepare_ordered(Limits::default())
         .unwrap()
-        .storage()
+        .storage
         .construction_work;
     for limit in 0..required {
         let mut catalog = owner();
@@ -564,7 +561,14 @@ fn refused_preparation_publishes_no_partial_order() {
         ));
         assert!(catalog.ordered().is_none());
         assert_eq!(catalog.atoms(), [atom(9, 0), atom(2, 0), atom(5, 0)]);
-        assert_eq!(catalog.prepare_ordered(Limits::default()).unwrap().len(), 3);
+        assert_eq!(
+            catalog
+                .prepare_ordered(Limits::default())
+                .unwrap()
+                .runs
+                .len(),
+            3
+        );
         for (position, value) in [2, 5, 9].into_iter().enumerate() {
             assert_eq!(catalog.atoms()[ids(&catalog)[position]], atom(value, 0));
         }
@@ -784,7 +788,7 @@ fn one_append_to_a_large_extent_costs_its_own_run_not_a_copy_of_the_extent() {
     let work = catalog
         .prepare_ordered(Limits::default())
         .unwrap()
-        .storage()
+        .storage
         .construction_work;
     // The previous run becomes a level unchanged and the new row is a run of
     // one; nothing of the 2,048 older rows is compared or copied.
@@ -810,7 +814,7 @@ fn levels_shrink_geometrically_and_rows_are_merged_logarithmically() {
             work += catalog
                 .prepare_ordered(Limits::default())
                 .unwrap()
-                .storage()
+                .storage
                 .construction_work;
             let runs = catalog.ordered().unwrap();
             for pair in runs.levels().windows(2) {
