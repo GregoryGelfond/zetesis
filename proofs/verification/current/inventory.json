@@ -1747,12 +1747,17 @@
     },
     {
       "file": "Zetesis/DomainBindings.lean",
-      "line": 39,
+      "line": 44,
       "name": "Zetesis.DomainBindings.complete_binding_survives"
     },
     {
       "file": "Zetesis/DomainBindings.lean",
-      "line": 54,
+      "line": 63,
+      "name": "Zetesis.DomainBindings.kept_binding_survives"
+    },
+    {
+      "file": "Zetesis/DomainBindings.lean",
+      "line": 79,
       "name": "Zetesis.DomainBindings.guarded_continuations_exact"
     },
     {
@@ -6195,7 +6200,7 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "2af603525b8bac0b236b2a9d86a6b977f743a99ce9f6aad3961400ec434851dc",
+    "Audit.lean": "1c665d7e54fff281b39c998025c000da27a9c22754486cc90e4cd7c05adeb98d",
     "Zetesis.lean": "dc17d3d2129c5bfb52a3eee1e264ee5b946e768e01e8a43dae485914c337b768",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
     "Zetesis/AggregateBounds.lean": "c1a49f93ac5140bcd22876b42c52c23c4f447352c9cf61f2f01741fbbdc98452",
@@ -6233,7 +6238,7 @@
     "Zetesis/DeltaRounds.lean": "55c43f1f5c546648dff7e0c073fd6097edc38af37f8319e3bfb423f12e8e86c5",
     "Zetesis/DependencySchedule.lean": "c60bd62d45d5e0af661b0b850c92c0e4495346a8a153587cd22509cd53279c46",
     "Zetesis/DisjunctiveSupport.lean": "06cc6a63275e095939b95bb581a53ec4a481100e2d885733343d6e5cd6c6518e",
-    "Zetesis/DomainBindings.lean": "e6a8b5235159a471d07be8af36ea8be5c4f7ca4694a4af83968731f6b2522172",
+    "Zetesis/DomainBindings.lean": "8938b606a258c6459724b74c46e8d26f8d5ebe3c014f881cdc82d261de34cf80",
     "Zetesis/DomainContraction.lean": "e51c8d3ed236612599e390189e399b1a11df210a26f4bdef943da6a1306a4750",
     "Zetesis/EvaluatedWitnesses.lean": "4bde5b8cec56a3229d091a3010bfead386bdcb310beb061aa1bceaa9db78125b",
     "Zetesis/EvaluationPrefix.lean": "f82517010fed810cc995747c02275d66be4c8b464301bf8a9e8e5de9fcdadbba",

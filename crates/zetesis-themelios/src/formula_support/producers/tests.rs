@@ -212,7 +212,6 @@ fn richer_sources_retain_the_existing_schedule() {
         "p(1).r(X):-p(X),not absent(X).",
         "p(1).r(X+1):-p(X).",
         "p(1).{r(X)}:-p(X).",
-        "p(1).r(X):-p(X),X=1.",
     ] {
         let prepared = prepare(source);
         assert!(
@@ -226,6 +225,33 @@ fn richer_sources_retain_the_existing_schedule() {
             .is_none(),
             "{source}"
         );
+    }
+}
+
+#[test]
+fn a_body_comparison_is_no_producer_input() {
+    // The comparison offers no rows and no relation wakes it, so the plan
+    // schedules the rule on its one atom occurrence and completes the same
+    // possible support as the unplanned rounds, in which X = 2 excludes
+    // the one substitution.
+    for (source, expected) in [
+        (
+            "p(1).r(X):-p(X),X=1.",
+            vec![
+                atom("p", zetesis_core::Sign::Positive, &[1]),
+                atom("r", zetesis_core::Sign::Positive, &[1]),
+            ],
+        ),
+        (
+            "p(1).r(X):-p(X),X=2.",
+            vec![atom("p", zetesis_core::Sign::Positive, &[1])],
+        ),
+    ] {
+        let prepared = prepare(source);
+        let planned = plan(&prepared);
+        assert_eq!(planned.rules[1], Some(0..1), "{source}");
+        assert_eq!(atoms(&prepared, Some(planned)), expected, "{source}");
+        assert_eq!(atoms(&prepared, None), expected, "{source}");
     }
 }
 

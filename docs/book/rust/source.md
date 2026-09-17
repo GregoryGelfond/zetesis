@@ -84,23 +84,26 @@ applicability and proof boundaries.
 ## Optional domains during final instantiation
 
 `PreparedFormula::with_domain_analysis(Some(DomainLimits { .. }))` requests
-necessary argument-domain guards; `None` is the default. Bundle preparation has
-the same method. The ordinary CLI leaves this option off. This is separate from
-choosing `Indexed` or `Table` joins, and adds no language construct or CLI flag.
+necessary argument-domain guards; `None` is the library default. Bundle
+preparation has the same method. The ordinary command requests the analysis
+with its default limits. This is separate from choosing `Indexed` or `Table`
+joins, and adds no language construct or CLI flag.
 
 The consumer checks the exact normalized whole program and its original rule
 occurrences. The initial profile permits ordinary positive flat rules and
-constraints, whole named variables, and atomic numbers, strings, positive
-nullary symbols, infimum and supremum. It excludes arithmetic, generators,
-negative body literals, structured terms, anonymous/local scopes and richer
-heads. `NormalizedProgram` is necessary; a dependency projection never supplies
+constraints, whole named variables, atomic numbers, strings, positive nullary
+symbols, infimum and supremum, and body comparisons. It excludes arithmetic in
+atoms, generators, negative body literals, structured terms, anonymous/local
+scopes and richer heads. `NormalizedProgram` is necessary; a dependency projection never supplies
 narrowing. Inapplicability keeps the existing complete path and does not create
 a new source refusal.
 
 After unchanged possible-support completion, finite argument domains constrain
-each final rule's variable occurrences. Their intersection can reject a row
+each final rule's variable occurrences. Their intersection, less every value a
+comparison over that variable alone is defined and false at, can reject a row
 that has no complete positive continuation, before copying its new bindings or
-opening deeper probes. The surviving rows keep the existing matcher, original
+opening deeper probes; a guard is prepared only where that set is narrower than
+the argument's domain. The surviving rows keep the existing matcher, original
 positions and source origins. Support-growth, objective and factorized component
 joins retain their existing paths. Global Unknown or Stopped analysis supplies
 no guards. An individually Unknown argument is unrestricted; other finite

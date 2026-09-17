@@ -4,6 +4,10 @@
 //! therefore checked independently and remains the sole occurrence/provenance
 //! owner. This certificate permits support scheduling and optional domain guards;
 //! it establishes neither answer-set membership nor a unique answer set.
+//!
+//! A body comparison belongs to the profile: it binds no variable and offers no
+//! row, so the argument domains stay upper bounds over it, and the guards narrow
+//! a variable's candidates by the comparisons that read it alone.
 
 use themelios_base::span::Location;
 use themelios_program::program::{
@@ -80,6 +84,11 @@ fn applicable(
                 let BodyElement::Literal(literal) = element.get() else {
                     return Ok(false);
                 };
+                if literal.negation == DefaultNegation::None
+                    && matches!(literal.inner, LiteralInner::Comparison(_))
+                {
+                    continue;
+                }
                 if !source_atom(literal, limits, counters, location)? {
                     return Ok(false);
                 }
@@ -99,6 +108,9 @@ fn applicable(
         }
         for literal in &rule.body {
             counters.work(limits, rule.location)?;
+            if matches!(literal, LiteralIr::Compare(..)) {
+                continue;
+            }
             let LiteralIr::Atom(DefaultNegation::None, atom) = literal else {
                 return Ok(false);
             };

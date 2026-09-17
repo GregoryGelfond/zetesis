@@ -90,6 +90,11 @@ impl<'source> ProducerPlan<'source> {
             let start = inputs.len();
             for (occurrence, literal) in rule.body.iter().enumerate() {
                 counters.work(limits, rule.location)?;
+                // A comparison offers no rows and depends on no predicate;
+                // it is no input a changed relation could wake.
+                if matches!(literal, LiteralIr::Compare(..)) {
+                    continue;
+                }
                 let LiteralIr::Atom(_, atom) = literal else {
                     return Err(invalid(Failure::Owner, rule.location));
                 };

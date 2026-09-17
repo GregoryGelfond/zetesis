@@ -88,6 +88,7 @@ pub(crate) fn source(
                 .prepare_formula(expansion_limits(options), formula_limits(options))
                 .map_err(SourceFailure::into_error)?
                 .with_grounding_options(grounding_options(options))
+                .with_domain_analysis(Some(zetesis_themelios::DomainLimits::default()))
                 .ground_with_observer(
                     observer
                         .as_ref()
@@ -180,6 +181,7 @@ pub(crate) fn bundle(
                 formula_limits(options),
             )?
             .with_grounding_options(grounding_options(options))
+            .with_domain_analysis(Some(zetesis_themelios::DomainLimits::default()))
             .ground_with_observer(
                 observer
                     .as_ref()

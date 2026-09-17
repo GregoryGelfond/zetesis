@@ -380,12 +380,16 @@ arguments.
 [`DomainBindings`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DomainBindings.lean)
 addresses a different filtering boundary: a local match may have no complete
 continuation. Conservative argument coverage makes the intersection for each
-source variable necessary. Selecting every row that can finish then preserves
-the exact ordered completion list, including multiplicity. The optional eager
-consumer applies these guards to the exact normalized positive program, after
-support completion. Unknown, stopped and inapplicable analysis supply no
-narrowing. Concrete analyzer soundness, source/IR correspondence, dictionary
-identity and recursive matching remain unproved implementation bridges. The
+source variable necessary, and `kept_binding_survives` keeps it necessary once
+every value a comparison over that variable alone excludes is removed, for the
+bindings the exclusion rule keeps. Selecting every row that can finish then
+preserves the exact ordered completion list, including multiplicity. The
+optional eager consumer applies these guards to the exact normalized positive
+program, after support completion; the ordinary command requests it. Unknown,
+stopped and inapplicable analysis supply no narrowing. Concrete analyzer
+soundness, source/IR correspondence, dictionary identity, the agreement of the
+guard's comparison verdict with the join's, and recursive matching remain
+unproved implementation bridges. The
 [domain-binding guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/domain-bindings.md)
 also states the separate work, storage and authored-error obligations.
 

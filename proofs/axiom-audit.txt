@@ -362,6 +362,7 @@
  Classical.choice,
  Quot.sound]
 'Zetesis.DomainBindings.complete_binding_survives' does not depend on any axioms
+'Zetesis.DomainBindings.kept_binding_survives' does not depend on any axioms
 'Zetesis.DomainBindings.guarded_continuations_exact' depends on axioms: [propext]
 'Zetesis.DomainContraction.singleton_filter_preserves' depends on axioms: [propext, Quot.sound]
 'Zetesis.DomainContraction.remainder_lower_bound' depends on axioms: [propext, Quot.sound]

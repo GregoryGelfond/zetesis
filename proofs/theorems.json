@@ -1747,12 +1747,17 @@
   {
     "name": "Zetesis.DomainBindings.complete_binding_survives",
     "file": "Zetesis/DomainBindings.lean",
-    "line": 39
+    "line": 44
+  },
+  {
+    "name": "Zetesis.DomainBindings.kept_binding_survives",
+    "file": "Zetesis/DomainBindings.lean",
+    "line": 63
   },
   {
     "name": "Zetesis.DomainBindings.guarded_continuations_exact",
     "file": "Zetesis/DomainBindings.lean",
-    "line": 54
+    "line": 79
   },
   {
     "name": "Zetesis.DomainContraction.singleton_filter_preserves",

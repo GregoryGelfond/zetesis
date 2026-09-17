@@ -187,23 +187,27 @@ limitations separately from measurements of the ordinary grounding consumer.
 ## Optional argument-domain guards
 
 Prepared formula and bundle values also expose
-`with_domain_analysis(Some(DomainLimits { .. }))`; `None` is the default and
-turns the attempt off. This library option adds a final-instantiation consumer
-for the exact normalized whole program. It is independent of `Indexed` or
-`Table` row selection and has no CLI enabling flag.
+`with_domain_analysis(Some(DomainLimits { .. }))`; `None` is the library
+default and turns the attempt off, and the ordinary command requests the
+attempt with its default limits. This option adds a final-instantiation
+consumer for the exact normalized whole program. It is independent of
+`Indexed` or `Table` row selection and has no CLI flag.
 
 The initial profile admits ordinary positive flat rules and constraints over
-whole named variables and atomic logical values. It excludes arithmetic,
-generators, negative body literals, structured terms, local scopes and richer
-heads from the complete attempt. A dependency projection cannot qualify.
+whole named variables, atomic logical values and body comparisons. It excludes
+arithmetic in atoms, generators, negative body literals, structured terms,
+local scopes and richer heads from the complete attempt. A dependency projection cannot qualify.
 Unsupported profiles use the existing complete path; they receive no new
 language refusal. A global Unknown or Stopped analysis supplies no narrowing.
 An individually Unknown argument supplies no restriction.
 
 For each eligible final rule, the consumer intersects the finite domains of
-all positive argument occurrences naming one variable. Borrowed source values
-are resolved through the completed support owner's existing equality dictionary;
-no second dictionary assigns IDs. A row failing a necessary domain is rejected
+all positive argument occurrences naming one variable and removes every value a
+comparison over that variable alone is defined and false at; a value the
+comparison cannot evaluate stays, so the join reaches it. A guard is prepared
+only where the candidates are fewer than the argument's domain. Borrowed source
+values are resolved through the completed support owner's existing equality
+dictionary; no second dictionary assigns IDs. A row failing a necessary domain is rejected
 before binding copies and deeper probes. Surviving rows keep their original
 positions, matcher and emission order. Support completion, objective joins and
 existing factorized rule plans retain their existing paths. The analyzer is an
@@ -215,7 +219,8 @@ observation emits a sequential `domain_analysis` phase only when requested.
 `domain_prepare_work` includes charged applicability, analysis and guard
 preparation, including a stopped or failed prefix. `domain_guard_rows`,
 `domain_guard_checks` and `domain_rejected_rows` count actual row visits,
-dictionary-ID comparisons and rejections. Visited rows remain in `join_rows`
+dictionary-ID comparisons and rejections; `domain_narrowed_candidates` counts
+the values comparisons excluded before any row was read. Visited rows remain in `join_rows`
 and `table_rows`; avoided deeper work appears in the existing probe counts.
 
 Analyzer populations and inspected source bytes have separate finite

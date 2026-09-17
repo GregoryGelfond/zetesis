@@ -8,6 +8,11 @@ complete positive binding. Intersecting the domains of all occurrences of one
 variable therefore remains necessary for that variable. Unknown contributes the
 universal predicate; an empty finite meet excludes complete continuations.
 
+A comparison that reads one variable alone decides on that variable's value.
+Removing from a variable's meet every value such a comparison excludes leaves
+its narrowed candidates, which remain necessary for every complete binding the
+exclusion rule keeps.
+
 A guard may reject a locally matching row with no complete continuation. The
 local row-family equality premise of `TableBindings.join_family_preserved` is
 therefore too strong for this consumer. The second law below preserves the
@@ -15,8 +20,8 @@ ordered flattened list of complete continuations directly. A continuation may
 carry the whole source-occurrence/row-ID trace and the final binding, so order and
 multiplicity are retained, not just a set of output values.
 
-These laws require actual argument coverage and unchanged complete continuations
-as explicit premises. They do not prove `zetesis_domain` soundness, normalized
+These laws require actual argument coverage, exclusion decided on the variable's
+value and unchanged complete continuations as explicit premises. They do not prove `zetesis_domain` soundness, normalized
 source/IR correspondence, dictionary identity, Rust matching, accounting, authored
 error preservation or stopped-prefix equivalence. They do not justify narrowing a
 dependency projection or treating Unknown/Stopped as a finite empty domain.
@@ -42,6 +47,26 @@ theorem complete_binding_survives (scope : Column → Variable)
     ∀ slot, Meet scope domains slot (binding slot) := by
   intro slot column same
   simpa only [same] using covered column
+
+/-- A variable's meet, less every value a comparison over that variable alone
+excludes. -/
+def Narrowed (scope : Column → Variable) (domains : Column → Value → Prop)
+    (excluded : Variable → Value → Prop) (slot : Variable) (value : Value) : Prop :=
+  Meet scope domains slot value ∧ ¬ excluded slot value
+
+/-- A complete binding that no comparison excludes belongs to each variable's
+narrowed candidates.
+
+The meet follows from coverage as above. A comparison over one variable alone
+excludes a binding exactly when it excludes the binding's value at that
+variable, so a kept binding is excluded at no variable. -/
+theorem kept_binding_survives (scope : Column → Variable)
+    (domains : Column → Value → Prop) (excluded : Variable → Value → Prop)
+    (binding : Variable → Value)
+    (covered : ∀ column, domains column (binding (scope column)))
+    (kept : ∀ slot, ¬ excluded slot (binding slot)) :
+    ∀ slot, Narrowed scope domains excluded slot (binding slot) :=
+  fun slot => ⟨complete_binding_survives scope domains binding covered slot, kept slot⟩
 
 /-- Removing rows without complete continuations preserves the exact ordered
 completion list, including repeated row occurrences and repeated results.

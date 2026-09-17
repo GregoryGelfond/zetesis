@@ -293,3 +293,113 @@ fn optional_analysis_changes_no_arithmetic_verdict() {
         ));
     }
 }
+
+#[test]
+fn a_comparison_over_one_variable_narrows_its_candidates() {
+    // X < 3 is defined and false at 198 of the 200 candidates the domain of
+    // d/1 offers, so those rows are rejected before binding; the theory is
+    // the one the complete join grounds.
+    let source = "d(1..200). p(X) :- d(X), X < 3.";
+    let off = Observation::default();
+    let on = Observation::default();
+    let complete = ground(source, JoinStrategy::Indexed, None, &off).unwrap();
+    let narrowed = ground(
+        source,
+        JoinStrategy::Indexed,
+        Some(DomainLimits::default()),
+        &on,
+    )
+    .unwrap();
+    equal(&complete, &narrowed);
+    assert_eq!(
+        narrowed
+            .atoms()
+            .iter()
+            .filter(|atom| atom.predicate().name() == "p")
+            .count(),
+        2
+    );
+    let rules = *on.rules.borrow().last().unwrap();
+    assert_eq!(rules.domain_narrowed_candidates, Some(198));
+    assert_eq!(rules.domain_rejected_rows, Some(198));
+    assert_eq!(rules.binding_snapshots, Some(2));
+}
+
+#[test]
+fn a_candidate_no_comparison_can_evaluate_is_kept() {
+    // 1/X = 1 is undefined at X = 0 and false at X = 2, so the analysis
+    // excludes 2 alone; X != 0 then excludes 0. The same substitution is
+    // reached, and refuses, when no comparison excludes it.
+    let source = "d(0..2). p(X) :- d(X), 1/X = 1, X != 0.";
+    let on = Observation::default();
+    let narrowed = ground(
+        source,
+        JoinStrategy::Indexed,
+        Some(DomainLimits::default()),
+        &on,
+    )
+    .unwrap();
+    equal(
+        &ground(source, JoinStrategy::Indexed, None, &Observation::default()).unwrap(),
+        &narrowed,
+    );
+    let rules = *on.rules.borrow().last().unwrap();
+    assert_eq!(rules.domain_narrowed_candidates, Some(2));
+    assert!(matches!(
+        ground(
+            "d(0..2). p(X) :- d(X), 1/X = 1.",
+            JoinStrategy::Indexed,
+            Some(DomainLimits::default()),
+            &Observation::default()
+        ),
+        Err(FormulaFailure::Expansion(
+            ExpansionFailure::Evaluation { .. }
+        ))
+    ));
+}
+
+#[test]
+fn a_comparison_over_two_variables_narrows_no_candidate() {
+    // X < Y reads two variables; it is decided in the join, where the
+    // exclusion rule already prunes it, and no candidate of either is
+    // excluded on its own.
+    let source = "d(1..3). p(X,Y) :- d(X), d(Y), X < Y.";
+    let on = Observation::default();
+    let narrowed = ground(
+        source,
+        JoinStrategy::Indexed,
+        Some(DomainLimits::default()),
+        &on,
+    )
+    .unwrap();
+    equal(
+        &ground(source, JoinStrategy::Indexed, None, &Observation::default()).unwrap(),
+        &narrowed,
+    );
+    let rules = *on.rules.borrow().last().unwrap();
+    assert_eq!(rules.domain_narrowed_candidates, Some(0));
+    assert_eq!(rules.domain_guard_rows, Some(0));
+}
+
+#[test]
+fn a_domain_that_admits_every_row_restricts_nothing() {
+    // The domain of d/1 is what d/1 offers, so a guard over it could reject
+    // no row and none is prepared.
+    let source = "d(1..8). e(1..8). p(X,Y) :- d(X), e(Y).";
+    let on = Observation::default();
+    let narrowed = ground(
+        source,
+        JoinStrategy::Indexed,
+        Some(DomainLimits::default()),
+        &on,
+    )
+    .unwrap();
+    equal(
+        &ground(source, JoinStrategy::Indexed, None, &Observation::default()).unwrap(),
+        &narrowed,
+    );
+    assert_eq!(on.status.get(), Some(Status::FixedPoint));
+    let rules = *on.rules.borrow().last().unwrap();
+    assert_eq!(rules.domain_guard_rows, Some(0));
+    assert_eq!(rules.domain_guard_checks, Some(0));
+}
