@@ -116,7 +116,11 @@ defined; a body with a binder, range or guard is validated on its complete
 rows, because a reached undefined operation is a refusal under the
 [language reference](../reference/language.md) and a false comparison is not
 permission to skip it. The order decides how early a comparison is bound,
-not what a false one may skip.
+not what a false one may skip. Each comparison is evaluated once, at the
+depth whose occurrence binds its last variable, and the prefix's verdict is
+the conjunction of the comparisons decided so far; deeper rows inherit it
+rather than re-evaluating, and an evaluation failure met at a depth is
+retained until that depth is undone.
 
 Each formula join owns one reusable expression workspace. Prefix checks, binding
 generators and final filters borrow it in sequence; pending generators do not

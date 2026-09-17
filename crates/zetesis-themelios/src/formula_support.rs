@@ -23,7 +23,7 @@ use zetesis_core::{Atom, AtomPattern, Value};
 use crate::expansion::Budget;
 use crate::formula::ceiling;
 use crate::formula_binding::Binding;
-use crate::formula_ir::{Expression, HeadIr, LiteralIr, Operation, Prepared, value_bytes};
+use crate::formula_ir::{Expression, HeadIr, LiteralIr, Prepared, value_bytes};
 use crate::grounding_observer::{Event, Work};
 use crate::{ExpansionFailure, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
 
@@ -417,7 +417,7 @@ impl Derivation<'_, '_> {
     }
 }
 
-/// Validation evidence for one partial positive binding. A false comparison
+/// Validation evidence for one complete positive binding. A false comparison
 /// can prune only when every scalar check is defined. An arithmetic failure is
 /// retained until the positive join has a complete extension; an incomplete
 /// prefix alone does not require evaluating a ground source instance.
@@ -469,7 +469,15 @@ pub(crate) struct Join<'a, 'source> {
     bindings: Option<&'a crate::formula_assignment_plan::Plan>,
     literals: &'a [LiteralIr],
     generated: bool,
+    /// The certificate of the last completed row, taken by its consumer.
     comparisons: Comparisons,
+    /// What each prefix of the current order decides.
+    decisions: order::Decisions,
+    /// The conjunction of the comparisons decided up to each depth.
+    verdicts: Vec<bool>,
+    /// The first evaluation failure on the current prefix and the depth that
+    /// met it; released when that depth is undone.
+    failure: Option<(usize, ExpansionFailure)>,
     evaluation: Evaluation,
     pending: Option<crate::formula_binding_cursor::Cursor<'a, 'source>>,
     pending_head: Option<crate::formula_binding_cursor::Cursor<'a, 'source>>,
@@ -654,6 +662,7 @@ impl<'a, 'source> Join<'a, 'source> {
                 *slot = Slot::Excluded;
             }
         }
+        join.decide();
         Ok(join)
     }
     pub fn new(
@@ -722,7 +731,7 @@ impl<'a, 'source> Join<'a, 'source> {
                 slots[index] = Slot::Excluded;
             }
         }
-        Ok(Self {
+        let mut join = Self {
             bindings: None,
             literals,
             generated: literals
@@ -732,6 +741,9 @@ impl<'a, 'source> Join<'a, 'source> {
             pending_head: None,
             head_slots: variables..variables,
             comparisons: Comparisons::Deferred,
+            decisions: order::Decisions::of(literals, &[], &[]),
+            verdicts: vec![true; count.max(1)],
+            failure: None,
             evaluation: Evaluation::default(),
             patterns,
             delta: None,
@@ -745,7 +757,16 @@ impl<'a, 'source> Join<'a, 'source> {
             depth: 0,
             empty_yielded: false,
             finished: false,
-        })
+        };
+        join.decide();
+        Ok(join)
+    }
+    /// Fix, for the current order and prefix, the depth at which each
+    /// comparison is decided and whether any check waits for the complete
+    /// row. Called after every arrangement and after the prefix is fixed.
+    fn decide(&mut self) {
+        let prefix: Vec<bool> = self.values.iter().map(Option::is_some).collect();
+        self.decisions = order::Decisions::of(self.literals, &self.patterns, &prefix);
     }
     /// Restrict this round's join to the rows `variant` offers each source
     /// occurrence and order the join by those counts: the pivot occurrence
@@ -774,7 +795,9 @@ impl<'a, 'source> Join<'a, 'source> {
             },
             budget,
             location,
-        )
+        )?;
+        self.decide();
+        Ok(())
     }
     pub fn next(
         &mut self,
@@ -943,8 +966,6 @@ impl<'a, 'source> Join<'a, 'source> {
         counters: &mut Counters,
         location: Location,
     ) -> Result<Option<Binding<'static>>, FormulaFailure> {
-        // This certificate belongs to the next returned binding snapshot, even
-        // though completing that snapshot undoes the last mutable join row.
         self.comparisons = Comparisons::Deferred;
         if self.finished {
             return Ok(None);
@@ -966,12 +987,16 @@ impl<'a, 'source> Join<'a, 'source> {
                 if !self.filter_prefix(limits, budget, counters, location)? && !retain_rejected {
                     continue;
                 }
+                self.comparisons = self.certificate();
                 if let Some(binding) = self.complete(limits, budget, counters, location)? {
                     return Ok(Some(binding));
                 }
                 continue;
             }
             if self.depth == self.patterns.len() {
+                // The certificate belongs to the returned binding snapshot,
+                // even though completing that snapshot undoes the last row.
+                self.comparisons = self.certificate();
                 let complete = self.complete(limits, budget, counters, location)?;
                 self.depth -= 1;
                 self.undo();
@@ -1104,6 +1129,9 @@ impl<'a, 'source> Join<'a, 'source> {
         }
         Ok(matches)
     }
+    /// Evaluate the comparisons the current depth decides, once, and fold
+    /// them into the prefix's verdict. The prefix is pruned only when every
+    /// comparison is decided and defined and one is false.
     fn filter_prefix(
         &mut self,
         limits: &FormulaLimits,
@@ -1111,20 +1139,69 @@ impl<'a, 'source> Join<'a, 'source> {
         counters: &mut Counters,
         location: Location,
     ) -> Result<bool, FormulaFailure> {
-        self.comparisons = partial_filters(
-            self.literals,
-            &self.values,
-            &mut self.evaluation,
-            limits,
-            budget,
-            counters,
-            location,
-        )?;
-        Ok(!matches!(self.comparisons, Comparisons::Verified(false)))
+        let depth = self.depth;
+        let mut passes = depth == 0 || self.verdicts[depth - 1];
+        if self.failure.is_none() {
+            for index in self.decisions.decided_at(depth) {
+                let (left, relation, right) =
+                    comparison(&self.literals[index]).expect("a decided literal is a comparison");
+                let values = (|| {
+                    let left = partial_value(
+                        left,
+                        &self.values,
+                        &mut self.evaluation,
+                        limits,
+                        budget,
+                        counters,
+                        location,
+                    )?;
+                    let right = partial_value(
+                        right,
+                        &self.values,
+                        &mut self.evaluation,
+                        limits,
+                        budget,
+                        counters,
+                        location,
+                    )?;
+                    Ok((left, right))
+                })();
+                match values {
+                    Ok((left, right)) => passes &= compare(&left, relation, &right),
+                    Err(FormulaFailure::Expansion(error @ ExpansionFailure::Evaluation { .. })) => {
+                        self.failure = Some((depth, error));
+                        break;
+                    }
+                    Err(error) => return Err(error),
+                }
+            }
+        }
+        self.verdicts[depth] = passes;
+        Ok(self.failure.is_some() || !self.decisions.certifies(depth) || passes)
+    }
+    /// The certificate of the completed prefix: a retained failure, the
+    /// conjunction of every comparison when all are decided, or deferral.
+    fn certificate(&mut self) -> Comparisons {
+        if let Some((_, error)) = self.failure.take() {
+            return Comparisons::Failed(error);
+        }
+        let depth = self.patterns.len().saturating_sub(1);
+        if self.decisions.certifies(depth) {
+            Comparisons::Verified(self.verdicts[depth])
+        } else {
+            Comparisons::Deferred
+        }
     }
     fn undo(&mut self) {
         for variable in self.changes[self.depth].drain(..) {
             self.values[variable] = None;
+        }
+        if self
+            .failure
+            .as_ref()
+            .is_some_and(|(at, _)| *at >= self.depth)
+        {
+            self.failure = None;
         }
     }
     fn skip_derived(
@@ -1195,63 +1272,6 @@ impl<'a, 'source> Join<'a, 'source> {
     }
 }
 
-fn partial_filters(
-    literals: &[LiteralIr],
-    assignment: &[Option<Value>],
-    evaluation: &mut Evaluation,
-    limits: &FormulaLimits,
-    budget: &mut Budget,
-    counters: &mut Counters,
-    location: Location,
-) -> Result<Comparisons, FormulaFailure> {
-    let mut deferred = false;
-    let mut passes = true;
-    for literal in literals {
-        if crate::formula_binding_cursor::target(literal)
-            .is_some_and(|target| target >= assignment.len())
-        {
-            continue;
-        }
-        if let Some((left, relation, right)) = comparison(literal) {
-            if !bound(left, assignment, limits, counters, location)?
-                || !bound(right, assignment, limits, counters, location)?
-            {
-                deferred = true;
-                continue;
-            }
-            let values = (|| {
-                let left = partial_value(
-                    left, assignment, evaluation, limits, budget, counters, location,
-                )?;
-                let right = partial_value(
-                    right, assignment, evaluation, limits, budget, counters, location,
-                )?;
-                Ok((left, right))
-            })();
-            match values {
-                Ok((left, right)) => passes &= compare(&left, relation, &right),
-                Err(FormulaFailure::Expansion(error @ ExpansionFailure::Evaluation { .. })) => {
-                    return Ok(Comparisons::Failed(error));
-                }
-                Err(error) => return Err(error),
-            }
-        } else if !matches!(
-            literal,
-            LiteralIr::Atom(..) | LiteralIr::PatternAtom(_) | LiteralIr::ProjectedAtom(..)
-        ) {
-            // Tuple/whole guards, range checks and generated values are validated
-            // by their complete-row operations. An ordinary comparison cannot
-            // certify that these independent checks have succeeded.
-            deferred = true;
-        }
-    }
-    Ok(if deferred {
-        Comparisons::Deferred
-    } else {
-        Comparisons::Verified(passes)
-    })
-}
-
 /// Captured arguments reuse comparison evaluation, never binding inference.
 fn comparison(literal: &LiteralIr) -> Option<(&Expression, Relation, &Expression)> {
     match literal {
@@ -1282,25 +1302,6 @@ fn partial_value(
         counters,
         location,
     )
-}
-
-fn bound(
-    expression: &Expression,
-    assignment: &[Option<Value>],
-    limits: &FormulaLimits,
-    counters: &mut Counters,
-    location: Location,
-) -> Result<bool, FormulaFailure> {
-    for operation in &expression.nodes {
-        counters.work(limits, location)?;
-        counters.record(Event::ReadinessNode);
-        if let Operation::Variable(variable) = operation
-            && assignment[*variable].is_none()
-        {
-            return Ok(false);
-        }
-    }
-    Ok(true)
 }
 
 impl Join<'_, '_> {

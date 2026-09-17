@@ -160,8 +160,6 @@ pub struct GroundingWork {
     /// These may contain placeholders for later generated assignments. This is
     /// not the number of completed generated bindings or emitted ground rules.
     pub binding_snapshots: Option<u64>,
-    /// Expression nodes visited while checking whether comparison inputs are bound.
-    pub readiness_nodes: Option<u64>,
     /// Expression evaluations entered, including ones that subsequently fail.
     pub expression_evaluations: Option<u64>,
     /// Expression operations admitted by the work ceiling, including failed operations.
@@ -203,7 +201,6 @@ impl Default for GroundingWork {
             domain_rejected_rows: Some(0),
             join_rows: Some(0),
             binding_snapshots: Some(0),
-            readiness_nodes: Some(0),
             expression_evaluations: Some(0),
             expression_nodes: Some(0),
             atom_lookups: Some(0),
@@ -239,7 +236,6 @@ pub(crate) enum Event {
     DomainRejectedRow,
     JoinRow,
     BindingSnapshot,
-    ReadinessNode,
     ExpressionEvaluation,
     ExpressionNode,
     AtomLookup,
@@ -296,7 +292,6 @@ impl GroundingWork {
             domain_guard_checks: sum(self.domain_guard_checks, other.domain_guard_checks),
             domain_rejected_rows: sum(self.domain_rejected_rows, other.domain_rejected_rows),
             binding_snapshots: sum(self.binding_snapshots, other.binding_snapshots),
-            readiness_nodes: sum(self.readiness_nodes, other.readiness_nodes),
             expression_evaluations: sum(self.expression_evaluations, other.expression_evaluations),
             expression_nodes: sum(self.expression_nodes, other.expression_nodes),
             atom_lookups: sum(self.atom_lookups, other.atom_lookups),
@@ -343,7 +338,6 @@ impl GroundingWork {
             Event::DomainRejectedRow => &mut self.domain_rejected_rows,
             Event::JoinRow => &mut self.join_rows,
             Event::BindingSnapshot => &mut self.binding_snapshots,
-            Event::ReadinessNode => &mut self.readiness_nodes,
             Event::ExpressionEvaluation => &mut self.expression_evaluations,
             Event::ExpressionNode => &mut self.expression_nodes,
             Event::AtomLookup => &mut self.atom_lookups,

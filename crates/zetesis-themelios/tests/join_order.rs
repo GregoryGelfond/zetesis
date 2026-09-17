@@ -12,13 +12,15 @@ use zetesis_themelios::{
     GroundingPhase, GroundingWork, admit_formula_with_grounding_observer,
 };
 
-/// Rows offered to the whole-row matcher while completing possible support,
-/// the phase whose joins prune on comparisons; rule instantiation retains
-/// every complete row for validation and reads the full product.
+/// Rows offered to the whole-row matcher, and expressions evaluated, while
+/// completing possible support, the phase whose joins prune on comparisons;
+/// rule instantiation retains every complete row for validation and reads
+/// the full product.
 #[derive(Default)]
 struct JoinRows {
     active: Cell<bool>,
     support: Cell<u64>,
+    evaluations: Cell<u64>,
 }
 
 impl GroundingObserver for JoinRows {
@@ -43,13 +45,17 @@ impl GroundingObserver for JoinRows {
             let rows = work.join_rows.expect("finite visits");
             self.support
                 .set(self.support.get().checked_add(rows).unwrap());
+            let evaluations = work.expression_evaluations.expect("finite evaluations");
+            self.evaluations
+                .set(self.evaluations.get().checked_add(evaluations).unwrap());
         }
     }
 }
 
-/// The rows the support completion phases read. The work ceiling is raised
-/// so that it measures the order and not the admission of the program.
-fn support_rows(source: &str) -> u64 {
+/// The rows the support completion phases read and the expressions they
+/// evaluate. The work ceiling is raised so that it measures the order and
+/// not the admission of the program.
+fn support_counts(source: &str) -> (u64, u64) {
     let rows = JoinRows::default();
     admit_formula_with_grounding_observer(
         source.to_owned(),
@@ -62,7 +68,11 @@ fn support_rows(source: &str) -> u64 {
         Some(&rows),
     )
     .unwrap();
-    rows.support.get()
+    (rows.support.get(), rows.evaluations.get())
+}
+
+fn support_rows(source: &str) -> u64 {
+    support_counts(source).0
 }
 
 #[test]
@@ -92,4 +102,13 @@ fn a_literal_whose_variables_are_bound_is_a_test_and_precedes_generators() {
     }
     source.push_str("r(X,Y) :- a(X), c(X), b(X,Y).");
     assert_eq!(support_rows(&source), 10 + 10 + 500);
+}
+
+#[test]
+fn a_comparison_is_evaluated_once_at_the_depth_that_binds_it() {
+    // X < Y is decided once d(Y) is joined: two expressions for each of the
+    // 1,600 pairs, and none again for the 31,200 rows d(Z) adds beneath the
+    // 780 surviving pairs, whose verdict the deeper prefix inherits.
+    let (_, evaluations) = support_counts("d(1..40). p(X,Y,Z) :- d(X), d(Y), X < Y, d(Z).");
+    assert_eq!(evaluations, 2 * 1_600);
 }

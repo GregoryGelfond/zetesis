@@ -202,7 +202,6 @@ fn arithmetic_counts_describe_the_joined_rule() {
         .unwrap();
     assert_eq!(arithmetic.phase, GroundingPhase::RuleInstantiation);
     assert_eq!(arithmetic.work.expression_evaluations, Some(2));
-    assert_eq!(arithmetic.work.readiness_nodes, Some(4));
     assert_eq!(arithmetic.work.join_probes, Some(1));
     assert_eq!(arithmetic.work.join_rows, Some(1));
     assert_eq!(arithmetic.work.binding_snapshots, Some(1));

@@ -56,7 +56,7 @@ fn outcome_label<S: serde::Serializer>(value: &GroundingOutcome, s: S) -> Result
 
 fn serialize_work<S: serde::Serializer>(work: &GroundingWork, s: S) -> Result<S::Ok, S::Error> {
     use serde::ser::SerializeStruct;
-    let mut fields = s.serialize_struct("GroundingWork", 30)?;
+    let mut fields = s.serialize_struct("GroundingWork", 29)?;
     fields.serialize_field("support_rounds", &work.support_rounds)?;
     fields.serialize_field("support_producer_visits", &work.support_producer_visits)?;
     fields.serialize_field(
@@ -82,7 +82,6 @@ fn serialize_work<S: serde::Serializer>(work: &GroundingWork, s: S) -> Result<S:
     fields.serialize_field("domain_guard_checks", &work.domain_guard_checks)?;
     fields.serialize_field("domain_rejected_rows", &work.domain_rejected_rows)?;
     fields.serialize_field("binding_snapshots", &work.binding_snapshots)?;
-    fields.serialize_field("readiness_nodes", &work.readiness_nodes)?;
     fields.serialize_field("expression_evaluations", &work.expression_evaluations)?;
     fields.serialize_field("expression_nodes", &work.expression_nodes)?;
     fields.serialize_field("atom_lookups", &work.atom_lookups)?;
@@ -229,7 +228,6 @@ impl GroundingObserver for Observer {
             work.domain_guard_checks,
             work.domain_rejected_rows,
             work.binding_snapshots,
-            work.readiness_nodes,
             work.expression_evaluations,
             work.expression_nodes,
             work.atom_lookups,

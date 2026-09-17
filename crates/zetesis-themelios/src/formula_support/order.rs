@@ -26,7 +26,7 @@ use std::cmp::Reverse;
 use themelios_base::span::Location;
 use zetesis_core::Term;
 
-use super::{PatternOccurrence, comparison};
+use super::{PatternOccurrence, PositivePattern, comparison};
 use crate::expansion::Budget;
 use crate::formula_ir::LiteralIr;
 use crate::{ExpansionResource, FormulaFailure};
@@ -71,19 +71,113 @@ impl Waiting {
     }
 }
 
+/// Apply `visit` to every variable slot the occurrence binds when it
+/// matches: its whole arguments and, for a structural pattern, the captured
+/// subterms.
+fn each_slot(occurrence: &PatternOccurrence<'_>, mut visit: impl FnMut(usize)) {
+    match occurrence.pattern {
+        PositivePattern::Flat(atom) => {
+            for term in atom.terms() {
+                if let Term::Variable(variable) = term {
+                    visit(*variable);
+                }
+            }
+        }
+        PositivePattern::Structural(pattern) => pattern.slots().for_each(visit),
+    }
+}
+
 fn binds(occurrence: &PatternOccurrence<'_>, variable: usize) -> bool {
-    occurrence
-        .atom()
-        .terms()
-        .iter()
-        .any(|term| matches!(term, Term::Variable(bound) if *bound == variable))
+    let mut found = false;
+    each_slot(occurrence, |slot| found |= slot == variable);
+    found
 }
 
 fn is_test(occurrence: &PatternOccurrence<'_>, bound: &[bool]) -> bool {
-    occurrence.atom().terms().iter().all(|term| match term {
-        Term::Variable(variable) => is_bound(bound, *variable),
-        Term::Constant(_) => true,
-    })
+    let mut all = true;
+    each_slot(occurrence, |slot| all &= is_bound(bound, slot));
+    all
+}
+
+/// What the prefixes of one join order decide: for each literal, the depth
+/// at which its comparison is decided, and whether some check waits for the
+/// complete row.
+pub(super) struct Decisions {
+    /// By literal index: the index of the occurrence, in join order, after
+    /// whose match every variable the comparison reads is bound. A variable
+    /// the prefix binds is bound before any occurrence, so a comparison over
+    /// prefix variables alone is decided at depth zero. `None` marks a
+    /// literal that is not a comparison or reads a variable no occurrence
+    /// binds, which no prefix decides.
+    at: Vec<Option<usize>>,
+    /// The deepest decision, so a shallower prefix cannot certify the row.
+    last: Option<usize>,
+    /// Whether some literal is decided by no prefix: a comparison over a
+    /// generated variable, or a guard, range or tuple check that only its
+    /// complete-row operation validates.
+    on_completion: bool,
+}
+
+impl Decisions {
+    pub(super) fn of(
+        literals: &[LiteralIr],
+        occurrences: &[PatternOccurrence<'_>],
+        prefix: &[bool],
+    ) -> Self {
+        let mut bound_at: Vec<Option<usize>> =
+            prefix.iter().map(|&bound| bound.then_some(0)).collect();
+        for (depth, occurrence) in occurrences.iter().enumerate() {
+            each_slot(occurrence, |slot| {
+                if let Some(entry) = bound_at.get_mut(slot)
+                    && entry.is_none()
+                {
+                    *entry = Some(depth);
+                }
+            });
+        }
+        let at: Vec<Option<usize>> = literals
+            .iter()
+            .map(|literal| {
+                let (left, _, right) = comparison(literal)?;
+                left.inputs()
+                    .chain(right.inputs())
+                    .try_fold(0, |depth, variable| {
+                        bound_at
+                            .get(variable)
+                            .copied()
+                            .flatten()
+                            .map(|at| depth.max(at))
+                    })
+            })
+            .collect();
+        let last = at.iter().filter_map(|depth| *depth).max();
+        let on_completion = literals.iter().zip(&at).any(|(literal, decision)| {
+            decision.is_none()
+                && !matches!(
+                    literal,
+                    LiteralIr::Atom(..) | LiteralIr::PatternAtom(_) | LiteralIr::ProjectedAtom(..)
+                )
+        });
+        Self {
+            at,
+            last,
+            on_completion,
+        }
+    }
+
+    /// The literals whose comparisons `depth` decides.
+    pub(super) fn decided_at(&self, depth: usize) -> impl Iterator<Item = usize> + '_ {
+        self.at
+            .iter()
+            .enumerate()
+            .filter_map(move |(index, at)| (*at == Some(depth)).then_some(index))
+    }
+
+    /// Whether a prefix of `depth` occurrences has decided every check, so
+    /// its conjunction certifies the row.
+    pub(super) fn certifies(&self, depth: usize) -> bool {
+        !self.on_completion && self.last <= Some(depth)
+    }
 }
 
 /// A variable outside the frame is a head or generator slot the positive
@@ -127,13 +221,11 @@ pub(super) fn arrange(
         }
         let (chosen, _) = best.expect("a candidate remains at every position");
         occurrences.swap(position, chosen);
-        for term in occurrences[position].atom().terms() {
-            if let Term::Variable(variable) = term
-                && let Some(slot) = bound.get_mut(*variable)
-            {
-                *slot = true;
+        each_slot(&occurrences[position], |slot| {
+            if let Some(entry) = bound.get_mut(slot) {
+                *entry = true;
             }
-        }
+        });
         for comparison in &mut waiting {
             comparison.decided |= comparison
                 .variables
