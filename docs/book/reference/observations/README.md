@@ -418,6 +418,55 @@ is cheaper to compute but not cheaper to search with; it would be
 reconsidered only with an ordering heuristic that does not read the current
 values.
 
+## Item 2: admission charged at its cost
+
+Two campaigns on 17 September 2026 between 02:08:09 and 02:15:24 UTC, same
+machine, profile, four workers and clingo as above. `main` is the 896a5f73
+executable rerun as the control; `after` is built from
+`2e9abd7a` (SHA-256
+`a5b030e44d841e945c6e549094cd83cb91772365a35e37bd4ef566d160f6c892`), where
+the producer plan charges each dependency validation one logarithmic lookup
+instead of a comparison against every predicate, the head allowance is
+charged once per new atom after the membership test, a transient binding
+frame is not charged to the cumulative byte allowance, that allowance is the
+`--max-expansion-bytes` option, and the four small formula ceilings follow
+the atom ceiling's scale.
+[series-2e9abd7a-cpu-auto.json](series-2e9abd7a-cpu-auto.json) and its
+[table view](series-2e9abd7a-cpu-auto-tables.md) are the derived comparison;
+raw report SHA-256
+`75d1c1b86228f8c436810bbebb944a7fbaead0428cda2c7f1cd667efeb536acd` (main) and
+`93902d9519912cca182023343cbd2d6952cb0a7b7eb3929b6ae45af4c3650666` (after).
+
+The quantity this step changes is reach, not speed: which programs the
+formula route admits at its defaults. The series cells were all admitted
+before, and their native medians moved within the run-to-run band of the
+earlier steps (the formula cells between 0.89 and 0.97 of the control, the
+closure cells carrying the cumulative gains of items 3 and 8). The audit's
+four reproductions, each run once per executable with default options
+except where a flag is named, and clingo on the same file:
+
+| Program | main | after | clingo | answer |
+|---|---|---:|---:|---|
+| 700 facts and 699 two-literal rules under `#project` | refused: work 10,004,588 of 10,000,000 | 47 ms | 11 ms | 1,399 atoms, equal |
+| 400-node arithmetic path closure, `--max-expansion-work 100000000` | refused: scalar bytes 16,777,220 of 16,777,216 | 609 ms | 66 ms | 80,199 atoms, equal |
+| `p(0). p(X+1) :- p(X), X < 1500.` | refused: support rounds 1,025 of 1,024 | 13 ms | 6 ms | 1,501 atoms, equal |
+| `d(1..1100). p(X) :- d(X), X < 3.` | refused: domain values 1,025 of 1,024 | 15 ms | 5 ms | 1,102 atoms, equal |
+
+In the problem's words: before, a program could be refused for the shape of
+an allowance rather than for its size. Preparing the producer plan for a
+rule cost a comparison against every predicate in the program, so seven
+hundred small rules exhausted the work ceiling before a single instance was
+grounded; every proposal of a head atom was charged three times its bytes
+whether or not the atom was new, and every binding frame was charged to a
+budget that never released it, so the transitive closure of a four-hundred
+node path ran out of a sixteen-mebibyte allowance while occupying a fraction
+of it; and four ceilings of 1,024 refused a chain of 1,500 numbers or a
+domain of 1,100 values. Each charge now counts the operation or the retained
+payload it names, and the allowance that was hidden is an option and is
+reported with the others. The programs answer, and their answers agree with
+clingo; the closure-route cells are unaffected because none of these charges
+is on that route.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
