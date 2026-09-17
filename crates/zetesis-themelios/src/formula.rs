@@ -777,19 +777,21 @@ pub(crate) struct Compiled {
 /// # Errors
 /// Returns a typed located refusal on diagnostics, unsupported syntax, unsafe
 /// variables, undefined arithmetic, or any exceeded source/expansion/formula limit.
-/// Arithmetic in variable comparisons is checked on complete possible-positive
-/// joins, including rows whose scalar filters are false. An incomplete positive
-/// prefix with no complete extension creates no such validation obligation.
-/// Row-dependent head atom values are evaluated only after their rule or local
-/// element's body scalar and range selection. Negative gates and aggregate truth remain formulas
-/// and do not select this stage. Closed-term syntax and arithmetic validation still
-/// occur during source preparation.
-/// Rejected complete rule and scoped-objective rows validate their bodies through
+/// A comparison over relationally bound variables that is defined and false
+/// excludes its substitution, and nothing in an excluded substitution is
+/// reached. Arithmetic is checked on every complete possible-positive
+/// substitution the comparisons leave; an incomplete positive prefix with no
+/// complete extension creates no such obligation. Row-dependent head atom
+/// values are evaluated only after their rule or local element's body scalar
+/// and range selection. Negative gates and aggregate truth remain formulas and
+/// do not select this stage. Closed-term syntax and arithmetic validation still
+/// occur during source preparation. Substitutions a binder, interval check,
+/// tuple comparison or guard rejects still validate their bodies through
 /// isolated formula scratch before being discarded; that scratch supplies no
 /// atoms, roots, producers or objective keys to the admitted program. Rule-body
 /// scratch uses the existing theory atom/node ceilings; objective-body scratch
 /// retains its independent ceilings. Cumulative source work still applies.
-/// Encountered undefined operations refuse the input rather than emulating
+/// A reached undefined operation refuses the input rather than emulating
 /// clingo's warning-and-drop behavior. Numeric typing of a variable objective
 /// weight is checked later when its contribution is active in a verified model.
 pub fn admit_formula(

@@ -9,8 +9,8 @@ use std::cell::Cell;
 
 use themelios_base::span::Location;
 use zetesis_themelios::{
-    AdmissionOptions, ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits,
-    FormulaResource, GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork,
+    AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
+    GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork,
     admit_formula_with_grounding_observer,
 };
 
@@ -66,22 +66,24 @@ fn delta_support_matches_complete_finite_substitutions() {
 }
 
 #[test]
-fn delta_completion_retains_authored_body_errors() {
-    // p already has support before the later invalid positive row appears.
-    // Membership pruning is not a certificate of authored scalar validation.
+fn delta_completion_excludes_what_a_false_comparison_excludes() {
+    // p already has support before the later positive row d(0) appears.
+    // 1=2 is defined and false over every substitution of the rule, so the
+    // division over X is never reached, in the first round or the delta
+    // round, and the rule adds nothing to the program without it.
+    let expanded =
+        source_records::admit("p. d(1). d(0):-d(1).", &FormulaLimits::default()).unwrap();
     for source in [
         "p. d(1). d(0):-d(1). p:-d(X),1=2,1/X=1.",
         "p. d(1). d(0):-d(1). p:-d(X),1/X=1,1=2.",
         "p. d(1). d(0):-d(1). p:-d(X),1=2,not q(1/X).",
         "p. d(1). d(0):-d(1). p:-d(X),not not q(1/X),1=2.",
     ] {
-        assert!(
-            matches!(
-                source_records::admit(source, &FormulaLimits::default()),
-                Err(FormulaFailure::Expansion(
-                    ExpansionFailure::Evaluation { .. }
-                ))
-            ),
+        let admitted = source_records::admit(source, &FormulaLimits::default())
+            .unwrap_or_else(|error| panic!("{source}: {error}"));
+        assert_eq!(
+            source_records::exhaustive(&admitted),
+            source_records::exhaustive(&expanded),
             "{source}"
         );
     }

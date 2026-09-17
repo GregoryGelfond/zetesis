@@ -695,19 +695,34 @@ in both facts and generated bindings: `p(a..b).` contributes no fact. Endpoint
 errors remain errors, so `p(a..(1/0)).` refuses admission. An empty range also
 does not hide an unbound variable or invalid sibling argument.
 
-Reached undefined or overflowing scalar operations produce located refusals.
-The formula source API does not emulate clingo's warning-and-drop behavior for
-such operations. A syntactically false condition is not permission to skip
-required source validation.
+A rule is grounded over candidate substitutions for its relationally bound
+variables, and a comparison between terms over those variables that is
+defined and false excludes a substitution: nothing in an excluded
+substitution is reached, neither the arithmetic beside the comparison nor the
+head, a gate, a guard or an aggregate element under it. `d(0..2).
+p(X) :- d(X), X != 0, 1/X = 1.` therefore answers, with `p(1)`: the
+substitution `X = 0` is excluded by `X != 0`, so `1/0` is never evaluated.
+The verdict is taken over the complete substitution, whatever order the
+comparisons are met in, so a failure met before the relation that decides an
+exclusion is still no refusal.
 
-For body arithmetic, a complete possible-positive binding is the validation
-boundary. A false scalar filter does not hide another required body expression,
-including a scoped aggregate guard. An incomplete positive join with no complete
-extension creates no ground-row obligation. Row-dependent head atom arguments
-are a later stage: `d(0;1). p((X+1)**31):-d(X),X=0.` evaluates the head only for
-`X=0`. The same distinction applies to local choice elements. Negative gates and
-aggregate truth remain formulas and do not prune that stage. Closed-term source
-validation and aggregate-head tuple contribution checks retain their own scopes.
+Every substitution that no comparison excludes is validated in full: a
+reached undefined or overflowing scalar operation is a located refusal.
+`d(0..2). p(X) :- d(X), 1/X = 1.` is refused, where clingo drops the instance
+with a message; this is the deliberate departure from the reference. A
+binder, an interval check, a tuple comparison, an aggregate guard and a
+comparison over a generated value do not exclude a substitution; they are
+validated on every substitution the comparisons leave, so `d(0). p(1/X) :-
+d(X), not d(X).` is refused. Closed-term arithmetic is validated as written
+during source preparation, before any substitution exists: `p :- 1 = 2,
+1/0 = 1.` is refused. An incomplete positive join with no complete extension
+creates no obligation.
+
+Row-dependent head atom arguments are a later stage: `d(0;1).
+p((X+1)**31):-d(X),X=0.` evaluates the head only for `X=0`. The same
+distinction applies to local choice elements. Negative gates and aggregate
+truth remain formulas and do not prune that stage. Aggregate-head tuple
+contribution checks retain their own scopes.
 The [arithmetic validation contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/arithmetic_validation.rs)
 check defined complete families, incomplete joins, required failures and explicit
 clingo differences.

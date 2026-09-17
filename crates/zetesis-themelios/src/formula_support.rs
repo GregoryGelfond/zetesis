@@ -417,10 +417,11 @@ impl Derivation<'_, '_> {
     }
 }
 
-/// Validation evidence for one complete positive binding. A false comparison
-/// can prune only when every scalar check is defined. An arithmetic failure is
-/// retained until the positive join has a complete extension; an incomplete
-/// prefix alone does not require evaluating a ground source instance.
+/// Validation evidence for one complete positive binding. A comparison that
+/// is defined and false excludes the substitution before this certificate is
+/// issued. An arithmetic failure is retained until the positive join has a
+/// complete extension no comparison excludes; an incomplete prefix alone does
+/// not require evaluating a ground source instance.
 enum Comparisons {
     Deferred,
     Failed(ExpansionFailure),
@@ -816,7 +817,7 @@ impl<'a, 'source> Join<'a, 'source> {
         counters: &mut Counters,
         location: Location,
     ) -> Result<Option<Row>, FormulaFailure> {
-        self.next_staged(None, true, limits, budget, counters, location)
+        self.next_staged(None, limits, budget, counters, location)
     }
     fn next_support(
         &mut self,
@@ -837,9 +838,7 @@ impl<'a, 'source> Join<'a, 'source> {
         counters: &mut Counters,
         location: Location,
     ) -> Result<Option<Binding<'static>>, FormulaFailure> {
-        while let Some(row) =
-            self.next_staged(projected, false, limits, budget, counters, location)?
-        {
+        while let Some(row) = self.next_staged(projected, limits, budget, counters, location)? {
             if row.passes {
                 return Ok(Some(row.values));
             }
@@ -851,7 +850,6 @@ impl<'a, 'source> Join<'a, 'source> {
     fn next_staged(
         &mut self,
         projected: Option<(&AtomPattern, &BTreeSet<Atom>)>,
-        retain_rejected: bool,
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
@@ -868,15 +866,7 @@ impl<'a, 'source> Join<'a, 'source> {
                 }));
             }
             self.pending_head = None;
-            let Some(row) = self.next_inner(
-                projected,
-                retain_rejected,
-                limits,
-                budget,
-                counters,
-                location,
-            )?
-            else {
+            let Some(row) = self.next_inner(projected, limits, budget, counters, location)? else {
                 return Ok(None);
             };
             if !row.passes || self.head_slots.is_empty() {
@@ -894,21 +884,13 @@ impl<'a, 'source> Join<'a, 'source> {
     fn next_inner(
         &mut self,
         projected: Option<(&AtomPattern, &BTreeSet<Atom>)>,
-        retain_rejected: bool,
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
     ) -> Result<Option<Row>, FormulaFailure> {
         if !self.generated {
-            if let Some(binding) = self.next_base(
-                projected,
-                retain_rejected,
-                limits,
-                budget,
-                counters,
-                location,
-            )? {
+            if let Some(binding) = self.next_base(projected, limits, budget, counters, location)? {
                 let comparisons = std::mem::replace(&mut self.comparisons, Comparisons::Deferred);
                 let passes =
                     self.filters(&binding, comparisons, limits, budget, counters, location)?;
@@ -937,14 +919,7 @@ impl<'a, 'source> Join<'a, 'source> {
                     passes,
                 }));
             }
-            let Some(binding) = self.next_base(
-                projected,
-                retain_rejected,
-                limits,
-                budget,
-                counters,
-                location,
-            )?
+            let Some(binding) = self.next_base(projected, limits, budget, counters, location)?
             else {
                 return Ok(None);
             };
@@ -960,7 +935,6 @@ impl<'a, 'source> Join<'a, 'source> {
     fn next_base(
         &mut self,
         projected: Option<(&AtomPattern, &BTreeSet<Atom>)>,
-        retain_rejected: bool,
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
@@ -984,7 +958,7 @@ impl<'a, 'source> Join<'a, 'source> {
                     return Ok(None);
                 }
                 self.empty_yielded = true;
-                if !self.filter_prefix(limits, budget, counters, location)? && !retain_rejected {
+                if !self.filter_prefix(limits, budget, counters, location)? {
                     continue;
                 }
                 self.comparisons = self.certificate();
@@ -1059,9 +1033,7 @@ impl<'a, 'source> Join<'a, 'source> {
             }
             let matches =
                 self.match_row(pattern.pattern, atom, limits, budget, counters, location)?;
-            if matches
-                && (self.filter_prefix(limits, budget, counters, location)? || retain_rejected)
-            {
+            if matches && self.filter_prefix(limits, budget, counters, location)? {
                 self.depth += 1;
             } else {
                 self.undo();
@@ -1130,8 +1102,11 @@ impl<'a, 'source> Join<'a, 'source> {
         Ok(matches)
     }
     /// Evaluate the comparisons the current depth decides, once, and fold
-    /// them into the prefix's verdict. The prefix is pruned only when every
-    /// comparison is decided and defined and one is false.
+    /// them into the prefix's verdict. A comparison that is defined and false
+    /// excludes every substitution of the prefix, so the prefix is pruned and
+    /// nothing beneath it is reached; an evaluation failure is retained, and
+    /// becomes a refusal only if no comparison of the complete substitution
+    /// excludes it.
     fn filter_prefix(
         &mut self,
         limits: &FormulaLimits,
@@ -1141,7 +1116,7 @@ impl<'a, 'source> Join<'a, 'source> {
     ) -> Result<bool, FormulaFailure> {
         let depth = self.depth;
         let mut passes = depth == 0 || self.verdicts[depth - 1];
-        if self.failure.is_none() {
+        {
             for index in self.decisions.decided_at(depth) {
                 let (left, relation, right) =
                     comparison(&self.literals[index]).expect("a decided literal is a comparison");
@@ -1169,15 +1144,18 @@ impl<'a, 'source> Join<'a, 'source> {
                 match values {
                     Ok((left, right)) => passes &= compare(&left, relation, &right),
                     Err(FormulaFailure::Expansion(error @ ExpansionFailure::Evaluation { .. })) => {
-                        self.failure = Some((depth, error));
-                        break;
+                        // Retained, not raised: a comparison decided here or
+                        // deeper may still exclude the substitution.
+                        if self.failure.is_none() {
+                            self.failure = Some((depth, error));
+                        }
                     }
                     Err(error) => return Err(error),
                 }
             }
         }
         self.verdicts[depth] = passes;
-        Ok(self.failure.is_some() || !self.decisions.certifies(depth) || passes)
+        Ok(passes)
     }
     /// The certificate of the completed prefix: a retained failure, the
     /// conjunction of every comparison when all are decided, or deferral.

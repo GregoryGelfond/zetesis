@@ -262,23 +262,34 @@ fn richer_source_keeps_the_complete_join() {
 }
 
 #[test]
-fn optional_analysis_never_suppresses_authored_arithmetic() {
+fn optional_analysis_changes_no_arithmetic_verdict() {
+    // 1 = 2 excludes the only substitution, so nothing in it is reached with
+    // or without the analysis; a reached operation refuses either way.
     for source in ["d(0).p:-d(X),1=2,1/X=1.", "d(0).p:-d(X),1=2,not q(1/X)."] {
-        for options in [None, Some(DomainLimits::default())] {
-            assert!(
-                matches!(
-                    ground(
-                        source,
-                        JoinStrategy::Indexed,
-                        options,
-                        &Observation::default()
-                    ),
-                    Err(FormulaFailure::Expansion(
-                        ExpansionFailure::Evaluation { .. }
-                    ))
-                ),
-                "{source}"
-            );
-        }
+        let off = Observation::default();
+        let on = Observation::default();
+        equal(
+            &ground(source, JoinStrategy::Indexed, None, &off).unwrap(),
+            &ground(
+                source,
+                JoinStrategy::Indexed,
+                Some(DomainLimits::default()),
+                &on,
+            )
+            .unwrap(),
+        );
+    }
+    for options in [None, Some(DomainLimits::default())] {
+        assert!(matches!(
+            ground(
+                "d(0).p:-d(X),1/X=1.",
+                JoinStrategy::Indexed,
+                options,
+                &Observation::default()
+            ),
+            Err(FormulaFailure::Expansion(
+                ExpansionFailure::Evaluation { .. }
+            ))
+        ));
     }
 }

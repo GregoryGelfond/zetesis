@@ -3,14 +3,13 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
-use themelios_program::term::EvalError;
 use zetesis_core::{Atom, Predicate, Value};
 use zetesis_cpu::Control;
 use zetesis_ferraris::{Interpretation, Limits, models, models_reduct};
 use zetesis_sat::{Limits as SearchLimits, StableModels};
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, FormulaFailure,
-    FormulaLimits, FormulaResource, admit_formula,
+    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, FormulaResource,
+    admit_formula,
 };
 
 fn input(source: &str) -> AdmittedFormula {
@@ -207,31 +206,17 @@ fn head_constants_repetition_other_producers_and_negative_projection_remain_exac
 }
 
 #[test]
-fn a_false_component_filter_preserves_required_arithmetic() {
+fn a_false_component_filter_excludes_the_substitution() {
     let source = "a(0).b(1).p:-a(X),1/X>0,b(Y),Y=2.";
-    // The positive join has the complete row X=0,Y=1. Y=2 is a scalar
-    // rejection, so it cannot hide X's undefined division. The external
-    // reference's successful {a(0),b(1)} family is retained separately.
-    let error = admit_formula(
-        source.to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .expect_err("both positive components have a complete extension");
-    let FormulaFailure::Expansion(ExpansionFailure::Evaluation {
-        error: EvalError::Undefined,
-        location,
-    }) = error
-    else {
-        panic!("expected located undefined arithmetic: {error:?}");
-    };
-    assert_eq!(location.source, themelios_base::source::SourceId::new(0));
-    assert_eq!(location.span.start().get(), 10);
-    assert_eq!(
-        usize::try_from(location.span.end().get()).unwrap(),
-        source.len()
-    );
+    // The positive join has the one substitution X=0,Y=1. Y=2 is defined and
+    // false over it, so the substitution is excluded and X's undefined
+    // division is never reached, whichever component the join reads first.
+    // The family is {a(0),b(1)}, as the external reference records.
+    let expected = BTreeSet::from([BTreeSet::from([
+        atom("a", vec![Value::Number(0)]),
+        atom("b", vec![Value::Number(1)]),
+    ])]);
+    assert_eq!(stable(&input(source)), expected);
 }
 
 #[test]

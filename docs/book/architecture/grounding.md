@@ -110,17 +110,17 @@ comparison prunes before an unrelated relation multiplies the rows; and
 otherwise the earlier occurrence of the canonical body, which orders literals
 by predicate and then by variable name rather than by their position in the
 source text. Every order yields the same complete bindings, and the
-semi-naive partition reads source occurrence, not this order. A comparison
-prunes a prefix only when every scalar check of the body is bound and
-defined; a body with a binder, range or guard is validated on its complete
-rows, because a reached undefined operation is a refusal under the
-[language reference](../reference/language.md) and a false comparison is not
-permission to skip it. The order decides how early a comparison is bound,
-not what a false one may skip. Each comparison is evaluated once, at the
-depth whose occurrence binds its last variable, and the prefix's verdict is
-the conjunction of the comparisons decided so far; deeper rows inherit it
-rather than re-evaluating, and an evaluation failure met at a depth is
-retained until that depth is undone.
+semi-naive partition reads source occurrence, not this order. Each
+comparison is evaluated once, at the depth whose occurrence binds its last
+variable. A comparison that is defined and false excludes every
+substitution of the prefix, so the prefix is pruned there and nothing
+beneath it is reached, in every grounding pass; an evaluation failure met
+at a depth is retained until that depth is undone and becomes a refusal
+only for a complete substitution no comparison excludes, as the
+[language reference](../reference/language.md) states. Binders, interval
+checks, tuple comparisons and guards are validated on the substitutions the
+comparisons leave. The order decides how early an exclusion is decided,
+never whether it is.
 
 Each formula join owns one reusable expression workspace. Prefix checks, binding
 generators and final filters borrow it in sequence; pending generators do not

@@ -13,13 +13,12 @@ use zetesis_themelios::{
 };
 
 /// Rows offered to the whole-row matcher, and expressions evaluated, while
-/// completing possible support, the phase whose joins prune on comparisons;
-/// rule instantiation retains every complete row for validation and reads
-/// the full product.
+/// completing possible support and while instantiating rules.
 #[derive(Default)]
 struct JoinRows {
     active: Cell<bool>,
     support: Cell<u64>,
+    instantiation: Cell<u64>,
     evaluations: Cell<u64>,
 }
 
@@ -41,6 +40,11 @@ impl GroundingObserver for JoinRows {
         work: GroundingWork,
     ) {
         assert_eq!(outcome, GroundingOutcome::Completed);
+        if phase == GroundingPhase::RuleInstantiation {
+            let rows = work.join_rows.expect("finite visits");
+            self.instantiation
+                .set(self.instantiation.get().checked_add(rows).unwrap());
+        }
         if phase == GroundingPhase::SupportCompletion {
             let rows = work.join_rows.expect("finite visits");
             self.support
@@ -69,6 +73,23 @@ fn support_counts(source: &str) -> (u64, u64) {
     )
     .unwrap();
     (rows.support.get(), rows.evaluations.get())
+}
+
+/// The rows the rule instantiation phases read, under the same ceiling.
+fn instantiation_rows(source: &str) -> u64 {
+    let rows = JoinRows::default();
+    admit_formula_with_grounding_observer(
+        source.to_owned(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits {
+            max_work: 100_000_000,
+            ..FormulaLimits::default()
+        },
+        Some(&rows),
+    )
+    .unwrap();
+    rows.instantiation.get()
 }
 
 fn support_rows(source: &str) -> u64 {
@@ -111,4 +132,13 @@ fn a_comparison_is_evaluated_once_at_the_depth_that_binds_it() {
     // 780 surviving pairs, whose verdict the deeper prefix inherits.
     let (_, evaluations) = support_counts("d(1..40). p(X,Y,Z) :- d(X), d(Y), X < Y, d(Z).");
     assert_eq!(evaluations, 2 * 1_600);
+}
+
+#[test]
+fn rule_instantiation_reads_only_the_substitutions_the_comparisons_leave() {
+    // A substitution X < Y excludes is not an instance, so instantiation
+    // prunes it as possible support does: 40 + 1,600 + 780 × 40 rows, not
+    // the full 65,640-row product validated before the exclusion rule.
+    let rows = instantiation_rows("d(1..40). p(X,Y,Z) :- d(X), d(Y), X < Y, d(Z).");
+    assert_eq!(rows, 40 + 1_600 + 780 * 40);
 }
