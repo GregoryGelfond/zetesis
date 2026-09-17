@@ -672,6 +672,55 @@ comparison, which compares predicate names byte by byte at every visited
 node, at a fifth: that is the next grounding cost, and it is a
 representation decision recorded in the audit as R4.
 
+## The atom catalog indexed by predicate
+
+Three campaigns on 17 September 2026 between 11:57:13 and 12:09:25 UTC,
+same machine, profile, four workers and clingo as above. `main` is the
+896a5f73 executable rerun as the control, `before` the grounding-core
+executable (`e5828b84`, SHA-256
+`629b682de860f6e1cb19a17ea58444c351ec25c9ffc8b52f1cf04105e4d7a625`) and
+`after` is built from `20b4f778` (SHA-256
+`a6974b914cffffb7dff572279b2d2e7900ebb1e20ec27c5f873e2d0fe3833ba4`), where
+the formula grounder's atom catalog keeps one ordered tree per predicate,
+finds the predicate's tree by a checked binary search over the program's
+relations and compares arguments only along it.
+[series-20b4f778-cpu-auto.json](series-20b4f778-cpu-auto.json) and its
+[table view](series-20b4f778-cpu-auto-tables.md) are the derived comparison;
+raw report SHA-256
+`4bf01d06b601c53acee02c7e6183a248f8e43780f2f73e536bdd1396e18176ab` (main),
+`6ce06b982a4a0e8ad5b5cde1998ad64a7ffb1186e067790e9859a7640453d9f1` (before)
+and `4f34782eea9a26b9639f7b2bb4f528620705413f69c358d2bbcecae57493403b`
+(after).
+
+The catalog is the formula route's, so the closure-route cells are
+unchanged by construction and their movement in this campaign (chain-1000
+1.17, transitive-path-100 1.06, independent-choice-12 1.09, all under thirty
+milliseconds) is the width of the run-to-run band for small cells. On the
+formula cells:
+
+| Cell | before | after | after/before | clingo |
+|---|---:|---:|---:|---:|
+| ties-50 | 178.4 | 162.9 | 0.91 | 18.7 |
+| independent-negation-aggregate-16 | 346.8 | 317.3 | 0.92 | 30.6 |
+| disjunction-12 | 211.7 | 202.1 | 0.95 | 22.2 |
+| variant-04/05-larger-mix | 308.4 | 298.7 | 0.97 | 150.4 |
+| send-money/send-money | 43.5 | 42.7 | 0.98 | 14.1 |
+| n-queens/variant-01 8→10 | 111.2 | 113.4 | 1.02 | 31.5 |
+| n-queens/variant-01 8→11 | 418.1 | 436.8 | 1.05 | 183.7 |
+
+In the problem's words: every lookup of a ground atom walked a tree over
+all atoms, and at each of its levels compared the predicate's name byte by
+byte before looking at the arguments. Now it finds the predicate's own tree
+once, by a search over the handful of predicates the program names, and
+compares only arguments on the way down. The profile of send-money shows
+the predicate comparison falling from eight percent of the samples to
+three and a half; the wall time moved by two to nine percent on the
+formula cells except queens, whose two readings differ in the other
+direction by two to four percent, within the band of a cell whose time is
+in the search rather than the grounder. Atoms are still self-contained
+values with their own predicate; the dense predicate identity the audit's
+R4 also describes remains a separate representation decision.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
