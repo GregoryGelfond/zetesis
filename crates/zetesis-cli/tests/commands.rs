@@ -32,7 +32,9 @@ fn normal_invocation_defaults_to_auto_and_preserves_explicit_backends() {
 }
 
 #[test]
-fn tiny_auto_run_keeps_lazy_first_seed_and_separates_diagnostics() {
+fn tiny_auto_run_reads_the_root_once_and_separates_diagnostics() {
+    // The narrowed root holds the one undecided gate atom; its out branch is
+    // the first answer, found after one check.
     let mut models = Vec::new();
     let mut diagnostics = Vec::new();
     let report = run_with_diagnostics(
@@ -45,7 +47,7 @@ fn tiny_auto_run_keeps_lazy_first_seed_and_separates_diagnostics() {
     .unwrap();
     assert_eq!(report.completion, Completion::RequestedModels);
     assert_eq!(report.checked, 1);
-    assert_eq!(report.discovered_gate_atoms, 0);
+    assert_eq!(report.discovered_gate_atoms, 1);
     let models = String::from_utf8(models).unwrap();
     let diagnostics = String::from_utf8(diagnostics).unwrap();
     assert!(models.starts_with("Answer: 1\nnode(a)\n"));

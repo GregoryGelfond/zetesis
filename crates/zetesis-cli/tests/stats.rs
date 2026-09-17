@@ -426,4 +426,30 @@ fn the_counter_runs_between_the_program_closures() {
         ),
         "{diagnostics}"
     );
+    // The root is decided, so it is the one region and its one seed.
+    assert!(
+        diagnostics.contains(
+            "carrier regions: visited=1; refuted=0; decided=1; counted=0; narrowing passes=0"
+        ),
+        "{diagnostics}"
+    );
+}
+
+#[test]
+fn the_regions_of_independent_pairs_are_the_answers() {
+    // Deciding out(i) decides in(i), and two adjacent in atoms are refuted
+    // by the edge constraint in the region's lower closure: the regions'
+    // leaves are the thirteen independent sets of the path, each checked once.
+    let (report, _, diagnostics) = solve(
+        "node(1..5). edge(1,2). edge(2,3). edge(3,4). edge(4,5). \
+         in(X) :- node(X), not out(X). out(X) :- node(X), not in(X). :- edge(X,Y), in(X), in(Y).",
+        &options(&["--stats"]),
+    );
+    assert_eq!(report.models, 13);
+    assert_eq!(report.checked, 13, "{diagnostics}");
+    assert!(
+        diagnostics.contains("carrier regions: visited=")
+            && diagnostics.contains("; decided=13; counted=0;"),
+        "{diagnostics}"
+    );
 }

@@ -96,6 +96,21 @@ pub struct CandidateStatistics {
     /// seed of it is accepted and the counter offered none
     /// (`Bounds.lower_constraint_refutes`).
     pub bounds_refuted: bool,
+    /// Regions the split visited, the narrowed root included.
+    pub regions: usize,
+    /// Regions a definite constraint refuted in their lower closure: no seed
+    /// of them was offered.
+    pub regions_refuted: usize,
+    /// Regions whose narrowing decided every gate atom: one seed each,
+    /// offered without a count.
+    pub regions_decided: usize,
+    /// Regions counted as a flat interval, because their narrowing decided
+    /// nothing beyond the split that formed them or a closure stopped inside
+    /// them; the count's restrictions still apply within.
+    pub regions_counted: usize,
+    /// Completed narrowing passes over the regions below the root, each two
+    /// closures.
+    pub region_passes: usize,
 }
 
 enum RestrictionState {
@@ -108,11 +123,39 @@ enum RestrictionState {
 }
 
 /// Whether the program's closures narrow the carrier, and how far that got.
+#[derive(Clone, Copy)]
 enum BoundsState {
     Disabled,
     Pending(Limits),
-    Applied,
+    /// The root is narrowed; its regions are narrowed under the same limits.
+    Applied(Limits),
     Unavailable,
+}
+
+/// How the seeds are offered once the bounds are applied.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Enumeration {
+    /// The binary counter over the carrier, pulled lazily.
+    Carrier,
+    /// The regions of the narrowed root, split until decided or counted.
+    Regions,
+}
+
+/// A region of the narrowed root: every root atom is held in, cut out, or
+/// undecided. Its seeds are the root's seeds that agree with its decisions;
+/// this is the `Cube` of `Search.lean` over the root's undecided atoms.
+struct Region {
+    decided: Vec<Option<bool>>,
+    /// The narrowed root itself, which is always split rather than counted.
+    root: bool,
+}
+
+/// The outcome of narrowing one region below the root.
+enum RegionNarrowing {
+    /// A definite constraint fired: no seed of the region is accepted.
+    Refuted,
+    /// The fixed point, and whether it decided an atom beyond the split.
+    Fixed { changed: bool },
 }
 
 /// The outcome of one narrowing pass.
@@ -158,6 +201,16 @@ pub struct Candidates<'a> {
     termination: Option<CandidateTermination>,
     restrictions: RestrictionState,
     bounds: BoundsState,
+    enumeration: Enumeration,
+    /// The undecided gate atoms of the narrowed root, in carrier order; a
+    /// region decides over their indices.
+    root: Vec<Arc<GateAtom>>,
+    /// The gate atoms every seed holds, from the root's narrowing.
+    root_must: BTreeSet<Atom>,
+    /// The regions still to visit, the next on top.
+    regions: Vec<Region>,
+    /// The counter is running inside a counted region.
+    counting: bool,
     statistics: CandidateStatistics,
 }
 
@@ -180,6 +233,11 @@ impl<'a> Candidates<'a> {
             termination: None,
             restrictions: RestrictionState::Disabled,
             bounds: BoundsState::Disabled,
+            enumeration: Enumeration::Carrier,
+            root: Vec::new(),
+            root_must: BTreeSet::new(),
+            regions: Vec::new(),
+            counting: false,
             statistics: CandidateStatistics::default(),
         }
     }
@@ -264,10 +322,14 @@ impl<'a> Candidates<'a> {
         self.statistics
     }
 
-    /// Carrier atoms successfully retained so far.
+    /// Carrier atoms successfully retained so far: the narrowed root's
+    /// undecided atoms once the bounds are applied, else the counter's.
     #[must_use]
     pub fn discovered_atoms(&self) -> usize {
-        self.atoms.len()
+        match self.enumeration {
+            Enumeration::Regions => self.root.len(),
+            Enumeration::Carrier => self.atoms.len(),
+        }
     }
 
     /// Retained stopping outcome, even after the error item has been consumed.
@@ -298,16 +360,201 @@ impl<'a> Candidates<'a> {
             return Ok(None);
         }
         self.prepare_restrictions()?;
+        if self.enumeration == Enumeration::Regions {
+            return self.region_selection();
+        }
+        if !self.counted_selection()? {
+            return Ok(None);
+        }
+        self.selected()
+    }
+
+    /// Advance the counter to its next permitted seed; `false` when the
+    /// counter's interval is exhausted or a restriction rules out the rest.
+    fn counted_selection(&mut self) -> Result<bool, Stop> {
         if self.started {
             if !self.advance()? {
-                return Ok(None);
+                return Ok(false);
             }
         } else {
             self.started = true;
         }
-        if !self.seek_permitted()? {
-            return Ok(None);
+        self.seek_permitted()
+    }
+
+    /// The seeds of the narrowed root, region by region: a region is
+    /// narrowed to its fixed point, refuted by a definite constraint,
+    /// decided outright, split on its highest undecided atom with the out
+    /// branch first, or counted when its narrowing decided nothing beyond
+    /// the split. The leaves come in the counter's order, and every accepted
+    /// seed of the root lies in exactly one region visited
+    /// (`Search.CoverageTree.split`, `split_partition`).
+    fn region_selection(&mut self) -> Result<Option<SeedSelection>, Stop> {
+        loop {
+            if self.counting {
+                if self.counted_selection()? {
+                    return self.selected();
+                }
+                self.counting = false;
+            }
+            let Some(mut region) = self.regions.pop() else {
+                return Ok(None);
+            };
+            self.statistics.regions += 1;
+            let changed = match self.narrow_region(&mut region)? {
+                RegionNarrowing::Refuted => {
+                    self.statistics.regions_refuted += 1;
+                    continue;
+                }
+                RegionNarrowing::Fixed { changed } => changed,
+            };
+            let Some(last) = region.decided.iter().rposition(Option::is_none) else {
+                self.statistics.regions_decided += 1;
+                self.hold(&region, &[])?;
+                return self.selected();
+            };
+            if region.root || changed {
+                let mut held = Region {
+                    decided: Vec::new(),
+                    root: false,
+                };
+                held.decided
+                    .try_reserve_exact(region.decided.len())
+                    .map_err(|_| Stop::Allocation)?;
+                held.decided.extend_from_slice(&region.decided);
+                held.decided[last] = Some(true);
+                let mut cut = region;
+                cut.root = false;
+                cut.decided[last] = Some(false);
+                self.regions.try_reserve(2).map_err(|_| Stop::Allocation)?;
+                self.regions.push(held);
+                self.regions.push(cut);
+            } else {
+                self.statistics.regions_counted += 1;
+                let undecided: Vec<usize> = region
+                    .decided
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, decision)| decision.is_none())
+                    .map(|(index, _)| index)
+                    .collect();
+                self.hold(&region, &undecided)?;
+                self.started = false;
+                self.counting = true;
+            }
         }
+    }
+
+    /// Hold the region's decided atoms in every seed and offer its undecided
+    /// ones to the counter.
+    fn hold(&mut self, region: &Region, undecided: &[usize]) -> Result<(), Stop> {
+        self.must.clear();
+        self.atoms.clear();
+        self.bits.clear();
+        let mut held: BTreeSet<&Atom> = self.root_must.iter().collect();
+        for (index, decision) in region.decided.iter().enumerate() {
+            if *decision == Some(true) {
+                held.insert(self.root[index].atom());
+            }
+        }
+        self.must
+            .try_reserve(held.len())
+            .map_err(|_| Stop::Allocation)?;
+        for atom in held {
+            self.control.poll()?;
+            self.must.push(Arc::new(atom.clone()));
+        }
+        self.atoms
+            .try_reserve(undecided.len())
+            .map_err(|_| Stop::Allocation)?;
+        self.bits
+            .try_reserve(undecided.len())
+            .map_err(|_| Stop::Allocation)?;
+        for &index in undecided {
+            self.atoms.push(self.root[index].clone());
+            self.bits.push(false);
+        }
+        Ok(())
+    }
+
+    /// Narrow a region below the root to its fixed point, reading each pass's
+    /// decisions back into it. A closure stopped on a resource ceiling keeps
+    /// the completed passes' decisions and reports no change, so the region
+    /// is counted with them; cancellation or a deadline stops the pull.
+    fn narrow_region(&mut self, region: &mut Region) -> Result<RegionNarrowing, Stop> {
+        if region.root {
+            return Ok(RegionNarrowing::Fixed { changed: true });
+        }
+        let BoundsState::Applied(limits) = self.bounds else {
+            return Ok(RegionNarrowing::Fixed { changed: false });
+        };
+        let mut cube = self.cube_of(region);
+        let mut changed = false;
+        loop {
+            match self.narrow(&mut cube, limits) {
+                Ok(Narrowing::Changed) => {
+                    self.statistics.region_passes += 1;
+                    changed |= self.decide(region, &cube);
+                }
+                Ok(Narrowing::Fixed) => {
+                    self.statistics.region_passes += 1;
+                    return Ok(RegionNarrowing::Fixed { changed });
+                }
+                Ok(Narrowing::Refuted) => return Ok(RegionNarrowing::Refuted),
+                Err(stop @ (Stop::Cancelled | Stop::Deadline)) => return Err(stop),
+                Err(stop) => {
+                    self.statistics.bounds_stop.get_or_insert(stop);
+                    return Ok(RegionNarrowing::Fixed { changed: false });
+                }
+            }
+        }
+    }
+
+    /// The region as a cube over the root's atoms: its held atoms with the
+    /// root's, and every atom not cut out.
+    fn cube_of(&self, region: &Region) -> Cube {
+        let mut must = self.root_must.clone();
+        let mut may = self.root_must.clone();
+        for (index, decision) in region.decided.iter().enumerate() {
+            let atom = self.root[index].atom();
+            match decision {
+                Some(true) => {
+                    must.insert(atom.clone());
+                    may.insert(atom.clone());
+                }
+                Some(false) => {}
+                None => {
+                    may.insert(atom.clone());
+                }
+            }
+        }
+        Cube {
+            must,
+            may: Some(may),
+        }
+    }
+
+    /// Read a narrowed cube's decisions into the region; whether one was new.
+    fn decide(&self, region: &mut Region, cube: &Cube) -> bool {
+        let mut changed = false;
+        for (index, decision) in region.decided.iter_mut().enumerate() {
+            if decision.is_some() {
+                continue;
+            }
+            let atom = self.root[index].atom();
+            if cube.must.contains(atom) {
+                *decision = Some(true);
+                changed = true;
+            } else if cube.may.as_ref().is_some_and(|may| !may.contains(atom)) {
+                *decision = Some(false);
+                changed = true;
+            }
+        }
+        changed
+    }
+
+    /// The selection of the held atoms and the counter's selected ones.
+    fn selected(&mut self) -> Result<Option<SeedSelection>, Stop> {
         if self.emitted >= self.limits.max_candidates {
             return Err(Stop::CandidateLimit);
         }
@@ -361,7 +608,7 @@ impl<'a> Candidates<'a> {
         };
         // An empty carrier has nothing to bound; the one seed costs no closure.
         if self.program.gate_predicates().is_empty() {
-            self.bounds = BoundsState::Applied;
+            self.bounds = BoundsState::Applied(limits);
             return Ok(());
         }
         let mut cube = Cube::undecided();
@@ -370,12 +617,15 @@ impl<'a> Candidates<'a> {
         // of the first upper closure, so the loop ends.
         self.bounds = loop {
             match self.narrow(&mut cube, limits) {
-                Ok(Narrowing::Changed) => {}
-                Ok(Narrowing::Fixed) => break BoundsState::Applied,
+                Ok(Narrowing::Changed) => self.statistics.bounds_passes += 1,
+                Ok(Narrowing::Fixed) => {
+                    self.statistics.bounds_passes += 1;
+                    break BoundsState::Applied(limits);
+                }
                 Ok(Narrowing::Refuted) => {
                     self.refuted = true;
                     self.statistics.bounds_refuted = true;
-                    break BoundsState::Applied;
+                    break BoundsState::Applied(limits);
                 }
                 Err(stop @ (Stop::Cancelled | Stop::Deadline)) => return Err(stop),
                 Err(stop) => {
@@ -384,12 +634,49 @@ impl<'a> Candidates<'a> {
                 }
             }
         };
-        self.may = cube.may;
-        for atom in cube.must {
+        for atom in &cube.must {
             self.must.try_reserve(1).map_err(|_| Stop::Allocation)?;
-            self.must.push(Arc::new(atom));
+            self.must.push(Arc::new(atom.clone()));
         }
         self.statistics.necessary_gate_atoms = self.must.len();
+        if self.refuted {
+            return Ok(());
+        }
+        match (self.bounds, cube.may) {
+            // The narrowed root's undecided atoms, in carrier order, are the
+            // region tree's coordinates; the carrier is read once for them.
+            (BoundsState::Applied(_), Some(may)) => {
+                self.root_must = cube.must;
+                self.materialize_root(&may)?;
+                self.regions.push(Region {
+                    decided: vec![None; self.root.len()],
+                    root: true,
+                });
+                self.enumeration = Enumeration::Regions;
+            }
+            (_, may) => self.may = may,
+        }
+        Ok(())
+    }
+
+    /// Retain the carrier's gate atoms inside `may` and outside the held set.
+    fn materialize_root(&mut self, may: &BTreeSet<Atom>) -> Result<(), Stop> {
+        for atom in self.carrier.by_ref() {
+            self.control.poll()?;
+            let atom = atom.map_err(|error| match error {
+                GateAtomError::Carrier(_) => Stop::Allocation,
+                GateAtomError::OrdinalOverflow => Stop::CarrierLimit,
+            })?;
+            if !may.contains(atom.atom()) {
+                self.statistics.underivable_gate_atoms += 1;
+            } else if !self.root_must.contains(atom.atom()) {
+                if self.root.len() >= self.limits.max_carrier_atoms {
+                    return Err(Stop::CarrierLimit);
+                }
+                self.root.try_reserve(1).map_err(|_| Stop::Allocation)?;
+                self.root.push(Arc::new(atom));
+            }
+        }
         Ok(())
     }
 
@@ -400,7 +687,6 @@ impl<'a> Candidates<'a> {
             return Ok(Narrowing::Refuted);
         }
         let upper = possible_closure(self.program, cube, limits, &self.control)?;
-        self.statistics.bounds_passes += 1;
         let before = (cube.must.len(), cube.may.as_ref().map(BTreeSet::len));
         for atom in lower.atoms.atoms() {
             if self.program.contains_gate_atom(atom) {
@@ -418,12 +704,17 @@ impl<'a> Candidates<'a> {
             None => derivable,
             Some(may) => may.intersection(&derivable).cloned().collect(),
         });
-        debug_assert!(
-            cube.must
-                .iter()
-                .all(|atom| cube.may.as_ref().is_some_and(|may| may.contains(atom))),
-            "a lower closure lies inside its upper closure"
-        );
+        // A gate atom every seed of the region holds that no seed of it can
+        // derive: the region holds no accepted seed
+        // (`Bounds.conflicting_atom_refutes`). From the undecided cube the
+        // lower closure lies inside the upper one; a split can part them.
+        if cube
+            .must
+            .iter()
+            .any(|atom| cube.may.as_ref().is_some_and(|may| !may.contains(atom)))
+        {
+            return Ok(Narrowing::Refuted);
+        }
         let after = (cube.must.len(), cube.may.as_ref().map(BTreeSet::len));
         Ok(if after == before {
             Narrowing::Fixed

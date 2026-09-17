@@ -21,22 +21,26 @@ fn solve(source: &str, extra: &[&str]) -> (zetesis_cli::Report, String) {
 
 #[test]
 fn exhaustive_models_are_streamed_once_with_coverage() {
+    // Deciding b decides a, so the two regions below the root are the two
+    // answers and nothing else is checked.
     let (report, text) = solve("a :- not b. b :- not a.", &["--models", "0"]);
     assert_eq!(report.completion, Completion::Exhausted);
     assert_eq!(
         (report.models, report.checked, report.discovered_gate_atoms),
-        (2, 4, 2)
+        (2, 2, 2)
     );
     assert!(text.contains("Answer: 1\na\nAnswer: 2\nb\nSATISFIABLE\nCoverage: exhausted"));
 }
 
 #[test]
-fn first_positive_model_does_not_expand_the_carrier() {
+fn the_first_model_reads_the_carrier_once_for_the_root() {
+    // The narrowed root holds the one undecided gate atom; its out branch is
+    // the first answer, found after one check.
     let (report, text) = solve("node(a). {chosen(X)} :- node(X).", &[]);
     assert_eq!(report.completion, Completion::RequestedModels);
     assert_eq!(
         (report.models, report.checked, report.discovered_gate_atoms),
-        (1, 1, 0)
+        (1, 1, 1)
     );
     assert!(text.contains("Answer: 1\nnode(a)\n"));
 }
@@ -58,7 +62,11 @@ fn unsat_requires_exhaustion_and_limits_preserve_incomplete_status() {
     assert_eq!(report.completion, Completion::Exhausted);
     assert_eq!(report.models, 0);
     assert!(text.contains("UNSATISFIABLE"));
-    let (limited, text) = solve("a :- not a.", &["--models", "0", "--max-candidates", "1"]);
+    // Both regions of `a :- not a.` are refuted before any seed, so the
+    // candidate limit is exercised on a program whose region is counted:
+    // with r out nothing is decided, and the count's first seed meets it.
+    let counted = "p :- not q, not r. q :- not p, not r. r :- not p, not q.";
+    let (limited, text) = solve(counted, &["--models", "0", "--max-candidates", "1"]);
     assert_eq!(limited.completion, Completion::Interrupted);
     assert_eq!(
         limited.interruption,
