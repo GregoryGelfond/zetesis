@@ -917,6 +917,58 @@ of the choice rules, the digit and carry domains from the analysis, and
 the one-solution argument written in the module, and touches no other
 cell in the corpus.
 
+## The region split: the narrowed root visited region by region
+
+Three campaigns on 17 September 2026, the reports written between 22:25:21
+and 22:36:11 UTC, same machine, profile, four workers and clingo as above.
+`main` is the 896a5f73 executable rerun as the control, `before` the
+keyed-constraint executable (`808530bf`, SHA-256
+`30849015c6feb2f8b8df4565aa99c0e601cdc1ecd9bfa9347c8e11a999b58c2d`) and
+`after` is built from `fcf8cad0` (SHA-256
+`004e153e8db2ca8366a316aa882e018db2c9e9cff330dd684b1267ba90de0265`), where
+the closure route visits the narrowed root's regions instead of counting
+its seeds. [series-fcf8cad0-cpu-auto.json](series-fcf8cad0-cpu-auto.json)
+and its [table view](series-fcf8cad0-cpu-auto-tables.md) are the derived
+comparison; raw report SHA-256
+`bb02bc67934191f93e5fc321435d4a50d9d646e3f756e9d21182648a5ab962c2` (main),
+`f06c5d41dbfa4892bea795d412ee3a16c3deba9a4ff2a0e2643eb17e3fce48bf` (before)
+and `1871d6730f9d7252800a5ca04b730982a4209fb4a8e2d273071d5ed0b808f338`
+(after).
+
+The two cells whose answers the counter had to find among every subset of
+their gate atoms:
+
+| Cell | before | after | after/before | clingo |
+|---|---:|---:|---:|---:|
+| independent-negation-8 | 107.1 | 19.4 | 0.18 | 4.7 |
+| independent-negation-10 | 1334.4 | 58.6 | 0.044 | 4.7 |
+
+Every other cell moved within its band (0.92 to 1.04). The family was
+also timed three times each outside the harness, on the `before` and
+`after` executables and on clingo, with the candidates each executable
+examined:
+
+| Nodes | before | candidates | after | candidates | regions (refuted) | clingo |
+|---:|---:|---:|---:|---:|---:|---:|
+| 8 | 0.03 s | 14,080 | 0.01 s | 55 | 175 (33) | 0.00 s |
+| 10 | 0.93 s | 147,456 | 0.05 s | 144 | 463 (88) | 0.00 s |
+| 12 | 11.9 s | 1,544,192 | 0.15 s | 377 | 1,217 (232) | 0.00 s |
+
+In the problem's words: the program chooses, for each node of a path,
+whether it is in or out, and forbids two adjacent nodes in; its answers
+are the independent sets of the path. Before, the counter offered every
+combination of the twenty gate atoms that a restriction did not rule out
+and let the reduct reject all but the answers. Now a region decides one
+node at a time: holding a node out makes it in by its own rule, holding
+it in makes it out impossible, and holding two adjacent nodes in fires
+the constraint in the region's lower closure, which refutes the region
+before any seed. The leaves are exactly the answers, each still checked
+in full, and no region was counted. The remaining factor over clingo, ten
+on these cells, is the two closures per region and the reduct check per
+leaf, both computed from scratch; the parallel visit of regions and the
+sharing of a parent's closure with its children are the next steps on
+this route.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
