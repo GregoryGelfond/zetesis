@@ -869,6 +869,54 @@ reads the rows the final instantiation reads, so a rule's comparison over
 one variable is decided once per candidate value in the whole grounding
 rather than once per offered row in every round.
 
+## Keyed constraints: the one atom the key admits
+
+Three campaigns on 17 September 2026, the reports written between 21:45:21
+and 21:56:14 UTC, same machine, profile, four workers and clingo as above.
+`main` is the 896a5f73 executable rerun as the control, `before` the
+completion-narrowing executable (`329b12cf`, SHA-256
+`efd92b5329af30944c4f500a3010cec63772d8b6110d18fce72240a8358969c4`) and
+`after` is built from `808530bf` (SHA-256
+`30849015c6feb2f8b8df4565aa99c0e601cdc1ecd9bfa9347c8e11a999b58c2d`), where
+a constraint over a keyed value is asked as the one atom its key admits.
+[series-808530bf-cpu-auto.json](series-808530bf-cpu-auto.json) and its
+[table view](series-808530bf-cpu-auto-tables.md) are the derived comparison;
+raw report SHA-256
+`4fc2bd2f13512d3c03a491fcdd8410cd1f51bb45693a214d3c52c0acd827655b` (main),
+`9e3534f1997504d5f8fe35c04fd9e37f78588930fd6a58f1feb42cbd87fed1a6` (before)
+and `e081330c3fd1139374a674e3c94f1e35ea9f63c31d5ffc1871bb6e9c4053bf1b`
+(after).
+
+One cell has the form the rewrite reads, and it is the cell it was built
+for:
+
+| Cell | before | after | after/before | clingo |
+|---|---:|---:|---:|---:|
+| send-money/send-money | 40.4 | 10.0 | 0.25 | 14.1 |
+| variant-04/05-larger-mix | 307.4 | 277.7 | 0.90 | 146.4 |
+| n-queens/variant-01 8→10 | 99.6 | 91.3 | 0.92 | 30.7 |
+
+Every other cell moved within its band (0.96 to 1.06; the closure-route
+cells 0.87 to 1.03 under fifty milliseconds). Timed three times each
+outside the harness, the send-money process falls from 0.03–0.04 s at
+about 19 MB to under 0.01 s at about 12 MB; its formula summary reads
+`120 atoms, 6963 nodes, 1927 roots; 5 constraints asked by key` where it
+read `112 atoms, 38656 nodes, 13836 roots`.
+
+In the problem's words: each column of SEND + MORE = MONEY was written as
+"the digits and the carry must not fail the sum", a test over every
+combination of a letter's ten digits and a carry's two values, of which
+the grounder formed eighteen hundred forbidden combinations per column.
+Each letter has exactly one digit and each column exactly one carry, so
+the same constraint says "the digit of this letter must be the sum's last
+digit, and the carry must be its tens": one hundred instances per
+column, each asking for one atom. The program reads the same, the answer
+is the same, and the cell is now faster than the reference, which grounds
+the written form. The rewrite is per rule, needs the exactly-one reading
+of the choice rules, the digit and carry domains from the analysis, and
+the one-solution argument written in the module, and touches no other
+cell in the corpus.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
