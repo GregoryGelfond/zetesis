@@ -821,6 +821,54 @@ time depends on how many rows a comparison over one variable excludes and
 how often that relation is offered; the series has no such cell, and the
 step is recorded for its counted effect and for the analysis now being on.
 
+## Completion narrowing: the same candidates in every round
+
+Three campaigns on 17 September 2026, the reports written between 20:51:48
+and 21:02:40 UTC, same machine, profile, four workers and clingo as above.
+The machine suspended after the control's matrix had completed and resumed
+at 20:46 UTC while its report was being written; the timed intervals are
+taken inside each run and none spans the suspension. `main` is the
+896a5f73 executable rerun as the control, `before` the candidate-narrowing
+executable (`8710ad31`, SHA-256
+`b104d7c9fd90a47f2ae4acf7f3dba20379f32b584497f17b1cf3b248be8dbf44`) and
+`after` is built from `329b12cf` (SHA-256
+`efd92b5329af30944c4f500a3010cec63772d8b6110d18fce72240a8358969c4`), where
+the narrowed candidates are prepared once per rule with the analysis and
+resolved into every support-completion snapshot as into the final one.
+[series-329b12cf-cpu-auto.json](series-329b12cf-cpu-auto.json) and its
+[table view](series-329b12cf-cpu-auto-tables.md) are the derived comparison;
+raw report SHA-256
+`493b6021d8c2b916b61fc0ae33b95d5a119e1b681fdbfb03f7bfee632e3fcbf0` (main),
+`745bed5af2830f4bf0b2b4c5e9114d761d65a65fdaad7c804c1312c10759faa2` (before)
+and `109d8616a8f1e1ba86ff84fc8d1759bf37a967604904f8990163392f0089ba1c`
+(after).
+
+The series is flat, as expected, since no cell carries a comparison over
+one variable: the formula cells read 0.96 to 1.07 with ties-50 at 1.12
+against a low `before` reading (160.7 ms; its readings across the last
+four campaigns are 163 to 181 ms), and the closure-route cells, untouched
+by the change, 0.88 to 1.02. Two shapes built for the step were timed
+three times each outside the harness, on the `before` and `after`
+executables:
+
+| Shape | before | after | completion evaluations before | after |
+|---|---:|---:|---:|---:|
+| `d(1..2000). p(X) :- d(X), X < 3.` | 0.02 s | 0.02 s | 4,000 | 4,000 |
+| `d(1..2000). e(1..250). p(X,Y) :- d(X), e(Y), Y < 3.` | 0.04 s | 0.04 s | 500 | 4 |
+
+In the problem's words: the first shape's domain has 2,000 values, past
+the analysis's 256-value widening, so nothing is narrowed and nothing
+changes. On the second the join criterion already places `e(Y)` first,
+because it decides `Y < 3`, so completion read 4,250 rows before this step
+and reads 4,250 now; what the step removes is the evaluation of the
+comparison on the 250 rows of `e` (500 evaluations, now 4) and the 248
+binding copies the guard rejects first, a cost too small to time at this
+size. The step's value is structural: the candidates are a property of
+the rule and the analysis, computed once, and every completion round now
+reads the rows the final instantiation reads, so a rule's comparison over
+one variable is decided once per candidate value in the whole grounding
+rather than once per offered row in every round.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
