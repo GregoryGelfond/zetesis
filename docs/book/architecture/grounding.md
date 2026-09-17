@@ -358,8 +358,9 @@ and either origin ceiling remain located admission failures, never UNSAT.
 
 Eager formula preparation can request a domain attempt through the library's
 `with_domain_analysis` method. The library leaves it off and the ordinary
-command requests it, independently of `Indexed` or `Table`; it changes neither
-possible-support completion nor the original formula/reduct semantics. The source guide provides a
+command requests it, independently of `Indexed` or `Table`; it changes the
+rows possible-support completion and final instantiation read, never the
+original formula/reduct semantics. The source guide provides a
 [checked on/off example](../rust/source.md#optional-domains-during-final-instantiation).
 
 The private applicability check covers the exact normalized whole source and
@@ -377,9 +378,11 @@ variable alone is decided on that variable's value, so every value it is
 defined and false at is removed from the candidates as well: the candidates
 that remain are exactly the values the exclusion rule leaves, decided before
 any row is read. A value the comparison cannot evaluate stays a candidate, so
-the join reaches it and refuses as the language reference requires. A guard
-is prepared only where the candidates are fewer than the argument's domain,
-since a relation offers no value outside it. Unknown contributes no
+the join reaches it and refuses as the language reference requires. The candidates
+are prepared once per rule, with the analysis; a guard resolves them into a
+snapshot's dictionary, for every completion round and the final one, and
+only where the candidates are fewer than the argument's domain, since a
+relation offers no value outside it. Unknown contributes no
 restriction. A global Unknown/Stopped analysis or an inapplicable program
 keeps complete fallback. These are upper bounds on source bindings, not facts
 about candidate truth or answer-set membership.

@@ -122,22 +122,13 @@ fn instantiate<'a>(
     use crate::GroundingPhase;
 
     let mut counters = Counters::observed(profile.work());
-    let catalog = profile.phase(GroundingPhase::SupportCompletion, None, || {
-        formula_support::build(&prepared, limits, budget, &mut counters, location)
-    })?;
-    let completed = profile.phase(GroundingPhase::SupportCompletion, None, || {
-        catalog.snapshot(limits, &mut counters, location)
-    })?;
-    let queries = profile.phase(GroundingPhase::SupportCompletion, None, || {
-        completed.queries(options.joins, limits, &counters, location)
-    })?;
-    let support = queries.support();
     let domains = if options.domains.is_some() {
         profile.phase(GroundingPhase::DomainAnalysis, None, || {
             crate::formula_domains::analyze(
                 &prepared,
                 options.domains,
                 limits,
+                budget,
                 &mut counters,
                 profile,
                 location,
@@ -147,6 +138,23 @@ fn instantiate<'a>(
         profile.domain_analysis(crate::DomainObservation::Disabled);
         None
     };
+    let catalog = profile.phase(GroundingPhase::SupportCompletion, None, || {
+        formula_support::build(
+            &prepared,
+            domains.as_ref(),
+            limits,
+            budget,
+            &mut counters,
+            location,
+        )
+    })?;
+    let completed = profile.phase(GroundingPhase::SupportCompletion, None, || {
+        catalog.snapshot(limits, &mut counters, location)
+    })?;
+    let queries = profile.phase(GroundingPhase::SupportCompletion, None, || {
+        completed.queries(options.joins, limits, &counters, location)
+    })?;
+    let support = queries.support();
     let (objectives, objective_origins) =
         profile.phase(GroundingPhase::ObjectiveActivation, None, || {
             objectives::prepare(&prepared, &queries, limits, budget, &mut counters, location)

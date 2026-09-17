@@ -62,6 +62,7 @@ fn atoms(prepared: &Prepared, selected: Option<ProducerPlan<'_>>) -> Vec<Atom> {
     let catalog = complete(
         prepared,
         selected,
+        None,
         &limits,
         &mut Budget::new(ExpansionLimits::default(), usize::MAX),
         &mut counters,

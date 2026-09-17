@@ -98,14 +98,15 @@ scopes and richer heads. `NormalizedProgram` is necessary; a dependency projecti
 narrowing. Inapplicability keeps the existing complete path and does not create
 a new source refusal.
 
-After unchanged possible-support completion, finite argument domains constrain
-each final rule's variable occurrences. Their intersection, less every value a
+Finite argument domains constrain each rule's variable occurrences, in every
+possible-support completion round and in final instantiation. Their intersection, less every value a
 comparison over that variable alone is defined and false at, can reject a row
 that has no complete positive continuation, before copying its new bindings or
-opening deeper probes; a guard is prepared only where that set is narrower than
-the argument's domain. The surviving rows keep the existing matcher, original
-positions and source origins. Support-growth, objective and factorized component
-joins retain their existing paths. Global Unknown or Stopped analysis supplies
+opening deeper probes; the candidates are prepared once per rule with the
+analysis, and a guard is prepared only where they are fewer than the
+argument's domain. The surviving rows keep the existing matcher, original
+positions and source origins. Objective and factorized component joins retain
+their existing paths. Global Unknown or Stopped analysis supplies
 no guards. An individually Unknown argument is unrestricted; other finite
 arguments may still contribute restrictions.
 

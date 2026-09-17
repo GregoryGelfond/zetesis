@@ -385,7 +385,8 @@ every value a comparison over that variable alone excludes is removed, for the
 bindings the exclusion rule keeps. Selecting every row that can finish then
 preserves the exact ordered completion list, including multiplicity. The
 optional eager consumer applies these guards to the exact normalized positive
-program, after support completion; the ordinary command requests it. Unknown,
+program, in every support-completion round and in final instantiation; the
+ordinary command requests it. Unknown,
 stopped and inapplicable analysis supply no narrowing. Concrete analyzer
 soundness, source/IR correspondence, dictionary identity, the agreement of the
 guard's comparison verdict with the join's, and recursive matching remain

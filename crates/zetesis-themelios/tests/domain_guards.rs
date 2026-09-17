@@ -124,7 +124,9 @@ fn finite_meets_avoid_real_prefixes_and_probes() {
         assert_eq!(actual, expected);
         assert!(off.disabled.get());
         assert_eq!(on.status.get(), Some(Status::FixedPoint));
-        assert_eq!(on.support.get(), off.support.get());
+        // Completion reads the same narrowed rows as the final instantiation.
+        assert!(on.support.get().domain_rejected_rows.unwrap() > 0);
+        assert!(on.support.get().join_rows < off.support.get().join_rows);
         let before = *off.rules.borrow().last().unwrap();
         let after = *on.rules.borrow().last().unwrap();
         // Eight a/b values, but only four occur in the corresponding c columns.
@@ -179,8 +181,36 @@ fn eligible_domain_guards_preserve_complete_grounding() {
             .unwrap(),
         );
         assert_eq!(on.status.get(), Some(Status::FixedPoint), "{source}");
-        assert_eq!(on.support.get(), off.support.get());
+        assert!(on.support.get().join_rows <= off.support.get().join_rows);
     }
+}
+
+#[test]
+fn completion_reads_the_narrowed_rows() {
+    // The candidates are prepared once, with the analysis; the first
+    // completion round rejects the 198 rows X < 3 excludes, and the delta
+    // round offers d/1 no new row.
+    let source = "d(1..200). p(X) :- d(X), X < 3. q(X) :- p(X).";
+    let off = Observation::default();
+    let on = Observation::default();
+    equal(
+        &ground(source, JoinStrategy::Indexed, None, &off).unwrap(),
+        &ground(
+            source,
+            JoinStrategy::Indexed,
+            Some(DomainLimits::default()),
+            &on,
+        )
+        .unwrap(),
+    );
+    let (before, after) = (off.support.get(), on.support.get());
+    assert_eq!(after.domain_rejected_rows, Some(198));
+    assert_eq!(after.join_rows, before.join_rows);
+    // X < 3 was evaluated on both sides of every offered row; now on the
+    // two rows the guard admits.
+    assert_eq!(before.expression_evaluations, Some(400));
+    assert_eq!(after.expression_evaluations, Some(4));
+    assert_eq!(on.work.get().domain_narrowed_candidates, Some(198));
 }
 
 #[test]
@@ -319,8 +349,8 @@ fn a_comparison_over_one_variable_narrows_its_candidates() {
             .count(),
         2
     );
+    assert_eq!(on.work.get().domain_narrowed_candidates, Some(198));
     let rules = *on.rules.borrow().last().unwrap();
-    assert_eq!(rules.domain_narrowed_candidates, Some(198));
     assert_eq!(rules.domain_rejected_rows, Some(198));
     assert_eq!(rules.binding_snapshots, Some(2));
 }
@@ -343,8 +373,7 @@ fn a_candidate_no_comparison_can_evaluate_is_kept() {
         &ground(source, JoinStrategy::Indexed, None, &Observation::default()).unwrap(),
         &narrowed,
     );
-    let rules = *on.rules.borrow().last().unwrap();
-    assert_eq!(rules.domain_narrowed_candidates, Some(2));
+    assert_eq!(on.work.get().domain_narrowed_candidates, Some(2));
     assert!(matches!(
         ground(
             "d(0..2). p(X) :- d(X), 1/X = 1.",
@@ -376,9 +405,8 @@ fn a_comparison_over_two_variables_narrows_no_candidate() {
         &ground(source, JoinStrategy::Indexed, None, &Observation::default()).unwrap(),
         &narrowed,
     );
-    let rules = *on.rules.borrow().last().unwrap();
-    assert_eq!(rules.domain_narrowed_candidates, Some(0));
-    assert_eq!(rules.domain_guard_rows, Some(0));
+    assert_eq!(on.work.get().domain_narrowed_candidates, Some(0));
+    assert_eq!(on.work.get().domain_guard_rows, Some(0));
 }
 
 #[test]

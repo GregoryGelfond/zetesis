@@ -208,9 +208,10 @@ comparison cannot evaluate stays, so the join reaches it. A guard is prepared
 only where the candidates are fewer than the argument's domain. Borrowed source
 values are resolved through the completed support owner's existing equality
 dictionary; no second dictionary assigns IDs. A row failing a necessary domain is rejected
-before binding copies and deeper probes. Surviving rows keep their original
-positions, matcher and emission order. Support completion, objective joins and
-existing factorized rule plans retain their existing paths. The analyzer is an
+before binding copies and deeper probes, in every support-completion round
+and in final instantiation. Surviving rows keep their original positions,
+matcher and emission order. Objective joins and existing factorized rule
+plans retain their existing paths. The analyzer is an
 upper-bound producer, not a candidate-truth or answer-set certificate.
 
 `DomainObservation` exposes Disabled, Inapplicable or the actual borrowed
@@ -220,7 +221,8 @@ observation emits a sequential `domain_analysis` phase only when requested.
 preparation, including a stopped or failed prefix. `domain_guard_rows`,
 `domain_guard_checks` and `domain_rejected_rows` count actual row visits,
 dictionary-ID comparisons and rejections; `domain_narrowed_candidates` counts
-the values comparisons excluded before any row was read. Visited rows remain in `join_rows`
+the values comparisons excluded before any row was read, charged to the
+analysis phase that prepares the candidates. Visited rows remain in `join_rows`
 and `table_rows`; avoided deeper work appears in the existing probe counts.
 
 Analyzer populations and inspected source bytes have separate finite

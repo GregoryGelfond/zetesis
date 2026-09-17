@@ -71,10 +71,10 @@ fn domains_preserve_the_qualified_subject() {
 fn domain_receipts_describe_actual_guard_work() {
     for joins in [JoinStrategy::Indexed, JoinStrategy::Table] {
         let (before, after) = paired(joins);
-        assert_eq!(
-            work(&before, GroundingPhase::SupportCompletion),
-            work(&after, GroundingPhase::SupportCompletion)
-        );
+        // Completion reads the same narrowed rows as the final instantiation.
+        let completion = work(&after, GroundingPhase::SupportCompletion);
+        assert!(completion.domain_rejected_rows.unwrap() > 0);
+        assert!(completion.join_rows < work(&before, GroundingPhase::SupportCompletion).join_rows);
         let off = work(&before, GroundingPhase::RuleInstantiation);
         let on = work(&after, GroundingPhase::RuleInstantiation);
         assert_eq!(off.join_probes, Some(73));

@@ -62,17 +62,228 @@ pub(crate) struct Guards<'a, 'source> {
     bytes: usize,
 }
 
+/// The narrowed candidates of one rule's variables: a property of the rule
+/// and the analysis alone, prepared once and resolved into every completion
+/// snapshot and the final one. Its storage is bounded by the analysis's value
+/// entries, as the analysis heap is, and lies outside the support allowance.
+pub(crate) struct Candidates<'source> {
+    bounds: Vec<Option<Values<'source>>>,
+    occurrences: Vec<Occurrence<'source>>,
+}
+
+impl<'source> Candidates<'source> {
+    pub(crate) fn prepare(
+        rule: &'source RuleIr,
+        analysis: &Analysis<'source>,
+        limits: &FormulaLimits,
+        budget: &mut Budget,
+        counters: &mut Counters,
+    ) -> Result<Self, FormulaFailure> {
+        let mut bounds = Vec::new();
+        for _ in 0..rule.variables {
+            counters.work(limits, rule.location)?;
+            bounds.push(None);
+        }
+        let mut candidates = Self {
+            bounds,
+            occurrences: Vec::new(),
+        };
+        for (literal, element) in rule.body.iter().enumerate() {
+            // A comparison binds nothing and offers no row; it narrows the
+            // candidates below, once every meet is taken.
+            if matches!(element, LiteralIr::Compare(..)) {
+                continue;
+            }
+            let LiteralIr::Atom(DefaultNegation::None, pattern) = element else {
+                return Err(failure(Failure::Predicate, rule.location));
+            };
+            for (column, term) in pattern.terms().iter().enumerate() {
+                counters.work(limits, rule.location)?;
+                let Term::Variable(slot) = term else {
+                    continue;
+                };
+                let domain = argument(
+                    analysis,
+                    pattern.predicate(),
+                    column,
+                    limits,
+                    counters,
+                    rule.location,
+                )?;
+                let bound =
+                    candidates
+                        .bounds
+                        .get_mut(*slot)
+                        .ok_or(FormulaFailure::UnsafeVariable {
+                            variable: *slot,
+                            location: rule.location,
+                        })?;
+                if let Some(domain) = domain {
+                    meet(bound, domain, limits, counters, rule.location)?;
+                }
+                counters.work(limits, rule.location)?;
+                candidates.occurrences.push(Occurrence {
+                    literal,
+                    pattern,
+                    column,
+                    slot: *slot,
+                    width: domain.map(BTreeSet::len),
+                });
+            }
+        }
+        candidates.narrow(rule, limits, budget, counters)?;
+        Ok(candidates)
+    }
+
+    /// Exclude from each variable's candidates every value a comparison over
+    /// that variable alone is defined and false at. A candidate the comparison
+    /// cannot evaluate is kept: nothing excludes it, so the join reaches it
+    /// and refuses as the language reference requires.
+    fn narrow(
+        &mut self,
+        rule: &RuleIr,
+        limits: &FormulaLimits,
+        budget: &mut Budget,
+        counters: &mut Counters,
+    ) -> Result<(), FormulaFailure> {
+        let mut evaluation = Evaluation::default();
+        for literal in &rule.body {
+            counters.work(limits, rule.location)?;
+            let Some(comparison) = unary(literal) else {
+                continue;
+            };
+            let Some(values) =
+                self.bounds
+                    .get_mut(comparison.slot)
+                    .ok_or(FormulaFailure::UnsafeVariable {
+                        variable: comparison.slot,
+                        location: rule.location,
+                    })?
+            else {
+                continue;
+            };
+            let mut kept = 0;
+            for index in 0..values.len() {
+                let symbol = values[index];
+                counters.charge_work(1 + atomic_bytes(symbol) as u128, limits, rule.location)?;
+                budget.charge(ExpansionResource::TermWork, 1, rule.location)?;
+                let candidate = crate::compile::scalar(symbol, rule.location)?;
+                if excludes(
+                    &comparison,
+                    &candidate,
+                    &mut evaluation,
+                    limits,
+                    budget,
+                    counters,
+                    rule.location,
+                )? {
+                    counters.record(Event::DomainNarrowedCandidate);
+                } else {
+                    values[kept] = symbol;
+                    kept += 1;
+                }
+            }
+            counters.work(limits, rule.location)?;
+            values.truncate(kept);
+        }
+        Ok(())
+    }
+}
+
+/// Intersect a variable's bound with one more argument domain, in place.
+fn meet<'p>(
+    target: &mut Option<Values<'p>>,
+    source: &BTreeSet<&'p Symbol>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: Location,
+) -> Result<(), FormulaFailure> {
+    let Some(values) = target else {
+        let mut values = Vec::new();
+        values
+            .try_reserve_exact(source.len())
+            .map_err(|_| failure(Failure::Allocation, location))?;
+        for &value in source {
+            counters.work(limits, location)?;
+            values.push(value);
+        }
+        *target = Some(values);
+        return Ok(());
+    };
+    let mut other = source.iter().copied().peekable();
+    let mut kept = 0;
+    for index in 0..values.len() {
+        while let Some(&right) = other.peek() {
+            compare_work(values[index], right, limits, counters, location)?;
+            match values[index].cmp(right) {
+                std::cmp::Ordering::Less => break,
+                std::cmp::Ordering::Equal => {
+                    counters.work(limits, location)?;
+                    values[kept] = values[index];
+                    kept += 1;
+                    other.next();
+                    break;
+                }
+                std::cmp::Ordering::Greater => {
+                    other.next();
+                }
+            }
+        }
+    }
+    counters.work(limits, location)?;
+    values.truncate(kept);
+    Ok(())
+}
+
+/// Whether the comparison, with its variable bound to `candidate`, is
+/// defined and false. An evaluation failure excludes nothing; a resource
+/// refusal is returned as it is.
+fn excludes(
+    comparison: &Unary<'_>,
+    candidate: &Value,
+    evaluation: &mut Evaluation,
+    limits: &FormulaLimits,
+    budget: &mut Budget,
+    counters: &mut Counters,
+    location: Location,
+) -> Result<bool, FormulaFailure> {
+    let left = evaluation.expression(
+        comparison.left,
+        |_| Ok(candidate),
+        limits,
+        budget,
+        counters,
+        location,
+    );
+    let sides = left.and_then(|left| {
+        let right = evaluation.expression(
+            comparison.right,
+            |_| Ok(candidate),
+            limits,
+            budget,
+            counters,
+            location,
+        )?;
+        Ok((left, right))
+    });
+    match sides {
+        Ok((left, right)) => Ok(!super::super::compare(&left, comparison.relation, &right)),
+        Err(FormulaFailure::Expansion(ExpansionFailure::Evaluation { .. })) => Ok(false),
+        Err(error) => Err(error),
+    }
+}
+
 impl<'source> Support<'source> {
     pub(crate) fn domain_guards<'a>(
         &'a self,
         rule: &'a RuleIr,
-        analysis: &Analysis<'_>,
+        candidates: &'a Candidates<'_>,
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
     ) -> Result<Option<Guards<'a, 'source>>, FormulaFailure> {
         let before = counters.work;
-        let result = Guards::prepare(self, rule, analysis, limits, budget, counters);
+        let result = Guards::prepare(self, rule, candidates, limits, budget, counters);
         counters.record(Event::DomainPrepareWork(counters.work - before));
         result
     }
@@ -82,7 +293,7 @@ impl<'a, 'source> Guards<'a, 'source> {
     fn prepare(
         support: &'a Support<'source>,
         rule: &'a RuleIr,
-        analysis: &Analysis<'_>,
+        candidates: &'a Candidates<'_>,
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
@@ -98,81 +309,21 @@ impl<'a, 'source> Guards<'a, 'source> {
         };
         guards.include(
             size_of::<Self>()
-                + size_of::<Vec<Option<Values<'_>>>>()
                 + size_of::<Restriction<'_, '_>>()
                 + size_of::<Vec<Restriction<'_, '_>>>()
                 + size_of::<Vec<u32>>()
-                + size_of::<Vec<&Symbol>>()
                 + size_of::<Value>(),
             limits,
             counters,
         )?;
-        let mut bounds = Vec::new();
-        guards.reserve(&mut bounds, rule.variables, limits, counters)?;
-        for _ in 0..rule.variables {
-            counters.work(limits, rule.location)?;
-            bounds.push(None);
-        }
-        let mut columns = 0_usize;
-        for literal in &rule.body {
-            counters.work(limits, rule.location)?;
-            if let LiteralIr::Atom(DefaultNegation::None, pattern) = literal {
-                columns = columns
-                    .checked_add(pattern.terms().len())
-                    .ok_or_else(|| failure(Failure::Overflow, rule.location))?;
-            }
-        }
-        let mut occurrences = Vec::new();
-        guards.reserve(&mut occurrences, columns, limits, counters)?;
-        for (literal, element) in rule.body.iter().enumerate() {
-            // A comparison binds nothing and offers no row; it narrows the
-            // candidates below, once every meet is taken.
-            if matches!(element, LiteralIr::Compare(..)) {
-                continue;
-            }
-            let LiteralIr::Atom(DefaultNegation::None, pattern) = element else {
-                return Err(failure(Failure::Predicate, rule.location));
-            };
-            for (column, term) in pattern.terms().iter().enumerate() {
-                counters.work(limits, rule.location)?;
-                let Term::Variable(slot) = term else {
-                    continue;
-                };
-                let bound = bounds
-                    .get_mut(*slot)
-                    .ok_or(FormulaFailure::UnsafeVariable {
-                        variable: *slot,
-                        location: rule.location,
-                    })?;
-                let domain = argument(
-                    analysis,
-                    pattern.predicate(),
-                    column,
-                    limits,
-                    counters,
-                    rule.location,
-                )?;
-                if let Some(domain) = domain {
-                    guards.meet(bound, domain, limits, counters)?;
-                }
-                occurrences.push(Occurrence {
-                    literal,
-                    pattern,
-                    column,
-                    slot: *slot,
-                    width: domain.map(BTreeSet::len),
-                });
-            }
-        }
-        guards.narrow(&mut bounds, limits, budget, counters)?;
-        let restrictions = guards.restrict(&occurrences, &bounds, limits, budget, counters)?;
+        let restrictions = guards.restrict(
+            &candidates.occurrences,
+            &candidates.bounds,
+            limits,
+            budget,
+            counters,
+        )?;
         guards.restrictions = restrictions;
-        counters.charge_work(bounds.len() as u128, limits, rule.location)?;
-        let transient = transient_bytes(&bounds, bounds.capacity(), occurrences.capacity())
-            .ok_or_else(|| failure(Failure::Overflow, rule.location))?;
-        drop(bounds);
-        drop(occurrences);
-        guards.release(transient);
         Ok((!guards.restrictions.is_empty()).then_some(guards))
     }
 
@@ -227,99 +378,6 @@ impl<'a, 'source> Guards<'a, 'source> {
         Ok(restrictions)
     }
 
-    /// Exclude from each variable's candidates every value a comparison over
-    /// that variable alone is defined and false at. A candidate the comparison
-    /// cannot evaluate is kept: nothing excludes it, so the join reaches it
-    /// and refuses as the language reference requires.
-    fn narrow(
-        &mut self,
-        bounds: &mut [Option<Values<'_>>],
-        limits: &FormulaLimits,
-        budget: &mut Budget,
-        counters: &mut Counters,
-    ) -> Result<(), FormulaFailure> {
-        let mut evaluation = Evaluation::default();
-        for literal in &self.rule.body {
-            counters.work(limits, self.rule.location)?;
-            let Some(comparison) = unary(literal) else {
-                continue;
-            };
-            let Some(values) =
-                bounds
-                    .get_mut(comparison.slot)
-                    .ok_or(FormulaFailure::UnsafeVariable {
-                        variable: comparison.slot,
-                        location: self.rule.location,
-                    })?
-            else {
-                continue;
-            };
-            let mut kept = 0;
-            for index in 0..values.len() {
-                let (candidate, charged) =
-                    self.admit_value(values[index], limits, budget, counters)?;
-                let excluded = self.excludes(
-                    &comparison,
-                    &candidate,
-                    &mut evaluation,
-                    limits,
-                    budget,
-                    counters,
-                )?;
-                drop(candidate);
-                self.release(charged);
-                if excluded {
-                    counters.record(Event::DomainNarrowedCandidate);
-                } else {
-                    values[kept] = values[index];
-                    kept += 1;
-                }
-            }
-            counters.work(limits, self.rule.location)?;
-            values.truncate(kept);
-        }
-        Ok(())
-    }
-
-    /// Whether the comparison, with its variable bound to `candidate`, is
-    /// defined and false. An evaluation failure excludes nothing; a resource
-    /// refusal is returned as it is.
-    fn excludes(
-        &self,
-        comparison: &Unary<'_>,
-        candidate: &Value,
-        evaluation: &mut Evaluation,
-        limits: &FormulaLimits,
-        budget: &mut Budget,
-        counters: &mut Counters,
-    ) -> Result<bool, FormulaFailure> {
-        let location = self.rule.location;
-        let left = evaluation.expression(
-            comparison.left,
-            |_| Ok(candidate),
-            limits,
-            budget,
-            counters,
-            location,
-        );
-        let sides = left.and_then(|left| {
-            let right = evaluation.expression(
-                comparison.right,
-                |_| Ok(candidate),
-                limits,
-                budget,
-                counters,
-                location,
-            )?;
-            Ok((left, right))
-        });
-        match sides {
-            Ok((left, right)) => Ok(!super::super::compare(&left, comparison.relation, &right)),
-            Err(FormulaFailure::Expansion(ExpansionFailure::Evaluation { .. })) => Ok(false),
-            Err(error) => Err(error),
-        }
-    }
-
     /// Convert one borrowed source symbol to a value, charging its payload.
     /// The caller releases the returned bytes once the value is dropped.
     fn admit_value(
@@ -342,48 +400,6 @@ impl<'a, 'source> Guards<'a, 'source> {
             self.include_actual(actual - payload, limits, counters)?;
         }
         Ok((value, actual.max(payload)))
-    }
-
-    fn meet<'p>(
-        &mut self,
-        target: &mut Option<Values<'p>>,
-        source: &BTreeSet<&'p Symbol>,
-        limits: &FormulaLimits,
-        counters: &mut Counters,
-    ) -> Result<(), FormulaFailure> {
-        let Some(values) = target else {
-            let mut values = Vec::new();
-            self.reserve(&mut values, source.len(), limits, counters)?;
-            for &value in source {
-                counters.work(limits, self.rule.location)?;
-                values.push(value);
-            }
-            *target = Some(values);
-            return Ok(());
-        };
-        let mut other = source.iter().copied().peekable();
-        let mut kept = 0;
-        for index in 0..values.len() {
-            while let Some(&right) = other.peek() {
-                compare_work(values[index], right, limits, counters, self.rule.location)?;
-                match values[index].cmp(right) {
-                    std::cmp::Ordering::Less => break,
-                    std::cmp::Ordering::Equal => {
-                        counters.work(limits, self.rule.location)?;
-                        values[kept] = values[index];
-                        kept += 1;
-                        other.next();
-                        break;
-                    }
-                    std::cmp::Ordering::Greater => {
-                        other.next();
-                    }
-                }
-            }
-        }
-        counters.work(limits, self.rule.location)?;
-        values.truncate(kept);
-        Ok(())
     }
 
     fn resolve(
@@ -662,23 +678,4 @@ fn compare_work(
 
 fn failure(error: Failure, location: Location) -> FormulaFailure {
     FormulaFailure::SupportRelation { error, location }
-}
-
-fn transient_bytes(
-    bounds: &[Option<Values<'_>>],
-    capacity: usize,
-    occurrences: usize,
-) -> Option<usize> {
-    let arrays = bounds.iter().flatten().try_fold(0_usize, |total, values| {
-        total.checked_add(values.capacity().checked_mul(size_of::<&Symbol>())?)
-    })?;
-    arrays
-        .checked_add(capacity.checked_mul(size_of::<Option<Values<'_>>>())?)?
-        .checked_add(occurrences.checked_mul(size_of::<Occurrence<'_>>())?)?
-        .checked_add(size_of::<Vec<Option<Values<'_>>>>())?
-        .checked_add(size_of::<Restriction<'_, '_>>())?
-        .checked_add(size_of::<Vec<Restriction<'_, '_>>>())?
-        .checked_add(size_of::<Vec<u32>>())?
-        .checked_add(size_of::<Vec<&Symbol>>())?
-        .checked_add(size_of::<Value>())
 }

@@ -27,7 +27,9 @@ excludes generators, negative body gates, structured terms and richer producers
 from this consumer; a body comparison is admitted, and one that reads a single
 variable narrows that variable's candidates by `kept_binding_survives`, whose
 exclusion premise the guard discharges by evaluating the comparison at the
-candidate exactly as the join evaluates it. Support completion is unchanged. On this pure positive profile, induction over the
+candidate exactly as the join evaluates it. The candidates are prepared once
+per rule and resolved into every completion snapshot and the final one, so
+support completion reads the same narrowed rows as final instantiation. On this pure positive profile, induction over the
 completed support construction and the analyzer's conservative transfers must
 supply argument coverage; this source-to-implementation bridge remains a review
 and executable-control obligation, not a theorem established by these lemmas.

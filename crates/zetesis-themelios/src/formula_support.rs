@@ -28,7 +28,7 @@ use crate::grounding_observer::{Event, Work};
 use crate::{ExpansionFailure, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
 
 pub(crate) use evaluation::Evaluation;
-pub(crate) use queries::Support;
+pub(crate) use queries::{Candidates, Support};
 #[cfg(test)]
 use relations::RelationRows;
 pub(crate) use relations::{Relations, SupportCatalog};
@@ -174,18 +174,23 @@ impl Counters {
 
 pub(crate) fn build(
     prepared: &Prepared,
+    domains: Option<&crate::formula_domains::Domains<'_>>,
     limits: &FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
     fallback: Location,
 ) -> Result<CompletedCatalog, FormulaFailure> {
     let plan = producers::ProducerPlan::prepare(prepared, limits, counters, fallback)?;
-    complete(prepared, plan, limits, budget, counters, fallback)
+    complete(prepared, plan, domains, limits, budget, counters, fallback)
 }
 
+/// Every round joins each selected rule under its domain guards, when the
+/// analysis prepared candidates: a row a guard rejects has no complete
+/// continuation the exclusion rule keeps, in this round as in the final one.
 fn complete(
     prepared: &Prepared,
     mut plan: Option<producers::ProducerPlan<'_>>,
+    domains: Option<&crate::formula_domains::Domains<'_>>,
     limits: &FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
@@ -236,8 +241,18 @@ fn complete(
                     }
                     None => delta::variants(rule, &support, rounds == 1, limits, counters)?,
                 };
+                let guards = match domains {
+                    Some(domains) => support.domain_guards(
+                        rule,
+                        domains.for_rule(index, rule)?,
+                        limits,
+                        budget,
+                        counters,
+                    )?,
+                    None => None,
+                };
                 while let Some(variant) = variants.next(limits, counters)? {
-                    let mut outer = Join::rule(rule, &support, budget)?;
+                    let mut outer = Join::domain_rule(rule, &support, guards.as_ref(), budget)?;
                     outer.partition(variant, budget, rule.location)?;
                     derive_rule(
                         rule, &mut outer, &support, &mut delta, limits, budget, counters,
