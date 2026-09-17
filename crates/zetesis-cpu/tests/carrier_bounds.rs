@@ -196,3 +196,26 @@ fn the_bounded_counter_applies_both_closures_on_its_first_pull() {
     assert_eq!(seeds.len(), 16);
     assert_eq!(seeds.iter().filter(|(_, accepted)| *accepted).count(), 1);
 }
+
+#[test]
+fn a_program_without_gate_predicates_computes_no_closure_for_its_bounds() {
+    // No work is admitted, yet no stop is recorded: with an empty carrier
+    // the counter yields its one seed without asking for either closure.
+    let program = program(vec![
+        fact("d", vec![number(1)]),
+        Template::new(
+            Some(pattern("r", vec![Term::Variable(0)])),
+            vec![pattern("d", vec![Term::Variable(0)])],
+            vec![],
+            vec![],
+            vec![],
+        ),
+    ]);
+    let mut candidates = Candidates::new(&program, CandidateLimits::default(), Control::default());
+    candidates.bounded(Limits {
+        max_work: 0,
+        ..Limits::default()
+    });
+    assert_eq!(candidates.by_ref().map(Result::unwrap).count(), 1);
+    assert_eq!(candidates.statistics().bounds_stop, None);
+}

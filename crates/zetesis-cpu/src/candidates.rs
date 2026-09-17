@@ -332,6 +332,11 @@ impl<'a> Candidates<'a> {
         let BoundsState::Pending(limits) = self.bounds else {
             return Ok(());
         };
+        // An empty carrier has nothing to bound; the one seed costs no closure.
+        if self.program.gate_predicates().is_empty() {
+            self.bounds = BoundsState::Applied;
+            return Ok(());
+        }
         let closures = upper_closure(self.program, limits, &self.control).and_then(|may| {
             let must = lower_closure(self.program, limits, &self.control)?;
             Ok((may, must))
