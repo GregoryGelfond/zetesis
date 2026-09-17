@@ -115,7 +115,17 @@ fn medians_are_taken_per_cell_profile_and_report() {
     assert_eq!(chain["reference"]["after"]["median_ns"], 8_100_000);
     // Ratios are of medians, later report over earlier, in label order.
     assert_eq!(chain["profiles"][0]["ratios"]["after/before"], 0.375);
+    // Each report's native median over the reference solver's median on the
+    // same cell: the standing of the build against clingo, per step.
+    assert_eq!(chain["profiles"][0]["reference_ratios"]["before"], 0.25);
+    assert_eq!(
+        chain["profiles"][0]["reference_ratios"]["after"],
+        750_000.0 / 8_100_000.0
+    );
     assert_eq!(encoded["labels"], json!(["before", "after"]));
+    let markdown = comparison.markdown();
+    assert!(markdown.contains("| before/reference | after/reference |"));
+    assert!(markdown.contains("| 0.250 | 0.093 |"));
 }
 
 #[test]
@@ -183,6 +193,7 @@ fn non_pass_cells_are_reported_by_decision_not_averaged() {
     let cell = &encoded["cells"][0]["profiles"][0]["reports"]["main"];
     assert!(cell.get("median_ns").is_none());
     assert_eq!(cell["decisions"], json!({"refused": 2}));
+    assert!(encoded["cells"][0]["profiles"][0]["reference_ratios"]["main"].is_null());
     let markdown = comparison.markdown();
     assert!(markdown.contains("producer-chain-700"));
     assert!(markdown.contains("refused"));

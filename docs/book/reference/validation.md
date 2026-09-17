@@ -238,8 +238,9 @@ defaults and the observation retains the grounding mode each cell took;
 `--time-limit` adds a cooperative deadline to every native profile.
 
 `zetesis-series` derives one comparison from published reports of the same
-cells: exact medians, later-over-earlier ratios, the retained counters and each
-report's native seal, with cells that did not pass listed by decision. The
+cells: exact medians, later-over-earlier ratios, each report's native median
+over the reference solver's median on the same cell, the retained counters and
+each report's native seal, with cells that did not pass listed by decision. The
 [comparison guide](https://github.com/GregoryGelfond/zetesis/blob/main/scripts/README-comparison.md#the-fixed-series)
 gives the commands. Retained series comparisons live beside the other
 [recorded observations](observations/README.md).

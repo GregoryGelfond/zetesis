@@ -136,6 +136,9 @@ pub struct ProfileRow {
     /// `later/earlier` median ratios between consecutive reports and between
     /// the last and the first, present only where both cells passed.
     pub ratios: BTreeMap<String, f64>,
+    /// Each report's native median over the reference solver's median on the
+    /// same cell, by report label, present only where both passed.
+    pub reference_ratios: BTreeMap<String, f64>,
 }
 
 /// One cell across the reports.
@@ -218,6 +221,12 @@ pub fn compare(reports: &[Labelled<'_>]) -> Result<Comparison, ViewError> {
     let mut cells = Vec::with_capacity(entries.len());
     for (index, entry) in entries.iter().enumerate() {
         let label = label(entry, workloads.and_then(|workloads| workloads.get(index)));
+        let mut reference = BTreeMap::new();
+        for labelled in reports {
+            if let Some(timing) = self::reference(labelled, index)? {
+                reference.insert(labelled.label.to_owned(), timing);
+            }
+        }
         let mut rows = Vec::with_capacity(requested.len());
         for (profile, request) in requested.iter().enumerate() {
             let mut records = BTreeMap::new();
@@ -225,17 +234,13 @@ pub fn compare(reports: &[Labelled<'_>]) -> Result<Comparison, ViewError> {
                 records.insert(labelled.label.to_owned(), native(labelled, index, profile)?);
             }
             let ratios = ratios(&labels, &records);
+            let reference_ratios = reference_ratios(&records, &reference);
             rows.push(ProfileRow {
                 profile: request.clone(),
                 reports: records,
                 ratios,
+                reference_ratios,
             });
-        }
-        let mut reference = BTreeMap::new();
-        for labelled in reports {
-            if let Some(timing) = self::reference(labelled, index)? {
-                reference.insert(labelled.label.to_owned(), timing);
-            }
         }
         cells.push(Cell {
             entry: entry.clone(),
@@ -290,8 +295,11 @@ impl fmt::Display for Markdown<'_> {
             for name in &ratio_names {
                 write!(f, " {name} |")?;
             }
+            for label in &comparison.labels {
+                write!(f, " {label}/reference |")?;
+            }
             write!(f, "\n|---|")?;
-            for _ in 0..comparison.labels.len() + ratio_names.len() {
+            for _ in 0..2 * comparison.labels.len() + ratio_names.len() {
                 write!(f, "---:|")?;
             }
             writeln!(f)?;
@@ -303,6 +311,12 @@ impl fmt::Display for Markdown<'_> {
                 }
                 for name in &ratio_names {
                     match row.ratios.get(*name) {
+                        Some(ratio) => write!(f, " {ratio:.3} |")?,
+                        None => write!(f, " n/a |")?,
+                    }
+                }
+                for label in &comparison.labels {
+                    match row.reference_ratios.get(label) {
                         Some(ratio) => write!(f, " {ratio:.3} |")?,
                         None => write!(f, " n/a |")?,
                     }
@@ -460,6 +474,27 @@ fn ratios(labels: &[String], records: &BTreeMap<String, Native>) -> BTreeMap<Str
             )]
             let ratio = after as f64 / before as f64;
             ratios.insert(format!("{later}/{earlier}"), ratio);
+        }
+    }
+    ratios
+}
+
+/// The native median over the reference median, per report, where both passed.
+fn reference_ratios(
+    records: &BTreeMap<String, Native>,
+    reference: &BTreeMap<String, Timing>,
+) -> BTreeMap<String, f64> {
+    let mut ratios = BTreeMap::new();
+    for (label, record) in records {
+        if let (Native::Passed(passed), Some(timing)) = (record, reference.get(label))
+            && timing.median_ns > 0
+        {
+            #[expect(
+                clippy::cast_precision_loss,
+                reason = "a ratio of intervals is reported to three decimals"
+            )]
+            let ratio = passed.timing.median_ns as f64 / timing.median_ns as f64;
+            ratios.insert(label.clone(), ratio);
         }
     }
     ratios
