@@ -1021,6 +1021,45 @@ quarter of their time in the reduct search's propagation and a sixth in
 byte comparison of predicate names, which the dense predicate identity
 is to remove; their per-model output cost is the writer's.
 
+## Shared predicate names
+
+Three campaigns on 17 September 2026, the reports written between 23:02:25
+and 23:13:19 UTC, same machine, profile, four workers and clingo as above.
+`main` is the 896a5f73 executable rerun as the control, `before` the
+region-split executable (`fcf8cad0`, SHA-256
+`004e153e8db2ca8366a316aa882e018db2c9e9cff330dd684b1267ba90de0265`) and
+`after` is built from `df256d7d` (SHA-256
+`fc865a4bda26205538d67e8b37b695afd0a41434ca45e345082581f996e2f21b`), where
+a predicate's name is one shared allocation across the atoms that carry it.
+[series-df256d7d-cpu-auto.json](series-df256d7d-cpu-auto.json) and its
+[table view](series-df256d7d-cpu-auto-tables.md) are the derived comparison;
+raw report SHA-256
+`ea9e7f9d2cc2b770f0d9005c54a1b02177944e11443985d8a84a9db326624856` (main),
+`7eb85fcd179f6e234c1ee75c5323a064d2cff948841f29afef48064f6b3c31b0` (before)
+and `9d251ebb21023078406c5a462ee268967eea5b78019a531bf0079e6d6f08d833`
+(after).
+
+The series is flat. The formula cells read 0.94 to 1.06 (send-money 0.96,
+independent-negation-aggregate-16 0.94, independent-choice-16 0.96,
+n-queens/variant-01 8→10 1.06), the closure-route cells 1.00 to 1.11, with
+chain-1000 at 1.11 and chain-2000 at 1.09. Those two were remeasured
+outside the harness with `perf stat` over fifteen runs each: chain-2000
+takes 34.58 ± 0.36 ms on `before` and 34.59 ± 0.30 ms on `after` with four
+workers, 34.81 ± 0.43 and 35.29 ± 0.53 with one, so the campaign's
+readings were the width of the band (the `before` run's maxima on the
+transitive cells reached 78 ms) and not a change.
+
+In the problem's words: the profile that motivated the step was taken
+with the plain writer, where a seventh of the samples compared predicate
+names byte by byte. Under the harness's JSON output the same cell's
+profile is a different picture: the JSON encoder's buffer and quoting
+take a third of the samples and the reduct search's propagation a sixth,
+and the byte comparison is under three percent after this change, where
+it was fourteen before. The comparison is gone, and its share of the
+harness's cells was too small to show in wall time. What the profile now
+says plainly is that the writer is the next cost on every cell with many
+answers, and that the search's propagation is the one after it.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
