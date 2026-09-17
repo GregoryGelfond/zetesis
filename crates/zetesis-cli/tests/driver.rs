@@ -141,7 +141,9 @@ fn cli_rejects_zero_workers_and_batches() {
 fn kr_domains_rule_excerpts_complete_with_known_results() {
     // Reachability is derived by gate-free rules, so every reachable vertex
     // is a necessary gate atom and no other is derivable: one seed decides
-    // each excerpt, where the symbolic carrier alone offered sixteen.
+    // the reachable excerpt, where the symbolic carrier alone offered
+    // sixteen, and the disconnected one is refuted before any seed, since a
+    // constraint on an unreachable vertex fires under every seed.
     for (source, models, seeds) in [
         (
             include_str!("fixtures/kr-domains/accepted/shortest-path-reachable.lp"),
@@ -151,7 +153,7 @@ fn kr_domains_rule_excerpts_complete_with_known_results() {
         (
             include_str!("fixtures/kr-domains/accepted/shortest-path-disconnected-cycle-unsat.lp"),
             0,
-            1,
+            0,
         ),
         (
             include_str!("fixtures/kr-domains/accepted/task-allocation-projections.lp"),

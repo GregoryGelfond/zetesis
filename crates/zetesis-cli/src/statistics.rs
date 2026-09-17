@@ -408,17 +408,25 @@ fn candidates(sink: &mut impl Write, stats: zetesis_cpu::CandidateStatistics) ->
         stats.restriction_bytes,
         stats.restriction_peak_bytes
     )?;
-    match stats.bounds_stop {
-        None => writeln!(
+    if stats.bounds_refuted {
+        return writeln!(
             sink,
-            "  carrier bounds: underivable gate atoms={}; necessary gate atoms={}",
-            stats.underivable_gate_atoms, stats.necessary_gate_atoms
-        ),
-        Some(stop) => writeln!(
-            sink,
-            "  carrier bounds: unavailable ({stop}); the counter ran over the symbolic gate carrier"
-        ),
+            "  carrier bounds: refuted by a definite constraint after {} narrowing passes; no seed offered",
+            stats.bounds_passes
+        );
     }
+    writeln!(
+        sink,
+        "  carrier bounds: narrowing passes={}; underivable gate atoms={}; necessary gate atoms={}",
+        stats.bounds_passes, stats.underivable_gate_atoms, stats.necessary_gate_atoms
+    )?;
+    if let Some(stop) = stats.bounds_stop {
+        writeln!(
+            sink,
+            "  carrier bounds: narrowing stopped ({stop}); the completed passes' bounds were kept"
+        )?;
+    }
+    Ok(())
 }
 
 fn query(sink: &mut impl Write, observation: &crate::QueryExecutionObservation) -> io::Result<()> {

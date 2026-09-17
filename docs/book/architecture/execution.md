@@ -75,18 +75,25 @@ seed cursor can skip a whole interval while those gate bits remain true.
 Possible support alone cannot supply that witness. Ineligible constraints stay
 with the full closure check.
 
-Before its first seed, the closure route computes two closures of the
-program: one with every gate treated as possible, and one with none, so that
-only gate-free rules fire. A gate atom outside the first belongs to no answer
-set and is never offered to the counter; a gate atom inside the second belongs
-to every answer set and is held in every seed. The counter enumerates the gate
-atoms between the two, and the statistics report the omitted ones as
-underivable and the held ones as necessary gate atoms. Each returned seed is
-still checked in full against the whole gate carrier. The law is
-`Bounds.undecided_bounds_accepted`: this is the narrowing of the cube in which
-nothing is decided, applied once; narrowing inside the search is not
-performed. Each closure is charged as one candidate check, and a stop while
-computing it is reported as a preparation interruption.
+Before its first seed, the closure route narrows the region of seeds it
+must enumerate. The region starts with nothing decided. Each pass computes
+the region's two closures: the lower one, in which a rule fires only if its
+gates hold under every seed of the region, and the upper one, in which a
+rule fires if its gates hold under some seed. A gate atom the lower closure
+derives belongs to every answer set and is held in every seed; a gate atom
+the upper closure does not derive belongs to no answer set and is never
+offered. The next pass reads those decisions, and the passes stop when one
+changes nothing. The counter then enumerates the gate atoms still undecided,
+and the statistics report the passes, the omitted atoms as underivable and
+the held ones as necessary. A constraint that fires in a lower closure holds
+under every seed of the region, so no seed is offered and the program has no
+answer set. Each returned seed is still checked in full against the whole
+gate carrier. The laws are `Bounds.narrowed_contains_accepted`, the
+iterated narrowing of the undecided cube, and `Bounds.lower_constraint_refutes`;
+splitting the region, the rest of the cube search, is not performed. Each
+closure is charged as one candidate check; a resource stop keeps the bounds of
+the completed passes and is reported in the statistics, and a program without
+gate predicates computes no closure.
 
 For a theory whose complete asserted-head grammar is ordinary disjunction,
 every true atom in an answer set must have an original producer whose body is

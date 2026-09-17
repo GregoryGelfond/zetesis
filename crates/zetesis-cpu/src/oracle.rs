@@ -278,9 +278,36 @@ pub fn check_view(
 
 // Construction establishes complete source coverage through bootstrap and
 // completed round history, not constraint satisfaction or seed agreement.
-struct CompletedClosure {
-    atoms: Model,
-    constraint_violated: bool,
+pub(crate) struct CompletedClosure {
+    pub(crate) atoms: Model,
+    /// A constraint fired in the completed closure: under a frozen seed, the
+    /// candidate is rejected; under the definite reading of a cube, no seed
+    /// of the cube is accepted (`Bounds.lower_constraint_refutes`).
+    pub(crate) constraint_violated: bool,
+}
+
+/// A region of seeds: the gate atoms every seed of it holds and the gate
+/// atoms some seed of it may hold. `None` for `may` is the whole symbolic
+/// carrier, which is never materialized. This is the `Cube` of
+/// `Bounds.lean` with `undecided` as its origin.
+pub(crate) struct Cube {
+    pub(crate) must: BTreeSet<Atom>,
+    pub(crate) may: Option<BTreeSet<Atom>>,
+}
+impl Cube {
+    /// Nothing decided: every seed lies in this cube.
+    pub(crate) fn undecided() -> Self {
+        Self {
+            must: BTreeSet::new(),
+            may: None,
+        }
+    }
+    fn must_hold(&self, key: &zetesis_core::AtomKey<'_>) -> bool {
+        key.get(&self.must).is_some()
+    }
+    fn may_hold(&self, key: &zetesis_core::AtomKey<'_>) -> bool {
+        self.may.as_ref().is_none_or(|may| key.get(may).is_some())
+    }
 }
 
 // Positive bodies, pure equality filters and frozen gates make old enabled
@@ -304,34 +331,43 @@ fn least_closure(
     )
 }
 
-/// How a rule's gates are read while a closure is computed. The two
-/// assumptions are the gates of the undecided cube of `Bounds.lean`: a rule
-/// is definite there when it has no gate and possible whatever its gates.
+/// How a rule's gates are read while a closure is computed. The two cube
+/// readings are `MustGate` and `MayGate` of `Bounds.lean`.
 #[derive(Clone, Copy)]
 enum Gates<'a> {
     /// The frozen seed decides every gate: a candidate's closure.
     Frozen(SeedView<'a>),
-    /// Every gate passes, so every rule with a true positive body fires: the
-    /// upper closure, which every answer set lies inside.
-    Possible,
-    /// No gate passes, so only gate-free rules fire: the lower closure, which
-    /// lies inside every answer set.
-    Definite,
+    /// A gate holds only if it holds under every seed of the cube, so the
+    /// closure lies inside every answer set the cube contains: its lower
+    /// closure.
+    Definite(&'a Cube),
+    /// A gate holds if it holds under some seed of the cube, so every answer
+    /// set the cube contains lies inside the closure: its upper closure.
+    Possible(&'a Cube),
 }
-impl<'a> Gates<'a> {
-    /// The seed the source joins consult; an assumption consults none.
-    fn seed(self) -> Option<SeedView<'a>> {
-        match self {
-            Self::Frozen(seed) => Some(seed),
-            Self::Possible | Self::Definite => None,
-        }
-    }
-    /// Whether a rule fires under this reading of its gates when its
-    /// positive body holds.
+impl Gates<'_> {
+    /// Whether a rule can fire under this reading before its gates are
+    /// bound: a definite rule needs each `not not` gate in `must` and each
+    /// `not` gate outside `may`, which an empty `must` or an unbounded `may`
+    /// rules out for the whole template.
     fn admits(self, template: &Template) -> bool {
         match self {
-            Self::Frozen(_) | Self::Possible => true,
-            Self::Definite => template.gate_true().is_empty() && template.gate_false().is_empty(),
+            Self::Frozen(_) | Self::Possible(_) => true,
+            Self::Definite(cube) => {
+                (template.gate_true().is_empty() || !cube.must.is_empty())
+                    && (template.gate_false().is_empty() || cube.may.is_some())
+            }
+        }
+    }
+    /// Whether the gate `pattern` bound to `key` holds under this reading;
+    /// `required` is true for a `not not` gate and false for a `not` gate.
+    fn holds(self, key: &zetesis_core::AtomKey<'_>, required: bool) -> bool {
+        match (self, required) {
+            (Self::Frozen(seed), _) => seed.contains_key(key) == required,
+            (Self::Definite(cube), true) => cube.must_hold(key),
+            (Self::Definite(cube), false) => !cube.may_hold(key),
+            (Self::Possible(cube), true) => cube.may_hold(key),
+            (Self::Possible(cube), false) => !cube.must_hold(key),
         }
     }
 }
@@ -348,7 +384,7 @@ impl<'a> Gates<'a> {
 /// `limits`, which it charges as one candidate check would; no partial
 /// closure is returned.
 pub fn upper_closure(program: &Program, limits: Limits, control: &Control) -> Result<Model, Stop> {
-    closure_under(program, Gates::Possible, limits, control)
+    Ok(possible_closure(program, &Cube::undecided(), limits, control)?.atoms)
 }
 
 /// The closure with no gate treated as passing: only gate-free rules fire.
@@ -359,7 +395,29 @@ pub fn upper_closure(program: &Program, limits: Limits, control: &Control) -> Re
 /// # Errors
 /// As [`upper_closure`].
 pub fn lower_closure(program: &Program, limits: Limits, control: &Control) -> Result<Model, Stop> {
-    closure_under(program, Gates::Definite, limits, control)
+    Ok(definite_closure(program, &Cube::undecided(), limits, control)?.atoms)
+}
+
+/// The lower closure of `cube`: rules fire only under gates every seed of the
+/// cube satisfies. A fired constraint refutes the whole cube.
+pub(crate) fn definite_closure(
+    program: &Program,
+    cube: &Cube,
+    limits: Limits,
+    control: &Control,
+) -> Result<CompletedClosure, Stop> {
+    closure_under(program, Gates::Definite(cube), limits, control)
+}
+
+/// The upper closure of `cube`: rules fire under gates some seed of the cube
+/// satisfies. Its constraint verdict says nothing about any seed.
+pub(crate) fn possible_closure(
+    program: &Program,
+    cube: &Cube,
+    limits: Limits,
+    control: &Control,
+) -> Result<CompletedClosure, Stop> {
+    closure_under(program, Gates::Possible(cube), limits, control)
 }
 
 fn closure_under(
@@ -367,7 +425,7 @@ fn closure_under(
     gates: Gates<'_>,
     limits: Limits,
     control: &Control,
-) -> Result<Model, Stop> {
+) -> Result<CompletedClosure, Stop> {
     control.poll()?;
     let mut work = Work {
         control,
@@ -378,13 +436,12 @@ fn closure_under(
         mask_bytes: 0,
     };
     let prepared = PreparedQueries::prepare(program, &mut work)?;
-    let completed = prepared.closure_with(
+    prepared.closure_with(
         gates,
         &mut ClosureWorkspace::default(),
         Schedule::Delta,
         &mut work,
-    )?;
-    Ok(completed.atoms)
+    )
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -595,7 +652,7 @@ fn visit_round<'source>(
                     visit_with(
                         template,
                         closure,
-                        gates.seed(),
+                        gates,
                         None,
                         work,
                         &mut emit,
@@ -613,7 +670,7 @@ fn visit_round<'source>(
             visit_with(
                 template,
                 closure,
-                gates.seed(),
+                gates,
                 None,
                 work,
                 &mut emit,
@@ -676,7 +733,7 @@ struct Frame<'frame, 'source> {
 fn visit<'source, E: From<Stop>>(
     template: &Template,
     relations: &'source impl Relational,
-    seed: Option<SeedView<'_>>,
+    gates: Gates<'_>,
     membership: Option<&mut worlds::Join<'_>>,
     work: &mut Work<'_>,
     emit: impl FnMut(&[Option<&'source Value>], &mut Work<'_>) -> Result<(), E>,
@@ -686,7 +743,7 @@ fn visit<'source, E: From<Stop>>(
     visit_with(
         template,
         relations,
-        seed,
+        gates,
         membership,
         work,
         emit,
@@ -701,7 +758,7 @@ fn visit<'source, E: From<Stop>>(
 fn visit_with<'source, E: From<Stop>>(
     template: &Template,
     relations: &'source impl Relational,
-    seed: Option<SeedView<'_>>,
+    gates: Gates<'_>,
     mut membership: Option<&mut worlds::Join<'_>>,
     work: &mut Work<'_>,
     mut emit: impl FnMut(&[Option<&'source Value>], &mut Work<'_>) -> Result<(), E>,
@@ -717,7 +774,7 @@ fn visit_with<'source, E: From<Stop>>(
     let assignment = &mut assignment[..template.variable_count()];
     work.charge(assignment.len())?;
     assignment.fill(None);
-    if !guards(template, assignment, seed, work)? {
+    if !guards(template, assignment, gates, work)? {
         return Ok(());
     }
     let count = template.positive().len();
@@ -789,7 +846,7 @@ fn visit_with<'source, E: From<Stop>>(
         // row. The cumulative probe count therefore cannot exceed charged work.
         work.statistics.tuple_probes += 1;
         if bind(pattern, atom, assignment, &mut undo[depth], work)?
-            && guards(template, assignment, seed, work)?
+            && guards(template, assignment, gates, work)?
             && match membership.as_mut() {
                 Some(membership) => membership.extend(occurrence, index, work)?,
                 None => true,
@@ -850,7 +907,7 @@ fn resolve<'a>(term: &'a Term, assignment: &[Option<&'a Value>]) -> Option<&'a V
 fn guards(
     template: &Template,
     assignment: &[Option<&Value>],
-    seed: Option<SeedView<'_>>,
+    gates: Gates<'_>,
     work: &mut Work<'_>,
 ) -> Result<bool, Stop> {
     for filter in template.filters() {
@@ -865,17 +922,14 @@ fn guards(
             }
         }
     }
-    let Some(seed) = seed else {
-        return Ok(true);
-    };
     for (patterns, required) in [(template.gate_true(), true), (template.gate_false(), false)] {
         for pattern in patterns {
             work.tick()?;
             work.charge(pattern.terms().len())?;
             // An absent referenced slot defers this gate until a later join
-            // supplies it. A complete key borrows the exact seed lookup tuple.
+            // supplies it. A complete key borrows the exact lookup tuple.
             if let Ok(key) = pattern.key(assignment)
-                && seed.contains_key(&key) != required
+                && !gates.holds(&key, required)
             {
                 return Ok(false);
             }

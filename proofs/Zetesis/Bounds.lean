@@ -154,6 +154,24 @@ theorem undecided_bounds_accepted (P : Program α) (S z : Atoms α)
   have narrowed := acceptance_survives_narrowing P S inside hz
   exact ⟨(Cube.contains_narrow.mp narrowed).2.1, (Cube.contains_narrow.mp narrowed).2.2⟩
 
+/-- The regions of the iterated narrowing from the undecided cube: each one
+is the previous narrowed by its own two closures. -/
+def narrowed (P : Program α) (S : Atoms α) : Nat → Cube α
+  | 0 => undecided
+  | n + 1 => Narrow P S (narrowed P S n)
+
+/-- Every accepted seed lies in every region of the iterated narrowing, so a
+seed counter may take any pass's bounds, in particular the fixed point where
+a pass changes nothing: the gate atoms of that region's lower closure are
+held in every seed and no gate atom outside its upper closure is offered.
+
+Proof outline. Induction on the pass: every seed lies in the undecided cube,
+and narrowing preserves an accepted seed (`acceptance_survives_narrowing`). -/
+theorem narrowed_contains_accepted (P : Program α) (S z : Atoms α)
+    (hz : Accept P S z) : ∀ n, (narrowed P S n).Contains z
+  | 0 => ⟨fun _ h => h.elim, fun _ _ => trivial⟩
+  | n + 1 => acceptance_survives_narrowing P S (narrowed_contains_accepted P S z hz n) hz
+
 /-- This creates the concrete ledger's narrowing node from must/may closure. -/
 def coverage_narrowed (P : Program α) (S : Atoms α) (c : Cube α)
     (child : CoverageTree (Accept P S) (Narrow P S c)) :

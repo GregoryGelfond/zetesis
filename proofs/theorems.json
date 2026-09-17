@@ -650,24 +650,29 @@
     "line": 148
   },
   {
+    "name": "Zetesis.Bounds.narrowed_contains_accepted",
+    "file": "Zetesis/Bounds.lean",
+    "line": 170
+  },
+  {
     "name": "Zetesis.Bounds.inconsistent_narrowing_refutes",
     "file": "Zetesis/Bounds.lean",
-    "line": 169
+    "line": 187
   },
   {
     "name": "Zetesis.Bounds.conflicting_atom_refutes",
     "file": "Zetesis/Bounds.lean",
-    "line": 178
+    "line": 196
   },
   {
     "name": "Zetesis.Bounds.lower_constraint_refutes",
     "file": "Zetesis/Bounds.lean",
-    "line": 185
+    "line": 203
   },
   {
     "name": "Zetesis.Bounds.lower_prefix_constraint_refutes",
     "file": "Zetesis/Bounds.lean",
-    "line": 194
+    "line": 212
   },
   {
     "name": "Zetesis.CandidateCursor.next_preserves",

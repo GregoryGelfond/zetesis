@@ -130,6 +130,7 @@ import Zetesis
 #print axioms Zetesis.Bounds.accepted_seed_agrees
 #print axioms Zetesis.Bounds.acceptance_survives_narrowing
 #print axioms Zetesis.Bounds.undecided_bounds_accepted
+#print axioms Zetesis.Bounds.narrowed_contains_accepted
 #print axioms Zetesis.Bounds.inconsistent_narrowing_refutes
 #print axioms Zetesis.Bounds.conflicting_atom_refutes
 #print axioms Zetesis.Bounds.lower_constraint_refutes

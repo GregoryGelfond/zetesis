@@ -652,22 +652,27 @@
     },
     {
       "file": "Zetesis/Bounds.lean",
-      "line": 169,
+      "line": 170,
+      "name": "Zetesis.Bounds.narrowed_contains_accepted"
+    },
+    {
+      "file": "Zetesis/Bounds.lean",
+      "line": 187,
       "name": "Zetesis.Bounds.inconsistent_narrowing_refutes"
     },
     {
       "file": "Zetesis/Bounds.lean",
-      "line": 178,
+      "line": 196,
       "name": "Zetesis.Bounds.conflicting_atom_refutes"
     },
     {
       "file": "Zetesis/Bounds.lean",
-      "line": 185,
+      "line": 203,
       "name": "Zetesis.Bounds.lower_constraint_refutes"
     },
     {
       "file": "Zetesis/Bounds.lean",
-      "line": 194,
+      "line": 212,
       "name": "Zetesis.Bounds.lower_prefix_constraint_refutes"
     },
     {
@@ -6190,7 +6195,7 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "75c28769e72b45425699f0dfe60765a7526e937cffc73cd28e5b624f5f1e14e3",
+    "Audit.lean": "2af603525b8bac0b236b2a9d86a6b977f743a99ce9f6aad3961400ec434851dc",
     "Zetesis.lean": "dc17d3d2129c5bfb52a3eee1e264ee5b946e768e01e8a43dae485914c337b768",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
     "Zetesis/AggregateBounds.lean": "c1a49f93ac5140bcd22876b42c52c23c4f447352c9cf61f2f01741fbbdc98452",
@@ -6206,7 +6211,7 @@
     "Zetesis/BindingScopes.lean": "1ccfde0f879702572dbc25ed20531f2b85e04eeedb59fd7eeea45ad7972486a7",
     "Zetesis/BooleanHeadElements.lean": "1a8601feb54155f84d1fc9cb784236f7ba19471a3f7a129da203e94cb45f6ef6",
     "Zetesis/BooleanHeads.lean": "6c1bdb43ab5b5a4d5753f9396e89adc2e9c52cfa9a1df56860ad8d54005d4c27",
-    "Zetesis/Bounds.lean": "9644bd0bd397e38b02f981e84e6ec4f8e53afbd7fd825292ca3fd8ccc27927e9",
+    "Zetesis/Bounds.lean": "cd14edc605df8586595816c36d2e867e4326c83e27e734dee15a12104585076c",
     "Zetesis/CandidateCursor.lean": "09bba309247ba7b7300dd8f6994ecb8482ac5b14fbfd356ab8c24103fbfe1039",
     "Zetesis/CertifiedExecution.lean": "693ec9dcd4542e70d21cd19b99dd13dc59ac375b9ac945c65ee1632ff7ccc3a0",
     "Zetesis/ChoiceConsumers.lean": "2505ef92e4694faddfe66bebeb26155b6d820a5493f94fa3653bcfbefc633d5a",

@@ -119,7 +119,7 @@ fn the_bounded_counter_omits_gate_atoms_no_rule_derives_and_holds_the_necessary(
     assert_eq!(names(&must), ["blocked", "d", "d", "d", "d"]);
 
     let mut candidates = Candidates::new(&program, CandidateLimits::default(), Control::default());
-    candidates.within(may);
+    candidates.within(&may);
     candidates.requiring(&must).unwrap();
     assert_eq!(candidates.statistics().necessary_gate_atoms, 1);
     let seeds = enumerate(&program, candidates);
@@ -151,7 +151,7 @@ fn the_bounded_counter_reports_the_atoms_it_omitted() {
     let program = blocked_program();
     let may = upper_closure(&program, Limits::default(), &Control::default()).unwrap();
     let mut candidates = Candidates::new(&program, CandidateLimits::default(), Control::default());
-    candidates.within(may);
+    candidates.within(&may);
     assert_eq!(candidates.by_ref().map(Result::unwrap).count(), 32);
     assert_eq!(candidates.statistics().underivable_gate_atoms, 3);
     assert_eq!(candidates.statistics().necessary_gate_atoms, 0);
@@ -188,13 +188,15 @@ fn a_cancelled_bound_stops_the_first_pull() {
 }
 
 #[test]
-fn the_bounded_counter_applies_both_closures_on_its_first_pull() {
+fn the_narrowing_decides_the_blocked_program_outright() {
+    // The first pass holds blocked(2) and omits the other blocked atoms; the
+    // second reads those decisions, so r(1), r(3) and r(4) are necessary and
+    // r(2) underivable. Nothing is left to count: one seed, the answer.
     let program = blocked_program();
     let mut candidates = Candidates::new(&program, CandidateLimits::default(), Control::default());
     candidates.bounded(Limits::default());
     let seeds = enumerate(&program, candidates);
-    assert_eq!(seeds.len(), 16);
-    assert_eq!(seeds.iter().filter(|(_, accepted)| *accepted).count(), 1);
+    assert_eq!(seeds, [(4, true)]);
 }
 
 #[test]
@@ -218,4 +220,108 @@ fn a_program_without_gate_predicates_computes_no_closure_for_its_bounds() {
     });
     assert_eq!(candidates.by_ref().map(Result::unwrap).count(), 1);
     assert_eq!(candidates.statistics().bounds_stop, None);
+}
+
+/// Eight nodes with a bad third one, as in the stratified family: blocked
+/// and reach are gate predicates with eight symbolic atoms each.
+fn stratified_program() -> Program {
+    let mut templates: Vec<Template> = (1..=8)
+        .map(|node| fact("node", vec![number(node)]))
+        .collect();
+    templates.push(fact("bad", vec![number(3)]));
+    for node in 1..8 {
+        templates.push(fact("e", vec![number(node), number(node + 1)]));
+        templates.push(fact("next", vec![number(node), number(node + 1)]));
+    }
+    for node in 1..7 {
+        templates.push(fact("e", vec![number(node), number(node + 2)]));
+    }
+    let (x, y) = (Term::Variable(0), Term::Variable(1));
+    templates.push(Template::new(
+        Some(pattern("blocked", vec![y.clone()])),
+        vec![
+            pattern("bad", vec![x.clone()]),
+            pattern("next", vec![x.clone(), y.clone()]),
+        ],
+        vec![],
+        vec![],
+        vec![],
+    ));
+    templates.push(fact("reach", vec![number(1)]));
+    templates.push(Template::new(
+        Some(pattern("reach", vec![y.clone()])),
+        vec![
+            pattern("reach", vec![x.clone()]),
+            pattern("e", vec![x, y.clone()]),
+        ],
+        vec![],
+        vec![pattern("blocked", vec![y])],
+        vec![],
+    ));
+    templates.push(Template::new(
+        None,
+        vec![],
+        vec![],
+        vec![pattern("reach", vec![number(8)])],
+        vec![],
+    ));
+    program(templates)
+}
+
+#[test]
+fn the_narrowing_decides_a_stratified_program_in_three_passes() {
+    // Pass one: blocked(4) and reach(1) are necessary, seven blocked atoms
+    // underivable. Pass two reads those decisions: reach(2), reach(3) and
+    // reach(5..8) are necessary and reach(4) is underivable. Pass three
+    // changes nothing, and the one seed is the answer.
+    let program = stratified_program();
+    let mut candidates = Candidates::new(&program, CandidateLimits::default(), Control::default());
+    candidates.bounded(Limits::default());
+    let seeds = enumerate(&program, candidates);
+    assert_eq!(seeds, [(8, true)]);
+}
+
+#[test]
+fn the_narrowing_reports_its_passes_and_decisions() {
+    let program = stratified_program();
+    let mut candidates = Candidates::new(&program, CandidateLimits::default(), Control::default());
+    candidates.bounded(Limits::default());
+    assert_eq!(candidates.by_ref().map(Result::unwrap).count(), 1);
+    let statistics = candidates.statistics();
+    assert_eq!(statistics.bounds_passes, 3);
+    assert_eq!(statistics.necessary_gate_atoms, 8);
+    assert_eq!(statistics.underivable_gate_atoms, 8);
+    assert!(!statistics.bounds_refuted);
+    assert_eq!(statistics.bounds_stop, None);
+}
+
+#[test]
+fn a_definite_constraint_refutes_the_whole_carrier() {
+    // d(1..3). :- not d(4).  No rule derives d(4), so after the first pass
+    // the constraint's gate holds under every seed and it fires in the lower
+    // closure: no seed is offered, and no answer set exists.
+    let mut templates: Vec<Template> = (1..=3)
+        .map(|value| fact("d", vec![number(value)]))
+        .collect();
+    templates.push(Template::new(
+        None,
+        vec![],
+        vec![],
+        vec![pattern("d", vec![number(4)])],
+        vec![],
+    ));
+    let program = program(templates);
+    let mut candidates = Candidates::new(&program, CandidateLimits::default(), Control::default());
+    candidates.bounded(Limits::default());
+    assert_eq!(candidates.by_ref().count(), 0);
+    let statistics = candidates.statistics();
+    assert!(statistics.bounds_refuted);
+    assert_eq!(statistics.bounds_passes, 1);
+    // The unbounded counter finds the same absence the long way.
+    let unbounded = Candidates::new(&program, CandidateLimits::default(), Control::default());
+    assert!(
+        enumerate(&program, unbounded)
+            .iter()
+            .all(|(_, accepted)| !accepted)
+    );
 }

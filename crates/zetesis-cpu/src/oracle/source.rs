@@ -243,7 +243,7 @@ fn scan_inner<'a, E>(
         visit(
             template,
             &relations,
-            None,
+            super::Gates::Possible(&super::Cube::undecided()),
             membership.as_deref_mut(),
             work,
             |assignment, work| {

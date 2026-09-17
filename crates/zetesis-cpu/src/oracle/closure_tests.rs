@@ -59,7 +59,7 @@ fn join_bindings_borrow_their_source_values() {
     super::visit(
         &template,
         &relations,
-        None,
+        super::Gates::Possible(&super::Cube::undecided()),
         None,
         &mut work,
         |assignment, _| -> Result<(), Stop> {
@@ -336,7 +336,7 @@ fn tuple_probes_include_whole_row_rejections() {
     super::visit(
         &template,
         &relations,
-        None,
+        super::Gates::Possible(&super::Cube::undecided()),
         None,
         &mut work,
         |assignment, _| -> Result<(), Stop> {

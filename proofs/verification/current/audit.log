@@ -128,6 +128,7 @@
 'Zetesis.Bounds.accepted_seed_agrees' does not depend on any axioms
 'Zetesis.Bounds.acceptance_survives_narrowing' does not depend on any axioms
 'Zetesis.Bounds.undecided_bounds_accepted' does not depend on any axioms
+'Zetesis.Bounds.narrowed_contains_accepted' does not depend on any axioms
 'Zetesis.Bounds.inconsistent_narrowing_refutes' does not depend on any axioms
 'Zetesis.Bounds.conflicting_atom_refutes' does not depend on any axioms
 'Zetesis.Bounds.lower_constraint_refutes' does not depend on any axioms

@@ -209,7 +209,7 @@ fn assert_all_small_models(program: &Program) {
     let mut bounded_models = BTreeSet::new();
     let mut bounded_seeds = 0usize;
     let mut candidates = Candidates::new(program, CandidateLimits::default(), Control::default());
-    candidates.within(may.clone());
+    candidates.within(&may);
     candidates.requiring(&must).expect("tiny lower closure");
     for candidate in candidates {
         let candidate = candidate.expect("tiny carrier exhausts within budget");

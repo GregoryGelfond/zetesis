@@ -396,9 +396,11 @@ fn the_closure_limits_line_states_the_derived_allowance() {
 #[test]
 fn the_counter_runs_between_the_program_closures() {
     // Eight nodes, one bad, so the gate predicates blocked/1 and reach/1 have
-    // sixteen symbolic atoms. Every seed could derive reach(1..8) and
-    // blocked(4) and nothing else; every seed must hold blocked(4) and the
-    // fact reach(1). Seven free atoms remain: 128 seeds, not 65,536.
+    // sixteen symbolic atoms. The first pass finds blocked(4) and reach(1)
+    // necessary and seven blocked atoms underivable; the second, reading
+    // those decisions, finds every other reachable node necessary and
+    // reach(4) underivable; the third changes nothing. One seed remains of
+    // the 65,536 the symbolic carrier offered.
     let mut source = String::from("node(1..8). bad(3). ");
     for node in 1..8 {
         write!(
@@ -417,9 +419,11 @@ fn the_counter_runs_between_the_program_closures() {
     );
     let (report, _, diagnostics) = solve(&source, &options(&["--stats"]));
     assert_eq!(report.models, 1);
-    assert_eq!(report.checked, 128, "{diagnostics}");
+    assert_eq!(report.checked, 1, "{diagnostics}");
     assert!(
-        diagnostics.contains("carrier bounds: underivable gate atoms=7; necessary gate atoms=2"),
+        diagnostics.contains(
+            "carrier bounds: narrowing passes=3; underivable gate atoms=8; necessary gate atoms=8"
+        ),
         "{diagnostics}"
     );
 }
