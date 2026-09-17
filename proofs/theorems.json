@@ -602,67 +602,72 @@
   {
     "name": "Zetesis.Bounds.gate_sandwich",
     "file": "Zetesis/Bounds.lean",
-    "line": 46
+    "line": 50
   },
   {
     "name": "Zetesis.Bounds.selected_consequence_mono",
     "file": "Zetesis/Bounds.lean",
-    "line": 63
+    "line": 67
   },
   {
     "name": "Zetesis.Bounds.selected_consequence_refines",
     "file": "Zetesis/Bounds.lean",
-    "line": 69
+    "line": 73
   },
   {
     "name": "Zetesis.Bounds.consequence_sandwich",
     "file": "Zetesis/Bounds.lean",
-    "line": 76
+    "line": 80
   },
   {
     "name": "Zetesis.Bounds.gamma_sandwich",
     "file": "Zetesis/Bounds.lean",
-    "line": 85
+    "line": 89
   },
   {
     "name": "Zetesis.Bounds.lower_prefix_sound",
     "file": "Zetesis/Bounds.lean",
-    "line": 92
+    "line": 96
   },
   {
     "name": "Zetesis.Bounds.closed_upper_sound",
     "file": "Zetesis/Bounds.lean",
-    "line": 99
+    "line": 103
   },
   {
     "name": "Zetesis.Bounds.accepted_seed_agrees",
     "file": "Zetesis/Bounds.lean",
-    "line": 104
+    "line": 108
   },
   {
     "name": "Zetesis.Bounds.acceptance_survives_narrowing",
     "file": "Zetesis/Bounds.lean",
-    "line": 116
+    "line": 120
+  },
+  {
+    "name": "Zetesis.Bounds.undecided_bounds_accepted",
+    "file": "Zetesis/Bounds.lean",
+    "line": 148
   },
   {
     "name": "Zetesis.Bounds.inconsistent_narrowing_refutes",
     "file": "Zetesis/Bounds.lean",
-    "line": 144
+    "line": 169
   },
   {
     "name": "Zetesis.Bounds.conflicting_atom_refutes",
     "file": "Zetesis/Bounds.lean",
-    "line": 153
+    "line": 178
   },
   {
     "name": "Zetesis.Bounds.lower_constraint_refutes",
     "file": "Zetesis/Bounds.lean",
-    "line": 160
+    "line": 185
   },
   {
     "name": "Zetesis.Bounds.lower_prefix_constraint_refutes",
     "file": "Zetesis/Bounds.lean",
-    "line": 169
+    "line": 194
   },
   {
     "name": "Zetesis.CandidateCursor.next_preserves",

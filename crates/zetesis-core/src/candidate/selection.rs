@@ -110,6 +110,48 @@ impl SeedSelection {
         })
     }
 
+    /// Retain gate atoms every candidate of an enumeration holds beside the
+    /// core-minted atoms the counter selected. The necessary atoms are checked
+    /// against the symbolic gate carrier and the minted ones against program
+    /// identity; both sort in the canonical atom order, which is also the
+    /// minted position order, and a payload present in both is kept once.
+    /// Vector growth is fallible; no payload is copied.
+    ///
+    /// # Errors
+    /// Refuses an outside-carrier necessary atom, foreign program identity or
+    /// unavailable selection storage.
+    pub fn necessary_and_selected(
+        program: &Program,
+        necessary: impl IntoIterator<Item = Arc<Atom>>,
+        selected: impl IntoIterator<Item = Arc<GateAtom>>,
+    ) -> Result<Self, SeedSelectionError> {
+        let mut entries = Vec::new();
+        for atom in necessary {
+            if !program.contains_gate_atom(&atom) {
+                return Err(SeedSelectionError::OutsideCarrier { atom });
+            }
+            entries
+                .try_reserve(1)
+                .map_err(|_| SeedSelectionError::Allocation)?;
+            entries.push(Entry::Manual(atom));
+        }
+        for atom in selected {
+            if !program.same_instance(&atom.program) {
+                return Err(SeedSelectionError::WrongProgram);
+            }
+            entries
+                .try_reserve(1)
+                .map_err(|_| SeedSelectionError::Allocation)?;
+            entries.push(Entry::Indexed(atom));
+        }
+        entries.sort_unstable_by(|left, right| left.atom().cmp(right.atom()));
+        entries.dedup_by(|left, right| left.atom() == right.atom());
+        Ok(Self {
+            program: program.clone(),
+            atoms: entries,
+        })
+    }
+
     /// Borrow exact true membership and canonical iteration without allocation.
     #[must_use]
     pub fn view(&self) -> SeedView<'_> {

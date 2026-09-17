@@ -297,11 +297,94 @@ fn least_closure(
 ) -> Result<CompletedClosure, Stop> {
     let prepared = PreparedQueries::prepare(program, work)?;
     prepared.closure_with(
-        seed,
+        Gates::Frozen(seed),
         &mut ClosureWorkspace::default(),
         Schedule::Delta,
         work,
     )
+}
+
+/// How a rule's gates are read while a closure is computed. The two
+/// assumptions are the gates of the undecided cube of `Bounds.lean`: a rule
+/// is definite there when it has no gate and possible whatever its gates.
+#[derive(Clone, Copy)]
+enum Gates<'a> {
+    /// The frozen seed decides every gate: a candidate's closure.
+    Frozen(SeedView<'a>),
+    /// Every gate passes, so every rule with a true positive body fires: the
+    /// upper closure, which every answer set lies inside.
+    Possible,
+    /// No gate passes, so only gate-free rules fire: the lower closure, which
+    /// lies inside every answer set.
+    Definite,
+}
+impl<'a> Gates<'a> {
+    /// The seed the source joins consult; an assumption consults none.
+    fn seed(self) -> Option<SeedView<'a>> {
+        match self {
+            Self::Frozen(seed) => Some(seed),
+            Self::Possible | Self::Definite => None,
+        }
+    }
+    /// Whether a rule fires under this reading of its gates when its
+    /// positive body holds.
+    fn admits(self, template: &Template) -> bool {
+        match self {
+            Self::Frozen(_) | Self::Possible => true,
+            Self::Definite => template.gate_true().is_empty() && template.gate_false().is_empty(),
+        }
+    }
+}
+
+/// The closure with every gate treated as possible: a rule fires whenever its
+/// positive body holds, whatever a seed decides. Every answer set lies inside
+/// it and every accepted seed inside its gate atoms
+/// (`Bounds.undecided_bounds_accepted`), so a gate atom outside it belongs to
+/// no answer set and the seed counter may omit it. No seed is fixed, so no
+/// constraint is judged.
+///
+/// # Errors
+/// Returns [`Stop`] for cancellation, deadlines and the closure budgets of
+/// `limits`, which it charges as one candidate check would; no partial
+/// closure is returned.
+pub fn upper_closure(program: &Program, limits: Limits, control: &Control) -> Result<Model, Stop> {
+    closure_under(program, Gates::Possible, limits, control)
+}
+
+/// The closure with no gate treated as passing: only gate-free rules fire.
+/// It lies inside every answer set and its gate atoms inside every accepted
+/// seed (`Bounds.undecided_bounds_accepted`), so the seed counter may hold
+/// them in every seed instead of enumerating them.
+///
+/// # Errors
+/// As [`upper_closure`].
+pub fn lower_closure(program: &Program, limits: Limits, control: &Control) -> Result<Model, Stop> {
+    closure_under(program, Gates::Definite, limits, control)
+}
+
+fn closure_under(
+    program: &Program,
+    gates: Gates<'_>,
+    limits: Limits,
+    control: &Control,
+) -> Result<Model, Stop> {
+    control.poll()?;
+    let mut work = Work {
+        control,
+        limits,
+        statistics: Statistics::default(),
+        mask_words: 0,
+        pruned_prefixes: 0,
+        mask_bytes: 0,
+    };
+    let prepared = PreparedQueries::prepare(program, &mut work)?;
+    let completed = prepared.closure_with(
+        gates,
+        &mut ClosureWorkspace::default(),
+        Schedule::Delta,
+        &mut work,
+    )?;
+    Ok(completed.atoms)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -351,7 +434,7 @@ struct RoundWorkspace<'a> {
 
 fn least_closure_with(
     program: &Program,
-    seed: SeedView<'_>,
+    gates: Gates<'_>,
     closure: &mut Catalogs,
     workspace: RoundWorkspace<'_>,
     schedule: Schedule,
@@ -386,7 +469,7 @@ fn least_closure_with(
             closure.set_overhead(overhead.checked_add(bytes).ok_or(Stop::StorageLimit)?, work)?;
             visit_round(
                 program,
-                seed,
+                gates,
                 closure,
                 incremental.then_some(rules),
                 Frame {
@@ -438,7 +521,7 @@ struct RoundConsequences {
 /// with new rows: no other template can bind anew.
 fn visit_round<'source>(
     program: &Program,
-    seed: SeedView<'_>,
+    gates: Gates<'_>,
     closure: &'source Catalogs,
     incremental: Option<&prepared::Rules>,
     frame: Frame<'_, 'source>,
@@ -477,6 +560,9 @@ fn visit_round<'source>(
             Some(_) => &program.templates()[buffers.rules[position]],
         };
         work.tick()?;
+        if !gates.admits(template) {
+            continue;
+        }
         let mut emit = |assignment: &[Option<&Value>], work: &mut Work<'_>| -> Result<(), Stop> {
             work.tick()?;
             if let Some(head) = template.head() {
@@ -509,7 +595,7 @@ fn visit_round<'source>(
                     visit_with(
                         template,
                         closure,
-                        Some(seed),
+                        gates.seed(),
                         None,
                         work,
                         &mut emit,
@@ -527,7 +613,7 @@ fn visit_round<'source>(
             visit_with(
                 template,
                 closure,
-                Some(seed),
+                gates.seed(),
                 None,
                 work,
                 &mut emit,

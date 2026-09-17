@@ -3,10 +3,12 @@
 use std::iter::FusedIterator;
 use std::sync::Arc;
 use zetesis_core::{
-    GateAtom, GateAtomError, GateAtoms, Program, Seed, SeedSelection, SeedSelectionError,
+    Atom, GateAtom, GateAtomError, GateAtoms, Model, Program, Seed, SeedSelection,
+    SeedSelectionError,
 };
 
 use crate::oracle::restrictions::{Conflict, Restrictions};
+use crate::oracle::{Limits, lower_closure, upper_closure};
 use crate::{Control, Stop};
 
 /// Explicit limits for complete seed enumeration. Zero is a real ceiling.
@@ -74,6 +76,18 @@ pub struct CandidateStatistics {
     pub restriction_conjunctions: usize,
     /// Certified impossible binary intervals skipped, not individual seeds.
     pub conflicts: u64,
+    /// Symbolic gate atoms outside the supplied upper closure, never offered to
+    /// the counter: no rule derives them under any gate assumption, so no
+    /// answer set holds them.
+    pub underivable_gate_atoms: usize,
+    /// Gate atoms of the supplied lower closure, held in every seed instead of
+    /// counted: gate-free rules derive them, so every answer set holds them.
+    pub necessary_gate_atoms: usize,
+    /// Why the requested carrier bounds were not applied: a closure stopped on
+    /// a resource ceiling before the first pull, and the counter ran over the
+    /// whole symbolic carrier instead. `None` when no bound was requested or
+    /// both closures completed.
+    pub bounds_stop: Option<Stop>,
 }
 
 enum RestrictionState {
@@ -83,6 +97,14 @@ enum RestrictionState {
         limits: CandidateRestrictionLimits,
         plan: Restrictions,
     },
+}
+
+/// Whether the program's two closures bound the carrier, and how far that got.
+enum BoundsState {
+    Disabled,
+    Pending(Limits),
+    Applied,
+    Unavailable,
 }
 
 /// Retained termination of the gate-seed enumerator, independent of membership.
@@ -96,13 +118,18 @@ pub enum CandidateTermination {
 
 /// Enumerate empty, `{a}`, `{b}`, `{a,b}`, `{c}`, and so on. A new carrier
 /// atom is requested only on carry beyond the known binary counter. Creation
-/// and the first successful empty seed never request a carrier tuple.
+/// and the first successful empty seed never request a carrier tuple. Between
+/// the program's two closures ([`Self::within`], [`Self::requiring`]) the
+/// counter runs over the gate atoms some seed could derive and not every
+/// seed must hold; the others are omitted or held throughout.
 /// Each discovered atom payload is retained once in an immutable shared owner.
 /// Creating that Arc uses infallible allocation under the carrier-count bound;
 /// carrier and selected-handle vectors use typed fallible reservation.
 pub struct Candidates<'a> {
     program: &'a Program,
     carrier: GateAtoms<'a>,
+    may: Option<Model>,
+    must: Vec<Arc<Atom>>,
     atoms: Vec<Arc<GateAtom>>,
     bits: Vec<bool>,
     limits: CandidateLimits,
@@ -111,6 +138,7 @@ pub struct Candidates<'a> {
     started: bool,
     termination: Option<CandidateTermination>,
     restrictions: RestrictionState,
+    bounds: BoundsState,
     statistics: CandidateStatistics,
 }
 
@@ -121,6 +149,8 @@ impl<'a> Candidates<'a> {
         Self {
             program,
             carrier: program.indexed_gate_atoms(),
+            may: None,
+            must: Vec::new(),
             atoms: Vec::new(),
             bits: Vec::new(),
             limits,
@@ -129,6 +159,7 @@ impl<'a> Candidates<'a> {
             started: false,
             termination: None,
             restrictions: RestrictionState::Disabled,
+            bounds: BoundsState::Disabled,
             statistics: CandidateStatistics::default(),
         }
     }
@@ -158,6 +189,49 @@ impl<'a> Candidates<'a> {
         let mut candidates = Self::new(program, limits, control);
         candidates.restrictions = RestrictionState::Pending(restrictions);
         candidates
+    }
+
+    /// Bound the carrier by the program's two closures before the first pull:
+    /// [`crate::upper_closure`] through [`Self::within`] and
+    /// [`crate::lower_closure`] through [`Self::requiring`], each computed
+    /// under `limits` as one candidate check would be. A closure stopped by a
+    /// resource ceiling leaves the counter over the whole symbolic carrier and
+    /// is retained in the statistics; cancellation or a deadline stops the
+    /// pull that met it.
+    pub fn bounded(&mut self, limits: Limits) {
+        debug_assert!(!self.started, "the bound precedes the first pull");
+        self.bounds = BoundsState::Pending(limits);
+    }
+
+    /// Offer the counter only the gate atoms inside `may`, the program's
+    /// upper closure from [`crate::upper_closure`]. A gate atom outside it
+    /// belongs to no answer set, so the returned seeds remain a necessary
+    /// superset of answer-set gate projections while the carrier shrinks from
+    /// the symbolic gate atoms to the derivable ones. The bound precedes the
+    /// first pull; carrier positions keep their symbolic order.
+    pub fn within(&mut self, may: Model) {
+        debug_assert!(!self.started, "the bound precedes the first pull");
+        self.may = Some(may);
+    }
+
+    /// Hold the gate atoms of `must`, the program's lower closure from
+    /// [`crate::lower_closure`], in every seed instead of counting them.
+    /// Every answer set holds them, so no seed without them is accepted and
+    /// the counter loses no answer set by never clearing them. The bound
+    /// precedes the first pull and lies inside any upper bound given.
+    ///
+    /// # Errors
+    /// Returns [`Stop::Allocation`] when the necessary atoms cannot be retained.
+    pub fn requiring(&mut self, must: &Model) -> Result<(), Stop> {
+        debug_assert!(!self.started, "the bound precedes the first pull");
+        for atom in must.atoms() {
+            if self.program.contains_gate_atom(atom) {
+                self.must.try_reserve(1).map_err(|_| Stop::Allocation)?;
+                self.must.push(Arc::new(atom.clone()));
+            }
+        }
+        self.statistics.necessary_gate_atoms = self.must.len();
+        Ok(())
     }
 
     /// Accounted necessary-condition work and copied payload through this pull.
@@ -195,6 +269,7 @@ impl<'a> Candidates<'a> {
 
     fn selection(&mut self) -> Result<Option<SeedSelection>, Stop> {
         self.control.poll()?;
+        self.prepare_bounds()?;
         self.prepare_restrictions()?;
         if self.started {
             if !self.advance()? {
@@ -209,8 +284,9 @@ impl<'a> Candidates<'a> {
         if self.emitted >= self.limits.max_candidates {
             return Err(Stop::CandidateLimit);
         }
-        let seed = SeedSelection::from_gate_atoms(
+        let seed = SeedSelection::necessary_and_selected(
             self.program,
+            self.must.iter().cloned(),
             self.atoms
                 .iter()
                 .zip(&self.bits)
@@ -252,6 +328,29 @@ impl<'a> Candidates<'a> {
         }
     }
 
+    fn prepare_bounds(&mut self) -> Result<(), Stop> {
+        let BoundsState::Pending(limits) = self.bounds else {
+            return Ok(());
+        };
+        let closures = upper_closure(self.program, limits, &self.control).and_then(|may| {
+            let must = lower_closure(self.program, limits, &self.control)?;
+            Ok((may, must))
+        });
+        self.bounds = match closures {
+            Ok((may, must)) => {
+                self.within(may);
+                self.requiring(&must)?;
+                BoundsState::Applied
+            }
+            Err(stop @ (Stop::Cancelled | Stop::Deadline)) => return Err(stop),
+            Err(stop) => {
+                self.statistics.bounds_stop = Some(stop);
+                BoundsState::Unavailable
+            }
+        };
+        Ok(())
+    }
+
     fn prepare_restrictions(&mut self) -> Result<(), Stop> {
         if let RestrictionState::Pending(limits) = self.restrictions {
             let attempt = Restrictions::compile(self.program, limits, &self.control);
@@ -272,7 +371,13 @@ impl<'a> Candidates<'a> {
                 return Ok(true);
             };
             let remaining = limits.max_work - self.statistics.restriction_work;
-            let (result, work) = plan.conflict(&self.atoms, &self.bits, remaining, &self.control);
+            let (result, work) = plan.conflict(
+                &self.must,
+                &self.atoms,
+                &self.bits,
+                remaining,
+                &self.control,
+            );
             self.statistics.restriction_work += work;
             let Some(conflict) = result? else {
                 return Ok(true);
@@ -307,13 +412,29 @@ impl<'a> Candidates<'a> {
             }
             *bit = false;
         }
-        let Some(atom) = self.carrier.next() else {
-            return Ok(false);
+        let atom = loop {
+            self.control.poll()?;
+            let Some(atom) = self.carrier.next() else {
+                return Ok(false);
+            };
+            let atom = atom.map_err(|error| match error {
+                GateAtomError::Carrier(_) => Stop::Allocation,
+                GateAtomError::OrdinalOverflow => Stop::CarrierLimit,
+            })?;
+            if self
+                .may
+                .as_ref()
+                .is_some_and(|may| !may.contains(atom.atom()))
+            {
+                self.statistics.underivable_gate_atoms += 1;
+            } else if self
+                .must
+                .binary_search_by(|necessary| necessary.as_ref().cmp(atom.atom()))
+                .is_err()
+            {
+                break atom;
+            }
         };
-        let atom = atom.map_err(|error| match error {
-            GateAtomError::Carrier(_) => Stop::Allocation,
-            GateAtomError::OrdinalOverflow => Stop::CarrierLimit,
-        })?;
         if self.atoms.len() >= self.limits.max_carrier_atoms {
             return Err(Stop::CarrierLimit);
         }

@@ -75,6 +75,19 @@ seed cursor can skip a whole interval while those gate bits remain true.
 Possible support alone cannot supply that witness. Ineligible constraints stay
 with the full closure check.
 
+Before its first seed, the closure route computes two closures of the
+program: one with every gate treated as possible, and one with none, so that
+only gate-free rules fire. A gate atom outside the first belongs to no answer
+set and is never offered to the counter; a gate atom inside the second belongs
+to every answer set and is held in every seed. The counter enumerates the gate
+atoms between the two, and the statistics report the omitted ones as
+underivable and the held ones as necessary gate atoms. Each returned seed is
+still checked in full against the whole gate carrier. The law is
+`Bounds.undecided_bounds_accepted`: this is the narrowing of the cube in which
+nothing is decided, applied once; narrowing inside the search is not
+performed. Each closure is charged as one candidate check, and a stop while
+computing it is reported as a preparation interruption.
+
 For a theory whose complete asserted-head grammar is ordinary disjunction,
 every true atom in an answer set must have an original producer whose body is
 true and whose other head atoms are false. Otherwise removing that atom leaves

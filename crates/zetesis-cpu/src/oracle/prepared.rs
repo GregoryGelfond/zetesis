@@ -233,7 +233,7 @@ impl PreparedQueries {
         schedule: super::Schedule,
         work: &mut Work<'_>,
     ) -> Result<Check, Stop> {
-        let completed = self.closure_with(seed, workspace, schedule, work)?;
+        let completed = self.closure_with(super::Gates::Frozen(seed), workspace, schedule, work)?;
         let seed_mismatch =
             !super::gate_agreement(&self.program, seed, completed.atoms.atoms(), work)?;
         work.statistics.derived_atoms = completed.atoms.atoms().len();
@@ -248,7 +248,7 @@ impl PreparedQueries {
     }
     pub(super) fn closure_with(
         &self,
-        seed: SeedView<'_>,
+        gates: super::Gates<'_>,
         workspace: &mut ClosureWorkspace,
         schedule: super::Schedule,
         work: &mut Work<'_>,
@@ -273,7 +273,7 @@ impl PreparedQueries {
         }
         super::least_closure_with(
             &self.program,
-            seed,
+            gates,
             &mut workspace.catalogs,
             super::RoundWorkspace {
                 buffers: &mut workspace.buffers,

@@ -19,7 +19,8 @@ pub(crate) struct Attempt {
 }
 
 pub(crate) enum Conflict {
-    /// This conjunction has no gate premises and rules out every seed.
+    /// This conjunction has no counted gate premise and rules out every seed:
+    /// its premises are facts or gate atoms held in every seed.
     Unconditional,
     /// Every premise stays true until the lowest selected bit is cleared.
     Selected(usize),
@@ -43,20 +44,25 @@ impl Restrictions {
         }
     }
 
+    /// Find a forbidden conjunction whose premises are all true in the current
+    /// seed: `necessary` holds the gate atoms every seed selects, in canonical
+    /// order, and `atoms`/`bits` the counted ones with their selection.
     pub(crate) fn conflict(
         &self,
+        necessary: &[Arc<Atom>],
         atoms: &[Arc<GateAtom>],
         bits: &[bool],
         max_work: u64,
         control: &Control,
     ) -> (Result<Option<Conflict>, Stop>, u64) {
         let mut work = Work::source(control, max_work);
-        let result = self.find_conflict(atoms, bits, &mut work);
+        let result = self.find_conflict(necessary, atoms, bits, &mut work);
         (result, work.statistics.work)
     }
 
     fn find_conflict(
         &self,
+        necessary: &[Arc<Atom>],
         atoms: &[Arc<GateAtom>],
         bits: &[bool],
         work: &mut Work<'_>,
@@ -66,6 +72,11 @@ impl Restrictions {
             let mut first = None;
             let mut matched = true;
             for premise in forbidden {
+                // A necessary premise never clears, so it does not bound the
+                // interval the conjunction excludes.
+                if held(premise, necessary, work)? {
+                    continue;
+                }
                 let Some(index) = selected_index(premise, atoms, bits, work)? else {
                     matched = false;
                     break;
@@ -80,6 +91,22 @@ impl Restrictions {
         }
         Ok(None)
     }
+}
+
+fn held(premise: &Atom, necessary: &[Arc<Atom>], work: &mut Work<'_>) -> Result<bool, Stop> {
+    let mut start = 0;
+    let mut end = necessary.len();
+    while start < end {
+        let middle = start + (end - start) / 2;
+        charge_atom(premise, work)?;
+        charge_atom(&necessary[middle], work)?;
+        match necessary[middle].as_ref().cmp(premise) {
+            std::cmp::Ordering::Less => start = middle + 1,
+            std::cmp::Ordering::Greater => end = middle,
+            std::cmp::Ordering::Equal => return Ok(true),
+        }
+    }
+    Ok(false)
 }
 
 fn selected_index(

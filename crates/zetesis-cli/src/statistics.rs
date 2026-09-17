@@ -330,16 +330,7 @@ fn details(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io
         )?;
     }
     if let Some(stats) = report.candidate_statistics {
-        writeln!(
-            sink,
-            "  candidate restrictions: work={}; conjunctions={}; skipped impossible intervals={}; prepared atom occurrences={}; copied payload bytes={}; peak copied payload bytes={}; allocator/index overhead excluded",
-            stats.restriction_work,
-            stats.restriction_conjunctions,
-            stats.conflicts,
-            stats.restriction_atoms,
-            stats.restriction_bytes,
-            stats.restriction_peak_bytes
-        )?;
+        candidates(sink, stats)?;
     }
     if let Some(observation) = report.query_execution {
         query(sink, observation)?;
@@ -404,6 +395,30 @@ fn details(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io
         )?;
     }
     Ok(())
+}
+
+fn candidates(sink: &mut impl Write, stats: zetesis_cpu::CandidateStatistics) -> io::Result<()> {
+    writeln!(
+        sink,
+        "  candidate restrictions: work={}; conjunctions={}; skipped impossible intervals={}; prepared atom occurrences={}; copied payload bytes={}; peak copied payload bytes={}; allocator/index overhead excluded",
+        stats.restriction_work,
+        stats.restriction_conjunctions,
+        stats.conflicts,
+        stats.restriction_atoms,
+        stats.restriction_bytes,
+        stats.restriction_peak_bytes
+    )?;
+    match stats.bounds_stop {
+        None => writeln!(
+            sink,
+            "  carrier bounds: underivable gate atoms={}; necessary gate atoms={}",
+            stats.underivable_gate_atoms, stats.necessary_gate_atoms
+        ),
+        Some(stop) => writeln!(
+            sink,
+            "  carrier bounds: unavailable ({stop}); the counter ran over the symbolic gate carrier"
+        ),
+    }
 }
 
 fn query(sink: &mut impl Write, observation: &crate::QueryExecutionObservation) -> io::Result<()> {

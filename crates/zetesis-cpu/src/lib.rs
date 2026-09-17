@@ -25,7 +25,7 @@ pub use control::{Control, Stop};
 pub use oracle::source;
 pub use oracle::{
     Check, ClosureWorkspace, Limits, PreparationLimits, PreparationStatistics, PreparedQueries,
-    Statistics, check, check_view,
+    Statistics, check, check_view, lower_closure, upper_closure,
 };
 pub use static_oracle::{StaticCheck, StaticStatistics, check_static, check_static_view};
 pub use verified::StableInterpretation;
