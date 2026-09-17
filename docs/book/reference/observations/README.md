@@ -721,6 +721,63 @@ in the search rather than the grounder. Atoms are still self-contained
 values with their own predicate; the dense predicate identity the audit's
 R4 also describes remains a separate representation decision.
 
+## The exclusion rule: a false comparison excludes the substitution
+
+Three campaigns on 17 September 2026, the reports written between 17:16:41
+and 17:27:40 UTC, same machine, profile, four workers and clingo as above.
+`main` is the 896a5f73 executable rerun as the control, `before` the
+per-predicate catalog executable (`20b4f778`, SHA-256
+`a6974b914cffffb7dff572279b2d2e7900ebb1e20ec27c5f873e2d0fe3833ba4`) and
+`after` is built from `852c9598` (SHA-256
+`182838f21d893684421981f80088530b842472c325e113a29c8df3464e47a2d2`), where
+a comparison between terms over relationally bound variables that is defined
+and false excludes the substitution, so nothing in it is reached and the
+join prunes the prefix in every grounding pass.
+[series-852c9598-cpu-auto.json](series-852c9598-cpu-auto.json) and its
+[table view](series-852c9598-cpu-auto-tables.md) are the derived comparison;
+raw report SHA-256
+`d566c8ad1ebfe9f48fef6198894977a5f14c03660b1ec1534047d698720f7792` (main),
+`bd250e2703dab42d0457dbbd59871d365251d80e87e8b9f521163215a806c258` (before)
+and `b990497dd77a4ffe525a956db50ba96dded8589b43605fb9e0041f96683bb523`
+(after).
+
+The rule changes what rule instantiation reads: the substitutions the
+comparisons leave, rather than the full product validated row by row. On
+the formula cells:
+
+| Cell | before | after | after/before | clingo |
+|---|---:|---:|---:|---:|
+| n-queens/variant-01 8→10 | 110.9 | 91.6 | 0.83 | 30.0 |
+| n-queens/variant-01 8→11 | 428.2 | 397.0 | 0.93 | 178.8 |
+| send-money/send-money | 42.2 | 39.5 | 0.94 | 14.4 |
+| n-queens/variant-04 8→11 | 303.8 | 299.5 | 0.99 | 175.6 |
+| variant-04/05-larger-mix | 306.1 | 310.8 | 1.02 | 146.3 |
+| disjunction-12 | 207.1 | 212.6 | 1.03 | 22.3 |
+| independent-negation-aggregate-16 | 342.8 | 351.7 | 1.03 | 31.3 |
+| ties-50 | 169.2 | 181.2 | 1.07 | 18.5 |
+
+The closure-route cells share no code with the change and move within
+their bands (chain-1000 0.87, transitive-path-200 0.93, both under fifty
+milliseconds). The audit's pair of forty-element rules with `X < Y`, timed
+three times each outside the harness, answers in 0.11 s on both executables
+at about 35 MB: the instantiation rows fell from 64,000 to 32,840 while the
+support rows stayed at 32,840, and at this size the process is the
+startup and the support completion.
+
+In the problem's words: a rule is grounded over candidate substitutions for
+its variables, and `X < Y` false at a pair is now the end of that pair.
+Before, the grounder kept reading the rest of the rule for every pair, to
+validate its arithmetic on a substitution it would then discard; now the
+pair is excluded where the comparison is decided and nothing beneath it is
+reached, in every grounding pass. The reference example `d(0..2). p(X) :-
+d(X), X != 0, 1/X = 1.` answers with `p(1)`, where every earlier build
+refused it because `1/0` was reached on the excluded substitution. The
+departure from clingo stays where it was: a reached undefined or
+overflowing operation on a substitution nothing excludes is still a
+refusal, where clingo drops the instance. Queens, whose ordering
+comparisons decide most pairs, gains eight to seventeen percent; the cells
+with few comparisons move within their bands.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
