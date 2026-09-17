@@ -778,6 +778,49 @@ refusal, where clingo drops the instance. Queens, whose ordering
 comparisons decide most pairs, gains eight to seventeen percent; the cells
 with few comparisons move within their bands.
 
+## Candidate narrowing: the comparisons over one variable, decided before any row
+
+Three campaigns on 17 September 2026, the reports written between 17:49:46
+and 18:00:45 UTC, same machine, profile, four workers and clingo as above.
+`main` is the 896a5f73 executable rerun as the control, `before` the
+exclusion-rule executable (`852c9598`, SHA-256
+`182838f21d893684421981f80088530b842472c325e113a29c8df3464e47a2d2`) and
+`after` is built from `8710ad31` (SHA-256
+`b104d7c9fd90a47f2ae4acf7f3dba20379f32b584497f17b1cf3b248be8dbf44`), where
+the domain guards narrow a variable's candidates by every comparison over
+it alone, the analysis's positive profile admits body comparisons, and the
+ordinary command runs the analysis by default.
+[series-8710ad31-cpu-auto.json](series-8710ad31-cpu-auto.json) and its
+[table view](series-8710ad31-cpu-auto-tables.md) are the derived comparison;
+raw report SHA-256
+`b10117abf9b91a9ef315f398f66075282befd42b1899abaa7926c68b9cb74bc2` (main),
+`9fedf1d4f84d9083f5c72331e2fc94e03a76e48b2735c229d64c54f54acefbe1` (before)
+and `dba2176baa84890b63fd4bfa5f4a99e236f3d02b082ef812bba6257749357830`
+(after).
+
+The series is flat, as expected: every comparison in these cells reads two
+variables, which this step does not narrow, so the change measured here
+is the analysis running by default on every formula cell. No cell refused
+and none left its band: n-queens/variant-01 8→10 0.91, n-queens/variant-04
+8→11 0.96, send-money 0.99, larger-mix 0.99, ties-50 1.02, disjunction-12
+1.03; the closure-route cells, which the analysis does not touch, moved
+0.82 to 1.01 under fifty milliseconds. The audit pair is unchanged at
+0.11 s and about 35 MB.
+
+In the problem's words: the exclusion rule decides a comparison over one
+variable on that variable's value alone, so the decision can be taken once
+per value instead of once per row. The guards take it against the inferred
+domain of the variable's argument before the relation is read: on `d(0..2).
+p(X) :- d(X), X != 0, 1/X = 1.` the analysis excludes the candidate `0`,
+the guard rejects its row before binding, and the receipt reads two
+narrowed candidates and two rejected rows for the one answer `p(1)`. On
+`d(1..200). p(X) :- d(X), X < 3.` it rejects 198 of the 200 rows before
+copying a binding. A value the comparison cannot evaluate is kept, so a
+reached undefined operation refuses exactly as before. What this buys in
+time depends on how many rows a comparison over one variable excludes and
+how often that relation is offered; the series has no such cell, and the
+step is recorded for its counted effect and for the analysis now being on.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
