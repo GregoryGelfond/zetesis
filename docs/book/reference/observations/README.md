@@ -387,6 +387,37 @@ rescan to lose. The reduct-query phase is absent on every formula cell
 after the change; the certificate's own phase is unchanged, since it did
 the same evaluation before and is now believed.
 
+### The branching order under assumptions
+
+The audit's remaining formula-route point asked whether the branching
+order, which the search recomputes for every seeded call, could be computed
+once per base closure and shared by its assumptions. Two campaigns on 17
+September 2026 between 01:43:14 and 01:50:23 UTC compared the 8b7239fd
+executable (`after`) with an experimental build (`static`, SHA-256
+`8d15f5829ec4a3724001ddb453b9cf1125203daacec8715c13cfc31f1371bf36`) that
+computes the order before the assumptions are assigned, so the same order
+serves every seed:
+[series-8b7239fd-cpu-auto-ordering.json](series-8b7239fd-cpu-auto-ordering.json)
+with its [table view](series-8b7239fd-cpu-auto-ordering-tables.md); raw
+report SHA-256
+`51bb1a80dd6a60bf587efa65264a668d63b194070903afd8e9758ee728ac3cc8` (after)
+and `a991848fc00110f7642bdf4eee5ab88a5dea47fd26ed4244815e23923038065e`
+(static). The experimental build is not retained.
+
+The order depends on the assumptions by construction: the ordering heuristic
+reads the current values, so a seed that fixes a literal changes which
+clauses still need a decision. Sharing the order removed that dependence,
+and the charged search work was identical on eighteen of the nineteen
+measured cells and 4.1 times larger on disjunction-12 (37.0 M against
+9.0 M units; 282 against 206 ms). The seeds are the reduct parameters of
+each candidate: the order computed after they are assigned ranks the
+clauses they leave open, while the shared order ranks the unfrozen problem
+and decides in an order the frozen one no longer rewards. The order stays
+per seed. The decision record: the once-per-closure order
+is cheaper to compute but not cheaper to search with; it would be
+reconsidered only with an ordering heuristic that does not read the current
+values.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
