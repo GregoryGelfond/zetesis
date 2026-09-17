@@ -64,7 +64,8 @@ fn final_filters_use_the_join_workspace() {
         .unwrap();
     assert_eq!(result, Some(complete([Value::Number(7)])));
     assert!(join.evaluation.values.is_empty());
-    assert!(join.evaluation.values.capacity() >= 2);
+    assert!(join.evaluation.integers.is_empty());
+    assert!(join.evaluation.integers.capacity() >= 2);
 }
 
 #[test]
@@ -112,7 +113,8 @@ fn binding_generators_use_the_join_workspace() {
             Some(complete([Value::Number(value), Value::Number(value + 1)]))
         );
         assert!(join.evaluation.values.is_empty());
-        assert!(join.evaluation.values.capacity() >= 2);
+        assert!(join.evaluation.integers.is_empty());
+        assert!(join.evaluation.integers.capacity() >= 2);
     }
     assert_eq!(
         join.next(
@@ -163,7 +165,8 @@ fn range_endpoints_use_the_join_workspace() {
         Some(complete([Value::Number(2), Value::Number(3)]))
     );
     assert!(join.evaluation.values.is_empty());
-    assert!(join.evaluation.values.capacity() >= 2);
+    assert!(join.evaluation.integers.is_empty());
+    assert!(join.evaluation.integers.capacity() >= 2);
 }
 
 #[test]
