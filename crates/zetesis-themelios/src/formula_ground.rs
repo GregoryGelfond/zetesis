@@ -287,7 +287,7 @@ impl Builder<'_> {
             catalog: atoms::Catalog::default(),
             metadata: metadata::Metadata::default(),
             nodes: Vec::new(),
-            node_indices: nodes::Index::new(),
+            node_indices: nodes::Index::default(),
             roots: Vec::new(),
             origins: Vec::new(),
             counters,

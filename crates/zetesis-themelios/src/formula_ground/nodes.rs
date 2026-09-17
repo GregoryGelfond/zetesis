@@ -1,12 +1,15 @@
 //! Exact node lookup; the node sequence alone fixes dense identity and order.
 //!
-//! `RandomState` retains randomized hashing for source-derived keys. No hash-table
-//! traversal emits nodes or selects IDs. Expected lookup is constant table work;
-//! collisions can require linear work and growth can rehash prior keys. Hashes
-//! establish bucket placement only: the complete node key decides identity.
+//! A key is a kind and two child identities the builder assigned densely, so
+//! it carries nothing an input author chooses and needs no randomized hash: a
+//! fixed multiplicative mix of the three words places it. No hash-table
+//! traversal emits nodes or selects IDs. Expected lookup is constant table
+//! work; collisions can require linear work and growth can rehash prior keys.
+//! Hashes establish bucket placement only: the complete node key decides
+//! identity.
 
 use std::collections::HashMap;
-use std::hash::BuildHasher;
+use std::hash::{BuildHasher, BuildHasherDefault, Hasher};
 
 use themelios_base::span::Location;
 use zetesis_ferraris::Node;
@@ -15,7 +18,33 @@ use crate::formula::ceiling;
 use crate::{FormulaFailure, FormulaResource};
 
 type Key = (u8, usize, usize);
-pub(super) type Index = HashMap<Key, usize>;
+pub(super) type Index = HashMap<Key, usize, BuildHasherDefault<NodeHasher>>;
+
+/// Mixes the words of a node key by multiplication with an odd constant
+/// after rotating the running value, the scheme of the Rust compiler's own
+/// interner hash; the low bits of each word reach every bit of the result.
+#[derive(Default)]
+pub(super) struct NodeHasher(u64);
+
+impl Hasher for NodeHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            self.write_u64(u64::from(byte));
+        }
+    }
+    fn write_u8(&mut self, word: u8) {
+        self.write_u64(u64::from(word));
+    }
+    fn write_usize(&mut self, word: usize) {
+        self.write_u64(word as u64);
+    }
+    fn write_u64(&mut self, word: u64) {
+        self.0 = (self.0.rotate_left(5) ^ word).wrapping_mul(0x517c_c1b7_2722_0a95);
+    }
+}
 
 pub(super) fn intern<S: BuildHasher>(
     index: &mut HashMap<Key, usize, S>,
@@ -115,7 +144,7 @@ mod tests {
     }
     #[test]
     fn a_node_ceiling_preserves_both_owners() {
-        let mut index = Index::new();
+        let mut index = Index::default();
         let mut nodes = Vec::new();
         intern(
             &mut index,
@@ -144,7 +173,7 @@ mod tests {
     }
     #[test]
     fn zero_node_admission_allocates_no_index() {
-        let mut index = Index::new();
+        let mut index = Index::default();
         let mut nodes = Vec::new();
         assert!(
             intern(
@@ -162,7 +191,7 @@ mod tests {
 
     #[test]
     fn refused_growth_preserves_index_capacity() {
-        let mut index = Index::new();
+        let mut index = Index::default();
         let mut nodes = Vec::new();
         intern(
             &mut index,
