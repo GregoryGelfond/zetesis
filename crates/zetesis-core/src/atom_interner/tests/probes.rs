@@ -152,15 +152,17 @@ fn read_only_misses_need_no_mutation_storage() {
 fn probe_work_matches_visited_typed_prefixes() {
     let owner = owner(&[2, 1, 3]);
     let pattern = pattern();
-    // Each p(number) visit costs a node, predicate descriptor, 'p' byte,
-    // terminating name length and numeric Value descriptor: five operations.
-    // p(2) is the root; every other query below visits exactly two nodes.
+    // Finding the one relation costs a probe, the predicate descriptor, the
+    // 'p' byte and the terminating name length: four operations, once per
+    // lookup. Each p(number) node visited then costs a node and a numeric
+    // Value descriptor: two operations. p(2) is the root; every other query
+    // below visits exactly two nodes.
     for (value, expected, work) in [
-        (2, Some(0), 5),
-        (1, Some(1), 10),
-        (3, Some(2), 10),
-        (0, None, 10),
-        (4, None, 10),
+        (2, Some(0), 6),
+        (1, Some(1), 8),
+        (3, Some(2), 8),
+        (0, None, 8),
+        (4, None, 8),
     ] {
         let mut spent = 0;
         let actual = owner
@@ -191,7 +193,7 @@ fn query_work_limits_are_inclusive() {
     for value in [3, 4] {
         let values = [Value::Number(value)];
         let key = pattern.key(values.as_slice()).unwrap();
-        for limit in 0..=10 {
+        for limit in 0..=8 {
             let cause = ("query stopped", limit);
             let mut spent = 0;
             let mut before = || {
@@ -203,14 +205,14 @@ fn query_work_limits_are_inclusive() {
                 }
             };
             let result = owner.find_key_with(key, limits(), &mut before);
-            if limit < 10 {
+            if limit < 8 {
                 assert!(
                     matches!(result, Err(Failure::Stopped(actual)) if std::ptr::eq(actual, &raw const cause))
                 );
                 assert_eq!(spent, limit);
             } else {
                 assert_eq!(result.unwrap(), (value == 3).then_some(2));
-                assert_eq!(spent, 10);
+                assert_eq!(spent, 8);
             }
         }
     }
@@ -288,10 +290,11 @@ fn vacant_entries_charge_link_replay() {
         })
         .unwrap();
     assert_eq!(entry.position(), None);
-    // Two five-operation typed probes include the local direction recording.
-    // Replay costs one node/decode and one Step write per visited node, without
-    // repeating typed comparisons. Existing capacity needs no growth allowance.
-    assert_eq!(spent, 10 + 2 * 2);
+    // The four-operation relation lookup and two two-operation typed probes
+    // include the local direction recording. Replay costs one node/decode and
+    // one Step write per visited node, without repeating typed comparisons.
+    // Existing capacity needs no growth allowance.
+    assert_eq!(spent, 4 + 2 * 2 + 2 * 2);
     assert_eq!(
         entry
             .insert_with(limits(), || Ok::<(), Infallible>(()))
@@ -336,9 +339,10 @@ fn full_direction_record_refuses_without_change() {
 
 #[test]
 fn replay_refusal_preserves_published_membership() {
-    // p(4) takes two typed probes (ten operations), followed by two replay
-    // node/Step pairs. Stop separately before each replay operation.
-    for limit in 10..14 {
+    // p(4) takes the relation lookup and two typed probes (eight operations),
+    // followed by two replay node/Step pairs. Stop separately before each
+    // replay operation.
+    for limit in 8..12 {
         let mut owner = owner(&[2, 1, 3]);
         assert!(owner.index.path.capacity() >= 2);
         owner

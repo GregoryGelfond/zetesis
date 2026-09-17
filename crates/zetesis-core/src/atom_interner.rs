@@ -9,10 +9,11 @@
 
 mod query;
 
+use std::cmp::Ordering;
 use std::{collections::TryReserveError, fmt};
 
-use crate::{Atom, AtomKey, ordered_index as index};
-use index::{Directions, Index, Node, Step, position};
+use crate::{Atom, AtomKey, Predicate, identity, ordered_index as index};
+use index::{Directions, Index, Link, Node, Step, position};
 use query::Query;
 
 /// Bounds on this interner's population and named storage, independent of truth.
@@ -105,10 +106,13 @@ impl<E: std::error::Error + 'static> std::error::Error for Failure<E> {
     }
 }
 
-/// Authoritative unique atoms in first-insertion order, plus an ID-only AVL index.
+/// Authoritative unique atoms in first-insertion order, plus one ID-only AVL
+/// index per predicate, kept in predicate order.
 ///
-/// Searches use O(log n) node probes and checked typed comparisons without
-/// allocating or changing retained scratch. Entry records the initial search's
+/// A lookup compares the predicate once, finding its relation among the few
+/// the program names by a checked binary search, and then compares arguments
+/// only along that relation's tree. Searches use O(log n) node probes and
+/// checked typed comparisons without allocating or changing retained scratch. Entry records the initial search's
 /// directions in fixed local stack state. Only a vacant entry replays child
 /// links to prepare its mutation path, without repeating typed comparisons.
 /// Insertion uses O(log n) path operations and at most two rotations. Vector growth is
@@ -122,6 +126,36 @@ pub struct AtomInterner {
     committed: Vec<Atom>,
     pending: Vec<Atom>,
     index: Index,
+    relations: Vec<Relation>,
+}
+
+/// One predicate's atoms: the root of its subtree in the shared node index.
+/// Relations are kept in the predicate's canonical identity order, so the
+/// trees in relation order give the canonical order of all atoms.
+struct Relation {
+    predicate: Predicate,
+    root: Link,
+}
+
+/// Find the relation of `predicate`, or the position that keeps the relations
+/// ordered if none exists, comparing predicates with the charged identity
+/// comparator at each probe.
+fn relation_of<E>(
+    relations: &[Relation],
+    predicate: &Predicate,
+    before: &mut impl FnMut() -> Result<(), E>,
+) -> Result<Result<usize, usize>, E> {
+    let (mut start, mut end) = (0, relations.len());
+    while start < end {
+        let middle = start + (end - start) / 2;
+        before()?;
+        match identity::predicate(&relations[middle].predicate, predicate, before)? {
+            Ordering::Less => start = middle + 1,
+            Ordering::Greater => end = middle,
+            Ordering::Equal => return Ok(Ok(middle)),
+        }
+    }
+    Ok(Err(start))
 }
 
 impl AtomInterner {
@@ -190,12 +224,16 @@ impl AtomInterner {
     ) -> Result<Option<usize>, Failure<E>> {
         population(self.len(), limits)?;
         admit(self.storage_bytes(), limits)?;
+        let mut checked = || before().map_err(Failure::Stopped);
+        let Ok(relation) = relation_of(&self.relations, query.predicate(), &mut checked)? else {
+            return Ok(None);
+        };
         query.search(
             &self.committed,
             &self.pending,
             &self.index.nodes,
-            self.index.root,
-            &mut || before().map_err(Failure::Stopped),
+            self.relations[relation].root,
+            &mut checked,
             |_| {},
         )
     }
@@ -208,6 +246,7 @@ impl AtomInterner {
             self.pending.capacity(),
             self.index.nodes.capacity(),
             self.index.path.capacity(),
+            self.relations.capacity(),
         )
     }
 
@@ -242,6 +281,7 @@ impl AtomInterner {
                 committed_capacity: capacity,
                 pending: &mut self.pending,
                 index: &mut self.index,
+                relations: &mut self.relations,
             },
         )
     }
@@ -313,43 +353,48 @@ impl AtomInterner {
             &mut checked,
         )?;
         self.index.path.clear();
-        let mut cursor = self.index.root;
-        loop {
-            while let Some(next) = cursor {
-                checked()?;
-                let id = position(next);
-                let node = self.index.nodes[id];
-                let live = self.storage_bytes()
-                    + size_of::<Vec<usize>>() as u128
-                    + cells::<usize>(output.capacity());
-                let bound = path_bound(self.len());
-                reserve(
-                    &mut self.index.path,
-                    1,
-                    bound,
-                    live,
-                    &mut self.index.peak,
-                    limits,
-                    &mut checked,
-                )?;
-                checked()?;
-                self.index.path.push(Step {
-                    id,
-                    node,
-                    right: false,
-                    changed: false,
-                });
-                cursor = node.children[0];
-            }
-            let Some(step) = self.index.path.pop() else {
-                break;
-            };
+        // Relations are in predicate order and each tree in argument order,
+        // so this visits every atom in canonical order.
+        for relation in 0..self.relations.len() {
             checked()?;
-            if step.id < count {
+            let mut cursor = self.relations[relation].root;
+            loop {
+                while let Some(next) = cursor {
+                    checked()?;
+                    let id = position(next);
+                    let node = self.index.nodes[id];
+                    let live = self.storage_bytes()
+                        + size_of::<Vec<usize>>() as u128
+                        + cells::<usize>(output.capacity());
+                    let bound = path_bound(self.len());
+                    reserve(
+                        &mut self.index.path,
+                        1,
+                        bound,
+                        live,
+                        &mut self.index.peak,
+                        limits,
+                        &mut checked,
+                    )?;
+                    checked()?;
+                    self.index.path.push(Step {
+                        id,
+                        node,
+                        right: false,
+                        changed: false,
+                    });
+                    cursor = node.children[0];
+                }
+                let Some(step) = self.index.path.pop() else {
+                    break;
+                };
                 checked()?;
-                output.push(step.id);
+                if step.id < count {
+                    checked()?;
+                    output.push(step.id);
+                }
+                cursor = step.node.children[1];
             }
-            cursor = step.node.children[1];
         }
         Ok(output)
     }
@@ -447,6 +492,7 @@ pub struct AtomAppender<'a> {
     committed_capacity: usize,
     pending: &'a mut Vec<Atom>,
     index: &'a mut Index,
+    relations: &'a mut Vec<Relation>,
 }
 impl AtomAppender<'_> {
     /// Distinct committed plus pending count.
@@ -472,6 +518,7 @@ impl AtomAppender<'_> {
             self.pending.capacity(),
             self.index.nodes.capacity(),
             self.index.path.capacity(),
+            self.relations.capacity(),
         )
     }
     /// Peak named conservative capacity; nested payload remains caller-owned accounting.
@@ -486,6 +533,7 @@ impl AtomAppender<'_> {
             committed_capacity: self.committed_capacity,
             pending: self.pending,
             index: self.index,
+            relations: self.relations,
         }
     }
 
@@ -527,27 +575,34 @@ impl<'a> AtomAppender<'a> {
         let mut checked = || before().map_err(Failure::Stopped);
         population(self.len(), limits)?;
         admit(self.storage_bytes(), limits)?;
+        let relation = relation_of(self.relations, query.predicate(), &mut checked)?;
         let mut directions = Directions::default();
-        let found = query.search(
-            self.committed,
-            self.pending,
-            &self.index.nodes,
-            self.index.root,
-            &mut checked,
-            |right| directions.push(right).expect("AVL height fits two words"),
-        )?;
+        let found = match relation {
+            Ok(relation) => query.search(
+                self.committed,
+                self.pending,
+                &self.index.nodes,
+                self.relations[relation].root,
+                &mut checked,
+                |right| directions.push(right).expect("AVL height fits two words"),
+            )?,
+            Err(_) => None,
+        };
         if found.is_none() {
-            self.prepare_path(&directions, limits, &mut checked)?;
+            let root = relation.map_or(None, |relation| self.relations[relation].root);
+            self.prepare_path(root, &directions, limits, &mut checked)?;
         }
         Ok(AtomEntry {
             appender: self,
             query,
+            relation,
             found,
         })
     }
 
     fn prepare_path<E>(
         &mut self,
+        root: Link,
         directions: &Directions,
         limits: Limits,
         before: &mut impl FnMut() -> Result<(), Failure<E>>,
@@ -558,12 +613,10 @@ impl<'a> AtomAppender<'a> {
             self.pending.capacity(),
             self.index.nodes.capacity(),
             0,
+            self.relations.capacity(),
         );
         let Index {
-            nodes,
-            root,
-            path,
-            peak,
+            nodes, path, peak, ..
         } = &mut *self.index;
         path.clear();
         // The exclusive entry borrow has prevented any node/link change since
@@ -571,7 +624,7 @@ impl<'a> AtomAppender<'a> {
         // root and each recorded direction reaches the same next node. Thus it
         // ends at that absent child; no second typed comparison is required.
         // Refusal changes only disposable path scratch, never published links.
-        let mut cursor = *root;
+        let mut cursor = root;
         for offset in 0..directions.len() {
             before()?; // Replayed node and its constant-size direction decode.
             let right = directions.get(offset).expect("recorded direction");
@@ -598,6 +651,8 @@ impl<'a> AtomAppender<'a> {
 pub struct AtomEntry<'owner, 'key> {
     appender: AtomAppender<'owner>,
     query: Query<'key>,
+    /// The predicate's relation, or where a new one keeps the relations ordered.
+    relation: Result<usize, usize>,
     found: Option<usize>,
 }
 impl AtomEntry<'_, '_> {
@@ -675,6 +730,18 @@ impl AtomEntry<'_, '_> {
             limits,
             &mut checked,
         )?;
+        if self.relation.is_err() {
+            let live = self.storage_bytes();
+            reserve(
+                self.appender.relations,
+                1,
+                limits.max_atoms,
+                live,
+                &mut self.appender.index.peak,
+                limits,
+                &mut checked,
+            )?;
+        }
         checked()?;
         self.appender.index.path.push(Step {
             id,
@@ -682,8 +749,20 @@ impl AtomEntry<'_, '_> {
             right: false,
             changed: true,
         });
-        let root = self.appender.index.plan(id, &mut checked)?;
+        let previous = self
+            .relation
+            .map_or(None, |relation| self.appender.relations[relation].root);
+        let root = self.appender.index.plan_from(previous, id, &mut checked)?;
         self.query.prepare_copy(&mut checked)?;
+        if let Err(at) = self.relation {
+            // The relation's own predicate copy, and each later relation moved.
+            for _ in self.query.predicate().name().as_bytes() {
+                checked()?;
+            }
+            for _ in at..self.appender.relations.len() {
+                checked()?;
+            }
+        }
         checked()?; // Authoritative atom-vector write.
         checked()?; // New AVL node.
         for step in &self.appender.index.path[..self.appender.index.path.len() - 1] {
@@ -693,7 +772,17 @@ impl AtomEntry<'_, '_> {
         }
         checked()?; // Root publication.
         self.appender.pending.push(self.query.to_atom());
-        self.appender.index.publish(root);
+        self.appender.index.publish_nodes();
+        match self.relation {
+            Ok(relation) => self.appender.relations[relation].root = root,
+            Err(at) => self.appender.relations.insert(
+                at,
+                Relation {
+                    predicate: self.query.predicate().clone(),
+                    root,
+                },
+            ),
+        }
         Ok(id)
     }
 }
@@ -706,12 +795,13 @@ fn get<'a>(committed: &'a [Atom], pending: &'a [Atom], id: usize) -> Option<&'a 
     }
 }
 
-fn storage(committed: usize, pending: usize, nodes: usize, path: usize) -> u128 {
+fn storage(committed: usize, pending: usize, nodes: usize, path: usize, relations: usize) -> u128 {
     size_of::<AtomInterner>() as u128
         + cells::<Atom>(committed)
         + cells::<Atom>(pending)
         + cells::<Node>(nodes)
         + cells::<Step>(path)
+        + cells::<Relation>(relations)
 }
 fn cells<T>(count: usize) -> u128 {
     count as u128 * size_of::<T>() as u128

@@ -159,9 +159,12 @@ these lifetimes to prepared views and execution state.
 
 The final formula catalog uses the shared core
 [`AtomInterner`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/atom_interner.rs).
-It owns each atom once and indexes stable insertion positions with an AVL tree.
-Lookup performs logarithmically many checked node probes and full typed
-comparisons; compared descriptors and text prefixes are additional charged work.
+It owns each atom once and indexes stable insertion positions with one AVL
+tree per predicate, the trees kept in predicate order. Lookup finds the
+predicate's tree by a checked binary search over the program's few relations,
+comparing the predicate once, then performs logarithmically many checked node
+probes comparing arguments only; compared descriptors and text prefixes are
+additional charged work.
 Insertion plans links and rotations in reusable scratch, admits capacity and
 publication work, then publishes the new identity. It neither hashes complete
 payloads nor shifts a sorted index. Canonical traversal is separate from the

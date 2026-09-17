@@ -146,6 +146,20 @@ impl<'a> AtomKey<'a> {
         if !order.is_eq() {
             return Ok(order);
         }
+        self.compare_values_with(atom, before)
+    }
+
+    /// Compare the arguments with an atom of this key's predicate, in column
+    /// order, charging as [`Self::compare_identity_with`] does after the
+    /// predicate.
+    ///
+    /// # Errors
+    /// Returns the first caller refusal before that comparison.
+    pub(crate) fn compare_values_with<E>(
+        &self,
+        atom: &Atom,
+        mut before: impl FnMut() -> Result<(), E>,
+    ) -> Result<Ordering, E> {
         for (column, value) in atom.values().iter().enumerate() {
             let order = self
                 .argument(column)
