@@ -7,6 +7,7 @@ use zetesis_core::{Atom, Model, Sign, Value, ValueNode};
 use zetesis_cpu::{Control, Stop};
 use zetesis_objective::Score;
 
+use super::json::AtomTable;
 use super::{ConstructionLimits, Error, Evaluation, Limits, ObservationProgram, Statistics};
 use crate::OutputSelection;
 
@@ -182,24 +183,126 @@ impl ModelView<'_> {
         }
     }
 
+    /// Encode the model as a record of a document: the atoms the document
+    /// has not spelled are spelled and entered into `table`, and every atom of
+    /// the model, shown or not, is referred to by its index in the table. The
+    /// terms and costs are encoded as in [`Self::json`].
+    ///
+    /// # Errors
+    /// Refuses as [`Self::json`] does, and with [`ViewError::Table`] when the
+    /// table would exceed its ceiling; a refused record enters no atom.
+    pub fn record(
+        &self,
+        table: &mut AtomTable,
+        limits: ViewLimits,
+        control: &Control,
+    ) -> Result<String, ViewError> {
+        self.encode_record(table, limits, control)
+            .map(super::json::Encoded::into_text)
+            .map_err(|failure| failure.cause())
+    }
+
+    /// Encode a document record with retained work accounting; the data is
+    /// byte-identical to [`Self::record`].
+    ///
+    /// # Errors
+    /// Returns the same causes as [`Self::record`], with work charged before
+    /// refusal.
+    pub fn encode_record(
+        &self,
+        table: &mut AtomTable,
+        limits: super::json::Limits,
+        control: &Control,
+    ) -> Result<super::json::Encoded, super::json::Failure> {
+        let mut out = Buffer::new(limits, control);
+        // The atoms this record spells are entered as it spells them, so a
+        // lookup is one hash probe; a refused record withdraws its entries.
+        let mut added = Vec::new();
+        let result = self.encode_record_into(&mut out, table, &mut added);
+        let statistics = super::json::Statistics {
+            work: out.work,
+            buffered_bytes: out.text.len(),
+        };
+        match result {
+            Ok(()) => Ok(super::json::Encoded::new(out.text, statistics)),
+            Err(cause) => {
+                table.retract(&added);
+                Err(super::json::Failure::new(cause, statistics))
+            }
+        }
+    }
+
+    fn encode_record_into<'m>(
+        &'m self,
+        out: &mut Buffer<'_>,
+        table: &mut AtomTable,
+        added: &mut Vec<&'m Atom>,
+    ) -> Result<(), ViewError> {
+        // One lookup per atom: the index of each atom of the model, in model
+        // order, serves the spelling pass and both index lists. The first
+        // record of a document spells every atom and is deferred whole.
+        let mut indices = Vec::new();
+        indices
+            .try_reserve_exact(self.model.atoms().len())
+            .map_err(|_| ViewError::Allocation)?;
+        out.text("{\"atoms\":[")?;
+        if table.is_empty() {
+            for (position, atom) in self.model.atoms().iter().enumerate() {
+                if position != 0 {
+                    out.text(",")?;
+                }
+                out.atom(atom)?;
+                added.try_reserve(1).map_err(|_| ViewError::Allocation)?;
+                added.push(atom);
+                indices.push(position);
+            }
+            table.defer(self.model)?;
+        } else {
+            for (position, atom) in self.model.atoms().iter().enumerate() {
+                let index = if let Some(index) = table.index(atom)? {
+                    index
+                } else {
+                    if !added.is_empty() {
+                        out.text(",")?;
+                    }
+                    out.atom(atom)?;
+                    added.try_reserve(1).map_err(|_| ViewError::Allocation)?;
+                    let index = table.enter(self.model, position)?;
+                    added.push(atom);
+                    index
+                };
+                indices.push(index);
+            }
+        }
+        out.text("],\"full_model\":[")?;
+        for (position, &index) in indices.iter().enumerate() {
+            if position != 0 {
+                out.text(",")?;
+            }
+            out.number(index)?;
+        }
+        out.text("],\"shown\":{\"atom_indices\":[")?;
+        let mut first = true;
+        for (atom, &index) in self.model.atoms().iter().zip(&indices) {
+            if self.selection.try_includes(atom, |units| out.step(units))? {
+                if !first {
+                    out.text(",")?;
+                }
+                first = false;
+                out.number(index)?;
+            }
+        }
+        out.text("],\"terms\":[")?;
+        self.encode_terms_and_costs(out)
+    }
+
     fn encode_json_into(&self, out: &mut Buffer<'_>) -> Result<(), ViewError> {
         out.text("{\"full_model\":[")?;
         for (index, atom) in self.model.atoms().iter().enumerate() {
             if index != 0 {
                 out.text(",")?;
             }
-            out.text("{\"predicate\":")?;
-            out.quoted(atom.predicate().name())?;
-            out.text(",\"sign\":")?;
-            out.quoted(sign(atom.predicate().sign()))?;
-            out.text(",\"arguments\":[")?;
-            for (index, value) in atom.values().iter().enumerate() {
-                if index != 0 {
-                    out.text(",")?;
-                }
-                out.value(value)?;
-            }
-            out.text("]}")?;
+            out.atom(atom)?;
         }
         out.text("],\"shown\":{\"atom_indices\":[")?;
         let mut first = true;
@@ -209,10 +312,15 @@ impl ModelView<'_> {
                     out.text(",")?;
                 }
                 first = false;
-                out.text(&index.to_string())?;
+                out.number(index)?;
             }
         }
         out.text("],\"terms\":[")?;
+        self.encode_terms_and_costs(out)
+    }
+
+    /// The shown terms and the costs, closing the shown object and the value.
+    fn encode_terms_and_costs(&self, out: &mut Buffer<'_>) -> Result<(), ViewError> {
         for (index, symbol) in self.shown_terms().iter().enumerate() {
             if index != 0 {
                 out.text(",")?;
@@ -274,6 +382,8 @@ pub enum ViewError {
     Depth,
     /// Fallible storage reservation failed.
     Allocation,
+    /// The document's atom table would exceed its ceiling of distinct atoms.
+    Table,
     /// Caller cancellation or deadline stopped the view.
     Stopped(Stop),
 }
@@ -314,6 +424,36 @@ impl<'a> Buffer<'a> {
         }
         self.work = u64::try_from(work).expect("checked u64 work ceiling");
         Ok(())
+    }
+    /// A typed atom: its predicate, sign and arguments.
+    fn atom(&mut self, atom: &Atom) -> Result<(), ViewError> {
+        self.text("{\"predicate\":")?;
+        self.quoted(atom.predicate().name())?;
+        self.text(",\"sign\":")?;
+        self.quoted(sign(atom.predicate().sign()))?;
+        self.text(",\"arguments\":[")?;
+        for (index, value) in atom.values().iter().enumerate() {
+            if index != 0 {
+                self.text(",")?;
+            }
+            self.value(value)?;
+        }
+        self.text("]}")
+    }
+    /// A decimal index, formatted without an allocation.
+    fn number(&mut self, value: usize) -> Result<(), ViewError> {
+        let mut digits = [0_u8; 20];
+        let mut end = digits.len();
+        let mut rest = value;
+        loop {
+            end -= 1;
+            digits[end] = b'0' + u8::try_from(rest % 10).expect("a digit");
+            rest /= 10;
+            if rest == 0 {
+                break;
+            }
+        }
+        self.text(std::str::from_utf8(&digits[end..]).expect("ASCII digits"))
     }
     fn text(&mut self, text: &str) -> Result<(), ViewError> {
         self.step(text.len() as u128 + 1)?;

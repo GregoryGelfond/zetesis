@@ -330,6 +330,14 @@ impl<'a> ModelAtoms<'a> {
         self.positions.is_empty()
     }
 
+    /// The atom at a position of the model's canonical order. Constant time.
+    #[must_use]
+    pub fn at(self, position: usize) -> Option<&'a Atom> {
+        self.positions
+            .get(position)
+            .map(|&index| &self.atoms[index])
+    }
+
     /// Canonical double-ended iteration with an exact remaining length.
     #[must_use]
     pub fn iter(self) -> ModelIter<'a> {

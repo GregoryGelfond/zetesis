@@ -160,7 +160,7 @@ fn failed_flush_prevents_a_later_json_footer() {
         )
         .unwrap_err();
     assert!(error.to_string().contains("original cause"));
-    assert_eq!(sink.0, b"{\"schema\":1,\"format\":\"zetesis\",\"models\":[");
+    assert_eq!(sink.0, b"{\"schema\":2,\"format\":\"zetesis\",\"models\":[");
 }
 
 #[test]

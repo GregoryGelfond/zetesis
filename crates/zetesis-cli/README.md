@@ -94,10 +94,16 @@ stdout can discard output without a write error. The command cannot recover the
 parent's intent from those descriptors. Library callers own source loading and
 supply explicit writers; observed I/O errors retain their original causes.
 
-`--json` streams one schema-1 document without ANSI styling. Full semantic atoms,
-shown atom indices, shown terms, costs and terminal outcomes remain distinct.
-`--max-json-record-bytes` bounds each model and terminal record, with an 8 MiB
-default. Integer consumers need lossless parsing. A failed writer can leave a
+`--json` streams one schema-2 document without ANSI styling. The document
+spells each atom once: a model record's `atoms` are the typed atoms the
+document has not spelled before, in the order it spells them, and the
+document's atom table is every record's `atoms` in document order. A record's
+`full_model` and its `shown.atom_indices` are indices into that table; shown
+terms and costs stay per record, and terminal outcomes remain distinct. A
+`#show` directive decides what is shown, as in human output; a program
+without one shows the whole model. `--max-json-record-bytes` bounds each model
+and terminal record, with an 8 MiB default, and `--max-atoms` bounds the
+table. Integer consumers need lossless parsing. A failed writer can leave a
 truncated document or partial human record; successful semantic checking does
 not imply successful publication. See [JSON views](src/output.rs) and
 [output regression tests](tests/json_output.rs).

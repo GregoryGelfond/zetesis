@@ -23,7 +23,7 @@ pub(crate) fn solve(
     let selection = OutputSelection::default();
     let observations = ObservationProgram::default();
     let metadata = input.metadata();
-    let display = crate::display::Display {
+    let mut display = crate::display::Display {
         selection: metadata.map_or(&selection, zetesis_themelios::SourceMetadata::output),
         observations: metadata.map_or(
             &observations,
@@ -31,6 +31,7 @@ pub(crate) fn solve(
         ),
         options,
         control,
+        atoms: zetesis_themelios::observation::json::AtomTable::new(options.max_atoms),
     };
     let mut request = Session::builder(input, options.into(), control.clone()).measurements(phases);
     if input

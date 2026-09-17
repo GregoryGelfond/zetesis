@@ -1,16 +1,170 @@
 //! Pure model-value JSON encoding vocabulary, independent of a CLI envelope.
 //!
-//! Schema 1 uses typed full atoms, preorder term nodes, separate shown channels
-//! and descending priority/cost pairs. All integers are exact decimal JSON numbers;
-//! consumers must preserve integers beyond JavaScript's exact Number range.
-//! The version is supplied out of band; it adds no field to existing model values.
+//! A model value spells its atoms in full: typed atoms, preorder term nodes,
+//! separate shown channels and descending priority/cost pairs (schema 1). A
+//! model *record* inside a document spells only the atoms the document has
+//! not spelled before and refers to every atom by its index in the document's
+//! [`AtomTable`], the atoms in the order the document spelled them (schema 2).
+//! All integers are exact decimal JSON numbers; consumers must preserve
+//! integers beyond JavaScript's exact Number range. The version is supplied
+//! out of band; it adds no field to existing model values.
 
+use std::collections::HashMap;
 use std::fmt;
+
+use zetesis_core::{Atom, Model};
 
 pub use super::view::{ViewError as Error, ViewLimits as Limits};
 
 /// Version of the model-value representation, independent of a stream envelope.
 pub const SCHEMA_VERSION: u32 = 1;
+
+/// Version of the model-record representation: a record refers to its atoms
+/// by index into the document's [`AtomTable`] and spells only the new ones.
+pub const RECORD_SCHEMA_VERSION: u32 = 2;
+
+/// The atoms a document has spelled, in the order it spelled them. A record
+/// encoded against the table spells the atoms it adds and refers to all of
+/// its atoms by index, so a document spells each atom once. The table is
+/// bounded by a ceiling on distinct atoms; every entry refers to its atom in
+/// the model that spelled it, sharing that model's catalog rather than
+/// copying the atom.
+#[derive(Debug)]
+pub struct AtomTable {
+    indices: HashMap<Entry, usize, std::hash::BuildHasherDefault<crate::word_hash::WordHasher>>,
+    /// The first record's model, whose atoms hold the indices `0..len` in
+    /// model order and are indexed only when a second record asks.
+    deferred: Option<Model>,
+    max_atoms: usize,
+}
+
+/// An atom by its position in the model that spelled it. It hashes and
+/// compares as the atom does, so a lookup by atom finds it.
+#[derive(Debug)]
+struct Entry {
+    model: Model,
+    position: usize,
+}
+impl Entry {
+    fn atom(&self) -> &Atom {
+        self.model
+            .atoms()
+            .at(self.position)
+            .expect("an entry refers to a position of the model that spelled it")
+    }
+}
+impl std::borrow::Borrow<Atom> for Entry {
+    fn borrow(&self) -> &Atom {
+        self.atom()
+    }
+}
+impl PartialEq for Entry {
+    fn eq(&self, other: &Self) -> bool {
+        self.atom() == other.atom()
+    }
+}
+impl Eq for Entry {}
+impl std::hash::Hash for Entry {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.atom().hash(state);
+    }
+}
+
+impl AtomTable {
+    /// An empty table admitting at most `max_atoms` distinct atoms.
+    #[must_use]
+    pub fn new(max_atoms: usize) -> Self {
+        Self {
+            indices: HashMap::default(),
+            deferred: None,
+            max_atoms,
+        }
+    }
+    /// Distinct atoms spelled so far.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.indices.len()
+            + self
+                .deferred
+                .as_ref()
+                .map_or(0, |model| model.atoms().len())
+    }
+    /// Whether no atom has been spelled.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+    /// The atom's index when the document has spelled it. The first
+    /// record's atoms are indexed on the first lookup after it, so a document
+    /// of one record never indexes at all.
+    ///
+    /// # Errors
+    /// Returns [`Error::Allocation`] when the deferred record cannot be indexed.
+    pub fn index(&mut self, atom: &Atom) -> Result<Option<usize>, Error> {
+        self.flush()?;
+        Ok(self.indices.get(atom).copied())
+    }
+    /// Take the whole first record as the table: its atoms hold the indices
+    /// `0..len` in model order, without indexing them.
+    pub(super) fn defer(&mut self, model: &Model) -> Result<(), Error> {
+        debug_assert!(self.is_empty(), "only the first record is deferred");
+        if model.atoms().len() > self.max_atoms {
+            return Err(Error::Table);
+        }
+        self.deferred = Some(model.clone());
+        Ok(())
+    }
+    fn flush(&mut self) -> Result<(), Error> {
+        let Some(model) = self.deferred.take() else {
+            return Ok(());
+        };
+        self.indices
+            .try_reserve(model.atoms().len())
+            .map_err(|_| Error::Allocation)?;
+        for position in 0..model.atoms().len() {
+            self.indices.insert(
+                Entry {
+                    model: model.clone(),
+                    position,
+                },
+                position,
+            );
+        }
+        Ok(())
+    }
+    /// Enter the atom at `position` of `model`, which the document is about
+    /// to spell, at the next index.
+    ///
+    /// # Errors
+    /// Returns [`Error::Table`] at the ceiling and [`Error::Allocation`] when
+    /// the entry cannot be retained; the table is unchanged either way.
+    pub(super) fn enter(&mut self, model: &Model, position: usize) -> Result<usize, Error> {
+        self.flush()?;
+        let index = self.indices.len();
+        if index >= self.max_atoms {
+            return Err(Error::Table);
+        }
+        self.indices.try_reserve(1).map_err(|_| Error::Allocation)?;
+        self.indices.insert(
+            Entry {
+                model: model.clone(),
+                position,
+            },
+            index,
+        );
+        Ok(index)
+    }
+    /// Withdraw the atoms a refused record entered, so the table is as it
+    /// was before the record.
+    pub(super) fn retract(&mut self, atoms: &[&Atom]) {
+        if self.deferred.take().is_some() {
+            return;
+        }
+        for atom in atoms {
+            self.indices.remove(*atom);
+        }
+    }
+}
 
 /// Charged encoding work, distinct from observation evaluation and publication.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -32,7 +186,7 @@ impl Encoded {
     pub(super) fn new(text: String, statistics: Statistics) -> Self {
         Self { text, statistics }
     }
-    /// Complete schema-1 model-value text; no external bytes have been written.
+    /// Complete model-value or record text; no external bytes have been written.
     #[must_use]
     pub fn text(&self) -> &str {
         &self.text

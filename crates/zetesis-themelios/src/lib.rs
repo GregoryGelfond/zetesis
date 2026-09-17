@@ -118,6 +118,7 @@ pub use formula_count_plan::{
 mod grounding_options;
 mod formula_domains;
 mod formula_keys;
+mod word_hash;
 pub use grounding_observer::{
     DomainObservation, GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork,
 };

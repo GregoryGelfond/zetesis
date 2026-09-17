@@ -234,8 +234,10 @@ point is a typed driver protocol failure. Partial views retain absent completion
 without substituting exhaustion or a logical interruption. Mutating a detached
 compatibility report cannot change the retained semantic outcome.
 
-The CLI's `--json` output is a versioned view. Full semantic atoms, shown atom
-indices, shown terms and costs remain separate. Human output and JSON do not
+The CLI's `--json` output is a versioned view. The document spells each atom
+once, in the record that first holds it; a record refers to its full model and
+its shown atoms by index into the document's atom table, and shown terms and
+costs stay per record. Human output and JSON do not
 define different solving modes. Applications should consume typed library
 values or the JSON contract rather than parse styled answer lines.
 

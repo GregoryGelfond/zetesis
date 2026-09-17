@@ -1,5 +1,8 @@
 //! Ordinary views preserve prepared CPU ownership evidence and complete models.
 
+#[path = "support/spelled.rs"]
+mod spelled;
+
 use std::io::{self, Write};
 
 use clap::Parser;
@@ -139,7 +142,7 @@ fn candidate_storage_refusal_follows_admitted_preparation() {
     assert_eq!(complete.completion, Completion::Exhausted);
     assert_eq!(complete.models, 1);
     assert_eq!(
-        expected["models"][0]["model"]["full_model"],
+        serde_json::Value::Array(spelled::spelled(&expected, &expected["models"][0])),
         serde_json::json!([
             {"predicate":"a", "sign":"positive", "arguments":[]}
         ])

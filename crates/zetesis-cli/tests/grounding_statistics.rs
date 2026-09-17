@@ -130,10 +130,13 @@ fn the_ordinary_command_narrows_candidates_by_comparison() {
     assert_eq!(json["domain_narrowed_candidates"], 198);
     let models = document["models"].as_array().unwrap();
     assert_eq!(models.len(), 1);
+    // The one record spells every atom of the document and refers to them.
+    let atoms = models[0]["model"]["atoms"].as_array().unwrap();
     let instances: Vec<_> = models[0]["model"]["full_model"]
         .as_array()
         .unwrap()
         .iter()
+        .map(|index| &atoms[usize::try_from(index.as_u64().unwrap()).unwrap()])
         .filter(|atom| atom["predicate"] == "p")
         .map(|atom| atom["arguments"][0][0]["value"].as_i64().unwrap())
         .collect();

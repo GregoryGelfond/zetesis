@@ -108,7 +108,7 @@ fn replay_human_footer(stopped: &crate::StoppedPublication) {
 }
 
 fn replay_json_footer(stopped: &crate::StoppedPublication, original: &[u8]) {
-    const PREFIX: &[u8] = b"{\"schema\":1,\"format\":\"zetesis\",\"models\":[";
+    const PREFIX: &[u8] = b"{\"schema\":2,\"format\":\"zetesis\",\"models\":[";
     const MARKER: &[u8] = b"],\"outcome\":";
     assert!(original.starts_with(PREFIX));
     let boundary = original
@@ -271,11 +271,12 @@ fn publication_stop_before_first_record_keeps_unclassified_search() {
         assert_eq!(progress.semantic().unwrap().completion(), None);
         control.cancel();
         let metadata = input.metadata().unwrap();
-        let display = crate::display::Display {
+        let mut display = crate::display::Display {
             selection: metadata.output(),
             observations: metadata.observations(),
             options: &options,
             control: &control,
+            atoms: zetesis_themelios::observation::json::AtomTable::new(options.max_atoms),
         };
         let mut output = Vec::new();
         let ControlFlow::Break(stop) = display

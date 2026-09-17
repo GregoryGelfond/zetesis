@@ -35,7 +35,7 @@ impl Fixture {
         let reference = directory.path().join("reference");
         executable(
             &native,
-            "printf '%s' '{\"schema\":1,\"format\":\"zetesis\",\"models\":[],\"statistics\":null,\"outcome\":{\"status\":\"failed\",\"completion\":null,\"coverage\":\"unavailable\",\"published_models\":0,\"verified_models\":null,\"checked\":null,\"interruption\":null,\"optimization\":null,\"error\":{\"kind\":\"unsupported_combination\",\"secondary_output_failure\":false}}}'; exit 2",
+            "printf '%s' '{\"schema\":2,\"format\":\"zetesis\",\"models\":[],\"statistics\":null,\"outcome\":{\"status\":\"failed\",\"completion\":null,\"coverage\":\"unavailable\",\"published_models\":0,\"verified_models\":null,\"checked\":null,\"interruption\":null,\"optimization\":null,\"error\":{\"kind\":\"unsupported_combination\",\"secondary_output_failure\":false}}}'; exit 2",
         );
         executable(
             &reference,

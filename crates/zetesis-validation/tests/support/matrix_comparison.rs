@@ -31,7 +31,7 @@ fn request() -> Request<'static> {
 }
 fn sample() -> Sample {
     let (mut document, stderr) = crate::performance::matrix::fixtures::fixture();
-    document["schema"] = json!(1);
+    document["schema"] = json!(2);
     document["format"] = json!("zetesis");
     document["models"] = json!([]);
     document["outcome"] = json!({"status":"unsatisfiable","coverage":"exhausted","completion":"exhausted","published_models":0,
@@ -184,10 +184,10 @@ fn exit(code: i32) -> process::Exit {
     }
 }
 fn failed(kind: &str) -> Value {
-    json!({"schema":1,"format":"zetesis","models":[],"statistics":null,"outcome":{"status":"failed","completion":null,"coverage":"unavailable","published_models":0,"verified_models":null,"checked":null,"interruption":null,"optimization":null,"error":{"kind":kind,"secondary_output_failure":false}}})
+    json!({"schema":2,"format":"zetesis","models":[],"statistics":null,"outcome":{"status":"failed","completion":null,"coverage":"unavailable","published_models":0,"verified_models":null,"checked":null,"interruption":null,"optimization":null,"error":{"kind":kind,"secondary_output_failure":false}}})
 }
 fn interrupted() -> Value {
-    json!({"schema":1,"format":"zetesis","models":[],"statistics":null,"outcome":{"status":"incomplete","completion":"interrupted","coverage":"partial","published_models":0,"verified_models":0,"checked":1,"interruption":{"kind":"oracle","code":"work_limit","detail":"WorkLimit"},"optimization":null,"error":null}})
+    json!({"schema":2,"format":"zetesis","models":[],"statistics":null,"outcome":{"status":"incomplete","completion":"interrupted","coverage":"partial","published_models":0,"verified_models":0,"checked":1,"interruption":{"kind":"oracle","code":"work_limit","detail":"WorkLimit"},"optimization":null,"error":null}})
 }
 
 #[test]
@@ -205,7 +205,7 @@ fn successful_status_cannot_classify_an_embedded_refusal() {
 #[test]
 fn minimal_incomplete_status_is_not_interruption_evidence() {
     let value =
-        json!({"schema":1,"format":"zetesis","outcome":{"status":"incomplete","error":null}});
+        json!({"schema":2,"format":"zetesis","outcome":{"status":"incomplete","error":null}});
     assert_eq!(
         outcome::check(&value, Some(exit(3))).unwrap_err().0,
         Decision::InvalidReport

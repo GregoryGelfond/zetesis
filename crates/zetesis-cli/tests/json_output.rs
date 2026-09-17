@@ -1,5 +1,8 @@
 //! Typed streaming JSON preserves the ordinary solver's semantic and output contracts.
 
+#[path = "support/spelled.rs"]
+mod spelled;
+
 use std::io::{self, Write};
 use std::process::Command;
 
@@ -54,7 +57,7 @@ fn source_projection_selects_full_representatives() {
     assert_eq!(models.len(), 2);
     let mut keys = std::collections::BTreeSet::new();
     for answer in models {
-        let full = answer["model"]["full_model"].as_array().unwrap();
+        let full = spelled::spelled(&value, answer);
         keys.insert(full.iter().any(|atom| atom["predicate"] == "p"));
         assert_eq!(answer["model"]["shown"]["atom_indices"], json!([]));
     }
@@ -133,7 +136,7 @@ fn hidden_display_preserves_full_model_identity() {
         let mut full = std::collections::BTreeSet::new();
         for model in models {
             assert_eq!(model["model"]["shown"]["atom_indices"], json!([]));
-            full.insert(model["model"]["full_model"].to_string());
+            full.insert(Json::Array(spelled::spelled(&value, model)).to_string());
         }
         assert_eq!(full, expected);
     }
@@ -155,7 +158,7 @@ fn model_numbers_follow_publication_order() {
 fn json_documents_identify_the_schema() {
     for oracle in ["closure", "countermodel"] {
         let (_, value) = hidden_choices(oracle);
-        assert_eq!(value["schema"], 1);
+        assert_eq!(value["schema"], 2);
     }
 }
 
@@ -334,7 +337,7 @@ fn interruption_retains_an_unproved_incumbent() {
     let models = value["models"].as_array().unwrap();
     assert_eq!(models.len(), 1);
     assert_eq!(models[0]["number"], 1);
-    let full = models[0]["model"]["full_model"].as_array().unwrap();
+    let full = spelled::spelled(&value, &models[0]);
     assert_eq!(full.len(), 1);
     // Either stable model may be found first; its retained cost must match it.
     let (name, cost) = match full[0]["predicate"].as_str() {

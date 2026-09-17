@@ -23,7 +23,7 @@ impl<'a, W: Write> Document<'a, W> {
             failed: false,
         };
         if json {
-            document.write_all(b"{\"schema\":1,\"format\":\"zetesis\",\"models\":[")?;
+            document.write_all(b"{\"schema\":2,\"format\":\"zetesis\",\"models\":[")?;
         }
         Ok(document)
     }
@@ -82,10 +82,13 @@ impl<W: Write> Write for Document<'_, W> {
 }
 
 /// Preflight the bounded UTF-8 record, then write it to the supplied sink.
+/// The record spells the atoms the document has not spelled and refers to
+/// every atom by its index in `atoms`, the document's table.
 pub(crate) fn write_model_record(
     output: &mut impl Write,
     number: usize,
     view: &zetesis_themelios::observation::ModelView<'_>,
+    atoms: &mut zetesis_themelios::observation::json::AtomTable,
     options: &Options,
     control: &zetesis_cpu::Control,
 ) -> Result<(), RunError> {
@@ -99,7 +102,8 @@ pub(crate) fn write_model_record(
         .checked_sub(overhead)
         .ok_or(RunError::JsonRecord(ViewError::Bytes))?;
     let record = view
-        .json(
+        .record(
+            atoms,
             zetesis_themelios::observation::ViewLimits {
                 max_bytes: maximum,
                 ..Default::default()
