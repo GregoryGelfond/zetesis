@@ -467,6 +467,57 @@ reported with the others. The programs answer, and their answers agree with
 clingo; the closure-route cells are unaffected because none of these charges
 is on that route.
 
+## Item 6, first step: the join criterion
+
+Three campaigns on 17 September 2026 between 02:40:06 and 02:53:20 UTC,
+same machine, profile, four workers and clingo as above. `main` is the
+896a5f73 executable rerun as the control, `before` the item 2 executable
+(`2e9abd7a`, SHA-256
+`a5b030e44d841e945c6e549094cd83cb91772365a35e37bd4ef566d160f6c892`) and
+`after` is built from `25f6b6e6` (SHA-256
+`37486be255e47a444e0a4761918a5817fd4e44733da3b63d668dc5250790eea4`), where
+a positive body is joined in an order chosen by a named criterion: tests
+before generators, fewer offered rows first (a semi-naive pivot's new rows
+count as its rows), then the occurrence that decides the most waiting
+comparisons, then the one that binds the most variables they wait on, then
+the canonical order.
+[series-25f6b6e6-cpu-auto.json](series-25f6b6e6-cpu-auto.json) and its
+[table view](series-25f6b6e6-cpu-auto-tables.md) are the derived comparison;
+raw report SHA-256
+`d2f474774f5d3c6bd0f915f1c9cb89fbb8ac104118903845fef5c92aff57eb93` (main),
+`62098526db0d98a799aa3348c546256a83f6ecf2a0caa2f527266a13b4fdea3f` (before)
+and `0d4787f75be96aad00a6ec909ff0ebda21670c8070314fb8544c938149b15bce`
+(after).
+
+No series cell has a body whose order the criterion changes with effect, and
+the after/before column is within 0.98 and 1.10 on every cell, the widest
+being the ten-millisecond arithmetic chain. The audit's reproduction pair,
+`p(X,Y,Z) :- d(X), d(Y), X < Y, d(Z).` and the same rule with `W` for `Z`
+over `d(1..40)`, run three times per executable with
+`--max-expansion-work 100000000`, median driver wall time and the rows the
+support-completion join reads (the count the
+[join-order tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/join_order.rs)
+pin):
+
+| Program | main | before | after | clingo | support rows before | support rows after |
+|---|---:|---:|---:|---:|---:|---:|
+| third variable `Z` | 237.2 ms | 235.0 ms | 240.8 ms | 25 ms | 32,840 | 32,840 |
+| third variable `W` | 234.6 ms | 236.4 ms | 234.7 ms | 26 ms | 65,640 | 32,840 |
+
+In the problem's words: before, the body was joined in the order the
+canonical program lists its literals, which sorts them by predicate and then
+by variable name, so calling the third variable `W` instead of `Z` moved it
+in front of the comparison and doubled the rows the possible-support join
+read. The order is now chosen by what the body says, and both spellings
+read the same rows. The time did not move, on either spelling: the
+possible-support join is a small part of grounding this rule, and the rule
+instantiation that follows reads the full product of 64,000 rows on every
+build, because a complete row is validated before it is rejected so that a
+reached undefined operation is a refusal rather than a dropped row. Where
+that contract stands is the language's decision, recorded in the reference;
+the criterion decides how early a comparison is bound, not what a false one
+may skip. The answers agree with clingo on both programs.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
