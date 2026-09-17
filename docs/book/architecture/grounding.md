@@ -204,10 +204,10 @@ Plan construction and traversal consume the cumulative formula work allowance.
 Its header, occurrence arrays, borrowed predicate postings, packed active set
 and temporary construction arrays count
 against `max_support_bytes` beside the live catalog and query views. Preparation
-uses checked signature searches and a conservative finite comparison allowance
-for the upstream graph's opaque tree lookup; this is not an exact count of that
-lookup's comparisons. Wake lookup, posting visits and packed-set reads/writes
-are also charged. Temporary graph metadata is released after preparation, and
+uses checked signature searches, and charges each dependency validation one
+logarithmic lookup in the upstream graph plus the edges it walks, so the plan
+costs O(B log N) for B body occurrences over N predicates. Wake lookup,
+posting visits and packed-set reads/writes are also charged. Temporary graph metadata is released after preparation, and
 the plan is released before completed support is returned. These
 checks qualify support scheduling, not satisfiability, unique-answer claims or
 source-to-Rust semantic refinement. Richer programs keep the existing schedule.

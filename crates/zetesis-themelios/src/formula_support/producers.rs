@@ -73,14 +73,6 @@ impl<'source> ProducerPlan<'source> {
         memory.reserve(&mut inputs, input_count)?;
         memory.reserve(&mut input_predicates, input_count)?;
         let nodes = graph_nodes(prepared, &mut memory, limits, counters, location)?;
-        // An upstream BTree lookup does not expose its comparison count. This
-        // finite sum bounds comparing the borrowed lookup key with every graph
-        // key once; the actual outgoing-edge walk is charged separately below.
-        let mut lookup_bound = 0_u128;
-        for node in &nodes {
-            counters.work(limits, location)?;
-            lookup_bound += 1 + node.signature.name.as_str().len() as u128;
-        }
         for rule in &prepared.rules {
             counters.work(limits, rule.location)?;
             let HeadIr::Normal(Some(head)) = &rule.head else {
@@ -113,7 +105,6 @@ impl<'source> ProducerPlan<'source> {
                     prepared,
                     &nodes,
                     (head, body),
-                    lookup_bound,
                     limits,
                     counters,
                     rule.location,
@@ -290,7 +281,6 @@ fn validate_dependency(
     prepared: &Prepared,
     nodes: &[Node<'_>],
     edge: (usize, usize),
-    lookup_bound: u128,
     limits: &FormulaLimits,
     counters: &mut Counters,
     location: Location,
@@ -305,8 +295,12 @@ fn validate_dependency(
         return Err(invalid(Failure::Owner, location));
     }
     let signature = nodes[head].signature;
+    // The upstream graph finds the head's edges by one ordered lookup: at
+    // most one comparison per level of a balanced tree over the graph's
+    // nodes, each comparison bounded by the name's length.
+    let levels = u128::from(usize::BITS - nodes.len().leading_zeros()) + 1;
     counters.charge_work(
-        lookup_bound + nodes.len() as u128 * signature.name.as_str().len() as u128,
+        levels * (1 + signature.name.as_str().len() as u128),
         limits,
         location,
     )?;

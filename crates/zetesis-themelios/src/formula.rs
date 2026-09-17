@@ -52,13 +52,16 @@ pub struct FormulaLimits {
     /// have the independent `objective.max_condition_nodes` ceiling.
     pub max_objective_formula_nodes: usize,
     /// Distinct scalar values in the logical source, independent of join work.
+    /// The set behind this count retains each value once so that its payload
+    /// is charged to the byte budget once.
     pub max_domain_values: usize,
     /// Candidate values retained while evaluating one assignment, range or
     /// objective-presence subset. Applies independently to each such operation.
     pub max_assignment_values: usize,
     /// Distinct values emitted by binding generators across formula grounding,
     /// including support construction, objective preparation and final rule/local
-    /// instantiation. This cumulative population is independent of one assignment.
+    /// instantiation. This cumulative population is independent of one assignment
+    /// and, like the domain, charges each distinct value's payload once.
     pub max_generated_values: usize,
     /// Distinct owned elements in one unconditional disjunctive head.
     pub max_disjunction_elements: usize,
@@ -120,9 +123,9 @@ impl Default for FormulaLimits {
             max_objective_presence_entries: DEFAULT_OBJECTIVE_PRESENCE_ENTRIES,
             max_objective_formula_atoms: 65_536,
             max_objective_formula_nodes: 1_048_576,
-            max_domain_values: 1_024,
-            max_assignment_values: 1_024,
-            max_generated_values: 1_024,
+            max_domain_values: 1_000_000,
+            max_assignment_values: 1_000_000,
+            max_generated_values: 1_000_000,
             max_disjunction_elements: 1_024,
             max_support_index_entries: 1_000_000,
             max_support_bytes: 134_217_728,
@@ -134,7 +137,7 @@ impl Default for FormulaLimits {
             max_analysis_edges: 1_000_000,
             max_substitutions: 1_000_000,
             max_work: 10_000_000,
-            max_support_rounds: 1_024,
+            max_support_rounds: 1_000_000,
             max_origin_locations: 1_000_000,
             theory: zetesis_ferraris::AdmissionLimits::default(),
             objective: zetesis_objective::AdmissionLimits::default(),

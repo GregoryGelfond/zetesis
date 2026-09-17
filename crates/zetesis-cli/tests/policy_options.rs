@@ -329,3 +329,14 @@ fn formula_device_limits_reject_unrepresentable_values() {
         }
     }
 }
+
+#[test]
+fn the_expansion_byte_budget_is_an_option_with_the_library_default() {
+    let options = Options::try_parse_from(["zetesis"]).unwrap();
+    assert_eq!(
+        options.max_expansion_bytes,
+        zetesis_themelios::ExpansionLimits::default().max_scalar_bytes
+    );
+    let raised = Options::try_parse_from(["zetesis", "--max-expansion-bytes", "5"]).unwrap();
+    assert_eq!(raised.max_expansion_bytes, 5);
+}

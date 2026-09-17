@@ -129,6 +129,11 @@ pub struct Options {
     /// Maximum scalar alternatives/emitted arguments in source expansion.
     #[arg(long, default_value_t = 1_000_000, hide_short_help = true)]
     pub max_expansion_values: usize,
+    /// Cumulative canonical payload bytes source expansion and eager formula
+    /// grounding may copy: term cells, values, atoms and plan storage, each
+    /// counted once when retained. Transient binding frames are excluded.
+    #[arg(long, default_value_t = zetesis_themelios::ExpansionLimits::default().max_scalar_bytes, hide_short_help = true)]
+    pub max_expansion_bytes: usize,
     /// Override distinct source-domain values in each selected admission profile.
     /// Omission preserves the relational and formula library defaults.
     #[arg(long, hide_short_help = true)]

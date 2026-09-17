@@ -65,7 +65,7 @@ fn copying_preserves_absent_slots() {
 #[test]
 fn scope_growth_publishes_only_absence() {
     let mut binding = complete([Value::Number(3)]);
-    binding.extend_scope(3, &mut budget(), location()).unwrap();
+    binding.extend_scope(3, location()).unwrap();
     assert_eq!(binding.slots(), &[Some(Value::Number(3)), None, None]);
     binding.set(2, Value::Number(0), location()).unwrap();
     binding.clear(2);
@@ -73,18 +73,26 @@ fn scope_growth_publishes_only_absence() {
 }
 
 #[test]
-fn frame_admission_charges_optional_cells() {
-    let required = std::mem::size_of::<Option<Value>>() as u128;
-    let mut limited = Budget::new(
+fn frame_cells_are_not_charged_to_the_scalar_budget() {
+    // A frame is transient; only the values copied into it are retained
+    // payload. An empty frame of any width is admitted under a zero budget.
+    let mut exhausted = Budget::new(
         ExpansionLimits {
-            max_scalar_bytes: usize::try_from(required - 1).unwrap(),
+            max_scalar_bytes: 0,
             ..Default::default()
         },
         usize::MAX,
     );
-    assert!(
-        matches!(copy_slots(&[None], &mut limited, location()), Err(FormulaFailure::Expansion(ExpansionFailure::Limit { resource: ExpansionResource::ScalarBytes, observed, .. })) if observed == required)
-    );
+    let binding = copy_slots(&[None, None, None], &mut exhausted, location()).unwrap();
+    assert_eq!(binding.len(), 3);
+    let symbol = Value::Symbol("a".into());
+    assert!(matches!(
+        copy_slots(&[Some(symbol)], &mut exhausted, location()),
+        Err(FormulaFailure::Expansion(ExpansionFailure::Limit {
+            resource: ExpansionResource::ScalarBytes,
+            ..
+        }))
+    ));
 }
 
 #[test]

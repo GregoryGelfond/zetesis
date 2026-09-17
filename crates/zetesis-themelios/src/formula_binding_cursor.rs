@@ -144,7 +144,7 @@ impl<'a, 'source> Cursor<'a, 'source> {
             if let Some(value) = value {
                 counters.generated(&value, limits, budget, location)?;
                 let target = target(self.generators[self.depth]).expect("generator target");
-                self.values.extend_scope(self.variables, budget, location)?;
+                self.values.extend_scope(self.variables, location)?;
                 self.values.set(target, value, location)?;
                 self.depth += 1;
             } else {

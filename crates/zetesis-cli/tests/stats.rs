@@ -60,7 +60,7 @@ fn statistics_distinguish_formula_profile_limits() {
             "{diagnostics}"
         );
         assert!(diagnostics.contains(&format!(
-            "formula profile ceilings: atoms={expected_atoms}; roots={expected_roots}; nodes=1048576; source values=1024; assignment values/operation=1024; generated binding values=1024; support rounds=1024"
+            "formula profile ceilings: atoms={expected_atoms}; roots={expected_roots}; nodes=1048576; source values=1000000; assignment values/operation=1000000; generated binding values=1000000; support rounds=1000000"
         )), "{diagnostics}");
         assert!(
             diagnostics.contains(&format!(
@@ -73,6 +73,13 @@ fn statistics_distinguish_formula_profile_limits() {
             diagnostics.contains(&format!(
                 "expansion limits: work={};",
                 zetesis_themelios::ExpansionLimits::default().max_term_work
+            )),
+            "{diagnostics}"
+        );
+        assert!(
+            diagnostics.contains(&format!(
+                "; scalar bytes={};",
+                zetesis_themelios::ExpansionLimits::default().max_scalar_bytes
             )),
             "{diagnostics}"
         );

@@ -209,10 +209,11 @@ fn limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
     )?;
     writeln!(
         sink,
-        "  expansion limits: work={}; templates={}; values={}; eager support bytes={}",
+        "  expansion limits: work={}; templates={}; values={}; scalar bytes={}; eager support bytes={}",
         crate::admission::expansion_limits(o).max_term_work,
         o.max_expanded_templates,
         o.max_expansion_values,
+        o.max_expansion_bytes,
         o.max_support_bytes
     )?;
     writeln!(

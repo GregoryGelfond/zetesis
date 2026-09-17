@@ -145,7 +145,7 @@ fn every_byte_ceiling_names_the_quantity_it_bounds() {
         .iter()
         .filter(|(name, _)| name.ends_with("-bytes"))
         .collect();
-    assert_eq!(ceilings.len(), 14, "{options:?}");
+    assert_eq!(ceilings.len(), 15, "{options:?}");
     for (name, text) in ceilings {
         assert!(
             ["reserved", "canonical", "encoded", "original"]

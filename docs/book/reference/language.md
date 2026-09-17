@@ -34,10 +34,14 @@ Value and round limits count different populations:
 
 | Option | Population and lifetime | Default |
 | --- | --- | --- |
-| `--max-domain-values` | Distinct source values across the selected admission profile | 1,024 for formulas; 1,000,000 for relational admission |
-| `--max-assignment-values` | Candidate values in one formula assignment, range or objective-presence subset | 1,024 per operation |
-| `--max-generated-values` | Distinct generated binding values across formula grounding: support, objective preparation and final instantiation | 1,024 cumulatively |
-| `--max-support-rounds` | Complete eager possible-support rounds, including the final no-change round | 1,024 |
+| `--max-domain-values` | Distinct source values across the selected admission profile | 1,000,000 for both profiles |
+| `--max-assignment-values` | Candidate values in one formula assignment, range or objective-presence subset | 1,000,000 per operation |
+| `--max-generated-values` | Distinct generated binding values across formula grounding: support, objective preparation and final instantiation | 1,000,000 cumulatively |
+| `--max-support-rounds` | Complete eager possible-support rounds, including the final no-change round | 1,000,000 |
+
+The domain and generated populations are sets, not counters: each distinct
+value is retained once so that its payload is charged to the byte budget once,
+however many source terms or generator steps produce it.
 
 An explicit domain override applies to both profiles. The assignment and
 generated-value limits are independent: many small assignments can exceed the
@@ -47,8 +51,12 @@ unsatisfiability. Zero is a real limit for every resource.
 
 Without `--max-expansion-work`, ordinary admission preserves the independent
 library defaults: 1,048,576 source-term expansion operations and 10,000,000 eager
-formula-grounding operations. An explicit value overrides both ceilings; each
-counter applies it independently. `--stats` reports both effective limits.
+formula-grounding operations. A ground instance of an ordinary rule costs the
+formula grounder between 480 and 640 operations on the measured corpus, so the
+default admits roughly sixteen to twenty thousand instances.
+`--max-expansion-bytes` separately bounds the canonical payload the grounder
+retains, 16 MiB by default, counted once per retained atom. An explicit work
+value overrides both work ceilings; each counter applies it independently. `--stats` reports both effective limits.
 Formula work includes checked atom comparisons, index construction, copying and
 commit operations. Accounting these operations changes the work needed to admit
 a source; formula admission now uses its library default instead of the earlier

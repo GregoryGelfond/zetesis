@@ -513,17 +513,6 @@ impl Builder<'_> {
         location: Location,
     ) -> Result<usize, FormulaFailure> {
         self.work(location)?;
-        let mut bytes = pattern.predicate().name().len() as u128;
-        for term in pattern.terms() {
-            bytes += value_bytes(assignment.resolve(term, location)?);
-        }
-        // Conservative symbolic allowance for lookup and retained atom/index
-        // storage. This cumulative admission charge is not live heap occupancy.
-        self.budget.charge(
-            ExpansionResource::ScalarBytes,
-            bytes.saturating_mul(3),
-            location,
-        )?;
         let key =
             pattern
                 .key(assignment.slots())
@@ -542,6 +531,17 @@ impl Builder<'_> {
             index
         } else {
             ceiling(atom_resource, required, atom_limit as u128, location)?;
+            // A new atom's copied payload, index entry and catalog cell: the
+            // cumulative allowance counts each atom once, not each proposal.
+            let mut bytes = pattern.predicate().name().len() as u128;
+            for term in pattern.terms() {
+                bytes += value_bytes(assignment.resolve(term, location)?);
+            }
+            self.budget.charge(
+                ExpansionResource::ScalarBytes,
+                bytes.saturating_mul(3),
+                location,
+            )?;
             if matches!(self.purpose, Purpose::Theory) {
                 self.budget
                     .charge(ExpansionResource::Origins, 1, location)?;

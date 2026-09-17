@@ -230,6 +230,7 @@ pub(crate) fn expansion_limits(options: &Options) -> ExpansionLimits {
             .unwrap_or_else(|| ExpansionLimits::default().max_term_work),
         max_templates: options.max_expanded_templates,
         max_values: options.max_expansion_values,
+        max_scalar_bytes: options.max_expansion_bytes,
         ..Default::default()
     }
 }

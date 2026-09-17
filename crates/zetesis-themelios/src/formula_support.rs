@@ -383,18 +383,6 @@ impl Derivation<'_, '_> {
         binding: &Binding,
         location: Location,
     ) -> Result<(), FormulaFailure> {
-        let bytes = pattern.predicate().name().len() as u128
-            + pattern
-                .terms()
-                .iter()
-                .map(|term| binding.resolve(term, location).map(value_bytes))
-                .sum::<Result<u128, _>>()?;
-        // Preserve the cumulative admission allowance; it is not live occupancy.
-        self.budget.charge(
-            ExpansionResource::ScalarBytes,
-            bytes.saturating_mul(3),
-            location,
-        )?;
         let key = pattern
             .key(binding.slots())
             .map_err(|error| FormulaFailure::UnsafeVariable {
@@ -410,6 +398,19 @@ impl Derivation<'_, '_> {
                 FormulaResource::Atoms,
                 self.support.len() as u128 + self.delta.len() as u128 + 1,
                 self.limits.theory.max_atoms as u128,
+                location,
+            )?;
+            // A new atom's copied payload, index entry and catalog cell: the
+            // cumulative allowance counts each atom once, not each proposal.
+            let bytes = pattern.predicate().name().len() as u128
+                + pattern
+                    .terms()
+                    .iter()
+                    .map(|term| binding.resolve(term, location).map(value_bytes))
+                    .sum::<Result<u128, _>>()?;
+            self.budget.charge(
+                ExpansionResource::ScalarBytes,
+                bytes.saturating_mul(3),
                 location,
             )?;
             self.delta.insert(key.to_atom());
