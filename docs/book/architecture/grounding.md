@@ -98,6 +98,26 @@ cells between evaluations. A one-node expression needs no scratch cells;
 constructing or copying its returned value can still allocate. This storage
 schedule has a separate [preservation law](../lean/correspondence.md).
 
+A positive body is joined in an order chosen once per join, before a row is
+read, from what the body says: each relation's size, the variables each
+occurrence binds and the variables each comparison waits on. Extending the
+bound prefix one occurrence at a time, the
+[criterion](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/order.rs)
+takes first an occurrence whose variables are all bound, which is a test and
+never widens the join; then the smaller relation; among relations of one size
+the occurrence that decides the most waiting comparisons, so that a false
+comparison prunes before an unrelated relation multiplies the rows; and
+otherwise the earlier occurrence of the canonical body, which orders literals
+by predicate and then by variable name rather than by their position in the
+source text. Every order yields the same complete bindings, and the
+semi-naive partition reads source occurrence, not this order. A comparison
+prunes a prefix only when every scalar check of the body is bound and
+defined; a body with a binder, range or guard is validated on its complete
+rows, because a reached undefined operation is a refusal under the
+[language reference](../reference/language.md) and a false comparison is not
+permission to skip it. The order decides how early a comparison is bound,
+not what a false one may skip.
+
 Each formula join owns one reusable expression workspace. Prefix checks, binding
 generators and final filters borrow it in sequence; pending generators do not
 retain another workspace. Reuse changes storage ownership, not evaluation order.

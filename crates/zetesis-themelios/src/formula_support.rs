@@ -2,6 +2,7 @@
 
 mod evaluation;
 mod delta;
+mod order;
 mod producers;
 mod relations;
 mod queries;
@@ -237,10 +238,7 @@ fn complete(
                 };
                 while let Some(variant) = variants.next(limits, counters)? {
                     let mut outer = Join::rule(rule, &support, budget)?;
-                    outer.delta = match variant {
-                        delta::Variant::Full => None,
-                        delta::Variant::Delta(pivot) => Some(pivot),
-                    };
+                    outer.partition(variant, budget, rule.location)?;
                     derive_rule(
                         rule, &mut outer, &support, &mut delta, limits, budget, counters,
                     )?;
@@ -444,7 +442,7 @@ impl PositivePattern<'_> {
     }
 }
 
-/// Source occurrence identity survives cardinality-based join reordering.
+/// Source occurrence identity survives join reordering.
 #[derive(Clone, Copy)]
 struct PatternOccurrence<'a> {
     pattern: PositivePattern<'a>,
@@ -694,7 +692,16 @@ impl<'a, 'source> Join<'a, 'source> {
                 }
             }
         }
-        patterns.sort_by_key(|pattern| support.row_count(pattern.atom().predicate()));
+        let mut bound: Vec<bool> = prefix.slots().iter().map(Option::is_some).collect();
+        bound.resize(variables, false);
+        order::arrange(
+            &mut patterns,
+            literals,
+            &mut bound,
+            |pattern| support.row_count(pattern.atom().predicate()),
+            budget,
+            location,
+        )?;
         let count = patterns.len();
         let mut values = vec![None; variables];
         let mut slots = vec![Slot::Relational; variables];
@@ -739,6 +746,35 @@ impl<'a, 'source> Join<'a, 'source> {
             empty_yielded: false,
             finished: false,
         })
+    }
+    /// Restrict this round's join to the rows `variant` offers each source
+    /// occurrence and order the join by those counts: the pivot occurrence
+    /// offers only the round's new rows, so it is joined first when they are
+    /// the fewest.
+    fn partition(
+        &mut self,
+        variant: delta::Variant,
+        budget: &mut Budget,
+        location: Location,
+    ) -> Result<(), FormulaFailure> {
+        self.delta = match variant {
+            delta::Variant::Full => None,
+            delta::Variant::Delta(pivot) => Some(pivot),
+        };
+        let mut bound: Vec<bool> = self.values.iter().map(Option::is_some).collect();
+        let (support, delta) = (self.support, self.delta);
+        order::arrange(
+            &mut self.patterns,
+            self.literals,
+            &mut bound,
+            |pattern| {
+                let predicate = pattern.atom().predicate();
+                let (old, total) = (support.old_rows(predicate), support.row_count(predicate));
+                delta::interval(delta, pattern.source, old, total).len()
+            },
+            budget,
+            location,
+        )
     }
     pub fn next(
         &mut self,
