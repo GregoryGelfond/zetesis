@@ -518,6 +518,50 @@ that contract stands is the language's decision, recorded in the reference;
 the criterion decides how early a comparison is bound, not what a false one
 may skip. The answers agree with clingo on both programs.
 
+## The carrier bounds: the seed counter between the program's two closures
+
+Three campaigns on 17 September 2026 between 04:17:00 and 04:29:50 UTC,
+same machine, profile, four workers and clingo as above. `main` is the
+896a5f73 executable rerun as the control, `before` the item 6 executable
+(`25f6b6e6`, SHA-256
+`37486be255e47a444e0a4761918a5817fd4e44733da3b63d668dc5250790eea4`) and
+`after` is built from `14000c8b` (SHA-256
+`56b07e3014eb6fc7e6c1777b3fc7388200a59d3d38857d6d398459afd3614011`), where
+the closure route computes the program's closure twice before its first
+seed, once with every gate treated as possible and once with none, and the
+counter runs over the gate atoms between the two: an atom outside the first
+is never offered, an atom inside the second is held in every seed
+(`Bounds.undecided_bounds_accepted`).
+[series-14000c8b-cpu-auto.json](series-14000c8b-cpu-auto.json) and its
+[table view](series-14000c8b-cpu-auto-tables.md) are the derived comparison;
+raw report SHA-256
+`75d17ea86e441dd9d71ebb9f61e80c7d838838afb43ea560f2627a195c67be82` (main),
+`e0d808ef1c0feed9dd6413473f17b1f0978612cf4324d090b4dc395f959a48f8` (before)
+and `ca180dc4a91b748c460091bb071eba1cfcf82c24d3adddae16a31b12ceb2c94b`
+(after).
+
+The cell this step changes is stratified-16, which timed out at thirty
+seconds on every earlier build:
+
+| Cell | before | after | clingo | seeds before | seeds after |
+|---|---:|---:|---:|---:|---:|
+| stratified-16 | timeout (30 s) | 750 ms | 4.5 ms | 2³² | 2¹⁵ = 32,768 |
+
+In the problem's words: the program has two gate predicates, `blocked`
+and `reach`, and the counter proposed every combination of their sixteen
+atoms each, four thousand million seeds. Only two `blocked` atoms can be
+derived at all, and the fact `reach(1)` and those two are derived by
+rules with no gate, so every answer set holds them: fourteen atoms leave
+the carrier and three are held, and the remaining fifteen give the
+32,768 seeds the run checks. Every other cell is within the run-to-run
+band, after a first build of this step had cost the gate-free chain and
+transitive cells two closures for nothing; a program without gate
+predicates now computes none. The counter still enumerates 2¹⁵ seeds for
+a program clingo grounds without negation: the fifteen `reach` atoms
+wait on gates that the first narrowing has decided, and deciding them
+needs the closures recomputed with those gates read as decided, which is
+the second narrowing pass and the subject of the next step.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
