@@ -969,6 +969,58 @@ leaf, both computed from scratch; the parallel visit of regions and the
 sharing of a parent's closure with its children are the next steps on
 this route.
 
+## The corpus at the region split, against clingo
+
+Two campaigns over the whole kr-domains corpus on 17 September 2026, the
+reports written at 22:39:35 and 22:40:13 UTC, same machine and profile,
+four workers, one warmup and three repetitions, a 120-second timeout and
+clingo timed beside every cell. `main` is the 896a5f73 executable and
+`after` is built from `fcf8cad0` (SHA-256
+`004e153e8db2ca8366a316aa882e018db2c9e9cff330dd684b1267ba90de0265`).
+[corpus-fcf8cad0-cpu-auto.json](corpus-fcf8cad0-cpu-auto.json) and its
+[table view](corpus-fcf8cad0-cpu-auto-tables.md) are the derived
+comparison; raw report SHA-256
+`f73a3e393e318fdd63e92a47e6f8c49ea371f60c5488bfd9aa4e879568a6240e` (main)
+and `368eb6cd7aad2adb166c56bddb7d06118436ed6afaf3bb221d35f6c02dac21f3`
+(after). Of the 86 cells, 85 were timed; task-allocation
+variant-04/05-larger-mix exceeded the corpus profile's output capture
+limit on both executables and is not compared here (the series suite
+times it with a bounded model count).
+
+Per family, the ratio of the current executable's median to clingo's in
+the same run (count, least, median, greatest):
+
+| Family | cells | least | median | greatest |
+|---|---:|---:|---:|---:|
+| send-money | 1 | 0.75 | 0.75 | 0.75 |
+| task-allocation variant-01 | 16 | 0.99 | 1.24 | 2.27 |
+| task-allocation variant-02 | 18 | 1.02 | 1.27 | 2.00 |
+| task-allocation variant-03 | 18 | 1.02 | 1.30 | 1.64 |
+| task-allocation variant-04 | 17 | 0.43 | 1.31 | 1.81 |
+| equality-generalized-tsp | 3 | 1.15 | 1.43 | 1.50 |
+| task-allocation variant-05 | 6 | 1.06 | 1.46 | 1.66 |
+| n-queens | 6 | 0.76 | 2.07 | 7.74 |
+
+Over the 85 cells the median ratio is 1.31 (it was 1.28 for the
+pre-branch executable in its own run, and the totals are 742 ms against
+clingo's 572 ms, from 816 ms). Five cells are faster than clingo
+(agent-serialization 0.43, send-money 0.75, queens variant-02 0.76,
+precedence 0.97, subtour-unsat 0.99); 75 lie between one and two times;
+three between two and five (ring, queens variants 01 and 03); two above
+five (queens variants 05 and 06, at 6.4 and 7.7).
+
+In the problem's words: most of the corpus is scenario cells that both
+solvers answer in five to twelve milliseconds, where the time is process
+start and admission and the ratio is within a third of one; the branch's
+work has not moved those and was not aimed at them. The cells the branch
+moved are the ones with real grounding or search: send-money from 3.7
+times clingo to 0.75, queens variants 01 and 03 halved to about twice
+clingo, queens variant-02 from 0.85 to 0.76. The two queens variants
+still at six to eight times spend, by the profile of this executable, a
+quarter of their time in the reduct search's propagation and a sixth in
+byte comparison of predicate names, which the dense predicate identity
+is to remove; their per-model output cost is the writer's.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
