@@ -215,13 +215,17 @@ fn defined_and_empty_join_families_match_clingo() {
 #[test]
 #[ignore = "requires independent clingo 5.8.2"]
 fn reached_operations_differ_from_clingo() {
-    // clingo drops an undefined instance with a message; zetesis refuses the
-    // program, since nothing excludes the substitution that reaches it.
+    // clingo drops the undefined instance X = 0 with a message and keeps
+    // p(1); zetesis refuses the program, since nothing excludes the
+    // substitution that reaches the operation.
     let source = "d(0..2).p(X):-d(X),1/X=1.";
     refused(source, &EvaluationError::Undefined);
     assert_eq!(
         source_oracle::records(source),
-        BTreeSet::from([(["d(0)", "d(1)", "d(2)"].map(str::to_owned).into(), None,)]),
+        BTreeSet::from([(
+            ["d(0)", "d(1)", "d(2)", "p(1)"].map(str::to_owned).into(),
+            None,
+        )]),
         "{source}"
     );
 }
