@@ -148,6 +148,39 @@ and membership costs may outweigh avoided probes. See
 [finite-domain ownership and proof boundaries](finite-tables.md#optional-argument-domain-guards)
 for the exact named-capacity scope and preservation premises.
 
+## Constraints over keyed values
+
+A choice rule of the form `1 { p(K, V) : c(V) } 1 :- b(K).` holds, in every
+answer set, exactly one atom `p(k, v)` for every `k` that `b` admits and no
+other atom of `p`, when nothing else produces `p`. `zetesis_domain::keys`
+reads these *keyed relations* from the normalized program: the key positions
+are the body's variables, the value position the one variable the element's
+condition binds. The analysis is syntactic and conservative; another producer,
+other bounds, a second element, a value bound outside its condition or a
+negated literal anywhere yields no key.
+
+Preparation then asks a constraint over a keyed value as the one atom its key
+admits. `:- G, p(k, Y), Y != t.`, with `Y` read nowhere else and `t` free of
+`Y`, is prepared as `:- G, b(k), not p(k, t).`: whenever `b(k)` holds, exactly
+one `p(k, y)` holds, and the written constraint fires exactly when that `y` is
+not `t`, which is exactly when `p(k, t)` is absent. A column with a digit and a
+carry, `:- G, p(k, Y), q(j, C), s != Y + 10*C.`, is prepared as two such
+constraints demanding `s \ 10` of `p` and `s / 10` of `q`, when the domain
+analysis shows every value `p` admits is a digit in `0..9` and every value `q`
+admits a natural number; the equation then has one solution, and for a
+negative `s` no solution, in which case both forms fire. The product of the
+demanded value with every value the key admits is never formed: the
+send-money puzzle's column constraints ground to two hundred instances each
+instead of two thousand.
+
+The asked program is prepared again under the remaining expansion budget.
+Every asked statement carries the written constraint's source location and
+the transformation's tag, so diagnostics and `formula_origins()` still name
+the constraint as written. `keyed_constraints()` on the admitted formula
+counts the constraints asked; the answer sets are the same either way, which
+the contract tests state against the hand-asked program and against clingo.
+A constraint outside the two patterns is left as written.
+
 ## Know which program was analyzed
 
 The analysis accessors are part of the prepared solver input's inspection

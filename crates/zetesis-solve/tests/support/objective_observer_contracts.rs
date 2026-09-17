@@ -58,6 +58,7 @@ fn attempt(
             theory: planned.theory(),
             atoms: planned.atom_catalog(),
             gate_atoms: 0,
+            keyed_constraints: 0,
             objectives: planned.objectives(),
             certificate_order: zetesis_sat::CertificateOrder::TightFirst,
         },

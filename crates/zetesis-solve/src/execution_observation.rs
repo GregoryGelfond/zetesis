@@ -95,6 +95,9 @@ pub enum ExecutionObservation<'a> {
         nodes: usize,
         /// Original asserted root count.
         roots: usize,
+        /// Written constraints over a keyed value asked as the one atom their
+        /// key admits before grounding; zero when no constraint had the form.
+        keyed_constraints: usize,
     },
     /// A checked tight certificate enables specialized membership checking.
     TightMembership,

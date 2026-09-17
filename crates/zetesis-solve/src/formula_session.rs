@@ -76,6 +76,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             atoms: self.input.theory.atom_count(),
             nodes: self.input.theory.nodes().len(),
             roots: self.input.theory.roots().len(),
+            keyed_constraints: self.input.keyed_constraints,
         })?;
         let models = phases.measure(SolvePhase::CandidateSetup, || {
             StableModels::new(

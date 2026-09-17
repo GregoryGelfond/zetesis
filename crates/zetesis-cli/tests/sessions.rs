@@ -887,6 +887,7 @@ fn observed_enumeration_preserves_all_objective_scores() {
                     atoms,
                     nodes,
                     roots,
+                    ..
                 } => {
                     assert!(self.formula.replace((atoms, nodes, roots)).is_none());
                 }

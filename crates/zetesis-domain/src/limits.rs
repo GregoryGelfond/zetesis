@@ -106,7 +106,7 @@ pub struct Statistics {
     pub widened: usize,
 }
 
-pub(super) fn check(resource: Resource, observed: u128, limit: u128) -> Result<(), Stop> {
+pub(crate) fn check(resource: Resource, observed: u128, limit: u128) -> Result<(), Stop> {
     if observed > limit {
         Err(Stop {
             resource,

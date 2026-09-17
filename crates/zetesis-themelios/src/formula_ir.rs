@@ -44,6 +44,9 @@ pub(crate) struct Prepared {
     /// Extrema tuple carriers selected for an optional numeric-weight precision
     /// refinement after support completion.
     pub objective_extrema: BTreeSet<usize>,
+    /// Written constraints over a keyed value that were asked as the one atom
+    /// their key admits, before this preparation.
+    pub keyed_constraints: usize,
 }
 pub(crate) struct ObjectiveIr {
     pub weight: ObjectiveField,
@@ -442,6 +445,7 @@ pub(crate) fn prepare(
         objectives,
         objective_declarations,
         objective_extrema,
+        keyed_constraints: 0,
     })
 }
 

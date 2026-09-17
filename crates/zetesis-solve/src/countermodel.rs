@@ -12,6 +12,8 @@ pub(crate) struct Input<'a> {
     pub(crate) theory: &'a Theory,
     pub(crate) atoms: &'a AtomCatalog,
     pub(crate) gate_atoms: usize,
+    /// Written constraints asked as the one atom their key admits.
+    pub(crate) keyed_constraints: usize,
     pub(crate) objectives: &'a zetesis_objective::ObjectiveProgram,
     /// Source analysis chooses attempt order; each plan checks the whole theory.
     pub(crate) certificate_order: zetesis_sat::CertificateOrder,

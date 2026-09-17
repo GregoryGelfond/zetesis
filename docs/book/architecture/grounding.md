@@ -204,6 +204,19 @@ prefix defers the membership check. Membership does not discharge authored-body
 validation. Existing support, current delta and formula atoms retain distinct
 roles even though they share the identity operation.
 
+### Keyed constraints
+
+Before completion, preparation reads the program's keyed relations, the
+choice rules `1 { p(K, V) : c(V) } 1 :- b(K).` that are their relation's only
+producer, and asks every constraint that reads such a value only to compare
+it as the one atom the key admits, in the two patterns the
+[source guide](../rust/source.md#constraints-over-keyed-values) states with
+their meaning arguments. The transformation is per rule and changes no
+answer set; what it changes is the grounding: a disequality over a product
+of a demanded value with every value the key admits becomes a negated lookup
+of the demanded atom, and the product is never formed. The asked statements
+keep the written constraint's provenance; the written constraint is dropped.
+
 ### Completed possible support
 
 Formula grounding grows possible support by complete rounds. Each round uses an

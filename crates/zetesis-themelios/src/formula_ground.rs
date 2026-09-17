@@ -55,6 +55,7 @@ pub(crate) fn ground(
     use crate::GroundingPhase;
 
     let profile = Profile::new(observer);
+    let keyed_constraints = prepared.keyed_constraints;
     let Instantiation {
         projection,
         builder,
@@ -94,6 +95,7 @@ pub(crate) fn ground(
         objectives,
         objective_origins,
         objective_declarations,
+        keyed_constraints,
     })
 }
 

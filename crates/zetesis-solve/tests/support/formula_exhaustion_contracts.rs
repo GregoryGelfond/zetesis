@@ -71,6 +71,7 @@ fn unexhausted_execution_preserves_only_established_evidence() {
                 atoms: owner.atom_catalog(),
                 objectives: owner.objectives(),
                 gate_atoms: 0,
+                keyed_constraints: 0,
                 certificate_order: zetesis_sat::CertificateOrder::TightFirst,
             },
             TruncatedExecution {

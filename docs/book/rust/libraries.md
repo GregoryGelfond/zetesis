@@ -36,7 +36,7 @@ construction and standalone analysis APIs belong to its own manual.
 | Reuse a compiled formula primitive across independent sessions | `GpuFormulaProfile`, `ExecutionResources::with_formula_profile` |
 | Device equality masks over one relation | `zetesis_wgpu::GpuRelationExecutor` |
 | Model-relative objective evaluation | `zetesis_objective` |
-| Source-domain analysis | `zetesis_domain` |
+| Source-domain analysis and keyed relations | `zetesis_domain` |
 | Reproducible comparisons and measurements | `zetesis_validation`, `zetesis_experiments` |
 | Repository proof records and qualification policy | `zetesis_maintenance::proofs::{verify, verify_with_audit}`, `zetesis_maintenance::coverage` |
 | Execute and publish current pinned proof evidence | `zetesis_maintenance::proofs::capture::capture` |

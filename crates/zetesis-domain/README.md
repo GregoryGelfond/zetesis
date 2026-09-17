@@ -20,6 +20,20 @@ analysis does not construct the argument product or claim that every pair is
 reachable. The result describes possible values, rather than concrete atoms or
 stable answers.
 
+## Keyed relations
+
+`keys(&Program, &Limits) -> Result<Vec<Key<'_>>, Stop>` lists the relations
+whose value is a function of their key: for the choice rule
+`1 { p(K, V) : c(V) } 1 :- b(K).`, the one producer of `p`, every answer set
+holds exactly one `p(k, v)` for every `k` that `b` admits and no other atom
+of `p`. A `Key` names the signature, the value position, the key variable at
+each other position, the value variable, the element's condition, the body
+and the producing statement. The reading is syntactic and conservative:
+another producer, other bounds, a second element, a value bound outside its
+condition, a body binding more than the key, or a negated literal anywhere
+yields no key. The consumer proves what it does with the fact; this crate
+states it.
+
 ## Contract
 
 `analyze(&Program, Limits) -> Analysis<'_>` retains the exact input reference.

@@ -108,7 +108,9 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
             #[cfg(feature = "gpu")]
             Event::DeviceFormula { adapter, grounder, batch_size, completion_workers, .. } => self.metadata(Label::Backend,
                 format_args!("hybrid GPU propagation + exact CPU residual search ({}, {}; vendor=0x{:04x}); oracle: Ferraris reduct countermodel; grounder: eager (requested {}); batch={batch_size}; CPU completion requested workers={completion_workers}", adapter.name, adapter.backend, adapter.vendor_id, grounder.label())),
-            Event::Formula { atoms, nodes, roots } => writeln!(self, "Formula: {atoms} atoms, {nodes} nodes, {roots} roots"),
+            Event::Formula { atoms, nodes, roots, keyed_constraints: 0 } => writeln!(self, "Formula: {atoms} atoms, {nodes} nodes, {roots} roots"),
+            Event::Formula { atoms, nodes, roots, keyed_constraints } => writeln!(self,
+                "Formula: {atoms} atoms, {nodes} nodes, {roots} roots; {keyed_constraints} constraints asked by key"),
             Event::TightMembership => writeln!(self, "Membership: checked tight support certificate; exact reduct residual completion"),
             Event::PositiveMembership => writeln!(self, "Membership: positive atomic-head theory; least consequences with original constraints"),
             Event::GeneralMembership(error) => writeln!(self, "Membership: general reduct; optional class certificate refused: {error}"),

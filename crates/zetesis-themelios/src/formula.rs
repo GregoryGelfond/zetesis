@@ -13,7 +13,7 @@ use zetesis_ferraris::Theory;
 use crate::{
     AdmissionFailure, AdmissionOptions, BundleAdmissionError, BundleAdmissionOptions,
     ExpansionFailure, ExpansionLimits, ParsedSource, SourceBundle, SourceFailure, SourceMetadata,
-    bundle_admission, extended, formula_ir, metadata, profile,
+    bundle_admission, extended, formula_ir, formula_keys, metadata, profile,
 };
 
 mod preparation;
@@ -479,6 +479,14 @@ impl AdmittedFormula {
         self.compiled.analysis_basis
     }
 
+    /// Written constraints over a keyed value that were asked as the one atom
+    /// their key admits before grounding, as the source guide describes. Zero
+    /// when no constraint had the form; the answer sets are the same either way.
+    #[must_use]
+    pub fn keyed_constraints(&self) -> usize {
+        self.compiled.keyed_constraints
+    }
+
     /// The admitted general formula theory.
     #[must_use]
     pub fn theory(&self) -> &Theory {
@@ -568,6 +576,14 @@ impl AdmittedFormulaBundle {
     #[must_use]
     pub fn analysis_basis(&self) -> AnalysisBasis {
         self.compiled.analysis_basis
+    }
+
+    /// Written constraints over a keyed value that were asked as the one atom
+    /// their key admits before grounding, as the source guide describes. Zero
+    /// when no constraint had the form; the answer sets are the same either way.
+    #[must_use]
+    pub fn keyed_constraints(&self) -> usize {
+        self.compiled.keyed_constraints
     }
 
     /// The admitted general formula theory.
@@ -686,6 +702,7 @@ pub(crate) struct Compiled {
     pub objectives: zetesis_objective::ObjectiveProgram,
     pub objective_origins: Vec<Vec<Location>>,
     pub objective_declarations: Vec<Location>,
+    pub keyed_constraints: usize,
 }
 
 /// Admit the extended scalar profile, finite conditional choices and body
@@ -1038,6 +1055,23 @@ fn prepare(
     metadata.observations =
         crate::observation::compile(source, options, limits.observation, &mut budget, location)?;
     let prepared = formula_ir::prepare(source, choices, options, limits, &mut budget, location)?;
+    // A constraint over a keyed value is asked as the one atom its key admits;
+    // the asked program is prepared again under the remaining budget.
+    let prepared = match formula_keys::rewrite(source, &prepared, &mut budget, location)? {
+        Some(asked) => {
+            let mut prepared = formula_ir::prepare(
+                &asked.program,
+                choices,
+                options,
+                limits,
+                &mut budget,
+                location,
+            )?;
+            prepared.keyed_constraints = asked.constraints;
+            prepared
+        }
+        None => prepared,
+    };
     Ok(Preparation::new(prepared, budget, limits, location))
 }
 
