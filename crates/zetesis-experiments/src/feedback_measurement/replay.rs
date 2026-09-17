@@ -103,7 +103,9 @@ fn membership(
     match checked.verdict() {
         zetesis_sat::Check::Stable => progress.stable.push(fixtures::bits(checked.candidate())),
         zetesis_sat::Check::NotModel => progress.not_models += 1,
-        zetesis_sat::Check::NonMinimal(_) => progress.nonminimal += 1,
+        zetesis_sat::Check::NonMinimal(_) | zetesis_sat::Check::Unsupported { .. } => {
+            progress.nonminimal += 1;
+        }
         zetesis_sat::Check::Inconclusive(error) => return Err(Error::Native(*error)),
     }
     // Membership is established before optional learning can refuse.

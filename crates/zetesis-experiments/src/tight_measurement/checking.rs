@@ -192,7 +192,9 @@ fn compatible(certificate: TightVerdict, exact: &zetesis_sat::Check) -> bool {
         TightVerdict::NotModel { .. } => matches!(exact, zetesis_sat::Check::NotModel),
         TightVerdict::Residual { .. } => matches!(
             exact,
-            zetesis_sat::Check::Stable | zetesis_sat::Check::NonMinimal(_)
+            zetesis_sat::Check::Stable
+                | zetesis_sat::Check::NonMinimal(_)
+                | zetesis_sat::Check::Unsupported { .. }
         ),
     }
 }
@@ -234,6 +236,28 @@ fn validate_witness(
             }
             Ok(())
         }
+        zetesis_sat::Check::Unsupported { atom } => {
+            // The support law names the witness: the candidate without the
+            // unsupported atom must model the reduct.
+            let witness = Interpretation::new(
+                candidate.theory(),
+                candidate.atoms().filter(|present| present != atom),
+            )
+            .map_err(|_| Error::Parity)?;
+            if !candidate.contains(*atom)
+                || !zetesis_ferraris::models_reduct(
+                    candidate.theory(),
+                    candidate,
+                    &witness,
+                    configuration.reference_limits,
+                    control,
+                )
+                .map_err(Error::Cpu)?
+            {
+                return Err(Error::Parity);
+            }
+            Ok(())
+        }
         zetesis_sat::Check::Stable | zetesis_sat::Check::NotModel => Ok(()),
     }
 }
@@ -252,6 +276,7 @@ pub(super) fn outcomes(
                 atoms.extend(witness.atoms());
                 Decision::NonMinimal { witness: atoms }
             }
+            zetesis_sat::Check::Unsupported { atom } => Decision::Unsupported { atom: *atom },
             zetesis_sat::Check::Inconclusive(reason) => return Err(Error::Residual(*reason)),
         };
         outcomes.push(Outcome {

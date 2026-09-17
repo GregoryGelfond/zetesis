@@ -616,14 +616,14 @@ fn certificate(
 ) -> io::Result<()> {
     writeln!(
         sink,
-        "  class certificate: eligible={}; refusal={:?}; storage limit={}; construction work={}; checks={}; stable decisions before commit={}; residuals={}; failed={}; checking work={}",
+        "  class certificate: eligible={}; refusal={:?}; storage limit={}; construction work={}; checks={}; stable decisions before commit={}; refuted by support={}; failed={}; checking work={}",
         certified.plan.is_some(),
         certified.refusal,
         max_bytes,
         certified.construction_work,
         certified.checks,
         certified.stable,
-        certified.residuals,
+        certified.refuted,
         certified.failed,
         certified.checking_work
     )?;

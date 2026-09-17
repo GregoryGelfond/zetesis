@@ -59,6 +59,9 @@ fn compare(theory: &Theory) -> BTreeSet<Vec<usize>> {
                     .unwrap()
                 );
             }
+            // The standalone check carries no certificate and never refutes
+            // by the support law.
+            Check::Unsupported { atom } => panic!("{mask}: refuted by support at {atom}"),
             Check::Inconclusive(error) => panic!("small complete membership: {error}"),
         }
     }

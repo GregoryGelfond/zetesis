@@ -64,10 +64,11 @@ fn batch_limits(n: usize) -> BatchLimits {
 }
 
 #[test]
-fn scalar_and_rayon_batches_match_independent_reduct_with_support_residuals_and_refusals() {
+fn scalar_and_rayon_batches_match_independent_reduct_with_support_refutations_and_refusals() {
     let cases = [
         choices(),
-        // Unsupported carrier atoms require genuine countermodel witnesses.
+        // Unsupported carrier atoms are refuted by the support law: every
+        // present atom lacks a producer, and no countermodel query is needed.
         theory(3, vec![], vec![]),
         theory(
             2,
@@ -110,8 +111,9 @@ fn scalar_and_rayon_batches_match_independent_reduct_with_support_residuals_and_
             assert_eq!(certificate.stable, 8);
         }
         if index == 1 {
-            assert_eq!(stats.countermodels, 7);
-            assert_eq!(certificate.residuals, 7);
+            assert_eq!(stats.countermodel_queries, 0);
+            assert_eq!(stats.countermodels, 0);
+            assert_eq!(certificate.refuted, 7);
         }
         for workers in [1, 4] {
             for size in [1, 2, 5] {

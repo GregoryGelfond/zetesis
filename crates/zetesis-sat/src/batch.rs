@@ -20,6 +20,10 @@ pub enum BatchVerdict {
     NoProperSubset,
     /// Exact native membership must finish this candidate.
     Residual,
+    /// The candidate is not an answer set and needs no query: a present atom
+    /// has no producer with a true body under the complete tight plan, and
+    /// by the support law the candidate without it models the reduct.
+    Refuted,
     /// Original satisfaction failed, contradicting this model-only producer.
     NotModel,
 }
@@ -246,7 +250,7 @@ impl StableModels {
                 )? {
                     super::certified::Verdict::Stable => BatchVerdict::NoProperSubset,
                     super::certified::Verdict::NotModel => BatchVerdict::NotModel,
-                    super::certified::Verdict::Residual => BatchVerdict::Residual,
+                    super::certified::Verdict::Unsupported { .. } => BatchVerdict::Refuted,
                 };
             }
             Ok(())
@@ -407,6 +411,9 @@ fn proposal(
     let Some(candidate) = proposal? else {
         return Ok(None);
     };
+    // Proposals cross to an external checker, so they are validated here
+    // under their own limit and phase before that boundary, whatever the
+    // candidate CNF's construction promises.
     let started = timing::start(statistics.phase_timings.as_ref());
     let original = models(theory, &candidate, verification(limits), budget.control);
     timing::finish(

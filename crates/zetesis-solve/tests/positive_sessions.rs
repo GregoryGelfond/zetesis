@@ -115,7 +115,7 @@ fn positive(view: &WorldView, observations: &Observations, workers: usize) {
         panic!("ordinary session did not retain a positive certificate: {certified:?}");
     };
     assert!(plan.retained_bytes > 0);
-    assert_eq!(certified.residuals, 0);
+    assert_eq!(certified.refuted, 0);
     assert_eq!(certified.failed, 0);
     assert_eq!(statistics.countermodel_queries, 0);
     assert!(statistics.reduct.preparation.is_none());

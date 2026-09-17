@@ -40,7 +40,12 @@ enum Kind {
 pub(super) enum Verdict {
     Stable,
     NotModel,
-    Residual,
+    /// A present atom has no producer with a true body under the complete
+    /// tight plan. By `TightPlans.stable_supported` the candidate is not an
+    /// answer set: the candidate without that atom models its reduct.
+    Unsupported {
+        atom: usize,
+    },
 }
 
 impl StableModels {
@@ -277,7 +282,7 @@ fn evaluate(
         .ok_or(Incomplete::CounterOverflow)?;
     match &result {
         Ok(Verdict::Stable) => increment(&mut stats.stable)?,
-        Ok(Verdict::Residual) => increment(&mut stats.residuals)?,
+        Ok(Verdict::Unsupported { .. }) => increment(&mut stats.refuted)?,
         Ok(Verdict::NotModel) => {}
         Err(_) => increment(&mut stats.failed)?,
     }
@@ -306,7 +311,9 @@ fn check_tight(
         Ok(check) => Ok(match check.verdict {
             TightVerdict::Stable => Verdict::Stable,
             TightVerdict::NotModel { .. } => Verdict::NotModel,
-            TightVerdict::Residual { .. } => Verdict::Residual,
+            TightVerdict::Residual { unsupported_atom } => Verdict::Unsupported {
+                atom: unsupported_atom,
+            },
         }),
         Err(TightError::Stopped(stop)) => Err(stop.into()),
         Err(TightError::Limit(TightResource::Work))

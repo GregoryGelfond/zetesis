@@ -78,6 +78,13 @@ pub enum Check {
     NotModel,
     /// Independently validated proper-subset model of the frozen reduct.
     NonMinimal(Interpretation),
+    /// A present atom has no producer with a true body under a complete tight
+    /// plan. By the support law the candidate is not an answer set, and the
+    /// candidate without that atom is a proper-subset model of its reduct.
+    Unsupported {
+        /// First unsupported present atom in ascending order.
+        atom: usize,
+    },
     /// No semantic membership decision can be made within available resources.
     Inconclusive(Incomplete),
 }
@@ -500,9 +507,7 @@ fn advance(
             )? {
                 certified::Verdict::Stable => Check::Stable,
                 certified::Verdict::NotModel => Check::NotModel,
-                certified::Verdict::Residual => {
-                    reduct.check(theory, &candidate, limits, budget, statistics)?
-                }
+                certified::Verdict::Unsupported { atom } => Check::Unsupported { atom },
             }
         } else {
             reduct.check(theory, &candidate, limits, budget, statistics)?

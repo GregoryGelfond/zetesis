@@ -41,7 +41,8 @@ order without allocating. Public input `Literal` values retain their full
 index range until admission; packing introduces no additional admitted bound.
 
 `check(&Theory, &Interpretation, Limits, &Control)` returns
-`Check::Stable`, `Check::NotModel`, `Check::NonMinimal(witness)` or
+`Check::Stable`, `Check::NotModel`, `Check::NonMinimal(witness)`,
+`Check::Unsupported { atom }` under a complete tight certificate, or
 `Check::Inconclusive(reason)`. `Check::accepted()` is true only for `Stable`.
 This standalone call explicitly constructs a fresh candidate-simplified reduct,
 retaining a differential control for the persistent path.
@@ -133,8 +134,11 @@ performance improvement follows from these route and full-family controls.
 proposals from membership checking. The checker receives the immutable original
 theory and an ordered, bounded slice, and returns one `BatchVerdict` per candidate.
 `NoProperSubset` is a trusted completion-preserving checker's stability result;
-`Residual` invokes exact native reduct search. A `NotModel` result for these
-independently validated original-model proposals is an invalid-witness error.
+`Residual` invokes exact native reduct search; `Refuted` is a rejection the
+checker established without a query, as the complete tight certificate does for
+a candidate with an unsupported present atom by the support law. A `NotModel`
+result for these independently validated original-model proposals is an
+invalid-witness error.
 The callback must preserve ordering and semantic meaning; cardinality is checked.
 
 Exact semantic blocks are installed as candidates are proposed. A retained
@@ -281,8 +285,11 @@ are never reused as reduct equivalences.
 
 The CNF asserts every reduct root, N subset M, and at least one M atom absent
 from N. With no atoms, strictness is an empty clause. Each query supplies M and
-implication truth as level-zero assumptions. Backtracking cannot retract them;
-a successful assignment is checked against both clauses and assumptions.
+implication truth as level-zero assumptions. Backtracking cannot retract them.
+A completed assignment that propagation left without conflict satisfies every
+clause, since a clause with both watches false would have propagated or
+conflicted; the truth-table tests state that property, a debug build re-checks
+each witness against the clauses, and a release build does not rescan them.
 A returned witness is still independently checked for properness and by
 `zetesis-ferraris::models_reduct`. Only completed UNSAT establishes stability.
 No least-model assumption or recursive stability query for N is used.

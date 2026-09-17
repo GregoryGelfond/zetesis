@@ -337,12 +337,13 @@ fn classify(
     budget.control.poll()?;
     match verdict {
         BatchVerdict::NoProperSubset => Ok(true),
+        BatchVerdict::Refuted => Ok(false),
         BatchVerdict::NotModel => Err(Incomplete::InvalidWitness),
         BatchVerdict::Residual => {
             let prepared = input.prepared.ok_or(Incomplete::InvalidWitness)?;
             match prepared.check_with(candidate, workspace, input.limits, budget, statistics)? {
                 Check::Stable => Ok(true),
-                Check::NonMinimal(_) => Ok(false),
+                Check::NonMinimal(_) | Check::Unsupported { .. } => Ok(false),
                 Check::NotModel | Check::Inconclusive(_) => Err(Incomplete::InvalidWitness),
             }
         }

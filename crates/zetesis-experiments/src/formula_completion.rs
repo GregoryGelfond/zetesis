@@ -39,7 +39,9 @@ pub(super) fn native_with_control(
     match zetesis_sat::check(theory, candidate, limits, control) {
         zetesis_sat::Check::Stable => Ok(Membership::Stable),
         zetesis_sat::Check::NotModel => Ok(Membership::NotModel),
-        zetesis_sat::Check::NonMinimal(_) => Ok(Membership::NonMinimal),
+        zetesis_sat::Check::NonMinimal(_) | zetesis_sat::Check::Unsupported { .. } => {
+            Ok(Membership::NonMinimal)
+        }
         zetesis_sat::Check::Inconclusive(error) => Err(FormulaBenchmarkError::Incomplete(error)),
     }
 }

@@ -22,13 +22,39 @@ const CHOICES: &str = "1 { p(1..4) } 2.";
 
 fn choice_work() -> u64 {
     // The frozen generic trace takes 2294 operations. Compare that entire
-    // trace before subtracting elided watch positions and the exact exclusion
-    // cost reduction for its ten distinct four-atom projections.
+    // trace before subtracting elided watch positions, the witness rescans
+    // and the exact exclusion cost reduction for its ten distinct four-atom
+    // projections.
+    let traced = trace(CHOICES, true, SearchLimits::default());
     assert_eq!(
-        trace(CHOICES, true, SearchLimits::default()),
+        traced.record,
         include_str!("../fixtures/watch-traces/exact.txt")
     );
-    2294 - reference_statistics(SearchStatistics::default(), 4, 10).work
+    2294 - reference_statistics(SearchStatistics::default(), 4, 10, traced.rescanned).work
+}
+
+/// The record of one traversal and the witness-rescan charges the historical
+/// implementation paid for it, restored for comparison.
+struct Trace {
+    record: String,
+    rescanned: u64,
+}
+
+// Historical witnesses were checked against every base clause, one charge
+// per literal up to and including the first true one; the watch scheme's
+// invariant makes that scan redundant and the current implementation only
+// asserts it in debug builds.
+fn rescan_charges(cnf: &crate::Cnf, assignment: &crate::Assignment) -> u64 {
+    cnf.clauses()
+        .map(|clause| {
+            clause
+                .iter()
+                .position(|literal| {
+                    assignment.value(literal.variable()) == Some(literal.positive())
+                })
+                .map_or(clause.len(), |first| first + 1) as u64
+        })
+        .sum()
 }
 
 #[test]
@@ -83,12 +109,14 @@ fn reference_statistics(
     mut actual: SearchStatistics,
     width: usize,
     excluded: u64,
+    rescanned: u64,
 ) -> SearchStatistics {
     let profile = super::propagation_profile::snapshot();
     let omitted = profile
         .binary_attempts
         .checked_mul(2)
         .and_then(|binary| binary.checked_add(profile.ternary_elided_positions))
+        .and_then(|omitted| omitted.checked_add(rescanned))
         .unwrap();
     actual.work = actual.work.checked_add(omitted).unwrap();
     // The old block path copied W literals, then checked a clause and W
@@ -108,7 +136,7 @@ fn reference_statistics(
     actual
 }
 
-fn trace(source: &str, refined: bool, limits: SearchLimits) -> String {
+fn trace(source: &str, refined: bool, limits: SearchLimits) -> Trace {
     super::propagation_profile::reset();
     let admitted = admit_formula(
         source.into(),
@@ -133,6 +161,7 @@ fn trace(source: &str, refined: bool, limits: SearchLimits) -> String {
     }
     let mut record = String::new();
     let mut excluded = 0;
+    let mut rescanned = 0;
     writeln!(
         record,
         "atoms={} nodes={} roots={} variables={} clauses={}",
@@ -148,23 +177,34 @@ fn trace(source: &str, refined: bool, limits: SearchLimits) -> String {
     for _ in 0..=92 {
         match cursor.query(&cnf, &mut charged) {
             Solve::Sat(assignment) => {
+                rescanned += rescan_charges(&cnf, &assignment);
                 let candidate =
                     encoding::interpretation(theory, &assignment, &mut charged).unwrap();
                 writeln!(
                     record,
                     "model {:?}; {:?}",
                     candidate.atoms().collect::<Vec<_>>(),
-                    reference_statistics(charged.statistics, theory.atom_count(), excluded)
+                    reference_statistics(
+                        charged.statistics,
+                        theory.atom_count(),
+                        excluded,
+                        rescanned
+                    )
                 )
                 .unwrap();
                 if let Err(error) = cursor.exclude(&cnf, &candidate, &mut charged) {
                     writeln!(
                         record,
                         "block {error:?}; {:?}",
-                        reference_statistics(charged.statistics, theory.atom_count(), excluded)
+                        reference_statistics(
+                            charged.statistics,
+                            theory.atom_count(),
+                            excluded,
+                            rescanned
+                        )
                     )
                     .unwrap();
-                    return record;
+                    return Trace { record, rescanned };
                 }
                 excluded += 1;
             }
@@ -172,10 +212,15 @@ fn trace(source: &str, refined: bool, limits: SearchLimits) -> String {
                 writeln!(
                     record,
                     "{terminal:?}; {:?}",
-                    reference_statistics(charged.statistics, theory.atom_count(), excluded)
+                    reference_statistics(
+                        charged.statistics,
+                        theory.atom_count(),
+                        excluded,
+                        rescanned
+                    )
                 )
                 .unwrap();
-                return record;
+                return Trace { record, rescanned };
             }
         }
     }
@@ -185,7 +230,7 @@ fn trace(source: &str, refined: bool, limits: SearchLimits) -> String {
 #[test]
 #[ignore = "bounded refined-cursor work profile; no clock or stable-model claim"]
 fn profile_refined_choice_trace() {
-    let record = trace(CHOICES, true, SearchLimits::default());
+    let record = trace(CHOICES, true, SearchLimits::default()).record;
     println!(
         "REFERENCE_COST_TRACE (omitted watched positions restored)\n{record}PROFILE {:?}",
         super::propagation_profile::snapshot()
@@ -203,14 +248,17 @@ fn replacement_elision_preserves_queens_reference_traces() {
         include_str!("../fixtures/watch-traces/queens-06.txt"),
     ];
     for (source, expected) in QUEENS.into_iter().zip(expected) {
-        assert_eq!(trace(source, false, SearchLimits::default()), expected);
+        assert_eq!(
+            trace(source, false, SearchLimits::default()).record,
+            expected
+        );
     }
 }
 
 #[test]
 fn replacement_elision_preserves_the_refined_reference_trace() {
     assert_eq!(
-        trace(CHOICES, true, SearchLimits::default()),
+        trace(CHOICES, true, SearchLimits::default()).record,
         include_str!("../fixtures/watch-traces/refined.txt")
     );
 }
@@ -222,7 +270,7 @@ fn reduced_work_ceiling_permits_the_complete_trace() {
         max_decisions: 9,
     };
     assert_eq!(
-        trace(CHOICES, true, limits),
+        trace(CHOICES, true, limits).record,
         include_str!("../fixtures/watch-traces/exact.txt")
     );
 }
@@ -234,7 +282,7 @@ fn reduced_work_ceiling_stops_one_tick_short() {
         max_decisions: 9,
     };
     assert_eq!(
-        trace(CHOICES, true, limits),
+        trace(CHOICES, true, limits).record,
         include_str!("../fixtures/watch-traces/work-short.txt")
     );
 }
@@ -246,7 +294,7 @@ fn replacement_elision_preserves_the_decision_stop() {
         max_decisions: 8,
     };
     assert_eq!(
-        trace(CHOICES, true, limits),
+        trace(CHOICES, true, limits).record,
         include_str!("../fixtures/watch-traces/decision-short.txt")
     );
 }

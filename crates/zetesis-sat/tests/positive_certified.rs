@@ -151,7 +151,6 @@ fn positive_batches_preserve_the_unique_family() {
             assert_eq!(stream.statistics().countermodel_queries, 0);
             let stats = stream.statistics().certified.unwrap();
             assert_eq!(stats.checks, stream.statistics().candidates);
-            assert_eq!(stats.residuals, 0);
         }
     }
 }
@@ -413,7 +412,10 @@ fn refused_positive_units_leave_the_full_candidate_region() {
         8,
         "all original classical assignments remain reachable"
     );
-    assert_eq!(stream.statistics().countermodels, 7);
+    // The seven nonempty candidates each hold an unsupported atom; the tight
+    // certificate refutes them by the support law without a countermodel.
+    assert_eq!(stream.statistics().countermodels, 0);
+    assert_eq!(stream.statistics().certified.unwrap().refuted, 7);
 }
 
 #[test]
