@@ -562,6 +562,57 @@ wait on gates that the first narrowing has decided, and deciding them
 needs the closures recomputed with those gates read as decided, which is
 the second narrowing pass and the subject of the next step.
 
+## The iterated narrowing: deciding the region before the first seed
+
+Three campaigns on 17 September 2026 between 04:51:39 and 05:03:56 UTC,
+same machine, profile, four workers and clingo as above. `main` is the
+896a5f73 executable rerun as the control, `before` the carrier-bounds
+executable (`14000c8b`, SHA-256
+`56b07e3014eb6fc7e6c1777b3fc7388200a59d3d38857d6d398459afd3614011`) and
+`after` is built from `ccdd5ac9` (SHA-256
+`80f014302c1e55949c203e7389a311e4a63c3413c29d47dc221ab749387ffbb6`), where
+the counter narrows its region pass by pass, each pass reading the
+decisions of the last, until one changes nothing, and offers no seed when
+a constraint fires in a lower closure (`Bounds.narrowed_contains_accepted`,
+`Bounds.lower_constraint_refutes`).
+[series-ccdd5ac9-cpu-auto.json](series-ccdd5ac9-cpu-auto.json) and its
+[table view](series-ccdd5ac9-cpu-auto-tables.md) are the derived comparison;
+raw report SHA-256
+`da4d2140a13e53d57ab10a6b4962377ec01502d94780540cba556085d7f58f65` (main),
+`46d1a2c4b8542527c46032aa0bc39ae3f33e00cf8f1a52c0f2779cc7424f71d5` (before)
+and `abd9758e49541a3b3dce846e548b9bf93398552ebc6c8589d703e7b17e1db52e`
+(after).
+
+The cell this step changes is again stratified-16; every other cell is
+within the run-to-run band. The stratified family was then run once per
+size and executable outside the harness, with a sixty-second limit, four
+workers and all answers requested, and clingo on the same files; the
+answer at every size has the same atoms in both solvers (1,312 at 256):
+
+| size | main | carrier bounds | narrowing | clingo | seeds after |
+|---:|---:|---:|---:|---:|---:|
+| 16 | > 60 s | 765 ms (32,768 seeds) | 7 ms | 6 ms | 1 |
+| 32 | > 60 s | > 60 s | 7 ms | 7 ms | 1 |
+| 64 | > 60 s | > 60 s | 9 ms | 6 ms | 1 |
+| 128 | > 60 s | > 60 s | 16 ms | 6 ms | 1 |
+| 256 | > 60 s | > 60 s | 26 ms | 8 ms | 1 |
+
+In the series, stratified-16 went from 749 ms with 32,768 seeds to
+4.5 ms with one, against clingo's 4.4 ms.
+
+In the problem's words: the first pass decided which `blocked` atoms can
+exist at all, but the `reach` rules wait on those very atoms, and a single
+pass read them as still open. Reading the decisions of one pass in the
+next, the second pass derives every reachable node as necessary and every
+unreachable one as impossible, and the third confirms that nothing moves.
+Three passes, each two closures, decide the program's whole gate carrier,
+which is what the well-founded model does for a stratified program; the
+counter then checks one seed. A program in which a constraint can never be
+satisfied, such as one demanding a vertex no edge reaches, is refuted in
+the first pass and no seed is checked at all. The `in/out` families are
+unchanged, as they must be: nothing in their rules is decided before a
+choice is made, and that is the case for the rest of the cube search.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
