@@ -342,6 +342,51 @@ matrix asks for, of which the output phase is 120 ms; clingo's `--outf=2`
 JSON run takes 28 ms in all. Both solvers emit JSON here; the cost is in
 zetesis's writer and is a separate item.
 
+## Item 7: the formula route's witness rescan and the support law
+
+Two campaigns on 17 September 2026 between 01:27:57 and 01:35:06 UTC, same
+machine, profile, four workers and clingo as above. `main` is the 896a5f73
+executable rerun as the control; `after` is built from
+`8b7239fd8e90befdd3a96392356d8f7e8be7682e` (SHA-256
+`60e306c71b10bd941cf2bad99e194114a4dc9e7e992e57a1058996d89708d0de`), which
+no longer rescans every base clause after each satisfying assignment (the
+watch scheme's invariant, asserted in debug builds and stated by the
+truth-table tests) and rejects a candidate with an unsupported present atom
+under the complete tight certificate by `TightPlans.stable_supported`
+instead of sending it to a reduct query.
+[series-8b7239fd-cpu-auto.json](series-8b7239fd-cpu-auto.json) and its
+[table view](series-8b7239fd-cpu-auto-tables.md) are the derived comparison;
+raw report SHA-256
+`e81d77d18bf075d1acf1ae978c7c97aa58645d62fdc9dac6201e1be46dcc40e4` (main) and
+`f8d8dfc887adfc3578a6eefea20247301748cf3e518d3b2607bfc17c014abc44` (after).
+
+In the problem's words: after every candidate the search found, the solver
+read every clause of the problem again to confirm the candidate satisfied
+them, which the way it finds candidates already guarantees; and a candidate
+that the tight certificate showed to hold an atom nothing produces was sent
+to a full search for a counterexample that the support law names directly.
+Native medians, ms, with clingo on the same cell, and the charged search
+work before and after:
+
+| Cell | before | after | after/before | clingo | after/clingo | work before | work after |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| n-queens/variant-01 8→10 | 126.2 | 116.2 | 0.92 | 33.9 | 3.4 | 17.3 M | 11.4 M |
+| n-queens/variant-01 8→11 | 457.0 | 432.1 | 0.95 | 187.2 | 2.3 | 85.1 M | 57.2 M |
+| n-queens/variant-04 8→11 | 311.5 | 305.0 | 0.98 | 179.3 | 1.7 | 55.5 M | 40.8 M |
+| variant-04/05-larger-mix | 347.8 | 297.1 | 0.85 | 163.4 | 1.8 | 44.2 M | 23.2 M |
+| ties-50 | 183.6 | 172.5 | 0.94 | 18.4 | 9.4 | 8.1 M | 4.7 M |
+| disjunction-12 | 216.2 | 206.8 | 0.96 | 22.1 | 9.4 | 12.3 M | 9.0 M |
+| send-money/send-money | 50.0 | 50.9 | 1.02 | 15.3 | 3.3 | 3.6 M | 3.6 M |
+
+The closure-route cells are unchanged, as they must be. The charged work of
+the formula cells fell by a third to a half while their time fell by five to
+fifteen percent: the rescan was a third of the charged units but a cheap
+third, a sequential pass the processor predicts well, so the work receipts
+overstated its share of the time. Send-money runs one candidate and has no
+rescan to lose. The reduct-query phase is absent on every formula cell
+after the change; the certificate's own phase is unchanged, since it did
+the same evaluation before and is now believed.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
