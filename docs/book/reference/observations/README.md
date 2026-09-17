@@ -288,6 +288,60 @@ grows 2.1 to 2.3 times per doubling, the n log n of the run merges, and depth
 source admission by the syntax-node ceiling of 262,144 nodes, not by the
 solver.
 
+## Item 8: one lookup per depth, one order per closure, one merge for the agreement
+
+Two campaigns on 17 September 2026 between 00:46:41 and 00:53:50 UTC, same
+machine, profile, four workers and clingo as above. `main` is the 896a5f73
+executable rerun as the control; `after` is built from
+`87a80cd0584cbeb8fb094d26187fc2994c436176` (SHA-256
+`11921136c06e73177d2e1ce021418a25e7d44c594f8f9b8b20b0b0ccedab803b`), which
+resolves a body pattern's relation once per join depth and indexes it on
+every probe, assembles the model from the relations in predicate order
+without sorting, checks the gate agreement by one merge over the gate
+predicates' ranges, and borrows the prepared runs without measuring
+capacity on every probe.
+[series-87a80cd0-cpu-auto.json](series-87a80cd0-cpu-auto.json) and its
+[table view](series-87a80cd0-cpu-auto-tables.md) are the derived comparison;
+raw report SHA-256
+`00b34c428d8f3f4be5a39577bc87a8599600d81148187fec680b5c10a6514d68` (main) and
+`9d409190ac877165b8a6514dd67bc0417138dcd7fc5915deb8ed0b03748be44c` (after).
+
+In the problem's words: for every row it examined, the solver looked up the
+relation by the predicate's name again; after every candidate it sorted the
+whole answer although its relations already held the order; and to compare
+the answer with the candidate it searched the gate predicates by name for
+every atom of the answer. It now looks a relation up once per join, adopts
+the relations' order, and walks the gate atoms and the candidate together.
+Native medians, ms, with clingo on the same cell, and the ratio the previous
+item's campaign gave for the same cell:
+
+| Cell | before | after | after/before | after item 3 | clingo | after/clingo |
+|---|---:|---:|---:|---:|---:|---:|
+| transitive-path-100 | 33.2 | 14.4 | 0.44 | 0.49 | 8.1 | 1.8 |
+| transitive-path-200 | 189.8 | 42.7 | 0.23 | 0.26 | 22.7 | 1.9 |
+| transitive-dense-40 | 43.6 | 38.7 | 0.89 | 0.98 | 6.7 | 5.8 |
+| independent-choice-12 | 23.8 | 20.9 | 0.88 | 1.01 | 6.8 | 3.0 |
+| independent-negation-10 | 1397.5 | 1319.1 | 0.94 | 1.03 | 5.7 | 231.5 |
+| chain-2000 | 360.9 | 35.6 | 0.10 | 0.10 | 11.0 | 3.2 |
+
+This item's own effect is the difference between the two ratio columns:
+five to ten percent on the join-heavy and enumeration cells, nothing on the
+chains, whose joins are one row wide, and nothing on the formula-route cells.
+A profile of the independent-negation cell on this executable attributes
+the per-candidate cost that remains: about a fifth to the catalog's
+insertion machinery (dictionary planning, index insertion, membership
+lookups), a sixth to allocation and freeing, five percent to predicate name
+comparison. The last two are the representation question deferred to the
+cube search; the first is the cost of building a closure at all, which
+fewer candidates, not cheaper ones, address. Memory did not change.
+
+The enumeration cells also show where their series time goes: the
+independent-choice cell at size 16 solves and prints its 2,584 models in
+30 ms as plain text and in 191 ms under the instrumented JSON record the
+matrix asks for, of which the output phase is 120 ms; clingo's `--outf=2`
+JSON run takes 28 ms in all. Both solvers emit JSON here; the cost is in
+zetesis's writer and is a separate item.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
