@@ -1984,7 +1984,9 @@ them, in themelios's ingestion of the program as an ordered set of statements
 and in this repository's normalization and fact expansion, which rebuild
 every statement; the split between the two is not measured, the executables
 carrying no frame pointers. For a program of many facts, reading it is now
-the larger part of the run on this route.
+the larger part of the run on this route. This is recorded as an
+observation: no change to source preparation belongs to this tranche, and
+what to do about it is left to the review that follows it.
 
 The series is flat under both steps: `after` is between 0.95 and 1.08 of
 `before` on every cell, the transitive cells at 0.99 and 0.98, and the one
