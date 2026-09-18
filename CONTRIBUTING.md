@@ -169,12 +169,18 @@ head, objective and output contracts over complete answer-set families. The
 formula CLI group also checks completed-support table joins with actual table
 probes and GPU candidates against complete CPU/Metal answer families.
 Every target group must report its
-expected named passing tests. The
+expected named passing tests. `scripts/check.sh hardware` qualifies the host's
+own device backend without instrumentation, Metal on macOS and Vulkan
+elsewhere, or the one named by `--metal` or `--vulkan`: the same sixteen groups
+of 56 exact tests, each backend's reviewed selection, every test reproducing
+the CPU's answer sets on the device; a change to a device route is qualified on
+every backend the hosts at hand expose, and the record says which. The
 portable report is retained separately; the CPU-only profile independently
 instruments both `zetesis-solve` and `zetesis-cli`. `target/coverage/toolchain.json` records the finite selection, with
-per-group logs and status files under `target/coverage/workspace`. Neither floor
-nor filename filters change. Unlisted GPU paths and Vulkan still require their
-own physical qualification.
+per-group logs and status files under `target/coverage/workspace`; the
+hardware gate keeps its logs and status files under `target/hardware`. Neither
+floor nor filename filters change. Unlisted GPU paths still require their own
+physical qualification.
 After both reports are written, the gate checks both floors even if the first
 fails. `target/coverage/floors.tsv` retains each profile's exit status;
 `target/coverage/status.txt` remains incomplete unless both floors pass.

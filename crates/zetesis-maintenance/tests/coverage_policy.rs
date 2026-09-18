@@ -3,6 +3,7 @@ use std::{fmt::Write as _, path::Path};
 use zetesis_maintenance::coverage::{self, Floor, Metadata, Mode, Observation, Tool};
 
 const TABLE: &str = include_str!("support/physical-selection.txt");
+const VULKAN_TABLE: &str = include_str!("support/physical-selection-vulkan.txt");
 fn output(tests: &[String], library: bool) -> String {
     let mut value = String::new();
     for test in tests {
@@ -146,6 +147,29 @@ fn library_results_cannot_qualify_another_group() {
         assert!(coverage::physical_result(&output(&observed.tests, true), expected).is_err());
     }
 }
+#[test]
+fn the_vulkan_selection_is_the_metal_selection_on_its_own_backend() {
+    let metal = coverage::selection(TABLE).unwrap();
+    let vulkan = coverage::selection(VULKAN_TABLE).unwrap();
+    assert_eq!(metal.len(), vulkan.len());
+    for (metal, vulkan) in metal.iter().zip(&vulkan) {
+        assert_eq!(metal.group, vulkan.group);
+        assert_eq!(metal.target, vulkan.target);
+        assert_eq!(metal.expected_tests, vulkan.expected_tests);
+        assert_eq!(metal.tests.len(), vulkan.tests.len());
+        // Each backend's tests are its own; none stands in both selections.
+        assert!(metal.tests.iter().all(|test| !vulkan.tests.contains(test)));
+        assert!(vulkan.tests.iter().all(|test| test.contains("vulkan")));
+    }
+    // One row of the other backend is neither selection.
+    let mixed = VULKAN_TABLE.replacen(
+        VULKAN_TABLE.lines().next().unwrap(),
+        TABLE.lines().next().unwrap(),
+        1,
+    );
+    assert!(coverage::selection(&mixed).is_err());
+}
+
 #[test]
 fn metal_selection_refuses_vulkan_substitution() {
     for (metal, vulkan) in [

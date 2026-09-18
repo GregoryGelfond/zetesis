@@ -698,9 +698,16 @@ scripts/check.sh oracle
 scripts/check.sh proofs
 scripts/check.sh coverage
 scripts/check.sh book
+scripts/check.sh hardware
 ```
 
-Physical Metal qualification adds the named device tests with
+`scripts/check.sh hardware` qualifies the host's physical device backend,
+Metal on macOS and Vulkan elsewhere, or the backend named by `--metal` or
+`--vulkan`: sixteen groups of 56 exact device tests, one reviewed selection
+per backend with the same groups and counts, each test reproducing the CPU's
+answer sets on the device; logs and status files are kept under
+`target/hardware`. Physical Metal qualification within coverage adds the
+named device tests with
 `scripts/check.sh coverage --metal` on a machine exposing a Metal adapter.
 The current selection contains 56 exact tests in 16 groups, including explicit
 Metal static-oracle construction and complete closure comparisons against an
@@ -801,7 +808,8 @@ The ordinary table-join case requires positive table preparation, probe and row
 counts, actual GPU candidates, exact decided/residual accounting and no pending
 results. Its complete Metal family equals the independent CPU family. It checks
 host table grounding composed with GPU reduct checking, not a GPU table kernel.
-Vulkan and other untested devices are outside this measurement.
+Other devices are outside this measurement; the hardware gate qualifies the
+Vulkan selection on a host exposing a Vulkan adapter.
 
 Reproduce this recorded snapshot from the linked source revision with
 `scripts/check.sh coverage --metal` using the

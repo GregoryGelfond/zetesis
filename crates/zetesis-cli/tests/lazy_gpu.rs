@@ -88,12 +88,21 @@ mod physical {
     #[test]
     #[ignore = "requires physical Metal with automatic materialization"]
     fn metal_automatic_grounder_keeps_source_joins() {
+        qualify_automatic_grounder(Backend::Metal);
+    }
+
+    #[test]
+    #[ignore = "requires actual Vulkan with automatic materialization"]
+    fn vulkan_automatic_grounder_keeps_source_joins() {
+        qualify_automatic_grounder(Backend::Vulkan);
+    }
+
+    fn qualify_automatic_grounder(backend: Backend) {
         let source = "{a}. {b}. {c}. {d}. {e}. {f}.";
         let (_, expected, _) = solve(source, &["--backend", "cpu", "--json"]);
         for grounder in [zetesis_cli::Grounder::Auto, zetesis_cli::Grounder::Lazy] {
-            let backend = zetesis_cli::Backend::Metal;
             let mut selected = options(&["--stats", "--json"]);
-            selected.backend = backend;
+            selected.backend = backend.requested();
             selected.grounder = grounder;
             // A hidden static lowering cannot succeed under these limits.
             selected.max_ground_rules = 0;
@@ -113,8 +122,8 @@ mod physical {
             assert_eq!(report.models, 64);
             assert_eq!(actual["models"], expected["models"]);
             let stats = report.lazy_execution.unwrap();
-            assert_eq!(stats.requested_backend, backend);
-            assert_eq!(stats.backend, "Metal");
+            assert_eq!(stats.requested_backend, backend.requested());
+            assert_eq!(stats.backend, backend.name());
             assert!(stats.dispatches > 0);
             assert!(stats.completed_candidates > 0);
             assert_eq!(stats.submitted_candidates, stats.completed_candidates);

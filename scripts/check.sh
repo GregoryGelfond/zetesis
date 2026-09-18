@@ -3,12 +3,21 @@
 set -eu
 mode=${1:-portable}
 coverage_option=${2:-}
-if [ "$#" -gt 2 ] || { [ "$#" -eq 2 ] && { [ "$mode" != coverage ] || [ "$coverage_option" != --metal ]; }; }; then
-    printf '%s\n' 'Usage: scripts/check.sh [portable|coverage|oracle|proofs|book|full]; scripts/check.sh coverage --metal' >&2
+usage='Usage: scripts/check.sh [portable|coverage|oracle|proofs|book|hardware|full]; scripts/check.sh coverage --metal; scripts/check.sh hardware [--metal|--vulkan]'
+if [ "$#" -gt 2 ]; then
+    printf '%s\n' "$usage" >&2
     exit 2
 fi
-case "$mode" in portable|coverage|oracle|proofs|book|full) ;; *)
-    printf '%s\n' 'Usage: scripts/check.sh [portable|coverage|oracle|proofs|book|full]; scripts/check.sh coverage --metal' >&2
+if [ "$#" -eq 2 ]; then
+    case "$mode $coverage_option" in
+        'coverage --metal'|'hardware --metal'|'hardware --vulkan') ;;
+        *)
+            printf '%s\n' "$usage" >&2
+            exit 2 ;;
+    esac
+fi
+case "$mode" in portable|coverage|oracle|proofs|book|hardware|full) ;; *)
+    printf '%s\n' "$usage" >&2
     exit 2 ;;
 esac
 repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
@@ -148,6 +157,14 @@ if [ "$mode" = coverage ] || [ "$mode" = full ]; then
         ./scripts/coverage.sh gate --metal
     else
         ./scripts/coverage.sh
+    fi
+fi
+if [ "$mode" = hardware ]; then
+    # The host's physical backend by default: Metal on macOS, Vulkan elsewhere.
+    if [ -n "$coverage_option" ]; then
+        ./scripts/hardware.sh "$coverage_option"
+    else
+        ./scripts/hardware.sh
     fi
 fi
 if [ "$mode" = full ]; then

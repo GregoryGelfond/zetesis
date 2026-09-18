@@ -18,7 +18,16 @@ pub struct Group {
     /// Independently specified count for this group.
     pub expected_tests: usize,
 }
+/// The reviewed selections: the Metal one and the Vulkan one, the same
+/// sixteen groups and counts, each naming the tests of its own backend.
+const SELECTIONS: [&str; 2] = [
+    include_str!("physical-selection.txt"),
+    include_str!("physical-selection-vulkan.txt"),
+];
+
 /// Parse the maintained shell table, checking its finite inventory independently.
+/// The table must be one reviewed selection whole; a backend's tests cannot
+/// stand in for the other's.
 /// # Errors
 /// Refuses missing/extra groups, altered target/count identities or duplicate tests.
 pub fn selection(table: &str) -> Result<Vec<Group>, Error> {
@@ -41,8 +50,10 @@ pub fn selection(table: &str) -> Result<Vec<Group>, Error> {
         ("static", "hardware", 2),
     ];
     require(
-        table.trim() == include_str!("physical-selection.txt").trim(),
-        "physical coverage requires the reviewed 56 exact test identities",
+        SELECTIONS
+            .iter()
+            .any(|selection| table.trim() == selection.trim()),
+        "physical qualification requires one reviewed selection of 56 exact test identities",
     )?;
     let rows: Vec<_> = table.lines().collect();
     require(
