@@ -2041,6 +2041,39 @@ all, and the corpus stands where it stood. What the ladder's new rungs
 showed beside that is that reading a program of many facts now costs more
 than closing it.
 
+## A correction: a keyed constraint with an anonymous key
+
+The review of the tranche as one change found that the keyed-constraint
+rewrite of `808530bf` changed the answer sets of a program whose demanded
+atom has an anonymous variable in a key position. For
+
+```
+letter(a;b). val(3;4).
+1 { assign(K,V) : val(V) } 1 :- letter(K).
+:- assign(_, Y), Y != 3.
+```
+
+clingo 5.8.2 and the executable of `896a5f73` give the one answer set
+`assign(a,3) assign(b,3)`; the executable of `e98d9357` gave three, two of
+them with a letter assigned 4, and reported one constraint asked by key. The
+rewrite asked `:- letter(_), not assign(_, 3).`; under `not` an anonymous
+argument reads "for no value at all", so the asked constraint forbade only
+that no letter holds 3, where the written one forbids a value other than 3
+at every letter. The recognition checked the value position of the demanded
+atom and never its key positions. The digit-and-carry pattern had the same
+hole. No test of the rewrite used an anonymous key, and no corpus case has
+that shape, which is why the corpus passed atom for atom throughout; the
+measurements of the keyed-constraints section stand, send-money naming every
+key.
+
+The rewrite now leaves such a constraint as written: a demand requires every
+key position to be free of anonymous variables. Two contract tests state it,
+one for each pattern, each against the same constraint with the key named,
+which is asked and has the same answer sets. `KeyedConstraints.one_value` is
+a law about one fixed key, and was never a law about this case; that the
+recognition stays inside the law's premise is the Rust obligation the
+correspondence names.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original

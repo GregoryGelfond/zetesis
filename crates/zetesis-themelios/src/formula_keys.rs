@@ -7,8 +7,8 @@
 //! the product of the demanded value with every value the key admits is
 //! never formed. Two patterns are read; each carries its meaning argument.
 //!
-//! *One value.* `:- G, p(k, Y), Y != t.`, with `Y` read nowhere else and `t`
-//! free of `Y`, becomes `:- G, b(k), not p(k, t).`, where `b` is the key's
+//! *One value.* `:- G, p(k, Y), Y != t.`, with `Y` read nowhere else, `t`
+//! free of `Y` and no anonymous variable in the key `k`, becomes `:- G, b(k), not p(k, t).`, where `b` is the key's
 //! body. Whenever `b(k)` holds, exactly one `p(k, y)` holds; the written
 //! constraint fires iff that `y` differs from `t`, iff `p(k, t)` is absent,
 //! iff the asked constraint fires. Whenever `b(k)` does not hold, no `p(k, _)`
@@ -25,6 +25,12 @@
 //! fires; `s \ c` is then negative or zero with `s / c` negative, so an asked
 //! atom is absent and an asked constraint fires. Division by `c ≥ 2` is
 //! defined, and `s` is evaluated where the written constraint evaluated it.
+//!
+//! A key position must name its value in both patterns. The asked atom stands
+//! under `not`, where `p(_, t)` holds when some key has the value `t`, so
+//! `not p(_, t)` forbids only that no key has it, while the written constraint
+//! forbids a wrong value at every key. A constraint with an anonymous key
+//! position is left as written.
 //!
 //! The rewrite reads the normalized program, where facts are expanded and
 //! constants resolved, and replaces the written constraint's source
@@ -269,11 +275,13 @@ fn demands<'a>(
         let Some(Term::Variable(Variable::Named(variable))) = terms.get(key.value()) else {
             continue;
         };
+        // The asked atom stands under `not`, where an anonymous argument
+        // reads as "for no value at all": the demanded atom is the key's one
+        // atom only when every key position names its value.
         if occurrences.get(variable) != Some(&2)
-            || terms
-                .iter()
-                .enumerate()
-                .any(|(position, term)| position != key.value() && mentions(term, variable))
+            || terms.iter().enumerate().any(|(position, term)| {
+                position != key.value() && (mentions(term, variable) || anonymous(term))
+            })
         {
             continue;
         }
@@ -475,6 +483,11 @@ fn count<'a>(term: &'a Term, occurrences: &mut BTreeMap<&'a VarName, usize>) {
             *occurrences.entry(name).or_default() += 1;
         }
     }
+}
+
+fn anonymous(term: &Term) -> bool {
+    term.subterms()
+        .any(|subterm| matches!(subterm, Term::Variable(Variable::Anonymous)))
 }
 
 fn mentions(term: &Term, variable: &VarName) -> bool {

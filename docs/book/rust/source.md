@@ -160,8 +160,8 @@ other bounds, a second element, a value bound outside its condition or a
 negated literal anywhere yields no key.
 
 Preparation then asks a constraint over a keyed value as the one atom its key
-admits. `:- G, p(k, Y), Y != t.`, with `Y` read nowhere else and `t` free of
-`Y`, is prepared as `:- G, b(k), not p(k, t).`: whenever `b(k)` holds, exactly
+admits. `:- G, p(k, Y), Y != t.`, with `Y` read nowhere else, `t` free of
+`Y` and every key position of `k` naming its value, is prepared as `:- G, b(k), not p(k, t).`: whenever `b(k)` holds, exactly
 one `p(k, y)` holds, and the written constraint fires exactly when that `y` is
 not `t`, which is exactly when `p(k, t)` is absent. A column with a digit and a
 carry, `:- G, p(k, Y), q(j, C), s != Y + 10*C.`, is prepared as two such
@@ -179,7 +179,11 @@ the transformation's tag, so diagnostics and `formula_origins()` still name
 the constraint as written. `keyed_constraints()` on the admitted formula
 counts the constraints asked; the answer sets are the same either way, which
 the contract tests state against the hand-asked program and against clingo.
-A constraint outside the two patterns is left as written.
+A constraint outside the two patterns is left as written, and so is one
+with an anonymous variable in a key position: the asked atom stands under
+`not`, where `p(_, t)` holds when some key has the value `t`, so
+`not p(_, t)` would forbid only that no key has it, while the written
+constraint forbids a wrong value at every key.
 
 ## Know which program was analyzed
 

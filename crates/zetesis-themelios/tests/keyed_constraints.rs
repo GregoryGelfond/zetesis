@@ -112,6 +112,41 @@ fn a_value_read_elsewhere_keeps_the_written_constraint() {
     assert_eq!(stable(&input).len(), 28 * 10 * 2);
 }
 
+const LETTERS: &str = "letter(a;b). val(3;4). 1 { assign(K,V) : val(V) } 1 :- letter(K). ";
+
+#[test]
+fn an_anonymous_key_keeps_the_written_constraint() {
+    // The written constraint forbids a value other than 3 at any key. Asked
+    // by key it would read `not assign(_, 3)`, no key at all holding 3, which
+    // forbids less: the key must be named for the one atom to be the key's.
+    let anonymous = admitted(&format!("{LETTERS} :- assign(_, Y), Y != 3."));
+    assert_eq!(anonymous.keyed_constraints(), 0);
+    // Both letters hold 3, as they do when the key is named.
+    let named = admitted(&format!("{LETTERS} :- assign(K, Y), Y != 3."));
+    assert_eq!(stable(&anonymous).len(), 1);
+    assert_eq!(stable(&anonymous), stable(&named));
+}
+
+const COLUMN: &str = "letter(a;b). digit(0..1). carry_value(0;1). idx(1). \
+    1 { assign(L,D) : digit(D) } 1 :- letter(L). \
+    1 { carry(I,V) : carry_value(V) } 1 :- idx(I). ";
+
+#[test]
+fn an_anonymous_key_keeps_the_written_column() {
+    // As above for the digit and the carry: 3 = C + 2K over C and K in 0..1
+    // has the one solution C = 1, K = 1, and with the digit's key anonymous
+    // every letter's digit must be that one, not some letter's.
+    let anonymous = admitted(&format!(
+        "{COLUMN} :- assign(_, C), carry(1, K), 3 != C + 2 * K."
+    ));
+    assert_eq!(anonymous.keyed_constraints(), 0);
+    let named = admitted(&format!(
+        "{COLUMN} :- assign(L, C), carry(1, K), 3 != C + 2 * K."
+    ));
+    assert_eq!(stable(&anonymous).len(), 1);
+    assert_eq!(stable(&anonymous), stable(&named));
+}
+
 #[test]
 fn a_relation_with_another_producer_keeps_the_written_constraint() {
     let choices = format!("{CHOICES} assign(a,0) :- not assign(a,1).");
