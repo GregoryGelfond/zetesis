@@ -1628,6 +1628,100 @@ theory size; the trail would be retired only where a region learns
 little relative to the theory, which no cell of the series does. The
 trail is kept as a patch outside the repository, not as code.
 
+## Dense relations on the closure route
+
+Four campaigns on 18 September 2026, the reports written between 09:59:50
+and 10:03:00 UTC, same machine, profile, four workers and clingo as above,
+one memory round per solver and cell. `before` is built from `a712f10d`
+(SHA-256
+`54069a1381bcc5fc86c39fa1e2f5afd1a7c4ae6b16809a8fafb0b29791acae25`),
+the branch before this item; `after` is built from `6f114811` (SHA-256
+`6930f3d13b893a151380aad0a3fab3d9147f48643f2f5cdf20fa9549bbb16fdf`),
+where preparation infers a bound on each argument's values and a predicate
+whose every argument is bounded is held as a bit array over the mixed-radix
+index of its arguments' ranks, with membership a bit test, insertion a bit
+set and a bound prefix one contiguous range; `clauses` is the same
+executable under `--search clauses`; and `corpus` is the same executable on
+all 94 corpus cases.
+[series-6f114811-cpu-auto.json](series-6f114811-cpu-auto.json), its
+[table view](series-6f114811-cpu-auto-tables.md),
+[corpus-6f114811-cpu-auto.json](corpus-6f114811-cpu-auto.json) and its
+[table view](corpus-6f114811-cpu-auto-tables.md) are the derived
+comparisons; raw report SHA-256
+`beca1ee081fcaef9fd770abee44fef9222d2b47f8f098277a60198b5fd18bb18` (before),
+`e8a695b37de27fea07680928752319eeb1ad3c8bd4246bfd75c383caa0221149` (after),
+`f77c803bc4ce128009381b8fc29cdf146b5d3d3cee94ca4b2042583ba35f71de`
+(clauses) and
+`38796bf2691d0bea061378918e8ec54145b9b4015377dcff532e3ba82576a7c8`
+(corpus).
+
+The closure-route cells, with the charged closure work of one run of each
+executable on the cell's program and the peak resident set of the memory
+round:
+
+| Cell | before | after | after/before | clingo | after/clingo | work before | work after | MiB before | MiB after |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| transitive-path-200 | 46.7 | 31.0 | 0.66 | 22.4 | 1.39 | 5,378,096 | 955,649 | 17.4 | 14.5 |
+| transitive-path-100 | 15.7 | 12.2 | 0.78 | 9.0 | 1.35 | 1,197,772 | 209,092 | 11.0 | 10.2 |
+| independent-negation-10 | 53.4 | 49.9 | 0.93 | 4.5 | 11.06 | 425,724 | 136,012 | 9.0 | 8.5 |
+| independent-negation-8 | 17.7 | 16.6 | 0.94 | 4.5 | 3.68 | 123,109 | 41,811 | 8.4 | 8.4 |
+| chain-1000 | 19.6 | 18.5 | 0.94 | 6.9 | 2.67 | 475,452 | 179,678 | 14.5 | 14.6 |
+| producer-chain-700 | 26.0 | 25.8 | 0.99 | 8.8 | 2.93 | 81,187 | 42,445 | 24.7 | 24.2 |
+| chain-2000 | 34.7 | 39.8 | 1.15 | 10.1 | 3.94 | 1,025,311 | 578,537 | 20.5 | 21.0 |
+
+The transitive cells fall by a fifth and a third, as the profile of the
+item said they would: their time was the value comparisons of the
+bound-prefix binary searches and the ordering of the catalogs each round,
+and a dense window is a block of positions read word by word. The
+enumeration cells move less than the hypothesis asked, 0.93 and 0.94
+against a predicted 0.3 to 0.7: the charged work of a closure falls to a
+third, but a derived atom of a dense predicate is still built as an atom,
+kept in the round's pending set and inserted by ranking its values after
+the round, so the allocation the hypothesis named is not yet gone; that is
+the next step, the pending bits of the dense round. The chain cells are
+where the hypothesis was refuted in part: the propositional producer chain
+has nothing to lay out but one-cell relations, chain-1000 moves within
+noise, and chain-2000 is slower by 0.15, because its edge relation over
+2,001 values on each side has four million positions for two thousand
+atoms, one megabyte of words per candidate against a hundred kilobytes of
+catalog, and each probe of a bound row scans thirty-two words to find one
+edge. Its memory rises by half a mebibyte. The condition that retires the
+ceiling as it stands is a relation this sparse costing more than its
+catalog did; a ceiling that reads the fact count as well as the product of
+widths, or a row of the layout kept sparse, is the repair, and it is not
+taken until the pending bits and the vector step have been measured on
+the same cells, since both change what a probe costs.
+
+Two corrections to the hypotheses as written. Transitive-dense-40 and
+chain-arithmetic-1000 were named as closure-route cells; they are not.
+The extended profile refuses variable arithmetic and the `<` comparison
+in a body, so both take the formula route, where the dense store does not
+reach, and both stand where they stood, 0.97 and 0.95. And chain-2000's
+time before this item was mostly source preparation, twenty of thirty
+milliseconds in parsing and fact expansion, which the closure cannot
+touch. The formula cells are within 0.96 and 1.00 of `before` except
+independent-choice-16 at 0.78, which this change does not reach and whose
+statistics under the two executables are the same line for line; the
+clause search of the same executable sits at 33.4 against `before`'s 40.5,
+so the `before` run of that cell reads as the slow one.
+
+The scoreboard reads seven of twenty-two for `before` and for `after`
+alike; the transitive cells, at 1.35 and 1.39 of the reference, are now
+among the closest losses. On the corpus all 94 cases passed
+on both solvers; the default is faster on eight of 94, the median ratio
+1.27 against the reference and the widest loss 1.82, against nine, 1.27
+and 1.97 at `9b6ac698`; against that campaign's own times the median case
+is 0.97 and the resident set 1.01, the largest gains 0.77 and 0.78 on two
+salesman cases and the largest loss 1.25 on one unsatisfiable tour.
+
+In the problem's words: a relation whose arguments the program bounds is
+now a set of bits, and where the closure's time was comparing values and
+ordering rows, the transitive cells, it is a fifth to a third cheaper;
+where the time is building each derived atom, the enumeration cells, the
+representation alone buys little until the round stops building them;
+and where the relation is sparse in a wide box, the long chain, the bits
+cost more than the tree.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
