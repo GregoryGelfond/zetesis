@@ -1060,6 +1060,63 @@ harness's cells was too small to show in wall time. What the profile now
 says plainly is that the writer is the next cost on every cell with many
 answers, and that the search's propagation is the one after it.
 
+## The JSON document that spells each atom once
+
+Three campaigns on 18 September 2026, the reports written between 00:33:14
+and 00:39:27 UTC, same machine, profile, four workers and clingo as above.
+`main` is the 896a5f73 executable rerun as the control, `before` the
+shared-names executable (`df256d7d`, SHA-256
+`fc865a4bda26205538d67e8b37b695afd0a41434ca45e345082581f996e2f21b`) and
+`after` is built from `40d197a9` (SHA-256
+`b34b5f8831f1d7b2ed046509776dc46e8c317a5418a0aaa911a2da9633f0b59e`), where
+the JSON document spells each atom once and a record refers to its atoms
+by index (schema 2). The harness reads both document forms, so the
+control and the previous head are compared as before.
+[series-40d197a9-cpu-auto.json](series-40d197a9-cpu-auto.json) and its
+[table view](series-40d197a9-cpu-auto-tables.md) are the derived comparison;
+raw report SHA-256
+`28d202947e1aee2dc430c32b543a9e5e48da67edc6dae36ee33d76f957027f47` (main),
+`40cbbc315ef4bc99bd09e50532ebe981954167ef3d003fbac0a5e0db4c67db7b` (before)
+and `a4619f9f95c27b1d547d459c0d32cf1d2cfe5b2b6f484073e834757f74e7f411`
+(after).
+
+The harness times the JSON output, so every cell with many answers moved:
+
+| Cell | before | after | after/before | clingo |
+|---|---:|---:|---:|---:|
+| independent-negation-aggregate-16 | 349.8 | 25.9 | 0.07 | 31.4 |
+| ties-50 | 173.4 | 26.9 | 0.16 | 18.5 |
+| independent-choice-16 | 204.2 | 41.2 | 0.20 | 28.9 |
+| disjunction-12 | 209.1 | 47.1 | 0.23 | 20.7 |
+| variant-04/05-larger-mix | 302.7 | 92.8 | 0.31 | 146.0 |
+| independent-choice-12 | 24.7 | 10.0 | 0.41 | 6.0 |
+| n-queens/variant-04 8→11 | 294.2 | 159.8 | 0.54 | 174.9 |
+| n-queens/variant-01 8→10 | 94.4 | 59.8 | 0.63 | 31.4 |
+| n-queens/variant-01 8→11 | 391.5 | 264.6 | 0.68 | 179.0 |
+| independent-negation-10 | 58.0 | 50.0 | 0.86 | 4.7 |
+
+The cells with one answer are flat: send-money 1.09 and transitive-path-100
+1.22 lie inside their bands (transitive-path-100 measured 13.8 ± 0.5 ms on
+`before` and 14.1 ± 0.3 ms on `after` over nine runs each outside the
+harness), and chain-2000 0.94, transitive-path-200 1.02, stratified 1.01.
+Outside the harness, queens-11 with 2,680 answers writes 639,741 bytes
+where it wrote 8,730,633, and takes 234 ms against 246; with the plain
+writer both take 232 ms.
+
+In the problem's words: every answer used to be written out in full, each
+atom with its predicate, sign and typed arguments, so a document of
+thousands of answers over the same hundred atoms spelled those atoms
+thousands of times, and the cells that print many answers spent most of
+their time in that spelling. The document now spells an atom the first
+time an answer holds it and refers to it by number afterwards, and what
+is shown is still decided by the program's `#show` directives. Three
+cells now run faster than the reference on the harness's terms
+(aggregate-16 at 0.82, the larger mix at 0.64, queens variant-04 at
+0.91), and the formula cells that had not moved in the whole tranche
+turn out to have been waiting on the writer. A document of one answer
+pays nothing for the numbering: its one record is deferred whole and
+indexed only if a second record asks.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
