@@ -127,7 +127,6 @@ impl Fixture {
             schedule: Schedule::new(0, 1).unwrap(),
             formula_joins: None,
             search: None,
-            region_workers: None,
             limits: performance::Limits::default(),
         }
     }

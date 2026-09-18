@@ -13,11 +13,15 @@ use zetesis_sat::Incomplete;
 mod bounded_writer;
 use bounded_writer::BoundedWriter;
 
+/// The batched completion and its pool belong to the clause search; the
+/// region walk decides its leaves in its workers.
 fn options(workers: usize, batch: usize) -> Options {
     let mut options = Options::try_parse_from([
         "zetesis",
         "--backend",
         "cpu",
+        "--search",
+        "clauses",
         "--oracle",
         "countermodel",
         "--models",

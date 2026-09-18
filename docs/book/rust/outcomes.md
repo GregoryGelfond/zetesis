@@ -61,9 +61,9 @@ it does not turn a completed answer into a rejected candidate. Under
 leaves, the propagations, atoms held and cut, whether the support cut
 applied, and the reading work, a subtotal of cumulative search work, and
 `statistics.search.reduct_regions` the regions of the reduct queries; under
-the default clauses method the former is `null` and the latter zero.
+`--search clauses` the former is `null` and the latter zero.
 
-Under `--region-workers` above one the answer sets of the formula route
+Under `--workers` above one the answer sets of the formula route
 arrive in the schedule's order: the family is exact and each answer appears
 once, but no order is promised, nor the same order between runs. Consumers
 compare answer sets as sets, as the oracle comparison does.
@@ -271,7 +271,7 @@ The CLI exposes the same fields as `statistics.candidate_restrictions` in JSON.
 `--max-candidate-bytes` bounds copied payload; `--max-search-work` bounds cumulative
 restriction work on this route. Both advanced controls appear in `--help-all`.
 
-Under the default clauses proposer, formula search records its necessary
+Under `--search clauses`, formula search records its necessary
 disjunctive support attempt separately from user or objective refinements.
 `statistics.search.necessary_support` identifies application, an inapplicable
 head grammar, or a configured construction/encoding shape limit; under

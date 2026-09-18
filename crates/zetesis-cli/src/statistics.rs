@@ -22,8 +22,8 @@ fn header(sink: &mut impl Write, options: &Options, elapsed: Duration) -> io::Re
     )?;
     writeln!(
         sink,
-        "  configured: workers={}; region workers={}; batch={}; displayed models={} (0=all)",
-        options.workers, options.region_workers, options.batch_size, options.models
+        "  configured: workers={}; batch={}; displayed models={} (0=all)",
+        options.workers, options.batch_size, options.models
     )?;
     writeln!(
         sink,
@@ -364,6 +364,21 @@ fn details(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io
         )?;
     } else if report.checked > 0 {
         closure(sink, options, report)?;
+    } else if report
+        .candidate_statistics
+        .is_some_and(|stats| stats.bounds_refuted)
+    {
+        // The root's narrowing settled the program: no seed was offered and
+        // no execution route ran.
+        writeln!(
+            sink,
+            "  effective execution: none needed; the root narrowing refuted every seed (a definite constraint fired)"
+        )?;
+        writeln!(
+            sink,
+            "  oracle work: unavailable; discovered gate tuples: {}",
+            report.discovered_gate_atoms
+        )?;
     } else {
         writeln!(
             sink,

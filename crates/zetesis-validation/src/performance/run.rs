@@ -65,7 +65,6 @@ pub(super) fn campaign(request: &Request<'_>, helper: Option<&Path>) -> Result<R
         schedule: request.schedule.clone(),
         formula_joins: request.formula_joins,
         search: request.search,
-        region_workers: request.region_workers,
         limits: request.limits,
         started_unix_ns,
         finished_unix_ns: None,
@@ -365,11 +364,6 @@ fn arguments<'a>(
         && let Some(search) = request.search
     {
         arguments.extend(["--search".into(), search.label().into()]);
-    }
-    if slot.producer == Producer::Native
-        && let Some(workers) = request.region_workers
-    {
-        arguments.extend(["--region-workers".into(), workers.to_string().into()]);
     }
     if slot.phase == Phase::Diagnostics {
         arguments.push("--stats".into());

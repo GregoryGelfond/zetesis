@@ -126,8 +126,8 @@ children, so a child's narrowing starts from its parent's and learns only
 what the split decided (`FormulaBounds.known_mono`), and the regions still
 share nothing. The reduct query carries its knowledge the same way. Node visits and producer
 checks are charged as search work and each split as a decision, against
-the same cumulative `SearchLimits`. The clauses proposer stays the default
-until the regions proposer is measured beside it.
+the same cumulative `SearchLimits`. Regions are the default method, measured
+beside the clauses on the same cells; the clauses are kept for comparison.
 `Statistics::regions` reports regions visited, refuted and reached as leaves,
 propagations, atoms held and cut, whether the support cut applied, and
 the reading work, and `Statistics::reduct.regions` the same for the reduct
@@ -380,9 +380,12 @@ once and none is missed, whatever the interleaving; the order of arrival is
 the schedule's, differs between runs, and is not a property of the result.
 A restriction added while the workers run narrows the regions not yet
 visited; models already on their way are returned as they are, as the
-scalar contract already allows. The work and decision ceilings are shared:
-the first worker to exhaust one reports the stop and the others stop at
-their next charge. Receipts are merged when the workers finish; a snapshot
+scalar contract already allows. The work, decision and candidate ceilings
+are shared: the first worker to exhaust one raises the stop and the others
+stop at their next charge or their next region; the models the workers
+verified before they stopped are delivered first and the stop after them,
+so a leaf admitted under the candidate ceiling is never lost to a worker
+the ceiling refused. Receipts are merged when the workers finish; a snapshot
 taken while they run reports what has been merged so far. One worker is
 the scalar regions walk. The batched protocol is not used with workers,
 since the workers decide their leaves themselves.

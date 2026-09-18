@@ -7,9 +7,19 @@ use zetesis_cli::{
 };
 use zetesis_cpu::Control;
 
+/// One worker: the exact charges these tests compare are the scalar walk's,
+/// whose first leaf is the same on every run.
 fn options() -> Options {
-    Options::try_parse_from(["zetesis", "--backend", "cpu", "--models", "0"])
-        .expect("bounded test configuration")
+    Options::try_parse_from([
+        "zetesis",
+        "--backend",
+        "cpu",
+        "--workers",
+        "1",
+        "--models",
+        "0",
+    ])
+    .expect("bounded test configuration")
 }
 
 fn solve(source: &str, options: &Options) -> (Report, String) {

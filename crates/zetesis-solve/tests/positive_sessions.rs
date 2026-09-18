@@ -8,7 +8,8 @@ use zetesis_ferraris::{Node, PositiveError, PositiveResource, TightError, TightR
 use zetesis_sat::CertificatePlanStatistics;
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, ExecutionObservation, ExecutionObserver, Grounder,
-    Interruption, Oracle, PreparedInput, Session, SolveConfig, WorldView, WorldViewLimits,
+    Interruption, Oracle, PreparedInput, SearchMethod, Session, SolveConfig, WorldView,
+    WorldViewLimits,
 };
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, AnalysisBasis, ExpansionLimits, FormulaLimits,
@@ -63,9 +64,13 @@ fn input(source: &str) -> AdmittedFormula {
     .unwrap()
 }
 
+/// The completion pool these sessions observe belongs to the clause search;
+/// the region walk decides its leaves in its workers, by the same
+/// certificates, and is qualified in zetesis-sat.
 fn config(workers: usize, oracle: Oracle) -> SolveConfig {
     SolveConfig {
         backend: Backend::Cpu,
+        search: SearchMethod::Clauses,
         oracle,
         grounder: Grounder::Eager,
         models: 0,

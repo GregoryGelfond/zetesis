@@ -531,6 +531,7 @@ impl StableModels {
             },
             Proposer::Parallel(parallel) => {
                 let merged = parallel.merged();
+                let merged = &merged;
                 let mut certified = self.statistics.certified;
                 if let (Some(into), Some(from)) = (certified.as_mut(), merged.certified.as_ref()) {
                     into.checks = from.checks;

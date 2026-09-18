@@ -117,26 +117,29 @@ arithmetic and resource failures are preserved. The
 
 Advanced `--search clauses|regions` selects the formula route's search
 method, for proposing candidates and for the reduct's proper-subset query
-alike. Clauses, the default, is the classical search over a Tseitin encoding
-for both: exact exclusion of every candidate proposed, and a clause query
-of the frozen reduct. Regions walk the region tree over the theory's atoms,
+alike. Regions, the default, walk the region tree over the theory's atoms,
 narrowed by the theory's readings, for both: the leaves of the candidate
 tree are proposed, and the proper subsets of a candidate are searched as a
 second tree under the frozen reduct, so no clause form is built at all.
+Clauses is the classical search over a Tseitin encoding for both, exact
+exclusion of every candidate proposed and a clause query of the frozen
+reduct, kept for comparison.
 The reduct decides membership either way, and a countermodel is validated
 independently of the method that found it; the flag changes which
 candidate is proposed next and the work charged, never whether one is
 accepted. `--stats` reports the regions visited, refuted and reached as
 leaves for the candidate tree and for the reduct queries under the latter.
 
-Advanced `--region-workers N` walks the region tree with `N` workers under
-`--search regions`, each deciding the leaves it reaches; the default is the
-host's available parallelism, as for `--workers`; the family of answer
-sets is the same as with one worker, each answer once, and with more than
-one worker the order in which answers appear is the schedule's and differs
-between runs. Under an objective the optimum and the retained ties keep
+`--workers N`, the host's available parallelism by default, is the one
+worker count: the closure route's pool, and under `--search regions` the
+workers walking the region tree, each deciding the leaves it reaches. The
+family of answer sets is the same as with one worker, each answer once, and
+with more than one worker the order in which answers appear is the
+schedule's and differs between runs. Under an objective the optimum and the retained ties keep
 their meaning; only the order among equally scored answers is unspecified.
-Consumers that need an order sort, or run one worker.
+Consumers that need an order sort, or run one worker. A ceiling stops every
+worker; the answers verified before the stop are still printed, and the
+coverage is partial.
 
 Advanced `--formula-joins indexed|table` selects positive joins within eager
 formula grounding. Indexed matching is the default. Table matching reuses

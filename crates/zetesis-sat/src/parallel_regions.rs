@@ -18,12 +18,17 @@
 //! A restriction added while the workers run narrows the regions not yet
 //! visited: each worker reads the restrictions before a narrowing, and a
 //! region reached before a restriction existed gets fresh knowledge under
-//! it. A work or decision ceiling is shared: the first worker to exhaust
-//! it reports the stop, the others stop at their next charge, and the
-//! enumeration is incomplete. Statistics are merged when the workers have
-//! finished; a snapshot taken earlier reports the coordinator's view.
+//! it. A work, decision or candidate ceiling is shared: the first worker
+//! to exhaust it raises the stop, the others stop at their next charge or
+//! their next region, and the enumeration is incomplete. The models the
+//! workers verified before they stopped are delivered first and the stop
+//! after them, so a leaf admitted under the candidate ceiling is never
+//! lost to a worker the ceiling refused. Statistics are merged when the
+//! workers have finished; a snapshot taken earlier reports the
+//! coordinator's view.
 
 use std::num::NonZeroUsize;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 use std::sync::{Arc, Condvar, Mutex, PoisonError, RwLock};
 use std::thread::JoinHandle;
@@ -42,19 +47,15 @@ const POOL_WAIT: Duration = Duration::from_millis(1);
 /// Models a worker may have sent and the enumeration not yet taken, per worker.
 const CHANNEL_SLACK: usize = 16;
 
-/// What a worker sends to the enumeration.
-enum Message {
-    Stable(Interpretation),
-    /// The worker stopped; its statistics so far travel with the stop.
-    Stopped(Incomplete),
-}
-
 /// The regions still to visit, and how many workers wait for one.
 struct Pool {
     pending: Vec<(Region, Vec<Knowledge>)>,
     idle: usize,
     /// Every worker was idle with nothing pending, or a stop was raised.
     closed: bool,
+    /// The first stop a worker raised; read by the enumeration once the
+    /// workers have finished, after their models.
+    stopped: Option<Incomplete>,
 }
 
 struct Shared {
@@ -69,6 +70,35 @@ struct Shared {
     limits: Limits,
     control: Control,
     workers: usize,
+    /// Leaves proposed by every worker, against the one candidate ceiling.
+    candidates: AtomicU64,
+    /// What the workers have done so far, readable while they run, so a
+    /// snapshot taken before they finish is current.
+    live: Live,
+}
+
+/// Counters the workers add to as they go.
+#[derive(Default)]
+struct Live {
+    regions: AtomicU64,
+    refuted: AtomicU64,
+    leaves: AtomicU64,
+    propagations: AtomicU64,
+    forced: AtomicU64,
+    cut: AtomicU64,
+    work: AtomicU64,
+    countermodel_queries: AtomicU64,
+    countermodels: AtomicU64,
+    stable_models: AtomicU64,
+}
+
+impl Live {
+    fn add(counter: &AtomicU64, amount: u64) {
+        counter.fetch_add(amount, Ordering::Relaxed);
+    }
+    fn read(counter: &AtomicU64) -> u64 {
+        counter.load(Ordering::Relaxed)
+    }
 }
 
 impl Shared {
@@ -80,13 +110,21 @@ impl Shared {
         self.lock().closed = true;
         self.pool_changed.notify_all();
     }
+
+    /// Raise a stop: the pool closes, and the first stop is the one reported.
+    fn stop(&self, error: Incomplete) {
+        let mut pool = self.lock();
+        pool.closed = true;
+        pool.stopped.get_or_insert(error);
+        self.pool_changed.notify_all();
+    }
 }
 
 /// The parallel proposer: verified stable models arrive from the workers.
 pub(crate) struct ParallelRegions {
     shared: Arc<Shared>,
-    receiver: Receiver<Message>,
-    sender: Option<SyncSender<Message>>,
+    receiver: Receiver<Interpretation>,
+    sender: Option<SyncSender<Interpretation>>,
     handles: Vec<JoinHandle<WorkerReport>>,
     started: bool,
     exhausted: bool,
@@ -150,12 +188,15 @@ impl ParallelRegions {
                     pending,
                     idle: 0,
                     closed: false,
+                    stopped: None,
                 }),
                 pool_changed: Condvar::new(),
                 budget: SharedBudget::new(limits.search, budget.statistics),
                 limits,
                 control,
                 workers: workers.get(),
+                candidates: AtomicU64::new(0),
+                live: Live::default(),
             }),
             receiver,
             sender: Some(sender),
@@ -167,13 +208,34 @@ impl ParallelRegions {
         })
     }
 
+    /// The region receipts, current while the workers run.
     pub(crate) fn statistics(&self) -> RegionSearchStatistics {
-        self.statistics
+        let live = &self.shared.live;
+        let count =
+            |counter: &AtomicU64| usize::try_from(Live::read(counter)).unwrap_or(usize::MAX);
+        RegionSearchStatistics {
+            regions: count(&live.regions),
+            refuted: count(&live.refuted),
+            leaves: count(&live.leaves),
+            propagations: Live::read(&live.propagations),
+            forced: Live::read(&live.forced),
+            cut: Live::read(&live.cut),
+            work: self.statistics.work.saturating_add(Live::read(&live.work)),
+            producers: self.statistics.producers,
+        }
     }
 
-    /// The workers' merged membership receipts, complete once they finished.
-    pub(crate) fn merged(&self) -> &Statistics {
-        &self.merged
+    /// The workers' membership receipts: the counters current while they
+    /// run, and the certificate and reduct receipts merged when they finish.
+    pub(crate) fn merged(&self) -> Statistics {
+        let live = &self.shared.live;
+        Statistics {
+            candidates: Live::read(&self.shared.candidates),
+            countermodel_queries: Live::read(&live.countermodel_queries),
+            countermodels: Live::read(&live.countermodels),
+            stable_models: Live::read(&live.stable_models),
+            ..self.merged
+        }
     }
 
     /// Restrict every region not yet visited to the classical models of
@@ -195,7 +257,9 @@ impl ParallelRegions {
 
     /// The next verified stable model, or `None` once the workers have
     /// covered the root. Starts the workers on the first call, with the
-    /// certificate the enumeration holds at that moment.
+    /// certificate the enumeration holds at that moment. A stop a worker
+    /// raised is returned once every model the workers sent has been
+    /// taken, and on every call after that.
     pub(crate) fn propose(
         &mut self,
         certificate: Option<&Arc<Certification>>,
@@ -210,20 +274,20 @@ impl ParallelRegions {
         loop {
             budget.control.poll()?;
             match self.receiver.recv_timeout(POOL_WAIT) {
-                Ok(Message::Stable(model)) => {
+                Ok(model) => {
                     self.account(budget);
                     return Ok(Some(model));
                 }
-                Ok(Message::Stopped(error)) => {
-                    self.shared.close();
-                    self.join();
-                    self.account(budget);
-                    return Err(error);
-                }
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
                 Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                    // Every worker has finished: the channel holds nothing
+                    // more, so the stop, if one was raised, follows every
+                    // model the workers verified.
                     self.join();
                     self.account(budget);
+                    if let Some(error) = self.shared.lock().stopped {
+                        return Err(error);
+                    }
                     self.exhausted = true;
                     return Ok(None);
                 }
@@ -332,7 +396,7 @@ fn merge_membership(into: &mut Statistics, from: &Statistics) {
 
 /// One worker's walk, until the pool closes, a stop is raised, or the
 /// enumeration stops listening.
-fn worker(shared: &Shared, sender: &SyncSender<Message>) -> WorkerReport {
+fn worker(shared: &Shared, sender: &SyncSender<Interpretation>) -> WorkerReport {
     let mut report = WorkerReport {
         regions: RegionSearchStatistics::default(),
         statistics: Statistics {
@@ -364,14 +428,13 @@ fn worker(shared: &Shared, sender: &SyncSender<Message>) -> WorkerReport {
             &mut report,
         ) {
             Ok(Some(model)) => {
-                if sender.send(Message::Stable(model)).is_err() {
+                if sender.send(model).is_err() {
                     break;
                 }
             }
             Ok(None) => {}
             Err(error) => {
-                shared.close();
-                let _ = sender.try_send(Message::Stopped(error));
+                shared.stop(error);
                 break;
             }
         }
@@ -434,6 +497,8 @@ fn step<'a>(
         .clone();
     let restricted: Vec<&(Theory, Narrower)> = restrictions.iter().map(|r| &**r).collect();
     report.regions.regions += 1;
+    Live::add(&shared.live.regions, 1);
+    let before = report.regions;
     let narrowing = super::regions::narrow(
         (&shared.theory, &shared.narrower),
         shared.producers.as_ref(),
@@ -443,12 +508,22 @@ fn step<'a>(
         budget,
         &mut report.regions,
     )?;
+    let after = report.regions;
+    Live::add(
+        &shared.live.propagations,
+        after.propagations - before.propagations,
+    );
+    Live::add(&shared.live.forced, after.forced - before.forced);
+    Live::add(&shared.live.cut, after.cut - before.cut);
+    Live::add(&shared.live.work, after.work - before.work);
     if narrowing == Narrowing::Refuted {
         report.regions.refuted += 1;
+        Live::add(&shared.live.refuted, 1);
         return Ok(None);
     }
     let Some(atom) = region.split_atom() else {
         report.regions.leaves += 1;
+        Live::add(&shared.live.leaves, 1);
         return leaf(shared, &region, budget, membership, report);
     };
     budget.decide()?;
@@ -487,10 +562,15 @@ fn leaf<'a>(
         zetesis_ferraris::AdmissionError::Allocation => Incomplete::Allocation,
         _ => Incomplete::InvalidWitness,
     })?;
-    if report.statistics.candidates >= shared.limits.max_candidates {
-        return Err(Incomplete::CandidateLimit);
-    }
+    shared
+        .candidates
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |count| {
+            (count < shared.limits.max_candidates).then(|| count + 1)
+        })
+        .map_err(|_| Incomplete::CandidateLimit)?;
     report.statistics.candidates += 1;
+    let queries_before = report.statistics.countermodel_queries;
+    let countermodels_before = report.statistics.countermodels;
     let verdict = if let Some(certificate) = &shared.certificate {
         let mut search = budget.statistics;
         let verdict = certified::classify(
@@ -516,9 +596,18 @@ fn leaf<'a>(
             &mut report.statistics,
         )?
     };
+    Live::add(
+        &shared.live.countermodel_queries,
+        report.statistics.countermodel_queries - queries_before,
+    );
+    Live::add(
+        &shared.live.countermodels,
+        report.statistics.countermodels - countermodels_before,
+    );
     match verdict {
         Check::Stable => {
             report.statistics.stable_models += 1;
+            Live::add(&shared.live.stable_models, 1);
             Ok(Some(candidate))
         }
         Check::NonMinimal(_) | Check::Unsupported { .. } => Ok(None),

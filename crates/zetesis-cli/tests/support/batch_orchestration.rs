@@ -371,7 +371,7 @@ fn cpu_batches_preserve_original_corpus_displays_under_regions() {
     every_original_case(crate::SearchMethod::Regions, 1);
 }
 
-fn every_original_case(search: crate::SearchMethod, region_workers: usize) {
+fn every_original_case(search: crate::SearchMethod, workers: usize) {
     let fixture: serde_json::Value =
         serde_json::from_str(include_str!("../fixtures/kr-domains/complete-models.json")).unwrap();
     let cases = fixture["cases"].as_array().unwrap();
@@ -379,7 +379,7 @@ fn every_original_case(search: crate::SearchMethod, region_workers: usize) {
     let root =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../validation/corpus/kr-domains");
     for case in cases {
-        original_case(&root, case, search, region_workers);
+        original_case(&root, case, search, workers);
     }
 }
 
@@ -387,13 +387,13 @@ fn original_case(
     root: &std::path::Path,
     case: &serde_json::Value,
     search: crate::SearchMethod,
-    region_workers: usize,
+    workers: usize,
 ) {
     let path = case["path"].as_str().unwrap();
     let mut options = options();
     options.batch_size = NonZeroUsize::new(64).unwrap();
     options.search = search;
-    options.region_workers = NonZeroUsize::new(region_workers).unwrap();
+    options.workers = NonZeroUsize::new(workers).unwrap();
     let bundle = zetesis_themelios::SourceBundle::load(
         root.join(path),
         zetesis_themelios::BundleLimits::default(),
@@ -415,7 +415,7 @@ fn original_case(
         "{path}"
     );
     // Parallel regions decide their leaves on the workers: no batch runs.
-    if region_workers == 1 {
+    if workers == 1 {
         let execution = captured.semantic().formula_execution().unwrap();
         require_cpu_batches(execution);
         assert_eq!(

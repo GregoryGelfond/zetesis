@@ -551,7 +551,10 @@ mod tests {
     fn ordinary_cpu_routes_preserve_the_full_scored_family() {
         let admitted = input();
         let scalar = measure(&admitted, config(), None, WorldViewLimits::default()).unwrap();
+        // The batched completion receipts read below belong to the clause
+        // method; regions with several workers decide leaves on the workers.
         let parallel_config = SolveConfig {
+            search: zetesis_solve::SearchMethod::Clauses,
             workers: NonZeroUsize::new(2).unwrap(),
             completion_workers: NonZeroUsize::new(2).unwrap(),
             ..config()

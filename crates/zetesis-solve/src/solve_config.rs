@@ -57,15 +57,13 @@ pub struct SolveConfig {
     pub max_optimal_bytes: usize,
     /// Maximum candidates per owned batch.
     pub batch_size: NonZeroUsize,
-    /// Closure worker count.
+    /// Worker count: the closure route's pool, and the walkers of the
+    /// region tree under the regions method, one being the scalar walk.
+    /// The command defaults it to the host's parallelism.
     pub workers: NonZeroUsize,
-    /// Formula exact-completion worker count.
+    /// Formula exact-completion worker count under the clauses search; the
+    /// regions search decides its leaves in `workers`.
     pub completion_workers: NonZeroUsize,
-    /// Workers walking the region tree at once under the regions method;
-    /// one is the scalar walk, and the command defaults this to the host's
-    /// parallelism as it does `workers`. Models then arrive in the
-    /// schedule's order.
-    pub region_workers: NonZeroUsize,
     /// Named cold reduct preparation and each query's retained capacity.
     /// The immutable reduct is prepared once per original theory. Parallel
     /// completion also admits its shared owner against the collective ceiling.
@@ -134,7 +132,7 @@ impl SolveConfig {
         grounder: Grounder::Auto,
         source_batching: SourceBatching::Independent,
         oracle: Oracle::Auto,
-        search: SearchMethod::Clauses,
+        search: SearchMethod::Regions,
         stats: false,
         models: 1,
         max_search_work: 10_000_000_000,
@@ -153,7 +151,6 @@ impl SolveConfig {
         batch_size: NonZeroUsize::new(64).unwrap(),
         workers: NonZeroUsize::new(4).unwrap(),
         completion_workers: NonZeroUsize::new(1).unwrap(),
-        region_workers: NonZeroUsize::new(1).unwrap(),
         max_reduct_bytes: zetesis_sat::ReductPreparationLimits::DEFAULT_BYTES,
         max_completion_scratch_bytes: 268_435_456,
         max_candidates: 10_000_000,

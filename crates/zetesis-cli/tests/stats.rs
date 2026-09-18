@@ -103,7 +103,10 @@ fn statistics_explain_candidate_restriction_units() {
 
 #[test]
 fn statistics_identify_necessary_disjunctive_support_under_clauses() {
-    let (_, _, text) = solve("a | b.", &options(&["--stats", "--oracle", "countermodel"]));
+    let (_, _, text) = solve(
+        "a | b.",
+        &options(&["--stats", "--oracle", "countermodel", "--search", "clauses"]),
+    );
     assert!(
         text.contains("necessary disjunctive support: status=Applied;"),
         "{text}"
@@ -203,10 +206,7 @@ fn statistics_flag_is_opt_in_and_preserves_each_supported_cpu_answer_path() {
         assert_eq!(report.models, baseline.models);
         assert!(diagnostics.starts_with(&ordinary));
         assert!(diagnostics.contains(effective), "{diagnostics}");
-        let host = std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get);
-        assert!(diagnostics.contains(&format!(
-            "configured: workers=1; region workers={host}; batch=64; displayed models=0"
-        )));
+        assert!(diagnostics.contains("configured: workers=1; batch=64; displayed models=0"));
         assert!(diagnostics.contains("completion: exhausted"));
         assert!(diagnostics.contains(&format!("GPU compiled={}", cfg!(feature = "gpu"))));
         let timing = diagnostics

@@ -548,7 +548,8 @@ fn cases(labelled: &Labelled<'_>) -> Result<Vec<String>, ViewError> {
 
 /// The search method is the one field a comparison may vary; the profiles
 /// are compared without it. Reports before the field spell it in neither of
-/// its two names and are compared as they are.
+/// its two names and are compared as they are; one campaign's reports name
+/// region workers separately, which is read the same way.
 const METHOD_FIELDS: [&str; 3] = ["search", "candidates", "region_workers"];
 
 fn profiles(labelled: &Labelled<'_>) -> Result<Vec<Value>, ViewError> {

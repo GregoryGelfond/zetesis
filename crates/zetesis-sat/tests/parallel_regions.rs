@@ -154,6 +154,33 @@ fn a_shared_work_ceiling_stops_every_worker_without_exhaustion() {
 }
 
 #[test]
+fn a_candidate_ceiling_delivers_the_admitted_leaves_before_it_stops() {
+    // Two independent choices leave four leaves for sixteen workers. One
+    // leaf is admitted under the ceiling; the workers refused by the
+    // ceiling raise the stop while that leaf is still being decided, and
+    // its model must arrive before the stop does. Repeated, because the
+    // interleaving is the schedule's.
+    let theory = choices(2);
+    let limits = Limits {
+        max_candidates: 1,
+        ..Limits::default()
+    };
+    for _ in 0..20 {
+        let mut parallel =
+            StableModels::with_region_workers(&theory, workers(16), limits, Control::default())
+                .unwrap();
+        let outcomes: Vec<_> = parallel.by_ref().collect();
+        assert_eq!(outcomes.len(), 2, "{outcomes:?}");
+        assert!(outcomes[0].is_ok(), "{outcomes:?}");
+        assert!(matches!(outcomes[1], Err(Incomplete::CandidateLimit)));
+        assert!(parallel.next().is_none());
+        assert!(!parallel.exhausted());
+        assert_eq!(parallel.statistics().candidates, 1);
+        assert_eq!(parallel.statistics().stable_models, 1);
+    }
+}
+
+#[test]
 fn a_tight_certificate_decides_the_workers_leaves() {
     let theory = choices(5);
     let mut parallel = StableModels::with_region_workers(

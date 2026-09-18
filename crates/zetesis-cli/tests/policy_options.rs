@@ -46,8 +46,6 @@ fn nondefault_options() -> Options {
         "23",
         "--completion-workers",
         "24",
-        "--region-workers",
-        "41",
         "--max-completion-scratch-bytes",
         "25",
         "--max-candidates",
@@ -106,7 +104,6 @@ fn nondefault_options_preserve_each_solver_field() {
     assert_eq!(config.batch_size.get(), 22);
     assert_eq!(config.workers.get(), 23);
     assert_eq!(config.completion_workers.get(), 24);
-    assert_eq!(config.region_workers.get(), 41);
     assert_eq!(config.max_completion_scratch_bytes, 25);
     assert_eq!(config.search, SearchMethod::Regions);
     assert_eq!(config.max_candidates, 26);

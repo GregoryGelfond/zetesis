@@ -259,5 +259,5 @@ fn under_regions_the_reduct_is_queried_by_regions_and_never_encoded() {
 fn the_search_policy_has_a_stable_spelling() {
     assert_eq!(SearchMethod::Regions.label(), "regions");
     assert_eq!(SearchMethod::Clauses.label(), "clauses");
-    assert_eq!(SearchMethod::default(), SearchMethod::Clauses);
+    assert_eq!(SearchMethod::default(), SearchMethod::Regions);
 }

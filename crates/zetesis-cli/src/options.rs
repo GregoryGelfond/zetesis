@@ -67,11 +67,12 @@ pub struct Options {
     #[arg(long, value_parser = oracle_parser(), default_value = "auto", hide_short_help = true)]
     pub oracle: Oracle,
     /// Advanced formula search method, for proposing candidates and for the
-    /// reduct's proper-subset query alike. Clauses, the default, is the
-    /// classical search over a clause form; regions narrow the candidate
-    /// space and the reduct's subsets by the theory's readings. The reduct
-    /// decides membership either way.
-    #[arg(long, value_parser = search_parser(), default_value = "clauses", hide_short_help = true)]
+    /// reduct's proper-subset query alike. Regions, the default, narrow the
+    /// candidate space and the reduct's subsets by the theory's readings;
+    /// clauses is the classical search over a clause form, kept for
+    /// comparison, with its own batched completion, `--completion-workers`
+    /// and scratch ceiling. The reduct decides membership either way.
+    #[arg(long, value_parser = search_parser(), default_value = "regions", hide_short_help = true)]
     pub search: SearchMethod,
     /// Print grounding, solving and execution statistics on stderr.
     ///
@@ -199,30 +200,31 @@ pub struct Options {
     /// Maximum canonical incumbent bytes: distinct catalogs, selections and one score.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_optimal_bytes, hide_short_help = true)]
     pub max_optimal_bytes: usize,
-    /// Maximum batched formula candidates; closure batches follow its first seed.
+    /// Maximum candidates per batch: the clause search's completion batches
+    /// and the leaves a device checks; closure batches follow its first seed.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.batch_size, hide_short_help = true)]
     pub batch_size: NonZeroUsize,
-    /// Closure CPU worker count; the default is the host's available parallelism,
-    /// or one when the host does not report it. Each worker is admitted at the
-    /// per-closure allowance, so workers × max-closure-bytes must not exceed
-    /// max-closure-batch-bytes. Formula completion has a separate worker setting.
+    /// Worker count for the closure route's pool and for the walkers of the
+    /// region tree; the default is the host's available parallelism, or one
+    /// when the host does not report it. Each closure worker is admitted at
+    /// the per-closure allowance, so workers × max-closure-bytes must not
+    /// exceed max-closure-batch-bytes. Under `--search regions` with more
+    /// than one worker, models arrive in the schedule's order, which differs
+    /// between runs; the family of answer sets is the same. Formula
+    /// completion under `--search clauses` has a separate worker setting.
     #[arg(long, default_value_t = host_workers(), hide_short_help = true)]
     pub workers: NonZeroUsize,
-    /// Exact formula completion workers; one retains the scalar CPU cursor.
+    /// Exact formula completion workers under `--search clauses`; one retains
+    /// the scalar CPU cursor. The regions search decides its leaves in its
+    /// `--workers`.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.completion_workers, hide_short_help = true)]
     pub completion_workers: NonZeroUsize,
-    /// Workers walking the region tree at once under `--search regions`; the
-    /// default is the host's available parallelism, or one when the host does
-    /// not report it, and one is the scalar walk. With more, models arrive in
-    /// the schedule's order, which differs between runs; the family of answer
-    /// sets is the same.
-    #[arg(long, default_value_t = host_workers(), hide_short_help = true)]
-    pub region_workers: NonZeroUsize,
     /// Maximum reserved capacity for cold reduct preparation and for each query's
     /// retained workspace. Shared theory payload and allocator metadata are excluded.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_reduct_bytes, hide_short_help = true)]
     pub max_reduct_bytes: u64,
-    /// Maximum reserved capacity for the shared prepared reduct, worker queries and
+    /// Maximum reserved capacity, under `--search clauses`, for the shared
+    /// prepared reduct, worker queries and
     /// transient/result slots, excluding the scalar cursor, allocator/table overhead,
     /// thread stacks and GPU storage.
     /// Optional class preparation/checking uses the same ceiling independently.
@@ -344,7 +346,6 @@ impl From<&Options> for crate::SolveConfig {
             batch_size: options.batch_size,
             workers: options.workers,
             completion_workers: options.completion_workers,
-            region_workers: options.region_workers,
             max_reduct_bytes: options.max_reduct_bytes,
             max_completion_scratch_bytes: options.max_completion_scratch_bytes,
             max_candidates: options.max_candidates,

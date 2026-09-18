@@ -32,9 +32,6 @@ struct Options {
     /// Explicit native formula search method; omission preserves its default.
     #[arg(long, value_enum)]
     search: Option<SearchArgument>,
-    /// Explicit worker count for the regions method; omission preserves its default.
-    #[arg(long)]
-    region_workers: Option<std::num::NonZeroUsize>,
     /// Explicit instrumented profile; repeat for a matrix. Corpus defaults to all four.
     #[arg(long, value_enum)]
     profile: Vec<ProfileArgument>,
@@ -157,7 +154,6 @@ fn execute(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
         schedule,
         formula_joins: options.formula_joins.map(Into::into),
         search: options.search.map(Into::into),
-        region_workers: options.region_workers,
         limits,
     };
     let report = if options.memory_runs > 0 || request.schedule.suite().is_none() {
@@ -316,7 +312,6 @@ fn execution_profiles(options: &Options) -> Vec<zetesis_validation::selected::Na
                 grounder,
                 formula_joins: options.formula_joins.map(Into::into),
                 search: options.search.map(Into::into),
-                region_workers: options.region_workers,
                 workers: options
                     .workers
                     .unwrap_or(std::num::NonZeroUsize::new(4).expect("four is nonzero")),

@@ -11,6 +11,9 @@ fn options(oracle: Oracle, workers: usize) -> Options {
         Options::try_parse_from(["zetesis", "--backend", "cpu", "--models", "0", "--stats"])
             .unwrap();
     o.oracle = oracle;
+    // The batched completion protocol these tests exercise is the clause
+    // method's.
+    o.search = zetesis_cli::SearchMethod::Clauses;
     o.completion_workers = std::num::NonZeroUsize::new(workers).unwrap();
     o
 }

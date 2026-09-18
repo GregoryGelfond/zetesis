@@ -146,9 +146,12 @@ fn sessions_preserve_complete_scored_answers() {
         let input = source_records::admit(source, &FormulaLimits::default()).unwrap();
         assert_eq!(input.objectives().priorities(), expected.priorities);
         for (workers, batch) in [(1, 1), (4, 3)] {
+            // The batched completion receipts this test reads belong to the
+            // clause method.
             let config = SolveConfig {
                 backend: Backend::Cpu,
                 oracle: Oracle::Countermodel,
+                search: zetesis_cli::SearchMethod::Clauses,
                 models: 0,
                 workers: NonZeroUsize::new(workers).unwrap(),
                 completion_workers: NonZeroUsize::new(workers).unwrap(),

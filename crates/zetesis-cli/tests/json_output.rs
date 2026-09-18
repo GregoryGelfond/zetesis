@@ -173,7 +173,10 @@ fn statistics_are_absent_without_opt_in() {
 #[test]
 fn support_statistics_identify_the_outer_restriction_under_clauses() {
     for (source, status) in [("a | b.", "applied"), ("{a;b}.", "not_applicable")] {
-        let (report, value) = solve(source, &options(&["--stats", "--oracle", "countermodel"]));
+        let (report, value) = solve(
+            source,
+            &options(&["--stats", "--oracle", "countermodel", "--search", "clauses"]),
+        );
         let report = report.unwrap();
         let measured = report.countermodel_statistics.unwrap().support.unwrap();
         let support = &value["statistics"]["search"]["necessary_support"];
@@ -214,6 +217,8 @@ fn completion_statistics_distinguish_requested_storage() {
             "--stats",
             "--oracle",
             "countermodel",
+            "--search",
+            "clauses",
             "--completion-workers",
             "2",
         ]),
@@ -779,6 +784,8 @@ fn resource_stops_encode_partial_coverage() {
             &[
                 "--oracle",
                 "countermodel",
+                "--search",
+                "clauses",
                 "--completion-workers",
                 "2",
                 "--max-completion-scratch-bytes",
@@ -846,7 +853,15 @@ fn projection_limits_preserve_checked_partial_answers() {
     ] {
         let (result, value) = solve(
             "{a;b}.",
-            &options(&["--oracle", "countermodel", "--stats", flag, "0"]),
+            &options(&[
+                "--oracle",
+                "countermodel",
+                "--search",
+                "clauses",
+                "--stats",
+                flag,
+                "0",
+            ]),
         );
         let report = result.unwrap();
         assert_eq!(report.completion, Completion::Interrupted);

@@ -17,6 +17,8 @@ fn capture(source: &str, oracle: &str, workers: &str) -> (Report, Value, Vec<u8>
         "cpu",
         "--grounder",
         "eager",
+        "--search",
+        "clauses",
         "--oracle",
         oracle,
         "--workers",
