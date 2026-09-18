@@ -456,9 +456,6 @@ fn arguments<'a>(
                 ),
                 ("--models", "0".into()),
                 ("--color", "never".into()),
-                // The reference allowance: the library's byte ceilings on
-                // every host, so a campaign is the same request everywhere.
-                ("--memory", "2147483648".into()),
             ];
             (
                 request.native,

@@ -143,8 +143,8 @@ The default ordinary comparison uses the maintained CPU baseline cases, not the
 whole collection. It times uninstrumented processes after qualification;
 separate statistics invocations are outside that timed population.
 The matrix instead uses native `--json --stats --models 0`, so it measures
-instrumented runs including typed output, at the reference memory allowance
-(`--memory 2147483648`, the library's byte ceilings) on every host. Native full-atom JSON and clingo's
+instrumented runs including typed output. The memory allowance is the host's,
+as the command takes it, and each native sample's statistics record it. Native full-atom JSON and clingo's
 selected display output can differ in volume. These are different protocols,
 not interchangeable timing populations.
 

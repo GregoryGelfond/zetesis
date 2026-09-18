@@ -341,10 +341,6 @@ fn arguments<'a>(
                 "0",
                 "--color",
                 "never",
-                // The reference allowance: the library's byte ceilings on
-                // every host, so a campaign is the same request everywhere.
-                "--memory",
-                "2147483648",
             ],
         ),
         Producer::Reference => (
