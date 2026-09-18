@@ -211,10 +211,12 @@ pub struct Options {
     /// Exact formula completion workers; one retains the scalar CPU cursor.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.completion_workers, hide_short_help = true)]
     pub completion_workers: NonZeroUsize,
-    /// Workers walking the region tree at once under `--search regions`; one
-    /// is the scalar walk. With more, models arrive in the schedule's order,
-    /// which differs between runs; the family of answer sets is the same.
-    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.region_workers, hide_short_help = true)]
+    /// Workers walking the region tree at once under `--search regions`; the
+    /// default is the host's available parallelism, or one when the host does
+    /// not report it, and one is the scalar walk. With more, models arrive in
+    /// the schedule's order, which differs between runs; the family of answer
+    /// sets is the same.
+    #[arg(long, default_value_t = host_workers(), hide_short_help = true)]
     pub region_workers: NonZeroUsize,
     /// Maximum reserved capacity for cold reduct preparation and for each query's
     /// retained workspace. Shared theory payload and allocator metadata are excluded.

@@ -130,7 +130,8 @@ accepted. `--stats` reports the regions visited, refuted and reached as
 leaves for the candidate tree and for the reduct queries under the latter.
 
 Advanced `--region-workers N` walks the region tree with `N` workers under
-`--search regions`, each deciding the leaves it reaches; the family of answer
+`--search regions`, each deciding the leaves it reaches; the default is the
+host's available parallelism, as for `--workers`; the family of answer
 sets is the same as with one worker, each answer once, and with more than
 one worker the order in which answers appear is the schedule's and differs
 between runs. Under an objective the optimum and the retained ties keep

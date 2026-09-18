@@ -62,7 +62,9 @@ pub struct SolveConfig {
     /// Formula exact-completion worker count.
     pub completion_workers: NonZeroUsize,
     /// Workers walking the region tree at once under the regions method;
-    /// one is the scalar walk. Models then arrive in the schedule's order.
+    /// one is the scalar walk, and the command defaults this to the host's
+    /// parallelism as it does `workers`. Models then arrive in the
+    /// schedule's order.
     pub region_workers: NonZeroUsize,
     /// Named cold reduct preparation and each query's retained capacity.
     /// The immutable reduct is prepared once per original theory. Parallel
