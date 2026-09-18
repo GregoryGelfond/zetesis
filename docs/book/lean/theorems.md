@@ -10,6 +10,7 @@ The maintained full index is
 | What makes an interpretation an answer set? | `Ferraris.stable_iff_minimal_reduct` | Fixed original theory and candidate |
 | Why may the clauses proposer narrow by classical consequence? | `FormulaRegions.classical_consequence_forces`, `no_model_refutes` | Every stable model is a classical model; the reduct still decides each leaf |
 | Why may a region of formula candidates be narrowed by the readings, and why is a leaf a classical model? | `FormulaBounds.read_sound`, `never_root_refutes`, `known_sound`, `unsupported_cut`, `decided_leaf_models` | The Rust readings agree with `read`; the support cut needs the covered producer fragment |
+| Why does a covered query tree over a candidate's subsets prove stability, and a leaf refute it? | `ReductRegions.stable_iff_no_countermodel` | The tree's validity is proper-subset modelling of the frozen reduct |
 | When does least closure suffice? | `Semantics.stable_iff_gamma` | Normalized single-head rules and constraints |
 | Why do normal and formula checking agree on this fragment? | `NormalFerraris.answer_set_iff`, `ferraris_answer_set_iff_closure` | The specified filter-aware translation and one shared atom universe |
 | Why may only gate atoms be guessed? | `Semantics.accept_sound`, `stable_complete`, `stable_iff_exists_seed` | The supplied carrier covers every frozen gate |

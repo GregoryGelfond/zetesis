@@ -354,17 +354,17 @@ fn every_publication_truncation_preserves_its_prefix() {
 
 #[test]
 fn cpu_batches_preserve_original_corpus_displays() {
-    every_original_case(crate::CandidateSearch::Clauses);
+    every_original_case(crate::SearchMethod::Clauses);
 }
 
 /// The regions proposer returns the recorded answer sets, atom for atom, on
 /// every corpus case, through the same batched route.
 #[test]
 fn cpu_batches_preserve_original_corpus_displays_under_regions() {
-    every_original_case(crate::CandidateSearch::Regions);
+    every_original_case(crate::SearchMethod::Regions);
 }
 
-fn every_original_case(candidates: crate::CandidateSearch) {
+fn every_original_case(search: crate::SearchMethod) {
     let fixture: serde_json::Value =
         serde_json::from_str(include_str!("../fixtures/kr-domains/complete-models.json")).unwrap();
     let cases = fixture["cases"].as_array().unwrap();
@@ -372,19 +372,15 @@ fn every_original_case(candidates: crate::CandidateSearch) {
     let root =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../validation/corpus/kr-domains");
     for case in cases {
-        original_case(&root, case, candidates);
+        original_case(&root, case, search);
     }
 }
 
-fn original_case(
-    root: &std::path::Path,
-    case: &serde_json::Value,
-    candidates: crate::CandidateSearch,
-) {
+fn original_case(root: &std::path::Path, case: &serde_json::Value, search: crate::SearchMethod) {
     let path = case["path"].as_str().unwrap();
     let mut options = options();
     options.batch_size = NonZeroUsize::new(64).unwrap();
-    options.candidates = candidates;
+    options.search = search;
     let bundle = zetesis_themelios::SourceBundle::load(
         root.join(path),
         zetesis_themelios::BundleLimits::default(),

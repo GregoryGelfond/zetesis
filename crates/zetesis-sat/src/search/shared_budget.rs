@@ -120,6 +120,21 @@ impl WorkLease<'_> {
         self.shared.decide()
     }
 
+    /// Consume `amount` permits, refilling grant by grant; a refill that
+    /// finds the allowance exhausted fails after the permits already taken.
+    pub(crate) fn take(&self, mut amount: u64) -> Result<(), Incomplete> {
+        while amount > 0 {
+            if self.remaining.get() == 0 {
+                self.settle();
+                self.refill()?;
+            }
+            let taken = self.remaining.get().min(amount);
+            self.remaining.set(self.remaining.get() - taken);
+            amount -= taken;
+        }
+        Ok(())
+    }
+
     fn refill(&self) -> Result<(), Incomplete> {
         loop {
             self.control.poll()?;

@@ -32,10 +32,10 @@ pub use clauses::{Clause, Clauses};
 pub use cnf::{AdmissionError, AdmissionLimits, Assignment, Cnf, Literal, Resource};
 pub use error::Incomplete;
 pub use ferraris::{
-    BatchError, BatchLimits, BatchStatistics, BatchVerdict, CandidateSearch, CertificateError,
-    CertificateLimits, CertificateOrder, CertificatePlanStatistics, CertifiedStatistics, Check,
-    CompletionExecutor, CompletionScratch, CompletionStatistics, Limits, RegionSearchStatistics,
-    StableModels, Statistics, SupportStatistics, SupportStatus, check,
+    BatchError, BatchLimits, BatchStatistics, BatchVerdict, CertificateError, CertificateLimits,
+    CertificateOrder, CertificatePlanStatistics, CertifiedStatistics, Check, CompletionExecutor,
+    CompletionScratch, CompletionStatistics, Limits, RegionQueryStatistics, RegionSearchStatistics,
+    SearchMethod, StableModels, Statistics, SupportStatistics, SupportStatus, check, check_with,
 };
 pub use projection::{ProjectionLimits, ProjectionResource, ProjectionStatistics};
 pub use search::{SearchLimits, SearchStatistics, Solve, solve, solve_with_statistics};

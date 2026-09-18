@@ -917,6 +917,11 @@ import Zetesis
 #print axioms Zetesis.QueryCompaction.assignment_branch_partition
 #print axioms Zetesis.QueryCompaction.assignment_branches_disjoint
 #print axioms Zetesis.QueryCompaction.exhausted_branches_refute
+#print axioms Zetesis.ReductRegions.query_contains
+#print axioms Zetesis.ReductRegions.leaf_refutes
+#print axioms Zetesis.ReductRegions.exhausted_stable
+#print axioms Zetesis.ReductRegions.countermodels_exact
+#print axioms Zetesis.ReductRegions.stable_iff_no_countermodel
 #print axioms Zetesis.RelationExtension.reconstruction_preserved
 #print axioms Zetesis.RelationExtension.acceptance_preserved
 #print axioms Zetesis.RuleFactorization.false_reduct

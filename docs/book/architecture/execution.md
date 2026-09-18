@@ -69,7 +69,7 @@ satisfiability: auxiliary encoding variables do not participate in answer-set
 identity or minimality.
 
 Candidates on the formula route can be proposed by regions
-(`--candidates regions`), the same coverage tree the closure route walks
+(`--search regions`), the same coverage tree the closure route walks
 (`Search.lean`), over the theory's atoms. The root leaves every atom open. Under a region every node of the formula DAG
 has two readings, decided by one pass over the DAG: sure, when every
 candidate of the region satisfies it, and impossible, when none does; a
@@ -101,17 +101,27 @@ once. The traversal itself is one operation in `zetesis-cpu`, shared by both
 routes; the closure route narrows by its two closures, the formula route by
 the readings.
 
-The classical search over a clause form is the default proposer while the
-readings are recomputed by full passes over the DAG, which charges more
-work per split than watched clauses on large theories; the regions
-proposer is measured beside it on the same cells. Read as regions the
-classical search is the same tree:
+Under the same method the reduct's proper-subset query is a second region
+tree: its root cuts every atom outside the candidate and leaves the
+candidate's atoms open, its regions are narrowed by the knowledge of the
+frozen reduct, read as the original DAG under the candidate's truth mask,
+without the support cut, since a model of the reduct need not be supported;
+a leaf other than the candidate is a proper-subset model, the countermodel,
+and a covered tree with no such leaf is the proof of minimality
+(`ReductRegions.stable_iff_no_countermodel`). Generation and membership
+are then the same operation over the same index of the theory, and no
+clause form is built anywhere on the route.
+
+The classical search over a clause form remains the default method while
+the regions method is measured beside it on the same cells. Read as
+regions the classical search is the same tree:
 a search node holds some atoms in and some out, propagation adds the atoms
 every classical model agrees on under those decisions, a conflict closes the
 node, and a complete assignment is a leaf the reduct decides
 (`FormulaRegions.classical_consequence_forces`, `no_model_refutes`). Under
-either proposer the reduct's proper-subset query is the Boolean search, and
-neither proposer decides membership or keeps learned clauses.
+the clauses method the reduct's proper-subset query is the Boolean search
+too. Neither method decides membership by anything but the reduct, and
+neither keeps learned clauses.
 
 Both paths can restrict candidate generation by necessary conditions. A normal
 source constraint supplies a forbidden positive gate conjunction when its

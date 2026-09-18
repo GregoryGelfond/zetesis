@@ -30,9 +30,9 @@ construction and standalone analysis APIs belong to its own manual.
 | Least consequences for an exact positive atomic-head formula theory | `zetesis_ferraris::{PositivePlan, PositivePlanLimits}` |
 | Repeated queries against one candidate's reduct | `zetesis_ferraris::FrozenReduct` |
 | Regions of a candidate space and the traversal that covers them | `zetesis_cpu::regions::{Region, Traversal}` |
-| Narrow a region of formula candidates by the theory's readings | `zetesis_ferraris::{narrow, producers}` |
+| Narrow a region of formula candidates, or of a reduct's subsets, by the theory's readings | `zetesis_ferraris::{Narrower, producers}` |
 | Reuse one reduct encoding across different candidates | `zetesis_sat::{PreparedReduct, ReductWorkspace}` |
-| Formula candidates by regions or by clauses, and the countermodel query | `zetesis_sat::{StableModels, CandidateSearch}` |
+| Formula candidates and the reduct query by regions or by clauses | `zetesis_sat::{StableModels, SearchMethod, check_with}` |
 | Bounded device execution | `zetesis_wgpu` |
 | Several device primitives on one selected device | `GpuContext` and each primitive's `from_context` constructor |
 | Reuse a compiled formula primitive across independent sessions | `GpuFormulaProfile`, `ExecutionResources::with_formula_profile` |

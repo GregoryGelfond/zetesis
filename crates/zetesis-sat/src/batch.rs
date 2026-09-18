@@ -345,6 +345,7 @@ impl StableModels {
                 verdicts,
                 limits: self.limits,
                 prepared: None,
+                query: None,
             },
             &mut budget,
             &mut self.statistics,

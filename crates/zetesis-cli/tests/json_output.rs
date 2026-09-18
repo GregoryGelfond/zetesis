@@ -191,13 +191,7 @@ fn region_statistics_identify_the_support_cut() {
     for (source, support_cut) in [("a | b.", "applied"), ("{a;b}.", "applied")] {
         let (report, value) = solve(
             source,
-            &options(&[
-                "--stats",
-                "--oracle",
-                "countermodel",
-                "--candidates",
-                "regions",
-            ]),
+            &options(&["--stats", "--oracle", "countermodel", "--search", "regions"]),
         );
         let report = report.unwrap();
         let statistics = report.countermodel_statistics.unwrap();

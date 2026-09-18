@@ -23,11 +23,11 @@ use zetesis_cpu::regions::{Counting, Narrowing, Region, Traversal, Visit};
 use zetesis_ferraris::{Interpretation, Narrower, Producers, RegionLimits, Theory};
 
 use crate::Incomplete;
-use crate::search::Budget;
+use crate::search::{Budget, Quota};
 
 /// How classical candidates are proposed to the reduct.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum CandidateSearch {
+pub enum SearchMethod {
     /// Regions of the candidate space narrowed by the theory's readings;
     /// every leaf is a classical model and no clause form is built.
     Regions,
@@ -38,7 +38,7 @@ pub enum CandidateSearch {
     Clauses,
 }
 
-impl CandidateSearch {
+impl SearchMethod {
     /// Stable spelling for configuration and execution reports.
     #[must_use]
     pub const fn label(self) -> &'static str {
@@ -227,7 +227,7 @@ fn narrow(
     }
 }
 
-fn limits(budget: &Budget<'_>) -> RegionLimits {
+fn limits<Q: Quota>(budget: &Budget<'_, Q>) -> RegionLimits {
     RegionLimits {
         max_work: budget.remaining_work(),
         max_propagations: u64::MAX,
@@ -239,4 +239,136 @@ fn stopped(stop: Stop) -> Incomplete {
         Stop::WorkLimit => Incomplete::WorkLimit,
         other => other.into(),
     }
+}
+
+/// What the region queries of one enumeration did, cumulatively.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RegionQueryStatistics {
+    /// Regions of the proper-subset trees narrowed.
+    pub regions: usize,
+    /// Regions the frozen reduct's knowledge refuted.
+    pub refuted: usize,
+    /// Leaves reached: proper-subset models, and the candidate itself.
+    pub leaves: usize,
+    /// Propagation events over the frozen reducts.
+    pub propagations: u64,
+    /// Node visits, included in search work.
+    pub work: u64,
+}
+
+/// The proper-subset query of a classical model as a region tree: the
+/// coverage tree over the subsets of the candidate, narrowed by the
+/// knowledge of the frozen reduct. A leaf other than the candidate is a
+/// proper-subset model of the reduct and refutes stability; a covered tree
+/// with no such leaf proves it (`ReductRegions.stable_iff_no_countermodel`).
+/// The reduct is read as the original DAG under the candidate's truth mask
+/// (`FerrarisMask`), so no clause form and no second theory is built; the
+/// index of the theory is shared by every query.
+#[derive(Debug)]
+pub(crate) struct ReductQuery {
+    narrower: Narrower,
+}
+
+impl ReductQuery {
+    pub(crate) fn new(theory: &Theory) -> Self {
+        Self {
+            narrower: Narrower::new(theory),
+        }
+    }
+
+    /// The indexing work, one visit per node.
+    pub(crate) fn work(&self) -> u64 {
+        self.narrower.work()
+    }
+
+    /// Search the proper subsets of the candidate, a classical model whose
+    /// node truth is `truth`, for a model of its frozen reduct.
+    ///
+    /// # Errors
+    /// Work, decision and control stops end the query without a verdict.
+    pub(crate) fn check<Q: Quota>(
+        &self,
+        theory: &Theory,
+        candidate: &Interpretation,
+        truth: &[bool],
+        limits: crate::Limits,
+        budget: &mut Budget<'_, Q>,
+        statistics: &mut crate::Statistics,
+    ) -> Result<crate::Check, Incomplete> {
+        let mut root = Region::undecided(theory.atom_count());
+        for atom in (0..theory.atom_count()).filter(|&atom| !candidate.contains(atom)) {
+            root.cut(atom);
+        }
+        let mut traversal = Traversal::new(root, Counting::Never);
+        loop {
+            let before = traversal.statistics();
+            let visit = traversal.next(|region| {
+                narrow_frozen(
+                    &self.narrower,
+                    theory,
+                    truth,
+                    region,
+                    budget,
+                    &mut statistics.reduct.regions,
+                )
+            });
+            let after = traversal.statistics();
+            let receipts = &mut statistics.reduct.regions;
+            receipts.regions += after.regions - before.regions;
+            receipts.refuted += after.refuted - before.refuted;
+            receipts.leaves += after.decided - before.decided;
+            let splits = (after.regions - before.regions)
+                - (after.refuted - before.refuted)
+                - (after.decided - before.decided);
+            for _ in 0..splits {
+                budget.decide()?;
+            }
+            match visit? {
+                None | Some(Visit::Counted(_)) => return Ok(crate::Check::Stable),
+                Some(Visit::Leaf(region)) => {
+                    // The candidate models its own reduct and is no
+                    // countermodel; every other leaf is a proper subset.
+                    if candidate.atoms().all(|atom| region.is_held(atom)) {
+                        continue;
+                    }
+                    let mut selected = crate::search::storage(theory.atom_count())?;
+                    selected.extend(region.held());
+                    let subset =
+                        Interpretation::new(theory, selected).map_err(|error| match error {
+                            zetesis_ferraris::AdmissionError::Allocation => Incomplete::Allocation,
+                            _ => Incomplete::InvalidWitness,
+                        })?;
+                    return crate::ferraris::checked_countermodel(
+                        theory, candidate, subset, limits, budget, statistics,
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// Narrow one region of a proper-subset query by the frozen reduct.
+fn narrow_frozen<Q: Quota>(
+    narrower: &Narrower,
+    theory: &Theory,
+    truth: &[bool],
+    region: &mut Region,
+    budget: &mut Budget<'_, Q>,
+    receipts: &mut RegionQueryStatistics,
+) -> Result<Narrowing, Incomplete> {
+    let result = narrower.narrow_frozen(theory, truth, region, limits(budget), budget.control);
+    let (narrowing, pass) = match result {
+        Ok(outcome) => outcome,
+        Err(Stop::WorkLimit) => {
+            let remaining = budget.remaining_work();
+            receipts.work += remaining;
+            budget.charge(remaining)?;
+            return Err(Incomplete::WorkLimit);
+        }
+        Err(stop) => return Err(stopped(stop)),
+    };
+    receipts.propagations += pass.propagations;
+    receipts.work += pass.work;
+    budget.charge(pass.work)?;
+    Ok(narrowing)
 }

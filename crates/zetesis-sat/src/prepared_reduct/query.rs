@@ -31,6 +31,9 @@ pub struct ReductStatistics {
     /// including failure. Shared preparation and temporary witness vectors are
     /// excluded; this is not the aggregate completion peak or process RSS.
     pub peak_workspace_bytes: u128,
+    /// The proper-subset queries run as region trees, under the regions
+    /// method; zero under the clause kernel.
+    pub regions: crate::RegionQueryStatistics,
 }
 
 /// One returned attempt, including work and retained storage after a refusal.
@@ -63,6 +66,32 @@ pub struct ReductWorkspace {
 }
 
 impl ReductWorkspace {
+    /// Evaluate the candidate's original truth into this workspace, under
+    /// the workspace's retained-storage ceiling, charging the evaluation
+    /// work to the reduct receipts. The truth is the frozen mask of the
+    /// candidate's reduct; the second value is the evaluation's retained
+    /// storage.
+    pub(crate) fn evaluate<'a>(
+        &'a mut self,
+        candidate: &'a Interpretation,
+        limits: Limits,
+        control: &Control,
+        statistics: &mut Statistics,
+    ) -> Result<(FormulaEvaluation<'a>, u128), Incomplete> {
+        let max_bytes = limits.max_reduct_bytes;
+        bound(self.retained_bytes(), max_bytes)?;
+        let other_bytes = self.retained_bytes() - self.evaluation.retained_bytes();
+        evaluate_truth(
+            &mut self.evaluation,
+            other_bytes,
+            max_bytes,
+            candidate,
+            limits,
+            control,
+            statistics,
+        )
+    }
+
     pub(crate) fn reserve(
         &mut self,
         prepared: &PreparedReduct,
@@ -185,40 +214,21 @@ impl PreparedReduct {
         }
         bound(workspace.retained_bytes(), max_bytes)?;
         let other_bytes = workspace.retained_bytes() - workspace.evaluation.retained_bytes();
-        let evaluation_limit =
-            usize::try_from(u128::from(max_bytes) - other_bytes).unwrap_or(usize::MAX);
-        let started = timing::start(statistics.phase_timings.as_ref());
-        let evaluated = workspace.evaluation.evaluate(
+        let (truth, evaluated_bytes) = evaluate_truth(
+            &mut workspace.evaluation,
+            other_bytes,
+            max_bytes,
             candidate,
-            EvaluationLimits {
-                max_work: limits.max_verification_work,
-                max_bytes: evaluation_limit,
-            },
+            limits,
             budget.control,
-        );
-        timing::finish(
-            &mut statistics.phase_timings,
-            Phase::OriginalValidation,
-            started,
-        );
-        statistics.reduct.original_work = statistics
-            .reduct
-            .original_work
-            .checked_add(evaluated.work)
-            .ok_or(Incomplete::CounterOverflow)?;
-        let truth = evaluated.result.map_err(|error| match error {
-            EvaluationError::Stopped(stop) => Incomplete::from(stop),
-            EvaluationError::Storage { required, .. } => Incomplete::ReductStorage {
-                required: other_bytes + required,
-                limit: u128::from(max_bytes),
-            },
-        })?;
+            statistics,
+        )?;
         if !truth.is_model() {
             return Ok(Check::NotModel);
         }
         let started = timing::start(statistics.phase_timings.as_ref());
         let result = (|| {
-            let base = header_bytes() + evaluated.retained_bytes;
+            let base = header_bytes() + evaluated_bytes;
             let prepared = &self.0;
             reserve_query(
                 &mut workspace.search,
@@ -288,6 +298,51 @@ impl PreparedReduct {
         }
         Ok(())
     }
+}
+
+/// Evaluate the candidate's original truth into the evaluation workspace
+/// under the workspace's retained-storage ceiling, charging the work to the
+/// reduct receipts. The truth is the frozen mask of the candidate's reduct;
+/// the second value is the evaluation's retained storage.
+#[allow(clippy::too_many_arguments)]
+fn evaluate_truth<'a>(
+    evaluation: &'a mut EvaluationWorkspace,
+    other_bytes: u128,
+    max_bytes: u64,
+    candidate: &'a Interpretation,
+    limits: Limits,
+    control: &Control,
+    statistics: &mut Statistics,
+) -> Result<(FormulaEvaluation<'a>, u128), Incomplete> {
+    let evaluation_limit =
+        usize::try_from(u128::from(max_bytes) - other_bytes).unwrap_or(usize::MAX);
+    let started = timing::start(statistics.phase_timings.as_ref());
+    let evaluated = evaluation.evaluate(
+        candidate,
+        EvaluationLimits {
+            max_work: limits.max_verification_work,
+            max_bytes: evaluation_limit,
+        },
+        control,
+    );
+    timing::finish(
+        &mut statistics.phase_timings,
+        Phase::OriginalValidation,
+        started,
+    );
+    statistics.reduct.original_work = statistics
+        .reduct
+        .original_work
+        .checked_add(evaluated.work)
+        .ok_or(Incomplete::CounterOverflow)?;
+    let truth = evaluated.result.map_err(|error| match error {
+        EvaluationError::Stopped(stop) => Incomplete::from(stop),
+        EvaluationError::Storage { required, .. } => Incomplete::ReductStorage {
+            required: other_bytes + required,
+            limit: u128::from(max_bytes),
+        },
+    })?;
+    Ok((truth, evaluated.retained_bytes))
 }
 
 fn header_bytes() -> u128 {

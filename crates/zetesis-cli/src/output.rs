@@ -749,7 +749,13 @@ fn search_statistics(
     support_statistics(out, stats.support)?;
     out.text(",\"regions\":")?;
     region_statistics(out, stats.regions)?;
-    out.text("}")
+    out.text(",\"reduct_regions\":{\"visited\":")?;
+    out.text(&stats.reduct.regions.regions.to_string())?;
+    out.number_field("refuted", stats.reduct.regions.refuted)?;
+    out.number_field("leaves", stats.reduct.regions.leaves)?;
+    out.number_field("propagations", stats.reduct.regions.propagations)?;
+    out.number_field("reading_work", stats.reduct.regions.work)?;
+    out.text("}}")
 }
 
 fn region_statistics(

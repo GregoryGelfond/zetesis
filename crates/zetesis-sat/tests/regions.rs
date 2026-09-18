@@ -9,7 +9,7 @@ use std::collections::BTreeSet;
 
 use zetesis_ferraris::{AdmissionLimits, Node, Theory, TightPlanLimits};
 use zetesis_sat::{
-    BatchLimits, BatchVerdict, CandidateSearch, Control, Incomplete, Limits, SearchLimits,
+    BatchLimits, BatchVerdict, Control, Incomplete, Limits, SearchLimits, SearchMethod,
     StableModels,
 };
 
@@ -54,8 +54,7 @@ fn choices(atoms: usize) -> Theory {
 }
 
 fn regions(theory: &Theory, limits: Limits) -> StableModels {
-    StableModels::with_candidates(theory, CandidateSearch::Regions, limits, Control::default())
-        .unwrap()
+    StableModels::with_method(theory, SearchMethod::Regions, limits, Control::default()).unwrap()
 }
 
 fn models(search: &mut StableModels) -> Vec<Vec<usize>> {
@@ -237,8 +236,28 @@ fn a_tight_certificate_decides_region_leaves_without_a_countermodel_query() {
 }
 
 #[test]
+fn under_regions_the_reduct_is_queried_by_regions_and_never_encoded() {
+    let mut search = regions(&mixed(), Limits::default());
+    let found = models(&mut search);
+    assert!(!found.is_empty());
+    let statistics = search.statistics();
+    assert!(
+        statistics.reduct.preparation.is_none(),
+        "no reduct encoding"
+    );
+    assert_eq!(statistics.reduct.parameter_work, 0);
+    assert!(statistics.countermodel_queries > 0);
+    assert!(statistics.reduct.regions.regions > 0);
+    assert_eq!(
+        u64::try_from(statistics.reduct.regions.leaves).unwrap(),
+        statistics.countermodels + statistics.stable_models,
+        "each query ends at a countermodel leaf or at the candidate's own leaf"
+    );
+}
+
+#[test]
 fn the_search_policy_has_a_stable_spelling() {
-    assert_eq!(CandidateSearch::Regions.label(), "regions");
-    assert_eq!(CandidateSearch::Clauses.label(), "clauses");
-    assert_eq!(CandidateSearch::default(), CandidateSearch::Clauses);
+    assert_eq!(SearchMethod::Regions.label(), "regions");
+    assert_eq!(SearchMethod::Clauses.label(), "clauses");
+    assert_eq!(SearchMethod::default(), SearchMethod::Clauses);
 }

@@ -114,17 +114,17 @@ impl<Q: Quota> Budget<'_, Q> {
     pub(crate) fn remaining_work(&self) -> u64 {
         self.limits.max_work.saturating_sub(self.statistics.work)
     }
-    /// Charge work an operation already performed, one poll for the lot.
+    /// Charge work an operation already performed, one poll for the lot,
+    /// reserved through the quota as ticks would be.
     pub(crate) fn charge(&mut self, work: u64) -> Result<(), Incomplete> {
         self.control.poll()?;
+        self.quota
+            .charge(self.statistics.work, self.limits.max_work, work)?;
         self.statistics.work = self
             .statistics
             .work
             .checked_add(work)
             .ok_or(Incomplete::CounterOverflow)?;
-        if self.statistics.work > self.limits.max_work {
-            return Err(Incomplete::WorkLimit);
-        }
         Ok(())
     }
 }

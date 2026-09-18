@@ -445,11 +445,8 @@ fn arguments<'a>(
                             OsString::from(joins.label()),
                         ]
                     }))
-                    .chain(profile.candidates.into_iter().flat_map(|candidates| {
-                        [
-                            OsString::from("--candidates"),
-                            OsString::from(candidates.label()),
-                        ]
+                    .chain(profile.search.into_iter().flat_map(|search| {
+                        [OsString::from("--search"), OsString::from(search.label())]
                     }))
                     .chain(profile.time_limit_seconds.into_iter().flat_map(|seconds| {
                         [

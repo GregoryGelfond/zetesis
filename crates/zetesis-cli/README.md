@@ -115,15 +115,19 @@ eligible richer source through finite Ferraris countermodel checking. Syntax,
 arithmetic and resource failures are preserved. The
 [frontend guide](../zetesis-themelios/README.md) defines admitted source profiles.
 
-Advanced `--candidates clauses|regions` selects how the formula route proposes
-classical candidates to the reduct. Clauses, the default, is the classical
-search over a Tseitin encoding, with exact exclusion of every candidate
-proposed. Regions walk the region tree over the theory's atoms, narrowed by
-the theory's readings, and propose its leaves; no clause form of the theory
-is built. Both propose only classical models, and the reduct decides
-membership either way; the flag changes which candidate is proposed next and
-the work charged, never whether one is accepted. `--stats` reports the
-regions visited, refuted and reached as leaves under the latter.
+Advanced `--search clauses|regions` selects the formula route's search
+method, for proposing candidates and for the reduct's proper-subset query
+alike. Clauses, the default, is the classical search over a Tseitin encoding
+for both: exact exclusion of every candidate proposed, and a clause query
+of the frozen reduct. Regions walk the region tree over the theory's atoms,
+narrowed by the theory's readings, for both: the leaves of the candidate
+tree are proposed, and the proper subsets of a candidate are searched as a
+second tree under the frozen reduct, so no clause form is built at all.
+The reduct decides membership either way, and a countermodel is validated
+independently of the method that found it; the flag changes which
+candidate is proposed next and the work charged, never whether one is
+accepted. `--stats` reports the regions visited, refuted and reached as
+leaves for the candidate tree and for the reduct queries under the latter.
 
 Advanced `--formula-joins indexed|table` selects positive joins within eager
 formula grounding. Indexed matching is the default. Table matching reuses

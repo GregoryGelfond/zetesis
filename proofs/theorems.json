@@ -4585,6 +4585,31 @@
     "line": 385
   },
   {
+    "name": "Zetesis.ReductRegions.query_contains",
+    "file": "Zetesis/ReductRegions.lean",
+    "line": 34
+  },
+  {
+    "name": "Zetesis.ReductRegions.leaf_refutes",
+    "file": "Zetesis/ReductRegions.lean",
+    "line": 40
+  },
+  {
+    "name": "Zetesis.ReductRegions.exhausted_stable",
+    "file": "Zetesis/ReductRegions.lean",
+    "line": 46
+  },
+  {
+    "name": "Zetesis.ReductRegions.countermodels_exact",
+    "file": "Zetesis/ReductRegions.lean",
+    "line": 56
+  },
+  {
+    "name": "Zetesis.ReductRegions.stable_iff_no_countermodel",
+    "file": "Zetesis/ReductRegions.lean",
+    "line": 65
+  },
+  {
     "name": "Zetesis.RelationExtension.reconstruction_preserved",
     "file": "Zetesis/RelationExtension.lean",
     "line": 27

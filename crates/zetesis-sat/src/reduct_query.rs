@@ -86,6 +86,7 @@ mod tests {
             let result = super::super::fresh_membership(
                 original,
                 &candidate,
+                crate::SearchMethod::Clauses,
                 Limits::default(),
                 &mut budget,
                 &mut Statistics::default(),

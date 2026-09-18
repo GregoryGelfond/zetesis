@@ -1,9 +1,7 @@
 //! CLI spellings map directly to the library's execution policy values.
 
 use clap::{CommandFactory, FromArgMatches, Parser, error::ErrorKind};
-use zetesis_cli::{
-    Backend, CandidateSearch, Grounder, Options, Oracle, SolveConfig, SourceBatching,
-};
+use zetesis_cli::{Backend, Grounder, Options, Oracle, SearchMethod, SolveConfig, SourceBatching};
 
 fn nondefault_options() -> Options {
     // Distinct values detect crossed fields whose defaults happen to coincide.
@@ -17,7 +15,7 @@ fn nondefault_options() -> Options {
         "worlds",
         "--oracle",
         "closure",
-        "--candidates",
+        "--search",
         "regions",
         "--stats",
         "--models",
@@ -107,7 +105,7 @@ fn nondefault_options_preserve_each_solver_field() {
     assert_eq!(config.workers.get(), 23);
     assert_eq!(config.completion_workers.get(), 24);
     assert_eq!(config.max_completion_scratch_bytes, 25);
-    assert_eq!(config.candidates, CandidateSearch::Regions);
+    assert_eq!(config.search, SearchMethod::Regions);
     assert_eq!(config.max_candidates, 26);
     assert_eq!(config.max_carrier_atoms, 27);
     assert_eq!(config.max_work, 28);

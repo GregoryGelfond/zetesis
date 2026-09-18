@@ -955,6 +955,11 @@
 'Zetesis.QueryCompaction.assignment_branch_partition' depends on axioms: [propext]
 'Zetesis.QueryCompaction.assignment_branches_disjoint' depends on axioms: [propext]
 'Zetesis.QueryCompaction.exhausted_branches_refute' depends on axioms: [propext]
+'Zetesis.ReductRegions.query_contains' does not depend on any axioms
+'Zetesis.ReductRegions.leaf_refutes' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ReductRegions.exhausted_stable' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ReductRegions.countermodels_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ReductRegions.stable_iff_no_countermodel' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.RelationExtension.reconstruction_preserved' depends on axioms: [Quot.sound]
 'Zetesis.RelationExtension.acceptance_preserved' depends on axioms: [propext, Quot.sound]
 'Zetesis.RuleFactorization.false_reduct' depends on axioms: [propext, Classical.choice, Quot.sound]

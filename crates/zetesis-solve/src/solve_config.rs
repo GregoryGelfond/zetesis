@@ -2,7 +2,7 @@
 
 use std::num::NonZeroUsize;
 
-use crate::{Backend, CandidateSearch, Grounder, Oracle, SourceBatching};
+use crate::{Backend, Grounder, Oracle, SearchMethod, SourceBatching};
 
 /// Policy for one semantic session. Budgets retain their existing ownership:
 /// Formula search/objective work is cumulative. Independent closure work is per
@@ -18,8 +18,8 @@ pub struct SolveConfig {
     pub source_batching: SourceBatching,
     /// Exact membership policy; prepared formula inputs retain their original theory.
     pub oracle: Oracle,
-    /// How the formula route proposes classical candidates to the reduct.
-    pub candidates: CandidateSearch,
+    /// How the formula route proposes candidates and queries the reduct.
+    pub search: SearchMethod,
     /// Enable optional host timing; semantic/resource counters remain independent.
     pub stats: bool,
     /// Maximum yielded models or retained optimum ties; zero requests all.
@@ -129,7 +129,7 @@ impl SolveConfig {
         grounder: Grounder::Auto,
         source_batching: SourceBatching::Independent,
         oracle: Oracle::Auto,
-        candidates: CandidateSearch::Clauses,
+        search: SearchMethod::Clauses,
         stats: false,
         models: 1,
         max_search_work: 10_000_000_000,

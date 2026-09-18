@@ -122,10 +122,10 @@ pub struct NativeExecution {
     /// executable's default and permits comparison with versions before this flag.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub formula_joins: Option<FormulaJoins>,
-    /// Optional formula candidate proposal. Omission preserves the sealed
+    /// Optional formula search method. Omission preserves the sealed
     /// executable's default and permits comparison with versions before this flag.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub candidates: Option<CandidateSearch>,
+    pub search: Option<SearchMethod>,
     /// Closure worker request.
     pub workers: NonZeroUsize,
     /// Formula completion worker request.
@@ -147,7 +147,7 @@ impl Default for NativeExecution {
             oracle: Oracle::Auto,
             grounder: Grounder::Eager,
             formula_joins: None,
-            candidates: None,
+            search: None,
             workers: NonZeroUsize::new(1).expect("one is nonzero"),
             completion_workers: NonZeroUsize::new(1).expect("one is nonzero"),
             batch_size: NonZeroUsize::new(64).expect("64 is nonzero"),
@@ -176,17 +176,17 @@ impl FormulaJoins {
     }
 }
 
-/// How the native formula route proposes classical candidates to the reduct.
+/// How the native formula route proposes candidates and queries the reduct.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
-pub enum CandidateSearch {
+pub enum SearchMethod {
     /// Leaves of the region tree narrowed by the theory's readings.
     Regions,
     /// The retained classical search over a clause form of the theory.
     Clauses,
 }
 
-impl CandidateSearch {
+impl SearchMethod {
     pub(crate) const fn label(self) -> &'static str {
         match self {
             Self::Regions => "regions",

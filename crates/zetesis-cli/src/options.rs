@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
-use crate::{Backend, CandidateSearch, Grounder, Oracle, SourceBatching};
+use crate::{Backend, Grounder, Oracle, SearchMethod, SourceBatching};
 
 /// Commands that do not read an answer-set program.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Subcommand)]
@@ -66,12 +66,13 @@ pub struct Options {
     /// requests are always honored or refused.
     #[arg(long, value_parser = oracle_parser(), default_value = "auto", hide_short_help = true)]
     pub oracle: Oracle,
-    /// Advanced formula candidate proposal. Clauses, the default, is the
+    /// Advanced formula search method, for proposing candidates and for the
+    /// reduct's proper-subset query alike. Clauses, the default, is the
     /// classical search over a clause form; regions narrow the candidate
-    /// space by the theory's readings. Both propose classical models that
-    /// the reduct decides.
-    #[arg(long, value_parser = candidates_parser(), default_value = "clauses", hide_short_help = true)]
-    pub candidates: CandidateSearch,
+    /// space and the reduct's subsets by the theory's readings. The reduct
+    /// decides membership either way.
+    #[arg(long, value_parser = search_parser(), default_value = "clauses", hide_short_help = true)]
+    pub search: SearchMethod,
     /// Print grounding, solving and execution statistics on stderr.
     ///
     /// Report version, settings, completion, available counters and total driver
@@ -317,7 +318,7 @@ impl From<&Options> for crate::SolveConfig {
             grounder: options.grounder,
             source_batching: options.source_batching,
             oracle: options.oracle,
-            candidates: options.candidates,
+            search: options.search,
             stats: options.stats,
             models: options.models,
             max_search_work: options.max_search_work,
@@ -459,18 +460,18 @@ fn source_batching_parser() -> impl TypedValueParser<Value = SourceBatching> {
     ])
 }
 
-fn candidates_parser() -> impl TypedValueParser<Value = CandidateSearch> {
+fn search_parser() -> impl TypedValueParser<Value = SearchMethod> {
     policy_parser([
         (
-            CandidateSearch::Regions,
-            PossibleValue::new(CandidateSearch::Regions.label()).help(
-                "Propose leaves of the region tree narrowed by the theory's readings; no clause form.",
+            SearchMethod::Regions,
+            PossibleValue::new(SearchMethod::Regions.label()).help(
+                "Regions narrowed by the theory's readings, for candidates and for the reduct query; no clause form.",
             ),
         ),
         (
-            CandidateSearch::Clauses,
-            PossibleValue::new(CandidateSearch::Clauses.label())
-                .help("Propose classical models by the retained search over a clause form."),
+            SearchMethod::Clauses,
+            PossibleValue::new(SearchMethod::Clauses.label())
+                .help("The retained clause search for candidates and the clause query for the reduct."),
         ),
     ])
 }

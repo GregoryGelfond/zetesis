@@ -69,13 +69,13 @@ impl ExecutionObserver for Route<'_> {
             ExecutionObservation::CpuFormula {
                 oracle,
                 grounder,
-                candidates,
+                search,
             } => {
                 if self.expected.is_some()
                     || self.selected
                     || oracle != self.config.oracle
                     || grounder != self.config.grounder
-                    || candidates != self.config.candidates
+                    || search != self.config.search
                 {
                     return Err(io::Error::other("unexpected CPU formula route"));
                 }

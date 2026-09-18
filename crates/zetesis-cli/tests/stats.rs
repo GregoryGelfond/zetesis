@@ -116,16 +116,10 @@ fn statistics_identify_necessary_disjunctive_support_under_clauses() {
 fn statistics_identify_the_regions_and_their_support_cut() {
     let (_, _, text) = solve(
         "a | b.",
-        &options(&[
-            "--stats",
-            "--oracle",
-            "countermodel",
-            "--candidates",
-            "regions",
-        ]),
+        &options(&["--stats", "--oracle", "countermodel", "--search", "regions"]),
     );
     assert!(
-        text.contains("oracle=countermodel; grounder=auto; candidates=regions"),
+        text.contains("oracle=countermodel; grounder=auto; search=regions"),
         "{text}"
     );
     assert!(text.contains("candidate regions: visited="), "{text}");

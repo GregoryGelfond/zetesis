@@ -67,7 +67,7 @@ failure prefixes. The fixed CNF can be larger or search more slowly than a fresh
 candidate-simplified encoding; reuse does not promise a speedup.
 
 
-`StableModels::with_candidates(&Theory, CandidateSearch, Limits, Control)`
+`StableModels::with_method(&Theory, SearchMethod, Limits, Control)`
 returns an iterator of `Result<Interpretation, Incomplete>` whose candidates
 come from the chosen proposer; `StableModels::new` is the clauses proposer,
 which builds the candidate CNF. Interpretations retain the original theory's
@@ -90,8 +90,8 @@ successful restriction, exhaustion covers only their intersection.
 
 ## Proposing candidates by regions
 
-Under `CandidateSearch::Regions`, reachable in the solve session as
-`--candidates regions`, no clause form of the theory is built. The candidate space is the coverage tree of
+Under `SearchMethod::Regions`, reachable in the solve session as
+`--search regions`, no clause form of the theory is built. The candidate space is the coverage tree of
 `Search.lean` over the theory's atoms, walked by `zetesis_cpu::regions`: the
 root leaves every atom open, each region is narrowed by
 `zetesis_ferraris::narrow` to the fixed point of the theory's readings, with
@@ -104,11 +104,18 @@ the most unresolved occurrences, cut branch first; a region with every atom
 decided is a leaf, and a leaf is a
 classical model of the theory and the restrictions, because at a full
 decision every root is sure or impossible and an impossible root refutes.
-The leaf is the proposal, and the reduct decides it exactly as it decides a
-proposal from the clauses: by the prepared reduct query, or by a complete
-class certificate when one applies. The positive certificate's unit
-restriction is clause-only; the regions proposer reads the same
-consequences through the theory.
+The leaf is the proposal, and the reduct decides it: by a complete class
+certificate when one applies, else by the proper-subset query, which under
+this method is a second region tree. Its root cuts every atom outside the
+candidate and leaves the candidate's atoms open; its regions are narrowed
+by the knowledge of the frozen reduct, read as the original DAG under the
+candidate's truth mask (`FerrarisMask`), with no support cut, since a model
+of the reduct need not be supported; a leaf other than the candidate is a
+proper-subset model and the validated countermodel, and a covered tree
+proves stability (`ReductRegions.stable_iff_no_countermodel`). No reduct
+encoding is prepared. Under `SearchMethod::Clauses` the prepared reduct
+encoding and the clause query serve instead, and the positive
+certificate's unit restriction, which is clause-only, applies.
 
 The narrowing is driven by a worklist over an index of the theory, built
 once: a node or atom that learns something is revisited once, and only its
@@ -119,7 +126,8 @@ the same cumulative `SearchLimits`. The clauses proposer stays the default
 until the regions proposer is measured beside it.
 `Statistics::regions` reports regions visited, refuted and reached as leaves,
 propagations, atoms held and cut, whether the support cut applied, and
-the reading work; `candidate_queries` and the projection history stay zero,
+the reading work, and `Statistics::reduct.regions` the same for the reduct
+queries; `candidate_queries` and the projection history stay zero,
 since no classical query is asked and no exclusion index is kept. Laws:
 `FormulaBounds.lean` for the readings, the three rules and the leaf
 (`decided_leaf_models`), `Search.lean` for the tree. See [the proposer](src/regions.rs) and
@@ -353,8 +361,8 @@ incomplete. The regions proposer needs no exclusion: a leaf is visited once.
 
 ## Search and limits
 
-The Boolean search serves the reduct's proper-subset query under either
-proposer, and the outer candidate query under the clauses proposer. It is
+The Boolean search serves the reduct's proper-subset query and the outer
+candidate query under the clauses method, and nothing under regions. It is
 deterministic, iterative chronological DPLL. It uses false-first
 branching, a heap trail and decision frames, and two watched literals. After
 initial unit propagation it counts unassigned variable occurrences in unresolved

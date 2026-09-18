@@ -185,9 +185,15 @@ pub struct Comparison {
     pub cells: Vec<Cell>,
     /// Per-report provenance.
     pub provenance: BTreeMap<String, Provenance>,
+    /// The formula search method each report requested, by label, where a
+    /// report requested one; the executable's default otherwise. Reports may
+    /// differ in this field alone, since the methods are compared on the
+    /// same cells by design.
+    pub methods: BTreeMap<String, String>,
 }
 
-/// Compare published reports over the same cells and profiles.
+/// Compare published reports over the same cells and profiles. The formula
+/// search method is the one profile field the reports may differ in.
 ///
 /// # Errors
 /// Refuses an empty list, repeated labels, reports whose cells or profiles
@@ -198,6 +204,7 @@ pub fn compare(reports: &[Labelled<'_>]) -> Result<Comparison, ViewError> {
     let requested = profiles(first)?;
     let mut labels = Vec::with_capacity(reports.len());
     let mut provenance = BTreeMap::new();
+    let mut methods = BTreeMap::new();
     for labelled in reports {
         if labels.contains(&labelled.label.to_owned()) {
             return Err(ViewError::Label {
@@ -216,6 +223,7 @@ pub fn compare(reports: &[Labelled<'_>]) -> Result<Comparison, ViewError> {
         }
         labels.push(labelled.label.to_owned());
         provenance.insert(labelled.label.to_owned(), self::provenance(labelled)?);
+        methods.insert(labelled.label.to_owned(), method(labelled)?);
     }
     let workloads = first.report["report"]["workloads"].as_array();
     let mut cells = Vec::with_capacity(entries.len());
@@ -253,6 +261,7 @@ pub fn compare(reports: &[Labelled<'_>]) -> Result<Comparison, ViewError> {
         labels,
         cells,
         provenance,
+        methods,
     })
 }
 
@@ -268,6 +277,32 @@ impl Comparison {
 
 struct Markdown<'a>(&'a Comparison);
 
+/// The profile line of a table, and the search method of each report when
+/// any report requested one.
+fn heading(f: &mut fmt::Formatter<'_>, comparison: &Comparison, profile: &Value) -> fmt::Result {
+    writeln!(
+        f,
+        "Native wall time, ms: median [minimum, maximum] of the timed intervals; profile {}.\n",
+        Profile(profile)
+    )?;
+    if comparison
+        .methods
+        .values()
+        .any(|method| method != "default")
+    {
+        write!(f, "Formula search method by report:")?;
+        for label in &comparison.labels {
+            let method = comparison
+                .methods
+                .get(label)
+                .map_or("default", String::as_str);
+            write!(f, " {label}={method};")?;
+        }
+        writeln!(f, "\n")?;
+    }
+    Ok(())
+}
+
 impl fmt::Display for Markdown<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let comparison = self.0;
@@ -282,11 +317,7 @@ impl fmt::Display for Markdown<'_> {
             .map_or(0, |cell| cell.profiles.len());
         for profile in 0..profile_count {
             let first = &comparison.cells[0].profiles[profile];
-            writeln!(
-                f,
-                "Native wall time, ms: median [minimum, maximum] of the timed intervals; profile {}.\n",
-                Profile(&first.profile)
-            )?;
+            heading(f, comparison, &first.profile)?;
             let ratio_names: Vec<&String> = first.ratios.keys().collect();
             write!(f, "| Cell |")?;
             for label in &comparison.labels {
@@ -515,14 +546,46 @@ fn cases(labelled: &Labelled<'_>) -> Result<Vec<String>, ViewError> {
         })
 }
 
+/// The search method is the one field a comparison may vary; the profiles
+/// are compared without it. Reports before the field spell it in neither of
+/// its two names and are compared as they are.
+const METHOD_FIELDS: [&str; 2] = ["search", "candidates"];
+
 fn profiles(labelled: &Labelled<'_>) -> Result<Vec<Value>, ViewError> {
-    labelled.report["report"]["plan"]["profiles"]
+    let mut profiles = labelled.report["report"]["plan"]["profiles"]
         .as_array()
         .cloned()
         .ok_or(ViewError::Malformed {
             label: labelled.label.into(),
             field: "report.plan.profiles",
+        })?;
+    for profile in &mut profiles {
+        if let Some(fields) = profile.as_object_mut() {
+            for field in METHOD_FIELDS {
+                fields.remove(field);
+            }
+        }
+    }
+    Ok(profiles)
+}
+
+/// The search method the report's first profile requested, or the
+/// executable's default.
+fn method(labelled: &Labelled<'_>) -> Result<String, ViewError> {
+    let profiles = labelled.report["report"]["plan"]["profiles"]
+        .as_array()
+        .ok_or(ViewError::Malformed {
+            label: labelled.label.into(),
+            field: "report.plan.profiles",
+        })?;
+    Ok(profiles
+        .first()
+        .and_then(|profile| {
+            METHOD_FIELDS
+                .iter()
+                .find_map(|field| profile[field].as_str())
         })
+        .map_or_else(|| "default".to_owned(), str::to_owned))
 }
 
 fn provenance(labelled: &Labelled<'_>) -> Result<Provenance, ViewError> {

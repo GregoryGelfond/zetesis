@@ -32,8 +32,9 @@ mod reduct_query;
 
 #[path = "regions.rs"]
 mod regions;
+pub(crate) use regions::ReductQuery;
 use regions::RegionSearch;
-pub use regions::{CandidateSearch, RegionSearchStatistics};
+pub use regions::{RegionQueryStatistics, RegionSearchStatistics, SearchMethod};
 
 /// Whole-operation ceilings for a membership check or stable-model enumeration.
 #[derive(Clone, Copy, Debug)]
@@ -146,13 +147,28 @@ fn verification(limits: Limits) -> zetesis_ferraris::Limits {
     }
 }
 
-/// Check stability through a classical proper-subset query of the frozen reduct.
-/// No enumeration of all subsets or invocation of an external solver occurs.
-/// `max_candidates` applies only to [`StableModels`].
+/// Check stability through a classical proper-subset query of the frozen reduct
+/// on the clause kernel. No enumeration of all subsets or invocation of an
+/// external solver occurs. `max_candidates` applies only to [`StableModels`].
 #[must_use]
 pub fn check(
     theory: &Theory,
     candidate: &Interpretation,
+    limits: Limits,
+    control: &Control,
+) -> Check {
+    check_with(theory, candidate, SearchMethod::Clauses, limits, control)
+}
+
+/// Check stability by the chosen method: the proper-subset query of the
+/// frozen reduct as a region tree, or as a clause query on the kernel. The
+/// verdict is the same either way; a countermodel is validated independently
+/// of the method that proposed it.
+#[must_use]
+pub fn check_with(
+    theory: &Theory,
+    candidate: &Interpretation,
+    method: SearchMethod,
     limits: Limits,
     control: &Control,
 ) -> Check {
@@ -166,6 +182,7 @@ pub fn check(
     match fresh_membership(
         theory,
         candidate,
+        method,
         limits,
         &mut budget,
         &mut statistics,
@@ -179,6 +196,7 @@ pub fn check(
 fn fresh_membership(
     theory: &Theory,
     candidate: &Interpretation,
+    method: SearchMethod,
     limits: Limits,
     budget: &mut Budget<'_, impl Quota>,
     statistics: &mut Statistics,
@@ -189,7 +207,15 @@ fn fresh_membership(
         return Ok(Check::NotModel);
     }
     let started = timing::start(statistics.phase_timings.as_ref());
-    let result = reduct_membership(theory, candidate, limits, budget, statistics, workspace);
+    let result = match method {
+        SearchMethod::Clauses => {
+            reduct_membership(theory, candidate, limits, budget, statistics, workspace)
+        }
+        SearchMethod::Regions => {
+            let mut state = crate::prepared_reduct::State::new(method);
+            state.check(theory, candidate, limits, budget, statistics)
+        }
+    };
     timing::finish(&mut statistics.phase_timings, Phase::Reduct, started);
     result
 }
@@ -244,29 +270,43 @@ pub(crate) fn checked_reduct_result(
         Solve::Inconclusive(error) => Err(error),
         Solve::Sat(assignment) => {
             let subset = encoding::interpretation(theory, &assignment, budget)?;
-            let mut proper = false;
-            for atom in 0..theory.atom_count() {
-                budget.tick()?;
-                if subset.contains(atom) && !candidate.contains(atom) {
-                    return Err(Incomplete::InvalidWitness);
-                }
-                proper |= candidate.contains(atom) && !subset.contains(atom);
-            }
-            if !proper
-                || !models_reduct(
-                    theory,
-                    candidate,
-                    &subset,
-                    verification(limits),
-                    budget.control,
-                )?
-            {
-                return Err(Incomplete::InvalidWitness);
-            }
-            increment(&mut statistics.countermodels)?;
-            Ok(Check::NonMinimal(subset))
+            checked_countermodel(theory, candidate, subset, limits, budget, statistics)
         }
     }
+}
+
+/// Validate a proposed countermodel independently: it must be a proper
+/// subset of the candidate and model the candidate's frozen reduct. Either
+/// proposer, the clause query or the region query, is held to this.
+pub(crate) fn checked_countermodel(
+    theory: &Theory,
+    candidate: &Interpretation,
+    subset: Interpretation,
+    limits: Limits,
+    budget: &mut Budget<'_, impl Quota>,
+    statistics: &mut Statistics,
+) -> Result<Check, Incomplete> {
+    let mut proper = false;
+    for atom in 0..theory.atom_count() {
+        budget.tick()?;
+        if subset.contains(atom) && !candidate.contains(atom) {
+            return Err(Incomplete::InvalidWitness);
+        }
+        proper |= candidate.contains(atom) && !subset.contains(atom);
+    }
+    if !proper
+        || !models_reduct(
+            theory,
+            candidate,
+            &subset,
+            verification(limits),
+            budget.control,
+        )?
+    {
+        return Err(Incomplete::InvalidWitness);
+    }
+    increment(&mut statistics.countermodels)?;
+    Ok(Check::NonMinimal(subset))
 }
 
 /// Native all-model search over classical candidates with exact semantic blocking.
@@ -304,19 +344,21 @@ impl StableModels {
     /// # Errors
     /// Refuses encoding/history admission, work limits, cancellation or allocation.
     pub fn new(theory: &Theory, limits: Limits, control: Control) -> Result<Self, Incomplete> {
-        Self::with_candidates(theory, CandidateSearch::Clauses, limits, control)
+        Self::with_method(theory, SearchMethod::Clauses, limits, control)
     }
 
-    /// Enumerate with the chosen proposer. Under [`CandidateSearch::Regions`]
-    /// no clause form of the theory is built: the theory's producers are
+    /// Enumerate by the chosen method. Under [`SearchMethod::Regions`] no
+    /// clause form of the theory is built: the theory's producers are
     /// extracted for the support cut and the root region is opened, both
-    /// charged as search work. Membership checking is the same either way.
+    /// charged as search work, and the reduct's proper-subset query is a
+    /// region tree too. The verdict on every candidate is the same either
+    /// way.
     ///
     /// # Errors
     /// Refuses admission, work limits, cancellation or allocation.
-    pub fn with_candidates(
+    pub fn with_method(
         theory: &Theory,
-        candidates: CandidateSearch,
+        method: SearchMethod,
         limits: Limits,
         control: Control,
     ) -> Result<Self, Incomplete> {
@@ -326,8 +368,8 @@ impl StableModels {
             control: &control,
             statistics: SearchStatistics::default(),
         };
-        let (proposer, support) = match candidates {
-            CandidateSearch::Clauses => {
+        let (proposer, support) = match method {
+            SearchMethod::Clauses => {
                 let mut cnf = encoding::encode(theory, None, limits.admission, &mut budget)?;
                 let support = candidate_support::restrict(&mut cnf, theory, limits, &mut budget)?;
                 let cursor = Cursor::projected(theory.atom_count(), limits.projections)?;
@@ -336,7 +378,7 @@ impl StableModels {
                     Some(support),
                 )
             }
-            CandidateSearch::Regions => (
+            SearchMethod::Regions => (
                 Proposer::Regions(Box::new(RegionSearch::new(theory, &mut budget)?)),
                 None,
             ),
@@ -357,7 +399,7 @@ impl StableModels {
             pending_error: None,
             batch: batch::State::default(),
             certification: None,
-            reduct: crate::prepared_reduct::State::default(),
+            reduct: crate::prepared_reduct::State::new(method),
         })
     }
     /// Enable coarse host timing from this point onward. Repeated calls retain

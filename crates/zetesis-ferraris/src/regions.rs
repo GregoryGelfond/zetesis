@@ -252,6 +252,38 @@ impl Narrower {
         limits: RegionLimits,
         control: &Control,
     ) -> Result<(Narrowing, NarrowingStatistics), Stop> {
+        self.narrow_with(theory, producers, None, region, limits, control)
+    }
+
+    /// Narrow a region of the theory's frozen reduct under a candidate: a
+    /// node false in `truth`, the candidate's truth of every node, reads as
+    /// falsum (`FerrarisMask`), and the rest of the DAG is read unchanged.
+    /// No support cut applies, since a model of the reduct need not be
+    /// supported: this narrows the proper-subset query, not the candidate
+    /// tree.
+    ///
+    /// # Errors
+    /// As [`Self::narrow`].
+    pub fn narrow_frozen(
+        &self,
+        theory: &Theory,
+        truth: &[bool],
+        region: &mut Region,
+        limits: RegionLimits,
+        control: &Control,
+    ) -> Result<(Narrowing, NarrowingStatistics), Stop> {
+        self.narrow_with(theory, None, Some(truth), region, limits, control)
+    }
+
+    fn narrow_with(
+        &self,
+        theory: &Theory,
+        producers: Option<&Producers>,
+        frozen: Option<&[bool]>,
+        region: &mut Region,
+        limits: RegionLimits,
+        control: &Control,
+    ) -> Result<(Narrowing, NarrowingStatistics), Stop> {
         control.poll()?;
         let mut known = Known::empty(theory.nodes().len(), theory.atom_count());
         let mut work = Work::new(limits.max_work);
@@ -260,6 +292,7 @@ impl Narrower {
             theory,
             self,
             producers,
+            frozen,
             region,
             &mut work,
             limits.max_propagations,
@@ -446,6 +479,7 @@ impl Known {
         theory: &Theory,
         index: &Narrower,
         producers: Option<&Producers>,
+        frozen: Option<&[bool]>,
         region: &Region,
         work: &mut Work,
         max_propagations: u64,
@@ -454,7 +488,8 @@ impl Known {
         let nodes = theory.nodes();
         let mut step = Sweep::Unchanged;
         for (node, kind) in nodes.iter().enumerate() {
-            if matches!(kind, Node::False) {
+            let falsum = matches!(kind, Node::False) || frozen.is_some_and(|truth| !truth[node]);
+            if falsum {
                 step = step.join(self.never(node));
             }
         }
@@ -478,7 +513,7 @@ impl Known {
             }
             let step = if let Some(node) = self.nodes.pop() {
                 statistics.propagations += 1;
-                self.revisit(nodes, index, producers, node, work)?
+                self.revisit(nodes, index, producers, frozen, node, work)?
             } else if let Some(atom) = self.heads.pop() {
                 statistics.propagations += 1;
                 match producers {
@@ -497,17 +532,30 @@ impl Known {
     /// A node that learned something teaches its operands what the
     /// connective leaves them, tells its atom, lets each parent learn from
     /// its operands, and, when it is a body that fails, has the producers'
-    /// heads rechecked.
+    /// heads rechecked. A node false under a frozen mask is falsum in the
+    /// reduct, a constant with no operands: it teaches nothing and learns
+    /// nothing from them, and a parent under the mask likewise.
     fn revisit(
         &mut self,
         nodes: &[Node],
         index: &Narrower,
         producers: Option<&Producers>,
+        frozen: Option<&[bool]>,
         node: usize,
         work: &mut Work,
     ) -> Result<Sweep, Stop> {
         work.tick()?;
+        let masked = |node: usize| frozen.is_some_and(|truth| !truth[node]);
         let mut step = Sweep::Unchanged;
+        if masked(node) {
+            for &parent in &index.parents[node] {
+                work.tick()?;
+                if !masked(parent) {
+                    step = step.join(self.learn_from_operands(nodes, parent));
+                }
+            }
+            return Ok(step);
+        }
         if self.sure[node] {
             step = step.join(match nodes[node] {
                 Node::Atom(atom) => {
@@ -572,41 +620,49 @@ impl Known {
         }
         for &parent in &index.parents[node] {
             work.tick()?;
-            step = step.join(match nodes[parent] {
-                Node::Atom(_) | Node::False => Sweep::Unchanged,
-                Node::And(a, b) => {
-                    let mut up = Sweep::Unchanged;
-                    if self.sure[a] && self.sure[b] {
-                        up = up.join(self.sure(parent));
-                    }
-                    if self.never[a] || self.never[b] {
-                        up = up.join(self.never(parent));
-                    }
-                    up
-                }
-                Node::Or(a, b) => {
-                    let mut up = Sweep::Unchanged;
-                    if self.sure[a] || self.sure[b] {
-                        up = up.join(self.sure(parent));
-                    }
-                    if self.never[a] && self.never[b] {
-                        up = up.join(self.never(parent));
-                    }
-                    up
-                }
-                Node::Implies(a, b) => {
-                    let mut up = Sweep::Unchanged;
-                    if self.never[a] || self.sure[b] {
-                        up = up.join(self.sure(parent));
-                    }
-                    if self.sure[a] && self.never[b] {
-                        up = up.join(self.never(parent));
-                    }
-                    up
-                }
-            });
+            if masked(parent) {
+                continue;
+            }
+            step = step.join(self.learn_from_operands(nodes, parent));
         }
         Ok(step)
+    }
+
+    /// A node learns from its operands what the connective dictates.
+    fn learn_from_operands(&mut self, nodes: &[Node], node: usize) -> Sweep {
+        match nodes[node] {
+            Node::Atom(_) | Node::False => Sweep::Unchanged,
+            Node::And(a, b) => {
+                let mut up = Sweep::Unchanged;
+                if self.sure[a] && self.sure[b] {
+                    up = up.join(self.sure(node));
+                }
+                if self.never[a] || self.never[b] {
+                    up = up.join(self.never(node));
+                }
+                up
+            }
+            Node::Or(a, b) => {
+                let mut up = Sweep::Unchanged;
+                if self.sure[a] || self.sure[b] {
+                    up = up.join(self.sure(node));
+                }
+                if self.never[a] && self.never[b] {
+                    up = up.join(self.never(node));
+                }
+                up
+            }
+            Node::Implies(a, b) => {
+                let mut up = Sweep::Unchanged;
+                if self.never[a] || self.sure[b] {
+                    up = up.join(self.sure(node));
+                }
+                if self.sure[a] && self.never[b] {
+                    up = up.join(self.never(node));
+                }
+                up
+            }
+        }
     }
 
     /// An atom none of its producers can support is known to fail, and an

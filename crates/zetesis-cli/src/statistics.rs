@@ -14,11 +14,11 @@ fn header(sink: &mut impl Write, options: &Options, elapsed: Duration) -> io::Re
     )?;
     writeln!(
         sink,
-        "  requested: backend={}; oracle={}; grounder={}; candidates={}",
+        "  requested: backend={}; oracle={}; grounder={}; search={}",
         options.backend.label(),
         options.oracle.label(),
         options.grounder.label(),
-        options.candidates.label()
+        options.search.label()
     )?;
     writeln!(
         sink,
@@ -655,6 +655,14 @@ fn countermodel(
             stats.reduct.original_work,
             stats.reduct.parameter_work,
             stats.reduct.peak_workspace_bytes,
+        )?;
+    }
+    if stats.reduct.regions.regions > 0 || stats.reduct.regions.work > 0 {
+        let regions = stats.reduct.regions;
+        writeln!(
+            sink,
+            "  reduct query regions: visited={}; refuted={}; leaves={}; propagations={}; reading work={} (included in search work)",
+            regions.regions, regions.refuted, regions.leaves, regions.propagations, regions.work,
         )?;
     }
     if let Some(certified) = stats.certified {

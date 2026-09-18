@@ -124,6 +124,7 @@ import Zetesis.TableBindings
 import Zetesis.DomainBindings
 import Zetesis.FormulaRegions
 import Zetesis.FormulaBounds
+import Zetesis.ReductRegions
 import Zetesis.ModelSelections
 import Zetesis.AtomCatalogs
 import Zetesis.StorageOwners

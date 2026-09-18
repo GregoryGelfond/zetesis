@@ -55,7 +55,7 @@ fn partial_reservation_records_capacity_and_preserves_allocation_failure() {
         };
         let mut statistics = Statistics::default();
         let mut accepted = Vec::new();
-        let mut state = crate::prepared_reduct::State::default();
+        let mut state = crate::prepared_reduct::State::new(crate::SearchMethod::Clauses);
         state
             .ensure(&original, limits, &mut budget, &mut statistics)
             .unwrap();
@@ -70,6 +70,7 @@ fn partial_reservation_records_capacity_and_preserves_allocation_failure() {
                 verdicts: &verdicts,
                 limits,
                 prepared: None,
+                query: None,
             },
             &mut budget,
             &mut statistics,

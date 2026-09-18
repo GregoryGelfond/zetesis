@@ -9,6 +9,9 @@ pub(crate) trait Quota {
     const BOUNDED_STORAGE: bool = false;
     fn work(&self, spent: u64, ceiling: u64) -> Result<(), Incomplete>;
     fn decision(&self, spent: u64, ceiling: u64) -> Result<(), Incomplete>;
+    /// Reserve `amount` units of work at once, for an operation that counts
+    /// its own work and reports it afterwards.
+    fn charge(&self, spent: u64, ceiling: u64, amount: u64) -> Result<(), Incomplete>;
 }
 
 /// Ordinary queries have no shared pointer or per-operation execution-mode test.
@@ -17,6 +20,14 @@ pub(crate) struct LocalQuota;
 impl Quota for LocalQuota {
     fn work(&self, spent: u64, ceiling: u64) -> Result<(), Incomplete> {
         if spent >= ceiling {
+            Err(Incomplete::WorkLimit)
+        } else {
+            Ok(())
+        }
+    }
+
+    fn charge(&self, spent: u64, ceiling: u64, amount: u64) -> Result<(), Incomplete> {
+        if spent.saturating_add(amount) > ceiling {
             Err(Incomplete::WorkLimit)
         } else {
             Ok(())
@@ -45,6 +56,10 @@ impl<Q: Quota> Quota for BoundedQuota<Q> {
     fn decision(&self, spent: u64, ceiling: u64) -> Result<(), Incomplete> {
         self.0.decision(spent, ceiling)
     }
+
+    fn charge(&self, spent: u64, ceiling: u64, amount: u64) -> Result<(), Incomplete> {
+        self.0.charge(spent, ceiling, amount)
+    }
 }
 
 // Worker counters start at zero and measure deltas; the shared budget is seeded
@@ -56,6 +71,10 @@ impl Quota for WorkLease<'_> {
 
     fn decision(&self, _spent: u64, _ceiling: u64) -> Result<(), Incomplete> {
         self.decide()
+    }
+
+    fn charge(&self, _spent: u64, _ceiling: u64, amount: u64) -> Result<(), Incomplete> {
+        self.take(amount)
     }
 }
 

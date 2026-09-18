@@ -56,11 +56,12 @@ as advanced CLI options. `statistics.search.projection_history` reports entries,
 nodes, retained/peak bytes and its subtotal of cumulative search work. A history
 refusal retains any already checked answer prefix and reports incomplete coverage;
 it does not turn a completed answer into a rejected candidate. Under
-`--candidates regions` the history stays empty and
+`--search regions` the history stays empty and
 `statistics.search.regions` reports the regions visited, refuted and reached as
 leaves, the propagations, atoms held and cut, whether the support cut
-applied, and the reading work, a subtotal of cumulative search work; under
-the default clauses proposer it is `null`.
+applied, and the reading work, a subtotal of cumulative search work, and
+`statistics.search.reduct_regions` the regions of the reduct queries; under
+the default clauses method the former is `null` and the latter zero.
 
 `SemanticOutcome::selection()` identifies the family requested by the session.
 `All` ranges over the original program; `Optimal` permits sound exclusion of
@@ -269,7 +270,7 @@ Under the default clauses proposer, formula search records its necessary
 disjunctive support attempt separately from user or objective refinements.
 `statistics.search.necessary_support` identifies application, an inapplicable
 head grammar, or a configured construction/encoding shape limit; under
-`--candidates regions` it is `null`, and `statistics.search.regions` says
+`--search regions` it is `null`, and `statistics.search.regions` says
 whether the support cut applied. Its construction and encoding work are included in search work,
 including a rolled-back encoding. A shape refusal retains general search;
 cancellation, work exhaustion and allocation failure remain explicit stops.
