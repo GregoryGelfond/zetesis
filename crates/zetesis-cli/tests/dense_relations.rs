@@ -158,29 +158,38 @@ fn stores() -> [PreparationLimits; 2] {
     ]
 }
 
-#[test]
-fn a_dense_head_is_recorded_as_a_bit_and_a_tree_head_as_an_atom() {
+/// The heads a closure of the transitive path recorded as bits, and its
+/// atoms, under one store.
+fn heads_recorded_as_bits(limits: PreparationLimits) -> (u64, usize) {
     let control = Control::default();
     let owner = transitive_path();
     let program = owner.program();
     let seed = Seed::new(program, []).unwrap();
-    let [dense, tree] = stores().map(|limits| {
-        let prepared = PreparedQueries::new(program, limits, &control).unwrap();
-        let check = prepared
-            .check_view(
-                seed.view(),
-                &mut ClosureWorkspace::default(),
-                Limits::default(),
-                &control,
-            )
-            .unwrap();
-        (
-            check.statistics().dense_heads,
-            check.closure().atoms().len(),
+    let prepared = PreparedQueries::new(program, limits, &control).unwrap();
+    let check = prepared
+        .check_view(
+            seed.view(),
+            &mut ClosureWorkspace::default(),
+            Limits::default(),
+            &control,
         )
-    });
-    assert_eq!(dense, (35, 35));
-    assert_eq!(tree, (0, 35));
+        .unwrap();
+    (
+        check.statistics().dense_heads,
+        check.closure().atoms().len(),
+    )
+}
+
+#[test]
+fn every_head_of_a_dense_relation_is_recorded_as_a_bit() {
+    let [dense, _] = stores();
+    assert_eq!(heads_recorded_as_bits(dense), (35, 35));
+}
+
+#[test]
+fn no_head_of_a_tree_relation_is_recorded_as_a_bit() {
+    let [_, tree] = stores();
+    assert_eq!(heads_recorded_as_bits(tree), (0, 35));
 }
 
 #[test]
