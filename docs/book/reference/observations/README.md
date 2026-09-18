@@ -1239,6 +1239,73 @@ alike, at roughly the clause search's cost on every cell and below it on
 one; the remaining gap is on the cells where the clause search's root
 probing finds forced atoms the readings only find by splitting.
 
+## Several workers on the region tree
+
+Five campaigns on 18 September 2026, the reports written between 04:24:15
+and 04:33:09 UTC, same machine, profile, four workers and clingo as above.
+`main` is the 896a5f73 executable rerun as the control, `before` the
+carried-knowledge executable (`f5801c49`, SHA-256
+`efd4027ab547f8e069c63fc00fbc4bfa49acd28b13a05bf92b20822539620865`),
+`after` is built from `553acae3` (SHA-256
+`0c9551639c03546fef8c06c6f0b480aff2e158469a6b2ce414ded95b82ada59b`), where
+several workers can walk the region tree at once, `regions` is the same
+executable run with `--search regions`, and `parallel` with
+`--search regions --region-workers 4`, the profile's worker count.
+[series-553acae3-cpu-auto.json](series-553acae3-cpu-auto.json) and its
+[table view](series-553acae3-cpu-auto-tables.md) are the derived
+comparison; raw report SHA-256
+`51776535b833ed52b7b4ac0cea9335b48d8f945a27d12af3c74ade771baf40a4` (main),
+`a69869bb0998554986a567cde1ccea52d9653b8fd3c65c626a54a4b6563dd2d7` (before),
+`5f1c701679958317fe2a8e331306bea174530e29e81c2ffcd79016c49dc82cba` (after),
+`d9824416f78b459f19db4b641868fc0c9c522af1adee34e3e9f178ccde359a1f`
+(regions) and
+`342c2b365a54c33b890397d3b976d4a3df7d8a74a16459dc0cf6cad6227f4368`
+(parallel).
+
+The default is unchanged and `after` against `before` is flat, 0.95 to
+1.12 on every cell, the widest reading on a cell whose band is that wide.
+Four workers on the region tree, against the clause search that is the
+default and against the reference, on the formula cells:
+
+| Cell | after | regions | parallel | parallel/after | clingo | parallel/clingo |
+|---|---:|---:|---:|---:|---:|---:|
+| variant-04/05-larger-mix | 88.3 | 103.7 | 42.8 | 0.48 | 149.0 | 0.29 |
+| n-queens/variant-01 8→11 | 254.4 | 281.0 | 119.0 | 0.47 | 184.6 | 0.64 |
+| n-queens/variant-04 8→11 | 156.2 | 235.8 | 97.0 | 0.62 | 179.6 | 0.54 |
+| n-queens/variant-01 8→10 | 56.8 | 66.7 | 32.7 | 0.58 | 31.2 | 1.05 |
+| disjunction-12 | 43.1 | 31.2 | 22.5 | 0.52 | 21.6 | 1.04 |
+| independent-negation-aggregate-16 | 24.9 | 28.1 | 20.6 | 0.83 | 30.3 | 0.68 |
+| ties-50 | 25.5 | 28.5 | 21.5 | 0.84 | 18.6 | 1.16 |
+| send-money/send-money | 10.5 | 15.0 | 13.3 | 1.26 | 14.2 | 0.94 |
+
+The clingo column is the reference measured in the parallel run itself.
+
+The closure-route cells are flat under every arm, as they must be. The
+answers are the same in every arm, each once, checked by the harness's
+parity and by the corpus test that walks all 94 cases with four workers
+and compares the answer sets atom for atom; the order they arrive in
+differs between runs, which the contract now says. On the cells with many
+answers the four workers take between 0.47 and 0.62 of the clause
+search's time, which is the share-nothing partition doing what it was
+built to do: the tree is cut into regions that need nothing from one
+another, and each worker walks its own. On send-money, one answer found
+after a long chain of refutations, the workers gain nothing and the
+per-region cost of the regions method still shows. Against the reference
+the parallel arm is below it on five of the eight formula cells and within
+1.16 on the rest; it is the first arm in this record to be faster than
+clingo on n-queens.
+
+The default stays the clause search on one worker, the configuration the
+harness runs, since the regions method on one worker is still above it on
+six formula cells. Whether the session's default becomes regions with the
+host's parallelism is a decision on the record, not a measurement.
+
+In the problem's words: with the knowledge carried and the tree cut into
+regions, four workers finish queens and the larger mix in under half the
+time of the clause search and ahead of clingo, and the method that does it
+is the one the thesis named, candidate generation and membership by the
+same reading of the program, split into regions that share nothing.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
