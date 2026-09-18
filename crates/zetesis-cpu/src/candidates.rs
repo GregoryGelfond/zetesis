@@ -396,7 +396,7 @@ impl<'a> Candidates<'a> {
                 .take()
                 .expect("regions follow applied bounds");
             let mut root = traversal.statistics().regions == 0;
-            let visit = traversal.next(|region| {
+            let visit = traversal.next(|region, ()| {
                 if std::mem::take(&mut root) {
                     Ok(Narrowing::Fixed { changed: true })
                 } else {
@@ -406,11 +406,11 @@ impl<'a> Candidates<'a> {
             self.traversal = Some(traversal);
             match visit? {
                 None => return Ok(None),
-                Some(Visit::Leaf(region)) => {
+                Some(Visit::Leaf(region, ())) => {
                     self.hold(&region, &[])?;
                     return self.selected();
                 }
-                Some(Visit::Counted(region)) => {
+                Some(Visit::Counted(region, ())) => {
                     let undecided: Vec<usize> = region.open().collect();
                     self.hold(&region, &undecided)?;
                     self.started = false;

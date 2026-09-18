@@ -534,6 +534,7 @@
 'Zetesis.FormulaBounds.sure_body_forces' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.FormulaBounds.sure_body_refutes' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.FormulaBounds.known_sound' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.FormulaBounds.known_mono' does not depend on any axioms
 'Zetesis.FormulaBounds.known_forces' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.FormulaBounds.known_cuts' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.FormulaBounds.known_contradiction_refutes' depends on axioms: [propext, Classical.choice, Quot.sound]

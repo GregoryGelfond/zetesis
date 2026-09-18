@@ -518,6 +518,7 @@ import Zetesis
 #print axioms Zetesis.FormulaBounds.sure_body_forces
 #print axioms Zetesis.FormulaBounds.sure_body_refutes
 #print axioms Zetesis.FormulaBounds.known_sound
+#print axioms Zetesis.FormulaBounds.known_mono
 #print axioms Zetesis.FormulaBounds.known_forces
 #print axioms Zetesis.FormulaBounds.known_cuts
 #print axioms Zetesis.FormulaBounds.known_contradiction_refutes

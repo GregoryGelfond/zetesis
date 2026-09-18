@@ -143,7 +143,10 @@ statistics count charged node visits and producer checks, the propagation
 events, and the atoms held and cut. Every event follows a newly learned bit,
 so the events are bounded by the bits. A `Narrower` indexes the theory once,
 its parents and its atom nodes, and narrows any region of it; `narrow`
-indexes for one narrowing. `Narrower::narrow_frozen` narrows a region of the
+indexes for one narrowing. `Narrower::narrow_known` narrows from a
+`Knowledge` the caller carries from a region to its children and leaves it
+closed for them: the knowledge of a region holds in every region inside it
+(`known_mono`), so a child learns only the decisions its parent did not know. `Narrower::narrow_frozen` narrows a region of the
 theory's frozen reduct under a candidate, reading a node false in the
 candidate's truth as falsum and applying no support cut, which is the
 proper-subset query's narrowing; `FormulaEvaluation::truth` is that mask. `RegionLimits` bounds the work and the events;

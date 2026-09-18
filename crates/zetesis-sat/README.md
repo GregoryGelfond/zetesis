@@ -120,7 +120,11 @@ certificate's unit restriction, which is clause-only, applies.
 The narrowing is driven by a worklist over an index of the theory, built
 once: a node or atom that learns something is revisited once, and only its
 parents, operands and dependent producers are read, as unit propagation
-over watched clauses touches only what moved. Node visits and producer
+over watched clauses touches only what moved. What a narrowing knows about
+a region travels with the region: a split clones the knowledge into both
+children, so a child's narrowing starts from its parent's and learns only
+what the split decided (`FormulaBounds.known_mono`), and the regions still
+share nothing. The reduct query carries its knowledge the same way. Node visits and producer
 checks are charged as search work and each split as a decision, against
 the same cumulative `SearchLimits`. The clauses proposer stays the default
 until the regions proposer is measured beside it.

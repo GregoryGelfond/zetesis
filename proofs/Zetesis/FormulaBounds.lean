@@ -251,6 +251,43 @@ theorem known_sound (T : Theory α) (c : Cube α) {z : Atoms α} (hz : c.Contain
   | not_imp_consequent _ ih =>
     exact ⟨(fun e => nomatch e), (fun _ sG => ih.2 rfl (fun _ => sG))⟩
 
+/-- A region inside another: it holds every atom the other holds and admits
+only atoms the other admits, so its seeds are among the other's. -/
+def Inside (c' c : Cube α) : Prop :=
+  (∀ a, c.lower a → c'.lower a) ∧ (∀ a, c'.upper a → c.upper a)
+
+/-- Knowledge of a region holds in every region inside it, so a child of a
+split may start from its parent's knowledge. Induction on the derivation:
+only the atom cases read the region. -/
+theorem known_mono (T : Theory α) {c c' : Cube α} (h : Inside c' c) {F : Formula α}
+    {b : Bool} (k : Known T c F b) : Known T c' F b := by
+  induction k with
+  | held ha => exact .held (h.1 _ ha)
+  | cut ha => exact .cut (fun u => ha (h.2 _ u))
+  | bot => exact .bot
+  | root hF => exact .root hF
+  | conj_up _ _ ihF ihG => exact .conj_up ihF ihG
+  | conj_up_left _ ihF => exact .conj_up_left ihF
+  | conj_up_right _ ihG => exact .conj_up_right ihG
+  | disj_up_left _ ihF => exact .disj_up_left ihF
+  | disj_up_right _ ihG => exact .disj_up_right ihG
+  | disj_up _ _ ihF ihG => exact .disj_up ihF ihG
+  | imp_up_left _ ihF => exact .imp_up_left ihF
+  | imp_up_right _ ihG => exact .imp_up_right ihG
+  | imp_up _ _ ihF ihG => exact .imp_up ihF ihG
+  | conj_left _ ih => exact .conj_left ih
+  | conj_right _ ih => exact .conj_right ih
+  | disj_left _ _ ih ihG => exact .disj_left ih ihG
+  | disj_right _ _ ih ihF => exact .disj_right ih ihF
+  | imp_consequent _ _ ih ihF => exact .imp_consequent ih ihF
+  | imp_antecedent _ _ ih ihG => exact .imp_antecedent ih ihG
+  | not_conj_left _ _ ih ihG => exact .not_conj_left ih ihG
+  | not_conj_right _ _ ih ihF => exact .not_conj_right ih ihF
+  | not_disj_left _ ih => exact .not_disj_left ih
+  | not_disj_right _ ih => exact .not_disj_right ih
+  | not_imp_antecedent _ ih => exact .not_imp_antecedent ih
+  | not_imp_consequent _ ih => exact .not_imp_consequent ih
+
 /-- An atom known to hold is in every stable model of the region. -/
 theorem known_forces (T : Theory α) (c : Cube α) {a : α}
     (h : Known T c (.atom a) true) : ∀ z, c.Contains z → Stable z T → z a :=

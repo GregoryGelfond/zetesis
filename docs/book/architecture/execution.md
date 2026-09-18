@@ -92,10 +92,13 @@ on the open atom the narrowing found most constrained, cut branch first;
 a region with every atom decided is a leaf, and a leaf is a classical model, since at a full decision every
 root is sure or impossible (`FormulaBounds.decided_leaf_models`). The leaf
 is the candidate the reduct decides.
-The readings are arrays over the DAG, one pass each, and the regions
-partition the space exactly, so generation has the closure route's shape:
-data-parallel passes inside a region and share-nothing regions beside one
-another. A candidate-only restriction narrows the regions still to visit
+The knowledge of a region holds in every region inside it
+(`FormulaBounds.known_mono`), so a split hands each child a copy of its
+parent's knowledge and the child learns only what the split decided; the
+regions still share nothing. The readings are arrays over the DAG, and the
+regions partition the space exactly, so generation has the closure route's
+shape: data-parallel work inside a region and share-nothing regions beside
+one another. A candidate-only restriction narrows the regions still to visit
 without a restart, and no exclusion index is kept, because a leaf is visited
 once. The traversal itself is one operation in `zetesis-cpu`, shared by both
 routes; the closure route narrows by its two closures, the formula route by

@@ -12,7 +12,7 @@ use zetesis_cpu::regions::{Counting, Narrowing, Region, Traversal, Visit};
 fn visits(mut traversal: Traversal) -> Vec<Visit> {
     let mut visits = Vec::new();
     while let Some(visit) = traversal
-        .next(|_| Ok::<_, Stop>(Narrowing::Fixed { changed: false }))
+        .next(|_, ()| Ok::<_, Stop>(Narrowing::Fixed { changed: false }))
         .unwrap()
     {
         visits.push(visit);
@@ -55,8 +55,8 @@ fn never_counting_visits_every_leaf_in_counter_order() {
     let leaves: Vec<Vec<usize>> = visits(traversal)
         .iter()
         .map(|visit| match visit {
-            Visit::Leaf(region) => held(region),
-            Visit::Counted(_) => panic!("never counted"),
+            Visit::Leaf(region, ()) => held(region),
+            Visit::Counted(..) => panic!("never counted"),
         })
         .collect();
     // Empty, {0}, {1}, {0,1}: atom 0 is the low bit of the counter.
@@ -69,8 +69,8 @@ fn the_root_is_split_even_when_its_narrowing_changes_nothing() {
     let visits = visits(traversal);
     // The root splits on atom 1; each child, unchanged by narrowing, is counted.
     assert_eq!(visits.len(), 2);
-    assert!(matches!(&visits[0], Visit::Counted(region) if region.is_cut(1)));
-    assert!(matches!(&visits[1], Visit::Counted(region) if region.is_held(1)));
+    assert!(matches!(&visits[0], Visit::Counted(region, ()) if region.is_cut(1)));
+    assert!(matches!(&visits[1], Visit::Counted(region, ()) if region.is_held(1)));
 }
 
 #[test]
@@ -80,7 +80,7 @@ fn a_narrowing_that_decides_an_atom_keeps_splitting_below_it() {
     let mut traversal = Traversal::new(Region::undecided(3), Counting::Unchanged);
     let mut seen = Vec::new();
     while let Some(visit) = traversal
-        .next(|region| {
+        .next(|region, ()| {
             if region.is_held(2) && region.is_open(0) {
                 assert!(region.cut(0));
                 Ok::<_, Stop>(Narrowing::Fixed { changed: true })
@@ -93,9 +93,9 @@ fn a_narrowing_that_decides_an_atom_keeps_splitting_below_it() {
         seen.push(visit);
     }
     assert_eq!(seen.len(), 3);
-    assert!(matches!(&seen[0], Visit::Counted(region) if region.is_cut(2)));
-    assert!(matches!(&seen[1], Visit::Leaf(region) if held(region) == vec![2]));
-    assert!(matches!(&seen[2], Visit::Leaf(region) if held(region) == vec![1, 2]));
+    assert!(matches!(&seen[0], Visit::Counted(region, ()) if region.is_cut(2)));
+    assert!(matches!(&seen[1], Visit::Leaf(region, ()) if held(region) == vec![2]));
+    assert!(matches!(&seen[2], Visit::Leaf(region, ()) if held(region) == vec![1, 2]));
 }
 
 #[test]
@@ -103,7 +103,7 @@ fn a_refuted_region_is_skipped_with_its_whole_subtree() {
     let mut traversal = Traversal::new(Region::undecided(3), Counting::Never);
     let mut leaves = Vec::new();
     while let Some(visit) = traversal
-        .next(|region| {
+        .next(|region, ()| {
             if region.is_held(2) {
                 Ok::<_, Stop>(Narrowing::Refuted)
             } else {
@@ -112,7 +112,7 @@ fn a_refuted_region_is_skipped_with_its_whole_subtree() {
         })
         .unwrap()
     {
-        if let Visit::Leaf(region) = visit {
+        if let Visit::Leaf(region, ()) = visit {
             leaves.push(held(&region));
         }
     }
@@ -131,14 +131,14 @@ fn a_decided_root_is_one_leaf() {
     assert!(root.hold(0) && root.cut(1));
     let visits = visits(Traversal::new(root, Counting::Unchanged));
     assert_eq!(visits.len(), 1);
-    assert!(matches!(&visits[0], Visit::Leaf(region) if held(region) == vec![0]));
+    assert!(matches!(&visits[0], Visit::Leaf(region, ()) if held(region) == vec![0]));
 }
 
 #[test]
 fn a_stopped_narrowing_stops_the_traversal_and_keeps_the_region() {
     let mut traversal = Traversal::new(Region::undecided(2), Counting::Never);
     assert_eq!(
-        traversal.next(|_| Err(Stop::WorkLimit)).unwrap_err(),
+        traversal.next(|_, ()| Err(Stop::WorkLimit)).unwrap_err(),
         Stop::WorkLimit
     );
     // The region whose narrowing stopped is visited again on the next call.
@@ -153,13 +153,13 @@ fn a_narrowing_may_choose_the_split_atom() {
     let mut traversal = Traversal::new(Region::undecided(2), Counting::Never);
     let mut leaves = Vec::new();
     while let Some(visit) = traversal
-        .next(|region| {
+        .next(|region, ()| {
             region.prefer(0);
             Ok::<_, Stop>(Narrowing::Fixed { changed: false })
         })
         .unwrap()
     {
-        if let Visit::Leaf(region) = visit {
+        if let Visit::Leaf(region, ()) = visit {
             leaves.push(held(&region));
         }
     }
@@ -168,4 +168,25 @@ fn a_narrowing_may_choose_the_split_atom() {
     region.prefer(1);
     assert!(region.hold(1));
     assert_eq!(region.split_atom(), Some(0), "a decided preference lapses");
+}
+
+#[test]
+fn a_split_clones_the_state_into_both_children_and_a_leaf_carries_it() {
+    // The state counts the regions on its own lineage: each narrowing adds
+    // one, so a leaf at depth two has seen three regions, and siblings do
+    // not see each other's count.
+    let mut traversal = Traversal::with_state(Region::undecided(2), Counting::Never, 0usize);
+    let mut depths = Vec::new();
+    while let Some(visit) = traversal
+        .next(|_, seen: &mut usize| {
+            *seen += 1;
+            Ok::<_, Stop>(Narrowing::Fixed { changed: false })
+        })
+        .unwrap()
+    {
+        if let Visit::Leaf(_, seen) = visit {
+            depths.push(seen);
+        }
+    }
+    assert_eq!(depths, vec![3, 3, 3, 3]);
 }

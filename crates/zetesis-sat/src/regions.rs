@@ -20,7 +20,7 @@
 
 use zetesis_cpu::Stop;
 use zetesis_cpu::regions::{Counting, Narrowing, Region, Traversal, Visit};
-use zetesis_ferraris::{Interpretation, Narrower, Producers, RegionLimits, Theory};
+use zetesis_ferraris::{Interpretation, Knowledge, Narrower, Producers, RegionLimits, Theory};
 
 use crate::Incomplete;
 use crate::search::{Budget, Quota};
@@ -76,7 +76,10 @@ pub struct RegionSearchStatistics {
 pub(crate) struct RegionSearch {
     producers: Option<Producers>,
     narrower: Narrower,
-    traversal: Traversal,
+    /// Each region carries what is known about it under the theory and
+    /// under each restriction, in order; a restriction added after a region
+    /// was reached gets fresh knowledge when the region is next narrowed.
+    traversal: Traversal<Vec<Knowledge>>,
     /// Each restriction with its own index.
     restrictions: Vec<(Theory, Narrower)>,
     statistics: RegionSearchStatistics,
@@ -97,8 +100,12 @@ impl RegionSearch {
                 ..Default::default()
             },
             producers: extraction.producers,
+            traversal: Traversal::with_state(
+                Region::undecided(theory.atom_count()),
+                Counting::Never,
+                vec![narrower.knowledge()],
+            ),
             narrower,
-            traversal: Traversal::new(Region::undecided(theory.atom_count()), Counting::Never),
             restrictions: Vec::new(),
         })
     }
@@ -139,12 +146,13 @@ impl RegionSearch {
             statistics,
         } = self;
         let before = traversal.statistics();
-        let visit = traversal.next(|region| {
+        let visit = traversal.next(|region, knowledge| {
             narrow(
                 (theory, narrower),
                 producers.as_ref(),
                 restrictions,
                 region,
+                knowledge,
                 budget,
                 statistics,
             )
@@ -158,8 +166,8 @@ impl RegionSearch {
             budget.decide()?;
         }
         match visit? {
-            None | Some(Visit::Counted(_)) => Ok(None),
-            Some(Visit::Leaf(region)) => {
+            None | Some(Visit::Counted(..)) => Ok(None),
+            Some(Visit::Leaf(region, _)) => {
                 let mut selected = crate::search::storage(theory.atom_count())?;
                 selected.extend(region.held());
                 Interpretation::new(theory, selected)
@@ -174,15 +182,18 @@ impl RegionSearch {
 }
 
 /// Narrow a region by the theory and every restriction until none decides
-/// an atom, or one refutes it. Each `zetesis_ferraris::narrow` call runs to
-/// its own fixed point, so the joint fixed point is reached when a full
-/// round changes nothing. A narrowing stopped on the work ceiling has
-/// spent at least the remaining work, which is charged.
+/// an atom, or one refutes it, each from what the region already knows
+/// under it. Each narrowing runs to its own fixed point, so the joint fixed
+/// point is reached when a full round changes nothing. A narrowing stopped
+/// on the work ceiling has spent at least the remaining work, which is
+/// charged.
+#[allow(clippy::too_many_arguments)]
 fn narrow(
     theory: (&Theory, &Narrower),
     producers: Option<&Producers>,
     restrictions: &[(Theory, Narrower)],
     region: &mut Region,
+    knowledge: &mut Vec<Knowledge>,
     budget: &mut Budget<'_>,
     statistics: &mut RegionSearchStatistics,
 ) -> Result<Narrowing, Incomplete> {
@@ -198,8 +209,20 @@ fn narrow(
             .enumerate()
         {
             let producers = if index == 0 { producers } else { None };
-            let result =
-                narrower.narrow(formulas, producers, region, limits(budget), budget.control);
+            if knowledge.len() <= index {
+                knowledge
+                    .try_reserve(1)
+                    .map_err(|_| Incomplete::Allocation)?;
+                knowledge.push(narrower.knowledge());
+            }
+            let result = narrower.narrow_known(
+                formulas,
+                producers,
+                region,
+                &mut knowledge[index],
+                limits(budget),
+                budget.control,
+            );
             let (narrowing, pass) = match result {
                 Ok(outcome) => outcome,
                 Err(Stop::WorkLimit) => {
@@ -299,15 +322,16 @@ impl ReductQuery {
         for atom in (0..theory.atom_count()).filter(|&atom| !candidate.contains(atom)) {
             root.cut(atom);
         }
-        let mut traversal = Traversal::new(root, Counting::Never);
+        let mut traversal = Traversal::with_state(root, Counting::Never, self.narrower.knowledge());
         loop {
             let before = traversal.statistics();
-            let visit = traversal.next(|region| {
+            let visit = traversal.next(|region, knowledge| {
                 narrow_frozen(
                     &self.narrower,
                     theory,
                     truth,
                     region,
+                    knowledge,
                     budget,
                     &mut statistics.reduct.regions,
                 )
@@ -324,8 +348,8 @@ impl ReductQuery {
                 budget.decide()?;
             }
             match visit? {
-                None | Some(Visit::Counted(_)) => return Ok(crate::Check::Stable),
-                Some(Visit::Leaf(region)) => {
+                None | Some(Visit::Counted(..)) => return Ok(crate::Check::Stable),
+                Some(Visit::Leaf(region, _)) => {
                     // The candidate models its own reduct and is no
                     // countermodel; every other leaf is a proper subset.
                     if candidate.atoms().all(|atom| region.is_held(atom)) {
@@ -353,10 +377,18 @@ fn narrow_frozen<Q: Quota>(
     theory: &Theory,
     truth: &[bool],
     region: &mut Region,
+    knowledge: &mut Knowledge,
     budget: &mut Budget<'_, Q>,
     receipts: &mut RegionQueryStatistics,
 ) -> Result<Narrowing, Incomplete> {
-    let result = narrower.narrow_frozen(theory, truth, region, limits(budget), budget.control);
+    let result = narrower.narrow_frozen_known(
+        theory,
+        truth,
+        region,
+        knowledge,
+        limits(budget),
+        budget.control,
+    );
     let (narrowing, pass) = match result {
         Ok(outcome) => outcome,
         Err(Stop::WorkLimit) => {

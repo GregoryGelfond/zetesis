@@ -162,13 +162,14 @@ pub enum Counting {
     Unchanged,
 }
 
-/// One region the traversal hands to the caller.
+/// One region the traversal hands to the caller, with what the caller
+/// carries alongside it.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Visit {
+pub enum Visit<S = ()> {
     /// Every atom is decided: the region is one candidate.
-    Leaf(Region),
+    Leaf(Region, S),
     /// The region's open atoms are the caller's to count.
-    Counted(Region),
+    Counted(Region, S),
 }
 
 /// The regions a traversal visited, by outcome.
@@ -184,11 +185,14 @@ pub struct RegionStatistics {
     pub counted: usize,
 }
 
-/// The coverage tree of a root region, walked depth first.
+/// The coverage tree of a root region, walked depth first. Each region
+/// carries the caller's state `S`, what the narrowing knows about the
+/// region; a split clones it into both children, so that a child starts
+/// from its parent's knowledge and the regions share nothing.
 #[derive(Clone, Debug)]
-pub struct Traversal {
-    /// The regions still to visit, the next on top.
-    regions: Vec<Region>,
+pub struct Traversal<S = ()> {
+    /// The regions still to visit with their state, the next on top.
+    regions: Vec<(Region, S)>,
     counting: Counting,
     /// The root has not been visited yet; it is split whatever its narrowing.
     root: bool,
@@ -196,11 +200,20 @@ pub struct Traversal {
 }
 
 impl Traversal {
-    /// A traversal of every candidate of the root.
+    /// A traversal of every candidate of the root, carrying nothing.
     #[must_use]
     pub fn new(root: Region, counting: Counting) -> Self {
+        Self::with_state(root, counting, ())
+    }
+}
+
+impl<S: Clone> Traversal<S> {
+    /// A traversal of every candidate of the root, carrying `state` with the
+    /// root and a clone of a region's state with each of its children.
+    #[must_use]
+    pub fn with_state(root: Region, counting: Counting, state: S) -> Self {
         Self {
-            regions: vec![root],
+            regions: vec![(root, state)],
             counting,
             root: true,
             statistics: self::RegionStatistics::default(),
@@ -222,13 +235,13 @@ impl Traversal {
     /// stack, so a later call narrows the same region again.
     pub fn next<E: From<Stop>>(
         &mut self,
-        mut narrow: impl FnMut(&mut Region) -> Result<Narrowing, E>,
-    ) -> Result<Option<Visit>, E> {
+        mut narrow: impl FnMut(&mut Region, &mut S) -> Result<Narrowing, E>,
+    ) -> Result<Option<Visit<S>>, E> {
         loop {
-            let Some(mut region) = self.regions.pop() else {
+            let Some((mut region, mut state)) = self.regions.pop() else {
                 return Ok(None);
             };
-            let changed = match narrow(&mut region) {
+            let changed = match narrow(&mut region, &mut state) {
                 Ok(Narrowing::Refuted) => {
                     self.statistics.regions += 1;
                     self.statistics.refuted += 1;
@@ -237,7 +250,7 @@ impl Traversal {
                 }
                 Ok(Narrowing::Fixed { changed }) => changed,
                 Err(stop) => {
-                    self.regions.push(region);
+                    self.regions.push((region, state));
                     return Err(stop);
                 }
             };
@@ -245,18 +258,18 @@ impl Traversal {
             let root = std::mem::replace(&mut self.root, false);
             let Some(atom) = region.split_atom() else {
                 self.statistics.decided += 1;
-                return Ok(Some(Visit::Leaf(region)));
+                return Ok(Some(Visit::Leaf(region, state)));
             };
             if self.counting == Counting::Unchanged && !root && !changed {
                 self.statistics.counted += 1;
-                return Ok(Some(Visit::Counted(region)));
+                return Ok(Some(Visit::Counted(region, state)));
             }
             let (cut, held) = region.split(atom);
             self.regions
                 .try_reserve(2)
                 .map_err(|_| E::from(Stop::Allocation))?;
-            self.regions.push(held);
-            self.regions.push(cut);
+            self.regions.push((held, state.clone()));
+            self.regions.push((cut, state));
         }
     }
 }

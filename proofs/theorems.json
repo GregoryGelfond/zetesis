@@ -2590,34 +2590,39 @@
     "line": 206
   },
   {
+    "name": "Zetesis.FormulaBounds.known_mono",
+    "file": "Zetesis/FormulaBounds.lean",
+    "line": 262
+  },
+  {
     "name": "Zetesis.FormulaBounds.known_forces",
     "file": "Zetesis/FormulaBounds.lean",
-    "line": 255
+    "line": 292
   },
   {
     "name": "Zetesis.FormulaBounds.known_cuts",
     "file": "Zetesis/FormulaBounds.lean",
-    "line": 260
+    "line": 297
   },
   {
     "name": "Zetesis.FormulaBounds.known_contradiction_refutes",
     "file": "Zetesis/FormulaBounds.lean",
-    "line": 265
+    "line": 302
   },
   {
     "name": "Zetesis.FormulaBounds.blocked_no_support",
     "file": "Zetesis/FormulaBounds.lean",
-    "line": 279
+    "line": 316
   },
   {
     "name": "Zetesis.FormulaBounds.unsupported_cut",
     "file": "Zetesis/FormulaBounds.lean",
-    "line": 290
+    "line": 327
   },
   {
     "name": "Zetesis.FormulaBounds.sole_support_forces",
     "file": "Zetesis/FormulaBounds.lean",
-    "line": 302
+    "line": 339
   },
   {
     "name": "Zetesis.FormulaRegions.classical_consequence_forces",

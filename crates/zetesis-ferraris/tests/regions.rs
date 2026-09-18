@@ -7,8 +7,8 @@ use std::collections::BTreeSet;
 
 use zetesis_cpu::Control;
 use zetesis_ferraris::{
-    AdmissionLimits, Interpretation, Limits, Narrowing, Node, Region, RegionLimits, Theory, check,
-    narrow, producers,
+    AdmissionLimits, Interpretation, Limits, Narrower, Narrowing, Node, Region, RegionLimits,
+    Theory, check, narrow, producers,
 };
 
 fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
@@ -421,4 +421,81 @@ fn a_held_atom_with_one_producer_left_demands_its_body() {
     ));
     assert!(region.is_held(1) && region.is_held(3));
     narrowing_keeps_every_stable_model(&t);
+}
+
+/// Walking the tree with knowledge carried from parent to child decides
+/// every region exactly as a fresh narrowing of that region does, and
+/// reaches the same leaves: the knowledge of a region holds in every
+/// region inside it.
+#[test]
+fn carried_knowledge_narrows_every_region_as_a_fresh_narrowing_does() {
+    for t in [disjunctive(), {
+        // p :- not q. q :- not p. r :- p, not s. s :- t. {t}.
+        let nodes = vec![
+            Node::Atom(0),        // p
+            Node::Atom(1),        // q
+            Node::False,          // 2
+            Node::Implies(1, 2),  // not q
+            Node::Implies(3, 0),  // not q -> p
+            Node::Implies(0, 2),  // not p
+            Node::Implies(5, 1),  // not p -> q
+            Node::Atom(2),        // r
+            Node::Atom(3),        // s
+            Node::Implies(8, 2),  // not s
+            Node::And(0, 9),      // p & not s
+            Node::Implies(10, 7), // -> r
+            Node::Atom(4),        // t
+            Node::Implies(12, 8), // t -> s
+            Node::Implies(12, 2), // not t
+            Node::Or(12, 14),     // t | not t
+        ];
+        theory(5, nodes, vec![4, 6, 11, 13, 15])
+    }] {
+        let narrower = Narrower::new(&t);
+        let extracted = producers(&t, RegionLimits::default(), &Control::default()).unwrap();
+        let producers = extracted.producers.as_ref();
+        let mut stack = vec![(Region::undecided(t.atom_count()), narrower.knowledge())];
+        let mut leaves = 0;
+        while let Some((mut carried, mut knowledge)) = stack.pop() {
+            let mut fresh = carried.clone();
+            let (from_fresh, _) = narrower
+                .narrow(
+                    &t,
+                    producers,
+                    &mut fresh,
+                    RegionLimits::default(),
+                    &Control::default(),
+                )
+                .unwrap();
+            let (from_carried, _) = narrower
+                .narrow_known(
+                    &t,
+                    producers,
+                    &mut carried,
+                    &mut knowledge,
+                    RegionLimits::default(),
+                    &Control::default(),
+                )
+                .unwrap();
+            assert_eq!(
+                matches!(from_fresh, Narrowing::Refuted),
+                matches!(from_carried, Narrowing::Refuted)
+            );
+            if matches!(from_fresh, Narrowing::Refuted) {
+                continue;
+            }
+            for atom in 0..t.atom_count() {
+                assert_eq!(fresh.decision(atom), carried.decision(atom), "atom {atom}");
+            }
+            match carried.highest_open() {
+                None => leaves += 1,
+                Some(atom) => {
+                    let (cut, held) = carried.split(atom);
+                    stack.push((held, knowledge.clone()));
+                    stack.push((cut, knowledge));
+                }
+            }
+        }
+        assert_eq!(leaves, stable_models(&t).len());
+    }
 }

@@ -208,6 +208,16 @@ pub struct Narrower {
     atom_nodes: Vec<Vec<usize>>,
 }
 
+/// What a narrowing knows about a region, carried from a region to its
+/// children: the knowledge of a region holds in every region inside it
+/// (`FormulaBounds.known_mono`), so a child's narrowing starts from its
+/// parent's knowledge and learns only what the split decided. A fresh
+/// value knows nothing and is seeded in full on first use.
+#[derive(Clone, Debug)]
+pub struct Knowledge {
+    known: Known,
+}
+
 impl Narrower {
     /// Index the theory's DAG for narrowing.
     #[must_use]
@@ -239,6 +249,14 @@ impl Narrower {
         self.parents.len() as u64
     }
 
+    /// Knowledge of nothing, for the root of a tree over this theory.
+    #[must_use]
+    pub fn knowledge(&self) -> Knowledge {
+        Knowledge {
+            known: Known::empty(self.parents.len(), self.atom_nodes.len()),
+        }
+    }
+
     /// Narrow the region to the fixed point of the three rules.
     ///
     /// # Errors
@@ -252,7 +270,59 @@ impl Narrower {
         limits: RegionLimits,
         control: &Control,
     ) -> Result<(Narrowing, NarrowingStatistics), Stop> {
-        self.narrow_with(theory, producers, None, region, limits, control)
+        let mut knowledge = self.knowledge();
+        self.narrow_with(
+            theory,
+            producers,
+            None,
+            region,
+            &mut knowledge,
+            limits,
+            control,
+        )
+    }
+
+    /// Narrow the region from what is already known about it, learning
+    /// only the decisions the knowledge has not seen, and leave the
+    /// knowledge closed for the region's children.
+    ///
+    /// # Errors
+    /// As [`Self::narrow`]; the knowledge is then unchanged.
+    pub fn narrow_known(
+        &self,
+        theory: &Theory,
+        producers: Option<&Producers>,
+        region: &mut Region,
+        knowledge: &mut Knowledge,
+        limits: RegionLimits,
+        control: &Control,
+    ) -> Result<(Narrowing, NarrowingStatistics), Stop> {
+        self.narrow_with(theory, producers, None, region, knowledge, limits, control)
+    }
+
+    /// [`Self::narrow_frozen`] from existing knowledge, as
+    /// [`Self::narrow_known`] is to [`Self::narrow`].
+    ///
+    /// # Errors
+    /// As [`Self::narrow`]; the knowledge is then unchanged.
+    pub fn narrow_frozen_known(
+        &self,
+        theory: &Theory,
+        truth: &[bool],
+        region: &mut Region,
+        knowledge: &mut Knowledge,
+        limits: RegionLimits,
+        control: &Control,
+    ) -> Result<(Narrowing, NarrowingStatistics), Stop> {
+        self.narrow_with(
+            theory,
+            None,
+            Some(truth),
+            region,
+            knowledge,
+            limits,
+            control,
+        )
     }
 
     /// Narrow a region of the theory's frozen reduct under a candidate: a
@@ -272,20 +342,33 @@ impl Narrower {
         limits: RegionLimits,
         control: &Control,
     ) -> Result<(Narrowing, NarrowingStatistics), Stop> {
-        self.narrow_with(theory, None, Some(truth), region, limits, control)
+        let mut knowledge = self.knowledge();
+        self.narrow_with(
+            theory,
+            None,
+            Some(truth),
+            region,
+            &mut knowledge,
+            limits,
+            control,
+        )
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn narrow_with(
         &self,
         theory: &Theory,
         producers: Option<&Producers>,
         frozen: Option<&[bool]>,
         region: &mut Region,
+        knowledge: &mut Knowledge,
         limits: RegionLimits,
         control: &Control,
     ) -> Result<(Narrowing, NarrowingStatistics), Stop> {
         control.poll()?;
-        let mut known = Known::empty(theory.nodes().len(), theory.atom_count());
+        // A stopped closure leaves the knowledge as it was; a refuted one
+        // is not carried anywhere.
+        let mut known = knowledge.known.clone();
         let mut work = Work::new(limits.max_work);
         let mut statistics = NarrowingStatistics::default();
         let closed = known.close(
@@ -318,6 +401,7 @@ impl Narrower {
             region.prefer(atom);
         }
         statistics.work = work.spent;
+        knowledge.known = known;
         Ok((Narrowing::Fixed { changed }, statistics))
     }
 
@@ -374,6 +458,7 @@ pub fn narrow(
 /// (`FormulaBounds.Known`, `known_sound`). The closure is driven by a
 /// worklist: a node or atom that learns something is revisited once, and
 /// only its parents, operands and dependent producers are read.
+#[derive(Clone, Debug)]
 struct Known {
     sure: Vec<bool>,
     never: Vec<bool>,
@@ -383,6 +468,9 @@ struct Known {
     nodes: Vec<usize>,
     /// Atoms whose support must be rechecked.
     heads: Vec<usize>,
+    /// The roots, falsum and every atom's support have been seeded once;
+    /// later closures learn only decisions not yet known.
+    seeded: bool,
 }
 
 /// What a step of the closure did.
@@ -424,6 +512,7 @@ impl Known {
             atom_never: vec![false; atoms],
             nodes: Vec::new(),
             heads: Vec::new(),
+            seeded: false,
         }
     }
 
@@ -487,22 +576,26 @@ impl Known {
     ) -> Result<Sweep, Stop> {
         let nodes = theory.nodes();
         let mut step = Sweep::Unchanged;
-        for (node, kind) in nodes.iter().enumerate() {
-            let falsum = matches!(kind, Node::False) || frozen.is_some_and(|truth| !truth[node]);
-            if falsum {
-                step = step.join(self.never(node));
+        if !self.seeded {
+            for (node, kind) in nodes.iter().enumerate() {
+                let falsum =
+                    matches!(kind, Node::False) || frozen.is_some_and(|truth| !truth[node]);
+                if falsum {
+                    step = step.join(self.never(node));
+                }
             }
-        }
-        for &root in theory.roots() {
-            step = step.join(self.sure(root));
+            for &root in theory.roots() {
+                step = step.join(self.sure(root));
+            }
+            if producers.is_some() {
+                self.heads.extend(0..theory.atom_count());
+            }
+            self.seeded = true;
         }
         for atom in 0..theory.atom_count() {
             if let Some(value) = region.decision(atom) {
                 step = step.join(self.atom(index, atom, value));
             }
-        }
-        if producers.is_some() {
-            self.heads.extend(0..theory.atom_count());
         }
         if step == Sweep::Contradiction {
             return Ok(step);
@@ -529,12 +622,11 @@ impl Known {
         }
     }
 
-    /// A node that learned something teaches its operands what the
-    /// connective leaves them, tells its atom, lets each parent learn from
-    /// its operands, and, when it is a body that fails, has the producers'
-    /// heads rechecked. A node false under a frozen mask is falsum in the
-    /// reduct, a constant with no operands: it teaches nothing and learns
-    /// nothing from them, and a parent under the mask likewise.
+    /// A node that learned something teaches its operands, and lets each
+    /// parent learn from its operands and teach them in turn. A node false
+    /// under a frozen mask is falsum in the reduct, a constant with no
+    /// operands: it teaches nothing and learns nothing from them, and a
+    /// parent under the mask likewise.
     fn revisit(
         &mut self,
         nodes: &[Node],
@@ -547,15 +639,36 @@ impl Known {
         work.tick()?;
         let masked = |node: usize| frozen.is_some_and(|truth| !truth[node]);
         let mut step = Sweep::Unchanged;
-        if masked(node) {
-            for &parent in &index.parents[node] {
-                work.tick()?;
-                if !masked(parent) {
-                    step = step.join(self.learn_from_operands(nodes, parent));
-                }
-            }
-            return Ok(step);
+        if !masked(node) {
+            step = step.join(self.teach_operands(nodes, index, producers, node));
         }
+        // A parent learns from its operands, and a parent already known
+        // teaches its operands again, since what it leaves them may have
+        // narrowed with this one.
+        for &parent in &index.parents[node] {
+            work.tick()?;
+            if masked(parent) {
+                continue;
+            }
+            step = step.join(self.learn_from_operands(nodes, parent));
+            if self.sure[parent] || self.never[parent] {
+                step = step.join(self.teach_operands(nodes, index, producers, parent));
+            }
+        }
+        Ok(step)
+    }
+
+    /// A known node teaches its operands what the connective leaves them,
+    /// tells its atom, and, when it is a body that fails, has the producers'
+    /// heads rechecked.
+    fn teach_operands(
+        &mut self,
+        nodes: &[Node],
+        index: &Narrower,
+        producers: Option<&Producers>,
+        node: usize,
+    ) -> Sweep {
+        let mut step = Sweep::Unchanged;
         if self.sure[node] {
             step = step.join(match nodes[node] {
                 Node::Atom(atom) => {
@@ -618,14 +731,7 @@ impl Known {
                 }
             }
         }
-        for &parent in &index.parents[node] {
-            work.tick()?;
-            if masked(parent) {
-                continue;
-            }
-            step = step.join(self.learn_from_operands(nodes, parent));
-        }
-        Ok(step)
+        step
     }
 
     /// A node learns from its operands what the connective dictates.
