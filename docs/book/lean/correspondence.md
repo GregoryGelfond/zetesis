@@ -140,7 +140,12 @@ from each argument's values being kept in canonical order with the first
 argument most significant. A round's dense heads are marked as pending bits
 and joined into the relation after the round; because the index is a
 bijection and only positions absent from the relation are marked, the marks
-are exactly the new atoms the round would have built, one bit for each.
+are exactly the new atoms the round would have built, one bit for each. A
+row step marks a block of heads from a block of rows by words; because the
+two relations list the stepped argument's values alike and every other
+argument is fixed, a row's place in its block is its head's place in the
+other, so the step marks what binding each row would, and the row-step
+plan, kernel and family tests check it.
 Under them, the closure over dense relations is
 the closure over catalogs, step for step. These are checked by the argument
 bound, dense relation and family tests, not stated in Lean: the consequence

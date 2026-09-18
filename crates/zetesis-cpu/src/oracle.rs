@@ -15,9 +15,11 @@ mod prepared;
 pub mod bounds;
 pub use prepared::{ClosureWorkspace, PreparationLimits, PreparationStatistics, PreparedQueries};
 use relations::{
-    Catalogs, Dense, Layouts, PendingRows, Relational, Relations, Row, RowSet, Rows, Slot,
+    Block, Catalogs, Dense, Layouts, PendingRows, Relational, Relations, Row, RowSet, Rows, Slot,
 };
 pub(crate) mod restrictions;
+mod row_steps;
+use row_steps::RowSteps;
 pub mod source;
 pub(crate) mod worlds;
 #[cfg(test)]
@@ -93,6 +95,11 @@ pub struct Statistics {
     /// that no atom was built for them before the model was assembled. The
     /// closure's other heads were built as atoms when first derived.
     pub dense_heads: u64,
+    /// Blocks of body rows joined into a head's pending rows a word at a
+    /// time, each in place of binding its rows one by one. The rows of such a
+    /// block are counted in `bindings` and not in `tuple_probes`: none is
+    /// offered to the row matcher.
+    pub row_steps: u64,
 }
 
 /// Exact closure and rejection reasons after a fully covered completion round.
@@ -504,6 +511,7 @@ struct RoundWorkspace<'a> {
     dimensions: &'a prepared::Dimensions,
     rules: &'a prepared::Rules,
     layouts: &'a Layouts,
+    row_steps: &'a RowSteps,
     pending: &'a mut PendingRows,
     overhead: u128,
 }
@@ -521,6 +529,7 @@ fn least_closure_with(
         dimensions,
         rules,
         layouts,
+        row_steps,
         pending,
         overhead,
     } = workspace;
@@ -553,6 +562,7 @@ fn least_closure_with(
                 incremental.then_some(rules),
                 DenseHeads {
                     layouts,
+                    row_steps,
                     pending: &mut *pending,
                 },
                 Frame {
@@ -643,7 +653,141 @@ fn record_head(
 /// head's slot, and the pending rows take its position.
 struct DenseHeads<'a> {
     layouts: &'a Layouts,
+    row_steps: &'a RowSteps,
     pending: &'a mut PendingRows,
+}
+
+/// What a join reports to: each complete binding, and, where the consumer
+/// can take them whole, the block of rows its innermost depth would bind one
+/// by one. A closure is a consumer of bindings alone.
+trait Sink<'source, E> {
+    fn binding(
+        &mut self,
+        assignment: &[Option<&'source Value>],
+        work: &mut Work<'_>,
+    ) -> Result<(), E>;
+
+    /// Whether the rows of this occurrence, visited innermost, are taken by
+    /// [`Self::rows`] instead of bound singly.
+    fn steps_by_rows(&self, _occurrence: usize) -> bool {
+        false
+    }
+
+    /// Take the block of rows matching the assignment, which binds every
+    /// variable of the rule but the occurrence's last.
+    fn rows(
+        &mut self,
+        _rows: Block<'source>,
+        _assignment: &[Option<&'source Value>],
+        _work: &mut Work<'_>,
+    ) -> Result<(), E> {
+        Ok(())
+    }
+}
+
+impl<'source, E, F> Sink<'source, E> for F
+where
+    F: FnMut(&[Option<&'source Value>], &mut Work<'_>) -> Result<(), E>,
+{
+    fn binding(
+        &mut self,
+        assignment: &[Option<&'source Value>],
+        work: &mut Work<'_>,
+    ) -> Result<(), E> {
+        self(assignment, work)
+    }
+}
+
+/// The consumer of one template's joins in a closure round.
+struct RoundSink<'a, 'source> {
+    template: &'a Template,
+    closure: &'source Catalogs,
+    /// The head's pending-row slot and relation, when the head is laid out.
+    dense_head: Option<(usize, &'source Dense)>,
+    /// The template's row-step plan, by positive occurrence.
+    row_steps: &'a [bool],
+    result: &'a mut RoundConsequences,
+    pending: &'a mut PendingRows,
+}
+
+impl<'source> Sink<'source, Stop> for RoundSink<'_, 'source> {
+    fn binding(
+        &mut self,
+        assignment: &[Option<&'source Value>],
+        work: &mut Work<'_>,
+    ) -> Result<(), Stop> {
+        work.tick()?;
+        if let Some(head) = self.template.head() {
+            work.charge(head.terms().len())?;
+            let key = head.key(assignment).map_err(|_| Stop::InvalidProgram)?;
+            record_head(
+                key,
+                self.dense_head,
+                self.closure,
+                self.result,
+                self.pending,
+                work,
+            )?;
+        } else {
+            self.result.constraint_violated = true;
+        }
+        Ok(())
+    }
+
+    fn steps_by_rows(&self, occurrence: usize) -> bool {
+        self.row_steps.get(occurrence).copied().unwrap_or(false)
+    }
+
+    // The plan admitted the occurrence, so the head is laid out, ends in the
+    // occurrence's last variable and lists its values as the occurrence does:
+    // the heads of the block are the block of the head's bound prefix, place
+    // for place, and each row of the block is one binding.
+    fn rows(
+        &mut self,
+        rows: Block<'source>,
+        assignment: &[Option<&'source Value>],
+        work: &mut Work<'_>,
+    ) -> Result<(), Stop> {
+        let (Some(head), Some((slot, dense))) = (self.template.head(), self.dense_head) else {
+            return Err(Stop::InvalidProgram);
+        };
+        let bound = head.terms().len().saturating_sub(1);
+        work.charge(bound)?;
+        let heads = dense.layout().prefix_range(
+            head.terms()[..bound]
+                .iter()
+                .map_while(|term| resolve(term, assignment)),
+        );
+        if heads.len() != rows.len {
+            // The head's bounds cover every derivable head: a head prefix
+            // outside them derives nothing, so the block holds no row.
+            return if rows.is_empty(work)? {
+                Ok(())
+            } else {
+                Err(Stop::InvalidProgram)
+            };
+        }
+        let derived = self
+            .closure
+            .len()
+            .checked_add(self.result.atoms.len())
+            .and_then(|atoms| atoms.checked_add(self.pending.len()))
+            .ok_or(Stop::DerivedAtomLimit)?;
+        let joined = self
+            .pending
+            .join_row(slot, dense, heads.start, rows, work)?;
+        if derived
+            .checked_add(joined.marked)
+            .is_none_or(|atoms| atoms > work.limits.max_derived_atoms)
+        {
+            return Err(Stop::DerivedAtomLimit);
+        }
+        let count = |n: usize| u64::try_from(n).map_err(|_| Stop::InvalidProgram);
+        work.statistics.bindings += count(joined.offered)?;
+        work.statistics.dense_heads += count(joined.marked)?;
+        work.statistics.row_steps += 1;
+        Ok(())
+    }
 }
 
 // Complete the disjoint source family before publishing either its history or
@@ -660,7 +804,11 @@ fn visit_round<'source>(
     frame: Frame<'_, 'source>,
     work: &mut Work<'_>,
 ) -> Result<RoundConsequences, Stop> {
-    let DenseHeads { layouts, pending } = dense_heads;
+    let DenseHeads {
+        layouts,
+        row_steps,
+        pending,
+    } = dense_heads;
     let Frame {
         assignment,
         buffers,
@@ -689,10 +837,11 @@ fn visit_round<'source>(
         }
     };
     for position in 0..visited {
-        let template = match incremental {
-            None => &program.templates()[position],
-            Some(_) => &program.templates()[buffers.rules[position]],
+        let index = match incremental {
+            None => position,
+            Some(_) => buffers.rules[position],
         };
+        let template = &program.templates()[index];
         work.tick()?;
         if !gates.admits(template) {
             continue;
@@ -708,16 +857,13 @@ fn visit_round<'source>(
             }
             None => None,
         };
-        let mut emit = |assignment: &[Option<&Value>], work: &mut Work<'_>| -> Result<(), Stop> {
-            work.tick()?;
-            if let Some(head) = template.head() {
-                work.charge(head.terms().len())?;
-                let key = head.key(assignment).map_err(|_| Stop::InvalidProgram)?;
-                record_head(key, dense_head, closure, &mut result, pending, work)?;
-            } else {
-                result.constraint_violated = true;
-            }
-            Ok(())
+        let mut emit = RoundSink {
+            template,
+            closure,
+            dense_head,
+            row_steps: row_steps.of(index),
+            result: &mut result,
+            pending: &mut *pending,
         };
         if incremental.is_some() {
             // Repeated predicates retain distinct occurrences. Earlier Old,
@@ -811,7 +957,7 @@ fn visit<'source, E: From<Stop>>(
     gates: Gates<'_>,
     membership: Option<&mut worlds::Join<'_>>,
     work: &mut Work<'_>,
-    emit: impl FnMut(&[Option<&'source Value>], &mut Work<'_>) -> Result<(), E>,
+    mut emit: impl FnMut(&[Option<&'source Value>], &mut Work<'_>) -> Result<(), E>,
 ) -> Result<(), E> {
     let mut assignment = vec![None; template.variable_count()];
     let mut buffers = prepared::Buffers::local(template.positive().len());
@@ -821,7 +967,7 @@ fn visit<'source, E: From<Stop>>(
         gates,
         membership,
         work,
-        emit,
+        &mut emit,
         Frame {
             assignment: &mut assignment,
             buffers: &mut buffers,
@@ -836,7 +982,7 @@ fn visit_with<'source, E: From<Stop>>(
     gates: Gates<'_>,
     mut membership: Option<&mut worlds::Join<'_>>,
     work: &mut Work<'_>,
-    mut emit: impl FnMut(&[Option<&'source Value>], &mut Work<'_>) -> Result<(), E>,
+    emit: &mut impl Sink<'source, E>,
     frame: Frame<'_, 'source>,
 ) -> Result<(), E> {
     // Reset all query state before this source occurrence. No binding survives
@@ -858,7 +1004,7 @@ fn visit_with<'source, E: From<Stop>>(
             return Err(Stop::InvalidProgram.into());
         }
         work.statistics.bindings += 1;
-        return emit(assignment, work);
+        return emit.binding(assignment, work);
     }
     if let Some(membership) = membership.as_mut() {
         membership.reset(template, work)?;
@@ -883,7 +1029,7 @@ fn visit_with<'source, E: From<Stop>>(
                 return Err(Stop::InvalidProgram.into());
             }
             work.statistics.bindings += 1;
-            emit(assignment, work)?;
+            emit.binding(assignment, work)?;
             depth -= 1;
             clear(assignment, &mut undo[depth]);
             continue;
@@ -903,6 +1049,20 @@ fn visit_with<'source, E: From<Stop>>(
             Slot::Absent | Slot::Unresolved => Rows::Borrowed(&[]),
         };
         let cursor = &mut cursors[depth];
+        // The innermost depth, entered for this parent assignment. A
+        // membership join follows single rows, so it keeps them.
+        if depth + 1 == count
+            && cursor.is_none()
+            && membership.is_none()
+            && step_by_rows(pattern, tuples, occurrence, assignment, emit, work)?
+        {
+            if depth == 0 {
+                return Ok(());
+            }
+            depth -= 1;
+            clear(assignment, &mut undo[depth]);
+            continue;
+        }
         let window = match cursor {
             Some(window) => window,
             None => cursor.insert(window::Window::open(pattern, tuples, assignment, work)?),
@@ -932,6 +1092,42 @@ fn visit_with<'source, E: From<Stop>>(
             clear(assignment, &mut undo[depth]);
         }
     }
+}
+
+/// Give a consumer that steps by rows the whole block of an occurrence's rows
+/// matching the assignment, in place of binding them one by one; whether it
+/// was given. The block is that of the bound leading terms, which for such an
+/// occurrence are all but its last.
+fn step_by_rows<'source, E: From<Stop>>(
+    pattern: &AtomPattern,
+    tuples: Rows<'source>,
+    occurrence: usize,
+    assignment: &[Option<&'source Value>],
+    emit: &mut impl Sink<'source, E>,
+    work: &mut Work<'_>,
+) -> Result<bool, E> {
+    let Rows::Dense { relation, set } = tuples else {
+        return Ok(false);
+    };
+    if !emit.steps_by_rows(occurrence) {
+        return Ok(false);
+    }
+    // A bound value outside its argument's bound matches no position: the
+    // block is empty and there is nothing to take.
+    let block = window::matching_prefix(pattern, tuples, 0, assignment, work)?;
+    if !block.is_empty() {
+        emit.rows(
+            Block {
+                relation,
+                set,
+                start: block.start,
+                len: block.len(),
+            },
+            assignment,
+            work,
+        )?;
+    }
+    Ok(true)
 }
 
 fn bind<'source>(

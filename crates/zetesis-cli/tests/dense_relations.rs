@@ -184,6 +184,39 @@ fn a_dense_head_is_recorded_as_a_bit_and_a_tree_head_as_an_atom() {
 }
 
 #[test]
+fn the_transitive_rule_joins_one_block_for_each_new_path_with_an_onward_edge() {
+    // Each of the 28 paths is new in one round, where the recursive rule
+    // visits it outermost and takes the edges leaving its end as one block.
+    // The seven paths ending at node 8 have none: 8 lies outside the bound
+    // of an edge's first argument, so their block is empty and not joined.
+    let control = Control::default();
+    let owner = transitive_path();
+    let program = owner.program();
+    let seed = Seed::new(program, []).unwrap();
+    let [dense, tree] = stores().map(|limits| {
+        let prepared = PreparedQueries::new(program, limits, &control).unwrap();
+        let check = prepared
+            .check_view(
+                seed.view(),
+                &mut ClosureWorkspace::default(),
+                Limits::default(),
+                &control,
+            )
+            .unwrap();
+        let statistics = check.statistics();
+        (
+            statistics.row_steps,
+            statistics.bindings,
+            check.closure().clone(),
+        )
+    });
+    assert_eq!((dense.0, tree.0), (21, 0));
+    // A row of a block is a binding, as it is when bound singly.
+    assert_eq!(dense.1, tree.1);
+    assert_eq!(dense.2, tree.2);
+}
+
+#[test]
 fn the_derived_atom_limit_stops_a_dense_closure_where_it_stops_a_tree() {
     let control = Control::default();
     let owner = transitive_path();

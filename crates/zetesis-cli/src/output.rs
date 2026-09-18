@@ -905,6 +905,7 @@ fn closure_statistics(
             out.number_field("bindings", joins.bindings)?;
             out.number_field("tuple_probes", joins.tuple_probes)?;
             out.number_field("dense_heads", joins.dense_heads)?;
+            out.number_field("row_steps", joins.row_steps)?;
             out.number_field("peak_closure_bytes", joins.peak_closure_bytes)?;
             out.text("}")?;
         }

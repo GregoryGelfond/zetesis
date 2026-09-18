@@ -40,6 +40,9 @@ pub struct ClosureJoinStatistics {
     /// Derived heads recorded as a bit of a dense relation, for which no atom
     /// was built before the model was assembled.
     pub dense_heads: u64,
+    /// Blocks of body rows joined into a head's pending rows a word at a
+    /// time, in place of binding their rows one by one.
+    pub row_steps: u64,
     /// Largest named closure envelope any completed check admitted or
     /// reserved; not an observed allocation peak and not RSS.
     pub peak_closure_bytes: usize,
@@ -78,6 +81,7 @@ impl ClosureExecutionStatistics {
                 bindings: add(joins.bindings, check.bindings)?,
                 tuple_probes: add(joins.tuple_probes, check.tuple_probes)?,
                 dense_heads: add(joins.dense_heads, check.dense_heads)?,
+                row_steps: add(joins.row_steps, check.row_steps)?,
                 peak_closure_bytes: joins.peak_closure_bytes.max(check.peak_closure_bytes),
             }),
             ..self.clone()

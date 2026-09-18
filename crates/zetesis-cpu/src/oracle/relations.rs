@@ -10,7 +10,7 @@ mod partition;
 use partition::Partition;
 
 mod dense;
-pub(in crate::oracle) use dense::{Dense, Layout, Layouts, PendingRows};
+pub(in crate::oracle) use dense::{Block, Dense, Layout, Layouts, PendingRows};
 
 pub(super) mod storage;
 pub(super) use storage::atom_bytes;

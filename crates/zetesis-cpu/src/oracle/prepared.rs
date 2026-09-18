@@ -8,6 +8,7 @@ use zetesis_core::{Predicate, Program, SeedView, Value};
 use super::{
     Check, Limits, Work, bounds,
     relations::{Catalogs, Layout, Layouts, PendingRows, storage},
+    row_steps::RowSteps,
 };
 use crate::{Control, Stop};
 
@@ -64,6 +65,8 @@ pub struct PreparedQueries {
     rules: Rules,
     /// The dense layouts, for the predicates the argument bounds admit.
     layouts: Layouts,
+    /// Where a template's innermost join may be taken a row at a time.
+    row_steps: RowSteps,
     statistics: PreparationStatistics,
 }
 
@@ -158,9 +161,11 @@ impl PreparedQueries {
                 layouts.push(layout);
             }
         }
-        let retained_bytes = (size_of::<Self>() as u128 + rules.bytes() as u128)
-            .checked_add(layouts.bytes())
-            .ok_or(Stop::StorageLimit)?;
+        let row_steps = RowSteps::plan(program, &layouts, work)?;
+        let retained_bytes =
+            (size_of::<Self>() as u128 + rules.bytes() as u128 + row_steps.bytes() as u128)
+                .checked_add(layouts.bytes())
+                .ok_or(Stop::StorageLimit)?;
         storage::admit(work, retained_bytes)?;
         storage::record(work, retained_bytes)?;
         Ok(Self {
@@ -174,6 +179,7 @@ impl PreparedQueries {
                 dense_predicates: layouts.len(),
             },
             layouts,
+            row_steps,
         })
     }
 
@@ -322,6 +328,7 @@ impl PreparedQueries {
                 dimensions: &self.dimensions,
                 rules: &self.rules,
                 layouts: &self.layouts,
+                row_steps: &self.row_steps,
                 pending: &mut workspace.pending,
                 overhead,
             },

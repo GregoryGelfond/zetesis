@@ -122,6 +122,12 @@ impl Layout {
         (arguments == self.axes.len()).then_some(index)
     }
 
+    /// The values of the last argument in canonical order, which index a
+    /// position within a block of a bound prefix; `None` for arity zero.
+    pub(in crate::oracle) fn last_values(&self) -> Option<&[Value]> {
+        self.axes.last().map(Vec::as_slice)
+    }
+
     /// The value of a position's tuple at an argument.
     pub(in crate::oracle) fn value(&self, argument: usize, index: usize) -> &Value {
         let axis = &self.axes[argument];
@@ -161,6 +167,10 @@ impl Layouts {
             "layouts are pushed in predicate order"
         );
         self.0.push(Arc::new(layout));
+    }
+
+    pub(in crate::oracle) fn get(&self, predicate: &Predicate) -> Option<&Arc<Layout>> {
+        self.slot(predicate).map(|slot| &self.0[slot])
     }
 
     /// The layout's position among the layouts, which indexes the pending
@@ -358,6 +368,12 @@ impl Dense {
 /// their number is the round's count of new dense atoms. Absorbing a row
 /// clears it: between rounds every row is zero and nothing of a candidate
 /// remains.
+///
+/// Retains one bit for each position of each layout, half of what the dense
+/// relations themselves hold, for as long as the workspace lives. Marking is
+/// constant time. Absorbing a row visits the words from its first mark to its
+/// last, at worst the whole row in every round that marks both of its ends;
+/// an unmarked row costs a round one unit.
 #[derive(Default)]
 pub(in crate::oracle) struct PendingRows {
     rows: Vec<PendingRow>,
@@ -486,6 +502,103 @@ impl PendingRows {
         self.marked -= absorbed;
         Ok(absorbed)
     }
+}
+
+/// What joining one body row into a head's pending row found: the body rows
+/// offered, each one binding of the rule, and those newly marked.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::oracle) struct RowJoin {
+    pub(in crate::oracle) offered: usize,
+    pub(in crate::oracle) marked: usize,
+}
+
+/// The rows of one set of a dense relation within a block of positions: the
+/// tuples sharing a bound prefix of arguments.
+#[derive(Clone, Copy)]
+pub(in crate::oracle) struct Block<'a> {
+    pub(in crate::oracle) relation: &'a Dense,
+    pub(in crate::oracle) set: RowSet,
+    pub(in crate::oracle) start: usize,
+    pub(in crate::oracle) len: usize,
+}
+
+impl Block<'_> {
+    /// Whether the block holds no row of its set. One unit a word examined.
+    pub(in crate::oracle) fn is_empty(&self, work: &mut Work<'_>) -> Result<bool, Stop> {
+        let mut range = self.start..self.start + self.len;
+        Ok(self
+            .relation
+            .next_row(self.set, &mut range, work)?
+            .is_none())
+    }
+}
+
+impl PendingRows {
+    /// Mark, for every tuple of the `body` block, the head position as far
+    /// into the block of `head` starting at `head_start`: the step of
+    /// a rule whose last body argument is its head's last argument, over the
+    /// same values in both, taken a word at a time. A position the head holds
+    /// or the round has marked is not marked again, so the marks are those
+    /// of marking each offered position singly. One unit for each word of
+    /// the block.
+    ///
+    /// Each pass reads the next `width` positions of the block, at most a
+    /// word, so the passes partition it and the loop ends with it.
+    pub(in crate::oracle) fn join_row(
+        &mut self,
+        slot: usize,
+        head: &Dense,
+        head_start: usize,
+        body: Block<'_>,
+        work: &mut Work<'_>,
+    ) -> Result<RowJoin, Stop> {
+        let row = &mut self.rows[slot];
+        let mut joined = RowJoin {
+            offered: 0,
+            marked: 0,
+        };
+        let mut done = 0;
+        while done < body.len {
+            charge(work, 1)?;
+            let width = (body.len - done).min(64);
+            let offered = bits(
+                |word| body.relation.word(body.set, word),
+                body.start + done,
+                width,
+            );
+            joined.offered += offered.count_ones() as usize;
+            let start = head_start + done;
+            let occupied = bits(|at| head.present[at] | row.words[at], start, width);
+            let fresh = offered & !occupied;
+            if fresh != 0 {
+                let (first, shift) = (start / 64, start % 64);
+                row.words[first] |= fresh << shift;
+                row.touched = cover(&row.touched, first);
+                if shift + width > 64 {
+                    row.words[first + 1] |= fresh >> (64 - shift);
+                    row.touched = cover(&row.touched, first + 1);
+                }
+                joined.marked += fresh.count_ones() as usize;
+            }
+            done += width;
+        }
+        row.marked += joined.marked;
+        self.marked += joined.marked;
+        Ok(joined)
+    }
+}
+
+/// The `width` bits from position `start`, at most a word, lowest first.
+fn bits(word: impl Fn(usize) -> u64, start: usize, width: usize) -> u64 {
+    let (index, shift) = (start / 64, start % 64);
+    let mut value = word(index) >> shift;
+    if shift + width > 64 {
+        value |= word(index + 1) << (64 - shift);
+    }
+    if width < 64 {
+        value &= (1u64 << width) - 1;
+    }
+    value
 }
 
 impl PendingRow {
@@ -683,6 +796,108 @@ mod tests {
         assert_eq!(pending.absorb_into(0, &mut dense, &mut work).unwrap(), 0);
         // The cleared bit can be marked again: nothing of the round remains.
         assert!(pending.mark(0, 3));
+    }
+
+    /// A body of three values by seventy and a head of two by seventy: rows
+    /// wider than a word, starting off a word boundary.
+    fn wide() -> (Layouts, PendingRows, Dense, Dense) {
+        let control = Control::default();
+        let mut work = Work::source(&control, 100_000);
+        work.limits.max_closure_bytes = 1 << 20;
+        let last: Vec<i32> = (0..70).collect();
+        let mut layouts = Layouts::default();
+        for (name, first) in [("body", &[1, 2, 3][..]), ("head", &[7, 8][..])] {
+            layouts.push(
+                Layout::new(
+                    &Predicate::new(name, 2).unwrap(),
+                    &[numbers(first), numbers(&last)],
+                    1 << 10,
+                )
+                .unwrap(),
+            );
+        }
+        let mut pending = PendingRows::default();
+        pending.prepare(&layouts, &mut 0, &mut work).unwrap();
+        let mut relations: Vec<Dense> = layouts
+            .iter()
+            .map(|layout| Dense::new(layout.clone()).unwrap())
+            .collect();
+        let head = relations.pop().unwrap();
+        let body = relations.pop().unwrap();
+        (layouts, pending, body, head)
+    }
+
+    fn block(relation: &Dense, set: RowSet, start: usize) -> Block<'_> {
+        Block {
+            relation,
+            set,
+            start,
+            len: 70,
+        }
+    }
+
+    #[test]
+    fn joining_a_row_marks_what_marking_each_of_its_positions_would() {
+        let control = Control::default();
+        let mut work = Work::source(&control, 100_000);
+        let (_, mut pending, mut body, mut head) = wide();
+        // The body's second row, positions 70..140, holds these last values.
+        let values = [0, 1, 5, 58, 63, 64, 69];
+        for value in values {
+            assert!(pending.mark(0, 70 + value));
+        }
+        pending.absorb_into(0, &mut body, &mut work).unwrap();
+        // The head's second row, positions 70..140, already holds 5 and has
+        // 64 pending: neither is marked again.
+        assert!(pending.mark(1, 70 + 5));
+        pending.absorb_into(1, &mut head, &mut work).unwrap();
+        assert!(pending.mark(1, 70 + 64));
+        let joined = pending
+            .join_row(1, &head, 70, block(&body, RowSet::Current, 70), &mut work)
+            .unwrap();
+        assert_eq!(
+            joined,
+            RowJoin {
+                offered: 7,
+                marked: 5
+            }
+        );
+        assert_eq!(pending.len(), 6);
+        assert_eq!(pending.absorb_into(1, &mut head, &mut work).unwrap(), 6);
+        let mut range = 0..140;
+        let mut found = Vec::new();
+        while let Some(position) = head
+            .next_row(RowSet::Current, &mut range, &mut work)
+            .unwrap()
+        {
+            found.push(position);
+        }
+        assert_eq!(found, values.map(|value| 70 + value));
+    }
+
+    #[test]
+    fn joining_a_row_reads_only_the_selected_rows() {
+        let control = Control::default();
+        let mut work = Work::source(&control, 100_000);
+        let (_, mut pending, mut body, head) = wide();
+        assert!(pending.mark(0, 3));
+        pending.absorb_into(0, &mut body, &mut work).unwrap();
+        body.advance(&mut work).unwrap();
+        assert!(pending.mark(0, 66));
+        pending.absorb_into(0, &mut body, &mut work).unwrap();
+        for (set, offered) in [(RowSet::Old, 1), (RowSet::New, 1), (RowSet::Current, 2)] {
+            let (_, mut pending, _, _) = wide();
+            let joined = pending
+                .join_row(1, &head, 0, block(&body, set, 0), &mut work)
+                .unwrap();
+            assert_eq!(
+                joined,
+                RowJoin {
+                    offered,
+                    marked: offered
+                }
+            );
+        }
     }
 
     #[test]

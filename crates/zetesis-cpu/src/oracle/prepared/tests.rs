@@ -58,8 +58,10 @@ fn repeated_candidates_reuse_empty_query_capacity() {
     let control = Control::default();
     let prepared = PreparedQueries::new(&program, PreparationLimits::default(), &control).unwrap();
     // Four templates and two positive occurrences; two passes of the bound
-    // inference at sixteen each; three predicates offered a layout.
-    assert_eq!(prepared.statistics().work, 41);
+    // inference at sixteen each; three predicates offered a layout; the
+    // row-step plan, a unit and a unit a term for each occurrence, four and
+    // three.
+    assert_eq!(prepared.statistics().work, 48);
     let mut workspace = ClosureWorkspace::default();
     let first = prepared
         .check_view(
