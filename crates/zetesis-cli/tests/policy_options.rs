@@ -125,8 +125,9 @@ fn nondefault_options_preserve_each_solver_field() {
 
 #[test]
 fn an_omitted_closure_allowance_is_the_collective_share_per_worker() {
-    let derived =
-        SolveConfig::from(&Options::try_parse_from(["zetesis", "--workers", "8"]).unwrap());
+    let derived = SolveConfig::from(
+        &Options::try_parse_from(["zetesis", "--workers", "8", "--memory", "2147483648"]).unwrap(),
+    );
     assert_eq!(
         derived.max_closure_bytes,
         SolveConfig::DEFAULT.max_closure_batch_bytes / 8
@@ -148,6 +149,73 @@ fn an_omitted_closure_allowance_is_the_collective_share_per_worker() {
         .unwrap(),
     );
     assert_eq!(collective.max_closure_bytes, 100);
+}
+
+#[test]
+fn byte_ceilings_are_the_library_defaults_scaled_by_the_memory_allowance() {
+    // At the reference allowance every byte ceiling is the library's; at
+    // twice it, every one is doubled and the others are unchanged.
+    let reference = SolveConfig::from(
+        &Options::try_parse_from(["zetesis", "--workers", "4", "--memory", "2147483648"]).unwrap(),
+    );
+    assert_eq!(
+        format!("{reference:?}"),
+        format!("{:?}", SolveConfig::DEFAULT)
+    );
+    let doubled = SolveConfig::from(
+        &Options::try_parse_from(["zetesis", "--workers", "4", "--memory", "4294967296"]).unwrap(),
+    );
+    let library = SolveConfig::DEFAULT;
+    assert_eq!(
+        doubled.max_projection_bytes,
+        2 * library.max_projection_bytes
+    );
+    assert_eq!(
+        doubled.max_objective_key_bytes,
+        2 * library.max_objective_key_bytes
+    );
+    assert_eq!(doubled.max_optimal_bytes, 2 * library.max_optimal_bytes);
+    assert_eq!(doubled.max_reduct_bytes, 2 * library.max_reduct_bytes);
+    assert_eq!(
+        doubled.max_completion_scratch_bytes,
+        2 * library.max_completion_scratch_bytes
+    );
+    assert_eq!(doubled.max_candidate_bytes, 2 * library.max_candidate_bytes);
+    assert_eq!(
+        doubled.max_closure_batch_bytes,
+        2 * library.max_closure_batch_bytes
+    );
+    assert_eq!(doubled.max_closure_bytes, 2 * library.max_closure_bytes);
+    assert_eq!(doubled.max_batch_bytes, 2 * library.max_batch_bytes);
+    let unscaled = SolveConfig {
+        max_projection_bytes: library.max_projection_bytes,
+        max_objective_key_bytes: library.max_objective_key_bytes,
+        max_optimal_bytes: library.max_optimal_bytes,
+        max_reduct_bytes: library.max_reduct_bytes,
+        max_completion_scratch_bytes: library.max_completion_scratch_bytes,
+        max_candidate_bytes: library.max_candidate_bytes,
+        max_closure_batch_bytes: library.max_closure_batch_bytes,
+        max_closure_bytes: library.max_closure_bytes,
+        max_batch_bytes: library.max_batch_bytes,
+        ..doubled
+    };
+    assert_eq!(format!("{unscaled:?}"), format!("{library:?}"));
+    // A given ceiling is taken as given, whatever the allowance.
+    let given = SolveConfig::from(
+        &Options::try_parse_from([
+            "zetesis",
+            "--memory",
+            "4294967296",
+            "--max-reduct-bytes",
+            "7",
+        ])
+        .unwrap(),
+    );
+    assert_eq!(given.max_reduct_bytes, 7);
+    // The default allowance is at least the reference.
+    let host = Options::try_parse_from(["zetesis"]).unwrap();
+    assert!(host.memory >= 2_147_483_648);
+    assert!(host.max_reduct_bytes.is_none());
 }
 
 #[test]

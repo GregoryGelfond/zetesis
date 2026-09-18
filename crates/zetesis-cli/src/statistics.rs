@@ -27,6 +27,13 @@ fn header(sink: &mut impl Write, options: &Options, elapsed: Duration) -> io::Re
     )?;
     writeln!(
         sink,
+        "  memory allowance: {} bytes (host physical memory {}); each byte ceiling not given is the library default scaled by the allowance over 2 GiB",
+        options.memory,
+        crate::options::host_memory()
+            .map_or_else(|| "unreported".to_owned(), |bytes| bytes.to_string())
+    )?;
+    writeln!(
+        sink,
         "  formula joins: requested={}; scope=completed_eager_support",
         match options.formula_joins {
             zetesis_themelios::JoinStrategy::Indexed => "indexed",
@@ -137,12 +144,14 @@ fn closure_limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
         sink,
         "  independent CPU closure limits: named bytes/owner={}{share}; preparation/cache/collective reservation bytes={}; query preparation work={}; returned models and allocator overhead excluded",
         o.closure_allowance(),
-        o.max_closure_batch_bytes,
+        o.closure_collective(),
         o.max_source_work
     )
 }
 
+/// The ceilings as the session takes them: given, or scaled by the allowance.
 fn limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
+    let c = crate::SolveConfig::from(o);
     if let Some(seconds) = o.time_limit {
         writeln!(
             sink,
@@ -153,7 +162,7 @@ fn limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
         writeln!(
             sink,
             "  shared CPU limits: source work/batch={}; record visits plus antecedent tests/world={}; collective catalog atoms={}; host payload bytes={}",
-            o.max_source_work, o.max_work, o.max_atoms, o.max_batch_bytes
+            o.max_source_work, o.max_work, o.max_atoms, c.max_batch_bytes
         )?;
     }
     writeln!(
@@ -164,17 +173,17 @@ fn limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
     writeln!(
         sink,
         "  candidate restriction limits: copied payload bytes={}; atom occurrences={}; allocator/index overhead excluded",
-        o.max_candidate_bytes, o.max_atoms
+        c.max_candidate_bytes, o.max_atoms
     )?;
     writeln!(
         sink,
         "  projection history limits: entries={}; nodes={}; named capacity/overlap bytes={}; work shares the search allowance",
-        o.max_projection_entries, o.max_projection_nodes, o.max_projection_bytes
+        o.max_projection_entries, o.max_projection_nodes, c.max_projection_bytes
     )?;
     writeln!(
         sink,
         "  prepared reduct limits: cold preparation/each query bytes={}; collective owner/worker/result bytes={}; theory and allocator metadata excluded",
-        o.max_reduct_bytes, o.max_completion_scratch_bytes
+        c.max_reduct_bytes, c.max_completion_scratch_bytes
     )?;
     closure_limits(sink, o)?;
     writeln!(
@@ -184,7 +193,7 @@ fn limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
         o.max_carrier_atoms,
         o.max_substitutions,
         o.max_ground_rules,
-        o.max_batch_bytes
+        c.max_batch_bytes
     )?;
     let formula = crate::admission::formula_limits(o);
     writeln!(
@@ -224,12 +233,12 @@ fn limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
         o.max_objective_bound_work,
         o.max_objective_bindings,
         o.max_objective_keys,
-        o.max_objective_key_bytes
+        c.max_objective_key_bytes
     )?;
     writeln!(
         sink,
         "  incumbent limits: models={}; atoms={}; bytes={}",
-        o.max_optimal_models, o.max_optimal_atoms, o.max_optimal_bytes
+        o.max_optimal_models, o.max_optimal_atoms, c.max_optimal_bytes
     )?;
     writeln!(
         sink,
@@ -681,7 +690,11 @@ fn countermodel(
         )?;
     }
     if let Some(certified) = stats.certified {
-        certificate(sink, &certified, options.max_completion_scratch_bytes)?;
+        certificate(
+            sink,
+            &certified,
+            crate::SolveConfig::from(options).max_completion_scratch_bytes,
+        )?;
     }
     Ok(())
 }
@@ -782,7 +795,7 @@ fn formula(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io
             execution.completion.failed,
             execution.completion.requested_scratch_bytes,
             execution.completion.peak_scratch_bytes,
-            options.max_completion_scratch_bytes,
+            crate::SolveConfig::from(options).max_completion_scratch_bytes,
             execution.completion.overflowed
         )?;
         writeln!(
@@ -816,7 +829,8 @@ fn formula(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io
         writeln!(
             sink,
             "  formula batch limits: candidates={}; pending bytes={}",
-            options.batch_size, options.max_batch_bytes
+            options.batch_size,
+            crate::SolveConfig::from(options).max_batch_bytes
         )?;
         if !execution.adapter.is_empty() {
             formula_gpu(sink, execution)?;

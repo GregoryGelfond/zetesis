@@ -279,7 +279,7 @@ fn bounded_search_never_publishes_optimum_status() {
         match kind {
             0 => options.max_objective_work = 0,
             1 => options.max_optimal_models = 1,
-            2 => options.max_batch_bytes = 0,
+            2 => options.max_batch_bytes = Some(0),
             _ => options.max_search_work = 0,
         }
         let mut output = Vec::new();

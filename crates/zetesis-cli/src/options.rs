@@ -99,6 +99,16 @@ pub struct Options {
     /// Library callers supply their own Control instead of this process option.
     #[arg(long, value_name = "SECONDS")]
     pub time_limit: Option<u64>,
+    /// The session's memory allowance in bytes. The library's byte ceilings
+    /// are the shares of a two-gibibyte allowance; each ceiling not given is
+    /// its library default scaled by this allowance over two gibibytes, so a
+    /// larger host admits larger problems before a ceiling refuses. The
+    /// default is half of the host's physical memory and at least two
+    /// gibibytes, or two gibibytes when the host does not report its memory.
+    /// Work, count and structural ceilings are not memory and do not scale.
+    /// The ceilings bound named storage, not resident memory.
+    #[arg(long, default_value_t = host_memory_allowance(), hide_short_help = true)]
+    pub memory: u64,
     /// Maximum encoded JSON bytes per model record or terminal outcome; not an all-model buffer.
     #[arg(long, default_value_t = 8_388_608, hide_short_help = true)]
     pub max_json_record_bytes: usize,
@@ -116,8 +126,9 @@ pub struct Options {
     pub max_projection_nodes: usize,
     /// Maximum reserved projection-history capacity, including growth overlap;
     /// capacity is counted before it is written, so this exceeds resident bytes.
-    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_projection_bytes, hide_short_help = true)]
-    pub max_projection_bytes: usize,
+    /// Omitted, it is the library default scaled by `--memory`.
+    #[arg(long, hide_short_help = true)]
+    pub max_projection_bytes: Option<usize>,
     /// Override source-expansion and eager formula-grounding work ceilings.
     ///
     /// Omission preserves each library default: 1,048,576 source-term operations
@@ -189,8 +200,9 @@ pub struct Options {
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_objective_keys, hide_short_help = true)]
     pub max_objective_keys: usize,
     /// Maximum canonical encoded objective contribution bytes per stable model.
-    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_objective_key_bytes, hide_short_help = true)]
-    pub max_objective_key_bytes: usize,
+    /// Omitted, it is the library default scaled by `--memory`.
+    #[arg(long, hide_short_help = true)]
+    pub max_objective_key_bytes: Option<usize>,
     /// Maximum tied incumbent models retained while proving an optimum.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_optimal_models, hide_short_help = true)]
     pub max_optimal_models: usize,
@@ -198,8 +210,9 @@ pub struct Options {
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_optimal_atoms, hide_short_help = true)]
     pub max_optimal_atoms: usize,
     /// Maximum canonical incumbent bytes: distinct catalogs, selections and one score.
-    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_optimal_bytes, hide_short_help = true)]
-    pub max_optimal_bytes: usize,
+    /// Omitted, it is the library default scaled by `--memory`.
+    #[arg(long, hide_short_help = true)]
+    pub max_optimal_bytes: Option<usize>,
     /// Maximum candidates per batch: the clause search's completion batches
     /// and the leaves a device checks; closure batches follow its first seed.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.batch_size, hide_short_help = true)]
@@ -221,23 +234,26 @@ pub struct Options {
     pub completion_workers: NonZeroUsize,
     /// Maximum reserved capacity for cold reduct preparation and for each query's
     /// retained workspace. Shared theory payload and allocator metadata are excluded.
-    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_reduct_bytes, hide_short_help = true)]
-    pub max_reduct_bytes: u64,
+    /// Omitted, it is the library default scaled by `--memory`.
+    #[arg(long, hide_short_help = true)]
+    pub max_reduct_bytes: Option<u64>,
     /// Maximum reserved capacity, under `--search clauses`, for the shared
     /// prepared reduct, worker queries and
     /// transient/result slots, excluding the scalar cursor, allocator/table overhead,
     /// thread stacks and GPU storage.
     /// Optional class preparation/checking uses the same ceiling independently.
-    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_completion_scratch_bytes, hide_short_help = true)]
-    pub max_completion_scratch_bytes: u64,
+    /// Omitted, it is the library default scaled by `--memory`.
+    #[arg(long, hide_short_help = true)]
+    pub max_completion_scratch_bytes: Option<u64>,
     /// Maximum candidate seeds; reaching a limit leaves search incomplete.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_candidates, hide_short_help = true)]
     pub max_candidates: u64,
     /// Maximum copied payload for necessary candidate restrictions, including
     /// temporary templates: canonical bytes, excluding spare capacity and
     /// allocator/index overhead.
-    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_candidate_bytes, hide_short_help = true)]
-    pub max_candidate_bytes: usize,
+    /// Omitted, it is the library default scaled by `--memory`.
+    #[arg(long, hide_short_help = true)]
+    pub max_candidate_bytes: Option<usize>,
     /// Maximum gate tuples retained by the incremental candidate cursor.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_carrier_atoms, hide_short_help = true)]
     pub max_carrier_atoms: usize,
@@ -257,8 +273,9 @@ pub struct Options {
     /// Collective reserved capacity for independent CPU preparation, the idle cache
     /// and assigned closure allowances; every worker's per-closure allowance is
     /// admitted against it. Also bounds immutable query preparation bytes.
-    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_closure_batch_bytes, hide_short_help = true)]
-    pub max_closure_batch_bytes: usize,
+    /// Omitted, it is the library default scaled by `--memory`.
+    #[arg(long, hide_short_help = true)]
+    pub max_closure_batch_bytes: Option<usize>,
     /// Device propagation work per formula candidate, independent of CPU work.
     /// A budget below mandatory setup work refuses before device submission.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.gpu_formula_work, hide_short_help = true)]
@@ -301,13 +318,60 @@ pub struct Options {
     /// Maximum reserved batch capacity, excluding allocator/driver overhead.
     /// Lazy GPU reserves half for source state and half for transient transport.
     /// Shared CPU rounds use the full allowance for source/world state.
-    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_batch_bytes, hide_short_help = true)]
-    pub max_batch_bytes: u64,
+    /// Omitted, it is the library default scaled by `--memory`.
+    #[arg(long, hide_short_help = true)]
+    pub max_batch_bytes: Option<u64>,
 }
 
 /// The host's available parallelism, or one worker when it cannot be reported.
 fn host_workers() -> NonZeroUsize {
     std::thread::available_parallelism().unwrap_or(NonZeroUsize::MIN)
+}
+
+/// Two gibibytes: the allowance the library's byte ceilings are the shares of.
+const REFERENCE_MEMORY: u64 = 2 * 1024 * 1024 * 1024;
+
+/// The host's physical memory in bytes, from `/proc/meminfo`.
+#[cfg(target_os = "linux")]
+pub(crate) fn host_memory() -> Option<u64> {
+    let text = std::fs::read_to_string("/proc/meminfo").ok()?;
+    let kibibytes: u64 = text
+        .lines()
+        .find_map(|line| line.strip_prefix("MemTotal:"))?
+        .split_whitespace()
+        .next()?
+        .parse()
+        .ok()?;
+    kibibytes.checked_mul(1024)
+}
+
+/// The host's physical memory in bytes, from the system's `sysctl`, run once
+/// when the default allowance is taken: the crate forbids foreign calls, and
+/// the system command is the reading without one.
+#[cfg(target_os = "macos")]
+pub(crate) fn host_memory() -> Option<u64> {
+    let output = std::process::Command::new("sysctl")
+        .args(["-n", "hw.memsize"])
+        .output()
+        .ok()?;
+    std::str::from_utf8(&output.stdout)
+        .ok()?
+        .trim()
+        .parse()
+        .ok()
+}
+
+/// The host does not report its physical memory on this platform.
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+pub(crate) fn host_memory() -> Option<u64> {
+    None
+}
+
+/// The default allowance: half of the host's memory, at least the reference.
+fn host_memory_allowance() -> u64 {
+    host_memory().map_or(REFERENCE_MEMORY, |memory| {
+        (memory / 2).max(REFERENCE_MEMORY)
+    })
 }
 
 impl Options {
@@ -316,7 +380,34 @@ impl Options {
     #[must_use]
     pub fn closure_allowance(&self) -> usize {
         self.max_closure_bytes
-            .unwrap_or(self.max_closure_batch_bytes / self.workers.get())
+            .unwrap_or(self.closure_collective() / self.workers.get())
+    }
+
+    /// The collective closure ceiling: the given value, or the library
+    /// default scaled by the allowance.
+    #[must_use]
+    pub fn closure_collective(&self) -> usize {
+        self.scaled_usize(
+            self.max_closure_batch_bytes,
+            crate::SolveConfig::DEFAULT.max_closure_batch_bytes,
+        )
+    }
+
+    /// A byte ceiling: the given value, or the library default, a share of
+    /// the reference allowance, scaled by the allowance over the reference.
+    fn scaled_u64(&self, given: Option<u64>, default: u64) -> u64 {
+        given.unwrap_or_else(|| {
+            let scaled =
+                u128::from(default) * u128::from(self.memory) / u128::from(REFERENCE_MEMORY);
+            u64::try_from(scaled).unwrap_or(u64::MAX)
+        })
+    }
+
+    fn scaled_usize(&self, given: Option<usize>, default: usize) -> usize {
+        given.unwrap_or_else(|| {
+            let default = u64::try_from(default).unwrap_or(u64::MAX);
+            usize::try_from(self.scaled_u64(None, default)).unwrap_or(usize::MAX)
+        })
     }
 }
 
@@ -334,33 +425,48 @@ impl From<&Options> for crate::SolveConfig {
             max_search_decisions: options.max_search_decisions,
             max_projection_entries: options.max_projection_entries,
             max_projection_nodes: options.max_projection_nodes,
-            max_projection_bytes: options.max_projection_bytes,
+            max_projection_bytes: options.scaled_usize(
+                options.max_projection_bytes,
+                Self::DEFAULT.max_projection_bytes,
+            ),
             max_objective_work: options.max_objective_work,
             max_objective_bound_work: options.max_objective_bound_work,
             max_objective_bindings: options.max_objective_bindings,
             max_objective_keys: options.max_objective_keys,
-            max_objective_key_bytes: options.max_objective_key_bytes,
+            max_objective_key_bytes: options.scaled_usize(
+                options.max_objective_key_bytes,
+                Self::DEFAULT.max_objective_key_bytes,
+            ),
             max_optimal_models: options.max_optimal_models,
             max_optimal_atoms: options.max_optimal_atoms,
-            max_optimal_bytes: options.max_optimal_bytes,
+            max_optimal_bytes: options
+                .scaled_usize(options.max_optimal_bytes, Self::DEFAULT.max_optimal_bytes),
             batch_size: options.batch_size,
             workers: options.workers,
             completion_workers: options.completion_workers,
-            max_reduct_bytes: options.max_reduct_bytes,
-            max_completion_scratch_bytes: options.max_completion_scratch_bytes,
+            max_reduct_bytes: options
+                .scaled_u64(options.max_reduct_bytes, Self::DEFAULT.max_reduct_bytes),
+            max_completion_scratch_bytes: options.scaled_u64(
+                options.max_completion_scratch_bytes,
+                Self::DEFAULT.max_completion_scratch_bytes,
+            ),
             max_candidates: options.max_candidates,
-            max_candidate_bytes: options.max_candidate_bytes,
+            max_candidate_bytes: options.scaled_usize(
+                options.max_candidate_bytes,
+                Self::DEFAULT.max_candidate_bytes,
+            ),
             max_carrier_atoms: options.max_carrier_atoms,
             max_work: options.max_work,
             max_closure_bytes: options.closure_allowance(),
-            max_closure_batch_bytes: options.max_closure_batch_bytes,
+            max_closure_batch_bytes: options.closure_collective(),
             gpu_formula_work: options.gpu_formula_work,
             gpu_formula_rounds: options.gpu_formula_rounds,
             max_source_work: options.max_source_work,
             max_atoms: options.max_atoms,
             max_substitutions: options.max_substitutions,
             max_ground_rules: options.max_ground_rules,
-            max_batch_bytes: options.max_batch_bytes,
+            max_batch_bytes: options
+                .scaled_u64(options.max_batch_bytes, Self::DEFAULT.max_batch_bytes),
         }
     }
 }

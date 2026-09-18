@@ -76,9 +76,12 @@ fn options(extra: &[&str]) -> Options {
 fn configuration_defaults_preserve_legacy_limits() {
     // A separate plain configuration must not silently change CLI defaults.
     // The command alone follows the host: its worker count is the host's
-    // parallelism and each closure's allowance is that count's share of the
-    // collective ceiling. Every other default is the library's.
-    let command = SolveConfig::from(&Options::try_parse_from(["zetesis"]).unwrap());
+    // parallelism, each closure's allowance is that count's share of the
+    // collective ceiling, and its byte ceilings scale with its memory
+    // allowance, here the reference allowance. Every other default is the
+    // library's.
+    let command =
+        SolveConfig::from(&Options::try_parse_from(["zetesis", "--memory", "2147483648"]).unwrap());
     let library = SolveConfig::default();
     assert_eq!(
         command.max_closure_bytes,

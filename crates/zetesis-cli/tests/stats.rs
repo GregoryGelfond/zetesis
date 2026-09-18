@@ -376,7 +376,8 @@ fn statistics_print_expansion_usage_beside_its_ceilings() {
 
 #[test]
 fn an_inconsistent_closure_reservation_is_refused_before_any_work() {
-    let mut configured = options(&["--stats"]);
+    // At the reference allowance the collective ceiling is the library's.
+    let mut configured = options(&["--stats", "--memory", "2147483648"]);
     configured.workers = std::num::NonZeroUsize::new(5).unwrap();
     configured.max_closure_bytes = Some(134_217_728);
     let mut output = Vec::new();
@@ -402,7 +403,7 @@ fn an_inconsistent_closure_reservation_is_refused_before_any_work() {
 
 #[test]
 fn the_closure_limits_line_states_the_derived_allowance() {
-    let mut eight = options(&["--stats"]);
+    let mut eight = options(&["--stats", "--memory", "2147483648"]);
     eight.workers = std::num::NonZeroUsize::new(8).unwrap();
     let (_, _, text) = solve("{a}.", &eight);
     assert!(

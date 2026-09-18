@@ -8,7 +8,17 @@ use zetesis_cpu::Control;
 
 fn options(oracle: Oracle, workers: usize) -> Options {
     let mut o =
-        Options::try_parse_from(["zetesis", "--backend", "cpu", "--models", "0", "--stats"])
+        // The reference allowance: the printed storage limit is the library's.
+        Options::try_parse_from([
+            "zetesis",
+            "--backend",
+            "cpu",
+            "--models",
+            "0",
+            "--stats",
+            "--memory",
+            "2147483648",
+        ])
             .unwrap();
     o.oracle = oracle;
     // The batched completion protocol these tests exercise is the clause
@@ -108,7 +118,7 @@ fn unsupported_class_falls_back_and_explicit_general_oracle_keeps_comparison_pat
     assert!(s.certified.unwrap().refusal.is_some());
     assert!(diag.contains("optional class certificate refused"));
     let mut limited = options(Oracle::Auto, 1);
-    limited.max_completion_scratch_bytes = 0;
+    limited.max_completion_scratch_bytes = Some(0);
     let (r, _, diag) = solve("1{a;b}1.", &limited);
     assert_eq!(r.completion, Completion::Exhausted);
     assert!(r.countermodel_statistics.unwrap().countermodel_queries > 0);

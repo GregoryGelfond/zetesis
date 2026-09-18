@@ -127,6 +127,9 @@ impl SolveConfig {
     /// These finite session allowances differ from standalone primitive defaults.
     /// Logical work ceilings do not impose a wall-clock deadline or remove the
     /// independently configured source, storage and materialization limits.
+    /// The byte ceilings are the shares of a two-gibibyte memory allowance;
+    /// the command scales them by the host's memory, the library takes them
+    /// as they are.
     pub const DEFAULT: Self = Self {
         backend: Backend::Auto,
         grounder: Grounder::Auto,
