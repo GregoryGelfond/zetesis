@@ -22,12 +22,12 @@ use crate::answers::native_json;
 use crate::examples;
 
 /// Number of cells in the series.
-pub const CELLS: usize = 20;
+pub const CELLS: usize = 22;
 
 /// Per-invocation capture ceiling the cells were sized against, in bytes.
 pub const CAPTURE_BYTES: usize = 16 * 1024 * 1024;
 
-const GENERATED: [(Family, u32); 15] = [
+const GENERATED: [(Family, u32); 17] = [
     (Family::IndependentChoice, 12),
     (Family::IndependentChoice, 16),
     (Family::IndependentNegation, 8),
@@ -43,6 +43,8 @@ const GENERATED: [(Family, u32); 15] = [
     (Family::ChainArithmetic, 1000),
     (Family::Stratified, 16),
     (Family::ProducerChain, 700),
+    (Family::LatinSquare, 5),
+    (Family::Planning, 14),
 ];
 
 // Queens boards derived from the curated encodings' `#const n = 8`.

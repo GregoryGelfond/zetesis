@@ -245,13 +245,14 @@ and a new report destination.
 
 ### Measure a fixed series of cells
 
-`performance::series::workloads(&Corpus, WorkloadLimits)` returns the twenty
-cells on which a sequence of solver changes is measured: fifteen generated
-programs, three constant-amended queens boards and two unchanged corpus
-entries, in a fixed order. `performance::families::Family` generates the
+`performance::series::workloads(&Corpus, WorkloadLimits)` returns the
+twenty-two cells on which a sequence of solver changes is measured: seventeen
+generated programs, three constant-amended queens boards and two unchanged
+corpus entries, in a fixed order. `performance::families::Family` generates the
 programs: each family is one shape with one size (independent sets in choice
 and negation form, disjunction, tied optima, transitive closures, derivation
-chains, stratified negation, a producer chain), its bytes a pure function of
+chains, stratified negation, a producer chain, a Latin square with its first
+row fixed, a line walked with move or stay), its bytes a pure function of
 the family and the size, its complete family a closed form the contract
 states. `Workload::generated(family, size, limits)` admits one as a sealed
 workload with entry `generated/<family>-<size>.lp`; the report retains the

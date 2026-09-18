@@ -80,6 +80,46 @@ fn stratified_source_blocks_every_seventh_node_and_keeps_the_last_reachable() {
 }
 
 #[test]
+fn constraint_and_planning_sources_keep_their_shapes() {
+    assert_eq!(
+        Family::LatinSquare.source(2).unwrap(),
+        "n(1..2).\n1 { cell(R,C,V) : n(V) } 1 :- n(R), n(C).\n:- cell(R,C1,V), cell(R,C2,V), C1 < C2.\n:- cell(R1,C,V), cell(R2,C,V), R1 < R2.\n:- n(C), not cell(1,C,C).\n#show cell/3.\n"
+    );
+    assert_eq!(
+        Family::Planning.source(2).unwrap(),
+        "step(0..1).\ntime(0..2).\npos(0..2).\nat(0,0).\n1 { move(T); stay(T) } 1 :- step(T).\nat(P+1,T+1) :- at(P,T), move(T), pos(P+1).\nat(P,T+1) :- at(P,T), stay(T).\n:- not at(1,2).\n#show move/1.\n"
+    );
+}
+
+#[test]
+fn constraint_and_planning_counts_follow_their_closed_forms() {
+    // (n - 1)! reduced Latin squares of orders one through five.
+    for (size, count) in [(1, 1), (2, 1), (3, 2), (4, 24), (5, 1344)] {
+        assert_eq!(
+            Family::LatinSquare.contract(size).unwrap().model_count(),
+            Some(count),
+            "order {size}"
+        );
+    }
+    // C(n, n / 2) plans: which n / 2 of the n steps are moves.
+    for (size, count) in [
+        (1, 1),
+        (2, 2),
+        (3, 3),
+        (4, 6),
+        (8, 70),
+        (14, 3432),
+        (20, 184_756),
+    ] {
+        assert_eq!(
+            Family::Planning.contract(size).unwrap().model_count(),
+            Some(count),
+            "{size} steps"
+        );
+    }
+}
+
+#[test]
 fn complete_family_counts_follow_their_closed_forms() {
     for size in 1..=40 {
         for family in [

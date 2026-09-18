@@ -229,12 +229,13 @@ performance trend.
 
 A sequence of solver changes is measured on one fixed cell set, so that each
 change's effect and the sequence's cumulative effect rest on the same
-observations. `performance::series::workloads` names twenty cells: fifteen
-generated programs from `performance::families` (one shape and one size each,
-byte-exact, with closed-form complete families as their contracts), three
-amended queens boards and two unchanged entries. The generated programs reach
-routes the corpus does not: the closure route, deep derivation, cyclic and
-stratified negation, refused admissions. `zetesis-perf --suite series` runs
+observations. `performance::series::workloads` names twenty-two cells:
+seventeen generated programs from `performance::families` (one shape and one
+size each, byte-exact, with closed-form complete families as their
+contracts), three amended queens boards and two unchanged entries. The
+generated programs reach routes the corpus does not: the closure route, deep
+derivation, cyclic and stratified negation, refused admissions, a Latin
+square in the shape of Sudoku and a line walked under frame rules. `zetesis-perf --suite series` runs
 them through the instrumented matrix; `--profile cpu-auto` requests the shipped
 defaults and the observation retains the grounding mode each cell took;
 `--time-limit` adds a cooperative deadline to every native profile.

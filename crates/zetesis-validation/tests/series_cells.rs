@@ -39,6 +39,8 @@ fn the_series_names_its_cells_in_a_fixed_order() {
             "generated/chain-arithmetic-1000.lp",
             "generated/stratified-16.lp",
             "generated/producer-chain-700.lp",
+            "generated/latin-square-5.lp",
+            "generated/planning-14.lp",
             "standalone/n-queens/variant-01.lp",
             "standalone/n-queens/variant-01.lp",
             "standalone/n-queens/variant-04.lp",
@@ -56,7 +58,7 @@ fn series_cells_have_distinct_identities_and_the_expected_provenance() {
     assert_eq!(identities.len(), workloads.len());
     let generated = workloads.iter().filter(|w| w.is_generated()).count();
     let amended = workloads.iter().filter(|w| w.is_amended()).count();
-    assert_eq!((generated, amended), (15, 3));
+    assert_eq!((generated, amended), (17, 3));
     // Unchanged corpus entries and generated programs carry a contract; an
     // amended queens board is established by its reference family alone.
     assert!(

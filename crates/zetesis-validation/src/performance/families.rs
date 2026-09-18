@@ -45,6 +45,14 @@ pub enum Family {
     Stratified,
     /// `n` facts and `n − 1` two-literal rules over distinct predicates.
     ProducerChain,
+    /// Latin squares of order `n` with the first row fixed to `1..n`:
+    /// `(n − 1)!` times the number of reduced Latin squares, a constraint
+    /// problem in the shape of Sudoku, every cell a choice of one value.
+    LatinSquare,
+    /// A line walked for `n` steps, one action a step, move or stay,
+    /// ending at position `n / 2`: `C(n, n / 2)` plans, the inertia of the
+    /// position carried by frame rules from step to step.
+    Planning,
 }
 
 /// A refused generation request.
@@ -74,7 +82,7 @@ impl std::error::Error for Error {}
 
 impl Family {
     /// Every family, in presentation order.
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 13] = [
         Self::IndependentChoice,
         Self::IndependentNegation,
         Self::IndependentNegationAggregate,
@@ -86,6 +94,8 @@ impl Family {
         Self::ChainArithmetic,
         Self::Stratified,
         Self::ProducerChain,
+        Self::LatinSquare,
+        Self::Planning,
     ];
 
     /// Stable lowercase name, usable as a file stem.
@@ -103,11 +113,14 @@ impl Family {
             Self::ChainArithmetic => "chain-arithmetic",
             Self::Stratified => "stratified",
             Self::ProducerChain => "producer-chain",
+            Self::LatinSquare => "latin-square",
+            Self::Planning => "planning",
         }
     }
 
     /// Admitted sizes. The upper bounds keep every count below 2⁶⁴, every
-    /// source below a mebibyte, and the stratified pattern well formed.
+    /// source below a mebibyte, and the stratified pattern well formed; the
+    /// Latin squares stop where their count is known in closed form.
     #[must_use]
     pub const fn sizes(self) -> RangeInclusive<u32> {
         match self {
@@ -119,6 +132,8 @@ impl Family {
             Self::Chain | Self::ChainArithmetic => 1..=8192,
             Self::Stratified => 8..=4096,
             Self::ProducerChain => 2..=4096,
+            Self::LatinSquare => 1..=5,
+            Self::Planning => 1..=20,
         }
     }
 
@@ -152,6 +167,8 @@ impl Family {
             Self::ChainArithmetic => format!("p(0).\np(X+1) :- p(X), X < {size}.\n"),
             Self::Stratified => stratified(size),
             Self::ProducerChain => producer_chain(size),
+            Self::LatinSquare => latin_square(size),
+            Self::Planning => planning(size),
         })
     }
 
@@ -174,6 +191,8 @@ impl Family {
             | Self::ChainArithmetic
             | Self::Stratified
             | Self::ProducerChain => 1,
+            Self::LatinSquare => latin_squares(size),
+            Self::Planning => binomial(size, size / 2),
         };
         let count = NonZeroU64::new(count).ok_or(Error::Size { family: self, size })?;
         Ok(match self {
@@ -238,6 +257,37 @@ fn producer_chain(size: u32) -> String {
         .map(|i| format!("q{i} :- p{i}, p{}.\n", i + 1))
         .collect();
     format!("{}\n{}", facts.join(" "), rules.concat())
+}
+
+// One value in every cell, no value twice in a row or a column, and the
+// first row in order; the count is the reduced count times `(n − 1)!`.
+fn latin_square(size: u32) -> String {
+    format!(
+        "n(1..{size}).\n1 {{ cell(R,C,V) : n(V) }} 1 :- n(R), n(C).\n:- cell(R,C1,V), cell(R,C2,V), C1 < C2.\n:- cell(R1,C,V), cell(R2,C,V), R1 < R2.\n:- n(C), not cell(1,C,C).\n#show cell/3.\n"
+    )
+}
+
+// The reduced Latin squares of orders one through five, `(n − 1)!` of
+// each order's squares with the first row fixed being one reduced square
+// with its first column permuted below the first row.
+fn latin_squares(size: u32) -> u64 {
+    const REDUCED: [u64; 5] = [1, 1, 1, 4, 56];
+    let factorial: u64 = (1..u64::from(size)).product();
+    factorial * REDUCED[size as usize - 1]
+}
+
+// Move or stay at each step; the position carries by inertia when the
+// walker stays and advances when it moves; the goal fixes the end.
+fn planning(size: u32) -> String {
+    let goal = size / 2;
+    format!(
+        "step(0..{}).\ntime(0..{size}).\npos(0..{size}).\nat(0,0).\n1 {{ move(T); stay(T) }} 1 :- step(T).\nat(P+1,T+1) :- at(P,T), move(T), pos(P+1).\nat(P,T+1) :- at(P,T), stay(T).\n:- not at({goal},{size}).\n#show move/1.\n",
+        size - 1
+    )
+}
+
+fn binomial(n: u32, k: u32) -> u64 {
+    (1..=u64::from(k)).fold(1, |acc, i| acc * (u64::from(n) - i + 1) / i)
 }
 
 fn fibonacci(index: u32) -> u64 {
