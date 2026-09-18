@@ -1888,6 +1888,157 @@ cells to within a tenth of the reference; where a closure derives one atom
 a round, the chain, nothing moves; and the corpus, which does not use this
 route at all, stands where it stood.
 
+## The window's bound prefix, the row step, and the sparse-relation repair dropped
+
+Seven campaigns and one ladder on 18 September 2026, the ladder written at
+17:18:12 UTC and the reports between 17:18:39 and 17:20:38, same machine,
+profile and clingo as above, one session. `before` is the pending-bit
+executable of `10644b3b` (SHA-256
+`7934b92d743525db2ebd9ad8274e67078497566cac68eeff67b284a182a88c69`);
+`window` is built from `283180ae` (SHA-256
+`fb58b495f447b9ff04e21e5a169cb1c2cf7c264f29496a8caceacb2908b078ac`), where
+opening a window over a dense relation reads the bound prefix where it lies
+instead of collecting it; `after` is built from `e98d9357` (SHA-256
+`c1a2ed92849ccf0d8b0b37eb2d128a3e78b54caa2fb9bcfe5f244acd62d08aa7`), where
+a rule whose innermost occurrence meets the row-step conditions joins the
+block of matching rows into the head's pending row a word at a time;
+`clauses` is that executable under `--search clauses`; and the corpus runs
+are that executable on all 94 cases with four workers, with one worker, and
+with one worker under `--search clauses`. Each executable was built from a
+checkout of its own commit into its own target tree.
+[series-e98d9357-cpu-auto.json](series-e98d9357-cpu-auto.json), its
+[table view](series-e98d9357-cpu-auto-tables.md),
+[corpus-e98d9357-cpu-auto.json](corpus-e98d9357-cpu-auto.json), its
+[table view](corpus-e98d9357-cpu-auto-tables.md),
+[corpus-e98d9357-cpu-auto-one-worker.json](corpus-e98d9357-cpu-auto-one-worker.json),
+its [table view](corpus-e98d9357-cpu-auto-one-worker-tables.md) and
+[ladder-e98d9357.json](ladder-e98d9357.json) are the derived comparisons and
+the ladder's runs; raw report SHA-256
+`6906f075b6bca8b7f89227d2afe8eb89b31d1f25d9f404ce8b81def66d71e5eb` (before),
+`acb9d86c5b6139cf3c3bbd915cbbd715df6890ce6a019646adddf850b9f5b0f9` (window),
+`ce5bdea4f5a5d9d64c9147dec0c03fd2dd858c990cee57a1c9ecf07f37fed173` (after),
+`6a6eed12b065ac31d03697fec09481a1e8f94da1e6acd0847ecaae0500f95852`
+(clauses),
+`ead7eb9b859ffba650b677aaf739d1d18d09fcbbd41b21d790f9faf60e82bb0a`
+(corpus, four workers),
+`081754cc0c1ab1b8b7894c7855a1168c1fea68578efef8a1baded8e5c7ce5625`
+(corpus, one worker) and
+`64e90b5f70dea7c45e73b1d77d6bc7796c0d40cb90b5ed924090d6a53c4d010a`
+(corpus, one worker, clauses).
+
+The ladder is the one of the section above, all five executables in this
+session, with three rungs added for the row step: transitive-complete at
+40, 80 and 160 nodes, the facts `e(i,j)` for every `i < j` followed by the
+two rules of transitive-path. It is given as facts, so it takes the closure
+route, and a node has many edges, so a block of rows holds many bits; the
+path graph of transitive-path holds one. These rungs are not series cells.
+Median process wall time in milliseconds, and the blocks the last executable
+joined:
+
+| Rung | control | dense | pending | window | vector | window/pending | vector/window | vector/control | row steps |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| independent-negation-8 | 17.1 | 16.5 | 13.9 | 13.0 | 14.1 | 0.94 | 1.08 | 0.82 | 0 |
+| independent-negation-10 | 51.0 | 49.3 | 40.5 | 38.6 | 38.2 | 0.95 | 0.99 | 0.75 | 0 |
+| independent-negation-12 | 152.0 | 150.6 | 114.3 | 112.9 | 113.3 | 0.99 | 1.00 | 0.75 | 0 |
+| independent-negation-14 | 450.1 | 457.9 | 334.3 | 344.2 | 337.8 | 1.03 | 0.98 | 0.75 | 0 |
+| transitive-path-100 | 12.6 | 9.4 | 7.0 | 7.1 | 6.0 | 1.02 | 0.84 | 0.47 | 4,851 |
+| transitive-path-200 | 36.4 | 24.6 | 16.4 | 15.1 | 14.9 | 0.92 | 0.99 | 0.41 | 19,701 |
+| transitive-path-400 | 151.4 | 88.4 | 53.5 | 49.9 | 46.4 | 0.93 | 0.93 | 0.31 | 79,401 |
+| transitive-path-800 | stopped | 360.3 | 208.0 | 200.8 | 190.0 | 0.97 | 0.95 | n/a | 318,801 |
+| chain-1000 | 18.0 | 15.8 | 18.0 | 16.7 | 16.6 | 0.92 | 1.00 | 0.92 | 0 |
+| chain-2000 | 33.9 | 33.1 | 31.8 | 31.7 | 31.4 | 1.00 | 0.99 | 0.93 | 0 |
+| chain-4000 | 68.5 | 67.9 | 67.0 | 65.7 | 66.9 | 0.98 | 1.02 | 0.98 | 0 |
+| transitive-complete-40 | 16.5 | 15.7 | 15.2 | 15.4 | 13.1 | 1.02 | 0.85 | 0.79 | 741 |
+| transitive-complete-80 | 67.0 | 62.3 | 57.6 | 58.1 | 49.1 | 1.01 | 0.85 | 0.73 | 3,081 |
+| transitive-complete-160 | 358.4 | 309.9 | 296.9 | 287.3 | 215.0 | 0.97 | 0.75 | 0.60 | 12,561 |
+
+Every run exhausted its search and exited 0 except the control on
+transitive-path-800, as before. The charged closure work is the same under
+`pending` and `window` on every rung, the window's change charging as it
+did, and under `vector` it falls where blocks are joined: 148,047 to
+111,564, 804,204 to 664,776, 4,955,654 to 4,382,983 and 33,800,382 to
+31,419,753 on transitive-path, and 121,910 to 44,027, 1,066,060 to 415,182
+and 10,807,373 to 5,474,591 on transitive-complete.
+
+Against the hypotheses. The window's change was predicted at 0.95 to 1.00
+and measures 0.92 to 1.03, within the few percent by which the runs of a
+rung differ: it removes an allocation the function's contract already
+denied, and its effect on time is not distinguishable from none. The row
+step is taken exactly where it was predicted to be: nowhere on
+independent-negation, whose gate reads the head's variable, nor on chain,
+where `r` lists the values 0 to n and `e` lists 1 to n, and on every rung of
+the two transitive families. On transitive-path it was predicted at 0.85 to
+0.95 and measures 0.84, 0.99, 0.93 and 0.95: a block there holds one row, so
+the step saves the binding of that row and no more. On transitive-complete
+it was predicted at 0.3 to 0.6 of the run and measures 0.85, 0.85 and 0.75,
+and the prediction is refuted for the run while it holds for the closure. At
+160 nodes the solving stage falls from 98.1 to 22.2 ms, 0.23, over the same
+695,360 bindings, with the rows offered to the matcher falling from 708,080
+to 38,160; the run falls only to 0.75 because 166 of its 194 driver
+milliseconds are source preparation, the reading and admission of 12,722
+statements at thirteen microseconds each, which the closure does not touch.
+The reference solves the whole of that program in 87 ms. A profile places
+that time in ordering comparisons of whole statements, terms and symbols, in
+the cloning and dropping of provenance and terms, and in the allocator under
+them, in themelios's ingestion of the program as an ordered set of statements
+and in this repository's normalization and fact expansion, which rebuild
+every statement; the split between the two is not measured, the executables
+carrying no frame pointers. For a program of many facts, reading it is now
+the larger part of the run on this route.
+
+The series is flat under both steps: `after` is between 0.95 and 1.08 of
+`before` on every cell, the transitive cells at 0.99 and 0.98, and the one
+excursion, `window` at 16.9 ms on transitive-path-100, is a median of runs
+ranging from 9.1 to 19.3 ms that the ladder's 1.02 on the same rung does not
+bear out. The scoreboard reads nine, twelve and eleven of twenty-two for
+`before`, `window` and `after`, and seven for `clauses`; it does not resolve a
+change here, several cells standing within two hundredths of the reference
+and falling on either side from one run to the next, and `before` itself
+read ten in the section above. The corpus passed on both solvers, all 94
+cases in each of the three configurations: four workers, eight faster than
+the reference, median ratio 1.26, widest loss 2.09; one worker, five, 1.26
+and 1.99; one worker under `--search clauses`, six, 1.31 and 2.21. No corpus
+case takes the closure route, so these runs establish that the two steps
+disturbed nothing there. Against the campaign of the section above the median
+case is 0.98 of its earlier time, single cases between 0.78 and 1.33, the
+spread between sessions already recorded. The peak resident set is unchanged
+under the three executables, chain-2000 at 21.3, 21.6 and 21.6 MiB.
+
+A reversal. The section on dense relations named a repair for chain-2000,
+then slower by 0.15 with its edge relation of two thousand atoms in a box of
+four million positions: a ceiling that reads the fact count as well as the
+product of the widths, or a row of the layout kept sparse, not to be taken
+until the pending bits and the row step had been measured on the same cells.
+They have been, and the repair is not taken. The loss has not recurred in
+three sessions: the chain rungs stand at 0.92, 0.93 and 0.98 of the control.
+What the dense store costs there is memory, half a mebibyte at 2,000 nodes
+and two mebibytes at 4,000, and charged work for sizing and absorbing a wide
+row, not time. Neither form of the repair is worth that. A ceiling that reads
+a population makes the choice of store a heuristic with a constant to tune,
+known at preparation only for facts and estimated for a derived relation, so
+that a program's speed could change with the number of its facts and nothing
+in it say why; and it would give back the gain it was meant to protect, since
+the edge relation of transitive-path has the shape of chain's, n edges in a
+box of n by n, and as a catalog it would lose its dense window and deny its
+rule the row step, which asks that both relations be dense. A sparse row is
+a third representation beside the catalog and the bit array, with its own
+path through the join, the window, the absorbing of marks and the row step,
+and its own argument, for a saving of mebibytes. What stands in its place is
+the one rule there was: a predicate is dense when every argument is bounded
+and the product of the widths fits `PreparationLimits::max_dense_atoms`. That
+ceiling is explicit, accounted in the closure bytes and one number to lower.
+The condition that would reopen this is a measured cost of the dense store,
+in time or in memory, on a relation sparse in a wide box, that lowering the
+ceiling does not remove.
+
+In the problem's words: where a rule's last step reads a whole row of one
+relation into a row of another, the round now does it a word at a time, and
+the closure of a graph with many edges to a node takes a quarter of the time
+it took; a graph with one edge to a node gains little, the series not at
+all, and the corpus stands where it stood. What the ladder's new rungs
+showed beside that is that reading a program of many facts now costs more
+than closing it.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original

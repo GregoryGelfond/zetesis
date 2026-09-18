@@ -543,6 +543,9 @@ derivable head, so a head outside them is an admitted-program invariant
 violation, not a missed row, and the closure over dense relations holds
 exactly the atoms the closure over catalogs would, step for step; the family
 tests check this atom for atom with dense relations enabled and disabled.
+Whether a predicate is laid out depends on its bounds and the ceiling alone,
+never on how many tuples it holds: a relation sparse in a wide box is dense
+all the same, at the cost of its words, and the ceiling is the one control.
 Every other predicate keeps its catalog, and the preparation receipt reports
 how many predicates were laid out.
 
