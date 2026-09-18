@@ -1440,6 +1440,37 @@ not; on the cells we lose, it is the closure route's fixed cost on small
 programs and, on the formula cells, the narrowing of many regions whose
 leaves are few.
 
+## The memory allowance from the host
+
+Two campaigns on 18 September 2026, the reports written between 08:35:51
+and 08:37:08 UTC, same machine, profile, four workers and clingo as above,
+one memory round per solver and cell. `before` is the scoreboard
+executable (`4b6e2636`, SHA-256
+`36a0876f8ef30382297b6accb50ca6acedaa1af0d16250f6c851e56726bec90c`),
+`after` is built from `e2b052b0` (SHA-256
+`b9cb2b9c2c2ccb4ff7562d77ad24de55715f897a6c7c4ed7907df9f018410093`),
+where the command sizes its byte ceilings by the host's memory: half of
+the host's physical memory as the allowance, the library's ceilings
+scaled by it, here 46 gibibytes on a host of 92.
+[series-e2b052b0-cpu-auto.json](series-e2b052b0-cpu-auto.json) and its
+[table view](series-e2b052b0-cpu-auto-tables.md) are the derived
+comparison; raw report SHA-256
+`6ba02660dd4633c9cbbff11fc88122c0bebec3f32ad03e9e5aa884d93e55fa60` (before)
+and
+`ca99dc51107c6855b3567f6aafc69a4a815fea18392625c188593a5618477274` (after).
+
+`after` against `before` is 0.95 to 1.06 on eighteen cells and 0.80 and
+1.19 on the two smallest, stratified-16 and transitive-path-100, whose
+bands are that wide: the ceilings bound named storage and touch no timed
+work, and no cell reached one under either allowance. The peak resident
+set is the same to the mebibyte on every cell, since a larger ceiling
+reserves nothing. The scoreboard reads six of twenty for `before` and
+five for `after`, the sixth being send-money at 0.95 against 1.02, a cell
+that sits at the reference either way. The campaign's first run asked
+every executable for the reference allowance and the older one refused
+the option, which is why the campaigns now leave the allowance to the
+host and read it from each sample's statistics.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
