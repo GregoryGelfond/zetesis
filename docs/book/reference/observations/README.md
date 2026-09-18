@@ -1117,6 +1117,69 @@ turn out to have been waiting on the writer. A document of one answer
 pays nothing for the numbering: its one record is deferred whole and
 indexed only if a second record asks.
 
+## The shared traversal and the regions method beside the clauses
+
+Four campaigns on 18 September 2026, the reports written between 03:00:05
+and 03:09:05 UTC, same machine, profile, four workers and clingo as above.
+`main` is the 896a5f73 executable rerun as the control, `before` the
+schema-2 executable (`40d197a9`, SHA-256
+`b34b5f8831f1d7b2ed046509776dc46e8c317a5418a0aaa911a2da9633f0b59e`),
+`after` is built from `906d89b6` (SHA-256
+`96680774689e7a63ea2f7ac0f5d1faf629a286579f9a8272e670641e3a86b133`), where
+the region traversal is one operation shared by both routes and the
+formula route can propose candidates by regions, and `regions` is the same
+executable run with `--candidates regions` (the flag was renamed `--search`
+in the following commit), which is the only profile field the four reports
+differ in. [series-906d89b6-cpu-auto.json](series-906d89b6-cpu-auto.json)
+and its [table view](series-906d89b6-cpu-auto-tables.md) are the derived
+comparison; raw report SHA-256
+`fbe12748c647d32036ef51e6eadeaa5024e9ea8951be9e931de120b57cfedd9c` (main),
+`2fe548d01221b8eb75386c3daf847d4a85eb0a022c94cc3583196e9b899c9691` (before),
+`12fafec1c5ca1e6ad897f495f9ce3bced4945ef33ae6942cc3ddca4e73ae49e7` (after)
+and `dc0116e85651128569127800e92f3a5c517a70f8736d0b2cd878e9decd239f80`
+(regions).
+
+The default is unchanged and so is the series: `after` against `before`
+reads 0.91 to 1.06 on every cell, the closure route having moved onto the
+shared traversal without a change in what it does. The regions method is
+not at parity on the formula cells:
+
+| Cell | after | regions | regions/after | clingo |
+|---|---:|---:|---:|---:|
+| n-queens/variant-01 8→11 | 270.1 | 5075.4 | 18.8 | 180.8 |
+| n-queens/variant-04 8→11 | 164.5 | 3254.0 | 19.8 | 180.5 |
+| n-queens/variant-01 8→10 | 61.3 | 927.6 | 15.1 | 32.3 |
+| send-money/send-money | 11.5 | 158.9 | 13.8 | 15.2 |
+| variant-04/05-larger-mix | 95.3 | 653.5 | 6.9 | 150.5 |
+| chain-arithmetic-1000 | 10.0 | 63.3 | 6.3 | 5.6 |
+| independent-negation-aggregate-16 | 25.7 | 84.4 | 3.3 | 33.4 |
+| ties-50 | 27.6 | 72.6 | 2.6 | 18.4 |
+| disjunction-12 | 45.8 | 92.8 | 2.0 | 21.7 |
+
+The closure-route cells are flat under either method, as they must be,
+since the method governs the formula route alone. The receipts say where
+the regions method's time goes. On n-queens 11 it makes 26,195 decisions
+where the clause search makes 33,712, visits 52,391 regions and refutes
+23,516 of them, and reaches its 2,680 answers with no candidate rejected
+by the reduct; but it charges 1.16 billion node visits against the clause
+search's 57 million, about 22 thousand per region and 8 thousand
+propagation events per narrowing on a DAG of 3,973 nodes. Every narrowing
+starts from the region's decisions alone and re-derives the whole
+knowledge of the parent, so the cost of a region is the size of the theory
+rather than the size of the split. The search shape is right and the
+primitive is not yet incremental across the tree: a child must inherit its
+parent's knowledge and propagate the one atom that changed. That is the
+next step, and the default follows its measurement.
+
+In the problem's words: the formula route can now grow its answers the way
+the closure route does, by splitting a region of candidates on one atom
+and letting the theory's own rules decide what follows, and it reaches the
+same answers with fewer guesses than the clause search. What it does not
+yet do is remember, when it steps from a region to its child, what it
+already knew about the parent; it works the whole theory out again at
+every step, and on queens that is twenty times the work. The clause search
+keeps its default until that memory is in place.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
