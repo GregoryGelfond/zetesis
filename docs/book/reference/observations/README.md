@@ -1471,6 +1471,64 @@ every executable for the reference allowance and the older one refused
 the option, which is why the campaigns now leave the allowance to the
 host and read it from each sample's statistics.
 
+## The Latin-square and planning cells, and the corpus against clingo
+
+Four campaigns on 18 September 2026, the reports written between 08:51:53
+and 08:55:55 UTC, same machine, profile, four workers and clingo as above,
+one memory round per solver and cell. `before` and `after` are the same
+solver executable (SHA-256
+`b9cb2b9c2c2ccb4ff7562d77ad24de55715f897a6c7c4ed7907df9f018410093`, the
+tree at `359fcedc` changes only the measurement harness), run by the
+harness that now names twenty-two series cells, the Latin square of order
+five with its first row fixed (1,344 squares) and the line walked for
+fourteen steps (3,432 plans) added; `clauses` is the same executable under
+`--search clauses`; and `corpus` is the same executable on all 94 corpus
+cases, the first corpus campaign under the scoreboard.
+[series-359fcedc-cpu-auto.json](series-359fcedc-cpu-auto.json), its
+[table view](series-359fcedc-cpu-auto-tables.md),
+[corpus-359fcedc-cpu-auto.json](corpus-359fcedc-cpu-auto.json) and its
+[table view](corpus-359fcedc-cpu-auto-tables.md) are the derived
+comparisons; raw report SHA-256
+`e32738797ff6760a31aa588edaa66bcc7c0ca282e4b3120a862a3b9a6bfe54b3` (before),
+`ddacdee93b7ba071bb10dc9619c956f4258577d1ce6a3dca0587e41e450cbba3` (after),
+`acfacca796cd96daa6ac26f07c6dff71b3fc56dc8fb6834ca89c589465c60139`
+(clauses) and
+`955ef83b94552892e263d18aff70b5f961aebf2db33bf46d3a901c776d0aee7e`
+(corpus).
+
+The two new cells, with the parts of `after` summed over the four workers
+and the peak resident set:
+
+| Cell | after | clauses | clingo | after/clingo | clauses/clingo | grounding | proposal | membership | ours MiB | clingo MiB |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| latin-square-5 | 16.2 | 36.7 | 15.7 | 1.03 | 2.29 | 1.2 | 23.6 | 10.3 | 10.6 | 10.7 |
+| planning-14 | 38.0 | 86.5 | 16.4 | 2.32 | 5.12 | 3.0 | 72.7 | 18.4 | 10.6 | 10.7 |
+
+`after` against `before`, the same executable twice, is 0.89 to 1.06:
+the band of the cells. The Latin square, a constraint problem in the shape
+of Sudoku, is level with the reference under the default and at 2.29 under
+the clause search; the plans, whose position is carried by frame rules
+from step to step, are 2.32 above the reference under the default and
+5.12 under the clause search, with the narrowing of the regions the
+larger part. The scoreboard reads seven of twenty-two for the default and
+four for the clause search.
+
+On the corpus, all 94 cases passed on both solvers; the default is faster
+than the reference on nine, at 0.29 to 0.34 on three task-allocation
+cases and 0.71 on the second queens encoding, level on four, and the
+median ratio over the 94 is 1.25 with the widest loss at 1.90. The losses
+are the small cases the earlier sections measured, five to twelve
+milliseconds against clingo's five to seven, where the fixed cost of
+admission and grounding is the whole of the difference: on the
+layered-DAG shortest-path cases the parts read one to two milliseconds of
+grounding, five to twelve of narrowing summed over the workers, and under
+a millisecond of membership.
+
+In the problem's words: the report now covers the whole corpus, and on it
+we are ahead of clingo where the search is large and behind by a fixed
+few milliseconds where it is small; the plans cell names the next thing to
+lift, the narrowing of many regions whose leaves are few.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
