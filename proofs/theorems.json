@@ -2625,6 +2625,26 @@
     "line": 339
   },
   {
+    "name": "Zetesis.FormulaBounds.restriction_forces",
+    "file": "Zetesis/FormulaBounds.lean",
+    "line": 359
+  },
+  {
+    "name": "Zetesis.FormulaBounds.restriction_cuts",
+    "file": "Zetesis/FormulaBounds.lean",
+    "line": 365
+  },
+  {
+    "name": "Zetesis.FormulaBounds.restriction_contradiction_refutes",
+    "file": "Zetesis/FormulaBounds.lean",
+    "line": 371
+  },
+  {
+    "name": "Zetesis.FormulaBounds.restricted_stable_narrowing",
+    "file": "Zetesis/FormulaBounds.lean",
+    "line": 384
+  },
+  {
     "name": "Zetesis.FormulaRegions.classical_consequence_forces",
     "file": "Zetesis/FormulaRegions.lean",
     "line": 40
@@ -2643,6 +2663,31 @@
     "name": "Zetesis.FormulaRegions.restricted_consequence_forces",
     "file": "Zetesis/FormulaRegions.lean",
     "line": 60
+  },
+  {
+    "name": "Zetesis.Pending.outputs_append",
+    "file": "Zetesis/Frontier.lean",
+    "line": 36
+  },
+  {
+    "name": "Zetesis.Pending.outputs_cons",
+    "file": "Zetesis/Frontier.lean",
+    "line": 40
+  },
+  {
+    "name": "Zetesis.Pending.Step.perm",
+    "file": "Zetesis/Frontier.lean",
+    "line": 72
+  },
+  {
+    "name": "Zetesis.Pending.Walk.perm",
+    "file": "Zetesis/Frontier.lean",
+    "line": 107
+  },
+  {
+    "name": "Zetesis.Pending.Walk.exhausted",
+    "file": "Zetesis/Frontier.lean",
+    "line": 118
   },
   {
     "name": "Zetesis.GatePositions.atoms_exact",

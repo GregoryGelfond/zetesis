@@ -349,4 +349,50 @@ theorem sole_support_forces (T : Theory α) (rules : List (Producer α))
     exact support.1
   · exact (blocked_no_support c r' a (h r' member support.2.1 eq) z hz support).elim
 
+/-- A restriction is a theory every model still sought satisfies: the support
+restriction the clauses method adds, or an objective bound admitting only the
+models better than an incumbent. A restriction is not a program, so its
+knowledge is closed without producers, by the readings alone, and the readings
+suffice: the knowledge of any theory is sound in its models. An atom the
+restriction knows to hold is in every model of the restriction inside the
+region. -/
+theorem restriction_forces (R : Theory α) (c : Cube α) {a : α}
+    (h : Known R c (.atom a) true) : ∀ z, c.Contains z → Models z R → z a :=
+  fun z hz hm => (known_sound (z := z) R c hz hm h).1 rfl
+
+/-- An atom a restriction knows to fail is in no model of the restriction
+inside the region. -/
+theorem restriction_cuts (R : Theory α) (c : Cube α) {a : α}
+    (h : Known R c (.atom a) false) : ∀ z, c.Contains z → Models z R → ¬ z a :=
+  fun z hz hm => (known_sound (z := z) R c hz hm h).2 rfl
+
+/-- A formula a restriction knows both to hold and to fail leaves the region
+without a model of the restriction. -/
+theorem restriction_contradiction_refutes (R : Theory α) (c : Cube α) {F : Formula α}
+    (ht : Known R c F true) (hf : Known R c F false) :
+    ∀ z, c.Contains z → ¬ Models z R :=
+  fun z hz hm =>
+    (known_sound (z := z) R c hz hm hf).2 rfl ((known_sound (z := z) R c hz hm ht).1 rfl)
+
+/-- A region narrowed by the theory's knowledge and by a restriction's keeps
+every stable model of the theory that satisfies the restriction: an atom
+either knowledge holds is in it, and an atom either knowledge cuts is not.
+A stable model is a classical model of the theory, and one still sought is a
+model of the restriction, so each knowledge is sound for it by `known_sound`;
+each theory's knowledge is carried to the children on its own, by
+`known_mono`. -/
+theorem restricted_stable_narrowing (T R : Theory α) (c : Cube α) {a : α}
+    (z : Atoms α) (hz : c.Contains z) (hs : Stable z T) (hr : Models z R) :
+    ((Known T c (.atom a) true ∨ Known R c (.atom a) true) → z a) ∧
+      ((Known T c (.atom a) false ∨ Known R c (.atom a) false) → ¬ z a) := by
+  constructor
+  · intro h
+    rcases h with h | h
+    · exact known_forces T c h z hz hs
+    · exact restriction_forces R c h z hz hr
+  · intro h
+    rcases h with h | h
+    · exact known_cuts T c h z hz hs
+    · exact restriction_cuts R c h z hz hr
+
 end Zetesis.FormulaBounds
