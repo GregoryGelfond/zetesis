@@ -469,6 +469,42 @@ fn a_clause_of_three_literals_forces_its_last_open_one() {
 }
 
 #[test]
+fn a_node_reached_on_both_sides_of_a_chain_is_one_operand() {
+    // a | (a | b): a is an operand of the outer disjunction and of the inner
+    // one it absorbs, one node of the DAG, so the chain has the operands
+    // {a, b} and fails when both fail; counted twice it never would.
+    let nodes = vec![Node::Atom(0), Node::Atom(1), Node::Or(0, 1), Node::Or(0, 2)];
+    let t = theory(2, nodes, vec![3]);
+    let mut both_cut = region(&t, &[], &[0, 1]);
+    assert!(matches!(
+        narrow(
+            &t,
+            None,
+            &mut both_cut,
+            RegionLimits::default(),
+            &Control::default()
+        )
+        .unwrap()
+        .0,
+        Narrowing::Refuted
+    ));
+    let mut a_cut = region(&t, &[], &[0]);
+    assert!(matches!(
+        narrow(
+            &t,
+            None,
+            &mut a_cut,
+            RegionLimits::default(),
+            &Control::default()
+        )
+        .unwrap()
+        .0,
+        Narrowing::Fixed { changed: true }
+    ));
+    assert!(a_cut.is_held(1));
+}
+
+#[test]
 fn a_subformula_shared_by_two_parents_serves_both_as_one_operand() {
     // (a | b) is an operand of both a | b | c and of the constraint
     // :- (a | b), d, so it is a chain of its own rather than absorbed: with

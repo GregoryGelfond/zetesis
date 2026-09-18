@@ -279,10 +279,16 @@ fn chains(theory: &Theory) -> (Vec<Chain>, Vec<Option<usize>>, Vec<bool>) {
             } else {
                 chain_of[operand].filter(|&k| built[k].disjunction == disjunction)
             };
+            // The operands stay distinct: a node reached twice, through
+            // both sides, is one operand, as it is one node of the DAG.
             if let Some(inner) = inner {
                 chain_of[operand] = None;
                 absorbed[operand] = true;
-                operands.extend(std::mem::take(&mut built[inner].operands));
+                for leaf in std::mem::take(&mut built[inner].operands) {
+                    if !operands.contains(&leaf) {
+                        operands.push(leaf);
+                    }
+                }
             } else if !operands.contains(&operand) {
                 operands.push(operand);
             }
@@ -847,7 +853,10 @@ impl Known {
     /// The one operand of a chain not yet known learns what the chain's
     /// own knowledge leaves it: to hold, in a disjunction known to hold
     /// whose others fail; to fail, in a conjunction known to fail whose
-    /// others hold. The operands are scanned once for it.
+    /// others hold. The operands are scanned once for it; a node's bit is
+    /// set when it learns and counted when it is revisited, so the scan
+    /// may find none, every operand being known with one count pending,
+    /// and then the pending step decides the chain.
     fn unit(&mut self, index: &Narrower, chain: usize) -> Sweep {
         let Chain {
             disjunction,
