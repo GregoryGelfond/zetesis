@@ -128,8 +128,10 @@ output or admitted control semantics.
 ## Verification and review
 
 Follow the workspace's rustfmt, pedantic Clippy, documentation and authored
-unsafe-code gates. Resolve diagnostics in the implementation; a passing command
-does not justify hiding an unused operation or weakening a check. Do not suppress
+unsafe-code gates. The one Clippy threshold the workspace sets is in
+`clippy.toml`, with its reason beside it. Resolve diagnostics in the
+implementation; a passing command does not justify hiding an unused operation
+or weakening a check. Do not suppress
 `dead_code`, its `unused` parent group or `warnings`, whether with `allow` or
 `expect`. Do not manufacture uses or widen visibility to evade these checks.
 Shared test helpers should expose cohesive operations and be compiled only by

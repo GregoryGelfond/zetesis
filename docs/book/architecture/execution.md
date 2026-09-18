@@ -115,6 +115,14 @@ and a covered tree with no such leaf is the proof of minimality
 are then the same operation over the same index of the theory, and no
 clause form is built anywhere on the route.
 
+Because the regions share nothing, several workers can walk the tree at
+once (`--region-workers`), each deciding the leaves it reaches, over a pool
+of regions still to visit. The family is exact at any worker count, each
+answer arriving once, by the partition law; the order in which answers
+arrive is the schedule's, is not promised to repeat between runs, and is
+not a property of the result. Verification rests on the laws and on the
+oracle comparison of answer sets as sets, not on order or determinism.
+
 The classical search over a clause form remains the default method while
 the regions method is measured beside it on the same cells. Read as
 regions the classical search is the same tree:

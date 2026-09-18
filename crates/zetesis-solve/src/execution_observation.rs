@@ -46,6 +46,11 @@ pub enum ExecutionObservation<'a> {
         /// How candidates are proposed and the reduct queried.
         search: SearchMethod,
     },
+    /// Several workers walk the region tree at once and decide its leaves.
+    ParallelRegions {
+        /// Requested worker population.
+        workers: NonZeroUsize,
+    },
     /// Bounded parallel residual completion is requested.
     ExactCompletion {
         /// Requested worker population.

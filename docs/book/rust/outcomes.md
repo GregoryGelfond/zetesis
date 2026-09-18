@@ -63,6 +63,11 @@ applied, and the reading work, a subtotal of cumulative search work, and
 `statistics.search.reduct_regions` the regions of the reduct queries; under
 the default clauses method the former is `null` and the latter zero.
 
+Under `--region-workers` above one the answer sets of the formula route
+arrive in the schedule's order: the family is exact and each answer appears
+once, but no order is promised, nor the same order between runs. Consumers
+compare answer sets as sets, as the oracle comparison does.
+
 `SemanticOutcome::selection()` identifies the family requested by the session.
 `All` ranges over the original program; `Optimal` permits sound exclusion of
 worse candidates. `Completion::Exhausted` therefore does not by itself identify

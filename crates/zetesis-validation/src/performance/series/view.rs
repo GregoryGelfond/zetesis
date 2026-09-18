@@ -549,7 +549,7 @@ fn cases(labelled: &Labelled<'_>) -> Result<Vec<String>, ViewError> {
 /// The search method is the one field a comparison may vary; the profiles
 /// are compared without it. Reports before the field spell it in neither of
 /// its two names and are compared as they are.
-const METHOD_FIELDS: [&str; 2] = ["search", "candidates"];
+const METHOD_FIELDS: [&str; 3] = ["search", "candidates", "region_workers"];
 
 fn profiles(labelled: &Labelled<'_>) -> Result<Vec<Value>, ViewError> {
     let mut profiles = labelled.report["report"]["plan"]["profiles"]
@@ -578,14 +578,17 @@ fn method(labelled: &Labelled<'_>) -> Result<String, ViewError> {
             label: labelled.label.into(),
             field: "report.plan.profiles",
         })?;
-    Ok(profiles
-        .first()
-        .and_then(|profile| {
-            METHOD_FIELDS
-                .iter()
-                .find_map(|field| profile[field].as_str())
-        })
-        .map_or_else(|| "default".to_owned(), str::to_owned))
+    let Some(profile) = profiles.first() else {
+        return Ok("default".to_owned());
+    };
+    let method = ["search", "candidates"]
+        .iter()
+        .find_map(|field| profile[field].as_str())
+        .unwrap_or("default");
+    Ok(match profile["region_workers"].as_u64() {
+        Some(workers) => format!("{method} with {workers} workers"),
+        None => method.to_owned(),
+    })
 }
 
 fn provenance(labelled: &Labelled<'_>) -> Result<Provenance, ViewError> {

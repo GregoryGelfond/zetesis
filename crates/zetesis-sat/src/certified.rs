@@ -129,7 +129,7 @@ impl StableModels {
                         }
                     });
                     stats.refusal = None;
-                    self.certification = Some(plan);
+                    self.certification = Some(std::sync::Arc::new(plan));
                     return Ok(true);
                 }
             }
@@ -218,7 +218,7 @@ impl StableModels {
             super::Proposer::Clauses(clauses) => {
                 positive::restrict(&plan, &mut clauses.cnf, &mut budget)
             }
-            super::Proposer::Regions(_) => Ok(0),
+            super::Proposer::Regions(_) | super::Proposer::Parallel(_) => Ok(0),
         };
         stats.restriction_work = budget.statistics.work - self.statistics.search.work;
         self.statistics.search = budget.statistics;

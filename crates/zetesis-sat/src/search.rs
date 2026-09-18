@@ -13,7 +13,7 @@ mod workspace_tests;
 use watch_node::WatchNode;
 
 pub(crate) use quota::{BoundedQuota, LocalQuota, Quota};
-pub(crate) use shared_budget::SharedBudget;
+pub(crate) use shared_budget::{SharedBudget, WorkLease};
 
 #[cfg(test)]
 #[path = "../tests/support/finish_contracts.rs"]

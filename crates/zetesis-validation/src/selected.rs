@@ -126,6 +126,10 @@ pub struct NativeExecution {
     /// executable's default and permits comparison with versions before this flag.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub search: Option<SearchMethod>,
+    /// Optional worker count for the regions method. Omission preserves the
+    /// sealed executable's default.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub region_workers: Option<NonZeroUsize>,
     /// Closure worker request.
     pub workers: NonZeroUsize,
     /// Formula completion worker request.
@@ -148,6 +152,7 @@ impl Default for NativeExecution {
             grounder: Grounder::Eager,
             formula_joins: None,
             search: None,
+            region_workers: None,
             workers: NonZeroUsize::new(1).expect("one is nonzero"),
             completion_workers: NonZeroUsize::new(1).expect("one is nonzero"),
             batch_size: NonZeroUsize::new(64).expect("64 is nonzero"),

@@ -387,6 +387,9 @@ pub struct Request<'a> {
     /// Optional native formula search method. None preserves the sealed
     /// executable's default; this does not change the independent clingo call.
     pub search: Option<crate::selected::SearchMethod>,
+    /// Optional worker count for the regions method; None preserves the
+    /// sealed executable's default.
+    pub region_workers: Option<std::num::NonZeroUsize>,
     /// Independent authored resource ceilings.
     pub limits: Limits,
 }

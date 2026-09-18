@@ -32,6 +32,10 @@ mod reduct_query;
 
 #[path = "regions.rs"]
 mod regions;
+
+#[path = "parallel_regions.rs"]
+mod parallel_regions;
+use parallel_regions::ParallelRegions;
 pub(crate) use regions::ReductQuery;
 use regions::RegionSearch;
 pub use regions::{RegionQueryStatistics, RegionSearchStatistics, SearchMethod};
@@ -328,7 +332,7 @@ pub struct StableModels {
     exhausted: bool,
     pending_error: Option<Incomplete>,
     batch: batch::State,
-    certification: Option<certified::Certification>,
+    certification: Option<std::sync::Arc<certified::Certification>>,
     reduct: crate::prepared_reduct::State,
 }
 impl StableModels {
@@ -345,6 +349,49 @@ impl StableModels {
     /// Refuses encoding/history admission, work limits, cancellation or allocation.
     pub fn new(theory: &Theory, limits: Limits, control: Control) -> Result<Self, Incomplete> {
         Self::with_method(theory, SearchMethod::Clauses, limits, control)
+    }
+
+    /// Enumerate by regions with several workers walking the tree at once,
+    /// each with its own knowledge, budget lease and reduct query, sharing a
+    /// pool of regions still to visit. The models arrive in the schedule's
+    /// order, which is not a property of the result and differs between
+    /// runs; the family is exact. One worker is the scalar regions method.
+    ///
+    /// # Errors
+    /// Refuses admission, work limits, cancellation or allocation.
+    pub fn with_region_workers(
+        theory: &Theory,
+        workers: std::num::NonZeroUsize,
+        limits: Limits,
+        control: Control,
+    ) -> Result<Self, Incomplete> {
+        if workers.get() == 1 {
+            return Self::with_method(theory, SearchMethod::Regions, limits, control);
+        }
+        let mut budget = Budget {
+            quota: crate::search::LocalQuota,
+            limits: limits.search,
+            control: &control,
+            statistics: SearchStatistics::default(),
+        };
+        let parallel = ParallelRegions::new(theory, workers, limits, control.clone(), &mut budget)?;
+        let statistics = Statistics {
+            search: budget.statistics,
+            ..Default::default()
+        };
+        Ok(Self {
+            theory: theory.clone(),
+            proposer: Proposer::Parallel(Box::new(parallel)),
+            limits,
+            control,
+            statistics,
+            terminal: false,
+            exhausted: false,
+            pending_error: None,
+            batch: batch::State::default(),
+            certification: None,
+            reduct: crate::prepared_reduct::State::new(SearchMethod::Regions),
+        })
     }
 
     /// Enumerate by the chosen method. Under [`SearchMethod::Regions`] no
@@ -482,6 +529,31 @@ impl StableModels {
                 regions: Some(regions.statistics()),
                 ..self.statistics
             },
+            Proposer::Parallel(parallel) => {
+                let merged = parallel.merged();
+                let mut certified = self.statistics.certified;
+                if let (Some(into), Some(from)) = (certified.as_mut(), merged.certified.as_ref()) {
+                    into.checks = from.checks;
+                    into.stable = from.stable;
+                    into.refuted = from.refuted;
+                    into.failed = from.failed;
+                    into.checking_work = from.checking_work;
+                    into.positive_check_peak_bytes = from.positive_check_peak_bytes;
+                }
+                Statistics {
+                    regions: Some(parallel.statistics()),
+                    candidates: merged.candidates,
+                    countermodel_queries: merged.countermodel_queries,
+                    countermodels: merged.countermodels,
+                    certified,
+                    reduct: crate::ReductStatistics {
+                        original_work: merged.reduct.original_work,
+                        regions: merged.reduct.regions,
+                        ..self.statistics.reduct
+                    },
+                    ..self.statistics
+                }
+            }
         }
     }
 
@@ -496,7 +568,8 @@ impl StableModels {
             Membership {
                 theory: &self.theory,
                 limits: self.limits,
-                certificate: self.certification.as_ref(),
+                certificate: self.certification.as_deref(),
+                certificate_owner: self.certification.as_ref(),
                 reduct: &mut self.reduct,
             },
             &mut self.proposer,
@@ -543,6 +616,8 @@ struct Membership<'a> {
     theory: &'a Theory,
     limits: Limits,
     certificate: Option<&'a certified::Certification>,
+    /// The same certificate as the enumeration owns it, for workers.
+    certificate_owner: Option<&'a std::sync::Arc<certified::Certification>>,
     reduct: &'a mut crate::prepared_reduct::State,
 }
 
@@ -552,6 +627,16 @@ struct Membership<'a> {
 enum Proposer {
     Clauses(Box<ClauseProposer>),
     Regions(Box<RegionSearch>),
+    /// Several workers walk the region tree and decide the leaves themselves.
+    Parallel(Box<ParallelRegions>),
+}
+
+/// What a proposer hands the enumeration.
+enum Proposal {
+    /// A classical model the reduct has yet to decide.
+    Candidate(Interpretation),
+    /// A stable model a worker has already decided.
+    Stable(Interpretation),
 }
 
 /// The clause form of the theory and the retained cursor over it.
@@ -569,9 +654,10 @@ impl Proposer {
         &mut self,
         theory: &Theory,
         limits: Limits,
+        certificate: Option<&std::sync::Arc<certified::Certification>>,
         budget: &mut Budget<'_>,
         statistics: &mut Statistics,
-    ) -> Result<Option<Interpretation>, Incomplete> {
+    ) -> Result<Option<Proposal>, Incomplete> {
         let proposal = match self {
             Self::Clauses(clauses) => {
                 increment(&mut statistics.candidate_queries)?;
@@ -593,8 +679,11 @@ impl Proposer {
                 }
                 proposal
             }
+            Self::Parallel(parallel) => {
+                return Ok(parallel.propose(certificate, budget)?.map(Proposal::Stable));
+            }
         };
-        Ok(proposal)
+        Ok(proposal.map(Proposal::Candidate))
     }
 
     /// Exclude a proposed candidate from every later proposal. Regions need
@@ -606,7 +695,7 @@ impl Proposer {
     ) -> Result<(), Incomplete> {
         match self {
             Self::Clauses(clauses) => clauses.cursor.exclude(&clauses.cnf, candidate, budget),
-            Self::Regions(_) => Ok(()),
+            Self::Regions(_) | Self::Parallel(_) => Ok(()),
         }
     }
 
@@ -623,6 +712,7 @@ impl Proposer {
                 Ok(())
             }
             Self::Regions(regions) => regions.restrict(restriction),
+            Self::Parallel(parallel) => parallel.restrict(restriction),
         }
     }
 }
@@ -638,14 +728,21 @@ fn advance(
         theory,
         limits,
         certificate,
+        certificate_owner,
         reduct,
     } = membership_input;
     loop {
         let started = timing::start(statistics.phase_timings.as_ref());
-        let proposal = proposer.propose(theory, limits, budget, statistics);
+        let proposal = proposer.propose(theory, limits, certificate_owner, budget, statistics);
         timing::finish(&mut statistics.phase_timings, Phase::Candidates, started);
-        let Some(candidate) = proposal? else {
-            return Ok(None);
+        let candidate = match proposal? {
+            None => return Ok(None),
+            Some(Proposal::Stable(model)) => {
+                // Decided by a worker; the coordinator only counts it.
+                increment(&mut statistics.stable_models)?;
+                return Ok(Some(model));
+            }
+            Some(Proposal::Candidate(candidate)) => candidate,
         };
         increment(&mut statistics.candidates)?;
         let result = if let Some(certificate) = certificate {

@@ -146,11 +146,12 @@ impl RegionSearch {
             statistics,
         } = self;
         let before = traversal.statistics();
+        let restricted: Vec<&(Theory, Narrower)> = restrictions.iter().collect();
         let visit = traversal.next(|region, knowledge| {
             narrow(
                 (theory, narrower),
                 producers.as_ref(),
-                restrictions,
+                &restricted,
                 region,
                 knowledge,
                 budget,
@@ -188,13 +189,13 @@ impl RegionSearch {
 /// on the work ceiling has spent at least the remaining work, which is
 /// charged.
 #[allow(clippy::too_many_arguments)]
-fn narrow(
+pub(crate) fn narrow<Q: Quota>(
     theory: (&Theory, &Narrower),
     producers: Option<&Producers>,
-    restrictions: &[(Theory, Narrower)],
+    restrictions: &[&(Theory, Narrower)],
     region: &mut Region,
     knowledge: &mut Vec<Knowledge>,
-    budget: &mut Budget<'_>,
+    budget: &mut Budget<'_, Q>,
     statistics: &mut RegionSearchStatistics,
 ) -> Result<Narrowing, Incomplete> {
     let mut changed = false;
@@ -250,14 +251,14 @@ fn narrow(
     }
 }
 
-fn limits<Q: Quota>(budget: &Budget<'_, Q>) -> RegionLimits {
+pub(crate) fn limits<Q: Quota>(budget: &Budget<'_, Q>) -> RegionLimits {
     RegionLimits {
         max_work: budget.remaining_work(),
         max_propagations: u64::MAX,
     }
 }
 
-fn stopped(stop: Stop) -> Incomplete {
+pub(crate) fn stopped(stop: Stop) -> Incomplete {
     match stop {
         Stop::WorkLimit => Incomplete::WorkLimit,
         other => other.into(),

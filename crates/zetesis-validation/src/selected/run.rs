@@ -357,6 +357,12 @@ fn native_arguments(execution: NativeExecution, input: &Path) -> Vec<OsString> {
                 .into_iter()
                 .flat_map(|search| [OsString::from("--search"), OsString::from(search.label())]),
         )
+        .chain(execution.region_workers.into_iter().flat_map(|workers| {
+            [
+                OsString::from("--region-workers"),
+                OsString::from(workers.to_string()),
+            ]
+        }))
         .chain([
             "--json".into(),
             "--stats".into(),

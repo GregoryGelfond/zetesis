@@ -448,6 +448,12 @@ fn arguments<'a>(
                     .chain(profile.search.into_iter().flat_map(|search| {
                         [OsString::from("--search"), OsString::from(search.label())]
                     }))
+                    .chain(profile.region_workers.into_iter().flat_map(|workers| {
+                        [
+                            OsString::from("--region-workers"),
+                            OsString::from(workers.to_string()),
+                        ]
+                    }))
                     .chain(profile.time_limit_seconds.into_iter().flat_map(|seconds| {
                         [
                             OsString::from("--time-limit"),

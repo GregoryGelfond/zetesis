@@ -363,6 +363,30 @@ operation fails after a stable model was already proved, the iterator returns
 that model and emits the pending failure on its next call; coverage remains
 incomplete. The regions proposer needs no exclusion: a leaf is visited once.
 
+## Walking the tree with several workers
+
+`StableModels::with_region_workers(&Theory, workers, Limits, Control)` walks
+the region tree with that many workers at once. Each worker owns a stack of
+regions with their knowledge, a budget leased from the enumeration's shared
+allowance, its own index for the reduct query and its own evaluation
+workspace; the workers share a pool of regions still to visit and nothing
+else. A worker narrows a region, drops it when refuted, splits it and keeps
+both children, offering one to the pool when the pool runs short, and at a
+leaf decides membership as the scalar walk does, by the class certificate
+when one applies and else by the proper-subset query, sending a stable
+model to the enumeration. The regions partition the candidate space exactly
+(`Search.split_partition`, `split_disjoint`), so every stable model arrives
+once and none is missed, whatever the interleaving; the order of arrival is
+the schedule's, differs between runs, and is not a property of the result.
+A restriction added while the workers run narrows the regions not yet
+visited; models already on their way are returned as they are, as the
+scalar contract already allows. The work and decision ceilings are shared:
+the first worker to exhaust one reports the stop and the others stop at
+their next charge. Receipts are merged when the workers finish; a snapshot
+taken while they run reports what has been merged so far. One worker is
+the scalar regions walk. The batched protocol is not used with workers,
+since the workers decide their leaves themselves.
+
 ## Search and limits
 
 The Boolean search serves the reduct's proper-subset query and the outer

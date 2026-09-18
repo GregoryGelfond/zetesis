@@ -79,12 +79,21 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             keyed_constraints: self.input.keyed_constraints,
         })?;
         let models = phases.measure(SolvePhase::CandidateSetup, || {
-            StableModels::with_method(
-                self.input.theory,
-                config.search,
-                crate::countermodel::search_limits(config),
-                control.clone(),
-            )
+            if config.search == crate::SearchMethod::Regions && config.region_workers.get() > 1 {
+                StableModels::with_region_workers(
+                    self.input.theory,
+                    config.region_workers,
+                    crate::countermodel::search_limits(config),
+                    control.clone(),
+                )
+            } else {
+                StableModels::with_method(
+                    self.input.theory,
+                    config.search,
+                    crate::countermodel::search_limits(config),
+                    control.clone(),
+                )
+            }
         });
         let mut models = match models {
             Ok(models) => models,

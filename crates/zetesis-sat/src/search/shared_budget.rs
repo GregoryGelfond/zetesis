@@ -88,6 +88,14 @@ impl SharedBudget {
             .map_err(|_| Incomplete::DecisionLimit)
     }
 
+    /// The work committed so far, while leases may still hold permits: a
+    /// lower bound on the work spent, exact once every lease has dropped.
+    pub(crate) fn snapshot(&self, statistics: &mut SearchStatistics) {
+        let work = self.lock();
+        statistics.work = work.spent;
+        statistics.decisions = self.decisions.load(Ordering::Relaxed);
+    }
+
     /// Every lease has dropped and all workers have joined before this read.
     pub(crate) fn record(&self, statistics: &mut SearchStatistics) {
         let work = self.lock();

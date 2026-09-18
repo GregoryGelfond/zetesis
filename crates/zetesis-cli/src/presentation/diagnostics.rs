@@ -90,6 +90,8 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
                 let oracle = if oracle == crate::Oracle::Auto { "Ferraris reduct membership" } else { "Ferraris reduct countermodel" };
                 self.metadata(Label::Backend, format_args!("cpu; oracle: {oracle}; search: {}; grounder: eager (requested {})", search.label(), grounder.label()))
             }
+            Event::ParallelRegions { workers } => writeln!(self,
+                "Parallel regions: {workers} workers; models arrive in the schedule's order"),
             Event::ExactCompletion { workers, max_scratch_bytes } => writeln!(self,
                 "Exact completion: requested workers={workers}; bounded logical scratch bytes={max_scratch_bytes}"),
             Event::AutomaticCpu => self.metadata(Label::Auto,

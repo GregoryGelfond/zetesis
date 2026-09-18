@@ -22,8 +22,8 @@ fn header(sink: &mut impl Write, options: &Options, elapsed: Duration) -> io::Re
     )?;
     writeln!(
         sink,
-        "  configured: workers={}; batch={}; displayed models={} (0=all)",
-        options.workers, options.batch_size, options.models
+        "  configured: workers={}; region workers={}; batch={}; displayed models={} (0=all)",
+        options.workers, options.region_workers, options.batch_size, options.models
     )?;
     writeln!(
         sink,

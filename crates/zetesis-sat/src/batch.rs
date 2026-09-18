@@ -230,7 +230,7 @@ impl StableModels {
     }
 
     fn certify_pending(&mut self, verdicts: &mut [BatchVerdict]) -> Result<(), Incomplete> {
-        let Some(certificate) = &self.certification else {
+        let Some(certificate) = self.certification.as_deref() else {
             return Ok(());
         };
         let mut search = self.statistics.search;
@@ -391,10 +391,14 @@ fn proposal(
     statistics: &mut super::Statistics,
 ) -> Result<Option<Interpretation>, Incomplete> {
     let started = timing::start(statistics.phase_timings.as_ref());
-    let proposal = proposer.propose(theory, limits, budget, statistics);
+    let proposal = proposer.propose(theory, limits, None, budget, statistics);
     timing::finish(&mut statistics.phase_timings, Phase::Candidates, started);
-    let Some(candidate) = proposal? else {
-        return Ok(None);
+    // The batched protocol checks its proposals itself; a worker-decided
+    // model is refused here rather than checked twice.
+    let candidate = match proposal? {
+        None => return Ok(None),
+        Some(super::Proposal::Candidate(candidate)) => candidate,
+        Some(super::Proposal::Stable(_)) => return Err(Incomplete::InvalidWitness),
     };
     // Proposals cross to an external checker, so they are validated here
     // under their own limit and phase before that boundary, whatever the

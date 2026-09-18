@@ -61,6 +61,9 @@ pub struct SolveConfig {
     pub workers: NonZeroUsize,
     /// Formula exact-completion worker count.
     pub completion_workers: NonZeroUsize,
+    /// Workers walking the region tree at once under the regions method;
+    /// one is the scalar walk. Models then arrive in the schedule's order.
+    pub region_workers: NonZeroUsize,
     /// Named cold reduct preparation and each query's retained capacity.
     /// The immutable reduct is prepared once per original theory. Parallel
     /// completion also admits its shared owner against the collective ceiling.
@@ -148,6 +151,7 @@ impl SolveConfig {
         batch_size: NonZeroUsize::new(64).unwrap(),
         workers: NonZeroUsize::new(4).unwrap(),
         completion_workers: NonZeroUsize::new(1).unwrap(),
+        region_workers: NonZeroUsize::new(1).unwrap(),
         max_reduct_bytes: zetesis_sat::ReductPreparationLimits::DEFAULT_BYTES,
         max_completion_scratch_bytes: 268_435_456,
         max_candidates: 10_000_000,
