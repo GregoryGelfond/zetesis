@@ -68,6 +68,20 @@ Its Boolean search representation does not redefine ASP as classical
 satisfiability: auxiliary encoding variables do not participate in answer-set
 identity or minimality.
 
+That search is a retained chronological traversal over the theory's atoms,
+and it is the same shape as the closure route's regions: a node of the
+search holds some atoms in and some out, propagation adds the atoms every
+classical model agrees on under those decisions, a conflict closes the
+node, and a complete assignment is a leaf the reduct decides. Every stable
+model is a classical model, so the propagated atoms narrow the region
+soundly, and a restriction every stable model satisfies, such as the
+support restriction on the outer query, extends what propagation may use
+(`FormulaRegions.classical_consequence_forces`, `restricted_consequence_forces`).
+The search proposes and never decides membership; it keeps no learned
+clauses, and its branch order and phase are heuristics that change which
+candidate is proposed next, never whether one is accepted. No second
+traversal is built beside it.
+
 Both paths can restrict candidate generation by necessary conditions. A normal
 source constraint supplies a forbidden positive gate conjunction when its
 remaining antecedents are witnessed by actual unconditional facts. The binary

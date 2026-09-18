@@ -2545,6 +2545,26 @@
     "line": 123
   },
   {
+    "name": "Zetesis.FormulaRegions.classical_consequence_forces",
+    "file": "Zetesis/FormulaRegions.lean",
+    "line": 40
+  },
+  {
+    "name": "Zetesis.FormulaRegions.classical_consequence_cuts",
+    "file": "Zetesis/FormulaRegions.lean",
+    "line": 47
+  },
+  {
+    "name": "Zetesis.FormulaRegions.no_model_refutes",
+    "file": "Zetesis/FormulaRegions.lean",
+    "line": 53
+  },
+  {
+    "name": "Zetesis.FormulaRegions.restricted_consequence_forces",
+    "file": "Zetesis/FormulaRegions.lean",
+    "line": 60
+  },
+  {
     "name": "Zetesis.GatePositions.atoms_exact",
     "file": "Zetesis/GatePositions.lean",
     "line": 32

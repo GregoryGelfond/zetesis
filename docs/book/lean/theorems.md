@@ -8,6 +8,7 @@ The maintained full index is
 | Question | Module and central law | Required boundary |
 | --- | --- | --- |
 | What makes an interpretation an answer set? | `Ferraris.stable_iff_minimal_reduct` | Fixed original theory and candidate |
+| Why may a candidate search narrow by classical consequence? | `FormulaRegions.classical_consequence_forces`, `no_model_refutes` | Every stable model is a classical model; the reduct still decides each leaf |
 | When does least closure suffice? | `Semantics.stable_iff_gamma` | Normalized single-head rules and constraints |
 | Why do normal and formula checking agree on this fragment? | `NormalFerraris.answer_set_iff`, `ferraris_answer_set_iff_closure` | The specified filter-aware translation and one shared atom universe |
 | Why may only gate atoms be guessed? | `Semantics.accept_sound`, `stable_complete`, `stable_iff_exists_seed` | The supplied carrier covers every frozen gate |

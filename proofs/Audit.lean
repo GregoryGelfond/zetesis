@@ -509,6 +509,10 @@ import Zetesis
 #print axioms Zetesis.FiniteValues.original_literal_identity
 #print axioms Zetesis.FiniteValues.frozen_literal_identity
 #print axioms Zetesis.FiniteValues.failed_step
+#print axioms Zetesis.FormulaRegions.classical_consequence_forces
+#print axioms Zetesis.FormulaRegions.classical_consequence_cuts
+#print axioms Zetesis.FormulaRegions.no_model_refutes
+#print axioms Zetesis.FormulaRegions.restricted_consequence_forces
 #print axioms Zetesis.GatePositions.atoms_exact
 #print axioms Zetesis.GatePositions.retained_position_exact
 #print axioms Zetesis.GateProjection.bitwise_support_exact

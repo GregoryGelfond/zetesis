@@ -122,6 +122,7 @@ import Zetesis.SourceContributions
 import Zetesis.FiniteTables
 import Zetesis.TableBindings
 import Zetesis.DomainBindings
+import Zetesis.FormulaRegions
 import Zetesis.ModelSelections
 import Zetesis.AtomCatalogs
 import Zetesis.StorageOwners
