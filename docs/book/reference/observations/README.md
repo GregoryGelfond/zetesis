@@ -1722,6 +1722,172 @@ representation alone buys little until the round stops building them;
 and where the relation is sparse in a wide box, the long chain, the bits
 cost more than the tree.
 
+## Pending bits for dense heads, and the size ladder
+
+Six campaigns and one ladder on 18 September 2026, same machine, profile
+and clingo as above. `before` is the dense-relation executable of
+`6f114811` (SHA-256
+`6930f3d13b893a151380aad0a3fab3d9147f48643f2f5cdf20fa9549bbb16fdf`);
+`after` is built from `10644b3b` (SHA-256
+`7934b92d743525db2ebd9ad8274e67078497566cac68eeff67b284a182a88c69`),
+where a round records a derived head of a dense relation as a pending bit
+in a row of words the closure workspace keeps for the layout, and joins the
+marked words into the relation after the round, so that no atom of a dense
+predicate is built before the model is assembled; `clauses` is the same
+executable under `--search clauses`; and `corpus` is the same executable on
+all 94 corpus cases, with four workers, and again with one worker under the
+default search and under `--search clauses`. The series and four-worker
+corpus reports were written between 15:43:01 and 15:44:09 UTC and the
+one-worker corpus reports at 15:52:42 and 15:52:55, one memory round per
+solver and cell.
+[series-10644b3b-cpu-auto.json](series-10644b3b-cpu-auto.json), its
+[table view](series-10644b3b-cpu-auto-tables.md),
+[corpus-10644b3b-cpu-auto.json](corpus-10644b3b-cpu-auto.json), its
+[table view](corpus-10644b3b-cpu-auto-tables.md),
+[corpus-10644b3b-cpu-auto-one-worker.json](corpus-10644b3b-cpu-auto-one-worker.json)
+and its [table view](corpus-10644b3b-cpu-auto-one-worker-tables.md) are the
+derived comparisons; raw report SHA-256
+`c329c0c553cdd94acda082d797f9f2407da7dbd8f2ee9df6eb3925434cbd3a35` (before),
+`1e7fb64ecc29a60f5db1cdc669ec475df822913b119fcb755db60dfe45f0dac6` (after),
+`4c84bfac46e076af55e67c3892cbe1e65d936effe26cb5d7412e538907c4f26b`
+(clauses),
+`5ff45f2ac557f0cb5beacf052d70e9a4d304d1420b4195ad92273a35cf993369`
+(corpus, four workers),
+`42ebb350630d9e78a6e75dbefb4f9d36cb59e53cbffc4cdd0a9aafc0934d387a`
+(corpus, one worker) and
+`57fdca9531ecd226f58f194b29c70af2f3e8d435e2af046cd4fe1ea1b897db3e`
+(corpus, one worker, clauses).
+
+The closure-route cells of the series, with the charged closure work of one
+run and the peak resident set of the memory round:
+
+| Cell | before | after | after/before | clingo | after/clingo | work before | work after | MiB before | MiB after |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| transitive-path-100 | 13.5 | 9.5 | 0.70 | 8.8 | 1.07 | 209,092 | 148,047 | 10.5 | 10.2 |
+| transitive-path-200 | 32.2 | 23.1 | 0.72 | 21.8 | 1.06 | 955,649 | 804,204 | 14.5 | 14.7 |
+| independent-choice-16 | 34.2 | 25.0 | 0.73 | 26.8 | 0.93 | 3,198,290 | 2,117,111 | 8.6 | 8.4 |
+| stratified-16 | 4.5 | 3.4 | 0.77 | 4.4 | 0.78 | 2,439 | 1,681 | 8.8 | 8.7 |
+| independent-negation-10 | 50.0 | 38.6 | 0.77 | 4.6 | 8.42 | 136,012 | 91,687 | 8.8 | 8.8 |
+| independent-negation-8 | 16.9 | 14.0 | 0.83 | 4.6 | 3.05 | 41,811 | 28,784 | 8.4 | 8.4 |
+| independent-choice-12 | 7.7 | 6.9 | 0.90 | 6.8 | 1.02 | 342,835 | 227,172 | 8.8 | 8.6 |
+| chain-2000 | 35.5 | 33.4 | 0.94 | 11.0 | 3.05 | 578,537 | 736,073 | 21.0 | 21.5 |
+| chain-1000 | 18.3 | 18.5 | 1.01 | 7.7 | 2.40 | 179,678 | 211,573 | 14.5 | 14.6 |
+| producer-chain-700 | 24.7 | 25.9 | 1.05 | 9.8 | 2.65 | 42,445 | 48,256 | 24.3 | 24.1 |
+
+The size ladder asks how a step scales, not only where it stands at one
+size. Its programs are the series families' texts at the sizes named:
+independent-negation at 8, 10, 12 and 14 nodes, transitive-path at 100,
+200, 400 and 800 and chain at 1000, 2000 and 4000. Each executable runs
+each program as `zetesis <program> --backend cpu --models 0 --workers 4
+--stats` with the machine otherwise idle, once as a warmup and three times
+timed; the figure is the median process wall time in milliseconds, and the
+work is the charged closure work the statistics report, the same in every
+run. The control is the executable of `a712f10d` (SHA-256
+`54069a1381bcc5fc86c39fa1e2f5afd1a7c4ae6b16809a8fafb0b29791acae25`), the
+branch before dense relations. [ladder-10644b3b.json](ladder-10644b3b.json)
+holds every run. The ladder is rerun with each later step of the dense
+round, all executables in one session, since times of different sessions
+do not compare.
+
+| Rung | control | dense | pending | dense/control | pending/dense | work control | work dense | work pending |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| independent-negation-8 | 16.4 | 16.4 | 14.5 | 1.00 | 0.88 | 123,109 | 41,811 | 28,784 |
+| independent-negation-10 | 50.4 | 48.5 | 37.9 | 0.96 | 0.78 | 425,724 | 136,012 | 91,687 |
+| independent-negation-12 | 148.3 | 145.8 | 110.7 | 0.98 | 0.76 | 1,385,573 | 423,458 | 280,758 |
+| independent-negation-14 | 445.6 | 450.4 | 340.8 | 1.01 | 0.76 | 4,354,196 | 1,298,863 | 857,156 |
+| transitive-path-100 | 12.9 | 9.6 | 7.1 | 0.75 | 0.74 | 1,197,772 | 209,092 | 148,047 |
+| transitive-path-200 | 37.3 | 27.3 | 16.0 | 0.73 | 0.59 | 5,378,096 | 955,649 | 804,204 |
+| transitive-path-400 | 150.1 | 88.5 | 51.8 | 0.59 | 0.59 | 23,870,854 | 4,812,835 | 4,955,654 |
+| transitive-path-800 | stopped | 358.1 | 202.9 | n/a | 0.57 | n/a | 27,231,857 | 33,800,382 |
+| chain-1000 | 17.9 | 17.7 | 16.3 | 0.99 | 0.92 | 475,452 | 179,678 | 211,573 |
+| chain-2000 | 33.0 | 31.0 | 32.4 | 0.94 | 1.05 | 1,025,311 | 578,537 | 736,073 |
+| chain-4000 | 66.8 | 66.9 | 68.7 | 1.00 | 1.03 | 2,200,821 | 2,030,006 | 2,720,073 |
+
+Every run exhausted its search and exited 0 except the control on
+transitive-path-800, which stops at the default oracle work limit after
+595 ms and has no ratio; both dense executables complete that rung. The
+three timed runs of a cell agree within a few percent; on chain-2000 and
+chain-4000 the ranges of `dense` and `pending` overlap, so those two
+ratios do not differ from one.
+
+The ladder answers the question it was set. The gain of the dense store
+alone does not widen with size on the enumeration cells, 1.00, 0.96, 0.98
+and 1.01 of the control, which is the reading that the cost per derived
+atom dominated them; the pending bits remove that cost and the cells fall
+to 0.88 at eight nodes and 0.76 to 0.78 from ten to fourteen, flat in
+size because each closure stays small and only their number grows. On the
+transitive cells the dense gain does widen, 0.75, 0.73 and 0.59, and the
+pending bits take a further 0.74 to 0.57, so that the rung at 400 nodes
+stands at 0.35 of the control. The chain shows no trend in either step.
+
+Against the hypotheses. The enumeration cells were predicted at 0.80 to
+0.90 and measure 0.76 to 0.88. The transitive cells were predicted at 0.85
+to 0.95 and measure 0.57 to 0.74: building each derived atom, keeping it
+in the round's tree set and ranking it a second time was a larger share
+of that closure than the prediction allowed, and the step that remains
+for those cells, the vector step, has less left to take than was thought;
+they stand at 1.06 and 1.07 of the reference, from 1.44 and 1.53. The
+chain was predicted near one and is. Two predictions were refuted. The
+charged work was predicted to fall on every closure cell, and it rises on
+the three chain rungs, on producer-chain-700 and on transitive-path-400
+and -800 while their times fall or hold: sizing the pending rows charges a
+unit a word, once for a workspace, and joining a round's marks charges the
+span from the first marked word to the last, which on the transitive
+cells is nearly the whole row every round, a cost of rounds times words,
+eight hundred rounds of ten thousand words at 800 nodes. The vector step
+writes whole rows and replaces that pass; until then the span is the
+recorded cost of keeping one range, not a list of marked words. On
+chain-4000 the two charges over the edge relation's 4,001 by 4,001
+positions are a quarter of a million units each, and the pending row of
+that relation is the half mebibyte by which chain-2000's resident set
+rises, 21.0 to 21.5 MiB; the sparse-relation repair recorded with the
+dense relations stands as it was, and the loss of 1.15 measured on
+chain-2000 then does not recur, 0.94 of the control on the ladder. And
+the scoreboard was predicted to stay at seven of twenty-two and reads ten:
+independent-choice-16 at 0.93 of the reference is a gain of this step;
+stratified-16 at 0.78 is a cell of three to four milliseconds whose
+timings fall a millisecond apart, weak evidence; and disjunction-12 at
+0.998 is a formula-route cell this step does not reach, a tie that fell
+on the near side. The clause search reads six of twenty-two.
+
+A correction to the section above. It names independent-choice-16 among
+the formula cells, says the dense store does not reach it and reads its
+0.78 as a slow `before` run. The cell takes the closure route under all
+three executables, `oracle=closure` in their statistics, with its three
+predicates laid out dense; its charged closure work is 10,427,471 at
+`a712f10d`, 3,198,290 at `6f114811` and 2,117,111 here, over the same
+2,584 checks and 91,926 derived atoms. The dense store reached it, and
+the 0.78 was most probably its gain, as 0.73 is this step's. The earlier
+timing itself is not re-established here, only the work. The remaining
+cells that report no grounding time, independent-choice-12 and
+stratified-16, are closure-route cells likewise. Of the formula-route
+cells, all within 0.96 and 1.03 of `before`, chain-arithmetic-1000 stands
+apart at 0.91, which this step cannot explain and which is recorded as
+unexplained.
+
+The corpus passed on both solvers in each of its three configurations,
+all 94 cases: four workers under the default search, faster than the
+reference on nine, median ratio 1.25, widest loss 1.97; one worker under
+the default search, four, 1.29 and 2.06; one worker under `--search
+clauses`, eight, 1.27 and 2.05, the clause search 1.02 of the default at
+the median of the cases and between 0.75 and 1.29 on single ones. No
+corpus case takes the closure route, every one reporting a grounding
+time, so this step does not run on the corpus: the three runs establish
+that it disturbed nothing there, and measure nothing of its gain. `before`
+was not run on the corpus in this session, so the comparison with the
+previous campaign is between sessions: the median case is 1.00 of its
+earlier time and single cases lie between 0.82 and 1.26, which is the
+spread of a case of five to seven milliseconds between sessions and the
+reading of the widest loss, 1.74 then and 1.97 now on one shortest-path
+case whose neighbour moved to 0.82.
+
+In the problem's words: where a closure's time was building each atom it
+derived, the enumeration and transitive cells, recording the atom as a bit
+takes a quarter to two fifths of the time away, and takes the transitive
+cells to within a tenth of the reference; where a closure derives one atom
+a round, the chain, nothing moves; and the corpus, which does not use this
+route at all, stands where it stood.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
