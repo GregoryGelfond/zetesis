@@ -1376,6 +1376,70 @@ cells and within a twentieth of it on three more; what remains above the
 reference is the closure route's fixed cost on small programs and the
 per-region cost of one long chain of refutations.
 
+## The scoreboard, the parts of a cell and the memory rounds
+
+Four campaigns on 18 September 2026, the reports written between 08:12:02
+and 08:21:34 UTC, same machine, profile, four workers and clingo as above,
+each with one memory round per solver and cell. `main` is the 896a5f73
+executable rerun as the control, `before` the default-search executable
+(`c2e939a6`, SHA-256
+`46a51100c58cd8984aa494c6dead31edf21710c0ed89b9b7aa34d9f6f0b9c7fa`),
+`after` is built from `4b6e2636` (SHA-256
+`36a0876f8ef30382297b6accb50ca6acedaa1af0d16250f6c851e56726bec90c`), where
+the region workers time their own narrowing and leaf decisions, and
+`clauses` is the same executable run with `--search clauses`.
+[series-4b6e2636-cpu-auto.json](series-4b6e2636-cpu-auto.json) and its
+[table view](series-4b6e2636-cpu-auto-tables.md) are the derived
+comparison; raw report SHA-256
+`e035dd16192236c2c54a428455329e7a4a36e87b11d297e44c42b24e1b5e2741` (main),
+`6a9fe5a5e6821cb1a07a2ed4fe786b8549b1299f659b69ceaead07f56efdf1b0` (before),
+`3c41ef0f6c1cb78f928e7dbcb0dcab3bd6083b2f6d6d8392ed2fdb7c1b2cab42` (after)
+and
+`3d00eb912e592b58d51334a81790612aa6caa1cc995486ff6754a738efb71924`
+(clauses).
+
+`after` against `before` is flat, 0.96 to 1.04 on every cell: the
+workers' timers cost nothing the measurement can see. The formula cells,
+with the parts of `after` and the peak resident set of each solver:
+
+| Cell | after | clingo | after/clingo | grounding | proposal | membership | clingo grounding | clingo solving | ours MiB | clingo MiB |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| variant-04/05-larger-mix | 44.4 | 147.7 | 0.30 | 3.2 | 85.6 | 13.2 | 84.0 | 58.0 | 13.6 | 23.5 |
+| n-queens/variant-04 8→11 | 98.7 | 179.8 | 0.55 | 1.6 | 324.5 | 18.6 | 1.0 | 173.0 | 11.3 | 11.9 |
+| independent-negation-aggregate-16 | 20.4 | 31.1 | 0.65 | 0.2 | 8.5 | 4.0 | 1.0 | 27.0 | 10.5 | 10.2 |
+| n-queens/variant-01 8→11 | 120.8 | 182.8 | 0.66 | 5.7 | 385.9 | 28.2 | 2.0 | 177.0 | 11.8 | 11.7 |
+| send-money/send-money | 13.5 | 15.1 | 0.89 | 2.8 | 11.3 | 0.3 | 9.0 | 1.0 | 12.5 | 12.9 |
+| stratified-16 | 4.5 | 4.5 | 1.01 | n/a | 0.8 | 0.3 | 0.0 | 0.0 | 8.9 | 10.4 |
+| n-queens/variant-01 8→10 | 33.3 | 31.2 | 1.07 | 4.4 | 81.7 | 6.4 | 1.0 | 25.0 | 11.4 | 10.8 |
+| disjunction-12 | 22.0 | 19.3 | 1.14 | 0.1 | 6.9 | 31.2 | 0.0 | 14.0 | 10.1 | 10.3 |
+| ties-50 | 21.1 | 18.5 | 1.14 | 0.3 | 18.9 | 3.1 | 1.0 | 13.0 | 11.8 | 10.6 |
+
+Milliseconds and mebibytes; the clingo columns are the reference
+measured in the `after` run itself, its grounding its own total less its
+solving time, both printed to the millisecond. The parts of `after` are
+summed over the four workers, as the contract now says, so proposal and
+membership together exceed the wall time on the parallel cells: on
+queens 8→11 the workers spend 386 ms narrowing and 28 ms deciding leaves
+to finish in 121 ms of wall time, and on the disjunction cell the leaf
+decisions, 31 ms summed, are the larger part. The memory rounds put the
+two solvers within a few mebibytes of each other on the formula cells,
+ours below the reference on the larger mix, 13.6 against 23.5; on the
+closure-route chain cells ours is above it, 20.7 against 11.1 on
+chain-2000 and 24.6 against 12.5 on producer-chain-700, the retained
+closure workspaces the earlier sections measured. No device ran, so the
+device column is empty.
+
+The scoreboard: `main` faster than the reference on none of the twenty
+cells, `before` and `after` on five, `clauses` on four, and the closest
+losses of `after` within 1.07 on stratified and queens 8→10 and at 1.14
+on the disjunction and ties cells.
+
+In the problem's words: the report now says, for each configuration,
+where we beat clingo and by how much, and where the time goes when we do
+not; on the cells we lose, it is the closure route's fixed cost on small
+programs and, on the formula cells, the narrowing of many regions whose
+leaves are few.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
