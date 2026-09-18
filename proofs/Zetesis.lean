@@ -134,3 +134,5 @@ import Zetesis.ConditionalHeads
 import Zetesis.ConditionalHeadSupport
 import Zetesis.ObservationBindings
 import Zetesis.ProjectedAnswers
+import Zetesis.KeyedConstraints
+import Zetesis.RowSteps

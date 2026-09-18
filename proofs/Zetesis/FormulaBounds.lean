@@ -25,7 +25,14 @@ the producer fragment of `DisjunctiveSupport`, an atom none of whose
 producers can support it under the region, because each has an impossible
 body or another head held, is cut, and an atom held with one producer
 left unblocked has that producer's body: `answer_set_supported` says every
-atom of a stable model has a supporting producer.
+atom of a stable model has a supporting producer. An atomic choice is a
+producer of its atom, blocked only when its body cannot hold, since a choice
+has no other head: `answer_set_supported_with_choices` gives every atom an
+ordinary supporter or an enabled choice of it, and the cut and the two sole
+producer laws are stated over both. Their premises ask that a producer
+support the atom nowhere in the region, which the readings supply, and so
+does the theory's knowledge, a body known to fail or another head known to
+hold; the narrowing blocks by knowledge.
 
 Each rule supplies a node of the coverage tree of `Search.lean` with the
 stable models as the valid seeds, so the leaves of a tree built from them
@@ -348,6 +355,139 @@ theorem sole_support_forces (T : Theory α) (rules : List (Producer α))
   · subst eq
     exact support.1
   · exact (blocked_no_support c r' a (h r' member support.2.1 eq) z hz support).elim
+
+/-- An atomic choice cannot support its atom under the region: it has a body
+and that body is impossible there. A choice without a body is never blocked,
+and a choice of another atom supports nothing else whatever the region. -/
+def ChoiceBlocked (c : Cube α) : ChoiceProducer α → Prop
+  | .fact _ | .reversedFact _ => False
+  | .rule B _ | .reversedRule B _ => Never c B
+
+/-- A blocked choice supports no atom in any seed of the region: support
+needs the choice enabled, and an impossible body holds in no seed. -/
+theorem choice_blocked_no_support (c : Cube α) (r : ChoiceProducer α) (a : α)
+    (hb : ChoiceBlocked c r) : ∀ z, c.Contains z → ¬ r.Supports z a := by
+  intro z hz hs
+  have enabled : r.Enabled z := hs.1
+  cases r with
+  | fact _ => exact hb
+  | reversedFact _ => exact hb
+  | rule B _ => exact never_sound c hz hb enabled
+  | reversedRule B _ => exact never_sound c hz hb enabled
+
+/-- A producer blocked by the theory's knowledge rather than by the readings
+alone: its body is known to fail, or another of its heads is known to hold.
+This is the narrowing's own test, which consults what propagation has
+established and not only what the region decides directly. -/
+def KnownBlocked (T : Theory α) (c : Cube α) (r : Producer α) (a : α) : Prop :=
+  (match r with
+    | .fact _ => False
+    | .rule B _ => Known T c B false) ∨
+  ∃ b, r.head.Contains b ∧ Known T c (.atom b) true ∧ b ≠ a
+
+/-- An atomic choice blocked by the theory's knowledge: its body is known to
+fail. -/
+def KnownChoiceBlocked (T : Theory α) (c : Cube α) : ChoiceProducer α → Prop
+  | .fact _ | .reversedFact _ => False
+  | .rule B _ | .reversedRule B _ => Known T c B false
+
+/-- A producer blocked by knowledge supports its atom in no classical model
+of the theory inside the region, by `known_sound`: a body known to fail does
+not hold there, and another head known to hold is held, against sole-head
+support. -/
+theorem known_blocked_no_support (T : Theory α) (c : Cube α) (r : Producer α) (a : α)
+    (hb : KnownBlocked T c r a) :
+    ∀ z, c.Contains z → Models z T → ¬ r.Supports z a := by
+  intro z hz hm hs
+  rcases hb with body | ⟨b, hb, held, ne⟩
+  · cases r with
+    | fact _ => exact body
+    | rule B _ => exact (known_sound (z := z) T c hz hm body).2 rfl hs.1
+  · have present : z b := (known_sound (z := z) T c hz hm held).1 rfl
+    exact ne (hs.2.2 b hb present)
+
+/-- A choice blocked by knowledge supports no atom in any classical model of
+the theory inside the region. -/
+theorem known_choice_blocked_no_support (T : Theory α) (c : Cube α)
+    (r : ChoiceProducer α) (a : α) (hb : KnownChoiceBlocked T c r) :
+    ∀ z, c.Contains z → Models z T → ¬ r.Supports z a := by
+  intro z hz hm hs
+  have enabled : r.Enabled z := hs.1
+  cases r with
+  | fact _ => exact hb
+  | reversedFact _ => exact hb
+  | rule B _ => exact (known_sound (z := z) T c hz hm hb).2 rfl enabled
+  | reversedRule B _ => exact (known_sound (z := z) T c hz hm hb).2 rfl enabled
+
+/-- The support cut with atomic choices read as producers. An atom is in no
+stable model of the region when no ordinary producer with the atom in its
+head, and no atomic choice of the atom, supports it in any stable model of
+the region.
+
+The premises ask only that each producer support the atom nowhere in the
+region. `blocked_no_support` and `choice_blocked_no_support` supply them from
+the readings, and `known_blocked_no_support` and
+`known_choice_blocked_no_support` from the theory's knowledge, a stable model
+being a classical model. `answer_set_supported_with_choices` gives every atom
+of a stable model an ordinary supporter or an enabled choice of that atom,
+and each is excluded by its premise. -/
+theorem unsupported_cut_with_choices (T : Theory α) (rules : List (Producer α))
+    (choices : List (ChoiceProducer α)) (covered : CoveredWithChoices T rules choices)
+    (c : Cube α) (a : α)
+    (ordinary : ∀ r ∈ rules, r.head.Contains a →
+      ∀ z, c.Contains z → Stable z T → ¬ r.Supports z a)
+    (chosen : ∀ r ∈ choices, r.head = a →
+      ∀ z, c.Contains z → Stable z T → ¬ r.Supports z a) :
+    ∀ z, c.Contains z → Stable z T → ¬ z a := by
+  intro z hz hs present
+  have supported : (∃ r ∈ rules, r.Supports z a) ∨ (∃ r ∈ choices, r.Supports z a) :=
+    answer_set_supported_with_choices z T rules choices covered hs a present
+  rcases supported with ⟨r, member, support⟩ | ⟨r, member, support⟩
+  · exact ordinary r member support.2.1 z hz hs support
+  · exact chosen r member support.2 z hz hs support
+
+/-- An atom held in a stable model of the region, every producer of which
+but one ordinary producer supports it nowhere in the region, is supported by
+that producer, so its body holds there. Atomic choices count among the
+producers: each choice of the atom must be excluded. -/
+theorem sole_rule_forces_with_choices (T : Theory α) (rules : List (Producer α))
+    (choices : List (ChoiceProducer α)) (covered : CoveredWithChoices T rules choices)
+    (c : Cube α) (a : α) (r : Producer α)
+    (ordinary : ∀ r' ∈ rules, r'.head.Contains a → r' ≠ r →
+      ∀ z, c.Contains z → Stable z T → ¬ r'.Supports z a)
+    (chosen : ∀ r' ∈ choices, r'.head = a →
+      ∀ z, c.Contains z → Stable z T → ¬ r'.Supports z a) :
+    ∀ z, c.Contains z → Stable z T → z a → r.Enabled z := by
+  intro z hz hs present
+  have supported : (∃ r' ∈ rules, r'.Supports z a) ∨ (∃ r' ∈ choices, r'.Supports z a) :=
+    answer_set_supported_with_choices z T rules choices covered hs a present
+  rcases supported with ⟨r', member, support⟩ | ⟨r', member, support⟩
+  · by_cases eq : r' = r
+    · subst eq
+      exact support.1
+    · exact (ordinary r' member support.2.1 eq z hz hs support).elim
+  · exact (chosen r' member support.2 z hz hs support).elim
+
+/-- The same with the one producer left an atomic choice: every ordinary
+producer of the atom and every other choice of it is excluded, so the choice
+is enabled in every stable model of the region holding the atom. -/
+theorem sole_choice_forces (T : Theory α) (rules : List (Producer α))
+    (choices : List (ChoiceProducer α)) (covered : CoveredWithChoices T rules choices)
+    (c : Cube α) (a : α) (r : ChoiceProducer α)
+    (ordinary : ∀ r' ∈ rules, r'.head.Contains a →
+      ∀ z, c.Contains z → Stable z T → ¬ r'.Supports z a)
+    (chosen : ∀ r' ∈ choices, r'.head = a → r' ≠ r →
+      ∀ z, c.Contains z → Stable z T → ¬ r'.Supports z a) :
+    ∀ z, c.Contains z → Stable z T → z a → r.Enabled z := by
+  intro z hz hs present
+  have supported : (∃ r' ∈ rules, r'.Supports z a) ∨ (∃ r' ∈ choices, r'.Supports z a) :=
+    answer_set_supported_with_choices z T rules choices covered hs a present
+  rcases supported with ⟨r', member, support⟩ | ⟨r', member, support⟩
+  · exact (ordinary r' member support.2.1 z hz hs support).elim
+  · by_cases eq : r' = r
+    · subst eq
+      exact support.1
+    · exact (chosen r' member support.2 eq z hz hs support).elim
 
 /-- A restriction is a theory every model still sought satisfies: the support
 restriction the clauses method adds, or an objective bound admitting only the

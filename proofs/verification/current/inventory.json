@@ -2547,102 +2547,132 @@
     },
     {
       "file": "Zetesis/FormulaBounds.lean",
-      "line": 62,
+      "line": 69,
       "name": "Zetesis.FormulaBounds.read_sound"
     },
     {
       "file": "Zetesis/FormulaBounds.lean",
-      "line": 90,
+      "line": 97,
       "name": "Zetesis.FormulaBounds.sure_sound"
     },
     {
       "file": "Zetesis/FormulaBounds.lean",
-      "line": 94,
+      "line": 101,
       "name": "Zetesis.FormulaBounds.never_sound"
     },
     {
       "file": "Zetesis/FormulaBounds.lean",
-      "line": 101,
+      "line": 108,
       "name": "Zetesis.FormulaBounds.decided_reads"
     },
     {
       "file": "Zetesis/FormulaBounds.lean",
-      "line": 133,
+      "line": 140,
       "name": "Zetesis.FormulaBounds.decided_leaf_models"
     },
     {
       "file": "Zetesis/FormulaBounds.lean",
-      "line": 143,
+      "line": 150,
       "name": "Zetesis.FormulaBounds.never_root_refutes"
     },
     {
       "file": "Zetesis/FormulaBounds.lean",
-      "line": 149,
+      "line": 156,
       "name": "Zetesis.FormulaBounds.sure_body_forces"
     },
     {
       "file": "Zetesis/FormulaBounds.lean",
-      "line": 155,
+      "line": 162,
       "name": "Zetesis.FormulaBounds.sure_body_refutes"
     },
     {
       "file": "Zetesis/FormulaBounds.lean",
-      "line": 206,
+      "line": 213,
       "name": "Zetesis.FormulaBounds.known_sound"
     },
     {
       "file": "Zetesis/FormulaBounds.lean",
-      "line": 262,
+      "line": 269,
       "name": "Zetesis.FormulaBounds.known_mono"
     },
     {
       "file": "Zetesis/FormulaBounds.lean",
-      "line": 292,
+      "line": 299,
       "name": "Zetesis.FormulaBounds.known_forces"
     },
     {
       "file": "Zetesis/FormulaBounds.lean",
-      "line": 297,
+      "line": 304,
       "name": "Zetesis.FormulaBounds.known_cuts"
     },
     {
       "file": "Zetesis/FormulaBounds.lean",
-      "line": 302,
+      "line": 309,
       "name": "Zetesis.FormulaBounds.known_contradiction_refutes"
     },
     {
       "file": "Zetesis/FormulaBounds.lean",
-      "line": 316,
+      "line": 323,
       "name": "Zetesis.FormulaBounds.blocked_no_support"
     },
     {
       "file": "Zetesis/FormulaBounds.lean",
-      "line": 327,
+      "line": 334,
       "name": "Zetesis.FormulaBounds.unsupported_cut"
     },
     {
       "file": "Zetesis/FormulaBounds.lean",
-      "line": 339,
+      "line": 346,
       "name": "Zetesis.FormulaBounds.sole_support_forces"
     },
     {
       "file": "Zetesis/FormulaBounds.lean",
-      "line": 359,
+      "line": 368,
+      "name": "Zetesis.FormulaBounds.choice_blocked_no_support"
+    },
+    {
+      "file": "Zetesis/FormulaBounds.lean",
+      "line": 398,
+      "name": "Zetesis.FormulaBounds.known_blocked_no_support"
+    },
+    {
+      "file": "Zetesis/FormulaBounds.lean",
+      "line": 411,
+      "name": "Zetesis.FormulaBounds.known_choice_blocked_no_support"
+    },
+    {
+      "file": "Zetesis/FormulaBounds.lean",
+      "line": 434,
+      "name": "Zetesis.FormulaBounds.unsupported_cut_with_choices"
+    },
+    {
+      "file": "Zetesis/FormulaBounds.lean",
+      "line": 453,
+      "name": "Zetesis.FormulaBounds.sole_rule_forces_with_choices"
+    },
+    {
+      "file": "Zetesis/FormulaBounds.lean",
+      "line": 474,
+      "name": "Zetesis.FormulaBounds.sole_choice_forces"
+    },
+    {
+      "file": "Zetesis/FormulaBounds.lean",
+      "line": 499,
       "name": "Zetesis.FormulaBounds.restriction_forces"
     },
     {
       "file": "Zetesis/FormulaBounds.lean",
-      "line": 365,
+      "line": 505,
       "name": "Zetesis.FormulaBounds.restriction_cuts"
     },
     {
       "file": "Zetesis/FormulaBounds.lean",
-      "line": 371,
+      "line": 511,
       "name": "Zetesis.FormulaBounds.restriction_contradiction_refutes"
     },
     {
       "file": "Zetesis/FormulaBounds.lean",
-      "line": 384,
+      "line": 524,
       "name": "Zetesis.FormulaBounds.restricted_stable_narrowing"
     },
     {
@@ -3109,6 +3139,26 @@
       "file": "Zetesis/JoinFrames.lean",
       "line": 106,
       "name": "Zetesis.JoinFrames.stale_root_can_erase_current_truth"
+    },
+    {
+      "file": "Zetesis/KeyedConstraints.lean",
+      "line": 55,
+      "name": "Zetesis.KeyedConstraints.one_value"
+    },
+    {
+      "file": "Zetesis/KeyedConstraints.lean",
+      "line": 77,
+      "name": "Zetesis.KeyedConstraints.digit_carry"
+    },
+    {
+      "file": "Zetesis/KeyedConstraints.lean",
+      "line": 100,
+      "name": "Zetesis.KeyedConstraints.digit_carry_asked"
+    },
+    {
+      "file": "Zetesis/KeyedConstraints.lean",
+      "line": 138,
+      "name": "Zetesis.KeyedConstraints.asked_constraints_preserve"
     },
     {
       "file": "Zetesis/LazyRounds.lean",
@@ -4672,28 +4722,73 @@
     },
     {
       "file": "Zetesis/ReductRegions.lean",
-      "line": 34,
+      "line": 39,
       "name": "Zetesis.ReductRegions.query_contains"
     },
     {
       "file": "Zetesis/ReductRegions.lean",
-      "line": 40,
+      "line": 45,
       "name": "Zetesis.ReductRegions.leaf_refutes"
     },
     {
       "file": "Zetesis/ReductRegions.lean",
-      "line": 46,
+      "line": 51,
       "name": "Zetesis.ReductRegions.exhausted_stable"
     },
     {
       "file": "Zetesis/ReductRegions.lean",
-      "line": 56,
+      "line": 61,
       "name": "Zetesis.ReductRegions.countermodels_exact"
     },
     {
       "file": "Zetesis/ReductRegions.lean",
-      "line": 65,
+      "line": 70,
       "name": "Zetesis.ReductRegions.stable_iff_no_countermodel"
+    },
+    {
+      "file": "Zetesis/ReductRegions.lean",
+      "line": 101,
+      "name": "Zetesis.ReductRegions.reduct_masked"
+    },
+    {
+      "file": "Zetesis/ReductRegions.lean",
+      "line": 113,
+      "name": "Zetesis.ReductRegions.reduct_conj"
+    },
+    {
+      "file": "Zetesis/ReductRegions.lean",
+      "line": 116,
+      "name": "Zetesis.ReductRegions.reduct_disj"
+    },
+    {
+      "file": "Zetesis/ReductRegions.lean",
+      "line": 119,
+      "name": "Zetesis.ReductRegions.reduct_imp"
+    },
+    {
+      "file": "Zetesis/ReductRegions.lean",
+      "line": 122,
+      "name": "Zetesis.ReductRegions.reduct_atom"
+    },
+    {
+      "file": "Zetesis/ReductRegions.lean",
+      "line": 152,
+      "name": "Zetesis.ReductRegions.masked_read_eq_reduct"
+    },
+    {
+      "file": "Zetesis/ReductRegions.lean",
+      "line": 174,
+      "name": "Zetesis.ReductRegions.masked_reads_falsum"
+    },
+    {
+      "file": "Zetesis/ReductRegions.lean",
+      "line": 244,
+      "name": "Zetesis.ReductRegions.masked_known_sound"
+    },
+    {
+      "file": "Zetesis/ReductRegions.lean",
+      "line": 281,
+      "name": "Zetesis.ReductRegions.masked_known_narrows"
     },
     {
       "file": "Zetesis/RelationExtension.lean",
@@ -4704,6 +4799,31 @@
       "file": "Zetesis/RelationExtension.lean",
       "line": 46,
       "name": "Zetesis.RelationExtension.acceptance_preserved"
+    },
+    {
+      "file": "Zetesis/RowSteps.lean",
+      "line": 52,
+      "name": "Zetesis.RowSteps.marks_are_new_atoms"
+    },
+    {
+      "file": "Zetesis/RowSteps.lean",
+      "line": 65,
+      "name": "Zetesis.RowSteps.absorbed_is_union"
+    },
+    {
+      "file": "Zetesis/RowSteps.lean",
+      "line": 84,
+      "name": "Zetesis.RowSteps.marks_distinct"
+    },
+    {
+      "file": "Zetesis/RowSteps.lean",
+      "line": 132,
+      "name": "Zetesis.RowSteps.block_heads"
+    },
+    {
+      "file": "Zetesis/RowSteps.lean",
+      "line": 154,
+      "name": "Zetesis.RowSteps.block_places"
     },
     {
       "file": "Zetesis/RuleFactorization.lean",
@@ -6340,6 +6460,7 @@
     "Zetesis/IntegerEnvelopes.lean",
     "Zetesis/Iteration.lean",
     "Zetesis/JoinFrames.lean",
+    "Zetesis/KeyedConstraints.lean",
     "Zetesis/LazyRounds.lean",
     "Zetesis/Lifted.lean",
     "Zetesis/LiftedBridge.lean",
@@ -6379,6 +6500,7 @@
     "Zetesis/QueryCompaction.lean",
     "Zetesis/ReductRegions.lean",
     "Zetesis/RelationExtension.lean",
+    "Zetesis/RowSteps.lean",
     "Zetesis/RuleFactorization.lean",
     "Zetesis/ScalarArithmetic.lean",
     "Zetesis/Search.lean",
@@ -6410,8 +6532,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "41ccdc4b0c52d78de38edf5a0d9e921104b84147e39f94db2788c8118844da2c",
-    "Zetesis.lean": "39d8fa59965ca32c8d4a92c531b424fbb31e96089016b1c6cba534311f3903e0",
+    "Audit.lean": "3a23dd5a90fb1eabaeeae05ed91e0659d605e2d375489313a5642ef789b40450",
+    "Zetesis.lean": "2d902866b3aee19371f41b9e3c9b981c4607ffdc430a65775d33d96170175ff4",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
     "Zetesis/AggregateBounds.lean": "c1a49f93ac5140bcd22876b42c52c23c4f447352c9cf61f2f01741fbbdc98452",
     "Zetesis/AggregateConsumers.lean": "41aded89dbfaa79833ed3b336030ef4b08afa5be8e7029060416c2f8de59ef97",
@@ -6466,7 +6588,7 @@
     "Zetesis/FinitePools.lean": "941db3834037593dd92bf6f3cacfc92acd55fa989955a4d64a4369e2d09857a5",
     "Zetesis/FiniteTables.lean": "892e5722be539571301797e33d2c42a0cb552bc765081523a7fc06f874cd3177",
     "Zetesis/FiniteValues.lean": "14e3d4f778b607fabdaa2c9153c7341618ab895f73158095efb46ff1d12d5788",
-    "Zetesis/FormulaBounds.lean": "590a6fa2178ba9ca56056d28f63c6da2eedb5689a5d4c006ced886318bc4a989",
+    "Zetesis/FormulaBounds.lean": "f9ac905d0dd31cbc5f1a72d3dbb993bc7cf4e45d83fed3f3d96d343ba91fc248",
     "Zetesis/FormulaChains.lean": "77be5aa437b90dde0fbc145363bf9e533d28dfad8f48f3d27682fb13684bd4e9",
     "Zetesis/FormulaRegions.lean": "64a8e7764e6e5afa11355dc71601c3a19b8f77bbea71c2c497aa5b77cc62451a",
     "Zetesis/Frontier.lean": "d60b411083cadfbc3b2ccb95e9991c05b9ac66bd37c3db6539d8b4b1a6e524ff",
@@ -6480,6 +6602,7 @@
     "Zetesis/IntegerEnvelopes.lean": "2f5ee0dc5abb7c0b7551988ebe353bc5e2909d9f0a73184e17819c02ebc41b9e",
     "Zetesis/Iteration.lean": "e5aac9eba61b8150296cc53c381e8f50bd6943c3fbcd6a4c84a6933d3855db16",
     "Zetesis/JoinFrames.lean": "b4af5ba25e37e6305f9121791519aa20ee7a4977c6bc61f3e18608a38fdd95c0",
+    "Zetesis/KeyedConstraints.lean": "d30e5b9149996725d57ab908a46896de465bbfa52ae1fa2364cdc2558015a40c",
     "Zetesis/LazyRounds.lean": "c356b730916c3add85d422183146eab7150281d375b5b54eff775a6157a76e86",
     "Zetesis/Lifted.lean": "beae8b170cd0dc605155cf996395bb3105b544dd622753954de443727915dbbb",
     "Zetesis/LiftedBridge.lean": "97de4a489c8a4e1fadf43d759320532064a70d90be463da25ed1da78b601ca09",
@@ -6517,8 +6640,9 @@
     "Zetesis/ProjectedConditionals.lean": "a420d26c76215b77f75cf33831dce80055a5d6cdb448db53f83c8951bf06dc4b",
     "Zetesis/Propagation.lean": "fc62487ece686b02daf4f2b229e90b266e09e624f8236fc70076ac427a2a745b",
     "Zetesis/QueryCompaction.lean": "47e08ca3b250dd8c0099635a836a7a3953cfb55863da57ac00324fa010b56c53",
-    "Zetesis/ReductRegions.lean": "40182bdf79b7dba723fcc47287c8ea080362886bde9d43d5477bf95539f1d75f",
+    "Zetesis/ReductRegions.lean": "b7956362dd83030cce1912d6b4d57a4c95747d32382d85d92c28986a095b897a",
     "Zetesis/RelationExtension.lean": "b14a16ce85275538d71b742aa5889f2c4fd0fbf27710b3b4de4f1b6cb14be2f0",
+    "Zetesis/RowSteps.lean": "9490851c801ef1f2d2a5233e75ed0b25dcfbe51778dc2051b9c2965a6189f3cf",
     "Zetesis/RuleFactorization.lean": "1fcd20b2f23dc91c91f9d2a7af2c47df212ef001815e868762c74de6e37b658c",
     "Zetesis/ScalarArithmetic.lean": "f6f6095c5f8c2112e42ce6271acd7979188d51b033d27b63b3388165469159b6",
     "Zetesis/Search.lean": "1ad1bc923559a3989946681b3f066757c66d8f10cbd269de8c64cd74c9a2250e",
