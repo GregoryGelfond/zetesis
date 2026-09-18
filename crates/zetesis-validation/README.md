@@ -158,7 +158,9 @@ thermal state, dynamic libraries or the rest of the host environment.
 
 Repeated `--case <manifest-relative.lp>` selects arbitrary runnable clean corpus
 cases for the ordinary CPU campaign. Add `--memory-runs 5` for separate paired
-child RSS observations; these never enter timed samples. The CLI seals its own
+child RSS observations; these never enter timed samples, and the matrix and
+series campaigns take the same option, running their memory rounds after the
+timed rounds. The CLI seals its own
 runner executable alongside the solvers and selected transitive source closure.
 Full native help is captured when short help advertises it, under the same
 capture limits, with no fallback after a failed full-help query.

@@ -149,10 +149,12 @@ worker counts, limits and warmup schedule with each result.
 
 Repeated `--case` arguments select unchanged cases from the sealed corpus.
 `--memory-runs` adds a separate population of fresh-child resource observations
-on macOS or Linux; it does not add samples to the wall-time distribution. Its
+on macOS or Linux, to the ordinary campaign and to the matrix and series
+campaigns alike; it does not add samples to the wall-time distribution. Its
 reported child peak RSS excludes the measuring helper and is neither simultaneous
 process-tree memory nor GPU memory. These selected/resource campaigns use their
-own versioned report view.
+own versioned report view; the series view reports the median peak RSS of each
+solver beside its timing.
 
 For example, compare three different encodings with complete CPU/eager solves:
 

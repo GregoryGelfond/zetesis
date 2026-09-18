@@ -25,7 +25,9 @@
 //! after them, so a leaf admitted under the candidate ceiling is never
 //! lost to a worker the ceiling refused. Statistics are merged when the
 //! workers have finished; a snapshot taken earlier reports the
-//! coordinator's view.
+//! coordinator's view. Phase timings, when enabled, are the workers' own
+//! narrowing and leaf decisions summed over the workers, so they may
+//! exceed the wall time of the walk.
 
 use std::num::NonZeroUsize;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -39,8 +41,9 @@ use zetesis_ferraris::{Interpretation, Knowledge, Narrower, Producers, Theory};
 
 use super::certified::{self, Certification};
 use super::regions::{RegionSearchStatistics, SearchMethod};
+use super::timing::{self, Phase, PhaseMeasurement};
 use crate::search::{Budget, SharedBudget, WorkLease};
-use crate::{Check, Control, Incomplete, Limits, SearchStatistics, Statistics};
+use crate::{Check, Control, Incomplete, Limits, SearchPhaseTimings, SearchStatistics, Statistics};
 
 /// A waiting worker rechecks cooperative control at least once per timed wait.
 const POOL_WAIT: Duration = Duration::from_millis(1);
@@ -70,6 +73,9 @@ struct Shared {
     limits: Limits,
     control: Control,
     workers: usize,
+    /// Whether the enumeration had phase timing enabled when the workers
+    /// started; the workers then time their own phases.
+    timed: bool,
     /// Leaves proposed by every worker, against the one candidate ceiling.
     candidates: AtomicU64,
     /// What the workers have done so far, readable while they run, so a
@@ -90,6 +96,15 @@ struct Live {
     countermodel_queries: AtomicU64,
     countermodels: AtomicU64,
     stable_models: AtomicU64,
+    /// The workers' phase timings, one pair of counters per phase.
+    timings: [LivePhase; 5],
+}
+
+/// One phase's calls and elapsed nanoseconds, summed over the workers.
+#[derive(Default)]
+struct LivePhase {
+    calls: AtomicU64,
+    nanos: AtomicU64,
 }
 
 impl Live {
@@ -99,6 +114,52 @@ impl Live {
     fn read(counter: &AtomicU64) -> u64 {
         counter.load(Ordering::Relaxed)
     }
+
+    /// Add what a worker measured since its last report.
+    fn add_timings(&self, before: &SearchPhaseTimings, after: &SearchPhaseTimings) {
+        for (live, (before, after)) in self.timings.iter().zip(phases(before).zip(phases(after))) {
+            Self::add(&live.calls, after.calls.saturating_sub(before.calls));
+            let elapsed = after.elapsed.saturating_sub(before.elapsed);
+            Self::add(
+                &live.nanos,
+                u64::try_from(elapsed.as_nanos()).unwrap_or(u64::MAX),
+            );
+        }
+    }
+
+    fn timings(&self) -> SearchPhaseTimings {
+        let read = |live: &LivePhase| PhaseMeasurement {
+            calls: Self::read(&live.calls),
+            elapsed: Duration::from_nanos(Self::read(&live.nanos)),
+            overflowed: false,
+        };
+        let [
+            candidates,
+            original_validation,
+            reduct,
+            reduct_preparation,
+            certified,
+        ] = &self.timings;
+        SearchPhaseTimings {
+            candidates: read(candidates),
+            original_validation: read(original_validation),
+            reduct: read(reduct),
+            reduct_preparation: read(reduct_preparation),
+            certified: read(certified),
+        }
+    }
+}
+
+/// The five phases in the order the live counters keep them.
+fn phases(timings: &SearchPhaseTimings) -> impl Iterator<Item = &PhaseMeasurement> {
+    [
+        &timings.candidates,
+        &timings.original_validation,
+        &timings.reduct,
+        &timings.reduct_preparation,
+        &timings.certified,
+    ]
+    .into_iter()
 }
 
 impl Shared {
@@ -195,6 +256,7 @@ impl ParallelRegions {
                 limits,
                 control,
                 workers: workers.get(),
+                timed: false,
                 candidates: AtomicU64::new(0),
                 live: Live::default(),
             }),
@@ -234,6 +296,7 @@ impl ParallelRegions {
             countermodel_queries: Live::read(&live.countermodel_queries),
             countermodels: Live::read(&live.countermodels),
             stable_models: Live::read(&live.stable_models),
+            phase_timings: self.shared.timed.then(|| live.timings()),
             ..self.merged
         }
     }
@@ -257,19 +320,20 @@ impl ParallelRegions {
 
     /// The next verified stable model, or `None` once the workers have
     /// covered the root. Starts the workers on the first call, with the
-    /// certificate the enumeration holds at that moment. A stop a worker
-    /// raised is returned once every model the workers sent has been
-    /// taken, and on every call after that.
+    /// certificate the enumeration holds at that moment, timing their
+    /// phases when `timed`. A stop a worker raised is returned once every
+    /// model the workers sent has been taken, and on every call after that.
     pub(crate) fn propose(
         &mut self,
         certificate: Option<&Arc<Certification>>,
+        timed: bool,
         budget: &mut Budget<'_>,
     ) -> Result<Option<Interpretation>, Incomplete> {
         if self.exhausted {
             return Ok(None);
         }
         if !self.started {
-            self.start(certificate)?;
+            self.start(certificate, timed)?;
         }
         loop {
             budget.control.poll()?;
@@ -295,13 +359,16 @@ impl ParallelRegions {
         }
     }
 
-    fn start(&mut self, certificate: Option<&Arc<Certification>>) -> Result<(), Incomplete> {
-        if let Some(certificate) = certificate {
-            // The certificate is shared read-only; the Arc is cloned into the
-            // shared structure before any worker starts.
-            let shared = Arc::get_mut(&mut self.shared).ok_or(Incomplete::InvalidWitness)?;
-            shared.certificate = Some(Arc::clone(certificate));
-        }
+    fn start(
+        &mut self,
+        certificate: Option<&Arc<Certification>>,
+        timed: bool,
+    ) -> Result<(), Incomplete> {
+        // The certificate is shared read-only; the Arc is cloned into the
+        // shared structure before any worker starts.
+        let shared = Arc::get_mut(&mut self.shared).ok_or(Incomplete::InvalidWitness)?;
+        shared.certificate = certificate.map(Arc::clone);
+        shared.timed = timed;
         let sender = self.sender.take().ok_or(Incomplete::ClosedEnumerator)?;
         self.handles
             .try_reserve(self.shared.workers)
@@ -405,9 +472,11 @@ fn worker(shared: &Shared, sender: &SyncSender<Interpretation>) -> WorkerReport 
                 .certificate
                 .as_ref()
                 .map(|_| super::certified::CertifiedStatistics::default()),
+            phase_timings: shared.timed.then(SearchPhaseTimings::default),
             ..Statistics::default()
         },
     };
+    let mut reported = SearchPhaseTimings::default();
     let lease = shared.budget.lease(&shared.control);
     let mut budget = Budget {
         quota: lease,
@@ -418,7 +487,7 @@ fn worker(shared: &Shared, sender: &SyncSender<Interpretation>) -> WorkerReport 
     let mut membership = crate::prepared_reduct::State::new(SearchMethod::Regions);
     let mut local: Vec<(Region, Vec<Knowledge>)> = Vec::new();
     while let Some((region, knowledge)) = take(shared, &mut local) {
-        match step(
+        let stepped = step(
             shared,
             region,
             knowledge,
@@ -426,7 +495,12 @@ fn worker(shared: &Shared, sender: &SyncSender<Interpretation>) -> WorkerReport 
             &mut budget,
             &mut membership,
             &mut report,
-        ) {
+        );
+        if let Some(measured) = report.statistics.phase_timings {
+            shared.live.add_timings(&reported, &measured);
+            reported = measured;
+        }
+        match stepped {
             Ok(Some(model)) => {
                 if sender.send(model).is_err() {
                     break;
@@ -499,6 +573,7 @@ fn step<'a>(
     report.regions.regions += 1;
     Live::add(&shared.live.regions, 1);
     let before = report.regions;
+    let started = timing::start(report.statistics.phase_timings.as_ref());
     let narrowing = super::regions::narrow(
         (&shared.theory, &shared.narrower),
         shared.producers.as_ref(),
@@ -507,7 +582,13 @@ fn step<'a>(
         &mut knowledge,
         budget,
         &mut report.regions,
-    )?;
+    );
+    timing::finish(
+        &mut report.statistics.phase_timings,
+        Phase::Candidates,
+        started,
+    );
+    let narrowing = narrowing?;
     let after = report.regions;
     Live::add(
         &shared.live.propagations,

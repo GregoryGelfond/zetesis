@@ -3,9 +3,15 @@
 //! The view reads the retained records and computes exact integer medians of
 //! the timed native and reference intervals per cell and profile, ratios of
 //! those medians between reports in the order given, and the counters the
-//! native records carry. It never pools reports, never averages a cell that
-//! did not pass, and retains each report's native executable seal so that a
-//! published comparison names what it compared.
+//! native records carry. For each report and profile it also keeps a
+//! scoreboard against the reference solver: the cells where both passed,
+//! which of them the native solver decided faster, and each cell's time
+//! split into grounding, candidate proposal and membership on the native
+//! side and grounding and solving on the reference's, with the peak
+//! resident set of each when the campaign ran memory rounds. It never pools
+//! reports, never averages a cell that did not pass, and retains each
+//! report's native executable seal so that a published comparison names
+//! what it compared.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -81,6 +87,56 @@ pub struct Timing {
     pub maximum_ns: u64,
 }
 
+/// The reference solver's record for one cell in one report.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct Reference {
+    /// Timed wall intervals.
+    #[serde(flatten)]
+    pub timing: Timing,
+    /// Median of the reference's own total less its solving time, from the
+    /// report it prints: grounding and preprocessing.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub grounding_ns: Option<u64>,
+    /// Median of the reference's own solving time.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub solving_ns: Option<u64>,
+    /// Median peak resident set over the memory rounds, bytes; absent when
+    /// the campaign ran none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub peak_rss_bytes: Option<u64>,
+}
+
+/// The native intervals summed into the three parts a comparison against
+/// the reference reads, each the median over the timed records that
+/// measured it.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct Breakdown {
+    /// The grounding stage, nanoseconds; absent under lazy grounding, which
+    /// grounds within membership, and when no record measured it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub grounding: Option<u64>,
+    /// Candidate setup and generation, nanoseconds.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proposal: Option<u64>,
+    /// Membership, nanoseconds: certificate setup and checks, closure and
+    /// exact reduct membership, reduct preparation, original validation and
+    /// the device's host oracle.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub membership: Option<u64>,
+}
+
+/// The phases each part of the breakdown sums.
+const PROPOSAL_PHASES: [&str; 2] = ["candidate_setup", "candidate_generation"];
+const MEMBERSHIP_PHASES: [&str; 7] = [
+    "certificate_setup",
+    "certified_membership",
+    "closure_membership",
+    "exact_reduct_membership",
+    "reduct_preparation",
+    "original_validation",
+    "gpu_host_oracle",
+];
+
 /// One native profile's record for one cell in one report.
 #[derive(Clone, Debug, Serialize)]
 #[serde(untagged)]
@@ -117,6 +173,65 @@ pub struct Passed {
     pub search_work: Option<u64>,
     /// Median of each measured phase's interval.
     pub phases: BTreeMap<String, PhaseTiming>,
+    /// The intervals summed into grounding, proposal and membership.
+    pub breakdown: Breakdown,
+    /// Median peak resident set over the memory rounds, bytes; absent when
+    /// the campaign ran none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub peak_rss_bytes: Option<u64>,
+    /// Device memory the first timed record's execution accounted, bytes;
+    /// absent when no device ran.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_bytes: Option<u64>,
+}
+
+/// One configuration's standing against the reference solver: the cells
+/// where the native profile and the reference both passed, and which of
+/// them the native solver decided faster.
+#[derive(Clone, Debug, Serialize)]
+pub struct Scoreboard {
+    /// The report's label.
+    pub report: String,
+    /// The requested profile's index.
+    pub profile: usize,
+    /// The report's formula search method, or `default`.
+    pub method: String,
+    /// Cells where both passed.
+    pub compared: usize,
+    /// Compared cells whose native median is below the reference median.
+    pub wins: usize,
+    /// Every compared cell, fastest ratio first.
+    pub verdicts: Vec<Verdict>,
+}
+
+/// One compared cell on a scoreboard.
+#[derive(Clone, Debug, Serialize)]
+pub struct Verdict {
+    /// The cell's label.
+    pub cell: String,
+    /// Native median wall interval.
+    pub native_ns: u64,
+    /// Reference median wall interval.
+    pub reference_ns: u64,
+    /// `native_ns / reference_ns`; below one is a win.
+    pub ratio: f64,
+    /// The native intervals by part.
+    pub native: Breakdown,
+    /// The reference's own grounding and preprocessing time.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reference_grounding_ns: Option<u64>,
+    /// The reference's own solving time.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reference_solving_ns: Option<u64>,
+    /// Native peak resident set, bytes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub native_peak_rss_bytes: Option<u64>,
+    /// Reference peak resident set, bytes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reference_peak_rss_bytes: Option<u64>,
+    /// Device memory the native execution accounted, bytes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_bytes: Option<u64>,
 }
 
 /// Median interval of one named phase.
@@ -152,8 +267,9 @@ pub struct Cell {
     pub label: String,
     /// One row per requested native profile.
     pub profiles: Vec<ProfileRow>,
-    /// The reference solver's timing by report label, where it passed.
-    pub reference: BTreeMap<String, Timing>,
+    /// The reference solver's timing and its own split by report label,
+    /// where it passed.
+    pub reference: BTreeMap<String, Reference>,
 }
 
 /// What a report is: its native seal and its own verdicts.
@@ -190,6 +306,9 @@ pub struct Comparison {
     /// differ in this field alone, since the methods are compared on the
     /// same cells by design.
     pub methods: BTreeMap<String, String>,
+    /// Each report's and profile's standing against the reference, in report
+    /// order and then profile order.
+    pub scoreboards: Vec<Scoreboard>,
 }
 
 /// Compare published reports over the same cells and profiles. The formula
@@ -231,8 +350,8 @@ pub fn compare(reports: &[Labelled<'_>]) -> Result<Comparison, ViewError> {
         let label = label(entry, workloads.and_then(|workloads| workloads.get(index)));
         let mut reference = BTreeMap::new();
         for labelled in reports {
-            if let Some(timing) = self::reference(labelled, index)? {
-                reference.insert(labelled.label.to_owned(), timing);
+            if let Some(record) = self::reference(labelled, index)? {
+                reference.insert(labelled.label.to_owned(), record);
             }
         }
         let mut rows = Vec::with_capacity(requested.len());
@@ -257,18 +376,84 @@ pub fn compare(reports: &[Labelled<'_>]) -> Result<Comparison, ViewError> {
             reference,
         });
     }
+    let scoreboards = scoreboards(&labels, &methods, &cells);
     Ok(Comparison {
         labels,
         cells,
         provenance,
         methods,
+        scoreboards,
     })
+}
+
+/// One scoreboard per report and profile, over the cells where both passed.
+fn scoreboards(
+    labels: &[String],
+    methods: &BTreeMap<String, String>,
+    cells: &[Cell],
+) -> Vec<Scoreboard> {
+    let profiles = cells.first().map_or(0, |cell| cell.profiles.len());
+    let mut scoreboards = Vec::with_capacity(labels.len() * profiles);
+    for label in labels {
+        for profile in 0..profiles {
+            let mut verdicts: Vec<Verdict> = cells
+                .iter()
+                .filter_map(|cell| {
+                    let Some(Native::Passed(passed)) = cell.profiles[profile].reports.get(label)
+                    else {
+                        return None;
+                    };
+                    let reference = cell.reference.get(label)?;
+                    Some(verdict(&cell.label, passed, reference))
+                })
+                .collect();
+            verdicts.sort_by(|a, b| a.ratio.total_cmp(&b.ratio));
+            scoreboards.push(Scoreboard {
+                report: label.clone(),
+                profile,
+                method: methods
+                    .get(label)
+                    .cloned()
+                    .unwrap_or_else(|| "default".to_owned()),
+                compared: verdicts.len(),
+                wins: verdicts
+                    .iter()
+                    .filter(|verdict| verdict.native_ns < verdict.reference_ns)
+                    .count(),
+                verdicts,
+            });
+        }
+    }
+    scoreboards
+}
+
+fn verdict(cell: &str, passed: &Passed, reference: &Reference) -> Verdict {
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "a ratio of intervals is reported to three decimals"
+    )]
+    let ratio = passed.timing.median_ns as f64 / reference.timing.median_ns.max(1) as f64;
+    Verdict {
+        cell: cell.to_owned(),
+        native_ns: passed.timing.median_ns,
+        reference_ns: reference.timing.median_ns,
+        ratio,
+        native: passed.breakdown.clone(),
+        reference_grounding_ns: reference.grounding_ns,
+        reference_solving_ns: reference.solving_ns,
+        native_peak_rss_bytes: passed.peak_rss_bytes,
+        reference_peak_rss_bytes: reference.peak_rss_bytes,
+        device_bytes: passed.device_bytes,
+    }
 }
 
 impl Comparison {
     /// Markdown tables: per profile, the median [minimum, maximum] in
     /// milliseconds of every cell in every report with the ratios; then the
-    /// reference solver; then the counters of the last report.
+    /// reference solver; then the counters of the last report; then each
+    /// report's and profile's scoreboard against the reference, with the
+    /// wins and the losses split by part and the peak memory where the
+    /// campaign measured it.
     #[must_use]
     pub fn markdown(&self) -> String {
         Markdown(self).to_string()
@@ -369,7 +554,7 @@ impl fmt::Display for Markdown<'_> {
             write!(f, "| {} |", cell.label)?;
             for label in &comparison.labels {
                 match cell.reference.get(label) {
-                    Some(timing) => write!(f, " {} |", timing_cell(timing))?,
+                    Some(record) => write!(f, " {} |", timing_cell(&record.timing))?,
                     None => write!(f, " not passed |")?,
                 }
             }
@@ -400,8 +585,110 @@ impl fmt::Display for Markdown<'_> {
                 }
             }
         }
+        for scoreboard in &comparison.scoreboards {
+            scoreboard_tables(f, comparison, scoreboard)?;
+        }
         Ok(())
     }
+}
+
+/// One scoreboard: its sentence, its wins, its losses and its peak memory.
+fn scoreboard_tables(
+    f: &mut fmt::Formatter<'_>,
+    comparison: &Comparison,
+    scoreboard: &Scoreboard,
+) -> fmt::Result {
+    let profile = comparison
+        .cells
+        .first()
+        .map(|cell| Profile(&cell.profiles[scoreboard.profile].profile).to_string())
+        .unwrap_or_default();
+    write!(
+        f,
+        "\nAgainst the reference: report {}, profile {} ({profile}; search {}): ",
+        scoreboard.report, scoreboard.profile, scoreboard.method
+    )?;
+    if scoreboard.compared == 0 {
+        writeln!(f, "no cell where both passed.")?;
+        return Ok(());
+    }
+    let tenths = scoreboard.wins * 1000 / scoreboard.compared;
+    writeln!(
+        f,
+        "faster on {} of {} cells where both passed ({}.{}%).",
+        scoreboard.wins,
+        scoreboard.compared,
+        tenths / 10,
+        tenths % 10
+    )?;
+    let (wins, losses): (Vec<&Verdict>, Vec<&Verdict>) = scoreboard
+        .verdicts
+        .iter()
+        .partition(|verdict| verdict.native_ns < verdict.reference_ns);
+    for (name, verdicts) in [
+        ("Wins, fastest first", wins),
+        ("Losses, closest first", losses),
+    ] {
+        if verdicts.is_empty() {
+            writeln!(f, "\n{name}: none.")?;
+            continue;
+        }
+        writeln!(
+            f,
+            "\n{name}. Milliseconds: ours and the reference's medians and their ratio; ours split into grounding, candidate proposal and membership; the reference's into grounding and solving from its own report.\n\n| Cell | ours | reference | ours/reference | grounding | proposal | membership | reference grounding | reference solving |\n|---|---:|---:|---:|---:|---:|---:|---:|---:|"
+        )?;
+        for verdict in verdicts {
+            writeln!(
+                f,
+                "| {} | {} | {} | {:.3} | {} | {} | {} | {} | {} |",
+                verdict.cell,
+                milliseconds(verdict.native_ns),
+                milliseconds(verdict.reference_ns),
+                verdict.ratio,
+                optional_ms(verdict.native.grounding),
+                optional_ms(verdict.native.proposal),
+                optional_ms(verdict.native.membership),
+                optional_ms(verdict.reference_grounding_ns),
+                optional_ms(verdict.reference_solving_ns),
+            )?;
+        }
+    }
+    if scoreboard.verdicts.iter().any(|verdict| {
+        verdict.native_peak_rss_bytes.is_some()
+            || verdict.reference_peak_rss_bytes.is_some()
+            || verdict.device_bytes.is_some()
+    }) {
+        writeln!(
+            f,
+            "\nPeak memory, MiB: the resident set of ours and of the reference over the memory rounds, and the device memory ours accounted.\n\n| Cell | ours | reference | device |\n|---|---:|---:|---:|"
+        )?;
+        for verdict in &scoreboard.verdicts {
+            writeln!(
+                f,
+                "| {} | {} | {} | {} |",
+                verdict.cell,
+                optional_mib(verdict.native_peak_rss_bytes),
+                optional_mib(verdict.reference_peak_rss_bytes),
+                optional_mib(verdict.device_bytes),
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn optional_ms(value: Option<u64>) -> String {
+    value.map_or_else(|| "n/a".to_owned(), milliseconds)
+}
+
+// Bytes to mebibytes with one decimal, rounded down.
+fn optional_mib(value: Option<u64>) -> String {
+    value.map_or_else(
+        || "n/a".to_owned(),
+        |bytes| {
+            let tenths = bytes / (1024 * 1024 / 10);
+            format!("{}.{}", tenths / 10, tenths % 10)
+        },
+    )
 }
 
 /// A requested profile in one line.
@@ -513,18 +800,18 @@ fn ratios(labels: &[String], records: &BTreeMap<String, Native>) -> BTreeMap<Str
 /// The native median over the reference median, per report, where both passed.
 fn reference_ratios(
     records: &BTreeMap<String, Native>,
-    reference: &BTreeMap<String, Timing>,
+    reference: &BTreeMap<String, Reference>,
 ) -> BTreeMap<String, f64> {
     let mut ratios = BTreeMap::new();
     for (label, record) in records {
-        if let (Native::Passed(passed), Some(timing)) = (record, reference.get(label))
-            && timing.median_ns > 0
+        if let (Native::Passed(passed), Some(other)) = (record, reference.get(label))
+            && other.timing.median_ns > 0
         {
             #[expect(
                 clippy::cast_precision_loss,
                 reason = "a ratio of intervals is reported to three decimals"
             )]
-            let ratio = passed.timing.median_ns as f64 / timing.median_ns as f64;
+            let ratio = passed.timing.median_ns as f64 / other.timing.median_ns as f64;
             ratios.insert(label.clone(), ratio);
         }
     }
@@ -739,9 +1026,17 @@ fn native(labelled: &Labelled<'_>, case: usize, profile: usize) -> Result<Native
             (name, PhaseTiming { median_ns })
         })
         .collect();
+    let peak_rss_bytes = memory(labelled, case, |producer| {
+        producer["solver"] == "native" && producer["profile"].as_u64() == Some(profile as u64)
+    })?;
     Ok(Native::Passed(Passed {
         timing,
         driver_median_ns,
+        breakdown: breakdown(&records),
+        peak_rss_bytes,
+        device_bytes: stdout.as_ref().and_then(|document| {
+            document["statistics"]["formula_execution"]["peak_accounted_bytes"].as_u64()
+        }),
         published_models: stdout
             .as_ref()
             .and_then(|document| document["outcome"]["published_models"].as_u64()),
@@ -769,10 +1064,103 @@ fn candidates_examined(stderr: &str) -> Option<u64> {
         .and_then(|value| value.trim().parse().ok())
 }
 
-fn reference(labelled: &Labelled<'_>, case: usize) -> Result<Option<Timing>, ViewError> {
+fn reference(labelled: &Labelled<'_>, case: usize) -> Result<Option<Reference>, ViewError> {
     let records = timed(labelled, case, |producer| producer["solver"] == "reference")?;
     if records.is_empty() || records.iter().any(|record| record["decision"] != "pass") {
         return Ok(None);
     }
-    timing(labelled, &records).map(Some)
+    let timing = timing(labelled, &records)?;
+    // The reference prints its own times in seconds to the millisecond; its
+    // total less its solving time is grounding and preprocessing.
+    let mut grounding = Vec::new();
+    let mut solving = Vec::new();
+    for record in &records {
+        let Some(times) = record["capture"]["stdout"]["data"]
+            .as_str()
+            .and_then(|text| serde_json::from_str::<Value>(text).ok())
+            .map(|document| document["Time"].clone())
+        else {
+            continue;
+        };
+        if let (Some(total), Some(solve)) = (
+            times["Total"].as_f64().and_then(seconds_to_ns),
+            times["Solve"].as_f64().and_then(seconds_to_ns),
+        ) {
+            grounding.push(total.saturating_sub(solve));
+            solving.push(solve);
+        }
+    }
+    Ok(Some(Reference {
+        timing,
+        grounding_ns: upper_median(&mut grounding),
+        solving_ns: upper_median(&mut solving),
+        peak_rss_bytes: memory(labelled, case, |producer| producer["solver"] == "reference")?,
+    }))
+}
+
+/// The sums of each part's phases per record, and their medians.
+fn breakdown(records: &[&Value]) -> Breakdown {
+    let mut grounding = Vec::new();
+    let mut proposal = Vec::new();
+    let mut membership = Vec::new();
+    for record in records {
+        let timing = &record["observation"]["timing"];
+        if let Some(elapsed) = timing["stages"]["grounding"]["elapsed_ns"].as_u64() {
+            grounding.push(elapsed);
+        }
+        let sum = |names: &[&str]| {
+            let measured: Vec<u64> = names
+                .iter()
+                .filter_map(|name| timing["phases"][*name]["elapsed_ns"].as_u64())
+                .collect();
+            (!measured.is_empty()).then(|| measured.iter().sum::<u64>())
+        };
+        proposal.extend(sum(&PROPOSAL_PHASES));
+        membership.extend(sum(&MEMBERSHIP_PHASES));
+    }
+    Breakdown {
+        grounding: upper_median(&mut grounding),
+        proposal: upper_median(&mut proposal),
+        membership: upper_median(&mut membership),
+    }
+}
+
+/// The median peak resident set over the passed memory rounds of one
+/// producer on one cell; absent when the campaign ran none.
+fn memory(
+    labelled: &Labelled<'_>,
+    case: usize,
+    producer: impl Fn(&Value) -> bool,
+) -> Result<Option<u64>, ViewError> {
+    let mut peaks: Vec<u64> = samples(labelled)?
+        .iter()
+        .filter(|sample| {
+            sample["slot"]["case"].as_u64() == Some(case as u64)
+                && sample["slot"]["phase"] == "memory"
+                && sample["decision"] == "pass"
+                && producer(&sample["slot"]["producer"])
+        })
+        .filter_map(|sample| sample["memory"]["peak_rss_bytes"].as_u64())
+        .collect();
+    Ok(upper_median(&mut peaks))
+}
+
+/// The upper median, as the phase medians are taken; `None` of nothing.
+fn upper_median(values: &mut [u64]) -> Option<u64> {
+    values.sort_unstable();
+    values.get(values.len() / 2).copied()
+}
+
+/// Seconds as the reference prints them to whole nanoseconds; a negative
+/// or non-finite value is not a duration.
+fn seconds_to_ns(seconds: f64) -> Option<u64> {
+    if !seconds.is_finite() || seconds < 0.0 {
+        return None;
+    }
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "the value is finite and non-negative, and rounded to whole nanoseconds"
+    )]
+    Some((seconds * 1e9).round() as u64)
 }

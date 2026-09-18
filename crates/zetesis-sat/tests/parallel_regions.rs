@@ -209,6 +209,27 @@ fn a_tight_certificate_decides_the_workers_leaves() {
 }
 
 #[test]
+fn phase_timings_sum_the_workers_narrowing_and_leaf_decisions() {
+    let theory = choices(6);
+    let mut parallel = StableModels::with_region_workers(
+        &theory,
+        workers(4),
+        Limits::default(),
+        Control::default(),
+    )
+    .unwrap();
+    parallel.enable_phase_timing();
+    assert_eq!(family(&mut parallel).len(), 64);
+    let timings = parallel.statistics().phase_timings.unwrap();
+    // Every leaf is decided by the reduct query once, in some worker; every
+    // region is narrowed once; no certificate was enabled.
+    assert_eq!(timings.reduct.calls, 64);
+    assert!(timings.candidates.calls >= 64);
+    assert_eq!(timings.certified.calls, 0);
+    assert!(timings.reduct.elapsed > std::time::Duration::ZERO);
+}
+
+#[test]
 fn one_worker_is_the_scalar_walk() {
     let theory = mixed();
     let mut one = StableModels::with_region_workers(

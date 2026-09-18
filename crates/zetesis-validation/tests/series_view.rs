@@ -4,7 +4,9 @@ use zetesis_validation::performance::series::{Labelled, ViewError, compare};
 
 /// A minimal published matrix report with one profile, timed rounds whose
 /// native elapsed values are `native[case][round]`, reference values of
-/// `reference[case]`, and one optional non-pass decision for a cell.
+/// `reference[case]`, and one optional non-pass decision for a cell. Every
+/// native record measures the same stages and phases; every reference
+/// record prints the same times.
 fn report(cases: &[&str], native: &[&[u64]], reference: &[u64], refused: Option<usize>) -> Value {
     let mut samples = Vec::new();
     for (case, rounds) in native.iter().enumerate() {
@@ -31,14 +33,20 @@ fn report(cases: &[&str], native: &[&[u64]], reference: &[u64], refused: Option<
                             "stdout": {"encoding": "utf8", "data": stdout},
                             "stderr": {"encoding": "utf8", "data": stderr}},
                 "observation": {"timing": {"driver_elapsed_ns": elapsed.saturating_sub(100_000),
-                    "phases": {"candidate_generation": {"calls": 3, "elapsed_ns": 40_000}}}}
+                    "stages": {"grounding": {"calls": 1, "elapsed_ns": 10_000},
+                               "solving": {"calls": 1, "elapsed_ns": 60_000}},
+                    "phases": {"candidate_setup": {"calls": 1, "elapsed_ns": 200},
+                               "candidate_generation": {"calls": 3, "elapsed_ns": 40_000},
+                               "closure_membership": {"calls": 3, "elapsed_ns": 3_000},
+                               "certified_membership": null}}}
             }));
             samples.push(json!({
                 "slot": {"case": case, "phase": "timed", "round": round,
                          "producer": {"solver": "reference"}},
                 "decision": "pass",
                 "capture": {"elapsed_ns": reference[case],
-                            "stdout": {"encoding": "utf8", "data": "{}"},
+                            "stdout": {"encoding": "utf8",
+                                       "data": "{\"Time\": {\"Total\": 0.004, \"Solve\": 0.001}}"},
                             "stderr": {"encoding": "utf8", "data": ""}}
             }));
         }
@@ -126,6 +134,164 @@ fn medians_are_taken_per_cell_profile_and_report() {
     let markdown = comparison.markdown();
     assert!(markdown.contains("| before/reference | after/reference |"));
     assert!(markdown.contains("| 0.250 | 0.093 |"));
+}
+
+/// Add passed memory rounds for one producer on the first case, with the
+/// given peak resident sets.
+fn with_memory(report: &mut Value, producer: &Value, peaks: &[u64]) {
+    let samples = report["report"]["samples"].as_array_mut().unwrap();
+    for (round, peak) in peaks.iter().enumerate() {
+        samples.push(json!({
+            "slot": {"case": 0, "phase": "memory", "round": round, "producer": producer},
+            "decision": "pass",
+            "capture": {"elapsed_ns": 5, "stdout": {"encoding": "utf8", "data": "{}"},
+                        "stderr": {"encoding": "utf8", "data": ""}},
+            "memory": {"schema": 1, "child": 7, "exit_code": 0, "signal": null,
+                       "raw_max_rss": peak / 1024, "raw_unit": "kibibytes",
+                       "peak_rss_bytes": peak}
+        }));
+    }
+}
+
+#[test]
+fn scoreboards_count_the_cells_the_native_solver_decided_faster() {
+    let only = report(
+        &[
+            "generated/chain-1000.lp",
+            "standalone/send-money/send-money.lp",
+            "generated/queens-11.lp",
+        ],
+        &[&[2_000_000], &[500_000], &[1_000_000]],
+        &[1_000_000, 1_000_000, 1_000_000],
+        None,
+    );
+    let comparison = compare(&[Labelled {
+        label: "only",
+        report: &only,
+    }])
+    .unwrap();
+    let encoded = serde_json::to_value(&comparison).unwrap();
+    let board = &encoded["scoreboards"][0];
+    assert_eq!(board["report"], "only");
+    assert_eq!(board["profile"], 0);
+    assert_eq!(board["compared"], 3);
+    // An equal median is not a win.
+    assert_eq!(board["wins"], 1);
+    let verdicts = board["verdicts"].as_array().unwrap();
+    assert_eq!(verdicts[0]["cell"], "send-money/send-money");
+    assert_eq!(verdicts[0]["ratio"], 0.5);
+    assert_eq!(verdicts[1]["cell"], "generated/queens-11");
+    assert_eq!(verdicts[2]["cell"], "generated/chain-1000");
+    assert_eq!(verdicts[2]["ratio"], 2.0);
+    let markdown = comparison.markdown();
+    assert!(markdown.contains("faster on 1 of 3 cells where both passed (33.3%)."));
+    assert!(markdown.contains("| send-money/send-money | 0.500 | 1.000 | 0.500 |"));
+    assert!(markdown.contains("| generated/chain-1000 | 2.000 | 1.000 | 2.000 |"));
+    // The campaign ran no memory rounds, so no memory table is printed.
+    assert!(!markdown.contains("Peak memory"));
+}
+
+#[test]
+fn a_cell_the_reference_did_not_pass_is_not_compared() {
+    let mut only = report(
+        &["generated/chain-1000.lp", "generated/queens-11.lp"],
+        &[&[500_000], &[500_000]],
+        &[1_000_000, 1_000_000],
+        None,
+    );
+    for sample in only["report"]["samples"].as_array_mut().unwrap() {
+        if sample["slot"]["case"] == 1 && sample["slot"]["producer"]["solver"] == "reference" {
+            sample["decision"] = json!("timeout");
+        }
+    }
+    let comparison = compare(&[Labelled {
+        label: "only",
+        report: &only,
+    }])
+    .unwrap();
+    assert_eq!(comparison.scoreboards[0].compared, 1);
+    assert_eq!(comparison.scoreboards[0].wins, 1);
+    assert_eq!(
+        comparison.scoreboards[0].verdicts[0].cell,
+        "generated/chain-1000"
+    );
+}
+
+#[test]
+fn breakdowns_sum_the_parts_of_each_record() {
+    let only = report(&["generated/chain-1000.lp"], &[&[2_000_000]], &[1], None);
+    let comparison = compare(&[Labelled {
+        label: "only",
+        report: &only,
+    }])
+    .unwrap();
+    let encoded = serde_json::to_value(&comparison).unwrap();
+    let breakdown = &encoded["cells"][0]["profiles"][0]["reports"]["only"]["breakdown"];
+    assert_eq!(breakdown["grounding"], 10_000);
+    assert_eq!(breakdown["proposal"], 40_200);
+    // An unmeasured phase contributes nothing; the measured one is the sum.
+    assert_eq!(breakdown["membership"], 3_000);
+    let verdict = &encoded["scoreboards"][0]["verdicts"][0];
+    assert_eq!(verdict["native"]["proposal"], 40_200);
+}
+
+#[test]
+fn reference_times_split_by_its_own_report() {
+    let only = report(
+        &["generated/chain-1000.lp"],
+        &[&[2_000_000]],
+        &[4_000_000],
+        None,
+    );
+    let comparison = compare(&[Labelled {
+        label: "only",
+        report: &only,
+    }])
+    .unwrap();
+    let encoded = serde_json::to_value(&comparison).unwrap();
+    let reference = &encoded["cells"][0]["reference"]["only"];
+    assert_eq!(reference["median_ns"], 4_000_000);
+    assert_eq!(reference["grounding_ns"], 3_000_000);
+    assert_eq!(reference["solving_ns"], 1_000_000);
+    let verdict = &encoded["scoreboards"][0]["verdicts"][0];
+    assert_eq!(verdict["reference_grounding_ns"], 3_000_000);
+    assert_eq!(verdict["reference_solving_ns"], 1_000_000);
+    assert!(comparison.markdown().contains(
+        "| generated/chain-1000 | 2.000 | 4.000 | 0.500 | 0.010 | 0.040 | 0.003 | 3.000 | 1.000 |"
+    ));
+}
+
+#[test]
+fn memory_rounds_report_the_median_peak_resident_set() {
+    let mut only = report(&["generated/chain-1000.lp"], &[&[2_000_000]], &[1], None);
+    let mib = 1024 * 1024;
+    with_memory(
+        &mut only,
+        &json!({"solver": "native", "profile": 0}),
+        &[300 * mib, 100 * mib, 200 * mib],
+    );
+    with_memory(
+        &mut only,
+        &json!({"solver": "reference"}),
+        &[50 * mib + mib / 2],
+    );
+    let comparison = compare(&[Labelled {
+        label: "only",
+        report: &only,
+    }])
+    .unwrap();
+    let encoded = serde_json::to_value(&comparison).unwrap();
+    assert_eq!(
+        encoded["cells"][0]["profiles"][0]["reports"]["only"]["peak_rss_bytes"],
+        200 * mib
+    );
+    assert_eq!(
+        encoded["cells"][0]["reference"]["only"]["peak_rss_bytes"],
+        50 * mib + mib / 2
+    );
+    let markdown = comparison.markdown();
+    assert!(markdown.contains("Peak memory, MiB"));
+    assert!(markdown.contains("| generated/chain-1000 | 200.0 | 50.5 | n/a |"));
 }
 
 #[test]

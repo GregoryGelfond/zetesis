@@ -27,6 +27,7 @@ fn request() -> Request<'static> {
         limits: crate::performance::Limits::default(),
         native_answers: crate::answers::native_json::Limits::default(),
         max_spelling_bytes: 1024,
+        helper: None,
     }
 }
 fn sample() -> Sample {
@@ -67,6 +68,7 @@ fn sample() -> Sample {
         selected_models: None,
         cost: None,
         observation: None,
+        memory: None,
     }
 }
 fn contract() -> examples::Contract {

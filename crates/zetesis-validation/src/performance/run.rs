@@ -1,5 +1,5 @@
 //! Sequential bounded processes around pure schedule and display comparisons.
-mod memory;
+pub(super) mod memory;
 mod metadata;
 
 use super::capture::unix_ns;

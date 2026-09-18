@@ -130,7 +130,9 @@ pub struct Statistics {
     /// Verified stable models returned by the iterator.
     pub stable_models: u64,
     /// Coarse host timings, absent unless explicitly enabled after construction.
-    /// These are separate from deterministic semantic work counters.
+    /// These are separate from deterministic semantic work counters. Under
+    /// several region workers they are the workers' own intervals summed,
+    /// which may exceed the wall time of the enumeration.
     pub phase_timings: Option<crate::SearchPhaseTimings>,
     /// Optional complete-theory certificate attempt and checks.
     pub certified: Option<CertifiedStatistics>,
@@ -547,6 +549,7 @@ impl StableModels {
                     countermodel_queries: merged.countermodel_queries,
                     countermodels: merged.countermodels,
                     certified,
+                    phase_timings: merged.phase_timings.or(self.statistics.phase_timings),
                     reduct: crate::ReductStatistics {
                         original_work: merged.reduct.original_work,
                         regions: merged.reduct.regions,
@@ -681,7 +684,10 @@ impl Proposer {
                 proposal
             }
             Self::Parallel(parallel) => {
-                return Ok(parallel.propose(certificate, budget)?.map(Proposal::Stable));
+                let timed = statistics.phase_timings.is_some();
+                return Ok(parallel
+                    .propose(certificate, timed, budget)?
+                    .map(Proposal::Stable));
             }
         };
         Ok(proposal.map(Proposal::Candidate))
@@ -733,7 +739,12 @@ fn advance(
         reduct,
     } = membership_input;
     loop {
-        let started = timing::start(statistics.phase_timings.as_ref());
+        // The parallel walk's workers time their own phases; the wait for
+        // their models is not a phase.
+        let started = match proposer {
+            Proposer::Parallel(_) => None,
+            _ => timing::start(statistics.phase_timings.as_ref()),
+        };
         let proposal = proposer.propose(theory, limits, certificate_owner, budget, statistics);
         timing::finish(&mut statistics.phase_timings, Phase::Candidates, started);
         let candidate = match proposal? {

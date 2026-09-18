@@ -296,7 +296,10 @@ independent pending-interpretation contract. No benchmark or device speedup is
 established by these portable completion tests.
 
 `StableModels::enable_phase_timing()` optionally records coarse host wall intervals
-in `statistics().phase_timings`. Enabling is idempotent and starts after initial
+in `statistics().phase_timings`. Under several region workers the intervals are
+the workers' own narrowing and leaf decisions summed over the workers, which
+may exceed the wall time; the coordinator's wait for their models is not a
+phase. Enabling is idempotent and starts after initial
 candidate CNF construction. Separate measurements cover candidate queries,
 projection and exact blocking; independent original-model validation; and frozen
 cold reduct preparation; parameter installation, exact search and witness

@@ -66,8 +66,82 @@ impl Fixture {
             limits: performance::Limits::default(),
             native_answers: zetesis_validation::answers::native_json::Limits::default(),
             max_spelling_bytes: 8_388_608,
+            helper: None,
         }
     }
+}
+
+#[test]
+fn memory_rounds_record_the_reference_peak_resident_set() {
+    let fixture = Fixture::new();
+    let helper = Path::new(env!("CARGO_BIN_EXE_zetesis-perf"));
+    let mut request = fixture.request(Suite::Queens);
+    request.plan = request.plan.with_memory(2).unwrap();
+    request.helper = Some(helper);
+    let workloads = [variant(&fixture, 10)];
+    let report = matrix::run_workloads(&request, &workloads).unwrap();
+    assert!(report.accounted());
+    // Qualification, one timed round and two memory rounds, for two producers.
+    assert_eq!(report.samples().len(), 8);
+    let memory: Vec<_> = report
+        .samples()
+        .iter()
+        .filter(|sample| sample.slot().phase == Phase::Memory)
+        .collect();
+    assert_eq!(memory.len(), 4);
+    for sample in &memory {
+        match sample.slot().producer {
+            Producer::Reference => {
+                assert_eq!(sample.decision(), Decision::Pass, "{sample:?}");
+                let measurement = sample.memory().unwrap();
+                assert!(measurement.peak_rss_bytes > 0);
+                // The capture is the helper's; the record is its child's.
+                let helper_child = sample.capture().unwrap().helper_child_id();
+                assert!(helper_child.is_some());
+                assert_ne!(Some(measurement.child), helper_child);
+            }
+            // The refused native cell launches nothing more, memory rounds included.
+            Producer::Native { .. } => {
+                assert_eq!(sample.decision(), Decision::NotAttempted);
+                assert!(sample.memory().is_none());
+            }
+        }
+    }
+    // The helper is sealed with the executables.
+    assert!(
+        report
+            .before()
+            .iter()
+            .any(|seal| seal.requested() == helper)
+    );
+    report.publish().unwrap();
+    let encoded: serde_json::Value =
+        serde_json::from_slice(&fs::read(&fixture.report).unwrap()).unwrap();
+    assert!(
+        encoded["report"]["peak_rss"]
+            .as_str()
+            .unwrap()
+            .starts_with("memory_rounds:")
+    );
+    let recorded = encoded["report"]["samples"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|sample| sample["slot"]["phase"] == "memory" && sample["decision"] == "pass")
+        .count();
+    assert_eq!(recorded, 2);
+}
+
+#[test]
+fn memory_rounds_require_an_absolute_helper() {
+    let fixture = Fixture::new();
+    let mut request = fixture.request(Suite::Queens);
+    request.plan = request.plan.with_memory(1).unwrap();
+    let error = matrix::run(&request).unwrap_err();
+    assert!(error.to_string().contains("helper"), "{error}");
+    request.helper = Some(Path::new("zetesis-perf"));
+    let error = matrix::run(&request).unwrap_err();
+    assert!(error.to_string().contains("helper"), "{error}");
 }
 #[test]
 fn every_corpus_cell_retains_its_refusal() {

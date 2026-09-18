@@ -56,6 +56,37 @@ fn every_profile_occupies_every_timed_position() {
     }
 }
 #[test]
+fn memory_rounds_follow_the_timed_rounds() {
+    let slots = plan(2).with_memory(3).unwrap().slots(4).unwrap();
+    let memory: Vec<_> = slots
+        .iter()
+        .enumerate()
+        .filter(|(_, slot)| slot.phase == Phase::Memory)
+        .collect();
+    // Three rounds of four cases and five producers.
+    assert_eq!(memory.len(), 3 * 4 * 5);
+    let last_timed = slots
+        .iter()
+        .rposition(|slot| slot.phase == Phase::Timed)
+        .unwrap();
+    assert!(memory.iter().all(|(index, _)| *index > last_timed));
+    for case in 0..4 {
+        for profile in 0..4 {
+            assert_eq!(
+                memory
+                    .iter()
+                    .filter(|(_, slot)| slot.case == case
+                        && slot.producer == Producer::Native { profile })
+                    .count(),
+                3
+            );
+        }
+    }
+    assert!(plan(2).with_memory(42).is_err());
+    assert_eq!(plan(2).memory_runs(), 0);
+}
+
+#[test]
 fn reference_census_precedes_native_census() {
     let slots = plan(1).slots(6).unwrap();
     assert!(

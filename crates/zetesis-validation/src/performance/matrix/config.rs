@@ -33,6 +33,9 @@ pub struct Plan {
     pub(super) reference_workers: NonZeroUsize,
     pub(super) warmups: usize,
     pub(super) repetitions: usize,
+    /// Separate child-resource rounds per producer and case, after the
+    /// timed rounds; zero unless requested.
+    pub(super) memory_runs: usize,
 }
 impl Plan {
     /// Construct up to eight CPU/Metal profiles. Each worker count is bounded
@@ -68,7 +71,26 @@ impl Plan {
             reference_workers,
             warmups,
             repetitions,
+            memory_runs: 0,
         })
+    }
+    /// Request zero through 41 memory rounds per producer and case: each a
+    /// separate invocation through a fresh helper that reports the child's
+    /// peak resident set, excluded from the timed population.
+    ///
+    /// # Errors
+    /// Refuses more than 41 rounds.
+    pub fn with_memory(mut self, rounds: usize) -> Result<Self, Error> {
+        if rounds > 41 {
+            return Err(Error::Configuration("memory rounds must be 0..=41"));
+        }
+        self.memory_runs = rounds;
+        Ok(self)
+    }
+    /// Memory rounds per producer and case.
+    #[must_use]
+    pub const fn memory_runs(&self) -> usize {
+        self.memory_runs
     }
     /// Ordered requested native profiles, indexed by [`Producer::Native`].
     #[must_use]
@@ -82,6 +104,7 @@ impl Plan {
     }
     /// Complete schedule. Qualification visits the reference first. Later rounds
     /// rotate both case and producer positions, without compacting refused cells.
+    /// The memory rounds follow the timed rounds.
     ///
     /// # Errors
     /// Refuses a case count outside the sealed corpus maximum.
@@ -90,11 +113,14 @@ impl Plan {
             return Err(Error::Configuration("matrix cases must be 1..=94"));
         }
         let width = self.profiles.len() + 1;
-        let mut slots = Vec::with_capacity(cases * width * (1 + self.warmups + self.repetitions));
+        let mut slots = Vec::with_capacity(
+            cases * width * (1 + self.warmups + self.repetitions + self.memory_runs),
+        );
         for (phase, rounds) in [
             (Phase::Qualification, 1),
             (Phase::Warmup, self.warmups),
             (Phase::Timed, self.repetitions),
+            (Phase::Memory, self.memory_runs),
         ] {
             for round in 0..rounds {
                 for position in 0..cases {
@@ -173,4 +199,8 @@ pub struct Request<'a> {
     pub native_answers: crate::answers::native_json::Limits,
     /// Combined selected-symbol spelling bytes per native report.
     pub max_spelling_bytes: usize,
+    /// Absolute helper executable that runs each memory round's solver as
+    /// its child and records the child's peak resident set; required when
+    /// the plan has memory rounds, and sealed with the other executables.
+    pub helper: Option<&'a Path>,
 }

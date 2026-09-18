@@ -168,7 +168,8 @@ pub fn run(request: &Request<'_>) -> Result<Report, Error> {
 /// distinct content identity, even when several instances share an entry path.
 /// Default contracts remain provenance for amended workloads; those workloads
 /// require a complete clingo family instead of the default model count.
-/// Reports use schema 2. No first-answer or memory samples are added.
+/// Reports use schema 2. No first-answer samples are added; memory rounds
+/// follow the plan.
 ///
 /// # Errors
 /// Refuses empty/oversized populations, repeated content identities, foreign

@@ -26,13 +26,18 @@ pub(super) fn campaign(
         ))?;
     let started =
         capture::unix_ns().ok_or(Error::Configuration("UTC metadata precedes Unix epoch"))?;
+    if request.plan.memory_runs() > 0 && !request.helper.is_some_and(Path::is_absolute) {
+        return Err(Error::Configuration(
+            "memory rounds require an absolute helper executable",
+        ));
+    }
     let corpus = examples::load(request.corpus, request.limits.corpus).map_err(Error::Corpus)?;
     let cases = prepare(&corpus, request, workloads)?;
     let sources: BTreeSet<_> = cases
         .iter()
         .flat_map(|case| case.input.corpus_source_paths())
         .collect();
-    let before = super::super::run::seals(
+    let mut before = super::super::run::seals(
         &corpus,
         &sources,
         request.corpus,
@@ -40,6 +45,9 @@ pub(super) fn campaign(
         request.reference,
         request.limits,
     )?;
+    if let Some(helper) = request.helper.filter(|_| request.plan.memory_runs() > 0) {
+        before.push(identity::seal(helper, request.limits.max_executable_bytes)?);
+    }
     let destination = publication::prepare(request.report, corpus.root(), &before)?;
     let directory = tempfile::tempdir()
         .map_err(|e| super::super::io(Path::new("private matrix sources"), e))?;
@@ -63,7 +71,11 @@ pub(super) fn campaign(
         finished_unix_ns: None,
         wall_scope: "fresh_process_spawn_capture_reap; native_json_and_stats_included; reference_json_included; comparison_hashing_excluded; no_cold_cache_claim",
         comparison_scope: "complete_selected_displays_with_symbol_and_model_multiplicities; final_optimum_ties_and_costs; native_full_records_retained; hidden_reference_interpretations_unavailable",
-        peak_rss: "unavailable: safe direct-child capture does not retain per-child rusage; no inference from logical allocation counters",
+        peak_rss: if request.plan.memory_runs() > 0 {
+            "memory_rounds: separate_fresh_helper_RUSAGE_CHILDREN; excludes_helper; may_include_usage_propagated_by_waited_descendants; not_simultaneous_tree_RSS_or_device_memory; macOS_bytes_Linux_KiB_converted_to_bytes"
+        } else {
+            "unavailable: safe direct-child capture does not retain per-child rusage; no inference from logical allocation counters"
+        },
         before,
         after: Vec::new(),
         metadata: Vec::new(),
@@ -261,6 +273,7 @@ fn unattempted(slot: Slot, blocked_by: Option<usize>, detail: &str) -> Sample {
         selected_models: None,
         cost: None,
         observation: None,
+        memory: None,
     }
 }
 fn fill_unattempted(report: &mut Report) -> Result<(), Error> {
@@ -286,6 +299,7 @@ fn capture_metadata(
         let Some(observed) = invoke(
             executable,
             vec![argument.into()],
+            false,
             directory,
             deadline,
             report,
@@ -319,28 +333,23 @@ fn execute(
     let mut stopped = false;
     for slot in request.plan.slots(cases.len())? {
         let cell = slot.case * width + slot.producer.index();
-        if stopped {
-            report.samples.push(unattempted(
-                slot,
-                None,
-                "campaign scheduling stopped; no replacement launches",
-            ));
-            continue;
-        }
-        if let Some(previous) = blocked[cell] {
-            report.samples.push(unattempted(
-                slot,
+        let skipped = if stopped {
+            Some((None, "campaign scheduling stopped; no replacement launches"))
+        } else if let Some(previous) = blocked[cell] {
+            Some((
                 Some(previous),
                 "cell disabled by its first non-pass observation",
-            ));
-            continue;
-        }
-        if slot.phase != Phase::Qualification && references[slot.case].is_none() {
-            report.samples.push(unattempted(
-                slot,
+            ))
+        } else if slot.phase != Phase::Qualification && references[slot.case].is_none() {
+            Some((
                 blocked[slot.case * width],
                 "reference census did not establish a complete family",
-            ));
+            ))
+        } else {
+            None
+        };
+        if let Some((blocker, detail)) = skipped {
+            report.samples.push(unattempted(slot, blocker, detail));
             continue;
         }
         let selected = &cases[slot.case];
@@ -351,7 +360,17 @@ fn execute(
             selected.input.path(),
             slot.producer,
         );
-        let Some(capture) = invoke(executable, arguments, &case_directory, deadline, report) else {
+        let record = case_directory.join("child-rss.json");
+        let launched = launch(
+            request,
+            slot.phase,
+            (executable, arguments),
+            &record,
+            &case_directory,
+            deadline,
+            report,
+        );
+        let Some(capture) = launched else {
             stopped = true;
             report.samples.push(unattempted(
                 slot,
@@ -369,7 +388,11 @@ fn execute(
             selected_models: None,
             cost: None,
             observation: None,
+            memory: None,
         };
+        if slot.phase == Phase::Memory && !measured(&mut sample, &record, report) {
+            continue;
+        }
         let contract = match (&selected.input, selected.workload) {
             (_, Some(workload)) => workload.contract(),
             (Input::Corpus(case), None) => Some(case.contract()),
@@ -545,9 +568,62 @@ fn qualify(
 fn invalid(error: &answers::Error) -> (Decision, String) {
     (Decision::InvalidReport, error.to_string())
 }
+/// Launch a slot's solver: directly, or on a memory round as the helper's
+/// child, the helper writing the child's resource record to `record`.
+fn launch(
+    request: &Request<'_>,
+    phase: Phase,
+    (executable, arguments): (&Path, Vec<OsString>),
+    record: &Path,
+    directory: &Path,
+    deadline: Instant,
+    report: &mut Report,
+) -> Option<Capture> {
+    if phase != Phase::Memory {
+        return invoke(executable, arguments, false, directory, deadline, report);
+    }
+    let helper = request
+        .helper
+        .expect("memory rounds admitted with a helper");
+    let mut supervised: Vec<OsString> = vec![
+        "__measure-child".into(),
+        record.as_os_str().to_owned(),
+        executable.as_os_str().to_owned(),
+    ];
+    supervised.extend(arguments);
+    invoke(helper, supervised, true, directory, deadline, report)
+}
+
+/// Read a memory round's resource record into its sample. A missing or
+/// contradictory record decides the sample and is retained with a fault;
+/// the campaign goes on, since the rounds are independent invocations.
+fn measured(sample: &mut Sample, record: &Path, report: &mut Report) -> bool {
+    let helper_child = sample.capture.as_ref().and_then(Capture::helper_child_id);
+    match super::super::run::memory::read(record, helper_child).1 {
+        Ok(measurement) => {
+            sample.memory = Some(measurement);
+            true
+        }
+        Err(detail) => {
+            sample.decision = Decision::InvalidMemory;
+            sample.detail = Some(detail);
+            report.faults.push(Fault::Observation);
+            report.samples.push(std::mem::replace(
+                sample,
+                unattempted(sample.slot, None, ""),
+            ));
+            false
+        }
+    }
+}
+
+/// Launch one bounded process within the campaign's remaining time and
+/// capture; a supervised launch is the memory helper's, whose child is
+/// reaped separately.
 fn invoke(
     executable: &Path,
     arguments: Vec<OsString>,
+    supervised: bool,
     directory: &Path,
     deadline: Instant,
     report: &mut Report,
@@ -573,7 +649,11 @@ fn invoke(
         max_output_bytes: report.limits.process.max_output_bytes.min(bytes),
         ..report.limits.process
     };
-    let (capture, fault) = capture::invoke(executable, arguments, directory, limits);
+    let (capture, fault) = if supervised {
+        capture::supervised(executable, arguments, directory, limits)
+    } else {
+        capture::invoke(executable, arguments, directory, limits)
+    };
     report.total_capture_bytes += capture.stdout().len() + capture.stderr().len();
     if let Some(fault) = fault {
         report.faults.push(Fault::ChildCleanup(fault));

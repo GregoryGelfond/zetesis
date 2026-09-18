@@ -23,7 +23,8 @@ struct Options {
     /// Select a manifest-relative clean corpus case; repeat for an ordinary CPU campaign.
     #[arg(long = "case", conflicts_with_all = ["profile", "workers", "completion_workers", "clingo_workers", "batch_size", "native_report_bytes"])]
     cases: Vec<String>,
-    /// Separate child RSS rounds per solver/case, zero through 41 (ordinary CPU only).
+    /// Separate child RSS rounds per solver/case, zero through 41, through a
+    /// fresh helper; excluded from the timed population.
     #[arg(long, default_value_t = 0)]
     memory_runs: usize,
     /// Explicit native eager-formula join strategy; omission preserves its default.
@@ -98,8 +99,8 @@ fn execute(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
     if matches!(options.suite, SuiteArgument::Corpus | SuiteArgument::Series)
         || !options.profile.is_empty()
     {
-        if !options.cases.is_empty() || options.memory_runs > 0 {
-            return Err("--case and --memory-runs require the ordinary CPU campaign".into());
+        if !options.cases.is_empty() {
+            return Err("--case requires the ordinary CPU campaign".into());
         }
         return matrix(options);
     }
@@ -365,12 +366,17 @@ fn matrix(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
             .unwrap_or(std::num::NonZeroUsize::new(1).expect("one is nonzero")),
         options.warmups,
         options.repetitions.unwrap_or(20),
-    )?;
+    )?
+    .with_memory(options.memory_runs)?;
     writeln!(
         io::stderr().lock(),
         "Recording instrumented solver matrix; evidence will be written to {}",
         options.report.display()
     )?;
+    // The memory rounds run each solver as this executable's child.
+    let helper = (options.memory_runs > 0)
+        .then(std::env::current_exe)
+        .transpose()?;
     let request = matrix::Request {
         corpus: &options.root,
         native: &native,
@@ -380,6 +386,7 @@ fn matrix(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
         limits,
         native_answers,
         max_spelling_bytes: limits.answers.max_input_bytes,
+        helper: helper.as_deref(),
     };
     let report = if matches!(options.suite, SuiteArgument::Series) {
         let corpus = zetesis_validation::examples::load(&options.root, limits.corpus)?;
