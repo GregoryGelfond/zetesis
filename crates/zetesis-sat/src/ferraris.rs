@@ -30,6 +30,11 @@ pub use candidate_support::{SupportStatistics, SupportStatus};
 #[path = "reduct_query.rs"]
 mod reduct_query;
 
+#[path = "regions.rs"]
+mod regions;
+use regions::RegionSearch;
+pub use regions::{CandidateSearch, RegionSearchStatistics};
+
 /// Whole-operation ceilings for a membership check or stable-model enumeration.
 #[derive(Clone, Copy, Debug)]
 pub struct Limits {
@@ -125,8 +130,11 @@ pub struct Statistics {
     /// Optional complete-theory certificate attempt and checks.
     pub certified: Option<CertifiedStatistics>,
     /// Initial necessary disjunctive support restriction on outer candidates.
-    /// Standalone membership checks do not construct this optional restriction.
+    /// Standalone membership checks do not construct this optional restriction,
+    /// and the regions proposer has the support cut in its narrowing instead.
     pub support: Option<SupportStatistics>,
+    /// The regions proposer's receipts; absent under the clauses proposer.
+    pub regions: Option<RegionSearchStatistics>,
     /// Actual persistent-reduct construction and query work, including failures.
     pub reduct: crate::ReductStatistics,
 }
@@ -272,8 +280,7 @@ pub(crate) fn checked_reduct_result(
 #[derive(Debug)]
 pub struct StableModels {
     theory: Theory,
-    candidate_cnf: Cnf,
-    candidate_cursor: Cursor,
+    proposer: Proposer,
     limits: Limits,
     control: Control,
     statistics: Statistics,
@@ -285,34 +292,63 @@ pub struct StableModels {
     reduct: crate::prepared_reduct::State,
 }
 impl StableModels {
-    /// Encode the original theory once, retaining its immutable instance identity.
-    /// Try a complete ordinary disjunctive support restriction on the outer CNF.
-    /// Rich asserted heads and optional formula/CNF shape limits retain general
-    /// candidate search. Construction and failed encoding work stay charged.
-    /// The optional formula bounds map SAT variables to atoms, literal units to
-    /// nodes and clause units to roots; final encoding uses remaining CNF limits.
+    /// Enumerate with the clauses proposer: encode the original theory once,
+    /// retaining its immutable instance identity, and try a complete ordinary
+    /// disjunctive support restriction on the outer CNF. Rich asserted heads
+    /// and optional formula/CNF shape limits retain general candidate search.
+    /// Construction and failed encoding work stay charged. The optional
+    /// formula bounds map SAT variables to atoms, literal units to nodes and
+    /// clause units to roots; final encoding uses remaining CNF limits.
     /// Original-model and frozen-reduct checks always use the original theory.
     ///
     /// # Errors
     /// Refuses encoding/history admission, work limits, cancellation or allocation.
     pub fn new(theory: &Theory, limits: Limits, control: Control) -> Result<Self, Incomplete> {
+        Self::with_candidates(theory, CandidateSearch::Clauses, limits, control)
+    }
+
+    /// Enumerate with the chosen proposer. Under [`CandidateSearch::Regions`]
+    /// no clause form of the theory is built: the theory's producers are
+    /// extracted for the support cut and the root region is opened, both
+    /// charged as search work. Membership checking is the same either way.
+    ///
+    /// # Errors
+    /// Refuses admission, work limits, cancellation or allocation.
+    pub fn with_candidates(
+        theory: &Theory,
+        candidates: CandidateSearch,
+        limits: Limits,
+        control: Control,
+    ) -> Result<Self, Incomplete> {
         let mut budget = Budget {
             quota: crate::search::LocalQuota,
             limits: limits.search,
             control: &control,
             statistics: SearchStatistics::default(),
         };
-        let mut candidate_cnf = encoding::encode(theory, None, limits.admission, &mut budget)?;
-        let support = candidate_support::restrict(&mut candidate_cnf, theory, limits, &mut budget)?;
+        let (proposer, support) = match candidates {
+            CandidateSearch::Clauses => {
+                let mut cnf = encoding::encode(theory, None, limits.admission, &mut budget)?;
+                let support = candidate_support::restrict(&mut cnf, theory, limits, &mut budget)?;
+                let cursor = Cursor::projected(theory.atom_count(), limits.projections)?;
+                (
+                    Proposer::Clauses(Box::new(ClauseProposer { cnf, cursor })),
+                    Some(support),
+                )
+            }
+            CandidateSearch::Regions => (
+                Proposer::Regions(Box::new(RegionSearch::new(theory, &mut budget)?)),
+                None,
+            ),
+        };
         let statistics = Statistics {
             search: budget.statistics,
-            support: Some(support),
+            support,
             ..Default::default()
         };
         Ok(Self {
             theory: theory.clone(),
-            candidate_cnf,
-            candidate_cursor: Cursor::projected(theory.atom_count(), limits.projections)?,
+            proposer,
             limits,
             control,
             statistics,
@@ -337,11 +373,12 @@ impl StableModels {
         &self.theory
     }
 
-    /// Append a classical candidate-only constraint and restart the outer cursor.
-    /// Original clauses and earlier restrictions stay in the CNF. The separate
-    /// exact projection index retains every earlier exclusion without turning
-    /// it into watched CNF storage. Original theory and reduct acceptance stay
-    /// unchanged.
+    /// Append a classical candidate-only constraint. The clauses proposer adds
+    /// it to the CNF and restarts the outer cursor; original clauses and
+    /// earlier restrictions stay in the CNF, and the separate exact projection
+    /// index retains every earlier exclusion without turning it into watched
+    /// CNF storage. The regions proposer narrows the regions still to visit by
+    /// it and continues. Original theory and reduct acceptance stay unchanged.
     ///
     /// The restriction must use the original semantic atom count and index
     /// meanings. Its separate immutable instance is expected. Restrictions
@@ -377,10 +414,9 @@ impl StableModels {
             control: &self.control,
             statistics: self.statistics.search,
         };
-        let result = encoding::restrict(&mut self.candidate_cnf, restriction, &mut budget);
+        let result = self.proposer.restrict(restriction, &mut budget);
         self.statistics.search = budget.statistics;
         if result.is_ok() {
-            self.candidate_cursor.restart();
             self.statistics.candidate_restrictions = count;
         }
         result
@@ -395,9 +431,15 @@ impl StableModels {
     /// Cumulative work, including an incomplete terminal attempt.
     #[must_use]
     pub fn statistics(&self) -> Statistics {
-        Statistics {
-            projections: self.candidate_cursor.projection_statistics(),
-            ..self.statistics
+        match &self.proposer {
+            Proposer::Clauses(clauses) => Statistics {
+                projections: clauses.cursor.projection_statistics(),
+                ..self.statistics
+            },
+            Proposer::Regions(regions) => Statistics {
+                regions: Some(regions.statistics()),
+                ..self.statistics
+            },
         }
     }
 
@@ -415,8 +457,7 @@ impl StableModels {
                 certificate: self.certification.as_ref(),
                 reduct: &mut self.reduct,
             },
-            &self.candidate_cnf,
-            &mut self.candidate_cursor,
+            &mut self.proposer,
             &mut budget,
             &mut self.statistics,
             &mut self.pending_error,
@@ -463,10 +504,90 @@ struct Membership<'a> {
     reduct: &'a mut crate::prepared_reduct::State,
 }
 
+/// How classical candidates are proposed: from a clause form of the theory
+/// by the retained cursor, or from regions narrowed by the theory's readings.
+#[derive(Debug)]
+enum Proposer {
+    Clauses(Box<ClauseProposer>),
+    Regions(Box<RegionSearch>),
+}
+
+/// The clause form of the theory and the retained cursor over it.
+#[derive(Debug)]
+struct ClauseProposer {
+    cnf: Cnf,
+    cursor: Cursor,
+}
+
+impl Proposer {
+    /// The next classical candidate, or `None` when the proposer has
+    /// covered the candidate space. A proposal is refused, not returned,
+    /// once the candidate ceiling is reached; the caller admits it.
+    fn propose(
+        &mut self,
+        theory: &Theory,
+        limits: Limits,
+        budget: &mut Budget<'_>,
+        statistics: &mut Statistics,
+    ) -> Result<Option<Interpretation>, Incomplete> {
+        let proposal = match self {
+            Self::Clauses(clauses) => {
+                increment(&mut statistics.candidate_queries)?;
+                match clauses.cursor.query(&clauses.cnf, budget) {
+                    Solve::Sat(assignment) => {
+                        if statistics.candidates >= limits.max_candidates {
+                            return Err(Incomplete::CandidateLimit);
+                        }
+                        Some(encoding::interpretation(theory, &assignment, budget)?)
+                    }
+                    Solve::Unsat => None,
+                    Solve::Inconclusive(error) => return Err(error),
+                }
+            }
+            Self::Regions(regions) => {
+                let proposal = regions.propose(theory, budget)?;
+                if proposal.is_some() && statistics.candidates >= limits.max_candidates {
+                    return Err(Incomplete::CandidateLimit);
+                }
+                proposal
+            }
+        };
+        Ok(proposal)
+    }
+
+    /// Exclude a proposed candidate from every later proposal. Regions need
+    /// nothing: a leaf is never visited twice.
+    fn exclude(
+        &mut self,
+        candidate: &Interpretation,
+        budget: &mut Budget<'_>,
+    ) -> Result<(), Incomplete> {
+        match self {
+            Self::Clauses(clauses) => clauses.cursor.exclude(&clauses.cnf, candidate, budget),
+            Self::Regions(_) => Ok(()),
+        }
+    }
+
+    /// Restrict every later proposal to the classical models of `restriction`.
+    fn restrict(
+        &mut self,
+        restriction: &Theory,
+        budget: &mut Budget<'_>,
+    ) -> Result<(), Incomplete> {
+        match self {
+            Self::Clauses(clauses) => {
+                encoding::restrict(&mut clauses.cnf, restriction, budget)?;
+                clauses.cursor.restart();
+                Ok(())
+            }
+            Self::Regions(regions) => regions.restrict(restriction),
+        }
+    }
+}
+
 fn advance(
     membership_input: Membership<'_>,
-    cnf: &Cnf,
-    cursor: &mut Cursor,
+    proposer: &mut Proposer,
     budget: &mut Budget<'_>,
     statistics: &mut Statistics,
     pending_error: &mut Option<Incomplete>,
@@ -479,23 +600,12 @@ fn advance(
     } = membership_input;
     loop {
         let started = timing::start(statistics.phase_timings.as_ref());
-        let proposal = (|| {
-            increment(&mut statistics.candidate_queries)?;
-            let assignment = match cursor.query(cnf, budget) {
-                Solve::Sat(assignment) => assignment,
-                Solve::Unsat => return Ok(None),
-                Solve::Inconclusive(error) => return Err(error),
-            };
-            if statistics.candidates >= limits.max_candidates {
-                return Err(Incomplete::CandidateLimit);
-            }
-            increment(&mut statistics.candidates)?;
-            encoding::interpretation(theory, &assignment, budget).map(Some)
-        })();
+        let proposal = proposer.propose(theory, limits, budget, statistics);
         timing::finish(&mut statistics.phase_timings, Phase::Candidates, started);
         let Some(candidate) = proposal? else {
             return Ok(None);
         };
+        increment(&mut statistics.candidates)?;
         let result = if let Some(certificate) = certificate {
             match certified::classify(
                 certificate,
@@ -516,7 +626,7 @@ fn advance(
             return Err(Incomplete::InvalidWitness);
         }
         let started = timing::start(statistics.phase_timings.as_ref());
-        let blocking = cursor.exclude(cnf, &candidate, budget);
+        let blocking = proposer.exclude(&candidate, budget);
         timing::finish(&mut statistics.phase_timings, Phase::Candidates, started);
         if matches!(result, Check::Stable) {
             increment(&mut statistics.stable_models)?;

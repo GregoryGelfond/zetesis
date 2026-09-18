@@ -747,6 +747,32 @@ fn search_statistics(
     out.text("}")?;
     out.text(",\"necessary_support\":")?;
     support_statistics(out, stats.support)?;
+    out.text(",\"regions\":")?;
+    region_statistics(out, stats.regions)?;
+    out.text("}")
+}
+
+fn region_statistics(
+    out: &mut Buffer,
+    statistics: Option<zetesis_sat::RegionSearchStatistics>,
+) -> Result<(), RunError> {
+    let Some(stats) = statistics else {
+        return out.text("null");
+    };
+    out.text("{\"visited\":")?;
+    out.text(&stats.regions.to_string())?;
+    out.number_field("refuted", stats.refuted)?;
+    out.number_field("leaves", stats.leaves)?;
+    out.number_field("propagations", stats.propagations)?;
+    out.number_field("held", stats.forced)?;
+    out.number_field("cut", stats.cut)?;
+    out.text(",\"support_cut\":")?;
+    out.string(if stats.producers {
+        "applied"
+    } else {
+        "not_applicable"
+    })?;
+    out.number_field("reading_work", stats.work)?;
     out.text("}")
 }
 

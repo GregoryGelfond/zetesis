@@ -211,7 +211,15 @@ impl StableModels {
             control: &self.control,
             statistics: self.statistics.search,
         };
-        let result = positive::restrict(&plan, &mut self.candidate_cnf, &mut budget);
+        // The units are a candidate-only restriction in clause form; the
+        // regions proposer reads the plan's consequences through the
+        // theory's own readings and needs none.
+        let result = match &mut self.proposer {
+            super::Proposer::Clauses(clauses) => {
+                positive::restrict(&plan, &mut clauses.cnf, &mut budget)
+            }
+            super::Proposer::Regions(_) => Ok(0),
+        };
         stats.restriction_work = budget.statistics.work - self.statistics.search.work;
         self.statistics.search = budget.statistics;
         match result {

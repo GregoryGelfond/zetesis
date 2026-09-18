@@ -29,6 +29,9 @@ struct Options {
     /// Explicit native eager-formula join strategy; omission preserves its default.
     #[arg(long, value_enum)]
     formula_joins: Option<JoinArgument>,
+    /// Explicit native formula candidate proposal; omission preserves its default.
+    #[arg(long, value_enum)]
+    candidates: Option<CandidatesArgument>,
     /// Explicit instrumented profile; repeat for a matrix. Corpus defaults to all four.
     #[arg(long, value_enum)]
     profile: Vec<ProfileArgument>,
@@ -150,6 +153,7 @@ fn execute(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
         report: &options.report,
         schedule,
         formula_joins: options.formula_joins.map(Into::into),
+        candidates: options.candidates.map(Into::into),
         limits,
     };
     let report = if options.memory_runs > 0 || request.schedule.suite().is_none() {
@@ -256,6 +260,21 @@ impl From<OracleArgument> for zetesis_validation::selected::Oracle {
     }
 }
 
+#[derive(Clone, Copy, ValueEnum)]
+enum CandidatesArgument {
+    Regions,
+    Clauses,
+}
+
+impl From<CandidatesArgument> for zetesis_validation::selected::CandidateSearch {
+    fn from(value: CandidatesArgument) -> Self {
+        match value {
+            CandidatesArgument::Regions => Self::Regions,
+            CandidatesArgument::Clauses => Self::Clauses,
+        }
+    }
+}
+
 impl From<JoinArgument> for zetesis_validation::selected::FormulaJoins {
     fn from(value: JoinArgument) -> Self {
         match value {
@@ -292,6 +311,7 @@ fn execution_profiles(options: &Options) -> Vec<zetesis_validation::selected::Na
                 backend,
                 grounder,
                 formula_joins: options.formula_joins.map(Into::into),
+                candidates: options.candidates.map(Into::into),
                 workers: options
                     .workers
                     .unwrap_or(std::num::NonZeroUsize::new(4).expect("four is nonzero")),

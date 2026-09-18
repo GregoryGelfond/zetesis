@@ -66,11 +66,16 @@ impl ExecutionObserver for Route<'_> {
 
     fn observe(&mut self, observation: ExecutionObservation<'_>) -> Result<(), Self::Error> {
         match observation {
-            ExecutionObservation::CpuFormula { oracle, grounder } => {
+            ExecutionObservation::CpuFormula {
+                oracle,
+                grounder,
+                candidates,
+            } => {
                 if self.expected.is_some()
                     || self.selected
                     || oracle != self.config.oracle
                     || grounder != self.config.grounder
+                    || candidates != self.config.candidates
                 {
                     return Err(io::Error::other("unexpected CPU formula route"));
                 }

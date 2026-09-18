@@ -102,11 +102,29 @@ impl<Q: Quota> Budget<'_, Q> {
         self.statistics.work += 1;
         Ok(())
     }
-    fn decide(&mut self) -> Result<(), Incomplete> {
+    pub(crate) fn decide(&mut self) -> Result<(), Incomplete> {
         self.tick()?;
         self.quota
             .decision(self.statistics.decisions, self.limits.max_decisions)?;
         self.statistics.decisions += 1;
+        Ok(())
+    }
+    /// The work left before the ceiling, for an operation that charges its
+    /// own work and reports it afterwards through [`Self::charge`].
+    pub(crate) fn remaining_work(&self) -> u64 {
+        self.limits.max_work.saturating_sub(self.statistics.work)
+    }
+    /// Charge work an operation already performed, one poll for the lot.
+    pub(crate) fn charge(&mut self, work: u64) -> Result<(), Incomplete> {
+        self.control.poll()?;
+        self.statistics.work = self
+            .statistics
+            .work
+            .checked_add(work)
+            .ok_or(Incomplete::CounterOverflow)?;
+        if self.statistics.work > self.limits.max_work {
+            return Err(Incomplete::WorkLimit);
+        }
         Ok(())
     }
 }

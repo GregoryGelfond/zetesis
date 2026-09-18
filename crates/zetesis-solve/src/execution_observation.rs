@@ -1,6 +1,6 @@
 //! Borrowed execution facts, distinct from answer-set evidence and presentation.
 
-use crate::{Grounder, Oracle, SolveError, SourceBatching};
+use crate::{CandidateSearch, Grounder, Oracle, SolveError, SourceBatching};
 use std::{error::Error, num::NonZeroUsize};
 use zetesis_themelios::objective_bound::ObjectiveBoundError;
 
@@ -43,6 +43,8 @@ pub enum ExecutionObservation<'a> {
         oracle: Oracle,
         /// Requested materialization policy.
         grounder: Grounder,
+        /// How classical candidates are proposed to the reduct.
+        candidates: CandidateSearch,
     },
     /// Bounded parallel residual completion is requested.
     ExactCompletion {

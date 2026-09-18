@@ -171,7 +171,7 @@ fn statistics_are_absent_without_opt_in() {
 }
 
 #[test]
-fn support_statistics_identify_the_outer_restriction() {
+fn support_statistics_identify_the_outer_restriction_under_clauses() {
     for (source, status) in [("a | b.", "applied"), ("{a;b}.", "not_applicable")] {
         let (report, value) = solve(source, &options(&["--stats", "--oracle", "countermodel"]));
         let report = report.unwrap();
@@ -180,6 +180,35 @@ fn support_statistics_identify_the_outer_restriction() {
         assert_eq!(support["status"], status);
         assert_eq!(support["construction_work"], measured.construction_work);
         assert_eq!(support["encoding_work"], measured.encoding_work);
+        assert!(value["statistics"]["search"]["regions"].is_null());
+    }
+}
+
+#[test]
+fn region_statistics_identify_the_support_cut() {
+    // A choice alone declines the clauses proposer's support restriction;
+    // the support cut reads a choice as a producer of its atom and applies.
+    for (source, support_cut) in [("a | b.", "applied"), ("{a;b}.", "applied")] {
+        let (report, value) = solve(
+            source,
+            &options(&[
+                "--stats",
+                "--oracle",
+                "countermodel",
+                "--candidates",
+                "regions",
+            ]),
+        );
+        let report = report.unwrap();
+        let statistics = report.countermodel_statistics.unwrap();
+        assert!(statistics.support.is_none());
+        let measured = statistics.regions.unwrap();
+        let regions = &value["statistics"]["search"]["regions"];
+        assert_eq!(regions["support_cut"], support_cut);
+        assert_eq!(regions["visited"], measured.regions);
+        assert_eq!(regions["leaves"], measured.leaves);
+        assert_eq!(regions["reading_work"], measured.work);
+        assert!(value["statistics"]["search"]["necessary_support"].is_null());
     }
 }
 
@@ -815,6 +844,8 @@ fn objective_refusals_publish_no_incumbent() {
 
 #[test]
 fn projection_limits_preserve_checked_partial_answers() {
+    // The projection history belongs to the clauses proposer; regions keep
+    // no exclusion index and never reach these limits.
     for (flag, code) in [
         ("--max-projection-entries", "projection_entries"),
         ("--max-projection-nodes", "projection_nodes"),

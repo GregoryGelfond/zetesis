@@ -86,9 +86,9 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
                 Label::Backend, format_args!("cpu (lazy source joins, {workers} workers)")),
             Event::CpuClosure { batching, workers, .. } => self.metadata(Label::Backend,
                 format_args!("cpu (shared {} source rounds, {workers} workers; collective source and per-world evaluation budgets)", batching.label())),
-            Event::CpuFormula { oracle, grounder } => {
+            Event::CpuFormula { oracle, grounder, candidates } => {
                 let oracle = if oracle == crate::Oracle::Auto { "Ferraris reduct membership" } else { "Ferraris reduct countermodel" };
-                self.metadata(Label::Backend, format_args!("cpu; oracle: {oracle}; grounder: eager (requested {})", grounder.label()))
+                self.metadata(Label::Backend, format_args!("cpu; oracle: {oracle}; candidates: {}; grounder: eager (requested {})", candidates.label(), grounder.label()))
             }
             Event::ExactCompletion { workers, max_scratch_bytes } => writeln!(self,
                 "Exact completion: requested workers={workers}; bounded logical scratch bytes={max_scratch_bytes}"),

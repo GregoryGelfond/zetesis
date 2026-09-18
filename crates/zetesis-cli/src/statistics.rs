@@ -14,10 +14,11 @@ fn header(sink: &mut impl Write, options: &Options, elapsed: Duration) -> io::Re
     )?;
     writeln!(
         sink,
-        "  requested: backend={}; oracle={}; grounder={}",
+        "  requested: backend={}; oracle={}; grounder={}; candidates={}",
         options.backend.label(),
         options.oracle.label(),
-        options.grounder.label()
+        options.grounder.label(),
+        options.candidates.label()
     )?;
     writeln!(
         sink,
@@ -596,6 +597,24 @@ fn countermodel(
             sink,
             "  necessary disjunctive support: status={:?}; construction work={}; encoding work={} (included in search work)",
             support.status, support.construction_work, support.encoding_work
+        )?;
+    }
+    if let Some(regions) = stats.regions {
+        writeln!(
+            sink,
+            "  candidate regions: visited={}; refuted={}; leaves={}; propagations={}; held={}; cut={}; support cut={}; reading work={} (included in search work)",
+            regions.regions,
+            regions.refuted,
+            regions.leaves,
+            regions.propagations,
+            regions.forced,
+            regions.cut,
+            if regions.producers {
+                "applied"
+            } else {
+                "not applicable"
+            },
+            regions.work,
         )?;
     }
     writeln!(

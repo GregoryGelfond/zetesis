@@ -1,6 +1,9 @@
 # zetesis-sat
 
-Native, bounded Boolean search for finite Ferraris theories. This library uses
+Stable-model enumeration for finite Ferraris theories, with a native bounded
+Boolean search for the reduct's proper-subset query. Candidates are proposed
+either by regions of the theory's atoms narrowed by its readings, with no
+clause form, or by the Boolean search over a clause form. This library uses
 no external SAT engine or clingo at runtime. It complements the existing
 exhaustive formula reference and the normal-rule least-closure checker.
 
@@ -64,20 +67,63 @@ failure prefixes. The fixed CNF can be larger or search more slowly than a fresh
 candidate-simplified encoding; reuse does not promise a speedup.
 
 
-`StableModels::new(&Theory, Limits, Control)` builds the candidate CNF and
-returns an iterator of `Result<Interpretation, Incomplete>`. Interpretations
-retain the original theory's immutable instance identity. The iterator is
-fused: after exhaustion or one terminal error it returns `None` forever.
-`exhausted()` becomes true only after the outer query proves that no unblocked
-classical candidate satisfying all successful candidate restrictions remains. Stopping after a requested model count does not
+`StableModels::with_candidates(&Theory, CandidateSearch, Limits, Control)`
+returns an iterator of `Result<Interpretation, Incomplete>` whose candidates
+come from the chosen proposer; `StableModels::new` is the clauses proposer,
+which builds the candidate CNF. Interpretations retain the original theory's
+immutable instance identity. The iterator is fused: after exhaustion or one
+terminal error it returns `None` forever. `exhausted()` becomes true only
+after the proposer proves that no classical candidate satisfying all
+successful candidate restrictions remains: the region tree is covered, or
+the outer query is UNSAT. Stopping after a requested model count does not
 establish exhaustion. `statistics()` includes work from incomplete attempts.
 
 `StableModels::restrict_candidates(&Theory)` appends a candidate-only classical
-constraint over the same semantic atom count and index meanings. It restarts
-only the outer cursor, retaining previous restrictions and exact blocks. The
-original theory returned by `theory()` and every reduct check remain unchanged.
-Encoding failure restores the previous CNF and cursor; charged work remains.
-After any successful restriction, exhaustion covers only their intersection.
+constraint over the same semantic atom count and index meanings. The regions
+proposer narrows the regions still to visit by it and continues, since a
+visited region was covered under the original theory and a restriction only
+removes candidates. The clauses proposer restarts only the outer cursor,
+retaining previous restrictions and exact blocks; encoding failure restores
+the previous CNF and cursor, and charged work remains. The original theory
+returned by `theory()` and every reduct check remain unchanged. After any
+successful restriction, exhaustion covers only their intersection.
+
+## Proposing candidates by regions
+
+Under `CandidateSearch::Regions`, reachable in the solve session as
+`--candidates regions`, no clause form of the theory is built. The candidate space is the coverage tree of
+`Search.lean` over the theory's atoms, walked by `zetesis_cpu::regions`: the
+root leaves every atom open, each region is narrowed by
+`zetesis_ferraris::narrow` to the fixed point of the theory's readings, with
+the theory's producers for the support cut, and by every candidate-only
+restriction without producers, since a restriction supports nothing. A region
+the readings refute is dropped with its whole subtree; a region with an open
+atom is split on the atom its narrowing prefers, the open atom with the most
+parents still unknown, as the clause search branches on the variable with
+the most unresolved occurrences, cut branch first; a region with every atom
+decided is a leaf, and a leaf is a
+classical model of the theory and the restrictions, because at a full
+decision every root is sure or impossible and an impossible root refutes.
+The leaf is the proposal, and the reduct decides it exactly as it decides a
+proposal from the clauses: by the prepared reduct query, or by a complete
+class certificate when one applies. The positive certificate's unit
+restriction is clause-only; the regions proposer reads the same
+consequences through the theory.
+
+The narrowing is driven by a worklist over an index of the theory, built
+once: a node or atom that learns something is revisited once, and only its
+parents, operands and dependent producers are read, as unit propagation
+over watched clauses touches only what moved. Node visits and producer
+checks are charged as search work and each split as a decision, against
+the same cumulative `SearchLimits`. The clauses proposer stays the default
+until the regions proposer is measured beside it.
+`Statistics::regions` reports regions visited, refuted and reached as leaves,
+propagations, atoms held and cut, whether the support cut applied, and
+the reading work; `candidate_queries` and the projection history stay zero,
+since no classical query is asked and no exclusion index is kept. Laws:
+`FormulaBounds.lean` for the readings, the three rules and the leaf
+(`decided_leaf_models`), `Search.lean` for the tree. See [the proposer](src/regions.rs) and
+[its propositions](tests/regions.rs).
 An optimizer must separately prove that excluded stable candidates are dominated
 by an already verified incumbent, and use a non-strict bound to preserve ties.
 
@@ -298,15 +344,18 @@ formula-level equivalence under subset and authentic-truth premises; the
 [guide](../../proofs/guide/parametric-reduct.md) separates that argument from
 Rust DAG/CNF, owner, search and resource obligations.
 
-After checking a candidate, enumeration adds the clause that disagrees with
-that candidate on at least one original atom. It excludes exactly `M` and does
-not generalize countermodel evidence. If this blocking operation fails after
-a stable model was already proved, the iterator returns that model and emits
-the pending failure on its next call; coverage remains incomplete.
+After checking a candidate, the clauses proposer records the exclusion that
+disagrees with that candidate on at least one original atom. It excludes
+exactly `M` and does not generalize countermodel evidence. If this blocking
+operation fails after a stable model was already proved, the iterator returns
+that model and emits the pending failure on its next call; coverage remains
+incomplete. The regions proposer needs no exclusion: a leaf is visited once.
 
 ## Search and limits
 
-Search is deterministic, iterative chronological DPLL. It uses false-first
+The Boolean search serves the reduct's proper-subset query under either
+proposer, and the outer candidate query under the clauses proposer. It is
+deterministic, iterative chronological DPLL. It uses false-first
 branching, a heap trail and decision frames, and two watched literals. After
 initial unit propagation it counts unassigned variable occurrences in unresolved
 clauses. A bounded mergesort forms a complete permutation, highest count first

@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
-use crate::{Backend, Grounder, Oracle, SourceBatching};
+use crate::{Backend, CandidateSearch, Grounder, Oracle, SourceBatching};
 
 /// Commands that do not read an answer-set program.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Subcommand)]
@@ -66,6 +66,12 @@ pub struct Options {
     /// requests are always honored or refused.
     #[arg(long, value_parser = oracle_parser(), default_value = "auto", hide_short_help = true)]
     pub oracle: Oracle,
+    /// Advanced formula candidate proposal. Clauses, the default, is the
+    /// classical search over a clause form; regions narrow the candidate
+    /// space by the theory's readings. Both propose classical models that
+    /// the reduct decides.
+    #[arg(long, value_parser = candidates_parser(), default_value = "clauses", hide_short_help = true)]
+    pub candidates: CandidateSearch,
     /// Print grounding, solving and execution statistics on stderr.
     ///
     /// Report version, settings, completion, available counters and total driver
@@ -311,6 +317,7 @@ impl From<&Options> for crate::SolveConfig {
             grounder: options.grounder,
             source_batching: options.source_batching,
             oracle: options.oracle,
+            candidates: options.candidates,
             stats: options.stats,
             models: options.models,
             max_search_work: options.max_search_work,
@@ -448,6 +455,22 @@ fn source_batching_parser() -> impl TypedValueParser<Value = SourceBatching> {
             SourceBatching::Worlds,
             PossibleValue::new(SourceBatching::Worlds.label())
                 .help("Prune source prefixes with per-world membership; evaluate on Rayon."),
+        ),
+    ])
+}
+
+fn candidates_parser() -> impl TypedValueParser<Value = CandidateSearch> {
+    policy_parser([
+        (
+            CandidateSearch::Regions,
+            PossibleValue::new(CandidateSearch::Regions.label()).help(
+                "Propose leaves of the region tree narrowed by the theory's readings; no clause form.",
+            ),
+        ),
+        (
+            CandidateSearch::Clauses,
+            PossibleValue::new(CandidateSearch::Clauses.label())
+                .help("Propose classical models by the retained search over a clause form."),
         ),
     ])
 }

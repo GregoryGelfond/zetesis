@@ -116,6 +116,7 @@ pub use session::{
 pub use shared_execution::SharedExecutionStatistics;
 pub use solve_config::SolveConfig;
 pub use world_view::{WorldView, WorldViewError, WorldViewFailure, WorldViewLimits};
+pub use zetesis_sat::CandidateSearch;
 pub use zetesis_telemetry::{GroundingMode, SolveStage, StageMeasurement, StageTimings};
 pub use zetesis_themelios::{GroundingOutcome, GroundingPhase, GroundingWork};
 

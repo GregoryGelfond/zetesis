@@ -2547,42 +2547,77 @@
   {
     "name": "Zetesis.FormulaBounds.read_sound",
     "file": "Zetesis/FormulaBounds.lean",
-    "line": 58
+    "line": 62
   },
   {
     "name": "Zetesis.FormulaBounds.sure_sound",
     "file": "Zetesis/FormulaBounds.lean",
-    "line": 86
+    "line": 90
   },
   {
     "name": "Zetesis.FormulaBounds.never_sound",
     "file": "Zetesis/FormulaBounds.lean",
-    "line": 90
+    "line": 94
   },
   {
-    "name": "Zetesis.FormulaBounds.never_root_refutes",
-    "file": "Zetesis/FormulaBounds.lean",
-    "line": 95
-  },
-  {
-    "name": "Zetesis.FormulaBounds.sure_body_forces",
+    "name": "Zetesis.FormulaBounds.decided_reads",
     "file": "Zetesis/FormulaBounds.lean",
     "line": 101
   },
   {
+    "name": "Zetesis.FormulaBounds.decided_leaf_models",
+    "file": "Zetesis/FormulaBounds.lean",
+    "line": 133
+  },
+  {
+    "name": "Zetesis.FormulaBounds.never_root_refutes",
+    "file": "Zetesis/FormulaBounds.lean",
+    "line": 143
+  },
+  {
+    "name": "Zetesis.FormulaBounds.sure_body_forces",
+    "file": "Zetesis/FormulaBounds.lean",
+    "line": 149
+  },
+  {
     "name": "Zetesis.FormulaBounds.sure_body_refutes",
     "file": "Zetesis/FormulaBounds.lean",
-    "line": 107
+    "line": 155
+  },
+  {
+    "name": "Zetesis.FormulaBounds.known_sound",
+    "file": "Zetesis/FormulaBounds.lean",
+    "line": 206
+  },
+  {
+    "name": "Zetesis.FormulaBounds.known_forces",
+    "file": "Zetesis/FormulaBounds.lean",
+    "line": 255
+  },
+  {
+    "name": "Zetesis.FormulaBounds.known_cuts",
+    "file": "Zetesis/FormulaBounds.lean",
+    "line": 260
+  },
+  {
+    "name": "Zetesis.FormulaBounds.known_contradiction_refutes",
+    "file": "Zetesis/FormulaBounds.lean",
+    "line": 265
   },
   {
     "name": "Zetesis.FormulaBounds.blocked_no_support",
     "file": "Zetesis/FormulaBounds.lean",
-    "line": 120
+    "line": 279
   },
   {
     "name": "Zetesis.FormulaBounds.unsupported_cut",
     "file": "Zetesis/FormulaBounds.lean",
-    "line": 131
+    "line": 290
+  },
+  {
+    "name": "Zetesis.FormulaBounds.sole_support_forces",
+    "file": "Zetesis/FormulaBounds.lean",
+    "line": 302
   },
   {
     "name": "Zetesis.FormulaRegions.classical_consequence_forces",

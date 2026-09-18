@@ -68,34 +68,50 @@ Its Boolean search representation does not redefine ASP as classical
 satisfiability: auxiliary encoding variables do not participate in answer-set
 identity or minimality.
 
-That search is a retained chronological traversal over the theory's atoms,
-and it is the same shape as the closure route's regions: a node of the
-search holds some atoms in and some out, propagation adds the atoms every
-classical model agrees on under those decisions, a conflict closes the
-node, and a complete assignment is a leaf the reduct decides. Every stable
-model is a classical model, so the propagated atoms narrow the region
-soundly, and a restriction every stable model satisfies, such as the
-support restriction on the outer query, extends what propagation may use
-(`FormulaRegions.classical_consequence_forces`, `restricted_consequence_forces`).
-The search proposes and never decides membership; it keeps no learned
-clauses, and its branch order and phase are heuristics that change which
-candidate is proposed next, never whether one is accepted. No second
-traversal is built beside it.
+Candidates on the formula route can be proposed by regions
+(`--candidates regions`), the same coverage tree the closure route walks
+(`Search.lean`), over the theory's atoms. The root leaves every atom open. Under a region every node of the formula DAG
+has two readings, decided by one pass over the DAG: sure, when every
+candidate of the region satisfies it, and impossible, when none does; a
+held atom is sure, a cut atom impossible, and the connectives combine the
+readings as the closure route's definite and possible gates combine a
+rule's. The narrowing closes what every candidate must make of each node
+in both directions: every root holds, a node learns from its operands, and
+a node teaches its operands what its knowledge leaves them, a conjunction
+that holds both operands, a disjunction that holds with one operand
+failing the other, and so on through the connectives, until nothing
+changes; an atom known is decided and a node known both ways refutes,
+which is what unit propagation over a clause form decides. An atom none
+of whose producers can support it, each having a failing body or another
+head held, is cut, a held one refuting the region, and an atom held with
+one producer left demands that producer's body. The `zetesis-ferraris` crate narrows a region by
+these rules to a fixed point over the theory's own DAG, without a clause
+form (`FormulaBounds.read_sound`, `never_root_refutes`, `known_sound`,
+`unsupported_cut`). A region no reading refutes is split
+on the open atom the narrowing found most constrained, cut branch first;
+a region with every atom decided is a leaf, and a leaf is a classical model, since at a full decision every
+root is sure or impossible (`FormulaBounds.decided_leaf_models`). The leaf
+is the candidate the reduct decides.
+The readings are arrays over the DAG, one pass each, and the regions
+partition the space exactly, so generation has the closure route's shape:
+data-parallel passes inside a region and share-nothing regions beside one
+another. A candidate-only restriction narrows the regions still to visit
+without a restart, and no exclusion index is kept, because a leaf is visited
+once. The traversal itself is one operation in `zetesis-cpu`, shared by both
+routes; the closure route narrows by its two closures, the formula route by
+the readings.
 
-The narrowing itself need not be propagation over clauses. Under a region
-every node of the formula DAG has two readings, decided by one pass over
-the DAG: sure, when every candidate of the region satisfies it, and
-impossible, when none does; a held atom is sure, a cut atom impossible, and
-the connectives combine the readings as the closure route's definite and
-possible gates combine a rule's. An impossible root refutes the region; a
-root with one open atom that can still move it decides that atom, which
-covers a rule with a sure body and a constraint with one open premise; and
-an atom none of whose producers can support it, each having an impossible
-body or another head held, is cut. The `zetesis-ferraris` crate narrows a
-region by these rules to a fixed point over the theory's own DAG, without a
-clause form (`FormulaBounds.read_sound`, `never_root_refutes`,
-`sure_body_forces`, `unsupported_cut`). The readings are arrays over the
-DAG, one pass each, so the narrowing has the closure route's shape.
+The classical search over a clause form is the default proposer while the
+readings are recomputed by full passes over the DAG, which charges more
+work per split than watched clauses on large theories; the regions
+proposer is measured beside it on the same cells. Read as regions the
+classical search is the same tree:
+a search node holds some atoms in and some out, propagation adds the atoms
+every classical model agrees on under those decisions, a conflict closes the
+node, and a complete assignment is a leaf the reduct decides
+(`FormulaRegions.classical_consequence_forces`, `no_model_refutes`). Under
+either proposer the reduct's proper-subset query is the Boolean search, and
+neither proposer decides membership or keeps learned clauses.
 
 Both paths can restrict candidate generation by necessary conditions. A normal
 source constraint supplies a forbidden positive gate conjunction when its

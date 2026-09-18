@@ -384,6 +384,9 @@ pub struct Request<'a> {
     /// Optional native eager-formula join strategy. None preserves the sealed
     /// executable's default; this does not change the independent clingo call.
     pub formula_joins: Option<crate::selected::FormulaJoins>,
+    /// Optional native formula candidate proposal. None preserves the sealed
+    /// executable's default; this does not change the independent clingo call.
+    pub candidates: Option<crate::selected::CandidateSearch>,
     /// Independent authored resource ceilings.
     pub limits: Limits,
 }

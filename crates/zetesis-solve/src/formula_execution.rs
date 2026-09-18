@@ -109,6 +109,7 @@ impl Execution {
             observations.record(Event::CpuFormula {
                 oracle: options.oracle,
                 grounder: options.grounder,
+                candidates: options.candidates,
             })?;
             if options.completion_workers.get() > 1 {
                 observations.record(Event::ExactCompletion {

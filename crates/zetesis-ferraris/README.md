@@ -119,33 +119,41 @@ See [support API](src/support.rs) and [complete small-family controls](tests/sup
 
 ## Narrowing regions by the theory's readings
 
-A `Region` holds some atoms in every candidate, cuts some from every
-candidate and leaves the rest open. Under a region every node of the DAG has
+A `Region` (`zetesis_cpu::regions`) holds some atoms in every candidate, cuts
+some from every candidate and leaves the rest open; here it decides over the
+theory's atoms. Under a region every node of the DAG has
 two readings, decided by one pass in index order: *sure* when every candidate
 of the region satisfies it and *impossible* when none does. A held atom is
 sure, a cut atom impossible, and the connectives combine the readings as the
 closure route's definite and possible gates do. `narrow` applies three rules
-to a fixed point: an impossible root refutes the region; a root not yet sure
-with exactly one open atom that can still move it is decided by that atom,
-held when the root is impossible with it cut and cut when impossible with it
-held, which covers a rule whose body is sure and a constraint with one open
-premise; and, when `producers` recognizes every root as a fact, a rule with a
+to a fixed point: every root and every decided atom is known, a node learns
+from its operands and teaches its operands what its own knowledge leaves
+them, in both directions until nothing changes, which is what unit
+propagation over a clause form decides, and an atom known both to hold and
+to fail refutes the region; and, when `producers` recognizes every root as a fact, a rule with a
 positive disjunctive head, an atomic choice or a constraint, an atom none of
 whose producers can support it, each having an impossible body or another
-head held, is cut. A choice supports its atom whenever its body is not
-impossible. Every stable model of the region survives the narrowing, and a
-refuted region holds none.
+head held, is cut, a held such atom refutes the region, and an atom held
+with exactly one producer able to support it demands that producer's body.
+A choice supports its atom whenever its body is not impossible. Every stable model of
+the region survives the narrowing, and a refuted region holds none.
 
 The result is `Refuted`, or `Fixed` with whether any atom was decided; the
-statistics count charged node reads, root tests and producer checks, the
-passes, and the atoms held and cut. Each pass decides an atom or is the last,
-so the passes are bounded by the atoms. `RegionLimits` bounds the work and
-the passes; exhausting either, or a control stop, returns the stop with the
-completed passes' decisions kept. `Region::split` yields the two regions a
-fresh atom partitions one into, cut first, so that a traversal splitting the
-highest open atom reaches its leaves in counter order.
-`proofs/Zetesis/FormulaBounds.lean` proves the readings sound and each rule
-sound for stable models on the fragment `DisjunctiveSupport` names; the
+statistics count charged node visits and producer checks, the propagation
+events, and the atoms held and cut. Every event follows a newly learned bit,
+so the events are bounded by the bits. A `Narrower` indexes the theory once,
+its parents and its atom nodes, and narrows any region of it; `narrow`
+indexes for one narrowing. `RegionLimits` bounds the work and the events;
+exhausting either, or a control stop, returns the stop with the region
+unchanged. A narrowing that does not refute also prefers the open atom with
+the most parents still unknown as the region's next split, which the
+traversal honours; without a preference it splits the highest open atom. The traversal that splits regions and
+covers the tree is `zetesis_cpu::regions::Traversal`, shared with the closure
+route; `zetesis-sat` uses it with this narrowing to propose candidates.
+`proofs/Zetesis/FormulaBounds.lean` proves the readings sound, the knowledge
+sound (`Known`, `known_sound`), and the support cut and the sole-support
+demand sound for stable models on the fragment `DisjunctiveSupport` names
+(`unsupported_cut`, `sole_support_forces`); the
 choice reading and the agreement of the Rust pass with `read` are Rust
 obligations. See [regions API](src/regions.rs) and
 [the rule propositions](tests/regions.rs).

@@ -102,13 +102,39 @@ fn statistics_explain_candidate_restriction_units() {
 }
 
 #[test]
-fn statistics_identify_necessary_disjunctive_support() {
+fn statistics_identify_necessary_disjunctive_support_under_clauses() {
     let (_, _, text) = solve("a | b.", &options(&["--stats", "--oracle", "countermodel"]));
     assert!(
         text.contains("necessary disjunctive support: status=Applied;"),
         "{text}"
     );
     assert!(text.contains("(included in search work)"), "{text}");
+    assert!(!text.contains("candidate regions:"), "{text}");
+}
+
+#[test]
+fn statistics_identify_the_regions_and_their_support_cut() {
+    let (_, _, text) = solve(
+        "a | b.",
+        &options(&[
+            "--stats",
+            "--oracle",
+            "countermodel",
+            "--candidates",
+            "regions",
+        ]),
+    );
+    assert!(
+        text.contains("oracle=countermodel; grounder=auto; candidates=regions"),
+        "{text}"
+    );
+    assert!(text.contains("candidate regions: visited="), "{text}");
+    assert!(text.contains("; leaves=2; propagations="), "{text}");
+    assert!(
+        text.contains("support cut=applied; reading work="),
+        "{text}"
+    );
+    assert!(!text.contains("necessary disjunctive support:"), "{text}");
 }
 
 #[test]

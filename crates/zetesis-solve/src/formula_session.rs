@@ -79,8 +79,9 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             keyed_constraints: self.input.keyed_constraints,
         })?;
         let models = phases.measure(SolvePhase::CandidateSetup, || {
-            StableModels::new(
+            StableModels::with_candidates(
                 self.input.theory,
+                config.candidates,
                 crate::countermodel::search_limits(config),
                 control.clone(),
             )
