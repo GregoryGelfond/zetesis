@@ -2645,6 +2645,41 @@
     "line": 384
   },
   {
+    "name": "Zetesis.FormulaBounds.position_in_append",
+    "file": "Zetesis/FormulaChains.lean",
+    "line": 46
+  },
+  {
+    "name": "Zetesis.FormulaBounds.disj_chain_sure",
+    "file": "Zetesis/FormulaChains.lean",
+    "line": 70
+  },
+  {
+    "name": "Zetesis.FormulaBounds.disj_chain_never",
+    "file": "Zetesis/FormulaChains.lean",
+    "line": 83
+  },
+  {
+    "name": "Zetesis.FormulaBounds.disj_chain_unit",
+    "file": "Zetesis/FormulaChains.lean",
+    "line": 95
+  },
+  {
+    "name": "Zetesis.FormulaBounds.conj_chain_sure",
+    "file": "Zetesis/FormulaChains.lean",
+    "line": 132
+  },
+  {
+    "name": "Zetesis.FormulaBounds.conj_chain_never",
+    "file": "Zetesis/FormulaChains.lean",
+    "line": 142
+  },
+  {
+    "name": "Zetesis.FormulaBounds.conj_chain_unit",
+    "file": "Zetesis/FormulaChains.lean",
+    "line": 156
+  },
+  {
     "name": "Zetesis.FormulaRegions.classical_consequence_forces",
     "file": "Zetesis/FormulaRegions.lean",
     "line": 40

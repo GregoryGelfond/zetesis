@@ -42,6 +42,24 @@ fn a_region_holds_cuts_or_leaves_each_atom_open() {
 }
 
 #[test]
+fn a_region_logs_its_decisions_in_order_and_is_equal_by_them() {
+    let mut region = Region::undecided(3);
+    assert!(region.hold(2));
+    assert!(region.cut(0));
+    assert!(region.hold(2), "an idle hold is not a decision");
+    assert_eq!(region.decisions(), [2, 0]);
+    let (cut, held) = region.split(1);
+    assert_eq!(cut.decisions(), [2, 0, 1]);
+    assert_eq!(held.decisions(), [2, 0, 1]);
+    // The same decisions made in another order are the same region.
+    let mut other = Region::undecided(3);
+    assert!(other.cut(0));
+    assert!(other.hold(2));
+    assert_eq!(other, region);
+    assert_ne!(other.decisions(), region.decisions());
+}
+
+#[test]
 fn a_split_partitions_a_region_on_one_atom_cut_first() {
     let region = Region::undecided(2);
     let (cut, held) = region.split(1);

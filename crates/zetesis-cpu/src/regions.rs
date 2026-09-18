@@ -26,12 +26,26 @@
 use crate::Stop;
 
 /// A region of candidates: every atom held, cut or open, and, once
-/// narrowed, the open atom its narrowing would split on.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// narrowed, the open atom its narrowing would split on. The region also
+/// keeps the order its atoms were decided in, so a narrowing that carries
+/// knowledge from the region's parent applies only the decisions made since.
+#[derive(Clone, Debug)]
 pub struct Region {
     decided: Vec<Option<bool>>,
     preferred: Option<usize>,
+    /// The atoms decided, in the order they were decided.
+    decisions: Vec<usize>,
 }
+
+/// Two regions are the same when they decide the same atoms the same way
+/// and prefer the same split; the order the decisions were made in is
+/// history, not identity.
+impl PartialEq for Region {
+    fn eq(&self, other: &Self) -> bool {
+        self.decided == other.decided && self.preferred == other.preferred
+    }
+}
+impl Eq for Region {}
 
 impl Region {
     /// The region in which nothing is decided: every candidate lies in it.
@@ -40,6 +54,7 @@ impl Region {
         Self {
             decided: vec![None; atoms],
             preferred: None,
+            decisions: Vec::new(),
         }
     }
     /// The number of atoms the region decides over.
@@ -66,11 +81,18 @@ impl Region {
         match self.decided.get(atom) {
             Some(None) => {
                 self.decided[atom] = Some(value);
+                self.decisions.push(atom);
                 true
             }
             Some(Some(decided)) => *decided == value,
             None => false,
         }
+    }
+    /// The atoms decided so far, in the order they were decided: a reader
+    /// that saw the first `n` takes up at `decisions()[n..]`.
+    #[must_use]
+    pub fn decisions(&self) -> &[usize] {
+        &self.decisions
     }
     /// The atom's decision: held, cut, or open; `None` outside the region too.
     #[must_use]
@@ -132,9 +154,11 @@ impl Region {
     pub fn split(&self, atom: usize) -> (Self, Self) {
         let mut cut = self.clone();
         cut.decided[atom] = Some(false);
+        cut.decisions.push(atom);
         cut.preferred = None;
         let mut held = self.clone();
         held.decided[atom] = Some(true);
+        held.decisions.push(atom);
         held.preferred = None;
         (cut, held)
     }

@@ -529,6 +529,13 @@ import Zetesis
 #print axioms Zetesis.FormulaBounds.restriction_cuts
 #print axioms Zetesis.FormulaBounds.restriction_contradiction_refutes
 #print axioms Zetesis.FormulaBounds.restricted_stable_narrowing
+#print axioms Zetesis.FormulaBounds.position_in_append
+#print axioms Zetesis.FormulaBounds.disj_chain_sure
+#print axioms Zetesis.FormulaBounds.disj_chain_never
+#print axioms Zetesis.FormulaBounds.disj_chain_unit
+#print axioms Zetesis.FormulaBounds.conj_chain_sure
+#print axioms Zetesis.FormulaBounds.conj_chain_never
+#print axioms Zetesis.FormulaBounds.conj_chain_unit
 #print axioms Zetesis.FormulaRegions.classical_consequence_forces
 #print axioms Zetesis.FormulaRegions.classical_consequence_cuts
 #print axioms Zetesis.FormulaRegions.no_model_refutes

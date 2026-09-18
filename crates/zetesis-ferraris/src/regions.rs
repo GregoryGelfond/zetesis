@@ -19,6 +19,9 @@
 //! the failure of its antecedent when its consequent fails, and the duals
 //! for a node known to fail; an atom node and its atom know the same,
 //! so a node shared by several parents is known once for all of them.
+//! A maximal tree of one connective, a clause or a body, is read as one
+//! node over its operands with the n-ary rules (`FormulaChains`), so a
+//! decision costs one step per occurrence of its atom.
 //! This is unit propagation over a clause form of the theory, read on the
 //! theory itself (`FormulaBounds.Known`, `known_sound`). In the producer
 //! fragment of the support restriction, an atom none of whose producers
@@ -199,13 +202,111 @@ impl Work {
     }
 }
 
-/// The shape of a theory a narrowing walks: which nodes have a node as an
-/// operand, and which nodes carry each atom. Built once per theory in one
-/// pass over its nodes.
+/// The shape of a theory a narrowing walks: each maximal tree of one
+/// connective read as one node, a *chain*, with its operands; the parents
+/// of each node that is not inside a chain, an implication or a chain root
+/// reading it as an operand; the nodes carrying each atom; and the atoms
+/// among each node's operands. Built once per theory in one pass over its
+/// nodes.
+///
+/// A node is absorbed into its parent's chain when it has that one parent,
+/// the same connective, and is not a root of the theory; every other
+/// conjunction or disjunction is the root of its own chain, of two operands
+/// at least. An absorbed node has no knowledge of its own: the chain's
+/// readings are the n-ary readings of its operands (`FormulaChains`), and
+/// a node false under a frozen mask is either an operand, which fails, or
+/// an absorbed node whose operands all fail (disjunction) or one of which
+/// fails (conjunction), so the operands' masks already read it.
 #[derive(Clone, Debug)]
 pub struct Narrower {
     parents: Vec<Vec<usize>>,
     atom_nodes: Vec<Vec<usize>>,
+    chains: Vec<Chain>,
+    /// The chain a node is the root of.
+    chain_of: Vec<Option<usize>>,
+    /// Whether a node is inside a chain, with no knowledge of its own.
+    absorbed: Vec<bool>,
+    /// The atoms among a node's operands, for the split ranking.
+    atom_operands: Vec<Vec<usize>>,
+}
+
+/// A maximal tree of one connective, read as one node over its operands.
+#[derive(Clone, Debug)]
+struct Chain {
+    disjunction: bool,
+    root: usize,
+    /// The leaves, distinct nodes, in operand order.
+    operands: Vec<usize>,
+}
+
+/// The chains of a theory: each conjunction or disjunction not absorbed
+/// into its parent is a root, with the chain it roots and, per node,
+/// whether the node is absorbed. Operands precede their parents, so a
+/// node's chain is complete when its parent is reached: a same-connective
+/// operand that is not a root of the theory and has this one parent joins
+/// the parent's chain, its own dissolving into it.
+fn chains(theory: &Theory) -> (Vec<Chain>, Vec<Option<usize>>, Vec<bool>) {
+    let nodes = theory.nodes();
+    let mut roots = vec![false; nodes.len()];
+    for &root in theory.roots() {
+        roots[root] = true;
+    }
+    let mut parent_count = vec![0usize; nodes.len()];
+    for node in nodes {
+        match *node {
+            Node::Atom(_) | Node::False => {}
+            Node::And(a, b) | Node::Or(a, b) | Node::Implies(a, b) => {
+                parent_count[a] += 1;
+                if b != a {
+                    parent_count[b] += 1;
+                }
+            }
+        }
+    }
+    let mut built: Vec<Chain> = Vec::new();
+    let mut chain_of: Vec<Option<usize>> = vec![None; nodes.len()];
+    let mut absorbed = vec![false; nodes.len()];
+    for (index, node) in nodes.iter().enumerate() {
+        let (disjunction, a, b) = match *node {
+            Node::Or(a, b) => (true, a, b),
+            Node::And(a, b) => (false, a, b),
+            _ => continue,
+        };
+        let mut operands = Vec::new();
+        for operand in [a, b] {
+            let inner = if roots[operand] || parent_count[operand] != 1 {
+                None
+            } else {
+                chain_of[operand].filter(|&k| built[k].disjunction == disjunction)
+            };
+            if let Some(inner) = inner {
+                chain_of[operand] = None;
+                absorbed[operand] = true;
+                operands.extend(std::mem::take(&mut built[inner].operands));
+            } else if !operands.contains(&operand) {
+                operands.push(operand);
+            }
+        }
+        chain_of[index] = Some(built.len());
+        built.push(Chain {
+            disjunction,
+            root: index,
+            operands,
+        });
+    }
+    // Dissolved chains keep their slot, emptied; renumber the live ones.
+    let mut live = Vec::with_capacity(built.len());
+    let mut renumbered = vec![None; built.len()];
+    for (old, chain) in built.into_iter().enumerate() {
+        if !absorbed[chain.root] {
+            renumbered[old] = Some(live.len());
+            live.push(chain);
+        }
+    }
+    for entry in &mut chain_of {
+        *entry = entry.and_then(|old| renumbered[old]);
+    }
+    (live, chain_of, absorbed)
 }
 
 /// What a narrowing knows about a region, carried from a region to its
@@ -223,23 +324,47 @@ impl Narrower {
     #[must_use]
     pub fn new(theory: &Theory) -> Self {
         let nodes = theory.nodes();
+        let (chains, chain_of, absorbed) = chains(theory);
         let mut parents = vec![Vec::new(); nodes.len()];
-        let mut atom_nodes = vec![Vec::new(); theory.atom_count()];
+        let mut atom_operands = vec![Vec::new(); nodes.len()];
+        let atom_of = |node: usize| match nodes[node] {
+            Node::Atom(atom) => Some(atom),
+            _ => None,
+        };
+        for chain in &chains {
+            for &operand in &chain.operands {
+                parents[operand].push(chain.root);
+                if let Some(atom) = atom_of(operand) {
+                    atom_operands[chain.root].push(atom);
+                }
+            }
+        }
         for (index, node) in nodes.iter().enumerate() {
-            match *node {
-                Node::Atom(atom) => atom_nodes[atom].push(index),
-                Node::False => {}
-                Node::And(a, b) | Node::Or(a, b) | Node::Implies(a, b) => {
-                    parents[a].push(index);
-                    if b != a {
-                        parents[b].push(index);
+            if let Node::Implies(a, b) = *node {
+                parents[a].push(index);
+                if b != a {
+                    parents[b].push(index);
+                }
+                for operand in [a, b] {
+                    if let Some(atom) = atom_of(operand) {
+                        atom_operands[index].push(atom);
                     }
                 }
+            }
+        }
+        let mut atom_nodes = vec![Vec::new(); theory.atom_count()];
+        for (index, node) in nodes.iter().enumerate() {
+            if let Node::Atom(atom) = *node {
+                atom_nodes[atom].push(index);
             }
         }
         Self {
             parents,
             atom_nodes,
+            chains,
+            chain_of,
+            absorbed,
+            atom_operands,
         }
     }
 
@@ -252,8 +377,14 @@ impl Narrower {
     /// Knowledge of nothing, for the root of a tree over this theory.
     #[must_use]
     pub fn knowledge(&self) -> Knowledge {
+        let mut unknown = vec![0u32; self.atom_nodes.len()];
+        for (atom, nodes) in self.atom_nodes.iter().enumerate() {
+            for &node in nodes {
+                unknown[atom] += u32::try_from(self.parents[node].len()).unwrap_or(u32::MAX);
+            }
+        }
         Knowledge {
-            known: Known::empty(self.parents.len(), self.atom_nodes.len()),
+            known: Known::empty(self.parents.len(), self.chains.len(), unknown),
         }
     }
 
@@ -366,9 +497,7 @@ impl Narrower {
         control: &Control,
     ) -> Result<(Narrowing, NarrowingStatistics), Stop> {
         control.poll()?;
-        // A stopped closure leaves the knowledge as it was; a refuted one
-        // is not carried anywhere.
-        let mut known = knowledge.known.clone();
+        let known = &mut knowledge.known;
         let mut work = Work::new(limits.max_work);
         let mut statistics = NarrowingStatistics::default();
         let closed = known.close(
@@ -380,58 +509,54 @@ impl Narrower {
             &mut work,
             limits.max_propagations,
             &mut statistics,
-        )?;
+        );
         statistics.work = work.spent;
-        if closed == Sweep::Contradiction {
+        if closed? == Sweep::Contradiction {
             return Ok((Narrowing::Refuted, statistics));
         }
+        // The atoms this closure learned decide the region; the region's own
+        // decisions, the split's and those made here, are then all seen.
         let mut changed = false;
-        for atom in region.open().collect::<Vec<_>>() {
-            if known.atom_sure[atom] {
-                region.hold(atom);
-                statistics.forced += 1;
-                changed = true;
-            } else if known.atom_never[atom] {
-                region.cut(atom);
-                statistics.cut += 1;
-                changed = true;
-            }
+        for atom in known.learned.drain(..) {
+            let was_open = region.is_open(atom);
+            let decided = if known.atom_sure[atom] {
+                statistics.forced += u64::from(was_open);
+                region.hold(atom)
+            } else {
+                statistics.cut += u64::from(was_open);
+                region.cut(atom)
+            };
+            debug_assert!(decided, "a learned atom agrees with the region");
+            changed |= was_open;
         }
-        if let Some(atom) = self.most_constrained(region, &known, &mut work)? {
+        known.seen = region.decisions().len();
+        if let Some(atom) = most_constrained(region, known, &mut work)? {
             region.prefer(atom);
         }
         statistics.work = work.spent;
-        knowledge.known = known;
         Ok((Narrowing::Fixed { changed }, statistics))
     }
+}
 
-    /// The open atom with the most parents still unknown, the one whose
-    /// decision the theory is most sensitive to; ties go to the lower atom.
-    /// This chooses the split, as the clause search branches on the
-    /// variable with the most unresolved occurrences.
-    fn most_constrained(
-        &self,
-        region: &Region,
-        known: &Known,
-        work: &mut Work,
-    ) -> Result<Option<usize>, Stop> {
-        let mut best: Option<(usize, usize)> = None;
-        for atom in region.open() {
-            let mut unknown = 0;
-            for &node in &self.atom_nodes[atom] {
-                for &parent in &self.parents[node] {
-                    work.tick()?;
-                    if !known.sure[parent] && !known.never[parent] {
-                        unknown += 1;
-                    }
-                }
-            }
-            if best.is_none_or(|(_, count)| unknown > count) {
-                best = Some((atom, unknown));
-            }
+/// The open atom with the most parents still unknown, the one whose
+/// decision the theory is most sensitive to; ties go to the lower atom.
+/// This chooses the split, as the clause search branches on the variable
+/// with the most unresolved occurrences. The counts are kept as parents
+/// become known, so the ranking is one read per open atom.
+fn most_constrained(
+    region: &Region,
+    known: &Known,
+    work: &mut Work,
+) -> Result<Option<usize>, Stop> {
+    let mut best: Option<(usize, u32)> = None;
+    for atom in region.open() {
+        work.tick()?;
+        let unknown = known.unknown[atom];
+        if best.is_none_or(|(_, count)| unknown > count) {
+            best = Some((atom, unknown));
         }
-        Ok(best.map(|(atom, _)| atom))
     }
+    Ok(best.map(|(atom, _)| atom))
 }
 
 /// Narrow the region with a fresh index of the theory; for one narrowing
@@ -451,23 +576,36 @@ pub fn narrow(
 
 /// What every candidate of the region must make of each node and each
 /// atom: known to hold, known to fail, or open. One bit pair over the
-/// DAG and one over the atoms, closed under the upward rules from a node's
-/// operands and the downward rules from a node's own knowledge until
-/// nothing changes: unit propagation on the theory itself, with a node
-/// shared by several parents known once for all of them
-/// (`FormulaBounds.Known`, `known_sound`). The closure is driven by a
-/// worklist: a node or atom that learns something is revisited once, and
-/// only its parents, operands and dependent producers are read.
+/// nodes, one over the atoms, and two counters over each chain, the
+/// operands known to hold and the operands known to fail, closed under the
+/// upward rules from a node's operands and the downward rules from a node's
+/// own knowledge until nothing changes: unit propagation on the theory
+/// itself, with a node shared by several parents known once for all of
+/// them (`FormulaBounds.Known`, `known_sound`; the chain rules are
+/// `FormulaChains`). The closure is driven by a worklist: a node that
+/// learns something is revisited once, and only its parents, operands and
+/// dependent producers are read, a chain learning from an operand by one
+/// counter step.
 #[derive(Clone, Debug)]
 struct Known {
     sure: Vec<bool>,
     never: Vec<bool>,
     atom_sure: Vec<bool>,
     atom_never: Vec<bool>,
-    /// Nodes that learned something and have not been revisited.
-    nodes: Vec<usize>,
+    /// Per chain, the operands known to hold.
+    sure_operands: Vec<u32>,
+    /// Per chain, the operands known to fail.
+    never_operands: Vec<u32>,
+    /// Per atom, the parents of its nodes not yet known: the split ranking.
+    unknown: Vec<u32>,
+    /// The atoms this closure decided, not yet told to the region.
+    learned: Vec<usize>,
+    /// Nodes that learned something, with what, and have not been revisited.
+    nodes: Vec<(usize, bool)>,
     /// Atoms whose support must be rechecked.
     heads: Vec<usize>,
+    /// How many of the region's decisions, in the order made, are known.
+    seen: usize,
     /// The roots, falsum and every atom's support have been seeded once;
     /// later closures learn only decisions not yet known.
     seeded: bool,
@@ -504,14 +642,19 @@ fn learn(known: &mut [bool], opposite: &[bool], index: usize) -> Sweep {
 }
 
 impl Known {
-    fn empty(nodes: usize, atoms: usize) -> Self {
+    fn empty(nodes: usize, chains: usize, unknown: Vec<u32>) -> Self {
         Self {
             sure: vec![false; nodes],
             never: vec![false; nodes],
-            atom_sure: vec![false; atoms],
-            atom_never: vec![false; atoms],
+            atom_sure: vec![false; unknown.len()],
+            atom_never: vec![false; unknown.len()],
+            sure_operands: vec![0; chains],
+            never_operands: vec![0; chains],
+            unknown,
+            learned: Vec::new(),
             nodes: Vec::new(),
             heads: Vec::new(),
+            seen: 0,
             seeded: false,
         }
     }
@@ -520,7 +663,7 @@ impl Known {
     fn sure(&mut self, index: usize) -> Sweep {
         let step = learn(&mut self.sure, &self.never, index);
         if step == Sweep::Changed {
-            self.nodes.push(index);
+            self.nodes.push((index, true));
         }
         step
     }
@@ -529,7 +672,7 @@ impl Known {
     fn never(&mut self, index: usize) -> Sweep {
         let step = learn(&mut self.never, &self.sure, index);
         if step == Sweep::Changed {
-            self.nodes.push(index);
+            self.nodes.push((index, false));
         }
         step
     }
@@ -545,6 +688,7 @@ impl Known {
         if step != Sweep::Changed {
             return step;
         }
+        self.learned.push(atom);
         let mut step = step;
         for &node in &index.atom_nodes[atom] {
             step = step.join(if value {
@@ -578,6 +722,9 @@ impl Known {
         let mut step = Sweep::Unchanged;
         if !self.seeded {
             for (node, kind) in nodes.iter().enumerate() {
+                if index.absorbed[node] {
+                    continue;
+                }
                 let falsum =
                     matches!(kind, Node::False) || frozen.is_some_and(|truth| !truth[node]);
                 if falsum {
@@ -592,11 +739,11 @@ impl Known {
             }
             self.seeded = true;
         }
-        for atom in 0..theory.atom_count() {
-            if let Some(value) = region.decision(atom) {
-                step = step.join(self.atom(index, atom, value));
-            }
+        for &atom in &region.decisions()[self.seen..] {
+            let value = region.decision(atom).expect("a decided atom is decided");
+            step = step.join(self.atom(index, atom, value));
         }
+        self.seen = region.decisions().len();
         if step == Sweep::Contradiction {
             return Ok(step);
         }
@@ -604,9 +751,9 @@ impl Known {
             if statistics.propagations >= max_propagations {
                 return Err(Stop::WorkLimit);
             }
-            let step = if let Some(node) = self.nodes.pop() {
+            let step = if let Some((node, value)) = self.nodes.pop() {
                 statistics.propagations += 1;
-                self.revisit(nodes, index, producers, frozen, node, work)?
+                self.revisit(nodes, index, producers, frozen, node, value, work)?
             } else if let Some(atom) = self.heads.pop() {
                 statistics.propagations += 1;
                 match producers {
@@ -623,10 +770,13 @@ impl Known {
     }
 
     /// A node that learned something teaches its operands, and lets each
-    /// parent learn from its operands and teach them in turn. A node false
+    /// parent learn from it: a chain by one counter step, an implication
+    /// from both its operands and, when already known, by teaching them
+    /// again, since what it leaves them may have narrowed. A node false
     /// under a frozen mask is falsum in the reduct, a constant with no
     /// operands: it teaches nothing and learns nothing from them, and a
     /// parent under the mask likewise.
+    #[allow(clippy::too_many_arguments)]
     fn revisit(
         &mut self,
         nodes: &[Node],
@@ -634,33 +784,96 @@ impl Known {
         producers: Option<&Producers>,
         frozen: Option<&[bool]>,
         node: usize,
+        value: bool,
         work: &mut Work,
     ) -> Result<Sweep, Stop> {
         work.tick()?;
         let masked = |node: usize| frozen.is_some_and(|truth| !truth[node]);
+        for &atom in &index.atom_operands[node] {
+            self.unknown[atom] = self.unknown[atom].saturating_sub(1);
+        }
         let mut step = Sweep::Unchanged;
         if !masked(node) {
             step = step.join(self.teach_operands(nodes, index, producers, node));
         }
-        // A parent learns from its operands, and a parent already known
-        // teaches its operands again, since what it leaves them may have
-        // narrowed with this one.
         for &parent in &index.parents[node] {
             work.tick()?;
             if masked(parent) {
                 continue;
             }
-            step = step.join(self.learn_from_operands(nodes, parent));
-            if self.sure[parent] || self.never[parent] {
-                step = step.join(self.teach_operands(nodes, index, producers, parent));
-            }
+            step = step.join(if let Some(chain) = index.chain_of[parent] {
+                self.operand_changed(index, chain, value)
+            } else {
+                let up = self.learn_from_operands(nodes, parent);
+                if self.sure[parent] || self.never[parent] {
+                    up.join(self.teach_operands(nodes, index, producers, parent))
+                } else {
+                    up
+                }
+            });
         }
         Ok(step)
     }
 
-    /// A known node teaches its operands what the connective leaves them,
-    /// tells its atom, and, when it is a body that fails, has the producers'
-    /// heads rechecked.
+    /// A chain learns from an operand that became known: one more operand
+    /// holds or fails. A disjunction holds with one, fails with all, and a
+    /// disjunction known to hold with all but one failing forces that one;
+    /// a conjunction dually (`disj_chain_sure`, `disj_chain_never`,
+    /// `disj_chain_unit` and the conjunction laws).
+    fn operand_changed(&mut self, index: &Narrower, chain: usize, value: bool) -> Sweep {
+        let Chain {
+            disjunction,
+            root,
+            ref operands,
+        } = index.chains[chain];
+        let total = u32::try_from(operands.len()).unwrap_or(u32::MAX);
+        if value {
+            self.sure_operands[chain] += 1;
+        } else {
+            self.never_operands[chain] += 1;
+        }
+        let (sure, never) = (self.sure_operands[chain], self.never_operands[chain]);
+        match (disjunction, value) {
+            (true, true) => self.sure(root),
+            (true, false) if never == total => self.never(root),
+            (true, false) if self.sure[root] && never + 1 == total => self.unit(index, chain),
+            (false, false) => self.never(root),
+            (false, true) if sure == total => self.sure(root),
+            (false, true) if self.never[root] && sure + 1 == total => self.unit(index, chain),
+            _ => Sweep::Unchanged,
+        }
+    }
+
+    /// The one operand of a chain not yet known learns what the chain's
+    /// own knowledge leaves it: to hold, in a disjunction known to hold
+    /// whose others fail; to fail, in a conjunction known to fail whose
+    /// others hold. The operands are scanned once for it.
+    fn unit(&mut self, index: &Narrower, chain: usize) -> Sweep {
+        let Chain {
+            disjunction,
+            ref operands,
+            ..
+        } = index.chains[chain];
+        let open = operands.iter().copied().find(|&operand| {
+            if disjunction {
+                !self.never[operand]
+            } else {
+                !self.sure[operand]
+            }
+        });
+        match open {
+            Some(operand) if disjunction => self.sure(operand),
+            Some(operand) => self.never(operand),
+            None => Sweep::Unchanged,
+        }
+    }
+
+    /// A known node teaches its operands what its knowledge leaves them,
+    /// tells its atom, and, when it is a body that fails, has the
+    /// producers' heads rechecked. A chain known to hold forces its one
+    /// open operand (disjunction) or every operand (conjunction); known to
+    /// fail, every operand (disjunction) or its one open operand
+    /// (conjunction).
     fn teach_operands(
         &mut self,
         nodes: &[Node],
@@ -669,6 +882,9 @@ impl Known {
         node: usize,
     ) -> Sweep {
         let mut step = Sweep::Unchanged;
+        if let Some(chain) = index.chain_of[node] {
+            step = step.join(self.teach_chain(index, chain));
+        }
         if self.sure[node] {
             step = step.join(match nodes[node] {
                 Node::Atom(atom) => {
@@ -687,16 +903,7 @@ impl Known {
                     self.atom(index, atom, true)
                 }
                 Node::False => Sweep::Contradiction,
-                Node::And(a, b) => self.sure(a).join(self.sure(b)),
-                Node::Or(a, b) => {
-                    if self.never[a] {
-                        self.sure(b)
-                    } else if self.never[b] {
-                        self.sure(a)
-                    } else {
-                        Sweep::Unchanged
-                    }
-                }
+                Node::And(..) | Node::Or(..) => Sweep::Unchanged,
                 Node::Implies(a, b) => {
                     if self.sure[a] {
                         self.sure(b)
@@ -711,17 +918,7 @@ impl Known {
         if self.never[node] {
             step = step.join(match nodes[node] {
                 Node::Atom(atom) => self.atom(index, atom, false),
-                Node::False => Sweep::Unchanged,
-                Node::And(a, b) => {
-                    if self.sure[a] {
-                        self.never(b)
-                    } else if self.sure[b] {
-                        self.never(a)
-                    } else {
-                        Sweep::Unchanged
-                    }
-                }
-                Node::Or(a, b) => self.never(a).join(self.never(b)),
+                Node::False | Node::And(..) | Node::Or(..) => Sweep::Unchanged,
                 Node::Implies(a, b) => self.sure(a).join(self.never(b)),
             });
             if let Some(producers) = producers {
@@ -734,30 +931,42 @@ impl Known {
         step
     }
 
-    /// A node learns from its operands what the connective dictates.
+    /// What a chain's own knowledge leaves its operands.
+    fn teach_chain(&mut self, index: &Narrower, chain: usize) -> Sweep {
+        let Chain {
+            disjunction,
+            root,
+            ref operands,
+        } = index.chains[chain];
+        let total = u32::try_from(operands.len()).unwrap_or(u32::MAX);
+        let mut step = Sweep::Unchanged;
+        if self.sure[root] {
+            if disjunction {
+                if self.never_operands[chain] + 1 == total {
+                    step = step.join(self.unit(index, chain));
+                }
+            } else {
+                for &operand in operands {
+                    step = step.join(self.sure(operand));
+                }
+            }
+        }
+        if self.never[root] {
+            if disjunction {
+                for &operand in operands {
+                    step = step.join(self.never(operand));
+                }
+            } else if self.sure_operands[chain] + 1 == total {
+                step = step.join(self.unit(index, chain));
+            }
+        }
+        step
+    }
+
+    /// An implication learns from its operands what the connective
+    /// dictates; chains learn by their counters.
     fn learn_from_operands(&mut self, nodes: &[Node], node: usize) -> Sweep {
         match nodes[node] {
-            Node::Atom(_) | Node::False => Sweep::Unchanged,
-            Node::And(a, b) => {
-                let mut up = Sweep::Unchanged;
-                if self.sure[a] && self.sure[b] {
-                    up = up.join(self.sure(node));
-                }
-                if self.never[a] || self.never[b] {
-                    up = up.join(self.never(node));
-                }
-                up
-            }
-            Node::Or(a, b) => {
-                let mut up = Sweep::Unchanged;
-                if self.sure[a] || self.sure[b] {
-                    up = up.join(self.sure(node));
-                }
-                if self.never[a] && self.never[b] {
-                    up = up.join(self.never(node));
-                }
-                up
-            }
             Node::Implies(a, b) => {
                 let mut up = Sweep::Unchanged;
                 if self.never[a] || self.sure[b] {
@@ -768,6 +977,7 @@ impl Known {
                 }
                 up
             }
+            Node::Atom(_) | Node::False | Node::And(..) | Node::Or(..) => Sweep::Unchanged,
         }
     }
 

@@ -428,6 +428,125 @@ fn a_held_atom_with_one_producer_left_demands_its_body() {
 /// reaches the same leaves: the knowledge of a region holds in every
 /// region inside it.
 #[test]
+fn a_clause_of_three_literals_forces_its_last_open_one() {
+    // a | b | c, admitted as a chain of two disjunctions; with a and b cut
+    // the chain's one open operand is forced, and with all three cut the
+    // region is refuted, through the chain rules (`disj_chain_unit`,
+    // `disj_chain_never`) rather than a walk of the chain.
+    let nodes = vec![
+        Node::Atom(0),
+        Node::Atom(1),
+        Node::Atom(2),
+        Node::Or(1, 2),
+        Node::Or(0, 3),
+    ];
+    let t = theory(3, nodes, vec![4]);
+    let by_readings = |region: &mut Region| {
+        narrow(
+            &t,
+            None,
+            region,
+            RegionLimits::default(),
+            &Control::default(),
+        )
+        .unwrap()
+        .0
+    };
+    let mut two_cut = region(&t, &[], &[0, 1]);
+    assert!(matches!(
+        by_readings(&mut two_cut),
+        Narrowing::Fixed { changed: true }
+    ));
+    assert!(two_cut.is_held(2));
+    let mut one_cut = region(&t, &[], &[1]);
+    assert!(matches!(
+        by_readings(&mut one_cut),
+        Narrowing::Fixed { changed: false }
+    ));
+    assert!(one_cut.is_open(0) && one_cut.is_open(2));
+    let mut all_cut = region(&t, &[], &[0, 1, 2]);
+    assert!(matches!(by_readings(&mut all_cut), Narrowing::Refuted));
+}
+
+#[test]
+fn a_subformula_shared_by_two_parents_serves_both_as_one_operand() {
+    // (a | b) is an operand of both a | b | c and of the constraint
+    // :- (a | b), d, so it is a chain of its own rather than absorbed: with
+    // c cut the first root forces a | b, which then cuts d.
+    let nodes = vec![
+        Node::Atom(0),       // a
+        Node::Atom(1),       // b
+        Node::Or(0, 1),      // 2: a | b, shared
+        Node::Atom(2),       // c
+        Node::Or(2, 3),      // 4: (a | b) | c
+        Node::Atom(3),       // d
+        Node::And(2, 5),     // 6: (a | b) & d
+        Node::False,         // 7
+        Node::Implies(6, 7), // 8: :- (a | b), d
+    ];
+    let t = theory(4, nodes, vec![4, 8]);
+    let mut cut_c = region(&t, &[], &[2]);
+    assert!(matches!(
+        narrow(
+            &t,
+            None,
+            &mut cut_c,
+            RegionLimits::default(),
+            &Control::default()
+        )
+        .unwrap()
+        .0,
+        Narrowing::Fixed { changed: true }
+    ));
+    assert!(cut_c.is_cut(3), "the shared disjunction holds, so d is cut");
+    assert!(cut_c.is_open(0) && cut_c.is_open(1));
+    narrowing_keeps_every_stable_model(&t);
+}
+
+#[test]
+fn a_frozen_mask_on_a_chain_node_reads_as_its_operands_masks() {
+    // Under the candidate {c}, the inner disjunction b | c of a | (b | c)
+    // holds, and under {a} it fails together with both its operands: the
+    // frozen reading of the chain is the reading of its operands' masks,
+    // so the subsets of {a} keep a forced and those of {c} keep c forced.
+    let nodes = vec![
+        Node::Atom(0),
+        Node::Atom(1),
+        Node::Atom(2),
+        Node::Or(1, 2),
+        Node::Or(0, 3),
+    ];
+    let t = theory(3, nodes, vec![4]);
+    let narrower = Narrower::new(&t);
+    for (candidate, forced) in [(vec![0], 0), (vec![2], 2)] {
+        let interpretation = Interpretation::new(&t, candidate.iter().copied()).unwrap();
+        let mut workspace = zetesis_ferraris::EvaluationWorkspace::default();
+        let attempt = workspace.evaluate(
+            &interpretation,
+            zetesis_ferraris::EvaluationLimits::default(),
+            &Control::default(),
+        );
+        let evaluation = attempt.result.unwrap();
+        let truth = evaluation.truth();
+        let mut subsets = Region::undecided(3);
+        for atom in (0..3).filter(|atom| !candidate.contains(atom)) {
+            subsets.cut(atom);
+        }
+        let (narrowing, _) = narrower
+            .narrow_frozen(
+                &t,
+                truth,
+                &mut subsets,
+                RegionLimits::default(),
+                &Control::default(),
+            )
+            .unwrap();
+        assert!(matches!(narrowing, Narrowing::Fixed { changed: true }));
+        assert!(subsets.is_held(forced), "candidate {candidate:?}");
+    }
+}
+
+#[test]
 fn carried_knowledge_narrows_every_region_as_a_fresh_narrowing_does() {
     for t in [disjunctive(), {
         // p :- not q. q :- not p. r :- p, not s. s :- t. {t}.

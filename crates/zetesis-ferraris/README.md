@@ -141,9 +141,20 @@ the region survives the narrowing, and a refuted region holds none.
 The result is `Refuted`, or `Fixed` with whether any atom was decided; the
 statistics count charged node visits and producer checks, the propagation
 events, and the atoms held and cut. Every event follows a newly learned bit,
-so the events are bounded by the bits. A `Narrower` indexes the theory once,
-its parents and its atom nodes, and narrows any region of it; `narrow`
-indexes for one narrowing. `Narrower::narrow_known` narrows from a
+so the events are bounded by the bits. A `Narrower` indexes the theory once
+and narrows any region of it; `narrow` indexes for one narrowing. The index
+reads each maximal tree of one connective, a clause or a body, as one node
+over its operands, a *chain*, when its inner nodes have that one parent and
+are not roots; the closure keeps two counters per chain, the operands known
+to hold and known to fail, and applies the n-ary rules, a disjunction sure
+with one operand and impossible with all, forcing its one open operand when
+sure, and the duals for a conjunction (`FormulaChains`), so a decision costs
+one step per occurrence of its atom rather than a walk of every clause it
+satisfies. A node false under a frozen mask is either an operand, which
+fails, or an inner node whose operands' masks already read it. The region
+keeps the order of its decisions, so a closure carried from the region's
+parent applies only the decisions made since, and the count of parents
+still unknown that ranks the next split is kept as nodes become known. `Narrower::narrow_known` narrows from a
 `Knowledge` the caller carries from a region to its children and leaves it
 closed for them: the knowledge of a region holds in every region inside it
 (`known_mono`), so a child learns only the decisions its parent did not know. `Narrower::narrow_frozen` narrows a region of the

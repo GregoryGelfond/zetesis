@@ -129,7 +129,8 @@ checks are charged as search work and each split as a decision, against
 the same cumulative `SearchLimits`. Regions are the default method, measured
 beside the clauses on the same cells; the clauses are kept for comparison.
 `Statistics::regions` reports regions visited, refuted and reached as leaves,
-propagations, atoms held and cut, whether the support cut applied, and
+propagations (a node learned and its parents revisited, a chain learning by
+one counter step, or an atom's support rechecked), atoms held and cut, whether the support cut applied, and
 the reading work, and `Statistics::reduct.regions` the same for the reduct
 queries; `candidate_queries` and the projection history stay zero,
 since no classical query is asked and no exclusion index is kept. Laws:
