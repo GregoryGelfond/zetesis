@@ -1180,6 +1180,65 @@ already knew about the parent; it works the whole theory out again at
 every step, and on queens that is twenty times the work. The clause search
 keeps its default until that memory is in place.
 
+## The knowledge a region hands to its children
+
+Four campaigns on 18 September 2026, the reports written between 03:57:05
+and 04:05:17 UTC, same machine, profile, four workers and clingo as above.
+`main` is the 896a5f73 executable rerun as the control, `before` the
+traversal executable (`906d89b6`, SHA-256
+`96680774689e7a63ea2f7ac0f5d1faf629a286579f9a8272e670641e3a86b133`),
+`after` is built from `f5801c49` (SHA-256
+`efd4027ab547f8e069c63fc00fbc4bfa49acd28b13a05bf92b20822539620865`), where
+the reduct's proper-subset query is a region tree under the regions
+method and a region hands its knowledge to its children, and `regions` is
+the same executable run with `--search regions`.
+[series-f5801c49-cpu-auto.json](series-f5801c49-cpu-auto.json) and its
+[table view](series-f5801c49-cpu-auto-tables.md) are the derived
+comparison; raw report SHA-256
+`3b735cbbecab57b835e0c7e63e08e236e0ed7933695bf0918da0390f5de3ceb8` (main),
+`1c1f5177eef7597fa58cc6fdcdc2536aeb1708b4455ce645f282a485905165e8` (before),
+`d7002fb087bdc5ae5b5ab5e44d19be6deb395fb44998df9638ab39c0cb293e7f` (after)
+and `f8a74b2cd398eb8ded35305e4748d2da8707be84225fb2ea17497635a71e9299`
+(regions).
+
+The default is unchanged and `after` against `before` is flat, 0.91 to
+1.08 on every cell. The regions method, which now proposes candidates and
+queries the reduct on the same trees with no clause form anywhere, stands
+against the clause search as follows on the formula cells:
+
+| Cell | after | regions | regions/after | clingo |
+|---|---:|---:|---:|---:|
+| disjunction-12 | 44.6 | 32.9 | 0.74 | 22.9 |
+| independent-negation-aggregate-16 | 25.6 | 27.4 | 1.07 | 31.3 |
+| n-queens/variant-01 8→11 | 262.9 | 287.7 | 1.09 | 183.3 |
+| ties-50 | 26.6 | 29.3 | 1.10 | 19.1 |
+| n-queens/variant-01 8→10 | 59.4 | 67.5 | 1.14 | 33.2 |
+| variant-04/05-larger-mix | 90.8 | 104.3 | 1.15 | 153.1 |
+| send-money/send-money | 10.9 | 15.5 | 1.42 | 15.1 |
+| n-queens/variant-04 8→11 | 159.7 | 239.3 | 1.50 | 179.0 |
+
+Against the previous observation the regions method moved from fifteen to
+twenty times the clause search on queens to 1.09 and 1.50, and from 13.8
+times on send-money to 1.42, while the answers and the decision counts
+are what they were: on n-queens 11 it still makes 26,194 decisions where
+the clause search makes 33,712, and its charged work fell from 1.18
+billion to 46 million, below the clause search's 57 million. The
+propagation events per region fell from eight thousand to about fifty,
+which is the size of a split rather than of the theory. Disjunction-12,
+where the support cut decides the second head of every rule as soon as the
+first is known, is faster by regions than by clauses, and by a wider
+margin than any formula cell is slower. The clause search keeps the
+default: two cells still read above 1.4, and the rule is that the default
+follows the measurement, not the thesis.
+
+In the problem's words: a region now remembers what its parent worked
+out, so stepping from a region to its child costs what the one decision
+changed and nothing else. The formula route reaches its answers with the
+same primitives that decide membership, generation and reduct query
+alike, at roughly the clause search's cost on every cell and below it on
+one; the remaining gap is on the cells where the clause search's root
+probing finds forced atoms the readings only find by splitting.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
