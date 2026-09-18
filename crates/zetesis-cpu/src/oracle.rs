@@ -11,8 +11,9 @@ use crate::{Control, Stop};
 mod window;
 mod relations;
 mod prepared;
+pub mod bounds;
 pub use prepared::{ClosureWorkspace, PreparationLimits, PreparationStatistics, PreparedQueries};
-use relations::{Catalogs, Relational, Relations, RowSet, Rows, Slot};
+use relations::{Catalogs, Layouts, Relational, Relations, Row, RowSet, Rows, Slot};
 pub(crate) mod restrictions;
 pub mod source;
 pub(crate) mod worlds;
@@ -42,7 +43,7 @@ pub struct Limits {
     /// are counted per occurrence. Tree-container allocations (including vacant
     /// slots), allocator metadata and Arc-counter overhead,
     /// and final `Model` retention are excluded. Prepared scalar checks include
-    /// query-owner headers and assignment/cursor/undo capacities.
+    /// the preparation's retained bytes and assignment/cursor/undo capacities.
     /// Actual allocator slack can exceed the proposed reservation before refusal;
     /// only completed checks publish their observed peak statistics.
     /// This is an independent finite allowance, not a process RSS ceiling.
@@ -272,7 +273,11 @@ pub fn check_view(
         pruned_prefixes: 0,
         mask_bytes: 0,
     };
-    let prepared = PreparedQueries::prepare(program, &mut work)?;
+    let prepared = PreparedQueries::prepare(
+        program,
+        PreparationLimits::default().max_dense_atoms,
+        &mut work,
+    )?;
     prepared.check_with(seed, &mut ClosureWorkspace::default(), &mut work)
 }
 
@@ -322,7 +327,8 @@ fn least_closure(
     seed: SeedView<'_>,
     work: &mut Work<'_>,
 ) -> Result<CompletedClosure, Stop> {
-    let prepared = PreparedQueries::prepare(program, work)?;
+    let prepared =
+        PreparedQueries::prepare(program, PreparationLimits::default().max_dense_atoms, work)?;
     prepared.closure_with(
         Gates::Frozen(seed),
         &mut ClosureWorkspace::default(),
@@ -435,7 +441,11 @@ fn closure_under(
         pruned_prefixes: 0,
         mask_bytes: 0,
     };
-    let prepared = PreparedQueries::prepare(program, &mut work)?;
+    let prepared = PreparedQueries::prepare(
+        program,
+        PreparationLimits::default().max_dense_atoms,
+        &mut work,
+    )?;
     prepared.closure_with(
         gates,
         &mut ClosureWorkspace::default(),
@@ -486,6 +496,7 @@ struct RoundWorkspace<'a> {
     buffers: &'a mut prepared::Buffers,
     dimensions: &'a prepared::Dimensions,
     rules: &'a prepared::Rules,
+    layouts: &'a Layouts,
     overhead: u128,
 }
 
@@ -501,6 +512,7 @@ fn least_closure_with(
         buffers,
         dimensions,
         rules,
+        layouts,
         overhead,
     } = workspace;
     let mut constraint_violated = false;
@@ -556,7 +568,7 @@ fn least_closure_with(
             pending_bytes = pending_bytes
                 .checked_sub(bytes)
                 .ok_or(Stop::InvalidProgram)?;
-            closure.insert(atom, pending_bytes, work)?;
+            closure.insert(atom, pending_bytes, layouts, work)?;
         }
     }
     Ok(CompletedClosure {
@@ -841,11 +853,11 @@ fn visit_with<'source, E: From<Stop>>(
             clear(assignment, &mut undo[depth]);
             continue;
         };
-        let atom = tuples.get(run, index).ok_or(Stop::InvalidProgram)?;
+        let row = tuples.get(run, index).ok_or(Stop::InvalidProgram)?;
         // This iteration already charged one join step and offers at most one
         // row. The cumulative probe count therefore cannot exceed charged work.
         work.statistics.tuple_probes += 1;
-        if bind(pattern, atom, assignment, &mut undo[depth], work)?
+        if bind(pattern, row, assignment, &mut undo[depth], work)?
             && guards(template, assignment, gates, work)?
             && match membership.as_mut() {
                 Some(membership) => membership.extend(occurrence, index, work)?,
@@ -861,12 +873,12 @@ fn visit_with<'source, E: From<Stop>>(
 
 fn bind<'source>(
     pattern: &AtomPattern,
-    atom: &'source Atom,
+    row: Row<'source>,
     assignment: &mut [Option<&'source Value>],
     undo: &mut Vec<usize>,
     work: &mut Work<'_>,
 ) -> Result<bool, Stop> {
-    for (term, value) in pattern.terms().iter().zip(atom.values()) {
+    for (term, value) in pattern.terms().iter().zip(row.values()) {
         structural_work(value, work)?;
         match term {
             Term::Constant(expected) if expected != value => return Ok(false),

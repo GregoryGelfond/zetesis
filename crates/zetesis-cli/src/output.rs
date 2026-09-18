@@ -925,6 +925,8 @@ fn query_statistics(
             out.text("{\"work\":")?;
             out.text(&preparation.work.to_string())?;
             out.number_field("retained_bytes", preparation.retained_bytes)?;
+            out.number_field("predicates", preparation.predicates)?;
+            out.number_field("dense_predicates", preparation.dense_predicates)?;
             out.text("}")?;
         } else {
             out.text("null")?;

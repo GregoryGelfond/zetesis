@@ -23,6 +23,7 @@ pub use candidates::{
     Candidates,
 };
 pub use control::{Control, Stop};
+pub use oracle::bounds::{ArgumentBounds, Bound, BoundLimits};
 pub use oracle::source;
 pub use oracle::{
     Check, ClosureWorkspace, Limits, PreparationLimits, PreparationStatistics, PreparedQueries,

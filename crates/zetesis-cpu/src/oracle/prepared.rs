@@ -6,8 +6,8 @@ use std::mem::size_of;
 use zetesis_core::{Predicate, Program, SeedView, Value};
 
 use super::{
-    Check, Limits, Work,
-    relations::{Catalogs, storage},
+    Check, Limits, Work, bounds,
+    relations::{Catalogs, Layout, Layouts, storage},
 };
 use crate::{Control, Stop};
 
@@ -15,10 +15,15 @@ use crate::{Control, Stop};
 /// Source program payload is already owned by `Program` and is not copied.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PreparationLimits {
-    /// Template and positive-pattern dimension inspections.
+    /// Template and positive-pattern dimension inspections, and the
+    /// argument-bound inference.
     pub max_work: u64,
     /// Named immutable preparation bytes, excluding the shared source program.
     pub max_bytes: usize,
+    /// The most tuples a dense relation may index: a predicate whose bounded
+    /// arguments admit more keeps its tree. Zero keeps every tree. A dense
+    /// relation's words are charged to each candidate's closure bytes.
+    pub max_dense_atoms: usize,
 }
 
 impl Default for PreparationLimits {
@@ -26,6 +31,7 @@ impl Default for PreparationLimits {
         Self {
             max_work: Limits::default().max_work,
             max_bytes: Limits::default().max_closure_bytes,
+            max_dense_atoms: 1 << 24,
         }
     }
 }
@@ -37,6 +43,11 @@ pub struct PreparationStatistics {
     pub work: u64,
     /// Named retained preparation storage, excluding the source program.
     pub retained_bytes: usize,
+    /// The program's predicates.
+    pub predicates: usize,
+    /// Predicates read as dense relations: every argument bounded and the
+    /// product of widths within `PreparationLimits::max_dense_atoms`.
+    pub dense_predicates: usize,
 }
 
 /// Prepared join dimensions for one exact immutable program instance.
@@ -51,6 +62,8 @@ pub struct PreparedQueries {
     program: Program,
     dimensions: Dimensions,
     rules: Rules,
+    /// The dense layouts, for the predicates the argument bounds admit.
+    layouts: Layouts,
     statistics: PreparationStatistics,
 }
 
@@ -104,10 +117,14 @@ impl PreparedQueries {
         control.poll()?;
         let mut work = Work::source(control, limits.max_work);
         work.limits.max_closure_bytes = limits.max_bytes;
-        Self::prepare(program, &mut work)
+        Self::prepare(program, limits.max_dense_atoms, &mut work)
     }
 
-    pub(super) fn prepare(program: &Program, work: &mut Work<'_>) -> Result<Self, Stop> {
+    pub(super) fn prepare(
+        program: &Program,
+        max_dense_atoms: usize,
+        work: &mut Work<'_>,
+    ) -> Result<Self, Stop> {
         storage::admit(work, size_of::<Self>() as u128)?;
         storage::record(work, size_of::<Self>() as u128)?;
         let before = work.statistics.work;
@@ -130,17 +147,33 @@ impl PreparedQueries {
                 }
             }
         }
-        let retained_bytes = size_of::<Self>() + rules.bytes();
-        storage::admit(work, retained_bytes as u128)?;
-        storage::record(work, retained_bytes as u128)?;
+        let bounds = bounds::infer_with(program, max_dense_atoms, work)?;
+        let mut layouts = Layouts::default();
+        for predicate in program.predicates() {
+            work.tick()?;
+            if let Some(layout) = bounds
+                .bounds(predicate)
+                .and_then(|bounds| Layout::new(predicate, bounds, max_dense_atoms))
+            {
+                layouts.push(layout);
+            }
+        }
+        let retained_bytes = (size_of::<Self>() as u128 + rules.bytes() as u128)
+            .checked_add(layouts.bytes())
+            .ok_or(Stop::StorageLimit)?;
+        storage::admit(work, retained_bytes)?;
+        storage::record(work, retained_bytes)?;
         Ok(Self {
             program: program.clone(),
             dimensions,
             rules,
             statistics: PreparationStatistics {
                 work: work.statistics.work - before,
-                retained_bytes,
+                retained_bytes: usize::try_from(retained_bytes).map_err(|_| Stop::StorageLimit)?,
+                predicates: program.predicates().len(),
+                dense_predicates: layouts.len(),
             },
+            layouts,
         })
     }
 
@@ -253,16 +286,19 @@ impl PreparedQueries {
         schedule: super::Schedule,
         work: &mut Work<'_>,
     ) -> Result<super::CompletedClosure, Stop> {
+        // The immutable preparation, its dense layouts included, serves every
+        // candidate's closure, so each candidate admits it first.
+        let retained = self.statistics.retained_bytes as u128;
         let base = workspace
             .catalogs
             .owned_bytes()
             .checked_add(ClosureWorkspace::headers())
-            .and_then(|bytes| bytes.checked_add(size_of::<Self>() as u128))
+            .and_then(|bytes| bytes.checked_add(retained))
             .ok_or(Stop::StorageLimit)?;
         workspace.buffers.prepare(&self.dimensions, base, work)?;
         let overhead = ClosureWorkspace::headers()
             .checked_add(workspace.buffers.bytes()?)
-            .and_then(|bytes| bytes.checked_add(size_of::<Self>() as u128))
+            .and_then(|bytes| bytes.checked_add(retained))
             .ok_or(Stop::StorageLimit)?;
         workspace.catalogs.set_overhead(overhead, work)?;
         if self.program.templates().is_empty() {
@@ -279,6 +315,7 @@ impl PreparedQueries {
                 buffers: &mut workspace.buffers,
                 dimensions: &self.dimensions,
                 rules: &self.rules,
+                layouts: &self.layouts,
                 overhead,
             },
             schedule,

@@ -10,7 +10,7 @@ use crate::Stop;
 /// rows as its levels and the New rows as its tail, so no derived ID buffer
 /// is needed here.
 #[derive(Default)]
-pub(super) struct Partition {
+pub(in crate::oracle) struct Partition {
     old_end: usize,
 }
 

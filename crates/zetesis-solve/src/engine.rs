@@ -298,6 +298,7 @@ impl Executor {
             .with_preparation_limits(PreparationLimits {
                 max_work: options.max_source_work,
                 max_bytes: options.max_closure_batch_bytes,
+                ..PreparationLimits::default()
             });
         if options.grounder == Grounder::Eager {
             let ground = match cached {

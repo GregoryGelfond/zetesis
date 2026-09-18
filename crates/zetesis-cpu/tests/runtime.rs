@@ -273,8 +273,23 @@ fn gates_prune_after_their_arguments_are_bound_before_a_cartesian_join() {
         .expect("arity")],
     )
     .expect("carrier");
-    let result =
-        check(&program, &seed, Limits::default(), &Control::default()).expect("complete check");
+    // The candidate's work alone: the preparation, whose bound inference
+    // visits every fact twice, has its own receipt.
+    let control = Control::default();
+    let prepared = zetesis_cpu::PreparedQueries::new(
+        &program,
+        zetesis_cpu::PreparationLimits::default(),
+        &control,
+    )
+    .unwrap();
+    let result = prepared
+        .check_view(
+            seed.view(),
+            &mut zetesis_cpu::ClosureWorkspace::default(),
+            Limits::default(),
+            &control,
+        )
+        .expect("complete check");
     assert!(result.accepted());
     assert_eq!(result.closure().atoms().len(), 129);
     // Compare non-catalog work with the unpruned Cartesian row population.

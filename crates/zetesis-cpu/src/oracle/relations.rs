@@ -9,11 +9,15 @@ use std::{collections::BTreeSet, mem::size_of};
 mod partition;
 use partition::Partition;
 
+mod dense;
+use dense::Dense;
+pub(in crate::oracle) use dense::{Layout, Layouts};
+
 pub(super) mod storage;
 pub(super) use storage::atom_bytes;
 
 use zetesis_core::{
-    Atom, AtomKey, Model, Predicate,
+    Atom, AtomKey, Model, Predicate, Value,
     relation::{Catalog, CatalogFailure, Failure, Insertion, Limits, Resource, Storage},
 };
 
@@ -24,7 +28,8 @@ use crate::Stop;
 /// addressed by its run and its position within the run; positions are access
 /// positions, not persistent equality IDs or global source occurrence IDs. A
 /// borrowed snapshot is one run; a catalog view is its levels and its tail,
-/// any of which a selection may leave out.
+/// any of which a selection may leave out; a dense view is one run of bit
+/// positions, of which only the set ones are rows.
 #[derive(Clone, Copy)]
 pub(super) enum Rows<'a> {
     Borrowed(&'a [&'a Atom]),
@@ -33,37 +38,85 @@ pub(super) enum Rows<'a> {
         levels: &'a [Vec<usize>],
         tail: &'a [usize],
     },
+    Dense {
+        relation: &'a Dense,
+        set: RowSet,
+    },
+}
+
+/// One row of a view: an atom the view borrows, or a position in a dense
+/// relation, whose values are read from the relation's layout.
+#[derive(Clone, Copy)]
+pub(super) enum Row<'a> {
+    Atom(&'a Atom),
+    Dense { layout: &'a Layout, index: usize },
+}
+
+impl<'a> Row<'a> {
+    /// The row's values in argument order.
+    pub(super) fn values(self) -> impl Iterator<Item = &'a Value> {
+        let (atom, dense) = match self {
+            Self::Atom(atom) => (Some(atom.values().iter()), None),
+            Self::Dense { layout, index } => (
+                None,
+                Some(
+                    (0..layout.predicate().arity())
+                        .map(move |argument| layout.value(argument, index)),
+                ),
+            ),
+        };
+        atom.into_iter()
+            .flatten()
+            .chain(dense.into_iter().flatten())
+    }
+
+    /// The borrowed atom of a tree row; a dense row has none.
+    #[cfg(test)]
+    pub(super) fn atom(self) -> Option<&'a Atom> {
+        match self {
+            Self::Atom(atom) => Some(atom),
+            Self::Dense { .. } => None,
+        }
+    }
 }
 
 impl<'a> Rows<'a> {
     /// Number of runs, counting an empty tail as none.
     pub(super) fn runs(self) -> usize {
         match self {
-            Self::Borrowed(_) => 1,
+            Self::Borrowed(_) | Self::Dense { .. } => 1,
             Self::Runs { levels, tail, .. } => levels.len() + usize::from(!tail.is_empty()),
         }
     }
 
+    /// The positions of a run; every one is a row except in a dense view,
+    /// where a window yields only the set positions.
     pub(super) fn run_len(self, run: usize) -> usize {
         match self {
             Self::Borrowed(rows) => rows.len(),
             Self::Runs { levels, tail, .. } => levels.get(run).map_or(tail.len(), Vec::len),
+            Self::Dense { relation, .. } => relation.layout().cells(),
         }
     }
 
     /// Every row of every run, run by run. Runs are each in canonical order;
     /// the sequence across runs is not.
     #[cfg(test)]
-    pub(super) fn all(self) -> Vec<&'a Atom> {
+    pub(super) fn all(self) -> Vec<Row<'a>> {
         (0..self.runs())
             .flat_map(|run| (0..self.run_len(run)).map(move |position| (run, position)))
+            .filter(|&(_, position)| match self {
+                Self::Dense { relation, set } => relation.holds(set, position),
+                Self::Borrowed(_) | Self::Runs { .. } => true,
+            })
             .map(|(run, position)| self.get(run, position).expect("in range"))
             .collect()
     }
 
-    pub(super) fn get(self, run: usize, position: usize) -> Option<&'a Atom> {
+    /// The row at a position a window yielded.
+    pub(super) fn get(self, run: usize, position: usize) -> Option<Row<'a>> {
         match self {
-            Self::Borrowed(rows) => rows.get(position).copied(),
+            Self::Borrowed(rows) => rows.get(position).copied().map(Row::Atom),
             Self::Runs {
                 atoms,
                 levels,
@@ -72,7 +125,27 @@ impl<'a> Rows<'a> {
                 .get(run)
                 .map_or(tail, Vec::as_slice)
                 .get(position)
-                .and_then(|&id| atoms.get(id)),
+                .and_then(|&id| atoms.get(id))
+                .map(Row::Atom),
+            Self::Dense { relation, .. } => {
+                (position < relation.layout().cells()).then_some(Row::Dense {
+                    layout: relation.layout(),
+                    index: position,
+                })
+            }
+        }
+    }
+
+    /// The next row's position in a run at or after the range's start,
+    /// advancing the range past it; `None` when the range holds no row.
+    pub(super) fn next_row(
+        self,
+        range: &mut std::ops::Range<usize>,
+        work: &mut Work<'_>,
+    ) -> Result<Option<usize>, Stop> {
+        match self {
+            Self::Borrowed(_) | Self::Runs { .. } => Ok(range.next()),
+            Self::Dense { relation, set } => relation.next_row(set, range, work),
         }
     }
 }
@@ -122,9 +195,45 @@ pub(super) enum Slot {
     At(usize),
 }
 
-pub(super) struct Relation {
-    catalog: Catalog,
-    partition: Partition,
+/// One predicate's rows: a typed catalog with its round partition, or a
+/// dense bit array when the predicate's arguments are bounded. The catalog
+/// is boxed so that the two arms are of a size.
+pub(super) enum Relation {
+    Tree {
+        catalog: Box<Catalog>,
+        partition: Partition,
+    },
+    Dense(Dense),
+}
+
+impl Relation {
+    fn predicate(&self) -> &Predicate {
+        match self {
+            Self::Tree { catalog, .. } => catalog.predicate(),
+            Self::Dense(dense) => dense.predicate(),
+        }
+    }
+
+    #[cfg(test)]
+    pub(super) fn catalog(&self) -> &Catalog {
+        match self {
+            Self::Tree { catalog, .. } => catalog,
+            Self::Dense(_) => panic!("a dense relation has no catalog"),
+        }
+    }
+
+    #[cfg(test)]
+    pub(super) fn partition(&self) -> &Partition {
+        match self {
+            Self::Tree { partition, .. } => partition,
+            Self::Dense(_) => panic!("a dense relation has no partition"),
+        }
+    }
+
+    #[cfg(test)]
+    pub(super) fn is_dense(&self) -> bool {
+        matches!(self, Self::Dense(_))
+    }
 }
 
 /// Borrowed rows grouped by predicate, in canonical atom order: the groups are
@@ -199,8 +308,10 @@ impl Relational for Catalogs {
     }
 
     fn rows_at(&self, handle: usize, set: RowSet) -> Result<Rows<'_>, Stop> {
-        let relation = self.relations.get(handle).ok_or(Stop::InvalidProgram)?;
-        relation.partition.rows(&relation.catalog, set)
+        match self.relations.get(handle).ok_or(Stop::InvalidProgram)? {
+            Relation::Tree { catalog, partition } => partition.rows(catalog, set),
+            Relation::Dense(relation) => Ok(Rows::Dense { relation, set }),
+        }
     }
 }
 
@@ -217,14 +328,16 @@ impl Catalogs {
     /// The relation's position, or where one for the predicate would go.
     fn find(&self, predicate: &Predicate) -> Result<usize, usize> {
         self.relations
-            .binary_search_by(|relation| relation.catalog.predicate().cmp(predicate))
+            .binary_search_by(|relation| relation.predicate().cmp(predicate))
     }
 
     pub(super) fn prepare(&mut self, work: &mut Work<'_>) -> Result<(), Stop> {
         storage::admit(work, self.bytes)?;
         storage::record(work, self.bytes)?;
         for relation in &mut self.relations {
-            let catalog = &mut relation.catalog;
+            let Relation::Tree { catalog, .. } = relation else {
+                continue;
+            };
             work.control.poll()?;
             let old = catalog.retained_bytes() as u128;
             let other = self.bytes.checked_sub(old).ok_or(Stop::InvalidProgram)?;
@@ -243,7 +356,9 @@ impl Catalogs {
     pub(super) fn prepare_delta(&mut self, work: &mut Work<'_>) -> Result<(), Stop> {
         self.prepare(work)?;
         for relation in &self.relations {
-            relation.partition.prepare(&relation.catalog, work)?;
+            if let Relation::Tree { catalog, partition } = relation {
+                partition.prepare(catalog, work)?;
+            }
         }
         Ok(())
     }
@@ -252,11 +367,21 @@ impl Catalogs {
     /// before appending the new heads. No borrowed round view is still live.
     pub(super) fn advance(&mut self, work: &mut Work<'_>) -> Result<(), Stop> {
         for relation in &mut self.relations {
-            relation
-                .partition
-                .advance(relation.catalog.atoms().len(), work)?;
+            match relation {
+                Relation::Tree { catalog, partition } => {
+                    partition.advance(catalog.atoms().len(), work)?;
+                }
+                Relation::Dense(dense) => dense.advance(work)?,
+            }
         }
         Ok(())
+    }
+
+    fn relation_has_new(relation: &Relation) -> bool {
+        match relation {
+            Relation::Tree { catalog, partition } => partition.has_new(catalog.atoms().len()),
+            Relation::Dense(dense) => dense.has_new(),
+        }
     }
 
     /// Predicates whose relation gained rows since the cutoff advanced, in
@@ -264,16 +389,16 @@ impl Catalogs {
     pub(super) fn predicates_with_new(&self) -> impl Iterator<Item = &Predicate> {
         self.relations
             .iter()
-            .filter(|relation| relation.partition.has_new(relation.catalog.atoms().len()))
-            .map(|relation| relation.catalog.predicate())
+            .filter(|relation| Self::relation_has_new(relation))
+            .map(Relation::predicate)
     }
 
     pub(super) fn has_new(&self, predicate: &Predicate, work: &mut Work<'_>) -> Result<bool, Stop> {
         work.tick()?;
-        Ok(self.find(predicate).ok().is_some_and(|handle| {
-            let relation = &self.relations[handle];
-            relation.partition.has_new(relation.catalog.atoms().len())
-        }))
+        Ok(self
+            .find(predicate)
+            .ok()
+            .is_some_and(|handle| Self::relation_has_new(&self.relations[handle])))
     }
 
     pub(super) fn contains(
@@ -286,7 +411,21 @@ impl Catalogs {
         let Ok(handle) = self.find(key.predicate()) else {
             return Ok(false);
         };
-        let catalog = &self.relations[handle].catalog;
+        let catalog = match &self.relations[handle] {
+            Relation::Tree { catalog, .. } => catalog,
+            Relation::Dense(dense) => {
+                work.charge(key.predicate().arity())?;
+                let values = (0..key.predicate().arity()).map(|column| key.value(column));
+                let mut complete = Vec::with_capacity(key.predicate().arity());
+                for value in values {
+                    complete.push(value.ok_or(Stop::InvalidProgram)?);
+                }
+                return Ok(dense
+                    .layout()
+                    .index_of(complete)
+                    .is_some_and(|position| dense.contains(position)));
+            }
+        };
         let other = self
             .bytes
             .checked_sub(catalog.retained_bytes() as u128)
@@ -310,10 +449,15 @@ impl Catalogs {
         )
     }
 
+    /// Insert a derived atom, creating its relation on first use: dense when
+    /// the layouts have one for its predicate, a tree otherwise. An atom
+    /// outside its dense layout's bounds violates the admitted program's
+    /// invariant that the bounds cover every derivable head.
     pub(super) fn insert(
         &mut self,
         atom: Atom,
         pending: u128,
+        layouts: &Layouts,
         work: &mut Work<'_>,
     ) -> Result<(), Stop> {
         work.control.poll()?;
@@ -330,11 +474,27 @@ impl Catalogs {
         let handle = match self.find(atom.predicate()) {
             Ok(handle) => handle,
             Err(position) => {
-                self.create(position, atom.predicate(), held, work)?;
+                match layouts.get(atom.predicate()) {
+                    Some(layout) => self.create_dense(position, layout, held, work)?,
+                    None => self.create(position, atom.predicate(), held, work)?,
+                }
                 position
             }
         };
-        let catalog = &mut self.relations[handle].catalog;
+        let catalog = match &mut self.relations[handle] {
+            Relation::Tree { catalog, .. } => catalog,
+            Relation::Dense(dense) => {
+                work.charge(atom.predicate().arity())?;
+                let position = dense
+                    .layout()
+                    .index_of(atom.values())
+                    .ok_or(Stop::InvalidProgram)?;
+                if dense.insert(position) {
+                    self.atoms += 1;
+                }
+                return Ok(());
+            }
+        };
         let old = catalog.retained_bytes() as u128;
         let other = self
             .bytes
@@ -377,9 +537,7 @@ impl Catalogs {
         let base = self
             .bytes
             .checked_add(held)
-            .and_then(|bytes| {
-                bytes.checked_add((size_of::<Relation>() - size_of::<Catalog>()) as u128)
-            })
+            .and_then(|bytes| bytes.checked_add(size_of::<Relation>() as u128))
             .ok_or(Stop::StorageLimit)?;
         let headers = base
             .checked_add(size_of::<Catalog>() as u128)
@@ -391,7 +549,7 @@ impl Catalogs {
         account_storage(work, other, catalog.construction())?;
         self.bytes = self
             .bytes
-            .checked_add((size_of::<Relation>() - size_of::<Catalog>()) as u128)
+            .checked_add(size_of::<Relation>() as u128)
             .and_then(|bytes| bytes.checked_add(names))
             .and_then(|bytes| bytes.checked_add(catalog.retained_bytes() as u128))
             .ok_or(Stop::StorageLimit)?;
@@ -401,11 +559,41 @@ impl Catalogs {
         work.charge(self.relations.len() - position)?;
         self.relations.insert(
             position,
-            Relation {
-                catalog,
+            Relation::Tree {
+                catalog: Box::new(catalog),
                 partition: Partition::default(),
             },
         );
+        Ok(())
+    }
+
+    /// Create a dense relation at its sorted position. Its variable storage
+    /// is the two word vectors; the layout is shared with the preparation
+    /// that chose it and counted there.
+    fn create_dense(
+        &mut self,
+        position: usize,
+        layout: &std::sync::Arc<Layout>,
+        held: u128,
+        work: &mut Work<'_>,
+    ) -> Result<(), Stop> {
+        let added = (size_of::<Relation>() as u128)
+            .checked_add(Dense::word_bytes(layout))
+            .ok_or(Stop::StorageLimit)?;
+        let total = self
+            .bytes
+            .checked_add(held)
+            .and_then(|bytes| bytes.checked_add(added))
+            .ok_or(Stop::StorageLimit)?;
+        storage::admit(work, total)?;
+        let dense = Dense::new(layout.clone())?;
+        storage::after_reservation(work, total)?;
+        self.bytes = self.bytes.checked_add(added).ok_or(Stop::StorageLimit)?;
+        self.relations
+            .try_reserve(1)
+            .map_err(|_| Stop::Allocation)?;
+        work.charge(self.relations.len() - position)?;
+        self.relations.insert(position, Relation::Dense(dense));
         Ok(())
     }
 
@@ -445,8 +633,15 @@ impl Catalogs {
         // Relations are in predicate order and each catalog knows its rows'
         // canonical order, so the model is their concatenation: no sort.
         for relation in &mut self.relations {
-            relation.partition.reset(work)?;
-            let catalog = &mut relation.catalog;
+            let (catalog, partition) = match relation {
+                Relation::Tree { catalog, partition } => (catalog, partition),
+                Relation::Dense(dense) => {
+                    work.tick()?;
+                    dense.take_atoms(&mut atoms, self.bytes, work)?;
+                    continue;
+                }
+            };
+            partition.reset(work)?;
             work.tick()?;
             let mut payload = 0_u128;
             for atom in catalog.atoms() {
@@ -592,14 +787,21 @@ mod tests {
             atom(Value::String("a".into())),
         ];
         for atom in &expected {
-            catalogs.insert(atom.clone(), 0, &mut work).unwrap();
+            catalogs
+                .insert(atom.clone(), 0, &Layouts::default(), &mut work)
+                .unwrap();
         }
         catalogs.prepare(&mut work).unwrap();
         expected.sort();
         // The first preparation is one run, in canonical order.
         let rows = catalogs.rows(&predicate);
         assert_eq!(rows.runs(), 1);
-        assert_eq!(rows.all(), expected.iter().collect::<Vec<_>>());
+        let all: Vec<&Atom> = rows
+            .all()
+            .into_iter()
+            .map(|row| row.atom().unwrap())
+            .collect();
+        assert_eq!(all, expected.iter().collect::<Vec<_>>());
         assert!(rows.get(0, expected.len()).is_none());
     }
 
@@ -611,12 +813,88 @@ mod tests {
         work.limits.max_derived_atoms = 1;
         let mut catalogs = Catalogs::default();
         catalogs
-            .insert(atom(Value::String("payload".into())), 0, &mut work)
+            .insert(
+                atom(Value::String("payload".into())),
+                0,
+                &Layouts::default(),
+                &mut work,
+            )
             .unwrap();
         catalogs.prepare(&mut work).unwrap();
-        let original = &catalogs.relation(&predicate).catalog.atoms()[0];
+        let original = &catalogs.relation(&predicate).catalog().atoms()[0];
         let row = catalogs.rows(&predicate).get(0, 0).unwrap();
-        assert!(std::ptr::eq(original, row));
+        assert!(std::ptr::eq(original, row.atom().unwrap()));
+    }
+
+    #[test]
+    fn a_laid_out_predicate_is_a_dense_relation_that_reads_back_in_order() {
+        use crate::oracle::bounds::Bound;
+        let predicate = Predicate::new("p", 1).unwrap();
+        let control = Control::default();
+        let mut work = Work::source(&control, u64::MAX);
+        work.limits.max_derived_atoms = 8;
+        let mut layouts = Layouts::default();
+        layouts.push(
+            Layout::new(
+                &predicate,
+                &[Bound::Finite(vec![
+                    Value::Number(1),
+                    Value::Number(2),
+                    Value::Number(3),
+                ])],
+                64,
+            )
+            .unwrap(),
+        );
+        let mut catalogs = Catalogs::default();
+        for value in [3, 1] {
+            catalogs
+                .insert(atom(Value::Number(value)), 0, &layouts, &mut work)
+                .unwrap();
+        }
+        // A repeated insertion is not a second atom.
+        catalogs
+            .insert(atom(Value::Number(3)), 0, &layouts, &mut work)
+            .unwrap();
+        assert!(catalogs.relation(&predicate).is_dense());
+        assert_eq!(catalogs.len(), 2);
+        catalogs.prepare_delta(&mut work).unwrap();
+        let key_pattern = zetesis_core::AtomPattern::new(
+            predicate.clone(),
+            vec![zetesis_core::Term::Variable(0)],
+        )
+        .unwrap();
+        let held = [Some(&Value::Number(3))];
+        let absent = [Some(&Value::Number(2))];
+        let outside = [Some(&Value::Number(9))];
+        for (assignment, expected) in [(&held, true), (&absent, false), (&outside, false)] {
+            let key = key_pattern.key(&assignment[..]).unwrap();
+            assert_eq!(catalogs.contains(&key, 0, &mut work).unwrap(), expected);
+        }
+        let positions: Vec<usize> = catalogs
+            .rows(&predicate)
+            .all()
+            .into_iter()
+            .map(|row| match row {
+                Row::Dense { index, .. } => index,
+                Row::Atom(_) => unreachable!(),
+            })
+            .collect();
+        assert_eq!(positions, vec![0, 2]);
+        assert!(catalogs.has_new(&predicate, &mut work).unwrap());
+        catalogs.advance(&mut work).unwrap();
+        assert!(!catalogs.has_new(&predicate, &mut work).unwrap());
+        let model = catalogs.take_model(&mut work).unwrap();
+        assert_eq!(
+            model,
+            Model::new([atom(Value::Number(1)), atom(Value::Number(3))])
+        );
+        // The emptied relation is reused as a dense one.
+        catalogs
+            .insert(atom(Value::Number(2)), 0, &layouts, &mut work)
+            .unwrap();
+        assert!(catalogs.relation(&predicate).is_dense());
+        assert_eq!(catalogs.len(), 1);
     }
 
     #[test]
@@ -631,8 +909,8 @@ mod tests {
         let receipt = catalog.insert(tuple, limits(&work, 0).unwrap()).unwrap();
         catalogs.relations.insert(
             0,
-            Relation {
-                catalog,
+            Relation::Tree {
+                catalog: Box::new(catalog),
                 partition: Partition::default(),
             },
         );
@@ -643,7 +921,7 @@ mod tests {
             catalogs
                 .relations
                 .iter()
-                .map(|relation| relation.catalog.atoms().len())
+                .map(|relation| relation.catalog().atoms().len())
                 .sum::<usize>()
         );
     }

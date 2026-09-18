@@ -1,6 +1,6 @@
 //! Compare ordered lookup with an independent linear prefix selection.
 
-use zetesis_core::{Predicate, Sign, Term, ValueLimits, ValueNode};
+use zetesis_core::{Atom, Predicate, Sign, Term, ValueLimits, ValueNode};
 
 use super::*;
 use crate::Control;

@@ -486,8 +486,11 @@ fn query(sink: &mut impl Write, observation: &crate::QueryExecutionObservation) 
         if let Some(preparation) = stats.preparation {
             writeln!(
                 sink,
-                "  query preparation: work={}; retained bytes={}; separate from candidate work; capacities are not RSS",
-                preparation.work, preparation.retained_bytes
+                "  query preparation: work={}; retained bytes={}; dense predicates={} of {}; separate from candidate work; capacities are not RSS",
+                preparation.work,
+                preparation.retained_bytes,
+                preparation.dense_predicates,
+                preparation.predicates
             )?;
         }
     } else {

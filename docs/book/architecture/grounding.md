@@ -493,6 +493,32 @@ or refused insertion preserves an existing prepared extent; a successful
 append invalidates it. Each round previously traversed the whole extent twice,
 which made a derivation of depth R cost O(n R).
 
+A predicate whose every argument is bounded is held as a dense relation
+instead of a catalog. Preparation infers an upper bound on each argument's
+values over the admitted templates: a constant in a head contributes itself, a
+head variable ranges within the intersection of the bounds of the positive
+body positions binding it, gates and filters bind nothing, and the least
+fixed point is finite because every value is a constant of the program. An
+argument wider than the ceiling is unknown, and unknown absorbs. Where every
+argument of a predicate is bounded and the product of the widths fits
+`PreparationLimits::max_dense_atoms`, the relation is a bit array over the
+mixed-radix index of the arguments' ranks, the first argument most
+significant, each argument's values kept in canonical order so that position
+order is canonical atom order. Membership is a bit test, insertion a bit set,
+and the rows matching a bound prefix are one contiguous range of positions,
+so a window is a scan of that range's words rather than two binary searches;
+no atom is allocated or compared by value until the model is assembled, and
+the model is read off the bits in order without sorting. The New rows of a
+round are a second bit array cleared when the cutoff advances, over the words
+the round touched, so an unchanged relation costs a round one unit whatever
+its size; Old is present and not new. The bounds are an upper domain of every
+derivable head, so a head outside them is an admitted-program invariant
+violation, not a missed row, and the closure over dense relations holds
+exactly the atoms the closure over catalogs would, step for step; the family
+tests check this atom for atom with dense relations enabled and disabled.
+Every other predicate keeps its catalog, and the preparation receipt reports
+how many predicates were laid out.
+
 Scalar closure first visits every template against empty derived truth, including
 facts, zero-positive rules and constraints under the frozen candidate. In each
 later round, a binding is visited at its first source occurrence containing a new
@@ -543,8 +569,10 @@ Fewer emitted bindings alone do not establish fewer probes or less total work;
 none of these counters establishes an elapsed-time gain.
 
 `zetesis_cpu::PreparedQueries` inspects one exact admitted `Program` once to
-bound the assignment, cursor and undo buffers used by its joins. Its preparation
-work and bytes have independent finite limits and a separate receipt. A
+bound the assignment, cursor and undo buffers used by its joins, to infer its
+argument bounds and to choose its dense layouts, which every candidate's
+closure shares and admits first. Its preparation work and bytes have
+independent finite limits and a separate receipt. A
 `ClosureWorkspace` retains the actual empty catalog metadata, predicate owners
 and reference-free cursor/undo and old/new ID capacities between candidates. Assignments borrow
 only the current immutable round; no candidate truth survives completion.

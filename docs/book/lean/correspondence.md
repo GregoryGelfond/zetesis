@@ -128,6 +128,20 @@ gate with a missing slot. Emitted source instances still own their values.
 membership. Rust comparison/hash equivalence, index construction and binding
 lifetimes remain implementation obligations.
 
+A dense relation stores a bounded predicate's rows as bits over the
+mixed-radix index of the arguments' ranks in their bounds. The obligations
+are that the inferred bounds are an upper domain of every derivable head,
+which holds because each head argument's bound is closed under every
+template's contribution to it; that the index is a bijection between the
+tuples inside the bounds and the bit positions, which is the mixed-radix
+arithmetic; and that position order is canonical atom order, which follows
+from each argument's values being kept in canonical order with the first
+argument most significant. Under them, the closure over dense relations is
+the closure over catalogs, step for step. These are checked by the argument
+bound, dense relation and family tests, not stated in Lean: the consequence
+step and constraint verdict of `DeltaRounds` are the same whichever store
+holds the rows.
+
 The objective consumers use `AtomLookup` over immutable model selections or an
 `AtomIndex` over the original catalog. The index owns permutations of row IDs,
 not additional atoms. Its required laws are exact full-key membership and

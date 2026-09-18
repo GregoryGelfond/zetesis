@@ -7,9 +7,9 @@
 
 use std::{cmp::Ordering, ops::Range};
 
-use zetesis_core::{Atom, AtomPattern, Value};
+use zetesis_core::{AtomPattern, Value};
 
-use super::relations::Rows;
+use super::relations::{Row, Rows};
 use super::{Work, resolve};
 use crate::Stop;
 
@@ -42,6 +42,18 @@ pub(super) fn matching_prefix(
     if bound == 0 {
         return Ok(0..length);
     }
+    if let Rows::Dense { relation, .. } = rows {
+        // The bound prefix names one block of positions.
+        work.charge(bound)?;
+        let prefix = pattern.terms()[..bound]
+            .iter()
+            .map(|term| resolve(term, assignment).ok_or(Stop::InvalidProgram));
+        let mut values = Vec::with_capacity(bound);
+        for value in prefix {
+            values.push(value?);
+        }
+        return Ok(relation.layout().prefix_range(values));
+    }
     let compare = |index, work: &mut Work<'_>| {
         compare_prefix(
             pattern,
@@ -58,7 +70,8 @@ pub(super) fn matching_prefix(
 
 /// The rows of a view matching one bound prefix, visited run by run. Each
 /// run's window is one binary search, taken when the cursor enters the run,
-/// so an unentered run costs nothing.
+/// so an unentered run costs nothing; a dense view's window is its block of
+/// positions, of which the set ones are the rows.
 #[derive(Clone, Debug)]
 pub(super) struct Window {
     run: usize,
@@ -88,7 +101,7 @@ impl Window {
         work: &mut Work<'_>,
     ) -> Result<Option<(usize, usize)>, Stop> {
         loop {
-            if let Some(position) = self.range.next() {
+            if let Some(position) = rows.next_row(&mut self.range, work)? {
                 return Ok(Some((self.run, position)));
             }
             self.run += 1;
@@ -122,7 +135,7 @@ fn boundary(
 
 fn compare_prefix(
     pattern: &AtomPattern,
-    row: &Atom,
+    row: Row<'_>,
     assignment: &[Option<&Value>],
     length: usize,
     work: &mut Work<'_>,
