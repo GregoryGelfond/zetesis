@@ -511,7 +511,17 @@ no atom is allocated or compared by value until the model is assembled, and
 the model is read off the bits in order without sorting. The New rows of a
 round are a second bit array cleared when the cutoff advances, over the words
 the round touched, so an unchanged relation costs a round one unit whatever
-its size; Old is present and not new. The bounds are an upper domain of every
+its size; Old is present and not new. A round records a derived head of a
+dense relation as a pending bit: the key is ranked once, the position is
+tested against the relation, and an absent position is marked in a row of
+words the closure workspace keeps for the layout, beside the catalogs the
+round's joins borrow. The marks are disjoint from the relation, so their
+number is the round's count of new dense atoms and the derived-atom limit is
+judged as each is marked. After the round the marked words are joined into
+the relation and into New, and cleared, so nothing of a round or a candidate
+remains in the pending rows; every dense relation is created when the closure
+starts, so that a round never changes the catalogs. `Statistics::dense_heads`
+counts the heads recorded this way. The bounds are an upper domain of every
 derivable head, so a head outside them is an admitted-program invariant
 violation, not a missed row, and the closure over dense relations holds
 exactly the atoms the closure over catalogs would, step for step; the family

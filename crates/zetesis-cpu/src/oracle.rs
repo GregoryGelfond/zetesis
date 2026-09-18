@@ -3,7 +3,8 @@
 use std::collections::BTreeSet;
 
 use zetesis_core::{
-    Atom, AtomPattern, Filter, Model, ModelAtoms, Program, Seed, SeedView, Template, Term, Value,
+    Atom, AtomKey, AtomPattern, Filter, Model, ModelAtoms, Program, Seed, SeedView, Template, Term,
+    Value,
 };
 
 use crate::{Control, Stop};
@@ -13,7 +14,9 @@ mod relations;
 mod prepared;
 pub mod bounds;
 pub use prepared::{ClosureWorkspace, PreparationLimits, PreparationStatistics, PreparedQueries};
-use relations::{Catalogs, Layouts, Relational, Relations, Row, RowSet, Rows, Slot};
+use relations::{
+    Catalogs, Dense, Layouts, PendingRows, Relational, Relations, Row, RowSet, Rows, Slot,
+};
 pub(crate) mod restrictions;
 pub mod source;
 pub(crate) mod worlds;
@@ -86,6 +89,10 @@ pub struct Statistics {
     pub tuple_probes: u64,
     /// Distinct atoms in the final least consequence closure.
     pub derived_atoms: usize,
+    /// Derived heads recorded as a bit of a dense relation's pending rows, so
+    /// that no atom was built for them before the model was assembled. The
+    /// closure's other heads were built as atoms when first derived.
+    pub dense_heads: u64,
 }
 
 /// Exact closure and rejection reasons after a fully covered completion round.
@@ -497,6 +504,7 @@ struct RoundWorkspace<'a> {
     dimensions: &'a prepared::Dimensions,
     rules: &'a prepared::Rules,
     layouts: &'a Layouts,
+    pending: &'a mut PendingRows,
     overhead: u128,
 }
 
@@ -513,9 +521,11 @@ fn least_closure_with(
         dimensions,
         rules,
         layouts,
+        pending,
         overhead,
     } = workspace;
     let mut constraint_violated = false;
+    closure.create_dense_relations(layouts, work)?;
     loop {
         work.tick()?;
         let incremental = schedule == Schedule::Delta && work.statistics.rounds != 0;
@@ -541,6 +551,10 @@ fn least_closure_with(
                 gates,
                 closure,
                 incremental.then_some(rules),
+                DenseHeads {
+                    layouts,
+                    pending: &mut *pending,
+                },
                 Frame {
                     assignment: &mut assignment,
                     buffers: &mut *buffers,
@@ -557,7 +571,7 @@ fn least_closure_with(
         constraint_violated |= triggered;
         closure.set_overhead(overhead, work)?;
         work.statistics.rounds += 1;
-        if delta.is_empty() {
+        if delta.is_empty() && pending.is_empty() {
             break;
         }
         if schedule == Schedule::Delta {
@@ -568,8 +582,9 @@ fn least_closure_with(
             pending_bytes = pending_bytes
                 .checked_sub(bytes)
                 .ok_or(Stop::InvalidProgram)?;
-            closure.insert(atom, pending_bytes, layouts, work)?;
+            closure.insert(atom, pending_bytes, work)?;
         }
+        closure.absorb(pending, layouts, work)?;
     }
     Ok(CompletedClosure {
         atoms: closure.take_model(work)?,
@@ -577,10 +592,58 @@ fn least_closure_with(
     })
 }
 
+/// What a round derived for the tree relations, and whether a constraint
+/// fired. Its dense heads are the marks left in the pending rows.
 struct RoundConsequences {
     atoms: BTreeSet<Atom>,
     bytes: u128,
     constraint_violated: bool,
+}
+
+/// Record a derived head unless the closure or the round already holds it: a
+/// head of a dense relation as a pending bit, any other as a pending atom. The
+/// atoms the closure holds, the round's pending atoms and its pending bits are
+/// disjoint, so their sum is the count the derived-atom limit bounds.
+fn record_head(
+    key: AtomKey<'_>,
+    dense_head: Option<(usize, &Dense)>,
+    closure: &Catalogs,
+    result: &mut RoundConsequences,
+    pending: &mut PendingRows,
+    work: &mut Work<'_>,
+) -> Result<(), Stop> {
+    let held = closure
+        .len()
+        .checked_add(result.atoms.len())
+        .and_then(|atoms| atoms.checked_add(pending.len()))
+        .ok_or(Stop::DerivedAtomLimit)?;
+    if let Some((slot, dense)) = dense_head {
+        // The bounds cover every derivable head: a key without a position
+        // violates the admitted program's invariant.
+        work.charge(key.predicate().arity())?;
+        let position = dense.position(&key).ok_or(Stop::InvalidProgram)?;
+        if !dense.contains(position) && pending.mark(slot, position) {
+            if held >= work.limits.max_derived_atoms {
+                return Err(Stop::DerivedAtomLimit);
+            }
+            work.statistics.dense_heads += 1;
+        }
+    } else if !closure.contains(&key, result.bytes, work)? && key.get(&result.atoms).is_none() {
+        if held >= work.limits.max_derived_atoms {
+            return Err(Stop::DerivedAtomLimit);
+        }
+        let (atom, bytes) = closure.pending(key, result.bytes, work)?;
+        result.atoms.insert(atom);
+        result.bytes = result.bytes.checked_add(bytes).ok_or(Stop::StorageLimit)?;
+    }
+    Ok(())
+}
+
+/// Where a round records a head of a dense relation: the layouts name the
+/// head's slot, and the pending rows take its position.
+struct DenseHeads<'a> {
+    layouts: &'a Layouts,
+    pending: &'a mut PendingRows,
 }
 
 // Complete the disjoint source family before publishing either its history or
@@ -593,9 +656,11 @@ fn visit_round<'source>(
     gates: Gates<'_>,
     closure: &'source Catalogs,
     incremental: Option<&prepared::Rules>,
+    dense_heads: DenseHeads<'_>,
     frame: Frame<'_, 'source>,
     work: &mut Work<'_>,
 ) -> Result<RoundConsequences, Stop> {
+    let DenseHeads { layouts, pending } = dense_heads;
     let Frame {
         assignment,
         buffers,
@@ -632,25 +697,23 @@ fn visit_round<'source>(
         if !gates.admits(template) {
             continue;
         }
+        // A laid-out head has its relation from the start of the closure, so
+        // both are resolved once for the template, not once per binding.
+        let dense_head = match template
+            .head()
+            .and_then(|head| layouts.slot(head.predicate()).zip(Some(head.predicate())))
+        {
+            Some((slot, predicate)) => {
+                Some((slot, closure.dense(predicate).ok_or(Stop::InvalidProgram)?))
+            }
+            None => None,
+        };
         let mut emit = |assignment: &[Option<&Value>], work: &mut Work<'_>| -> Result<(), Stop> {
             work.tick()?;
             if let Some(head) = template.head() {
                 work.charge(head.terms().len())?;
                 let key = head.key(assignment).map_err(|_| Stop::InvalidProgram)?;
-                if !closure.contains(&key, result.bytes, work)? && key.get(&result.atoms).is_none()
-                {
-                    if closure
-                        .len()
-                        .checked_add(result.atoms.len())
-                        .ok_or(Stop::DerivedAtomLimit)?
-                        >= work.limits.max_derived_atoms
-                    {
-                        return Err(Stop::DerivedAtomLimit);
-                    }
-                    let (atom, bytes) = closure.pending(key, result.bytes, work)?;
-                    result.atoms.insert(atom);
-                    result.bytes = result.bytes.checked_add(bytes).ok_or(Stop::StorageLimit)?;
-                }
+                record_head(key, dense_head, closure, &mut result, pending, work)?;
             } else {
                 result.constraint_violated = true;
             }

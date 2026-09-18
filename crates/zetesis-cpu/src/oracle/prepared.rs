@@ -7,7 +7,7 @@ use zetesis_core::{Predicate, Program, SeedView, Value};
 
 use super::{
     Check, Limits, Work, bounds,
-    relations::{Catalogs, Layout, Layouts, storage},
+    relations::{Catalogs, Layout, Layouts, PendingRows, storage},
 };
 use crate::{Control, Stop};
 
@@ -296,8 +296,14 @@ impl PreparedQueries {
             .and_then(|bytes| bytes.checked_add(retained))
             .ok_or(Stop::StorageLimit)?;
         workspace.buffers.prepare(&self.dimensions, base, work)?;
+        let mut live = base
+            .checked_add(workspace.buffers.bytes()?)
+            .and_then(|bytes| bytes.checked_add(workspace.pending.bytes()))
+            .ok_or(Stop::StorageLimit)?;
+        workspace.pending.prepare(&self.layouts, &mut live, work)?;
         let overhead = ClosureWorkspace::headers()
             .checked_add(workspace.buffers.bytes()?)
+            .and_then(|bytes| bytes.checked_add(workspace.pending.bytes()))
             .and_then(|bytes| bytes.checked_add(retained))
             .ok_or(Stop::StorageLimit)?;
         workspace.catalogs.set_overhead(overhead, work)?;
@@ -316,6 +322,7 @@ impl PreparedQueries {
                 dimensions: &self.dimensions,
                 rules: &self.rules,
                 layouts: &self.layouts,
+                pending: &mut workspace.pending,
                 overhead,
             },
             schedule,
@@ -335,6 +342,7 @@ pub struct ClosureWorkspace {
     program: Option<Program>,
     catalogs: Catalogs,
     buffers: Buffers,
+    pending: PendingRows,
     clean: bool,
 }
 
@@ -344,6 +352,7 @@ impl Default for ClosureWorkspace {
             program: None,
             catalogs: Catalogs::default(),
             buffers: Buffers::default(),
+            pending: PendingRows::default(),
             clean: true,
         }
     }
@@ -367,6 +376,7 @@ impl ClosureWorkspace {
             .owned_bytes()
             .checked_add(Self::headers())
             .and_then(|bytes| bytes.checked_add(buffers))
+            .and_then(|bytes| bytes.checked_add(self.pending.bytes()))
             .ok_or(Stop::StorageLimit)
     }
 }

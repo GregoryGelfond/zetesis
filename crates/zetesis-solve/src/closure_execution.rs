@@ -37,6 +37,9 @@ pub struct ClosureJoinStatistics {
     pub bindings: u64,
     /// Source rows offered to the whole-row matcher; bounded by `work`.
     pub tuple_probes: u64,
+    /// Derived heads recorded as a bit of a dense relation, for which no atom
+    /// was built before the model was assembled.
+    pub dense_heads: u64,
     /// Largest named closure envelope any completed check admitted or
     /// reserved; not an observed allocation peak and not RSS.
     pub peak_closure_bytes: usize,
@@ -74,6 +77,7 @@ impl ClosureExecutionStatistics {
                 catalog_work: add(joins.catalog_work, check.catalog_work)?,
                 bindings: add(joins.bindings, check.bindings)?,
                 tuple_probes: add(joins.tuple_probes, check.tuple_probes)?,
+                dense_heads: add(joins.dense_heads, check.dense_heads)?,
                 peak_closure_bytes: joins.peak_closure_bytes.max(check.peak_closure_bytes),
             }),
             ..self.clone()

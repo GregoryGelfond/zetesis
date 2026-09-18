@@ -135,6 +135,80 @@ fn dense_and_tree_closures_agree_atom_for_atom_on_every_family() {
     }
 }
 
+/// Seven edges and their 28 paths: 35 atoms, every predicate bounded.
+fn transitive_path() -> zetesis_themelios::Admitted {
+    zetesis_themelios::admit_extended(
+        format!(
+            "{}reach(X,Y) :- e(X,Y).\nreach(X,Z) :- reach(X,Y), e(Y,Z).\n",
+            edges("e", 1, 8)
+        ),
+        zetesis_themelios::AdmissionOptions::default(),
+        zetesis_themelios::ExpansionLimits::default(),
+    )
+    .unwrap()
+}
+
+fn stores() -> [PreparationLimits; 2] {
+    [
+        PreparationLimits::default(),
+        PreparationLimits {
+            max_dense_atoms: 0,
+            ..PreparationLimits::default()
+        },
+    ]
+}
+
+#[test]
+fn a_dense_head_is_recorded_as_a_bit_and_a_tree_head_as_an_atom() {
+    let control = Control::default();
+    let owner = transitive_path();
+    let program = owner.program();
+    let seed = Seed::new(program, []).unwrap();
+    let [dense, tree] = stores().map(|limits| {
+        let prepared = PreparedQueries::new(program, limits, &control).unwrap();
+        let check = prepared
+            .check_view(
+                seed.view(),
+                &mut ClosureWorkspace::default(),
+                Limits::default(),
+                &control,
+            )
+            .unwrap();
+        (
+            check.statistics().dense_heads,
+            check.closure().atoms().len(),
+        )
+    });
+    assert_eq!(dense, (35, 35));
+    assert_eq!(tree, (0, 35));
+}
+
+#[test]
+fn the_derived_atom_limit_stops_a_dense_closure_where_it_stops_a_tree() {
+    let control = Control::default();
+    let owner = transitive_path();
+    let program = owner.program();
+    let seed = Seed::new(program, []).unwrap();
+    for limits in stores() {
+        let prepared = PreparedQueries::new(program, limits, &control).unwrap();
+        let check = |max_derived_atoms| {
+            prepared
+                .check_view(
+                    seed.view(),
+                    &mut ClosureWorkspace::default(),
+                    Limits {
+                        max_derived_atoms,
+                        ..Limits::default()
+                    },
+                    &control,
+                )
+                .map(|check| check.closure().atoms().len())
+        };
+        assert_eq!(check(35), Ok(35));
+        assert_eq!(check(34), Err(zetesis_cpu::Stop::DerivedAtomLimit));
+    }
+}
+
 #[test]
 fn a_predicate_wider_than_the_ceiling_keeps_its_tree_beside_dense_ones() {
     // `n` has four tuples inside its bounds and `e` sixteen: a ceiling of

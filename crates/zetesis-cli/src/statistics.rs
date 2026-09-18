@@ -942,8 +942,12 @@ fn independent_closure(
     if let Some(joins) = closure.joins {
         writeln!(
             sink,
-            "  closure joins: catalog work={} (within work); bindings={}; tuple probes={}; peak named closure bytes={} (admitted or reserved capacity, not RSS)",
-            joins.catalog_work, joins.bindings, joins.tuple_probes, joins.peak_closure_bytes
+            "  closure joins: catalog work={} (within work); bindings={}; tuple probes={}; dense heads={} (recorded as bits); peak named closure bytes={} (admitted or reserved capacity, not RSS)",
+            joins.catalog_work,
+            joins.bindings,
+            joins.tuple_probes,
+            joins.dense_heads,
+            joins.peak_closure_bytes
         )?;
     }
     Ok(())

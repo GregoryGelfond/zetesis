@@ -18,7 +18,7 @@
 
 use std::{mem::size_of, ops::Range, sync::Arc};
 
-use zetesis_core::{Atom, Predicate, Value};
+use zetesis_core::{Atom, AtomKey, Predicate, Value};
 
 use super::super::bounds::Bound;
 use super::{RowSet, Work};
@@ -163,11 +163,17 @@ impl Layouts {
         self.0.push(Arc::new(layout));
     }
 
-    pub(in crate::oracle) fn get(&self, predicate: &Predicate) -> Option<&Arc<Layout>> {
+    /// The layout's position among the layouts, which indexes the pending
+    /// rows and is fixed for the preparation.
+    pub(in crate::oracle) fn slot(&self, predicate: &Predicate) -> Option<usize> {
         self.0
             .binary_search_by(|layout| layout.predicate().cmp(predicate))
             .ok()
-            .map(|slot| &self.0[slot])
+    }
+
+    /// The layouts in predicate order, which is slot order.
+    pub(in crate::oracle) fn iter(&self) -> impl Iterator<Item = &Arc<Layout>> {
+        self.0.iter()
     }
 
     pub(in crate::oracle) fn len(&self) -> usize {
@@ -253,27 +259,15 @@ impl Dense {
         position < self.layout.cells && self.word(set, position / 64) >> (position % 64) & 1 == 1
     }
 
-    pub(super) fn contains(&self, position: usize) -> bool {
+    pub(in crate::oracle) fn contains(&self, position: usize) -> bool {
         self.holds(RowSet::Current, position)
     }
 
-    /// Insert the tuple at a position; whether it was absent. The insertion
-    /// is new until the cutoff advances.
-    pub(super) fn insert(&mut self, position: usize) -> bool {
-        let (word, bit) = (position / 64, 1u64 << (position % 64));
-        if self.present[word] & bit != 0 {
-            return false;
-        }
-        self.present[word] |= bit;
-        self.new[word] |= bit;
-        self.count += 1;
-        self.new_count += 1;
-        self.new_words = if self.new_words.is_empty() {
-            word..word + 1
-        } else {
-            self.new_words.start.min(word)..self.new_words.end.max(word + 1)
-        };
-        true
+    /// The position of a complete key, ranking each value once; `None` when
+    /// the key is incomplete or a value lies outside its argument's bound.
+    pub(in crate::oracle) fn position(&self, key: &AtomKey<'_>) -> Option<usize> {
+        self.layout
+            .index_of((0..key.predicate().arity()).filter_map(|column| key.value(column)))
     }
 
     /// Move the cutoff to the present extent: nothing is new.
@@ -355,6 +349,160 @@ impl Dense {
     }
 }
 
+/// The heads one round derives for the dense relations, held as bits beside
+/// the catalogs the round's joins borrow.
+///
+/// A row of words per layout, in the layouts' order, sized once for the
+/// preparation. A marked position is a tuple absent from its relation when it
+/// was derived, so the marks of a round are disjoint from the relation and
+/// their number is the round's count of new dense atoms. Absorbing a row
+/// clears it: between rounds every row is zero and nothing of a candidate
+/// remains.
+#[derive(Default)]
+pub(in crate::oracle) struct PendingRows {
+    rows: Vec<PendingRow>,
+    marked: usize,
+}
+
+#[derive(Default)]
+struct PendingRow {
+    words: Vec<u64>,
+    marked: usize,
+    /// The words holding marks, so that absorbing visits only them.
+    touched: Range<usize>,
+}
+
+impl PendingRows {
+    /// Size a zero row for each layout, admitting the growth against `live`.
+    /// Rows already of their layout's size are kept.
+    pub(in crate::oracle) fn prepare(
+        &mut self,
+        layouts: &Layouts,
+        live: &mut u128,
+        work: &mut Work<'_>,
+    ) -> Result<(), Stop> {
+        if self.rows.len() < layouts.len() {
+            let headers = (layouts.len() * size_of::<PendingRow>()) as u128;
+            super::storage::admit(work, live.checked_add(headers).ok_or(Stop::StorageLimit)?)?;
+            let old = self.header_bytes();
+            self.rows
+                .try_reserve_exact(layouts.len() - self.rows.len())
+                .map_err(|_| Stop::Allocation)?;
+            self.rows.resize_with(layouts.len(), PendingRow::default);
+            *live = live
+                .checked_add(self.header_bytes() - old)
+                .ok_or(Stop::StorageLimit)?;
+            super::storage::after_reservation(work, *live)?;
+        }
+        for (row, layout) in self.rows.iter_mut().zip(layouts.iter()) {
+            work.tick()?;
+            let words = layout.words();
+            if row.words.len() == words {
+                continue;
+            }
+            let added = (words * size_of::<u64>()) as u128;
+            super::storage::admit(work, live.checked_add(added).ok_or(Stop::StorageLimit)?)?;
+            let old = row.bytes();
+            row.words
+                .try_reserve_exact(words.saturating_sub(row.words.len()))
+                .map_err(|_| Stop::Allocation)?;
+            charge(work, words)?;
+            row.words.clear();
+            row.words.resize(words, 0);
+            *live = live
+                .checked_sub(old)
+                .and_then(|bytes| bytes.checked_add(row.bytes()))
+                .ok_or(Stop::StorageLimit)?;
+            super::storage::after_reservation(work, *live)?;
+        }
+        Ok(())
+    }
+
+    fn header_bytes(&self) -> u128 {
+        self.rows.capacity() as u128 * size_of::<PendingRow>() as u128
+    }
+
+    /// Retained bytes: the row headers and their words.
+    pub(in crate::oracle) fn bytes(&self) -> u128 {
+        self.rows
+            .iter()
+            .map(PendingRow::bytes)
+            .fold(self.header_bytes(), u128::saturating_add)
+    }
+
+    /// Mark a position of the layout at `slot`; whether it was unmarked. The
+    /// caller has found the tuple absent from its relation.
+    pub(in crate::oracle) fn mark(&mut self, slot: usize, position: usize) -> bool {
+        let row = &mut self.rows[slot];
+        let (word, bit) = (position / 64, 1u64 << (position % 64));
+        if row.words[word] & bit != 0 {
+            return false;
+        }
+        row.words[word] |= bit;
+        row.marked += 1;
+        self.marked += 1;
+        row.touched = cover(&row.touched, word);
+        true
+    }
+
+    /// Positions marked since the rows were last absorbed.
+    pub(in crate::oracle) fn len(&self) -> usize {
+        self.marked
+    }
+
+    pub(in crate::oracle) fn is_empty(&self) -> bool {
+        self.marked == 0
+    }
+
+    /// Insert the marks of the row at `slot` into its relation as new rows
+    /// and clear them; the number inserted. One unit, and one per word that
+    /// held a mark or lies between two that did.
+    pub(super) fn absorb_into(
+        &mut self,
+        slot: usize,
+        dense: &mut Dense,
+        work: &mut Work<'_>,
+    ) -> Result<usize, Stop> {
+        let row = &mut self.rows[slot];
+        charge(work, 1 + row.touched.len())?;
+        if row.marked == 0 {
+            return Ok(0);
+        }
+        for word in row.touched.clone() {
+            let marks = std::mem::take(&mut row.words[word]);
+            debug_assert_eq!(dense.present[word] & marks, 0, "a mark is an absent tuple");
+            dense.present[word] |= marks;
+            dense.new[word] |= marks;
+        }
+        let absorbed = std::mem::take(&mut row.marked);
+        dense.count += absorbed;
+        dense.new_count += absorbed;
+        dense.new_words = if dense.new_words.is_empty() {
+            row.touched.clone()
+        } else {
+            dense.new_words.start.min(row.touched.start)..dense.new_words.end.max(row.touched.end)
+        };
+        row.touched = 0..0;
+        self.marked -= absorbed;
+        Ok(absorbed)
+    }
+}
+
+impl PendingRow {
+    fn bytes(&self) -> u128 {
+        self.words.capacity() as u128 * size_of::<u64>() as u128
+    }
+}
+
+/// The word range extended to hold `word`.
+fn cover(range: &Range<usize>, word: usize) -> Range<usize> {
+    if range.is_empty() {
+        word..word + 1
+    } else {
+        range.start.min(word)..range.end.max(word + 1)
+    }
+}
+
 /// Charge relation work, which counts as catalog work.
 fn charge(work: &mut Work<'_>, amount: usize) -> Result<(), Stop> {
     let before = work.statistics.work;
@@ -423,12 +571,12 @@ mod tests {
     fn rows_are_scanned_in_position_order_within_a_set() {
         let control = Control::default();
         let mut work = Work::source(&control, 1_000);
+        work.limits.max_closure_bytes = 1 << 20;
+        let (_, mut pending) = pending(&mut work);
         let mut dense = Dense::new(Arc::new(layout())).unwrap();
-        assert!(dense.insert(4));
-        assert!(!dense.insert(4));
+        insert(&mut dense, &mut pending, &[4], &mut work);
         dense.advance(&mut work).unwrap();
-        assert!(dense.insert(1));
-        assert!(dense.insert(5));
+        insert(&mut dense, &mut pending, &[1, 5], &mut work);
         let scan = |set: RowSet, work: &mut Work<'_>| {
             let mut range = 0..6;
             let mut found = Vec::new();
@@ -456,15 +604,95 @@ mod tests {
         );
     }
 
+    fn pending(work: &mut Work<'_>) -> (Layouts, PendingRows) {
+        let mut layouts = Layouts::default();
+        layouts.push(layout());
+        let mut pending = PendingRows::default();
+        let mut live = 0;
+        pending.prepare(&layouts, &mut live, work).unwrap();
+        assert_eq!(live, pending.bytes());
+        (layouts, pending)
+    }
+
+    /// Rows enter a dense relation only through the pending rows.
+    fn insert(
+        dense: &mut Dense,
+        pending: &mut PendingRows,
+        positions: &[usize],
+        work: &mut Work<'_>,
+    ) {
+        for &position in positions {
+            assert!(pending.mark(0, position));
+        }
+        assert_eq!(
+            pending.absorb_into(0, dense, work).unwrap(),
+            positions.len()
+        );
+    }
+
+    #[test]
+    fn a_position_is_marked_pending_once() {
+        let control = Control::default();
+        let mut work = Work::source(&control, 1_000);
+        work.limits.max_closure_bytes = 1 << 20;
+        let (_, mut pending) = pending(&mut work);
+        assert!(pending.is_empty());
+        assert!(pending.mark(0, 4));
+        assert!(!pending.mark(0, 4));
+        assert!(pending.mark(0, 1));
+        assert_eq!(pending.len(), 2);
+    }
+
+    #[test]
+    fn absorbing_pending_rows_inserts_exactly_the_marked_positions() {
+        let control = Control::default();
+        let mut work = Work::source(&control, 1_000);
+        work.limits.max_closure_bytes = 1 << 20;
+        let (layouts, mut pending) = pending(&mut work);
+        let mut dense = Dense::new(layouts.iter().next().unwrap().clone()).unwrap();
+        insert(&mut dense, &mut pending, &[4], &mut work);
+        dense.advance(&mut work).unwrap();
+        for position in [5, 1] {
+            pending.mark(0, position);
+        }
+        assert_eq!(pending.absorb_into(0, &mut dense, &mut work).unwrap(), 2);
+        assert_eq!(dense.len(), 3);
+        let scan = |set: RowSet, work: &mut Work<'_>| {
+            let mut range = 0..6;
+            let mut found = Vec::new();
+            while let Some(position) = dense.next_row(set, &mut range, work).unwrap() {
+                found.push(position);
+            }
+            found
+        };
+        assert_eq!(scan(RowSet::Current, &mut work), vec![1, 4, 5]);
+        assert_eq!(scan(RowSet::New, &mut work), vec![1, 5]);
+        assert_eq!(scan(RowSet::Old, &mut work), vec![4]);
+    }
+
+    #[test]
+    fn absorbed_pending_rows_are_empty_for_the_next_round() {
+        let control = Control::default();
+        let mut work = Work::source(&control, 1_000);
+        work.limits.max_closure_bytes = 1 << 20;
+        let (layouts, mut pending) = pending(&mut work);
+        let mut dense = Dense::new(layouts.iter().next().unwrap().clone()).unwrap();
+        pending.mark(0, 3);
+        pending.absorb_into(0, &mut dense, &mut work).unwrap();
+        assert!(pending.is_empty());
+        assert_eq!(pending.absorb_into(0, &mut dense, &mut work).unwrap(), 0);
+        // The cleared bit can be marked again: nothing of the round remains.
+        assert!(pending.mark(0, 3));
+    }
+
     #[test]
     fn taken_atoms_are_in_canonical_order_and_empty_the_relation() {
         let control = Control::default();
         let mut work = Work::source(&control, 10_000);
         work.limits.max_closure_bytes = 1 << 20;
+        let (_, mut pending) = pending(&mut work);
         let mut dense = Dense::new(Arc::new(layout())).unwrap();
-        for position in [5, 0, 3] {
-            dense.insert(position);
-        }
+        insert(&mut dense, &mut pending, &[5, 0, 3], &mut work);
         let mut atoms = Vec::new();
         dense.take_atoms(&mut atoms, 0, &mut work).unwrap();
         let values: Vec<Vec<i32>> = atoms

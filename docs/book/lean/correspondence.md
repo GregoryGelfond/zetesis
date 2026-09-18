@@ -120,7 +120,8 @@ coverage or a Lean-to-Rust refinement.
 Gate and consequence membership uses a checked `AtomKey` over that borrowed
 assignment. The key denotes the same signed predicate and complete typed tuple
 as materialization. Gate lookup and duplicate-head lookup create no owned atom;
-only a new consequence is copied into the pending delta. Key construction charges
+a new consequence of a catalog is copied into the pending delta, and one of a
+dense relation is a pending bit. Key construction charges
 the argument span separately from catalog lookup receipts, including a deferred
 gate with a missing slot. Emitted source instances still own their values.
 `AtomKeys.tuple_agrees` equates views agreeing on all requested reads;
@@ -136,7 +137,11 @@ template's contribution to it; that the index is a bijection between the
 tuples inside the bounds and the bit positions, which is the mixed-radix
 arithmetic; and that position order is canonical atom order, which follows
 from each argument's values being kept in canonical order with the first
-argument most significant. Under them, the closure over dense relations is
+argument most significant. A round's dense heads are marked as pending bits
+and joined into the relation after the round; because the index is a
+bijection and only positions absent from the relation are marked, the marks
+are exactly the new atoms the round would have built, one bit for each.
+Under them, the closure over dense relations is
 the closure over catalogs, step for step. These are checked by the argument
 bound, dense relation and family tests, not stated in Lean: the consequence
 step and constraint verdict of `DeltaRounds` are the same whichever store

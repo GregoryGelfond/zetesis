@@ -10,8 +10,7 @@ mod partition;
 use partition::Partition;
 
 mod dense;
-use dense::Dense;
-pub(in crate::oracle) use dense::{Layout, Layouts};
+pub(in crate::oracle) use dense::{Dense, Layout, Layouts, PendingRows};
 
 pub(super) mod storage;
 pub(super) use storage::atom_bytes;
@@ -415,14 +414,8 @@ impl Catalogs {
             Relation::Tree { catalog, .. } => catalog,
             Relation::Dense(dense) => {
                 work.charge(key.predicate().arity())?;
-                let values = (0..key.predicate().arity()).map(|column| key.value(column));
-                let mut complete = Vec::with_capacity(key.predicate().arity());
-                for value in values {
-                    complete.push(value.ok_or(Stop::InvalidProgram)?);
-                }
                 return Ok(dense
-                    .layout()
-                    .index_of(complete)
+                    .position(key)
                     .is_some_and(|position| dense.contains(position)));
             }
         };
@@ -449,15 +442,13 @@ impl Catalogs {
         )
     }
 
-    /// Insert a derived atom, creating its relation on first use: dense when
-    /// the layouts have one for its predicate, a tree otherwise. An atom
-    /// outside its dense layout's bounds violates the admitted program's
-    /// invariant that the bounds cover every derivable head.
+    /// Insert a derived atom of a tree relation, creating the relation on
+    /// first use. A dense relation takes its rows from the round's pending
+    /// rows, never as atoms, so an atom of one is an invariant violation.
     pub(super) fn insert(
         &mut self,
         atom: Atom,
         pending: u128,
-        layouts: &Layouts,
         work: &mut Work<'_>,
     ) -> Result<(), Stop> {
         work.control.poll()?;
@@ -474,26 +465,12 @@ impl Catalogs {
         let handle = match self.find(atom.predicate()) {
             Ok(handle) => handle,
             Err(position) => {
-                match layouts.get(atom.predicate()) {
-                    Some(layout) => self.create_dense(position, layout, held, work)?,
-                    None => self.create(position, atom.predicate(), held, work)?,
-                }
+                self.create(position, atom.predicate(), held, work)?;
                 position
             }
         };
-        let catalog = match &mut self.relations[handle] {
-            Relation::Tree { catalog, .. } => catalog,
-            Relation::Dense(dense) => {
-                work.charge(atom.predicate().arity())?;
-                let position = dense
-                    .layout()
-                    .index_of(atom.values())
-                    .ok_or(Stop::InvalidProgram)?;
-                if dense.insert(position) {
-                    self.atoms += 1;
-                }
-                return Ok(());
-            }
+        let Relation::Tree { catalog, .. } = &mut self.relations[handle] else {
+            return Err(Stop::InvalidProgram);
         };
         let old = catalog.retained_bytes() as u128;
         let other = self
@@ -564,6 +541,56 @@ impl Catalogs {
                 partition: Partition::default(),
             },
         );
+        Ok(())
+    }
+
+    /// Create the dense relation of every layout that lacks one, so that a
+    /// round can test and mark a dense head without changing the catalogs.
+    /// A reused workspace already holds them and pays one search each.
+    pub(super) fn create_dense_relations(
+        &mut self,
+        layouts: &Layouts,
+        work: &mut Work<'_>,
+    ) -> Result<(), Stop> {
+        for layout in layouts.iter() {
+            work.tick()?;
+            if let Err(position) = self.find(layout.predicate()) {
+                self.create_dense(position, layout, 0, work)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// The dense relation of a predicate, if it has one.
+    pub(super) fn dense(&self, predicate: &Predicate) -> Option<&Dense> {
+        match &self.relations[self.find(predicate).ok()?] {
+            Relation::Dense(dense) => Some(dense),
+            Relation::Tree { .. } => None,
+        }
+    }
+
+    /// Insert a round's pending rows into their relations as new rows,
+    /// leaving the pending rows empty. Called where the round's atoms are
+    /// inserted: after the cutoff advanced, with no borrowed view live.
+    pub(super) fn absorb(
+        &mut self,
+        pending: &mut PendingRows,
+        layouts: &Layouts,
+        work: &mut Work<'_>,
+    ) -> Result<(), Stop> {
+        if pending.is_empty() {
+            return Ok(());
+        }
+        for (slot, layout) in layouts.iter().enumerate() {
+            work.control.poll()?;
+            let handle = self
+                .find(layout.predicate())
+                .map_err(|_| Stop::InvalidProgram)?;
+            let Relation::Dense(dense) = &mut self.relations[handle] else {
+                return Err(Stop::InvalidProgram);
+            };
+            self.atoms += pending.absorb_into(slot, dense, work)?;
+        }
         Ok(())
     }
 
@@ -787,9 +814,7 @@ mod tests {
             atom(Value::String("a".into())),
         ];
         for atom in &expected {
-            catalogs
-                .insert(atom.clone(), 0, &Layouts::default(), &mut work)
-                .unwrap();
+            catalogs.insert(atom.clone(), 0, &mut work).unwrap();
         }
         catalogs.prepare(&mut work).unwrap();
         expected.sort();
@@ -813,12 +838,7 @@ mod tests {
         work.limits.max_derived_atoms = 1;
         let mut catalogs = Catalogs::default();
         catalogs
-            .insert(
-                atom(Value::String("payload".into())),
-                0,
-                &Layouts::default(),
-                &mut work,
-            )
+            .insert(atom(Value::String("payload".into())), 0, &mut work)
             .unwrap();
         catalogs.prepare(&mut work).unwrap();
         let original = &catalogs.relation(&predicate).catalog().atoms()[0];
@@ -846,17 +866,25 @@ mod tests {
             )
             .unwrap(),
         );
+        work.limits.max_closure_bytes = 1 << 20;
         let mut catalogs = Catalogs::default();
-        for value in [3, 1] {
-            catalogs
-                .insert(atom(Value::Number(value)), 0, &layouts, &mut work)
-                .unwrap();
-        }
-        // A repeated insertion is not a second atom.
         catalogs
-            .insert(atom(Value::Number(3)), 0, &layouts, &mut work)
+            .create_dense_relations(&layouts, &mut work)
             .unwrap();
+        let mut pending = PendingRows::default();
+        pending.prepare(&layouts, &mut 0, &mut work).unwrap();
+        // Positions 2 and 0 are the values 3 and 1; a repeated mark is not a
+        // second atom.
+        assert!(pending.mark(0, 2));
+        assert!(pending.mark(0, 0));
+        assert!(!pending.mark(0, 2));
+        catalogs.absorb(&mut pending, &layouts, &mut work).unwrap();
         assert!(catalogs.relation(&predicate).is_dense());
+        // A dense relation takes no atom.
+        assert_eq!(
+            catalogs.insert(atom(Value::Number(2)), 0, &mut work),
+            Err(Stop::InvalidProgram)
+        );
         assert_eq!(catalogs.len(), 2);
         catalogs.prepare_delta(&mut work).unwrap();
         let key_pattern = zetesis_core::AtomPattern::new(
@@ -890,9 +918,8 @@ mod tests {
             Model::new([atom(Value::Number(1)), atom(Value::Number(3))])
         );
         // The emptied relation is reused as a dense one.
-        catalogs
-            .insert(atom(Value::Number(2)), 0, &layouts, &mut work)
-            .unwrap();
+        assert!(pending.mark(0, 1));
+        catalogs.absorb(&mut pending, &layouts, &mut work).unwrap();
         assert!(catalogs.relation(&predicate).is_dense());
         assert_eq!(catalogs.len(), 1);
     }

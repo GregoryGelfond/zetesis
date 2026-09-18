@@ -123,7 +123,8 @@ with an atom table from another admission.
 `PreparedQueries` shares one exact native `Program` and retains its join
 dimensions, argument bounds and dense layouts under independent preparation
 limits. A `ClosureWorkspace` reuses
-empty catalog metadata and reference-free join buffers across scalar seed
+empty catalog metadata, reference-free join buffers and the zeroed pending
+rows of the dense layouts across scalar seed
 checks; returned closures own their atoms independently. It retains no completed
 candidate truth and retires old capacity when used with a different program
 instance. The [checked preparation example](parallel.md#reuse-preparation-across-scalar-checks)

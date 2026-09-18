@@ -1,7 +1,7 @@
 //! Stable insertion IDs partition canonical rows without another tuple owner.
 
 use super::*;
-use crate::oracle::relations::{Catalogs, Layouts, Relational};
+use crate::oracle::relations::{Catalogs, Relational};
 use crate::{
     Control,
     oracle::{Limits, Statistics},
@@ -21,16 +21,12 @@ fn work(control: &Control) -> Work<'_> {
 fn mixed(work: &mut Work<'_>) -> Catalogs {
     let mut catalogs = Catalogs::default();
     for value in [4, 2] {
-        catalogs
-            .insert(atom(value), 0, &Layouts::default(), work)
-            .unwrap();
+        catalogs.insert(atom(value), 0, work).unwrap();
     }
     catalogs.prepare_delta(work).unwrap();
     catalogs.advance(work).unwrap();
     for value in [3, 1] {
-        catalogs
-            .insert(atom(value), 0, &Layouts::default(), work)
-            .unwrap();
+        catalogs.insert(atom(value), 0, work).unwrap();
     }
     // The partition control starts with a real published, canonically ordered
     // extent. It measures only the additional derived old/new ID preparation.
@@ -107,17 +103,13 @@ fn a_refused_merge_keeps_the_old_view_and_publishes_no_partial_run() {
     let mut work = work(&control);
     let mut catalogs = Catalogs::default();
     for value in [4, 2] {
-        catalogs
-            .insert(atom(value), 0, &Layouts::default(), &mut work)
-            .unwrap();
+        catalogs.insert(atom(value), 0, &mut work).unwrap();
     }
     catalogs.prepare_delta(&mut work).unwrap();
     catalogs.advance(&mut work).unwrap();
     let retained = catalogs.owned_bytes();
     for value in [3, 1] {
-        catalogs
-            .insert(atom(value), 0, &Layouts::default(), &mut work)
-            .unwrap();
+        catalogs.insert(atom(value), 0, &mut work).unwrap();
     }
     let appended = catalogs.owned_bytes();
     work.limits.max_closure_bytes = usize::try_from(appended).unwrap();
@@ -175,9 +167,7 @@ fn extraction_retires_delta_identity_but_retains_empty_capacity() {
     let model = catalogs.take_model(&mut work).unwrap();
     assert_eq!(model, Model::new([1, 2, 3, 4].map(atom)));
     assert_eq!(catalogs.relation(&predicate).partition().old_end, 0);
-    catalogs
-        .insert(atom(9), 0, &Layouts::default(), &mut work)
-        .unwrap();
+    catalogs.insert(atom(9), 0, &mut work).unwrap();
     catalogs.prepare_delta(&mut work).unwrap();
     assert_rows(&catalogs, RowSet::Old, &[], &[]);
     assert_rows(&catalogs, RowSet::New, &[0], &[9]);
@@ -216,7 +206,6 @@ fn signed_typed_rows_keep_their_own_partition() {
                 .insert(
                     Atom::new(predicate.clone(), vec![value.clone()]).unwrap(),
                     0,
-                    &Layouts::default(),
                     &mut work,
                 )
                 .unwrap();
@@ -230,7 +219,6 @@ fn signed_typed_rows_keep_their_own_partition() {
                 .insert(
                     Atom::new(predicate.clone(), vec![value.clone()]).unwrap(),
                     0,
-                    &Layouts::default(),
                     &mut work,
                 )
                 .unwrap();
