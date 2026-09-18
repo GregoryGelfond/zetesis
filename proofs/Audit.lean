@@ -509,6 +509,14 @@ import Zetesis
 #print axioms Zetesis.FiniteValues.original_literal_identity
 #print axioms Zetesis.FiniteValues.frozen_literal_identity
 #print axioms Zetesis.FiniteValues.failed_step
+#print axioms Zetesis.FormulaBounds.read_sound
+#print axioms Zetesis.FormulaBounds.sure_sound
+#print axioms Zetesis.FormulaBounds.never_sound
+#print axioms Zetesis.FormulaBounds.never_root_refutes
+#print axioms Zetesis.FormulaBounds.sure_body_forces
+#print axioms Zetesis.FormulaBounds.sure_body_refutes
+#print axioms Zetesis.FormulaBounds.blocked_no_support
+#print axioms Zetesis.FormulaBounds.unsupported_cut
 #print axioms Zetesis.FormulaRegions.classical_consequence_forces
 #print axioms Zetesis.FormulaRegions.classical_consequence_cuts
 #print axioms Zetesis.FormulaRegions.no_model_refutes

@@ -1,0 +1,318 @@
+//! A region of candidates over a formula theory is narrowed by the theory's
+//! readings: an impossible root refutes it, a sure body forces its head or
+//! refutes a constraint, a unit root decides its one open atom, and an atom
+//! no producer can support is cut. Every stable model of the region survives.
+
+use std::collections::BTreeSet;
+
+use zetesis_cpu::Control;
+use zetesis_ferraris::{
+    AdmissionLimits, Interpretation, Limits, Narrowing, Node, Region, RegionLimits, Theory, check,
+    narrow, producers,
+};
+
+fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
+    Theory::new(atoms, nodes, roots, AdmissionLimits::default()).unwrap()
+}
+
+/// The stable models of a small theory, as masks over its atoms.
+fn stable_models(theory: &Theory) -> BTreeSet<usize> {
+    let atoms = theory.atom_count();
+    assert!(atoms <= 8);
+    (0..1usize << atoms)
+        .filter(|mask| {
+            let candidate =
+                Interpretation::new(theory, (0..atoms).filter(|a| mask & (1 << a) != 0)).unwrap();
+            check(theory, &candidate, Limits::default(), &Control::default())
+                .unwrap()
+                .accepted()
+        })
+        .collect()
+}
+
+fn region(theory: &Theory, held: &[usize], cut: &[usize]) -> Region {
+    let mut region = Region::undecided(theory);
+    for &atom in held {
+        assert!(region.hold(atom));
+    }
+    for &atom in cut {
+        assert!(region.cut(atom));
+    }
+    region
+}
+
+fn narrowed(theory: &Theory, region: &mut Region) -> Narrowing {
+    let extracted = producers(theory, RegionLimits::default(), &Control::default()).unwrap();
+    narrow(
+        theory,
+        extracted.as_ref(),
+        region,
+        RegionLimits::default(),
+        &Control::default(),
+    )
+    .unwrap()
+    .0
+}
+
+/// Every stable model inside a region lies inside its narrowing, and a
+/// refuted region holds none: checked over every region of a small theory.
+fn narrowing_keeps_every_stable_model(theory: &Theory) {
+    let atoms = theory.atom_count();
+    let models = stable_models(theory);
+    let regions = 3usize.pow(u32::try_from(atoms).unwrap());
+    for code in 0..regions {
+        let mut region = Region::undecided(theory);
+        let mut digits = code;
+        for atom in 0..atoms {
+            match digits % 3 {
+                1 => assert!(region.hold(atom)),
+                2 => assert!(region.cut(atom)),
+                _ => {}
+            }
+            digits /= 3;
+        }
+        let inside: Vec<usize> = models
+            .iter()
+            .copied()
+            .filter(|mask| {
+                (0..atoms).all(|a| {
+                    let present = mask & (1 << a) != 0;
+                    (present || !region.is_held(a)) && (!present || !region.is_cut(a))
+                })
+            })
+            .collect();
+        match narrowed(theory, &mut region) {
+            Narrowing::Refuted => {
+                assert!(inside.is_empty(), "region {code} refuted with {inside:?}");
+            }
+            Narrowing::Fixed { .. } => {
+                for mask in inside {
+                    for a in 0..atoms {
+                        let present = mask & (1 << a) != 0;
+                        assert!(
+                            present || !region.is_held(a),
+                            "region {code} holds {a} against {mask:b}"
+                        );
+                        assert!(
+                            !present || !region.is_cut(a),
+                            "region {code} cuts {a} against {mask:b}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// d. p | q :- d.  r :- not p.  :- q, r.
+fn disjunctive() -> Theory {
+    let (d, p, q, r) = (0, 1, 2, 3);
+    let nodes = vec![
+        Node::Atom(d),       // 0
+        Node::Atom(p),       // 1
+        Node::Atom(q),       // 2
+        Node::Or(1, 2),      // 3: p | q
+        Node::Implies(0, 3), // 4: d -> p | q
+        Node::False,         // 5
+        Node::Implies(1, 5), // 6: not p
+        Node::Atom(r),       // 7
+        Node::Implies(6, 7), // 8: not p -> r
+        Node::And(2, 7),     // 9: q & r
+        Node::Implies(9, 5), // 10: :- q, r
+    ];
+    theory(4, nodes, vec![0, 4, 8, 10])
+}
+
+#[test]
+fn an_impossible_root_refutes_the_region() {
+    let t = theory(1, vec![Node::Atom(0)], vec![0]);
+    let mut cut = region(&t, &[], &[0]);
+    assert!(matches!(narrowed(&t, &mut cut), Narrowing::Refuted));
+    let mut open = region(&t, &[], &[]);
+    assert!(matches!(
+        narrowed(&t, &mut open),
+        Narrowing::Fixed { changed: true }
+    ));
+    assert!(open.is_held(0), "the fact is forced");
+}
+
+#[test]
+fn a_sure_body_forces_its_head_and_refutes_a_constraint() {
+    // d. p :- d. :- p, s.  With s held, p is forced and the constraint fires.
+    let nodes = vec![
+        Node::Atom(0),       // d
+        Node::Atom(1),       // p
+        Node::Implies(0, 1), // d -> p
+        Node::Atom(2),       // s
+        Node::And(1, 3),     // p & s
+        Node::False,
+        Node::Implies(4, 5), // :- p, s
+    ];
+    let t = theory(3, nodes, vec![0, 2, 6]);
+    let mut open = region(&t, &[], &[]);
+    assert!(matches!(
+        narrowed(&t, &mut open),
+        Narrowing::Fixed { changed: true }
+    ));
+    assert!(open.is_held(0) && open.is_held(1));
+    assert!(open.is_cut(2), "the constraint's one open atom is cut");
+    let mut held = region(&t, &[2], &[]);
+    assert!(matches!(narrowed(&t, &mut held), Narrowing::Refuted));
+}
+
+#[test]
+fn a_unit_root_decides_its_one_open_atom() {
+    // a | b with a cut forces b; a held decides nothing more about b by the
+    // readings alone, so the support rule, which would cut b, is withheld.
+    let nodes = vec![Node::Atom(0), Node::Atom(1), Node::Or(0, 1)];
+    let t = theory(2, nodes, vec![2]);
+    let by_readings = |region: &mut Region| {
+        narrow(
+            &t,
+            None,
+            region,
+            RegionLimits::default(),
+            &Control::default(),
+        )
+        .unwrap()
+        .0
+    };
+    let mut cut = region(&t, &[], &[0]);
+    assert!(matches!(
+        by_readings(&mut cut),
+        Narrowing::Fixed { changed: true }
+    ));
+    assert!(cut.is_held(1));
+    let mut held = region(&t, &[0], &[]);
+    assert!(matches!(
+        by_readings(&mut held),
+        Narrowing::Fixed { changed: false }
+    ));
+    assert!(held.is_open(1));
+}
+
+#[test]
+fn an_atom_no_producer_can_support_is_cut() {
+    let t = disjunctive();
+    // p held: q's only producer has another head held, so q is cut, and
+    // then r is forced by nothing, since not p is impossible: r is cut too.
+    let mut held = region(&t, &[1], &[]);
+    assert!(matches!(
+        narrowed(&t, &mut held),
+        Narrowing::Fixed { changed: true }
+    ));
+    assert!(held.is_cut(2), "q is unsupported");
+    assert!(held.is_cut(3), "r's only producer has an impossible body");
+    // p cut: q is forced by the unit disjunction, r by its sure body, and
+    // the constraint :- q, r then refutes the region.
+    let mut cut = region(&t, &[], &[1]);
+    assert!(matches!(narrowed(&t, &mut cut), Narrowing::Refuted));
+}
+
+#[test]
+fn a_choice_is_supported_by_its_body_alone() {
+    // b.  {a} :- b, written a | not a <- b.
+    let nodes = vec![
+        Node::Atom(0), // b
+        Node::Atom(1), // a
+        Node::False,
+        Node::Implies(1, 2), // not a
+        Node::Or(1, 3),      // a | not a
+        Node::Implies(0, 4), // b -> (a | not a)
+    ];
+    let t = theory(2, nodes, vec![0, 5]);
+    let mut open = region(&t, &[], &[]);
+    narrowed(&t, &mut open);
+    assert!(open.is_held(0) && open.is_open(1));
+    let mut cut = region(&t, &[], &[0]);
+    assert!(
+        matches!(narrowed(&t, &mut cut), Narrowing::Refuted),
+        "b is a fact"
+    );
+}
+
+#[test]
+fn outside_the_producer_fragment_the_readings_still_narrow() {
+    // p | (q & r): no producer shape, so no support cut; with q cut the
+    // root is a unit on p and forces it.
+    let nodes = vec![
+        Node::Atom(0),
+        Node::Atom(1),
+        Node::Atom(2),
+        Node::And(1, 2),
+        Node::Or(0, 3),
+    ];
+    let t = theory(3, nodes, vec![4]);
+    assert!(
+        producers(&t, RegionLimits::default(), &Control::default())
+            .unwrap()
+            .is_none()
+    );
+    let mut cut = region(&t, &[], &[1]);
+    narrowed(&t, &mut cut);
+    assert!(cut.is_held(0));
+}
+
+#[test]
+fn narrowing_keeps_every_stable_model_of_every_region() {
+    narrowing_keeps_every_stable_model(&disjunctive());
+    // p :- not q. q :- not p. r :- p, not s. s :- t.
+    let nodes = vec![
+        Node::Atom(0),        // p
+        Node::Atom(1),        // q
+        Node::False,          // 2
+        Node::Implies(1, 2),  // 3: not q
+        Node::Implies(3, 0),  // 4: not q -> p
+        Node::Implies(0, 2),  // 5: not p
+        Node::Implies(5, 1),  // 6: not p -> q
+        Node::Atom(2),        // 7: r
+        Node::Atom(3),        // 8: s
+        Node::Implies(8, 2),  // 9: not s
+        Node::And(0, 9),      // 10: p & not s
+        Node::Implies(10, 7), // 11: -> r
+        Node::Atom(4),        // 12: t
+        Node::Implies(12, 8), // 13: t -> s
+    ];
+    narrowing_keeps_every_stable_model(&theory(5, nodes, vec![4, 6, 11, 13]));
+}
+
+#[test]
+fn the_leaves_of_the_region_tree_are_the_stable_models() {
+    fn leaves(theory: &Theory, mut region: Region, found: &mut Vec<usize>) {
+        if matches!(narrowed(theory, &mut region), Narrowing::Refuted) {
+            return;
+        }
+        match region.highest_open() {
+            None => {
+                let mask: usize = (0..theory.atom_count())
+                    .filter(|&a| region.is_held(a))
+                    .map(|a| 1 << a)
+                    .sum();
+                let candidate = Interpretation::new(
+                    theory,
+                    (0..theory.atom_count()).filter(|a| mask & (1 << a) != 0),
+                )
+                .unwrap();
+                if check(theory, &candidate, Limits::default(), &Control::default())
+                    .unwrap()
+                    .accepted()
+                {
+                    found.push(mask);
+                }
+            }
+            Some(atom) => {
+                let (cut, held) = region.split(atom);
+                leaves(theory, cut, found);
+                leaves(theory, held, found);
+            }
+        }
+    }
+    let t = disjunctive();
+    let mut found = Vec::new();
+    leaves(&t, Region::undecided(&t), &mut found);
+    assert_eq!(
+        found.iter().copied().collect::<BTreeSet<_>>(),
+        stable_models(&t)
+    );
+    assert_eq!(found.len(), stable_models(&t).len(), "each answer once");
+}

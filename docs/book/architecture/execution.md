@@ -82,6 +82,21 @@ clauses, and its branch order and phase are heuristics that change which
 candidate is proposed next, never whether one is accepted. No second
 traversal is built beside it.
 
+The narrowing itself need not be propagation over clauses. Under a region
+every node of the formula DAG has two readings, decided by one pass over
+the DAG: sure, when every candidate of the region satisfies it, and
+impossible, when none does; a held atom is sure, a cut atom impossible, and
+the connectives combine the readings as the closure route's definite and
+possible gates combine a rule's. An impossible root refutes the region; a
+root with one open atom that can still move it decides that atom, which
+covers a rule with a sure body and a constraint with one open premise; and
+an atom none of whose producers can support it, each having an impossible
+body or another head held, is cut. The `zetesis-ferraris` crate narrows a
+region by these rules to a fixed point over the theory's own DAG, without a
+clause form (`FormulaBounds.read_sound`, `never_root_refutes`,
+`sure_body_forces`, `unsupported_cut`). The readings are arrays over the
+DAG, one pass each, so the narrowing has the closure route's shape.
+
 Both paths can restrict candidate generation by necessary conditions. A normal
 source constraint supplies a forbidden positive gate conjunction when its
 remaining antecedents are witnessed by actual unconditional facts. The binary

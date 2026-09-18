@@ -525,6 +525,14 @@
 'Zetesis.FiniteValues.original_literal_identity' does not depend on any axioms
 'Zetesis.FiniteValues.frozen_literal_identity' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.FiniteValues.failed_step' depends on axioms: [propext]
+'Zetesis.FormulaBounds.read_sound' does not depend on any axioms
+'Zetesis.FormulaBounds.sure_sound' does not depend on any axioms
+'Zetesis.FormulaBounds.never_sound' does not depend on any axioms
+'Zetesis.FormulaBounds.never_root_refutes' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.FormulaBounds.sure_body_forces' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.FormulaBounds.sure_body_refutes' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.FormulaBounds.blocked_no_support' does not depend on any axioms
+'Zetesis.FormulaBounds.unsupported_cut' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.FormulaRegions.classical_consequence_forces' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.FormulaRegions.classical_consequence_cuts' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.FormulaRegions.no_model_refutes' depends on axioms: [propext, Classical.choice, Quot.sound]

@@ -20,6 +20,7 @@ mod checked;
 mod support;
 mod atomic_choice;
 mod positive;
+mod regions;
 pub mod partition;
 
 pub use checked::{CheckedInterpretation, StableInterpretation, check_interpretation};
@@ -38,6 +39,9 @@ pub use evaluation::{
 pub use normal::{from_ground_program, from_ground_program_supported};
 pub use oracle::{Check, Limits, Statistics, Verdict, check, models, models_reduct};
 pub use reduct::FrozenReduct;
+pub use regions::{
+    Narrowing, NarrowingStatistics, Producers, Region, RegionLimits, narrow, producers,
+};
 pub use theory::{AdmissionError, AdmissionLimits, Interpretation, Node, Theory};
 
 pub use tight::{

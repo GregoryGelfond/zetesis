@@ -117,6 +117,39 @@ refusal. The separate restriction still copies original DAG descriptors before
 adding support nodes; repeated encoding of that copy remains a preparation cost.
 See [support API](src/support.rs) and [complete small-family controls](tests/support.rs).
 
+## Narrowing regions by the theory's readings
+
+A `Region` holds some atoms in every candidate, cuts some from every
+candidate and leaves the rest open. Under a region every node of the DAG has
+two readings, decided by one pass in index order: *sure* when every candidate
+of the region satisfies it and *impossible* when none does. A held atom is
+sure, a cut atom impossible, and the connectives combine the readings as the
+closure route's definite and possible gates do. `narrow` applies three rules
+to a fixed point: an impossible root refutes the region; a root not yet sure
+with exactly one open atom that can still move it is decided by that atom,
+held when the root is impossible with it cut and cut when impossible with it
+held, which covers a rule whose body is sure and a constraint with one open
+premise; and, when `producers` recognizes every root as a fact, a rule with a
+positive disjunctive head, an atomic choice or a constraint, an atom none of
+whose producers can support it, each having an impossible body or another
+head held, is cut. A choice supports its atom whenever its body is not
+impossible. Every stable model of the region survives the narrowing, and a
+refuted region holds none.
+
+The result is `Refuted`, or `Fixed` with whether any atom was decided; the
+statistics count charged node reads, root tests and producer checks, the
+passes, and the atoms held and cut. Each pass decides an atom or is the last,
+so the passes are bounded by the atoms. `RegionLimits` bounds the work and
+the passes; exhausting either, or a control stop, returns the stop with the
+completed passes' decisions kept. `Region::split` yields the two regions a
+fresh atom partitions one into, cut first, so that a traversal splitting the
+highest open atom reaches its leaves in counter order.
+`proofs/Zetesis/FormulaBounds.lean` proves the readings sound and each rule
+sound for stable models on the fragment `DisjunctiveSupport` names; the
+choice reading and the agreement of the Rust pass with `read` are Rust
+obligations. See [regions API](src/regions.rs) and
+[the rule propositions](tests/regions.rs).
+
 ## Checked tight producer plans
 
 `TightPlan::compile` extracts normal and atomic-choice producers from every

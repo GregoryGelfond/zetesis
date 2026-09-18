@@ -2545,6 +2545,46 @@
     "line": 123
   },
   {
+    "name": "Zetesis.FormulaBounds.read_sound",
+    "file": "Zetesis/FormulaBounds.lean",
+    "line": 58
+  },
+  {
+    "name": "Zetesis.FormulaBounds.sure_sound",
+    "file": "Zetesis/FormulaBounds.lean",
+    "line": 86
+  },
+  {
+    "name": "Zetesis.FormulaBounds.never_sound",
+    "file": "Zetesis/FormulaBounds.lean",
+    "line": 90
+  },
+  {
+    "name": "Zetesis.FormulaBounds.never_root_refutes",
+    "file": "Zetesis/FormulaBounds.lean",
+    "line": 95
+  },
+  {
+    "name": "Zetesis.FormulaBounds.sure_body_forces",
+    "file": "Zetesis/FormulaBounds.lean",
+    "line": 101
+  },
+  {
+    "name": "Zetesis.FormulaBounds.sure_body_refutes",
+    "file": "Zetesis/FormulaBounds.lean",
+    "line": 107
+  },
+  {
+    "name": "Zetesis.FormulaBounds.blocked_no_support",
+    "file": "Zetesis/FormulaBounds.lean",
+    "line": 120
+  },
+  {
+    "name": "Zetesis.FormulaBounds.unsupported_cut",
+    "file": "Zetesis/FormulaBounds.lean",
+    "line": 131
+  },
+  {
     "name": "Zetesis.FormulaRegions.classical_consequence_forces",
     "file": "Zetesis/FormulaRegions.lean",
     "line": 40

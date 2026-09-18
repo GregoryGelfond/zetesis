@@ -2546,6 +2546,46 @@
       "name": "Zetesis.FiniteValues.failed_step"
     },
     {
+      "file": "Zetesis/FormulaBounds.lean",
+      "line": 58,
+      "name": "Zetesis.FormulaBounds.read_sound"
+    },
+    {
+      "file": "Zetesis/FormulaBounds.lean",
+      "line": 86,
+      "name": "Zetesis.FormulaBounds.sure_sound"
+    },
+    {
+      "file": "Zetesis/FormulaBounds.lean",
+      "line": 90,
+      "name": "Zetesis.FormulaBounds.never_sound"
+    },
+    {
+      "file": "Zetesis/FormulaBounds.lean",
+      "line": 95,
+      "name": "Zetesis.FormulaBounds.never_root_refutes"
+    },
+    {
+      "file": "Zetesis/FormulaBounds.lean",
+      "line": 101,
+      "name": "Zetesis.FormulaBounds.sure_body_forces"
+    },
+    {
+      "file": "Zetesis/FormulaBounds.lean",
+      "line": 107,
+      "name": "Zetesis.FormulaBounds.sure_body_refutes"
+    },
+    {
+      "file": "Zetesis/FormulaBounds.lean",
+      "line": 120,
+      "name": "Zetesis.FormulaBounds.blocked_no_support"
+    },
+    {
+      "file": "Zetesis/FormulaBounds.lean",
+      "line": 131,
+      "name": "Zetesis.FormulaBounds.unsupported_cut"
+    },
+    {
       "file": "Zetesis/FormulaRegions.lean",
       "line": 40,
       "name": "Zetesis.FormulaRegions.classical_consequence_forces"
@@ -6141,6 +6181,7 @@
     "Zetesis/FinitePools.lean",
     "Zetesis/FiniteTables.lean",
     "Zetesis/FiniteValues.lean",
+    "Zetesis/FormulaBounds.lean",
     "Zetesis/FormulaRegions.lean",
     "Zetesis/GatePositions.lean",
     "Zetesis/GateProjection.lean",
@@ -6221,8 +6262,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "b6da303911bac8184a1064747a3c1065558d1aa56f177573921d0ee02e12a885",
-    "Zetesis.lean": "bdb56550e9470f10a719ed9dfb68956201d9f0a56414ae07bf448b48ab646372",
+    "Audit.lean": "0db3ebf5e6291dc37d77f124464289885a5aaf5fd2c0934565da9dfec0def3c7",
+    "Zetesis.lean": "a118aa14bafaad8480006c8c42e05a8e78a9ffdabe0e5f94dbc95011947929b5",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
     "Zetesis/AggregateBounds.lean": "c1a49f93ac5140bcd22876b42c52c23c4f447352c9cf61f2f01741fbbdc98452",
     "Zetesis/AggregateConsumers.lean": "41aded89dbfaa79833ed3b336030ef4b08afa5be8e7029060416c2f8de59ef97",
@@ -6277,6 +6318,7 @@
     "Zetesis/FinitePools.lean": "941db3834037593dd92bf6f3cacfc92acd55fa989955a4d64a4369e2d09857a5",
     "Zetesis/FiniteTables.lean": "892e5722be539571301797e33d2c42a0cb552bc765081523a7fc06f874cd3177",
     "Zetesis/FiniteValues.lean": "14e3d4f778b607fabdaa2c9153c7341618ab895f73158095efb46ff1d12d5788",
+    "Zetesis/FormulaBounds.lean": "887b421829b4bebbf9d5e1a26d8d817ced21fc67a7cd290369b009243b0513d0",
     "Zetesis/FormulaRegions.lean": "64a8e7764e6e5afa11355dc71601c3a19b8f77bbea71c2c497aa5b77cc62451a",
     "Zetesis/GatePositions.lean": "0ce62d9226db2cf7b0a9374461b65050aab1e15dd39bd939c37190e8729dac6d",
     "Zetesis/GateProjection.lean": "d8fffb8e150ab7a0852b097c188da9c4d14f51242ac05be843d98f07940693a6",

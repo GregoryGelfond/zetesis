@@ -29,6 +29,7 @@ construction and standalone analysis APIs belong to its own manual.
 | Reusable original satisfaction with subject-bound node truth | `zetesis_ferraris::{EvaluationWorkspace, FormulaEvaluation}` |
 | Least consequences for an exact positive atomic-head formula theory | `zetesis_ferraris::{PositivePlan, PositivePlanLimits}` |
 | Repeated queries against one candidate's reduct | `zetesis_ferraris::FrozenReduct` |
+| Narrow a region of formula candidates by the theory's readings | `zetesis_ferraris::{Region, narrow, producers}` |
 | Reuse one reduct encoding across different candidates | `zetesis_sat::{PreparedReduct, ReductWorkspace}` |
 | Native formula candidate/countermodel search | `zetesis_sat` |
 | Bounded device execution | `zetesis_wgpu` |
