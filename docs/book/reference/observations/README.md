@@ -1306,6 +1306,76 @@ time of the clause search and ahead of clingo, and the method that does it
 is the one the thesis named, candidate generation and membership by the
 same reading of the program, split into regions that share nothing.
 
+## The regions default and one worker count
+
+Four campaigns on 18 September 2026, the reports written between 07:48:22
+and 07:56:37 UTC, same machine, profile, four workers and clingo as above.
+`main` is the 896a5f73 executable rerun as the control, `before` the
+parallel-regions executable (`553acae3`, SHA-256
+`0c9551639c03546fef8c06c6f0b480aff2e158469a6b2ce414ded95b82ada59b`),
+whose default was still the clause search, `after` is built from
+`c2e939a6` (SHA-256
+`46a51100c58cd8984aa494c6dead31edf21710c0ed89b9b7aa34d9f6f0b9c7fa`),
+where the regions method is the default and `--workers` is the one worker
+count, so the profile's four workers walk the region tree, and `clauses`
+is the same executable run with `--search clauses`.
+[series-c2e939a6-cpu-auto.json](series-c2e939a6-cpu-auto.json) and its
+[table view](series-c2e939a6-cpu-auto-tables.md) are the derived
+comparison, the first derived by the view that keeps a scoreboard against
+the reference; raw report SHA-256
+`f12e86eb7a568d47b69a960dd5df32f8a99bb3745eb1cca134b7ea91962d6448` (main),
+`b512dc5641a85e2bb60b719e75b89db72264a1b411a0b522d0e12fd1ab96f9d5` (before),
+`e20192b41dc32b49cac094b2dc11c16fce96a67428671fcdbb28f02b4d444853` (after)
+and
+`cfd6e4c3eff611fb78b84a4dca2bdc8be11f1249404508c287cbd83d3c84af26`
+(clauses).
+
+The formula cells, the new default against the previous one and against
+the clause search on the same executable:
+
+| Cell | before | after | clauses | after/before | clingo | after/clingo |
+|---|---:|---:|---:|---:|---:|---:|
+| variant-04/05-larger-mix | 90.0 | 44.3 | 95.7 | 0.49 | 151.2 | 0.29 |
+| n-queens/variant-01 8→11 | 256.2 | 121.3 | 264.5 | 0.47 | 183.4 | 0.66 |
+| n-queens/variant-04 8→11 | 158.0 | 98.5 | 162.7 | 0.62 | 181.9 | 0.54 |
+| n-queens/variant-01 8→10 | 58.9 | 33.3 | 59.9 | 0.56 | 31.6 | 1.05 |
+| disjunction-12 | 45.4 | 22.0 | 45.5 | 0.48 | 21.0 | 1.05 |
+| independent-negation-aggregate-16 | 24.7 | 21.7 | 26.0 | 0.88 | 32.7 | 0.66 |
+| ties-50 | 26.3 | 21.1 | 27.1 | 0.80 | 18.0 | 1.17 |
+| send-money/send-money | 11.3 | 15.2 | 11.4 | 1.35 | 15.2 | 1.00 |
+| stratified-16 | 4.5 | 4.5 | 4.5 | 1.01 | 4.4 | 1.03 |
+
+The clingo column is the reference measured in the `after` run itself.
+The closure-route cells are within 0.89 and 1.04 of `before`, the widest
+readings on cells whose bands are that wide; the `clauses` arm is the
+`before` arm again on every cell, as it must be, since it is the same
+method. The answers are the same in every arm, each once, checked by the
+harness's parity and by the corpus test in its three variants.
+
+The default now does what the previous section measured for the parallel
+arm: queens, the larger mix and the disjunction cells in about half the
+clause search's time, and the send-money regression of the regions method
+on one answer found after many refutations, 1.35, is now the default's.
+The scoreboard says how the arms stand against the reference on the
+twenty cells: `main` faster on none, `before` on four, `after` on four
+and `clauses` on five, the difference being send-money, where `after` is
+level with the reference at 1.00 and `clauses` below it at 0.79. The
+losses of `after` are the closure-route cells the earlier sections
+measured and three formula cells within 1.05 of the reference; the
+scoreboard lists each with its parts. In this executable the parts of a
+cell under several workers are misattributed: the coordinator times only
+its wait for the workers' models, which the view reads as candidate
+proposal, so membership reads as nearly nothing on the parallel cells.
+Since this executable the workers time their own narrowing and leaf
+decisions, summed over the workers, and the next observation reads
+correctly.
+
+In the problem's words: the default is now the method the thesis named,
+on the host's workers, and it is faster than clingo on four of the twenty
+cells and within a twentieth of it on three more; what remains above the
+reference is the closure route's fixed cost on small programs and the
+per-region cost of one long chain of refutations.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
