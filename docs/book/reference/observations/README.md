@@ -1595,6 +1595,39 @@ where the search is the work are a fifth to a third cheaper for it; what
 remains on them is the propagation itself, the certificate's check of
 each leaf, and the copy of the carried knowledge at each split.
 
+## Two narrowing steps measured and not taken
+
+Two further steps on the chain closure were built, measured on the same
+cells with one worker, interleaved five runs each against the `9b6ac698`
+executable, and reversed before a commit; they are recorded here so that
+the reasoning is not repeated.
+
+The first kept, per chain, the exclusive-or of the operands that could
+still decide it, so the unit rule read its one open operand instead of
+scanning the chain; the profile had put the scan at a tenth of the walk.
+Measured: queens 11 194 ms against 189, the larger mix 50 against 48, the
+tree identical. The scan runs over a few cache-hot operands and fires
+rarely relative to the counter steps, and the extra word per chain costs
+a step on every count and a copy at every split. What the experiment
+found and kept is that a chain's operands must be distinct across the
+subchains it absorbs (`fad7d459`).
+
+The second replaced the copy of the carried knowledge at every split by a
+trail with undo: the traversal kept one state for the path with a mark at
+each split, restored for the sibling; the parallel walk copied only when
+offering a region to the pool. The hypothesis was a tenth to an eighth
+off the narrowing-dominated cells, the copies' share in the profile.
+Measured, the tree identical on every cell: queens 11 227 ms against 193
+with one worker and 142 against 83 with four; the plans 64 against 61;
+the Latin square and the larger mix within their bands. Every learned bit
+then costs a push and later a pop with a scattered write, and a region
+learns a few hundred bits, which is dearer than one sequential copy of a
+few kilobytes; under four workers the copies offered to the pool carried
+the trail as well. The copy is the cheaper representation at this
+theory size; the trail would be retired only where a region learns
+little relative to the theory, which no cell of the series does. The
+trail is kept as a patch outside the repository, not as code.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
