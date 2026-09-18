@@ -1529,6 +1529,72 @@ we are ahead of clingo where the search is large and behind by a fixed
 few milliseconds where it is small; the plans cell names the next thing to
 lift, the narrowing of many regions whose leaves are few.
 
+## Each clause and body as one node
+
+Four campaigns on 18 September 2026, the reports written between 12:36:58
+and 12:40:49 UTC, same machine, profile, four workers and clingo as above,
+one memory round per solver and cell. `before` is the families executable
+(`359fcedc`, SHA-256
+`b9cb2b9c2c2ccb4ff7562d77ad24de55715f897a6c7c4ed7907df9f018410093`),
+`after` is built from `9b6ac698` (SHA-256
+`0186dbbe214cd4e7e9d67430d36354472f11e908671b0d3c4fff327e7de47f1e`),
+where the narrowing reads each clause and body as one node with two
+counters, applies only the decisions made since the parent's closure and
+keeps the split ranking as nodes become known; `clauses` is the same
+executable under `--search clauses`; and `corpus` is the same executable
+on all 94 corpus cases.
+[series-9b6ac698-cpu-auto.json](series-9b6ac698-cpu-auto.json), its
+[table view](series-9b6ac698-cpu-auto-tables.md),
+[corpus-9b6ac698-cpu-auto.json](corpus-9b6ac698-cpu-auto.json) and its
+[table view](corpus-9b6ac698-cpu-auto-tables.md) are the derived
+comparisons; raw report SHA-256
+`bb3d5b31927ae207715f8aa147b43089e0258c61b26cf018d9e5e28508096660` (before),
+`ef299e8f164e915dfabe29efb17fdc567abdf40ef6462f22701f8eb1077f1d85` (after),
+`b62df20c98d13f93bf9bde7206b1b53c1bc939eab414e284c202c3da32b54f83`
+(clauses) and
+`f055c4d3c441030e6e840dda8a62a9eec9b9ac8aafbfbf2f0537ad2d364b7685`
+(corpus).
+
+The formula cells, with the parts of `after` summed over the four workers:
+
+| Cell | before | after | clauses | after/before | clingo | after/clingo | proposal | membership |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| n-queens/variant-01 8→11 | 123.3 | 85.2 | 268.8 | 0.69 | 182.5 | 0.47 | 215.4 | 28.0 |
+| variant-04/05-larger-mix | 43.3 | 32.9 | 95.0 | 0.76 | 149.1 | 0.22 | 31.6 | 12.7 |
+| n-queens/variant-01 8→10 | 33.0 | 26.2 | 60.5 | 0.79 | 31.2 | 0.84 | 46.9 | 6.2 |
+| n-queens/variant-04 8→11 | 99.1 | 78.8 | 163.0 | 0.80 | 179.2 | 0.44 | 221.1 | 18.2 |
+| latin-square-5 | 15.7 | 13.7 | 37.3 | 0.87 | 16.7 | 0.82 | 12.1 | 10.2 |
+| planning-14 | 38.1 | 37.1 | 86.0 | 0.97 | 16.2 | 2.29 | 42.1 | 18.6 |
+| independent-negation-aggregate-16 | 21.0 | 21.3 | 26.5 | 1.02 | 30.2 | 0.71 | 3.8 | 4.1 |
+| disjunction-12 | 21.6 | 22.6 | 46.0 | 1.04 | 20.3 | 1.11 | 2.6 | 37.9 |
+| ties-50 | 21.2 | 22.0 | 27.2 | 1.04 | 19.0 | 1.16 | 14.0 | 3.1 |
+| send-money/send-money | 13.7 | 14.2 | 11.1 | 1.04 | 14.4 | 0.98 | 6.5 | 0.3 |
+| stratified-16 | 4.5 | 4.5 | 4.6 | 1.00 | 4.5 | 1.01 | 0.5 | 0.3 |
+
+The cells the narrowing dominates fall by a fifth to a third: queens 8→11
+to 0.69, the larger mix to 0.76, the queens 8→10 and variant-04 boards to
+about 0.8, the Latin square to 0.87. The cells whose time is elsewhere,
+the disjunction cell in its leaf decisions, ties in its objective, send-money
+in one long chain of refutations, are within 0.96 and 1.04, as are the
+closure-route cells (0.88 to 1.09, the two widest on the smallest cells).
+The plans cell moves little, 0.97: its narrowing is many regions of few
+chains each, and the parts say the proposal is still its larger part. On
+queens 11 with one worker, measured separately, the tree is the same
+52,389 regions and the reading work halves, 31M against 46M.
+
+The scoreboard reads seven of twenty-two for `after` against five for
+`before` and four for the clause search; queens 8→11 stands at 0.47 of
+the reference and the larger mix at 0.22. On the corpus the default is
+faster on nine of 94 with a median ratio of 1.27 and a widest loss of
+1.97: the small cases are the fixed cost of admission and grounding,
+which this change does not touch.
+
+In the problem's words: a decision now costs one step per clause it
+touches instead of a walk of every clause it satisfies, and the cells
+where the search is the work are a fifth to a third cheaper for it; what
+remains on them is the propagation itself, the certificate's check of
+each leaf, and the copy of the carried knowledge at each split.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
