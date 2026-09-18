@@ -43,16 +43,13 @@ pub(super) fn matching_prefix(
         return Ok(0..length);
     }
     if let Rows::Dense { relation, .. } = rows {
-        // The bound prefix names one block of positions.
+        // The bound prefix names one block of positions. Its terms resolved
+        // in the count above, so the values are read where they lie.
         work.charge(bound)?;
         let prefix = pattern.terms()[..bound]
             .iter()
-            .map(|term| resolve(term, assignment).ok_or(Stop::InvalidProgram));
-        let mut values = Vec::with_capacity(bound);
-        for value in prefix {
-            values.push(value?);
-        }
-        return Ok(relation.layout().prefix_range(values));
+            .map_while(|term| resolve(term, assignment));
+        return Ok(relation.layout().prefix_range(prefix));
     }
     let compare = |index, work: &mut Work<'_>| {
         compare_prefix(
