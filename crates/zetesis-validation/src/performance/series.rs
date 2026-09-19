@@ -12,8 +12,8 @@
 mod view;
 
 pub use view::{
-    Cell, Comparison, Labelled, Native, Passed, PhaseTiming, ProfileRow, Provenance, Timing,
-    ViewError, compare,
+    Breakdown, Cell, Comparison, Labelled, Native, Passed, PhaseTiming, ProfileRow, Provenance,
+    Reference, Scoreboard, Timing, Verdict, ViewError, compare,
 };
 
 use super::families::Family;
