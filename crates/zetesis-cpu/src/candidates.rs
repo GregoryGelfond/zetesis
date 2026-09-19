@@ -468,20 +468,13 @@ impl<'a> Candidates<'a> {
                 }
                 self.counting = false;
             }
-            // The root was narrowed when the bounds were applied; the
-            // traversal splits it whatever its narrowing reports.
+            // The root was narrowed when the bounds were applied, and the
+            // traversal starts from it narrowed.
             let mut traversal = self
                 .traversal
                 .take()
                 .expect("regions follow applied bounds");
-            let mut root = traversal.statistics().regions == 0;
-            let visit = traversal.next(|region, ()| {
-                if std::mem::take(&mut root) {
-                    Ok(Narrowing::Fixed { changed: true })
-                } else {
-                    self.narrow_region(region)
-                }
-            });
+            let visit = traversal.next(|region, ()| self.narrow_region(region));
             self.traversal = Some(traversal);
             match visit? {
                 None => return Ok(None),
@@ -708,9 +701,10 @@ impl<'a> Candidates<'a> {
             (true, Some(may)) => {
                 self.root_must = cube.must;
                 self.materialize_root(&may)?;
-                self.traversal = Some(Traversal::new(
+                self.traversal = Some(Traversal::with_narrowed_root(
                     Region::undecided(self.root.len()),
                     Counting::Unchanged,
+                    (),
                 ));
                 self.enumeration = Enumeration::Regions;
             }

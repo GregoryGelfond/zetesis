@@ -221,6 +221,9 @@ pub struct Traversal<S = ()> {
     counting: Counting,
     /// The root has not been visited yet; it is split whatever its narrowing.
     root: bool,
+    /// The caller narrowed the root before the traversal began, so it is
+    /// not narrowed again.
+    narrowed_root: bool,
     statistics: RegionStatistics,
 }
 
@@ -241,7 +244,20 @@ impl<S: Clone> Traversal<S> {
             regions: vec![(root, state)],
             counting,
             root: true,
+            narrowed_root: false,
             statistics: self::RegionStatistics::default(),
+        }
+    }
+
+    /// A traversal of every candidate of a root the caller has narrowed
+    /// already: the root is visited without a narrowing and split whatever
+    /// that narrowing reported, and every region below it is narrowed by
+    /// the caller's narrowing.
+    #[must_use]
+    pub fn with_narrowed_root(root: Region, counting: Counting, state: S) -> Self {
+        Self {
+            narrowed_root: true,
+            ..Self::with_state(root, counting, state)
         }
     }
 
@@ -266,17 +282,21 @@ impl<S: Clone> Traversal<S> {
             let Some((mut region, mut state)) = self.regions.pop() else {
                 return Ok(None);
             };
-            let changed = match narrow(&mut region, &mut state) {
-                Ok(Narrowing::Refuted) => {
-                    self.statistics.regions += 1;
-                    self.statistics.refuted += 1;
-                    self.root = false;
-                    continue;
-                }
-                Ok(Narrowing::Fixed { changed }) => changed,
-                Err(stop) => {
-                    self.regions.push((region, state));
-                    return Err(stop);
+            let changed = if std::mem::take(&mut self.narrowed_root) {
+                true
+            } else {
+                match narrow(&mut region, &mut state) {
+                    Ok(Narrowing::Refuted) => {
+                        self.statistics.regions += 1;
+                        self.statistics.refuted += 1;
+                        self.root = false;
+                        continue;
+                    }
+                    Ok(Narrowing::Fixed { changed }) => changed,
+                    Err(stop) => {
+                        self.regions.push((region, state));
+                        return Err(stop);
+                    }
                 }
             };
             self.statistics.regions += 1;

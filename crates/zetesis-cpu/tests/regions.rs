@@ -208,3 +208,26 @@ fn a_split_clones_the_state_into_both_children_and_a_leaf_carries_it() {
     }
     assert_eq!(depths, vec![3, 3, 3, 3]);
 }
+
+#[test]
+fn a_traversal_from_a_narrowed_root_does_not_narrow_it_again() {
+    // The caller narrowed the root before the traversal began: the root is
+    // split without a narrowing, and every region below it is narrowed
+    // once, the counting never counting the root as a flat interval.
+    let mut traversal =
+        Traversal::with_narrowed_root(Region::undecided(2), Counting::Unchanged, ());
+    let mut narrowed = Vec::new();
+    while let Some(visit) = traversal
+        .next(|region, ()| {
+            narrowed.push(region.decisions().to_vec());
+            Ok::<_, Stop>(Narrowing::Fixed { changed: false })
+        })
+        .unwrap()
+    {
+        assert!(matches!(visit, Visit::Counted(..)));
+    }
+    // The root's two children, each narrowed once and counted.
+    assert_eq!(narrowed, vec![vec![1], vec![1]]);
+    assert_eq!(traversal.statistics().regions, 3);
+    assert_eq!(traversal.statistics().counted, 2);
+}
