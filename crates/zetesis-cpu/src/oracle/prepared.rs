@@ -16,8 +16,11 @@ use crate::{Control, Stop};
 /// Source program payload is already owned by `Program` and is not copied.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PreparationLimits {
-    /// Template and positive-pattern dimension inspections, and the
-    /// argument-bound inference.
+    /// The three parts of preparation: the template and positive-pattern
+    /// dimension inspections, linear in the templates and occurrences; the
+    /// argument-bound inference, a fixed point over every head term; and
+    /// the row-step plan, which reads every term of a template once for
+    /// each of its occurrences.
     pub max_work: u64,
     /// Named immutable preparation bytes, excluding the shared source program.
     pub max_bytes: usize,
@@ -40,7 +43,8 @@ impl Default for PreparationLimits {
 /// Completed preparation receipt, separate from every candidate's work.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PreparationStatistics {
-    /// Actual charged dimension inspections.
+    /// Charged work of the three parts of preparation, as
+    /// [`PreparationLimits::max_work`] bounds it.
     pub work: u64,
     /// Named retained preparation storage, excluding the source program.
     pub retained_bytes: usize,
@@ -56,9 +60,13 @@ pub struct PreparationStatistics {
 /// This owner shares the admitted program and holds no candidate truth. It does
 /// not enumerate a ground carrier. Its evaluator uses scalar delta rounds;
 /// within each selected source occurrence tuples keep canonical storage order.
-/// Preparation is linear in templates and positive-pattern occurrences. The
-/// dimensions bound the assignment, cursor and undo buffers actually used by
-/// [`Self::check_view`]. They are not a class certificate or semantic index.
+/// Preparation inspects the dimensions, linear in templates and
+/// positive-pattern occurrences; infers the argument bounds, a fixed point
+/// over every head term whose passes are bounded by the values admitted; and
+/// plans the row steps, at most the square of the largest template's terms
+/// for each template. The dimensions bound the assignment, cursor and undo
+/// buffers actually used by [`Self::check_view`]. They are not a class
+/// certificate or semantic index.
 pub struct PreparedQueries {
     program: Program,
     dimensions: Dimensions,
