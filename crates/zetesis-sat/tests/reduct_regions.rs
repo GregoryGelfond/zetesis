@@ -160,7 +160,7 @@ fn the_region_query_agrees_with_the_reference_on_every_candidate() {
                         .unwrap()
                     );
                 }
-                other => panic!("{mask}: {other:?}"),
+                zetesis_sat::Check::Inconclusive(error) => panic!("{mask}: {error}"),
             }
         }
     }

@@ -43,19 +43,18 @@ pub(super) enum Verdict {
     /// A present atom has no producer with a true body under the complete
     /// tight plan. By `TightPlans.stable_supported` the candidate is not an
     /// answer set: the candidate without that atom models its reduct.
-    Unsupported {
-        atom: usize,
-    },
+    Unsupported,
 }
 
-impl From<Verdict> for crate::Check {
-    /// The check a certificate's verdict is: stable, not a model, or
-    /// unsupported at the atom.
+impl From<Verdict> for crate::ferraris::Decision {
+    /// What the enumeration does with a certificate's verdict: a refutation
+    /// by the support law is a refutation, and a candidate that is not a
+    /// model is invalid, since every proposed candidate is one.
     fn from(verdict: Verdict) -> Self {
         match verdict {
             Verdict::Stable => Self::Stable,
-            Verdict::NotModel => Self::NotModel,
-            Verdict::Unsupported { atom } => Self::Unsupported { atom },
+            Verdict::NotModel => Self::Invalid,
+            Verdict::Unsupported => Self::Refuted,
         }
     }
 }
@@ -302,7 +301,7 @@ fn evaluate(
         .ok_or(Incomplete::CounterOverflow)?;
     match &result {
         Ok(Verdict::Stable) => increment(&mut stats.stable)?,
-        Ok(Verdict::Unsupported { .. }) => increment(&mut stats.refuted)?,
+        Ok(Verdict::Unsupported) => increment(&mut stats.refuted)?,
         Ok(Verdict::NotModel) => {}
         Err(_) => increment(&mut stats.failed)?,
     }
@@ -331,9 +330,7 @@ fn check_tight(
         Ok(check) => Ok(match check.verdict {
             TightVerdict::Stable => Verdict::Stable,
             TightVerdict::NotModel { .. } => Verdict::NotModel,
-            TightVerdict::Residual { unsupported_atom } => Verdict::Unsupported {
-                atom: unsupported_atom,
-            },
+            TightVerdict::Residual { .. } => Verdict::Unsupported,
         }),
         Err(TightError::Stopped(stop)) => Err(stop.into()),
         Err(TightError::Limit(TightResource::Work))

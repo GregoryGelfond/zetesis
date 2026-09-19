@@ -6,7 +6,8 @@ use std::time::{Duration, Instant};
 use rayon::prelude::*;
 use zetesis_ferraris::{Interpretation, Theory};
 
-use super::{BatchVerdict, Check, Limits, Statistics};
+use super::{BatchVerdict, Limits, Statistics};
+use crate::ferraris::Decision;
 use crate::search::{BoundedQuota, Budget, LocalQuota, Quota, SharedBudget, increment, storage};
 use crate::{PreparedReduct, ReductWorkspace};
 
@@ -370,10 +371,10 @@ fn classify(
                 }
                 (None, None) => return Err(Incomplete::InvalidWitness),
             };
-            match verdict {
-                Check::Stable => Ok(true),
-                Check::NonMinimal(_) | Check::Unsupported { .. } => Ok(false),
-                Check::NotModel | Check::Inconclusive(_) => Err(Incomplete::InvalidWitness),
+            match Decision::from(verdict) {
+                Decision::Stable => Ok(true),
+                Decision::Refuted => Ok(false),
+                Decision::Invalid => Err(Incomplete::InvalidWitness),
             }
         }
     }

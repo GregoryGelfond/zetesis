@@ -44,8 +44,9 @@ use zetesis_ferraris::{Interpretation, Knowledge, Narrower, Producers, Theory};
 use super::certified::{self, Certification};
 use super::regions::{RegionCounts, RegionSearchStatistics, SearchMethod};
 use super::timing::{self, Phase, PhaseMeasurement};
+use crate::ferraris::Decision;
 use crate::search::{Budget, SharedBudget, WorkLease};
-use crate::{Check, Control, Incomplete, Limits, SearchPhaseTimings, SearchStatistics, Statistics};
+use crate::{Control, Incomplete, Limits, SearchPhaseTimings, SearchStatistics, Statistics};
 
 /// A waiting worker rechecks cooperative control at least once per timed wait.
 const POOL_WAIT: Duration = Duration::from_millis(1);
@@ -650,7 +651,7 @@ fn leaf<'a>(
     report.statistics.candidates += 1;
     let queries_before = report.statistics.countermodel_queries;
     let countermodels_before = report.statistics.countermodels;
-    let verdict = if let Some(certificate) = &shared.certificate {
+    let decision: Decision = if let Some(certificate) = &shared.certificate {
         let mut search = budget.statistics;
         let verdict = certified::classify(
             certificate,
@@ -663,13 +664,15 @@ fn leaf<'a>(
         budget.statistics = search;
         verdict?.into()
     } else {
-        membership.check(
-            &shared.theory,
-            &candidate,
-            shared.limits,
-            budget,
-            &mut report.statistics,
-        )?
+        membership
+            .check(
+                &shared.theory,
+                &candidate,
+                shared.limits,
+                budget,
+                &mut report.statistics,
+            )?
+            .into()
     };
     Live::add(
         &shared.live.countermodel_queries,
@@ -679,9 +682,9 @@ fn leaf<'a>(
         &shared.live.countermodels,
         report.statistics.countermodels - countermodels_before,
     );
-    match verdict {
-        Check::Stable => Ok(Some(candidate)),
-        Check::NonMinimal(_) | Check::Unsupported { .. } => Ok(None),
-        Check::NotModel | Check::Inconclusive(_) => Err(Incomplete::InvalidWitness),
+    match decision {
+        Decision::Stable => Ok(Some(candidate)),
+        Decision::Refuted => Ok(None),
+        Decision::Invalid => Err(Incomplete::InvalidWitness),
     }
 }

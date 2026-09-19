@@ -44,9 +44,10 @@ order without allocating. Public input `Literal` values retain their full
 index range until admission; packing introduces no additional admitted bound.
 
 `check(&Theory, &Interpretation, Limits, &Control)` returns
-`Check::Stable`, `Check::NotModel`, `Check::NonMinimal(witness)`,
-`Check::Unsupported { atom }` under a complete tight certificate, or
-`Check::Inconclusive(reason)`. `Check::accepted()` is true only for `Stable`.
+`Check::Stable`, `Check::NotModel`, `Check::NonMinimal(witness)` or
+`Check::Inconclusive(reason)`; a refutation by the support law under a
+complete tight certificate is the enumeration's own and never a check's
+verdict. `Check::accepted()` is true only for `Stable`.
 This standalone call explicitly constructs a fresh candidate-simplified reduct,
 retaining a differential control for the persistent path.
 

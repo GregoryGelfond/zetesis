@@ -249,7 +249,7 @@ impl StableModels {
                 )? {
                     super::certified::Verdict::Stable => BatchVerdict::NoProperSubset,
                     super::certified::Verdict::NotModel => BatchVerdict::NotModel,
-                    super::certified::Verdict::Unsupported { .. } => BatchVerdict::Refuted,
+                    super::certified::Verdict::Unsupported => BatchVerdict::Refuted,
                 };
             }
             Ok(())

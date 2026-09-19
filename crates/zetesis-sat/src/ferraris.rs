@@ -88,13 +88,6 @@ pub enum Check {
     NotModel,
     /// Independently validated proper-subset model of the frozen reduct.
     NonMinimal(Interpretation),
-    /// A present atom has no producer with a true body under a complete tight
-    /// plan. By the support law the candidate is not an answer set, and the
-    /// candidate without that atom is a proper-subset model of its reduct.
-    Unsupported {
-        /// First unsupported present atom in ascending order.
-        atom: usize,
-    },
     /// No semantic membership decision can be made within available resources.
     Inconclusive(Incomplete),
 }
@@ -618,6 +611,27 @@ impl Iterator for StableModels {
 }
 impl std::iter::FusedIterator for StableModels {}
 
+/// What the enumeration does with a candidate's membership verdict: the
+/// candidate is an answer set; it is refuted, by a proper-subset model of
+/// its reduct or by the support law, and the search goes on; or the verdict
+/// is one no proposed candidate can have, every candidate being a classical
+/// model, and the enumeration stops on an invalid witness.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Decision {
+    Stable,
+    Refuted,
+    Invalid,
+}
+impl From<Check> for Decision {
+    fn from(check: Check) -> Self {
+        match check {
+            Check::Stable => Self::Stable,
+            Check::NonMinimal(_) => Self::Refuted,
+            Check::NotModel | Check::Inconclusive(_) => Self::Invalid,
+        }
+    }
+}
+
 struct Membership<'a> {
     theory: &'a Theory,
     limits: Limits,
@@ -762,7 +776,7 @@ fn advance(
             Some(Proposal::Candidate(candidate)) => candidate,
         };
         increment(&mut statistics.candidates)?;
-        let result = if let Some(certificate) = certificate {
+        let decision: Decision = if let Some(certificate) = certificate {
             certified::classify(
                 certificate,
                 &candidate,
@@ -773,15 +787,17 @@ fn advance(
             )?
             .into()
         } else {
-            reduct.check(theory, &candidate, limits, budget, statistics)?
+            reduct
+                .check(theory, &candidate, limits, budget, statistics)?
+                .into()
         };
-        if matches!(result, Check::NotModel | Check::Inconclusive(_)) {
+        if decision == Decision::Invalid {
             return Err(Incomplete::InvalidWitness);
         }
         let started = timing::start(statistics.phase_timings.as_ref());
         let blocking = proposer.exclude(&candidate, budget);
         timing::finish(&mut statistics.phase_timings, Phase::Candidates, started);
-        if matches!(result, Check::Stable) {
+        if decision == Decision::Stable {
             increment(&mut statistics.stable_models)?;
             *pending_error = blocking.err();
             return Ok(Some(candidate));

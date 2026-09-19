@@ -73,12 +73,6 @@ pub enum Decision {
         /// Ascending semantic atom identities of the actual returned witness.
         witness: Vec<usize>,
     },
-    /// The complete tight certificate refuted the candidate by the support
-    /// law: this present atom has no producer with a true body.
-    Unsupported {
-        /// The first unsupported present atom.
-        atom: usize,
-    },
 }
 
 /// One occurrence's certificate and complete decision, in original input order.

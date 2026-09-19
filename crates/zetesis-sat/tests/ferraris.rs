@@ -73,9 +73,6 @@ fn compare(theory: &Theory) -> BTreeSet<Vec<usize>> {
                     .unwrap()
                 );
             }
-            // The standalone check carries no certificate and never refutes
-            // by the support law.
-            Check::Unsupported { atom } => panic!("{mask}: refuted by support at {atom}"),
             Check::Inconclusive(error) => panic!("small complete membership: {error}"),
         }
     }
@@ -435,4 +432,21 @@ fn repeated_commuted_classical_gates_fit_one_auxiliary_without_changing_reducts(
     assert!(cursor.exhausted());
     assert_eq!(actual, BTreeSet::from([vec![0], vec![1]]));
     assert_eq!(actual, compare(&input));
+}
+
+/// The standalone check decides membership by the reduct alone, so its
+/// verdict is one of four: stable, not a model, a proper-subset model of
+/// the reduct, or inconclusive. This compiles only while `Check` has those
+/// four cases and no other.
+#[test]
+fn the_check_verdict_has_four_cases() {
+    fn name(check: &Check) -> &'static str {
+        match check {
+            Check::Stable => "stable",
+            Check::NotModel => "not a model",
+            Check::NonMinimal(_) => "a proper-subset model of the reduct",
+            Check::Inconclusive(_) => "inconclusive",
+        }
+    }
+    assert_eq!(name(&Check::Stable), "stable");
 }

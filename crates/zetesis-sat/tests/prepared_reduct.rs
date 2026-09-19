@@ -107,9 +107,6 @@ fn compare(input: &Theory) {
                 );
                 assert_eq!(receipt.statistics.countermodels, 1);
             }
-            // The prepared reduct query carries no certificate, so it never
-            // refutes by the support law.
-            Check::Unsupported { atom } => panic!("reduct query refuted by support at {atom}"),
             Check::Inconclusive(error) => panic!("complete small query: {error}"),
         }
         assert_eq!(
