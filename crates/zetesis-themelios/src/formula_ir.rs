@@ -4,6 +4,10 @@
 #[path = "formula_assignment_plan_tests.rs"]
 mod assignment_plan_tests;
 
+#[cfg(test)]
+#[path = "formula_shared_names_tests.rs"]
+mod shared_names_tests;
+
 #[path = "formula_objective_scope.rs"]
 mod objective_scope;
 
@@ -635,7 +639,9 @@ pub(super) struct Compiler<'a> {
 }
 impl Compiler<'_> {
     /// The compilation's shared name for the predicate: every pattern of one
-    /// predicate refers to one allocation, as an admitted program's do.
+    /// predicate refers to one allocation, as an admitted program's do, the
+    /// patterns of an objective scope included, since the scope compiles
+    /// under the lent set.
     fn shared(&mut self, predicate: Predicate) -> Predicate {
         if let Some(shared) = self.predicates.get(&predicate) {
             return shared.clone();

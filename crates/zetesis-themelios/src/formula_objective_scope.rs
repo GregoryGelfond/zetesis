@@ -161,20 +161,23 @@ impl Compiler<'_> {
         origins: Vec<Location>,
         polarity: WeightPolarity,
     ) -> Result<ObjectiveIr, FormulaFailure> {
+        // The scope compiles under the compilation's shared names, lent to
+        // it and taken back with what it added, as the budget is lent.
         let mut compiler = Compiler {
             options: self.options,
             limits: self.limits,
             budget: self.budget,
             domain: BTreeSet::new(),
-            predicates: BTreeSet::new(),
+            predicates: std::mem::take(&mut self.predicates),
             next_aggregate: self.next_aggregate,
             dependency_projection: false,
             location: self.location,
         };
-        let objective = compiler.scoped_body(source, weight, terms, origins, polarity)?;
+        let objective = compiler.scoped_body(source, weight, terms, origins, polarity);
+        self.predicates = compiler.predicates;
         self.next_aggregate = compiler.next_aggregate;
         self.dependency_projection |= compiler.dependency_projection;
-        Ok(objective)
+        objective
     }
 
     fn scoped_field(
