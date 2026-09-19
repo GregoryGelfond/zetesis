@@ -654,3 +654,23 @@ fn carried_knowledge_narrows_every_region_as_a_fresh_narrowing_does() {
         assert_eq!(leaves, stable_models(&t).len());
     }
 }
+
+#[test]
+fn holding_an_atom_without_producers_rechecks_no_support() {
+    // One root atom, narrowed without producers: the root is learned and
+    // revisited, which holds its atom. That is the one propagation; without
+    // producers there is no support to recheck, so none is queued.
+    let t = theory(1, vec![Node::Atom(0)], vec![0]);
+    let mut region = Region::undecided(1);
+    let (narrowing, statistics) = narrow(
+        &t,
+        None,
+        &mut region,
+        RegionLimits::default(),
+        &Control::default(),
+    )
+    .unwrap();
+    assert!(matches!(narrowing, Narrowing::Fixed { changed: true }));
+    assert!(region.is_held(0));
+    assert_eq!(statistics.propagations, 1);
+}

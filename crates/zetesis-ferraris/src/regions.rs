@@ -613,7 +613,8 @@ struct Known {
     learned: Vec<usize>,
     /// Nodes that learned something, with what, and have not been revisited.
     nodes: Vec<(usize, bool)>,
-    /// Atoms whose support must be rechecked.
+    /// Atoms whose support must be rechecked; queued only when producers
+    /// are known, since only they say what supports an atom.
     heads: Vec<usize>,
     /// How many of the region's decisions, in the order made, are known.
     seen: usize,
@@ -689,8 +690,15 @@ impl Known {
     }
 
     /// An atom learns to hold or to fail, and every node carrying it
-    /// learns the same. A newly held atom has its support rechecked.
-    fn atom(&mut self, index: &Narrower, atom: usize, value: bool) -> Sweep {
+    /// learns the same. A newly held atom has its support rechecked when
+    /// producers are known.
+    fn atom(
+        &mut self,
+        index: &Narrower,
+        producers: Option<&Producers>,
+        atom: usize,
+        value: bool,
+    ) -> Sweep {
         let step = if value {
             learn(&mut self.atom_sure, &self.atom_never, atom)
         } else {
@@ -708,7 +716,7 @@ impl Known {
                 self.never(node)
             });
         }
-        if value {
+        if value && producers.is_some() {
             self.heads.push(atom);
         }
         step
@@ -752,7 +760,7 @@ impl Known {
         }
         for &atom in &region.decisions()[self.seen..] {
             let value = region.decision(atom).expect("a decided atom is decided");
-            step = step.join(self.atom(index, atom, value));
+            step = step.join(self.atom(index, producers, atom, value));
         }
         self.seen = region.decisions().len();
         if step == Sweep::Contradiction {
@@ -767,10 +775,9 @@ impl Known {
                 self.revisit(nodes, index, producers, frozen, node, value, work)?
             } else if let Some(atom) = self.heads.pop() {
                 statistics.propagations += 1;
-                match producers {
-                    Some(producers) => self.recheck(index, producers, atom, work)?,
-                    None => Sweep::Unchanged,
-                }
+                let producers =
+                    producers.expect("a support recheck is queued only when producers are known");
+                self.recheck(index, producers, atom, work)?
             } else {
                 return Ok(Sweep::Changed);
             };
@@ -914,7 +921,7 @@ impl Known {
                             );
                         }
                     }
-                    self.atom(index, atom, true)
+                    self.atom(index, producers, atom, true)
                 }
                 Node::False => Sweep::Contradiction,
                 Node::And(..) | Node::Or(..) => Sweep::Unchanged,
@@ -931,7 +938,7 @@ impl Known {
         }
         if self.never[node] {
             step = step.join(match nodes[node] {
-                Node::Atom(atom) => self.atom(index, atom, false),
+                Node::Atom(atom) => self.atom(index, producers, atom, false),
                 Node::False | Node::And(..) | Node::Or(..) => Sweep::Unchanged,
                 Node::Implies(a, b) => self.sure(a).join(self.never(b)),
             });
@@ -1028,7 +1035,7 @@ impl Known {
             }
         }
         Ok(match (supporters, sole) {
-            (0, _) => self.atom(index, atom, false),
+            (0, _) => self.atom(index, Some(producers), atom, false),
             (1, Some(body)) if self.atom_sure[atom] => self.sure(body),
             _ => Sweep::Unchanged,
         })
