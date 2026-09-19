@@ -10,7 +10,7 @@ mod partition;
 use partition::Partition;
 
 mod dense;
-pub(in crate::oracle) use dense::{Block, Dense, Layout, Layouts, PendingRows};
+pub(in crate::oracle) use dense::{Block, Dense, Layout, Layouts, PendingMarks};
 
 pub(super) mod storage;
 pub(super) use storage::atom_bytes;
@@ -582,12 +582,12 @@ impl Catalogs {
         }
     }
 
-    /// Insert a round's pending rows into their relations as new rows,
-    /// leaving the pending rows empty. Called where the round's atoms are
+    /// Insert a round's pending marks into their relations as new rows,
+    /// leaving the marks empty. Called where the round's atoms are
     /// inserted: after the cutoff advanced, with no borrowed view live.
     pub(super) fn absorb(
         &mut self,
-        pending: &mut PendingRows,
+        pending: &mut PendingMarks,
         layouts: &Layouts,
         work: &mut Work<'_>,
     ) -> Result<(), Stop> {
@@ -869,8 +869,8 @@ mod tests {
 
     /// `p` laid out over the values 1, 2 and 3, with the positions of 3 and
     /// 1 marked and absorbed: the predicate, the layouts, the catalogs and
-    /// the pending rows.
-    fn laid_out(work: &mut Work<'_>) -> (Predicate, Layouts, Catalogs, PendingRows) {
+    /// the pending marks.
+    fn laid_out(work: &mut Work<'_>) -> (Predicate, Layouts, Catalogs, PendingMarks) {
         use crate::oracle::argument_bounds::Bound;
         let predicate = Predicate::new("p", 1).unwrap();
         let mut layouts = Layouts::default();
@@ -888,7 +888,7 @@ mod tests {
         );
         let mut catalogs = Catalogs::default();
         catalogs.create_dense_relations(&layouts, work).unwrap();
-        let mut pending = PendingRows::default();
+        let mut pending = PendingMarks::default();
         pending.prepare(&layouts, &mut 0, work).unwrap();
         // Positions 2 and 0 are the values 3 and 1; a repeated mark is not a
         // second atom.

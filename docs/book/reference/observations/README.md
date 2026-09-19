@@ -2297,3 +2297,4 @@ The records above keep the spellings of their day. A later record spells these k
 | `carrier_bounds` with `narrowing_passes` | `carrier_narrowing` with `passes` |
 | `regions`, `reduct_regions` under `search` | `candidate_regions`, `reduct_query_regions` |
 | `decided` under `carrier_regions` | `leaves` |
+| `row_steps` under `closure joins` | `block_steps` |

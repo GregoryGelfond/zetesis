@@ -364,72 +364,75 @@ impl Dense {
 /// The heads one round derives for the dense relations, held as bits beside
 /// the catalogs the round's joins borrow.
 ///
-/// A row of words per layout, in the layouts' order, sized once for the
+/// The marks of each layout, in the layouts' order, sized once for the
 /// preparation. A marked position is a tuple absent from its relation when it
 /// was derived, so the marks of a round are disjoint from the relation and
-/// their number is the round's count of new dense atoms. Absorbing a row
-/// clears it: between rounds every row is zero and nothing of a candidate
-/// remains.
+/// their number is the round's count of new dense atoms. Absorbing a layout's
+/// marks clears them: between rounds every mark is zero and nothing of a
+/// candidate remains.
 ///
 /// Retains one bit for each position of each layout, half of what the dense
 /// relations themselves hold, for as long as the workspace lives. Marking is
-/// constant time. Absorbing a row visits the words from its first mark to its
-/// last, at worst the whole row in every round that marks both of its ends;
-/// an unmarked row costs a round one unit.
+/// constant time. Absorbing a layout's marks visits the words from its first
+/// mark to its last, at worst the whole array in every round that marks both
+/// of its ends; unmarked marks cost a round one unit.
 #[derive(Default)]
-pub(in crate::oracle) struct PendingRows {
-    rows: Vec<PendingRow>,
+pub(in crate::oracle) struct PendingMarks {
+    layouts: Vec<LayoutMarks>,
     marked: usize,
 }
 
+/// One layout's marks: a word for every sixty-four positions.
 #[derive(Default)]
-struct PendingRow {
+struct LayoutMarks {
     words: Vec<u64>,
     marked: usize,
     /// The words holding marks, so that absorbing visits only them.
     touched: Range<usize>,
 }
 
-impl PendingRows {
-    /// Size a zero row for each layout, admitting the growth against `live`.
-    /// Rows already of their layout's size are kept.
+impl PendingMarks {
+    /// Size zero marks for each layout, admitting the growth against `live`.
+    /// Marks already of their layout's size are kept.
     pub(in crate::oracle) fn prepare(
         &mut self,
         layouts: &Layouts,
         live: &mut u128,
         work: &mut Work<'_>,
     ) -> Result<(), Stop> {
-        if self.rows.len() < layouts.len() {
-            let headers = layouts.len() as u128 * size_of::<PendingRow>() as u128;
+        if self.layouts.len() < layouts.len() {
+            let headers = layouts.len() as u128 * size_of::<LayoutMarks>() as u128;
             super::storage::admit(work, live.checked_add(headers).ok_or(Stop::StorageLimit)?)?;
             let old = self.header_bytes();
-            self.rows
-                .try_reserve_exact(layouts.len() - self.rows.len())
+            self.layouts
+                .try_reserve_exact(layouts.len() - self.layouts.len())
                 .map_err(|_| Stop::Allocation)?;
-            self.rows.resize_with(layouts.len(), PendingRow::default);
+            self.layouts
+                .resize_with(layouts.len(), LayoutMarks::default);
             *live = live
                 .checked_add(self.header_bytes() - old)
                 .ok_or(Stop::StorageLimit)?;
             super::storage::after_reservation(work, *live)?;
         }
-        for (row, layout) in self.rows.iter_mut().zip(layouts.iter()) {
+        for (marks, layout) in self.layouts.iter_mut().zip(layouts.iter()) {
             work.tick()?;
             let words = layout.words();
-            if row.words.len() == words {
+            if marks.words.len() == words {
                 continue;
             }
             let added = words as u128 * size_of::<u64>() as u128;
             super::storage::admit(work, live.checked_add(added).ok_or(Stop::StorageLimit)?)?;
-            let old = row.bytes();
-            row.words
-                .try_reserve_exact(words.saturating_sub(row.words.len()))
+            let old = marks.bytes();
+            marks
+                .words
+                .try_reserve_exact(words.saturating_sub(marks.words.len()))
                 .map_err(|_| Stop::Allocation)?;
             charge(work, words)?;
-            row.words.clear();
-            row.words.resize(words, 0);
+            marks.words.clear();
+            marks.words.resize(words, 0);
             *live = live
                 .checked_sub(old)
-                .and_then(|bytes| bytes.checked_add(row.bytes()))
+                .and_then(|bytes| bytes.checked_add(marks.bytes()))
                 .ok_or(Stop::StorageLimit)?;
             super::storage::after_reservation(work, *live)?;
         }
@@ -437,33 +440,33 @@ impl PendingRows {
     }
 
     fn header_bytes(&self) -> u128 {
-        self.rows.capacity() as u128 * size_of::<PendingRow>() as u128
+        self.layouts.capacity() as u128 * size_of::<LayoutMarks>() as u128
     }
 
-    /// Retained bytes: the row headers and their words.
+    /// Retained bytes: the marks' headers and their words.
     pub(in crate::oracle) fn bytes(&self) -> u128 {
-        self.rows
+        self.layouts
             .iter()
-            .map(PendingRow::bytes)
+            .map(LayoutMarks::bytes)
             .fold(self.header_bytes(), u128::saturating_add)
     }
 
     /// Mark a position of the layout at `slot`; whether it was unmarked. The
     /// caller has found the tuple absent from its relation.
     pub(in crate::oracle) fn mark(&mut self, slot: usize, position: usize) -> bool {
-        let row = &mut self.rows[slot];
+        let marks = &mut self.layouts[slot];
         let (word, bit) = (position / 64, 1u64 << (position % 64));
-        if row.words[word] & bit != 0 {
+        if marks.words[word] & bit != 0 {
             return false;
         }
-        row.words[word] |= bit;
-        row.marked += 1;
+        marks.words[word] |= bit;
+        marks.marked += 1;
         self.marked += 1;
-        row.touched = cover(&row.touched, word);
+        marks.touched = cover(&marks.touched, word);
         true
     }
 
-    /// Positions marked since the rows were last absorbed.
+    /// Positions marked since the marks were last absorbed.
     pub(in crate::oracle) fn len(&self) -> usize {
         self.marked
     }
@@ -472,7 +475,7 @@ impl PendingRows {
         self.marked == 0
     }
 
-    /// Insert the marks of the row at `slot` into its relation as new rows
+    /// Insert the marks of the layout at `slot` into its relation as new rows
     /// and clear them; the number inserted. One unit, and one per word that
     /// held a mark or lies between two that did.
     pub(super) fn absorb_into(
@@ -481,32 +484,33 @@ impl PendingRows {
         dense: &mut Dense,
         work: &mut Work<'_>,
     ) -> Result<usize, Stop> {
-        let row = &mut self.rows[slot];
-        charge(work, 1 + row.touched.len())?;
-        if row.marked == 0 {
+        let marks = &mut self.layouts[slot];
+        charge(work, 1 + marks.touched.len())?;
+        if marks.marked == 0 {
             return Ok(0);
         }
-        for word in row.touched.clone() {
-            let marks = std::mem::take(&mut row.words[word]);
+        for word in marks.touched.clone() {
+            let marks = std::mem::take(&mut marks.words[word]);
             debug_assert_eq!(dense.present[word] & marks, 0, "a mark is an absent tuple");
             dense.present[word] |= marks;
             dense.new[word] |= marks;
         }
-        let absorbed = std::mem::take(&mut row.marked);
+        let absorbed = std::mem::take(&mut marks.marked);
         dense.count += absorbed;
         dense.new_count += absorbed;
         dense.new_words = if dense.new_words.is_empty() {
-            row.touched.clone()
+            marks.touched.clone()
         } else {
-            dense.new_words.start.min(row.touched.start)..dense.new_words.end.max(row.touched.end)
+            dense.new_words.start.min(marks.touched.start)
+                ..dense.new_words.end.max(marks.touched.end)
         };
-        row.touched = 0..0;
+        marks.touched = 0..0;
         self.marked -= absorbed;
         Ok(absorbed)
     }
 }
 
-/// What joining one body row into a head's pending row found: the body rows
+/// What joining one body row into a head's pending marks found: the body rows
 /// offered, each one binding of the rule, and those newly marked.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::oracle) struct RowJoin {
@@ -535,7 +539,7 @@ impl Block<'_> {
     }
 }
 
-impl PendingRows {
+impl PendingMarks {
     /// Mark, for every tuple of the `body` block, the head position as far
     /// into the block of `head` starting at `head_start`: the step of
     /// a rule whose last body argument is its head's last argument, over the
@@ -554,7 +558,7 @@ impl PendingRows {
         body: Block<'_>,
         work: &mut Work<'_>,
     ) -> Result<RowJoin, Stop> {
-        let row = &mut self.rows[slot];
+        let marks = &mut self.layouts[slot];
         let mut joined = RowJoin {
             offered: 0,
             marked: 0,
@@ -570,21 +574,21 @@ impl PendingRows {
             );
             joined.offered += offered.count_ones() as usize;
             let start = head_start + done;
-            let occupied = bits(|at| head.present[at] | row.words[at], start, width);
+            let occupied = bits(|at| head.present[at] | marks.words[at], start, width);
             let fresh = offered & !occupied;
             if fresh != 0 {
                 let (first, shift) = (start / 64, start % 64);
-                row.words[first] |= fresh << shift;
-                row.touched = cover(&row.touched, first);
+                marks.words[first] |= fresh << shift;
+                marks.touched = cover(&marks.touched, first);
                 if shift + width > 64 {
-                    row.words[first + 1] |= fresh >> (64 - shift);
-                    row.touched = cover(&row.touched, first + 1);
+                    marks.words[first + 1] |= fresh >> (64 - shift);
+                    marks.touched = cover(&marks.touched, first + 1);
                 }
                 joined.marked += fresh.count_ones() as usize;
             }
             done += width;
         }
-        row.marked += joined.marked;
+        marks.marked += joined.marked;
         self.marked += joined.marked;
         Ok(joined)
     }
@@ -603,7 +607,7 @@ fn bits(word: impl Fn(usize) -> u64, start: usize, width: usize) -> u64 {
     value
 }
 
-impl PendingRow {
+impl LayoutMarks {
     fn bytes(&self) -> u128 {
         self.words.capacity() as u128 * size_of::<u64>() as u128
     }
@@ -716,20 +720,20 @@ mod tests {
         );
     }
 
-    fn pending(work: &mut Work<'_>) -> (Layouts, PendingRows) {
+    fn pending(work: &mut Work<'_>) -> (Layouts, PendingMarks) {
         let mut layouts = Layouts::default();
         layouts.push(layout());
-        let mut pending = PendingRows::default();
+        let mut pending = PendingMarks::default();
         let mut live = 0;
         pending.prepare(&layouts, &mut live, work).unwrap();
         assert_eq!(live, pending.bytes());
         (layouts, pending)
     }
 
-    /// Rows enter a dense relation only through the pending rows.
+    /// Rows enter a dense relation only through the pending marks.
     fn insert(
         dense: &mut Dense,
-        pending: &mut PendingRows,
+        pending: &mut PendingMarks,
         positions: &[usize],
         work: &mut Work<'_>,
     ) {
@@ -799,7 +803,7 @@ mod tests {
 
     /// A body of three values by seventy and a head of two by seventy: rows
     /// wider than a word, starting off a word boundary.
-    fn wide() -> (Layouts, PendingRows, Dense, Dense) {
+    fn wide() -> (Layouts, PendingMarks, Dense, Dense) {
         let control = Control::default();
         let mut work = Work::source(&control, 100_000);
         work.limits.max_closure_bytes = 1 << 20;
@@ -815,7 +819,7 @@ mod tests {
                 .unwrap(),
             );
         }
-        let mut pending = PendingRows::default();
+        let mut pending = PendingMarks::default();
         pending.prepare(&layouts, &mut 0, &mut work).unwrap();
         let mut relations: Vec<Dense> = layouts
             .iter()

@@ -257,7 +257,7 @@ fn closure_receipts_sum_the_dense_heads_and_row_steps() {
     // dense head too, so 71 heads, and twice the blocks.
     let edges = "e(1,2). e(2,3). e(3,4). e(4,5). e(5,6). e(6,7). e(7,8).";
     let rules = "reach(X,Y) :- e(X,Y). reach(X,Z) :- reach(X,Y), e(Y,Z).";
-    for (source, checks, dense_heads, row_steps) in [
+    for (source, checks, dense_heads, block_steps) in [
         (format!("{edges} {rules}"), 1, 35, 21),
         (format!("{{a}}. {edges} {rules}"), 2, 71, 42),
     ] {
@@ -268,15 +268,15 @@ fn closure_receipts_sum_the_dense_heads_and_row_steps() {
             panic!("the lazy route ran: {closure:?}")
         };
         assert_eq!(
-            (joins.dense_heads, joins.row_steps),
-            (dense_heads, row_steps)
+            (joins.dense_heads, joins.block_steps),
+            (dense_heads, block_steps)
         );
         let encoded = &json["statistics"]["closure_execution"]["joins"];
         assert_eq!(encoded["dense_heads"], dense_heads);
-        assert_eq!(encoded["row_steps"], row_steps);
+        assert_eq!(encoded["block_steps"], block_steps);
         assert!(
             diagnostics.contains(&format!(
-                "dense heads={dense_heads} (recorded as bits); row steps={row_steps} (blocks joined by words)"
+                "dense heads={dense_heads} (recorded as bits); block steps={block_steps} (blocks joined by words)"
             )),
             "{diagnostics}"
         );

@@ -963,12 +963,12 @@ fn independent_closure(
     if let crate::ClosureRoute::Lazy(joins) = closure.route {
         writeln!(
             sink,
-            "  closure joins: catalog work={} (within work); bindings={}; tuple probes={}; dense heads={} (recorded as bits); row steps={} (blocks joined by words); peak named closure bytes={} (admitted or reserved capacity, not RSS)",
+            "  closure joins: catalog work={} (within work); bindings={}; tuple probes={}; dense heads={} (recorded as bits); block steps={} (blocks joined by words); peak named closure bytes={} (admitted or reserved capacity, not RSS)",
             joins.catalog_work,
             joins.bindings,
             joins.tuple_probes,
             joins.dense_heads,
-            joins.row_steps,
+            joins.block_steps,
             joins.peak_closure_bytes
         )?;
     }

@@ -15,12 +15,12 @@ mod prepared;
 mod argument_bounds;
 pub use prepared::{ClosureWorkspace, PreparationLimits, PreparationStatistics, PreparedQueries};
 use relations::{
-    Block, Catalogs, Dense, Layouts, PendingRows, Relational, Relations, Resolution, Row, RowSet,
+    Block, Catalogs, Dense, Layouts, PendingMarks, Relational, Relations, Resolution, Row, RowSet,
     Rows,
 };
 pub(crate) mod restrictions;
-mod row_steps;
-use row_steps::RowSteps;
+mod block_steps;
+use block_steps::BlockSteps;
 pub mod source;
 pub(crate) mod worlds;
 #[cfg(test)]
@@ -45,7 +45,7 @@ pub struct Limits {
     pub max_derived_atoms: usize,
     /// Named capacity per scalar closure: predicate/catalog cells and names,
     /// the tree relations' tuples, indexes, columns and prepared-order runs,
-    /// nested tuple payload, the dense relations' words and the pending rows'
+    /// nested tuple payload, the dense relations' words and the pending marks'
     /// marks, pending tuples and operation scratch/growth overlap. Shared
     /// structural buffers are counted per occurrence. Tree-container
     /// allocations (including vacant slots), allocator metadata and
@@ -94,15 +94,15 @@ pub struct Statistics {
     pub tuple_probes: u64,
     /// Distinct atoms in the final least consequence closure.
     pub derived_atoms: usize,
-    /// Derived heads recorded as a bit of a dense relation's pending rows, so
+    /// Derived heads recorded as a bit of a dense relation's pending marks, so
     /// that no atom was built for them before the model was assembled. The
     /// closure's other heads were built as atoms when first derived.
     pub dense_heads: u64,
-    /// Blocks of body rows joined into a head's pending rows a word at a
+    /// Blocks of body rows joined into a head's pending marks a word at a
     /// time, each in place of binding its rows one by one. The rows of such a
     /// block are counted in `bindings` and not in `tuple_probes`: none is
     /// offered to the row matcher.
-    pub row_steps: u64,
+    pub block_steps: u64,
 }
 
 /// Exact closure and rejection reasons after a fully covered completion round.
@@ -484,8 +484,8 @@ struct RoundWorkspace<'a> {
     dimensions: &'a prepared::Dimensions,
     rules: &'a prepared::Rules,
     layouts: &'a Layouts,
-    row_steps: &'a RowSteps,
-    pending: &'a mut PendingRows,
+    block_steps: &'a BlockSteps,
+    pending: &'a mut PendingMarks,
     overhead: u128,
 }
 
@@ -502,7 +502,7 @@ fn least_closure_with(
         dimensions,
         rules,
         layouts,
-        row_steps,
+        block_steps,
         pending,
         overhead,
     } = workspace;
@@ -536,7 +536,7 @@ fn least_closure_with(
                 RoundPlan {
                     rules,
                     layouts,
-                    row_steps,
+                    block_steps,
                 },
                 RoundScratch {
                     assignment: &mut assignment,
@@ -576,7 +576,7 @@ fn least_closure_with(
 }
 
 /// What a round derived for the tree relations, and whether a constraint
-/// fired. Its dense heads are the marks left in the pending rows.
+/// fired. Its dense heads are the marks left in the pending marks.
 struct RoundConsequences {
     atoms: BTreeSet<Atom>,
     bytes: u128,
@@ -593,7 +593,7 @@ struct RoundConsequences {
 fn atoms_held(
     closure: &Catalogs,
     result: &RoundConsequences,
-    pending: &PendingRows,
+    pending: &PendingMarks,
 ) -> Result<usize, Stop> {
     closure
         .len()
@@ -618,7 +618,7 @@ fn record_head(
     dense_head: Option<(usize, &Dense)>,
     closure: &Catalogs,
     result: &mut RoundConsequences,
-    pending: &mut PendingRows,
+    pending: &mut PendingMarks,
     work: &mut Work<'_>,
 ) -> Result<(), Stop> {
     let held = atoms_held(closure, result, pending)?;
@@ -642,20 +642,20 @@ fn record_head(
 
 /// The prepared parts a round reads and never changes: the rule index of
 /// the incremental rounds, the dense layouts, which name a head's slot, and
-/// the row-step plan.
+/// the block-step plan.
 #[derive(Clone, Copy)]
 struct RoundPlan<'a> {
     rules: &'a prepared::Rules,
     layouts: &'a Layouts,
-    row_steps: &'a RowSteps,
+    block_steps: &'a BlockSteps,
 }
 
 /// The scratch a round writes: the assignment, the join buffers and the
-/// pending rows, which take a dense head's position.
+/// pending marks, which take a dense head's position.
 struct RoundScratch<'a, 'source> {
     assignment: &'a mut [Option<&'source Value>],
     buffers: &'a mut prepared::Buffers,
-    pending: &'a mut PendingRows,
+    pending: &'a mut PendingMarks,
 }
 
 /// What a join reports to: each complete binding, and, where the consumer
@@ -670,7 +670,7 @@ trait Sink<'source, E> {
 
     /// Whether the rows of this occurrence, visited innermost, are taken by
     /// [`Self::rows`] instead of bound singly.
-    fn steps_by_rows(&self, _occurrence: usize) -> bool {
+    fn steps_by_blocks(&self, _occurrence: usize) -> bool {
         false
     }
 
@@ -705,12 +705,12 @@ where
 struct RoundSink<'a, 'source> {
     template: &'a Template,
     closure: &'source Catalogs,
-    /// The head's pending-row slot and relation, when the head is laid out.
+    /// The head's pending-marks slot and relation, when the head is laid out.
     dense_head: Option<(usize, &'source Dense)>,
-    /// The template's row-step plan, by positive occurrence.
-    row_steps: &'a [bool],
+    /// The template's block-step plan, by positive occurrence.
+    block_steps: &'a [bool],
     result: &'a mut RoundConsequences,
-    pending: &'a mut PendingRows,
+    pending: &'a mut PendingMarks,
 }
 
 impl<'source> Sink<'source, Stop> for RoundSink<'_, 'source> {
@@ -737,8 +737,8 @@ impl<'source> Sink<'source, Stop> for RoundSink<'_, 'source> {
         Ok(())
     }
 
-    fn steps_by_rows(&self, occurrence: usize) -> bool {
-        self.row_steps.get(occurrence).copied().unwrap_or(false)
+    fn steps_by_blocks(&self, occurrence: usize) -> bool {
+        self.block_steps.get(occurrence).copied().unwrap_or(false)
     }
 
     // The plan admitted the occurrence, so the head is laid out, ends in the
@@ -777,7 +777,7 @@ impl<'source> Sink<'source, Stop> for RoundSink<'_, 'source> {
         admits_more(held_atoms, joined.marked, work)?;
         let count = |n: usize| u64::try_from(n).map_err(|_| Stop::InvalidProgram);
         work.statistics.dense_heads += count(joined.marked)?;
-        work.statistics.row_steps += 1;
+        work.statistics.block_steps += 1;
         count(joined.offered)
     }
 }
@@ -799,7 +799,7 @@ fn visit_round<'source>(
     let RoundPlan {
         rules,
         layouts,
-        row_steps,
+        block_steps,
     } = plan;
     let RoundScratch {
         assignment,
@@ -853,7 +853,7 @@ fn visit_round<'source>(
             template,
             closure,
             dense_head,
-            row_steps: row_steps.of(index),
+            block_steps: block_steps.of(index),
             result: &mut result,
             pending: &mut *pending,
         };
@@ -1046,7 +1046,7 @@ fn visit_with<'source, E: From<Stop>>(
         if depth + 1 == count
             && cursor.is_none()
             && membership.is_none()
-            && step_by_rows(pattern, tuples, occurrence, assignment, emit, work)?
+            && step_by_blocks(pattern, tuples, occurrence, assignment, emit, work)?
         {
             if depth == 0 {
                 return Ok(());
@@ -1086,11 +1086,11 @@ fn visit_with<'source, E: From<Stop>>(
     }
 }
 
-/// Give a consumer that steps by rows the whole block of an occurrence's rows
+/// Give a consumer that steps by blocks the whole block of an occurrence's rows
 /// matching the assignment, in place of binding them one by one; whether it
 /// was given. The block is that of the bound leading terms, which for such an
 /// occurrence are all but its last.
-fn step_by_rows<'source, E: From<Stop>>(
+fn step_by_blocks<'source, E: From<Stop>>(
     pattern: &AtomPattern,
     tuples: Rows<'source>,
     occurrence: usize,
@@ -1101,7 +1101,7 @@ fn step_by_rows<'source, E: From<Stop>>(
     let Rows::Dense { relation, set } = tuples else {
         return Ok(false);
     };
-    if !emit.steps_by_rows(occurrence) {
+    if !emit.steps_by_blocks(occurrence) {
         return Ok(false);
     }
     // A bound value outside its argument's bound matches no position: the

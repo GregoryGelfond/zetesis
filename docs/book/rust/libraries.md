@@ -121,7 +121,7 @@ observations together. Do not build a session by independently pairing a theory
 with an atom table from another admission.
 
 `PreparedQueries` shares one exact native `Program` and retains its join
-dimensions, argument bounds, dense layouts and row-step plan under
+dimensions, argument bounds, dense layouts and block-step plan under
 independent preparation limits. A `ClosureWorkspace` reuses
 empty catalog metadata, reference-free join buffers and the zeroed pending
 rows of the dense layouts across scalar seed

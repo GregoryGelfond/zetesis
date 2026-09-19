@@ -1,4 +1,4 @@
-//! Where a rule's innermost join may be taken a row at a time.
+//! Where a rule's innermost join may be taken a block at a time.
 //!
 //! At the innermost depth of a join every other positive occurrence has bound
 //! its variables. Suppose the occurrence visited there is over a dense
@@ -26,16 +26,16 @@ use super::relations::Layouts;
 use crate::Stop;
 
 /// For each template and positive occurrence, whether the occurrence may be
-/// taken a row at a time when the join visits it innermost.
+/// taken a block at a time when the join visits it innermost.
 ///
 /// Retains one flag for each positive occurrence of the program. Planning
 /// reads every term of a template once for each of its occurrences, so its
 /// work is at most the square of the largest template's terms for each
 /// template; a round reads a flag in constant time.
 #[derive(Default)]
-pub(super) struct RowSteps(Vec<Vec<bool>>);
+pub(super) struct BlockSteps(Vec<Vec<bool>>);
 
-impl RowSteps {
+impl BlockSteps {
     /// One unit for each term of each pattern inspected for each occurrence.
     pub(super) fn plan(
         program: &Program,

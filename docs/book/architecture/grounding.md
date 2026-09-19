@@ -522,7 +522,7 @@ round's joins borrow. The marks are disjoint from the relation, so their
 number is the round's count of new dense atoms and the derived-atom limit is
 judged as each is marked. After the round the marked words are joined into
 the relation and into New, and cleared, so nothing of a round or a candidate
-remains in the pending rows; every dense relation is created when the closure
+remains in the pending marks; every dense relation is created when the closure
 starts, so that a round never changes the catalogs. `Statistics::dense_heads`
 counts the heads recorded this way. Where a rule's innermost occurrence is
 over a dense relation, its last argument is a variable that nothing else in
@@ -531,7 +531,7 @@ argument of the two patterns is a constant or bound by then, and the two
 relations list that argument's values alike, the join does not bind the
 occurrence's rows one by one: the rows matching the bound prefix are one
 block of the relation, their heads are one block of the head's relation,
-place for place, and the block of rows is joined into the head's pending row
+place for place, and the block of rows is joined into the head's pending marks
 a word at a time, leaving out the positions the head holds or the round has
 marked. No gate or filter reads the variable, so every guard was judged
 before the depth was reached, and each row of the block is one binding of
@@ -540,7 +540,7 @@ the row operation of a transitive closure over a boolean matrix. The plan is
 fixed at preparation for every occurrence, since the occurrence a round
 visits innermost depends on the one it pivots on; a rule that fails a clause
 keeps the binding of single rows, as does a join that follows membership.
-`Statistics::row_steps` counts the blocks joined, whose rows are counted as
+`Statistics::block_steps` counts the blocks joined, whose rows are counted as
 bindings and not as tuple probes. The bounds are an upper domain of every
 derivable head, so a head outside them is an admitted-program invariant
 violation, not a missed row, and the closure over dense relations holds

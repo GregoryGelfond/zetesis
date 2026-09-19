@@ -211,7 +211,7 @@ fn the_transitive_rule_joins_one_block_for_each_new_path_with_an_onward_edge() {
             .unwrap();
         let statistics = check.statistics();
         (
-            statistics.row_steps,
+            statistics.block_steps,
             statistics.bindings,
             check.closure().clone(),
         )

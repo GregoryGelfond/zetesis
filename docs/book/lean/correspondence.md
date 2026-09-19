@@ -132,8 +132,8 @@ lifetimes remain implementation obligations.
 A dense relation stores a bounded predicate's rows as bits over the
 mixed-radix index of the arguments' ranks in their bounds. A round's dense
 heads are marked as pending bits and joined into the relation after the
-round, and a row step marks a block of heads from a block of rows by words.
-[`RowSteps`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/RowSteps.lean)
+round, and a block step marks a block of heads from a block of rows by words.
+[`BlockSteps`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/BlockSteps.lean)
 states the laws of these steps over an abstract position function:
 `marks_are_new_atoms` and `absorbed_is_union`, that under a position
 injective on a carrier holding every derived head the marks are exactly the
@@ -152,11 +152,11 @@ the inferred bounds are such a carrier, an upper domain of every derivable
 head, which holds because each head argument's bound is closed under every
 template's contribution to it; that position order is canonical atom order,
 which follows from each argument's values being kept in canonical order with
-the first argument most significant; that the row-step plan admits only
+the first argument most significant; that the block-step plan admits only
 rules and relations meeting the block's conditions, and a block is stepped
 only at the innermost depth of a join, where every guard of the rule has
 been judged; and the word arithmetic of the join. The argument bound, dense
-relation, row-step plan and family tests check them. Under the laws and the
+relation, block-step plan and family tests check them. Under the laws and the
 obligations, the closure over dense relations is the closure over catalogs,
 step for step; the consequence step and constraint verdict of `DeltaRounds`
 are the same whichever store holds the rows.

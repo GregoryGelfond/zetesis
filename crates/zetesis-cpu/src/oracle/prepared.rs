@@ -7,8 +7,8 @@ use zetesis_core::{Predicate, Program, SeedView, Value};
 
 use super::{
     Check, Limits, Work, argument_bounds,
-    relations::{Catalogs, Layout, Layouts, PendingRows, storage},
-    row_steps::RowSteps,
+    block_steps::BlockSteps,
+    relations::{Catalogs, Layout, Layouts, PendingMarks, storage},
 };
 use crate::{Control, Stop};
 
@@ -19,7 +19,7 @@ pub struct PreparationLimits {
     /// The three parts of preparation: the template and positive-pattern
     /// dimension inspections, linear in the templates and occurrences; the
     /// argument-bound inference, a fixed point over every head term; and
-    /// the row-step plan, which reads every term of a template once for
+    /// the block-step plan, which reads every term of a template once for
     /// each of its occurrences.
     pub max_work: u64,
     /// Named immutable preparation bytes, excluding the shared source
@@ -68,7 +68,7 @@ pub struct PreparationStatistics {
 /// Preparation inspects the dimensions, linear in templates and
 /// positive-pattern occurrences; infers the argument bounds, a fixed point
 /// over every head term whose passes are bounded by the values admitted; and
-/// plans the row steps, at most the square of the largest template's terms
+/// plans the block steps, at most the square of the largest template's terms
 /// for each template. The dimensions bound the assignment, cursor and undo
 /// buffers actually used by [`Self::check_view`]. They are not a class
 /// certificate or semantic index.
@@ -78,8 +78,8 @@ pub struct PreparedQueries {
     rules: Rules,
     /// The dense layouts, for the predicates the argument bounds admit.
     layouts: Layouts,
-    /// Where a template's innermost join may be taken a row at a time.
-    row_steps: RowSteps,
+    /// Where a template's innermost join may be taken a block at a time.
+    block_steps: BlockSteps,
     statistics: PreparationStatistics,
 }
 
@@ -175,10 +175,10 @@ impl PreparedQueries {
                 layouts.push(layout);
             }
         }
-        let row_steps = RowSteps::plan(program, &layouts, work)?;
+        let block_steps = BlockSteps::plan(program, &layouts, work)?;
         let retained_bytes = rules
             .bytes()
-            .and_then(|bytes| bytes.checked_add(row_steps.bytes()?))
+            .and_then(|bytes| bytes.checked_add(block_steps.bytes()?))
             .and_then(|bytes| bytes.checked_add(layouts.bytes()?))
             .and_then(|bytes| bytes.checked_add(size_of::<Self>() as u128))
             .ok_or(Stop::StorageLimit)?;
@@ -195,7 +195,7 @@ impl PreparedQueries {
                 dense_predicates: layouts.len(),
             },
             layouts,
-            row_steps,
+            block_steps,
         })
     }
 
@@ -216,7 +216,7 @@ impl PreparedQueries {
     /// All candidate truth is empty initially. A completed call transfers atom
     /// payload to its returned `Check`; only empty catalog metadata, predicate
     /// names, reference-free join and prepared-order capacity, and the dense
-    /// relations' words and pending rows' marks, zeroed, remain. Frontiers and
+    /// relations' words and pending marks, zeroed, remain. Frontiers and
     /// all logical ID lengths are reset before another candidate is evaluated.
     /// Assignment references live
     /// within one immutable round. A different program instance retires the old
@@ -383,7 +383,7 @@ impl PreparedQueries {
                 dimensions: &self.dimensions,
                 rules: &self.rules,
                 layouts: &self.layouts,
-                row_steps: &self.row_steps,
+                block_steps: &self.block_steps,
                 pending: &mut workspace.pending,
                 overhead,
             },
@@ -404,7 +404,7 @@ pub struct ClosureWorkspace {
     program: Option<Program>,
     catalogs: Catalogs,
     buffers: Buffers,
-    pending: PendingRows,
+    pending: PendingMarks,
     clean: bool,
 }
 
@@ -414,7 +414,7 @@ impl Default for ClosureWorkspace {
             program: None,
             catalogs: Catalogs::default(),
             buffers: Buffers::default(),
-            pending: PendingRows::default(),
+            pending: PendingMarks::default(),
             clean: true,
         }
     }
