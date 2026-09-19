@@ -48,7 +48,7 @@ use themelios_program::program::{
 use themelios_program::provenance::{Origin, Provenance, TransformTag, WithProvenance};
 use themelios_program::symbol::{Signature, Symbol, VarName};
 use themelios_program::term::{BinaryOp, Term, Variable};
-use zetesis_domain::{Analysis, Domain, Key, Status};
+use zetesis_domain::{Analysis, Domain, Key, Status, atom_signature};
 
 use crate::expansion::Budget;
 use crate::formula_ir::Prepared;
@@ -264,10 +264,8 @@ fn demands<'a>(
         let Arguments::Single(terms) = &atom.arguments else {
             continue;
         };
-        let signature = Signature {
-            sign: atom.sign,
-            name: atom.name.clone(),
-            arity: u32::try_from(terms.len()).unwrap_or(u32::MAX),
+        let Some(signature) = atom_signature(atom, terms.len()) else {
+            continue;
         };
         let Some(key) = keys.get(&signature) else {
             continue;
@@ -411,14 +409,7 @@ fn admits_within(analysis: &Analysis<'_>, key: &Key<'_>, low: i64, high: i64) ->
         let position = terms
             .iter()
             .position(|term| mentions(term, key.value_variable()))?;
-        Some((
-            Signature {
-                sign: atom.sign,
-                name: atom.name.clone(),
-                arity: u32::try_from(terms.len()).unwrap_or(u32::MAX),
-            },
-            position,
-        ))
+        Some((atom_signature(atom, terms.len())?, position))
     });
     // The value is bound by the condition, so a literal names it; every one
     // that does bounds it, and one within range suffices.

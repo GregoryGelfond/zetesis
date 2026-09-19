@@ -1,12 +1,15 @@
 //! Complete formula and frozen-reduct comparison against explicit Cartesian rules.
 
+#[path = "support/stable_models.rs"]
+mod stable_models;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
+use stable_models::stable;
 use zetesis_core::{Atom, Predicate, Value};
 use zetesis_cpu::Control;
 use zetesis_ferraris::{Interpretation, Limits, models, models_reduct};
-use zetesis_sat::{Limits as SearchLimits, StableModels};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, FormulaResource,
     admit_formula,
@@ -108,22 +111,6 @@ fn independent_constraint_components_and_empty_extensions_are_exact() {
         "{a(1);a(2);b(1);b(2)}. h:-a(X),X!=1,X!=2,b(Y).",
         "{a(1);a(2);b(1);b(2)}.",
     );
-}
-
-fn stable(input: &AdmittedFormula) -> BTreeSet<BTreeSet<Atom>> {
-    let mut search =
-        StableModels::new(input.theory(), SearchLimits::default(), Control::default()).unwrap();
-    let mut result = BTreeSet::new();
-    for model in search.by_ref() {
-        let atoms = model
-            .unwrap()
-            .atoms()
-            .map(|index| input.atoms()[index].clone())
-            .collect();
-        assert!(result.insert(atoms), "duplicate complete stable model");
-    }
-    assert!(search.exhausted());
-    result
 }
 
 fn atom(name: &str, values: Vec<Value>) -> Atom {

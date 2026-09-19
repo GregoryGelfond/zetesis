@@ -1,11 +1,11 @@
 //! Keyed relations: exactly one value per key, from a program's choice rules.
 
 use themelios_base::source::{Source, SourceId};
-use themelios_program::program::Program;
+use themelios_program::program::{Arguments, Atom, Program};
 use themelios_program::raise::raise;
 use themelios_program::symbol::{Name, Sign, Signature, VarName};
 use themelios_syntax::{dialect::Dialect, parse::parse};
-use zetesis_domain::{Limits, keys};
+use zetesis_domain::{Limits, atom_signature, keys};
 
 fn source(text: &str) -> Program {
     let source = Source::new(SourceId::new(17), text.to_owned()).unwrap();
@@ -106,10 +106,6 @@ fn the_key_names_its_variables_and_owner() {
     assert_eq!(key.key_variable(0).map(VarName::as_str), Some("L"));
     assert_eq!(key.key_variable(1), None);
     assert_eq!(key.value_variable().as_str(), "D");
-    assert!(std::ptr::eq(
-        key.statement(),
-        program.statements().nth(2).unwrap()
-    ));
     assert_eq!(key.condition().literals().count(), 1);
     assert_eq!(key.body().elements().count(), 1);
 }
@@ -124,4 +120,15 @@ fn the_analysis_stops_within_its_work_limit() {
     let stop = keys(&source(program), &limits).unwrap_err();
     assert_eq!(stop.limit, 3);
     assert!(stop.observed > 3);
+}
+
+#[test]
+fn an_arity_beyond_a_signatures_width_has_no_signature() {
+    let atom = Atom {
+        sign: Sign::Positive,
+        name: Name::new("p").unwrap(),
+        arguments: Arguments::Single(vec![]),
+    };
+    assert_eq!(atom_signature(&atom, 2), Some(signature("p", 2)));
+    assert_eq!(atom_signature(&atom, usize::MAX), None);
 }

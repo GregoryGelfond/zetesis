@@ -30,7 +30,6 @@ use crate::limits::{Limits, Resource, Stop, check};
 #[derive(Debug)]
 pub struct Key<'p> {
     signature: Signature,
-    statement: &'p WithProvenance<Statement>,
     /// The key variable at each argument position; `None` at the value.
     arguments: Vec<Option<&'p VarName>>,
     value: usize,
@@ -62,12 +61,6 @@ impl<'p> Key<'p> {
     #[must_use]
     pub fn value_variable(&self) -> &'p VarName {
         self.value_variable
-    }
-
-    /// The choice rule that produces the relation.
-    #[must_use]
-    pub fn statement(&self) -> &'p WithProvenance<Statement> {
-        self.statement
     }
 
     /// The element's condition, which binds the value.
@@ -131,7 +124,7 @@ pub fn keys<'p>(program: &'p Program, limits: &Limits) -> Result<Vec<Key<'p>>, S
         let Head::Choice(choice) = rule.head().get() else {
             continue;
         };
-        if let Some(key) = key(carrier, choice, rule.body().get(), &producers, &mut work)? {
+        if let Some(key) = key(choice, rule.body().get(), &producers, &mut work)? {
             keys.push(key);
         }
     }
@@ -170,21 +163,27 @@ fn atom_produced(
 ) -> Result<(), Stop> {
     for terms in atom.alternatives() {
         work.step()?;
-        *producers.entry(signature(atom, terms.len())).or_default() += 1;
+        let Some(signature) = atom_signature(atom, terms.len()) else {
+            continue;
+        };
+        *producers.entry(signature).or_default() += 1;
     }
     Ok(())
 }
 
-fn signature(atom: &Atom, arity: usize) -> Signature {
-    Signature {
+/// The signed signature of `atom` with `arity` arguments, or `None` when the
+/// arity does not fit a signature's width: no signature names such an atom,
+/// so it produces nothing and is keyed by nothing.
+#[must_use]
+pub fn atom_signature(atom: &Atom, arity: usize) -> Option<Signature> {
+    Some(Signature {
         sign: atom.sign,
         name: atom.name.clone(),
-        arity: u32::try_from(arity).unwrap_or(u32::MAX),
-    }
+        arity: u32::try_from(arity).ok()?,
+    })
 }
 
 fn key<'p>(
-    statement: &'p WithProvenance<Statement>,
     choice: &'p Choice,
     body: &'p Body,
     producers: &BTreeMap<Signature, usize>,
@@ -209,7 +208,9 @@ fn key<'p>(
     if literal.negation != DefaultNegation::None {
         return Ok(None);
     }
-    let keyed = signature(atom, terms.len());
+    let Some(keyed) = atom_signature(atom, terms.len()) else {
+        return Ok(None);
+    };
     if producers.get(&keyed) != Some(&1) {
         return Ok(None);
     }
@@ -230,7 +231,6 @@ fn key<'p>(
     }
     Ok(Some(Key {
         signature: keyed,
-        statement,
         arguments: positions.arguments,
         value: positions.value,
         value_variable: positions.variable,
@@ -255,7 +255,7 @@ fn key_variables<'p>(
         let Arguments::Single(terms) = &atom.arguments else {
             return Ok(None);
         };
-        if signature(atom, terms.len()) == *keyed {
+        if atom_signature(atom, terms.len()).as_ref() == Some(keyed) {
             return Ok(None);
         }
         for term in terms {
@@ -337,7 +337,7 @@ fn binds_value(
         let Arguments::Single(terms) = &atom.arguments else {
             return Ok(false);
         };
-        if signature(atom, terms.len()) == *keyed {
+        if atom_signature(atom, terms.len()).as_ref() == Some(keyed) {
             return Ok(false);
         }
         for term in terms {

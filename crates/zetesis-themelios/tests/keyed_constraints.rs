@@ -4,12 +4,12 @@
 mod source_oracle;
 #[path = "support/source_records.rs"]
 mod source_records;
+#[path = "support/stable_models.rs"]
+mod stable_models;
 
 use std::collections::BTreeSet;
 
-use zetesis_core::Atom;
-use zetesis_cpu::Control;
-use zetesis_sat::{Limits, StableModels};
+use stable_models::stable;
 use zetesis_themelios::{AdmittedFormula, FormulaLimits};
 
 const CHOICES: &str = "letter(a;b;c). digit(0..9). carry_value(0;1). idx(1). \
@@ -19,22 +19,6 @@ const CHOICES: &str = "letter(a;b;c). digit(0..9). carry_value(0;1). idx(1). \
 fn admitted(source: &str) -> AdmittedFormula {
     source_records::admit(source, &FormulaLimits::default())
         .unwrap_or_else(|error| panic!("{source}: {error}"))
-}
-
-fn stable(input: &AdmittedFormula) -> BTreeSet<BTreeSet<Atom>> {
-    let mut search =
-        StableModels::new(input.theory(), Limits::default(), Control::default()).unwrap();
-    let mut result = BTreeSet::new();
-    for model in search.by_ref() {
-        let atoms = model
-            .unwrap()
-            .atoms()
-            .map(|index| input.atoms()[index].clone())
-            .collect();
-        assert!(result.insert(atoms));
-    }
-    assert!(search.exhausted());
-    result
 }
 
 /// The two programs ground to theories of the same shape and the same family.
