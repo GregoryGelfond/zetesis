@@ -657,14 +657,16 @@ trait Sink<'source, E> {
     }
 
     /// Take the block of rows matching the assignment, which binds every
-    /// variable of the rule but the occurrence's last.
+    /// variable of the rule but the occurrence's last, and report how many
+    /// rows were taken as bindings, which the join counts as it counts the
+    /// bindings it makes singly.
     fn rows(
         &mut self,
         _rows: Block<'source>,
         _assignment: &[Option<&'source Value>],
         _work: &mut Work<'_>,
-    ) -> Result<(), E> {
-        Ok(())
+    ) -> Result<u64, E> {
+        Ok(0)
     }
 }
 
@@ -730,7 +732,7 @@ impl<'source> Sink<'source, Stop> for RoundSink<'_, 'source> {
         rows: Block<'source>,
         assignment: &[Option<&'source Value>],
         work: &mut Work<'_>,
-    ) -> Result<(), Stop> {
+    ) -> Result<u64, Stop> {
         let (Some(head), Some((slot, dense))) = (self.template.head(), self.dense_head) else {
             return Err(Stop::InvalidProgram);
         };
@@ -745,7 +747,7 @@ impl<'source> Sink<'source, Stop> for RoundSink<'_, 'source> {
             // The head's bounds cover every derivable head: a head prefix
             // outside them derives nothing, so the block holds no row.
             return if rows.is_empty(work)? {
-                Ok(())
+                Ok(0)
             } else {
                 Err(Stop::InvalidProgram)
             };
@@ -756,10 +758,9 @@ impl<'source> Sink<'source, Stop> for RoundSink<'_, 'source> {
             .join_row(slot, dense, heads.start, rows, work)?;
         admits_more(held_atoms, joined.marked, work)?;
         let count = |n: usize| u64::try_from(n).map_err(|_| Stop::InvalidProgram);
-        work.statistics.bindings += count(joined.offered)?;
         work.statistics.dense_heads += count(joined.marked)?;
         work.statistics.row_steps += 1;
-        Ok(())
+        count(joined.offered)
     }
 }
 
@@ -1089,7 +1090,7 @@ fn step_by_rows<'source, E: From<Stop>>(
     // block is empty and there is nothing to take.
     let block = window::matching_prefix(pattern, tuples, 0, assignment, work)?;
     if !block.is_empty() {
-        emit.rows(
+        let bound = emit.rows(
             Block {
                 relation,
                 set,
@@ -1099,6 +1100,7 @@ fn step_by_rows<'source, E: From<Stop>>(
             assignment,
             work,
         )?;
+        work.statistics.bindings += bound;
     }
     Ok(true)
 }
