@@ -621,7 +621,7 @@ struct DenseHeads<'a> {
 
 /// What a join reports to: each complete binding, and, where the consumer
 /// can take them whole, the block of rows its innermost depth would bind one
-/// by one. A closure is a consumer of bindings alone.
+/// by one. A plain function, an `FnMut`, is a consumer of bindings alone.
 trait Sink<'source, E> {
     fn binding(
         &mut self,
