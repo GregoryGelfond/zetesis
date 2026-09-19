@@ -1,6 +1,6 @@
 //! Actual optional-domain profiling and its independent reference boundary.
 
-use zetesis_experiments::grounding::{Configuration, Error, Mode, Report, profile};
+use zetesis_experiments::grounding::{Configuration, Error, Mode, Report, measure_file};
 use zetesis_themelios::{
     DomainLimits, FormulaFailure, FormulaLimits, FormulaResource, GroundingOutcome, GroundingPhase,
     GroundingWork, JoinStrategy, SourceBundle, prepare_bundle_formula,
@@ -25,10 +25,10 @@ fn work(report: &Report, selected: GroundingPhase) -> GroundingWork {
 fn paired(joins: JoinStrategy) -> (Report, Report) {
     let mut config = configuration();
     config.grounding.joins = joins;
-    let before = profile(source("domain-prefixes.lp"), config).unwrap();
+    let before = measure_file(source("domain-prefixes.lp"), config).unwrap();
     assert!(before.complete, "{:?}", before.failure);
     config.domain_analysis = Some(DomainLimits::default());
-    let after = profile(source("domain-prefixes.lp"), config).unwrap();
+    let after = measure_file(source("domain-prefixes.lp"), config).unwrap();
     assert!(after.complete, "{:?}", after.failure);
     (before, after)
 }
@@ -124,7 +124,7 @@ fn stopped_domain_analysis_retains_complete_fallback() {
         max_work: 7,
         ..DomainLimits::default()
     });
-    let report = profile(source("domain-prefixes.lp"), config).unwrap();
+    let report = measure_file(source("domain-prefixes.lp"), config).unwrap();
     assert!(report.complete, "{:?}", report.failure);
     let qualified = report.qualification.as_ref().unwrap();
     assert_eq!(
@@ -199,7 +199,7 @@ fn domain_refusal_keeps_the_unmodified_reference() {
     let mut config = configuration();
     config.formula.max_work = upper;
     config.domain_analysis = Some(DomainLimits::default());
-    let report = profile(source("domain-fact.lp"), config).unwrap();
+    let report = measure_file(source("domain-fact.lp"), config).unwrap();
     assert!(!report.complete);
     let qualified = report
         .qualification

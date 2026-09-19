@@ -51,7 +51,7 @@ pub struct CommandOptions {
     pub static_options: Options,
 }
 
-/// Execution profiles with independent validation contracts.
+/// The experiments, each with its own validation contract.
 #[derive(Debug, clap::Subcommand)]
 pub enum Experiment {
     /// Compare complete finite-table row survival and projected typed domains on CPU.

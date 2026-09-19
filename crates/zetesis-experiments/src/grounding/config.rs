@@ -114,7 +114,7 @@ impl Configuration {
     }
 }
 
-/// Command adapter for the reusable [`super::profile`] operation.
+/// Command adapter for the reusable [`super::measure_file`] operation.
 #[derive(Debug, clap::Args)]
 pub struct Options {
     /// Original source entry path; includes are loaded without rewriting bytes.
