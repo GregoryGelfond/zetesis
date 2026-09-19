@@ -247,3 +247,38 @@ fn eager_closure_receipts_carry_no_join_counters() {
     );
     assert!(!diagnostics.contains("closure joins:"), "{diagnostics}");
 }
+
+#[test]
+fn closure_receipts_sum_the_dense_heads_and_row_steps() {
+    // Seven edges and their 28 paths: every one of the 35 heads is recorded
+    // as a bit, and the transitive rule joins 21 blocks, one for each new
+    // path with an onward edge. With a choice added, the two candidates'
+    // closures are summed: the candidate holding the choice derives it as a
+    // dense head too, so 71 heads, and twice the blocks.
+    let edges = "e(1,2). e(2,3). e(3,4). e(4,5). e(5,6). e(6,7). e(7,8).";
+    let rules = "reach(X,Y) :- e(X,Y). reach(X,Z) :- reach(X,Y), e(Y,Z).";
+    for (source, checks, dense_heads, row_steps) in [
+        (format!("{edges} {rules}"), 1, 35, 21),
+        (format!("{{a}}. {edges} {rules}"), 2, 71, 42),
+    ] {
+        let (report, json, diagnostics) = solve_source(&source, &options(&["--grounder", "lazy"]));
+        let closure = report.closure_execution.unwrap();
+        assert_eq!(closure.completed_checks, checks);
+        let ClosureRoute::Lazy(joins) = closure.route else {
+            panic!("the lazy route ran: {closure:?}")
+        };
+        assert_eq!(
+            (joins.dense_heads, joins.row_steps),
+            (dense_heads, row_steps)
+        );
+        let encoded = &json["statistics"]["closure_execution"]["joins"];
+        assert_eq!(encoded["dense_heads"], dense_heads);
+        assert_eq!(encoded["row_steps"], row_steps);
+        assert!(
+            diagnostics.contains(&format!(
+                "dense heads={dense_heads} (recorded as bits); row steps={row_steps} (blocks joined by words)"
+            )),
+            "{diagnostics}"
+        );
+    }
+}

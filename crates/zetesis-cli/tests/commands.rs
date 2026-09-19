@@ -3,7 +3,7 @@
 use std::process::{Command as ProcessCommand, Stdio};
 
 use clap::Parser;
-use zetesis_cli::{Backend, Command, Completion, Options, RunError, run_with_diagnostics};
+use zetesis_cli::{Backend, Command, Completion, Options, Report, RunError, run_with_diagnostics};
 use zetesis_cpu::Control;
 
 fn options(arguments: &[&str]) -> Options {
@@ -31,10 +31,9 @@ fn normal_invocation_defaults_to_auto_and_preserves_explicit_backends() {
     assert_eq!(options(&["devices"]).command, Some(Command::Devices));
 }
 
-#[test]
-fn tiny_auto_run_reads_the_root_once_and_separates_diagnostics() {
-    // The narrowed root holds the one undecided gate atom; its out branch is
-    // the first answer, found after one check.
+/// A tiny automatic run, one node and one choice, with its models and its
+/// diagnostics as text.
+fn tiny_auto_run() -> (Report, String, String) {
     let mut models = Vec::new();
     let mut diagnostics = Vec::new();
     let report = run_with_diagnostics(
@@ -45,12 +44,27 @@ fn tiny_auto_run_reads_the_root_once_and_separates_diagnostics() {
         &Control::default(),
     )
     .unwrap();
+    (
+        report,
+        String::from_utf8(models).unwrap(),
+        String::from_utf8(diagnostics).unwrap(),
+    )
+}
+
+#[test]
+fn a_tiny_auto_run_finds_its_first_answer_after_one_check() {
+    // The narrowed root holds the one undecided gate atom; its out branch is
+    // the first answer, found after one check.
+    let (report, models, _) = tiny_auto_run();
     assert_eq!(report.completion, Completion::RequestedModels);
     assert_eq!(report.checked, 1);
     assert_eq!(report.discovered_gate_atoms, 1);
-    let models = String::from_utf8(models).unwrap();
-    let diagnostics = String::from_utf8(diagnostics).unwrap();
     assert!(models.starts_with("Answer: 1\nnode(a)\n"));
+}
+
+#[test]
+fn diagnostics_are_written_apart_from_the_models() {
+    let (_, models, diagnostics) = tiny_auto_run();
     assert!(!models.contains("Backend:"));
     assert!(!models.contains("Auto:"));
     assert!(diagnostics.contains("Backend: cpu"));

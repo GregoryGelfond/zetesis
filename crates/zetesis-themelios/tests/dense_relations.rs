@@ -1,6 +1,8 @@
 //! A closure over dense relations is the closure over trees, atom for atom,
 //! on the families the closure route serves: the bounds decide only how a
-//! relation is stored, never which atoms it holds.
+//! relation is stored, never which atoms it holds. The families are source
+//! text, which this crate admits and the closure engine's own crate cannot
+//! without depending on this one, so the test lives here.
 use std::fmt::Write as _;
 
 use zetesis_core::{Atom, Model, Seed};
