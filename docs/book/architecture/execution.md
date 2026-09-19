@@ -72,8 +72,8 @@ Candidates on the formula route can be proposed by regions
 (`--search regions`), the same coverage tree the closure route walks
 (`Search.lean`), over the theory's atoms. The root leaves every atom open. Under a region every node of the formula DAG
 has two readings, decided by one pass over the DAG: sure, when every
-candidate of the region satisfies it, and impossible, when none does; a
-held atom is sure, a cut atom impossible, and the connectives combine the
+candidate of the region satisfies it, and never, when no candidate does; a
+held atom is sure, a cut atom never, and the connectives combine the
 readings as the closure route's definite and possible gates combine a
 rule's. The narrowing closes what every candidate must make of each node
 in both directions: every root holds, a node learns from its operands, and
@@ -90,7 +90,7 @@ form (`FormulaBounds.read_sound`, `never_root_refutes`, `known_sound`,
 `unsupported_cut`). A region no reading refutes is split
 on the open atom the narrowing found most constrained, cut branch first;
 a region with every atom decided is a leaf, and a leaf is a classical model, since at a full decision every
-root is sure or impossible (`FormulaBounds.decided_leaf_models`). The leaf
+root is sure or never (`FormulaBounds.decided_leaf_models`). The leaf
 is the candidate the reduct decides.
 The knowledge of a region holds in every region inside it
 (`FormulaBounds.known_mono`), so a split hands each child a copy of its

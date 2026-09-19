@@ -10,7 +10,7 @@
 //! the atom its narrowing prefers, cut branch first; a region with every atom
 //! decided is a leaf, and a leaf is a classical model of the theory and the
 //! restrictions, because at a full decision every root is sure or
-//! impossible and an impossible root refutes. The leaf is the proposal; the
+//! never and a root never refutes. The leaf is the proposal; the
 //! reduct decides it as it decides a proposal from the clauses.
 //!
 //! The narrowing's node reads are charged as search work and each split as
