@@ -87,13 +87,15 @@ pub struct CandidateStatistics {
     /// Gate atoms of the narrowing's lower closure, held in every seed
     /// instead of counted: every answer set holds them.
     pub necessary_gate_atoms: usize,
-    /// Why the narrowing stopped early: its preparation or a closure stopped
-    /// on a resource ceiling, and the counter kept the bounds of the passes
-    /// that completed, the whole symbolic carrier when none had. `None` when
-    /// no bound was requested or the narrowing reached its fixed point.
+    /// Why a narrowing stopped early, the root's or any region's below it:
+    /// the preparation or a closure stopped on a resource ceiling, and the
+    /// counter kept the bounds of the passes that completed, the whole
+    /// symbolic carrier when none had. The first stop is kept. `None` when
+    /// no bound was requested or every narrowing reached its fixed point.
     pub bounds_stop: Option<Stop>,
-    /// Completed narrowing passes, each two closures; the last one changed
-    /// neither bound, unless a stop or a refutation ended the narrowing.
+    /// The root's narrowing passes that changed a bound or found the fixed
+    /// point, each two closures; a pass that refuted the root or stopped is
+    /// not counted.
     pub bounds_passes: usize,
     /// A constraint fired in the lower closure of the narrowed region, so no
     /// seed of it is accepted and the counter offered none
@@ -111,8 +113,9 @@ pub struct CandidateStatistics {
     /// nothing beyond the split that formed them or a closure stopped inside
     /// them; the count's restrictions still apply within.
     pub regions_counted: usize,
-    /// Completed narrowing passes over the regions below the root, each two
-    /// closures.
+    /// The narrowing passes over the regions below the root that changed a
+    /// bound or found a fixed point, each two closures, as
+    /// [`Self::bounds_passes`] counts the root's.
     pub region_passes: usize,
 }
 
