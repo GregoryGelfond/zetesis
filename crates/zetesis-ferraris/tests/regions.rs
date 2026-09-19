@@ -357,10 +357,10 @@ fn a_held_atom_no_producer_can_support_refutes_the_region() {
 }
 
 #[test]
-fn a_demand_reaches_every_open_atom_of_the_side_that_must_hold() {
+fn a_disjunction_whose_one_side_is_impossible_holds_the_other_sides_atoms() {
     // (a & b) | (c & d) with a cut: the left side is impossible, so the
-    // right side must hold and both its atoms are held, which no rule over
-    // one open atom could decide.
+    // disjunction known to hold forces the right side, a conjunction known
+    // to hold, which holds both its atoms.
     let nodes = vec![
         Node::Atom(0),
         Node::Atom(1),
@@ -377,7 +377,10 @@ fn a_demand_reaches_every_open_atom_of_the_side_that_must_hold() {
         Narrowing::Fixed { changed: true }
     ));
     assert!(cut.is_held(2) && cut.is_held(3));
-    assert!(cut.is_open(1), "the impossible side demands nothing");
+    assert!(
+        cut.is_open(1),
+        "the impossible side decides nothing about its other atom"
+    );
     narrowing_keeps_every_stable_model(&t);
 }
 

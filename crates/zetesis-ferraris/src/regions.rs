@@ -28,7 +28,7 @@
 //! fragment of the support restriction, an atom none of whose producers
 //! can support it, each having a body known to fail or another head known
 //! to hold, is known to fail (`unsupported_cut`), and an atom known to
-//! hold with exactly one producer able to support it demands that
+//! hold with exactly one producer able to support it forces that
 //! producer's body (`sole_support_forces`). A node or atom known both to
 //! hold and to fail refutes the region. The open atoms known are then
 //! held or cut.
@@ -942,7 +942,7 @@ impl Known {
 
     /// An atom none of its producers can support is known to fail, and an
     /// atom known to hold with exactly one producer able to support it
-    /// demands that producer's body (`unsupported_cut`,
+    /// forces that producer's body (`unsupported_cut`,
     /// `sole_support_forces`). A producer can support its atom when its
     /// body is not known to fail and, unless it is a choice, no other of
     /// its heads is known to hold.

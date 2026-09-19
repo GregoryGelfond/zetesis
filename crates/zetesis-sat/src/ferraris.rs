@@ -131,7 +131,7 @@ pub struct Statistics {
     pub stable_models: u64,
     /// Coarse host timings, absent unless explicitly enabled after construction.
     /// These are separate from deterministic semantic work counters. Under
-    /// several region workers they are the workers' own intervals summed,
+    /// several workers they are the workers' own intervals summed,
     /// which may exceed the wall time of the enumeration.
     pub phase_timings: Option<crate::SearchPhaseTimings>,
     /// Optional complete-theory certificate attempt and checks.

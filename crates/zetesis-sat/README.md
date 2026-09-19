@@ -135,7 +135,7 @@ one counter step, or an atom's support rechecked), atoms held and cut, whether t
 the reading work, and `Statistics::reduct.regions` the same for the reduct
 queries; `candidate_queries` and the projection history stay zero,
 since no classical query is asked and no exclusion index is kept. Laws:
-`FormulaBounds.lean` for the readings, the three rules and the leaf
+`FormulaBounds.lean` for the readings, the closure's rules and the leaf
 (`decided_leaf_models`), `Search.lean` for the tree. See [the proposer](src/regions.rs) and
 [its propositions](tests/regions.rs).
 An optimizer must separately prove that excluded stable candidates are dominated
@@ -298,7 +298,7 @@ independent pending-interpretation contract. No benchmark or device speedup is
 established by these portable completion tests.
 
 `StableModels::enable_phase_timing()` optionally records coarse host wall intervals
-in `statistics().phase_timings`. Under several region workers the intervals are
+in `statistics().phase_timings`. Under several workers the intervals are
 the workers' own narrowing and leaf decisions summed over the workers, which
 may exceed the wall time; the coordinator's wait for their models is not a
 phase. Enabling is idempotent and starts after initial

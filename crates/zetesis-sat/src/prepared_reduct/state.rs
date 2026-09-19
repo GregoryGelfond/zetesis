@@ -12,7 +12,7 @@ use crate::{
 
 /// The membership machinery of one enumeration: under the clause kernel a
 /// prepared reduct encoding, under regions the theory's index for the
-/// proper-subset query; either is built once, on the first residual.
+/// proper-subset query; either is built once, on the first membership check.
 #[derive(Debug)]
 pub(crate) struct State {
     method: SearchMethod,

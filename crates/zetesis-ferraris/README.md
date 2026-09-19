@@ -136,7 +136,7 @@ to fail refutes the region; and, when `producers` recognizes every root as a fac
 positive disjunctive head, an atomic choice or a constraint, an atom none of
 whose producers can support it, each having an impossible body or another
 head held, is cut, a held such atom refutes the region, and an atom held
-with exactly one producer able to support it demands that producer's body.
+with exactly one producer able to support it forces that producer's body.
 A choice supports its atom whenever its body is not impossible. Every stable model of
 the region survives the narrowing, and a refuted region holds none.
 
@@ -173,7 +173,7 @@ covers the tree is `zetesis_cpu::regions::Traversal`, shared with the closure
 route; `zetesis-sat` uses it with this narrowing to propose candidates.
 `proofs/Zetesis/FormulaBounds.lean` proves the readings sound, the knowledge
 sound (`Known`, `known_sound`), and the support cut and the sole-support
-demand sound for stable models on the fragment `DisjunctiveSupport` names
+rule sound for stable models on the fragment `DisjunctiveSupport` names
 (`unsupported_cut`, `sole_support_forces`); the
 choice reading and the agreement of the Rust closure with `Known` are Rust
 obligations. See [regions API](src/regions.rs) and
