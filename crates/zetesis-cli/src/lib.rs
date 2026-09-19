@@ -52,9 +52,9 @@ pub use finalized::{
 // Compatibility exports preserve the canonical solver types, not another implementation.
 pub use zetesis_solve::{
     AnswerSelection, AnswerSet, Backend, ClosureExecutionStatistics, ClosureJoinStatistics,
-    Completion, CompletionAccounting, ExecutionObservation, ExecutionObserver, ExecutionResources,
-    FormulaDeviceLimits, FormulaExecutionStatistics, Grounder, GroundingMeasurement,
-    GroundingTimings, Interruption, LazyBufferUsage, LazyExecutionStatistics,
+    ClosureRoute, Completion, CompletionAccounting, ExecutionObservation, ExecutionObserver,
+    ExecutionResources, FormulaDeviceLimits, FormulaExecutionStatistics, Grounder,
+    GroundingMeasurement, GroundingTimings, Interruption, LazyBufferUsage, LazyExecutionStatistics,
     LazyTransportReplacements, LazyTransportUsage, MeasurementSpan, Optimization, OptimizationStop,
     Oracle, PhaseTimings, PreparedInput, PreparedProfile, QueryExecutionObservation, SearchMethod,
     SearchState, SemanticOutcome, Session, SessionBuilder, SessionModel, SharedExecutionStatistics,

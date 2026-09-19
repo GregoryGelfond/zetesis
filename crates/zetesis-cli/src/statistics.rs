@@ -879,11 +879,16 @@ fn formula_gpu(
 }
 
 fn closure(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io::Result<()> {
-    let grounder = if options.grounder == Grounder::Eager {
-        "eager"
-    } else {
-        "lazy"
-    };
+    // The receipt says which route ran; without one, the requested policy
+    // says which would have.
+    let grounder = report.closure_execution.map_or(
+        if options.grounder == Grounder::Eager {
+            "eager"
+        } else {
+            "lazy"
+        },
+        |closure| closure.route.label(),
+    );
     let cpu = report.shared_execution.is_some()
         || matches!(options.backend, Backend::Auto | Backend::Cpu);
     if cpu {
@@ -924,9 +929,9 @@ fn independent_closure(
     sink: &mut impl Write,
     closure: &crate::ClosureExecutionStatistics,
 ) -> io::Result<()> {
-    let (rounds, units) = match closure.grounder {
-        Grounder::Eager => ("rule passes", "eager scan units"),
-        Grounder::Lazy | Grounder::Auto => ("source rounds", "join/copy units"),
+    let (rounds, units) = match closure.route {
+        crate::ClosureRoute::Eager => ("rule passes", "eager scan units"),
+        crate::ClosureRoute::Lazy(_) => ("source rounds", "join/copy units"),
     };
     writeln!(
         sink,
@@ -937,7 +942,7 @@ fn independent_closure(
         closure.work,
         closure.derived_atoms
     )?;
-    if let Some(joins) = closure.joins {
+    if let crate::ClosureRoute::Lazy(joins) = closure.route {
         writeln!(
             sink,
             "  closure joins: catalog work={} (within work); bindings={}; tuple probes={}; dense heads={} (recorded as bits); row steps={} (blocks joined by words); peak named closure bytes={} (admitted or reserved capacity, not RSS)",

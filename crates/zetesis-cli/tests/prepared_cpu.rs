@@ -7,7 +7,7 @@ use std::io::{self, Write};
 
 use clap::Parser;
 use zetesis_cli::{
-    Completion, Grounder, Interruption, Options, run_detailed_with_diagnostics,
+    ClosureRoute, Completion, Interruption, Options, run_detailed_with_diagnostics,
     run_with_diagnostics,
 };
 use zetesis_cpu::{Control, Stop};
@@ -198,12 +198,13 @@ fn closure_receipts_sum_every_completed_check() {
     // Eight candidates, each an answer set; every atom lies in four closures.
     let (report, json, diagnostics) = solve(&[]);
     let closure = report.closure_execution.unwrap();
-    assert_eq!(closure.grounder, Grounder::Lazy);
+    let ClosureRoute::Lazy(joins) = closure.route else {
+        panic!("the lazy route ran: {closure:?}")
+    };
     assert_eq!(closure.completed_checks, 8);
     assert_eq!(closure.stopped_checks, 0);
     assert_eq!(closure.derived_atoms, 12);
     assert!(closure.work > 0);
-    let joins = closure.joins.unwrap();
     assert!(joins.peak_closure_bytes > 0);
     let encoded = &json["statistics"]["closure_execution"];
     assert_eq!(encoded["grounder"], "lazy");
@@ -234,10 +235,9 @@ fn closure_receipts_sum_every_completed_check() {
 fn eager_closure_receipts_carry_no_join_counters() {
     let (report, json, diagnostics) = solve(&["--grounder", "eager"]);
     let closure = report.closure_execution.unwrap();
-    assert_eq!(closure.grounder, Grounder::Eager);
+    assert_eq!(closure.route, ClosureRoute::Eager);
     assert_eq!(closure.completed_checks, 8);
     assert_eq!(closure.derived_atoms, 12);
-    assert!(closure.joins.is_none());
     assert_eq!(json["statistics"]["closure_execution"]["grounder"], "eager");
     assert!(json["statistics"]["closure_execution"]["joins"].is_null());
     assert!(report.query_execution.is_none());

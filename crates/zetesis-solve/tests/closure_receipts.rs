@@ -5,8 +5,8 @@ use std::num::NonZeroUsize;
 use zetesis_core::{AdmissionLimits, AtomPattern, Predicate, Program, Template};
 use zetesis_cpu::{Control, Stop};
 use zetesis_solve::{
-    Backend, Completion, Grounder, Interruption, PreparedInput, SemanticOutcome, Session,
-    SolveConfig,
+    Backend, ClosureRoute, Completion, Grounder, Interruption, PreparedInput, SemanticOutcome,
+    Session, SolveConfig,
 };
 
 /// `{a}. {b}. c :- a, not b.` Its four candidates are all answer sets, and
@@ -60,13 +60,14 @@ fn lazy_closure_receipts_sum_every_completed_check() {
     assert_eq!(answers, 4);
     assert_eq!(outcome.completion(), Some(Completion::Exhausted));
     let closure = outcome.closure_execution().unwrap();
-    assert_eq!(closure.grounder, Grounder::Lazy);
+    let ClosureRoute::Lazy(joins) = closure.route else {
+        panic!("the lazy route ran: {closure:?}")
+    };
     assert_eq!(closure.completed_checks, CANDIDATES);
     assert_eq!(closure.stopped_checks, 0);
     assert_eq!(closure.derived_atoms, CLOSURE_ATOMS);
     assert!(closure.rounds >= CANDIDATES);
     assert!(closure.work > 0);
-    let joins = closure.joins.unwrap();
     assert!(joins.catalog_work <= closure.work);
     assert!(joins.bindings > 0);
     assert!(joins.tuple_probes <= closure.work);
@@ -78,13 +79,12 @@ fn eager_closure_receipts_carry_no_join_counters() {
     let (answers, outcome) = run(&program(), config(Grounder::Eager));
     assert_eq!(answers, 4);
     let closure = outcome.closure_execution().unwrap();
-    assert_eq!(closure.grounder, Grounder::Eager);
+    assert_eq!(closure.route, ClosureRoute::Eager);
     assert_eq!(closure.completed_checks, CANDIDATES);
     assert_eq!(closure.stopped_checks, 0);
     assert_eq!(closure.derived_atoms, CLOSURE_ATOMS);
     assert!(closure.rounds > 0);
     assert!(closure.work > 0);
-    assert!(closure.joins.is_none());
 }
 
 #[test]

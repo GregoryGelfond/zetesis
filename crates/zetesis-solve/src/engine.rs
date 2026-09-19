@@ -313,7 +313,7 @@ impl Executor {
             Ok(Self::StaticCpu {
                 oracle,
                 ground,
-                statistics: crate::ClosureExecutionStatistics::new(Grounder::Eager),
+                statistics: crate::ClosureExecutionStatistics::new(crate::ClosureRoute::Eager),
             })
         } else {
             phases.lazy_grounding();
@@ -339,7 +339,9 @@ impl Executor {
                 Ok(Self::Cpu(IndependentCpu {
                     oracle,
                     observation: crate::QueryExecutionObservation::default(),
-                    statistics: crate::ClosureExecutionStatistics::new(Grounder::Lazy),
+                    statistics: crate::ClosureExecutionStatistics::new(crate::ClosureRoute::Lazy(
+                        crate::ClosureJoinStatistics::default(),
+                    )),
                 }))
             }
         }

@@ -93,7 +93,7 @@ mod phase_timing;
 mod stage_timing;
 mod grounding_timing;
 
-pub use closure_execution::{ClosureExecutionStatistics, ClosureJoinStatistics};
+pub use closure_execution::{ClosureExecutionStatistics, ClosureJoinStatistics, ClosureRoute};
 pub use completion::{Completion, Interruption, SearchState};
 pub use error::{FailureParts, SolveError, SolveFailure};
 pub use execution_observation::{ExecutionObservation, ExecutionObserver};

@@ -6,8 +6,8 @@ use zetesis_themelios::observation::ViewError;
 
 use crate::failure::Progress;
 use crate::{
-    Completion, Grounder, Interruption, Options, PhaseTimings, PublicationFailure,
-    PublicationOutcome, RunError, RunFailure, SolvePhase,
+    Completion, Interruption, Options, PhaseTimings, PublicationFailure, PublicationOutcome,
+    RunError, RunFailure, SolvePhase,
 };
 
 pub(crate) struct Document<'a, W> {
@@ -891,19 +891,16 @@ fn closure_statistics(
         return out.text("null");
     };
     out.text("{\"backend\":\"cpu\",\"grounder\":")?;
-    out.string(match stats.grounder {
-        Grounder::Eager => "eager",
-        Grounder::Lazy | Grounder::Auto => "lazy",
-    })?;
+    out.string(stats.route.label())?;
     out.number_field("completed_checks", stats.completed_checks)?;
     out.number_field("stopped_checks", stats.stopped_checks)?;
     out.number_field("rounds", stats.rounds)?;
     out.number_field("work", stats.work)?;
     out.number_field("derived_atoms", stats.derived_atoms)?;
     out.text(",\"joins\":")?;
-    match stats.joins {
-        None => out.text("null")?,
-        Some(joins) => {
+    match stats.route {
+        crate::ClosureRoute::Eager => out.text("null")?,
+        crate::ClosureRoute::Lazy(joins) => {
             out.text("{\"catalog_work\":")?;
             out.text(&joins.catalog_work.to_string())?;
             out.number_field("bindings", joins.bindings)?;

@@ -11,8 +11,9 @@ use zetesis_cpu::{StaticStatistics, Statistics};
 /// and differ between the routes. These are work counts, not process memory.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ClosureExecutionStatistics {
-    /// Route whose units the counters use.
-    pub grounder: crate::Grounder,
+    /// The route that ran, whose units the counters use, carrying the
+    /// counters only it produces.
+    pub route: ClosureRoute,
     /// Checks that returned a complete closure.
     pub completed_checks: u64,
     /// Checks stopped by a resource ceiling, cancellation or deadline.
@@ -24,8 +25,29 @@ pub struct ClosureExecutionStatistics {
     pub work: u64,
     /// Atoms in the completed closures, summed over checks.
     pub derived_atoms: u64,
-    /// Counters only the lazy route's source joins produce.
-    pub joins: Option<ClosureJoinStatistics>,
+}
+
+/// The independent CPU closure route a receipt sums, with the counters only
+/// it produces.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ClosureRoute {
+    /// Source joins without a complete ground rule store, counted in join
+    /// and copy units, with the joins' own counters.
+    Lazy(ClosureJoinStatistics),
+    /// Rule passes over a materialized static program, counted in eager
+    /// scan units.
+    Eager,
+}
+
+impl ClosureRoute {
+    /// Stable spelling for execution reports.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Lazy(_) => "lazy",
+            Self::Eager => "eager",
+        }
+    }
 }
 
 /// Counters of the lazy route's source joins, summed over completed checks.
@@ -49,16 +71,15 @@ pub struct ClosureJoinStatistics {
 }
 
 impl ClosureExecutionStatistics {
-    pub(crate) fn new(grounder: crate::Grounder) -> Self {
+    /// The empty receipt of the route about to run.
+    pub(crate) const fn new(route: ClosureRoute) -> Self {
         Self {
-            grounder,
+            route,
             completed_checks: 0,
             stopped_checks: 0,
             rounds: 0,
             work: 0,
             derived_atoms: 0,
-            joins: matches!(grounder, crate::Grounder::Lazy)
-                .then_some(ClosureJoinStatistics::default()),
         }
     }
 
@@ -70,13 +91,15 @@ impl ClosureExecutionStatistics {
     /// Sum one completed lazy check. Every field is checked before any is
     /// replaced, so an overflow leaves the receipt as it was.
     pub(crate) fn completed_lazy(&mut self, check: &Statistics) -> Result<(), crate::SolveError> {
-        let joins = self.joins.unwrap_or_default();
+        let ClosureRoute::Lazy(joins) = self.route else {
+            unreachable!("a lazy check is summed into a lazy receipt")
+        };
         let next = Self {
             completed_checks: add(self.completed_checks, 1)?,
             rounds: add(self.rounds, check.rounds)?,
             work: add(self.work, check.work)?,
             derived_atoms: add(self.derived_atoms, count(check.derived_atoms)?)?,
-            joins: Some(ClosureJoinStatistics {
+            route: ClosureRoute::Lazy(ClosureJoinStatistics {
                 catalog_work: add(joins.catalog_work, check.catalog_work)?,
                 bindings: add(joins.bindings, check.bindings)?,
                 tuple_probes: add(joins.tuple_probes, check.tuple_probes)?,
@@ -95,6 +118,9 @@ impl ClosureExecutionStatistics {
         &mut self,
         check: &StaticStatistics,
     ) -> Result<(), crate::SolveError> {
+        if self.route != ClosureRoute::Eager {
+            unreachable!("an eager check is summed into an eager receipt")
+        }
         let next = Self {
             completed_checks: add(self.completed_checks, 1)?,
             rounds: add(self.rounds, check.passes)?,
