@@ -63,8 +63,10 @@ pub struct SolveConfig {
     /// together, as [`Self::for_allowance`] does; the command defaults the
     /// count to the host's parallelism.
     pub workers: NonZeroUsize,
-    /// Formula exact-completion worker count under the clauses search; the
-    /// regions search decides its leaves in `workers`.
+    /// Formula exact-completion worker count: under the clauses search, and
+    /// under the regions search when one CPU worker walks the tree or a
+    /// device route runs; more than one CPU worker under regions decides its
+    /// leaves in `workers` and uses none.
     pub completion_workers: NonZeroUsize,
     /// Named cold reduct preparation and each query's retained capacity.
     /// The immutable reduct is prepared once per original theory. Parallel

@@ -227,9 +227,10 @@ pub struct Options {
     /// completion under `--search clauses` has a separate worker setting.
     #[arg(long, default_value_t = host_workers(), hide_short_help = true)]
     pub workers: NonZeroUsize,
-    /// Exact formula completion workers under `--search clauses`; one retains
-    /// the scalar CPU cursor. The regions search decides its leaves in its
-    /// `--workers`.
+    /// Exact formula completion workers: under `--search clauses`, and under
+    /// `--search regions` when one CPU worker walks the tree or a device
+    /// route runs; more than one CPU worker under regions decides its leaves
+    /// in its `--workers` and uses none. One retains the scalar cursor.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.completion_workers, hide_short_help = true)]
     pub completion_workers: NonZeroUsize,
     /// Maximum reserved capacity for cold reduct preparation and for each query's

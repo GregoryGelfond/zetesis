@@ -214,10 +214,11 @@ batches/candidates and successfully decoded batches/candidates separately.
 Propagation work and sweeps count decoded results; an interrupted unreturned
 submission does not establish how much shader work completed.
 
-`--workers` controls closure workers and defaults to the host's available
-parallelism, or one when the host does not report it. `--completion-workers`
-separately controls independent exact formula checks, with a scalar CPU
-default of one.
+`--completion-workers` controls the independent exact formula checks under
+`--search clauses`, and under `--search regions` when one CPU worker walks
+the tree or a device route runs; with more than one CPU worker under regions
+the workers decide their leaves and it is unused. The default of one is the
+scalar cursor. `--workers` is described above.
 `--memory` is the session's memory allowance in bytes, half of the host's
 physical memory by default and at least two gibibytes, or two gibibytes when
 the host does not report its memory (Linux and macOS report it). The library's
