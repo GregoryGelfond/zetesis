@@ -18,7 +18,7 @@ pub use view::{
 
 use super::families::Family;
 use super::matrix::{ConstantAmendment, Workload, WorkloadLimits};
-use super::{Error, Limits};
+use super::{Case, Error, Limits};
 use crate::answers::native_json;
 use crate::examples;
 
@@ -50,15 +50,21 @@ const GENERATED: [(Family, u32); 17] = [
 ];
 
 // Queens boards derived from the curated encodings' `#const n = 8`.
-const QUEENS: [(&str, i32); 3] = [
-    ("standalone/n-queens/variant-01.lp", 10),
-    ("standalone/n-queens/variant-01.lp", 11),
-    ("standalone/n-queens/variant-04.lp", 11),
+const QUEENS: [(Case, i32); 3] = [
+    (Case::Queens01, 10),
+    (Case::Queens01, 11),
+    (Case::Queens04, 11),
 ];
 
-const ORIGINAL: [&str; 2] = [
-    "standalone/send-money/send-money.lp",
-    "scenarios/task-allocation/variant-04/05-larger-mix.lp",
+const ORIGINAL: [Case; 2] = [Case::Send, Case::TaskAllocation];
+
+/// The corpus entries the series takes, amended or unchanged: what the
+/// matrix's series suite admits.
+pub const CORPUS_CASES: [Case; 4] = [
+    Case::Queens01,
+    Case::Queens04,
+    Case::Send,
+    Case::TaskAllocation,
 ];
 
 /// Campaign ceilings raised to what the cells need: one complete native
@@ -95,9 +101,9 @@ pub fn workloads(
     for (entry, size) in QUEENS {
         cells.push(Workload::amended(
             corpus,
-            entry,
+            entry.path(),
             &[ConstantAmendment {
-                source_path: entry,
+                source_path: entry.path(),
                 name: "n",
                 expected: 8,
                 replacement: size,
@@ -106,7 +112,7 @@ pub fn workloads(
         )?);
     }
     for entry in ORIGINAL {
-        cells.push(Workload::original(corpus, entry, limits)?);
+        cells.push(Workload::original(corpus, entry.path(), limits)?);
     }
     Ok(cells)
 }

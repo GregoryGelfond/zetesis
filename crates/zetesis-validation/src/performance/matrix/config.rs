@@ -20,8 +20,10 @@ pub enum Suite {
     /// All six curated queens encodings at their default N=8.
     Queens,
     /// The fixed cell set of [`super::super::series`]: generated families,
-    /// amended queens boards and two unchanged entries. Its corpus entries
-    /// are the queens, SEND and task-allocation cases.
+    /// amended queens boards and two unchanged entries, meant for
+    /// `run_workloads` with the series' workloads. Its corpus entries are
+    /// the series' own list, the queens, SEND and task-allocation cases;
+    /// a plain run under this suite measures only those, unchanged.
     Series,
 }
 

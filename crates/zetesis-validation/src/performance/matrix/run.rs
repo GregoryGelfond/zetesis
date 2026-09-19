@@ -243,12 +243,7 @@ fn cases<'a>(corpus: &'a examples::Corpus, plan: &Plan) -> Result<Vec<&'a exampl
         Suite::Corpus => return Ok(corpus.cases().iter().collect()),
         Suite::Baseline => super::super::Suite::Baseline.cases(),
         Suite::Queens => super::super::Suite::Queens.cases(),
-        Suite::Series => &[
-            super::super::Case::Queens01,
-            super::super::Case::Queens04,
-            super::super::Case::Send,
-            super::super::Case::TaskAllocation,
-        ],
+        Suite::Series => &super::super::series::CORPUS_CASES,
     };
     cases
         .iter()
