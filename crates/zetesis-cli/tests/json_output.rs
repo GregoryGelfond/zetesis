@@ -260,6 +260,44 @@ fn candidate_statistics_preserve_restriction_accounting() {
 }
 
 #[test]
+fn candidate_statistics_carry_the_carrier_bounds_and_regions() {
+    let (report, value) = solve(
+        "{a}. {b}. :- a,b.",
+        &options(&["--stats", "--grounder", "lazy"]),
+    );
+    let measured = report.unwrap().candidate_statistics.unwrap();
+    let stats = &value["statistics"]["candidate_restrictions"];
+    let bounds = &stats["carrier_bounds"];
+    assert_eq!(bounds["narrowing_passes"], measured.bounds_passes);
+    assert_eq!(
+        bounds["underivable_gate_atoms"],
+        measured.underivable_gate_atoms
+    );
+    assert_eq!(
+        bounds["necessary_gate_atoms"],
+        measured.necessary_gate_atoms
+    );
+    assert_eq!(bounds["refuted"], false);
+    assert_eq!(bounds["stopped"], Json::Null);
+    let regions = &stats["carrier_regions"];
+    assert_eq!(regions["visited"], measured.regions);
+    assert_eq!(regions["refuted"], measured.regions_refuted);
+    assert_eq!(regions["decided"], measured.regions_decided);
+    assert_eq!(regions["counted"], measured.regions_counted);
+    assert_eq!(regions["narrowing_passes"], measured.region_passes);
+}
+
+#[test]
+fn candidate_statistics_say_when_the_root_narrowing_refuted_every_seed() {
+    let (report, value) = solve("{a}. p. :- p.", &options(&["--stats"]));
+    let measured = report.unwrap().candidate_statistics.unwrap();
+    assert!(measured.bounds_refuted);
+    let bounds = &value["statistics"]["candidate_restrictions"]["carrier_bounds"];
+    assert_eq!(bounds["refuted"], true);
+    assert_eq!(bounds["narrowing_passes"], measured.bounds_passes);
+}
+
+#[test]
 fn interrupted_restriction_work_remains_visible() {
     let (report, value) = solve(
         "{a}. {b}. :- a,b.",

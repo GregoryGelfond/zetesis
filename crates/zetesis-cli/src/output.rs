@@ -800,7 +800,29 @@ fn candidate_statistics(
     out.number_field("prepared_atom_occurrences", stats.restriction_atoms)?;
     out.number_field("copied_payload_bytes", stats.restriction_bytes)?;
     out.number_field("peak_copied_payload_bytes", stats.restriction_peak_bytes)?;
-    out.text("}")
+    // The carrier bounds and regions, under the words of the text lines.
+    out.text(",\"carrier_bounds\":{\"narrowing_passes\":")?;
+    out.text(&stats.bounds_passes.to_string())?;
+    out.number_field("underivable_gate_atoms", stats.underivable_gate_atoms)?;
+    out.number_field("necessary_gate_atoms", stats.necessary_gate_atoms)?;
+    out.text(",\"refuted\":")?;
+    out.text(if stats.bounds_refuted {
+        "true"
+    } else {
+        "false"
+    })?;
+    out.text(",\"stopped\":")?;
+    match &stats.bounds_stop {
+        None => out.text("null")?,
+        Some(stop) => out.string(&stop.to_string())?,
+    }
+    out.text("},\"carrier_regions\":{\"visited\":")?;
+    out.text(&stats.regions.to_string())?;
+    out.number_field("refuted", stats.regions_refuted)?;
+    out.number_field("decided", stats.regions_decided)?;
+    out.number_field("counted", stats.regions_counted)?;
+    out.number_field("narrowing_passes", stats.region_passes)?;
+    out.text("}}")
 }
 
 fn support_statistics(
