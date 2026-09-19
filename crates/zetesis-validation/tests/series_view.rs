@@ -595,3 +595,22 @@ fn a_report_naming_region_workers_separately_is_read_with_them() {
     .unwrap();
     assert_eq!(comparison.methods["workers"], "regions with 4 workers");
 }
+
+#[test]
+fn a_report_whose_profiles_differ_in_method_is_refused() {
+    // A scoreboard is one method's standing against the reference, so the
+    // profiles of a report must agree on the method.
+    let mut mixed = report(&["generated/chain-1000.lp"], &[&[1]], &[1], None);
+    let profiles = mixed["report"]["plan"]["profiles"].as_array_mut().unwrap();
+    let mut clauses = profiles[0].clone();
+    profiles[0]["search"] = json!("regions");
+    clauses["search"] = json!("clauses");
+    profiles.push(clauses);
+    assert!(matches!(
+        compare(&[Labelled {
+            label: "mixed",
+            report: &mixed
+        }]),
+        Err(ViewError::Methods { label }) if label == "mixed"
+    ));
+}

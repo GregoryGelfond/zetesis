@@ -48,6 +48,12 @@ pub enum ViewError {
         /// The label whose profiles differ from the first report's.
         label: String,
     },
+    /// A report's profiles do not request the same search method, so it
+    /// has no one method to stand on its scoreboards.
+    Methods {
+        /// The label of the report.
+        label: String,
+    },
     /// A report lacks a field the view reads.
     Malformed {
         /// The label of the report.
@@ -64,6 +70,9 @@ impl fmt::Display for ViewError {
             Self::Cells { label } => write!(f, "report {label:?} measures different cells"),
             Self::Profiles { label } => {
                 write!(f, "report {label:?} requests different profiles")
+            }
+            Self::Methods { label } => {
+                write!(f, "report {label:?} requests different search methods")
             }
             Self::Malformed { label, field } => {
                 write!(f, "report {label:?} lacks a readable {field}")
@@ -194,7 +203,8 @@ pub struct Scoreboard {
     pub report: String,
     /// The requested profile's index.
     pub profile: usize,
-    /// The report's formula search method, or `default`.
+    /// The report's formula search method, the same on each of its
+    /// profiles, or `default`.
     pub method: String,
     /// Cells where both passed.
     pub compared: usize,
@@ -320,7 +330,8 @@ pub struct Comparison {
 ///
 /// # Errors
 /// Refuses an empty list, repeated labels, reports whose cells or profiles
-/// differ, and reports lacking the fields the view reads.
+/// differ, a report whose profiles disagree on the search method, and
+/// reports lacking the fields the view reads.
 pub fn compare(reports: &[Labelled<'_>]) -> Result<Comparison, ViewError> {
     let first = reports.first().ok_or(ViewError::Empty)?;
     let entries = cases(first)?;
@@ -865,8 +876,8 @@ fn profiles(labelled: &Labelled<'_>) -> Result<Vec<Value>, ViewError> {
     Ok(profiles)
 }
 
-/// The search method the report's first profile requested, or the
-/// executable's default.
+/// The search method the report's profiles requested, or the executable's
+/// default; the profiles must agree on it.
 fn method(labelled: &Labelled<'_>) -> Result<String, ViewError> {
     let profiles = labelled.report["report"]["plan"]["profiles"]
         .as_array()
@@ -874,17 +885,29 @@ fn method(labelled: &Labelled<'_>) -> Result<String, ViewError> {
             label: labelled.label.into(),
             field: "report.plan.profiles",
         })?;
-    let Some(profile) = profiles.first() else {
+    let mut methods = profiles.iter().map(profile_method);
+    let Some(method) = methods.next() else {
         return Ok("default".to_owned());
     };
+    if methods.any(|other| other != method) {
+        return Err(ViewError::Methods {
+            label: labelled.label.into(),
+        });
+    }
+    Ok(method)
+}
+
+/// The method one profile spells, under any of the method's spellings, the
+/// fields `METHOD_FIELDS` names.
+fn profile_method(profile: &Value) -> String {
     let method = ["search", "candidates"]
         .iter()
         .find_map(|field| profile[field].as_str())
         .unwrap_or("default");
-    Ok(match profile["region_workers"].as_u64() {
+    match profile["region_workers"].as_u64() {
         Some(workers) => format!("{method} with {workers} workers"),
         None => method.to_owned(),
-    })
+    }
 }
 
 fn provenance(labelled: &Labelled<'_>) -> Result<Provenance, ViewError> {
