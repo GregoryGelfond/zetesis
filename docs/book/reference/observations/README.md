@@ -1901,7 +1901,8 @@ opening a window over a dense relation reads the bound prefix where it lies
 instead of collecting it; `after` is built from `e98d9357` (SHA-256
 `c1a2ed92849ccf0d8b0b37eb2d128a3e78b54caa2fb9bcfe5f244acd62d08aa7`), where
 a rule whose innermost occurrence meets the row-step conditions joins the
-block of matching rows into the head's pending row a word at a time;
+block of matching rows into the head's pending row a word at a time, the step
+the two sections above call the vector step;
 `clauses` is that executable under `--search clauses`; and the corpus runs
 are that executable on all 94 cases with four workers, with one worker, and
 with one worker under `--search clauses`. Each executable was built from a
