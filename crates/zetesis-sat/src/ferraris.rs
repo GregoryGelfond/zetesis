@@ -567,8 +567,7 @@ impl StableModels {
             Membership {
                 theory: &self.theory,
                 limits: self.limits,
-                certificate: self.certification.as_deref(),
-                certificate_owner: self.certification.as_ref(),
+                certificate: self.certification.as_ref(),
                 reduct: &mut self.reduct,
             },
             &mut self.proposer,
@@ -635,9 +634,9 @@ impl From<Check> for Decision {
 struct Membership<'a> {
     theory: &'a Theory,
     limits: Limits,
-    certificate: Option<&'a certified::Certification>,
-    /// The same certificate as the enumeration owns it, for workers.
-    certificate_owner: Option<&'a std::sync::Arc<certified::Certification>>,
+    /// The certificate as the enumeration owns it, so that workers can
+    /// share it; the coordinator reads through it.
+    certificate: Option<&'a std::sync::Arc<certified::Certification>>,
     reduct: &'a mut crate::prepared_reduct::State,
 }
 
@@ -754,7 +753,6 @@ fn advance(
         theory,
         limits,
         certificate,
-        certificate_owner,
         reduct,
     } = membership_input;
     loop {
@@ -764,7 +762,7 @@ fn advance(
             Proposer::Parallel(_) => None,
             _ => timing::start(statistics.phase_timings.as_ref()),
         };
-        let proposal = proposer.propose(theory, limits, certificate_owner, budget, statistics);
+        let proposal = proposer.propose(theory, limits, certificate, budget, statistics);
         timing::finish(&mut statistics.phase_timings, Phase::Candidates, started);
         let candidate = match proposal? {
             None => return Ok(None),
