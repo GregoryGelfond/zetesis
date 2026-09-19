@@ -751,9 +751,9 @@ fn search_statistics(
     out.text("}")?;
     out.text(",\"necessary_support\":")?;
     support_statistics(out, stats.support)?;
-    out.text(",\"regions\":")?;
+    out.text(",\"candidate_regions\":")?;
     region_statistics(out, stats.regions)?;
-    out.text(",\"reduct_regions\":{\"visited\":")?;
+    out.text(",\"reduct_query_regions\":{\"visited\":")?;
     out.text(&stats.reduct.regions.regions.to_string())?;
     out.number_field("refuted", stats.reduct.regions.refuted)?;
     out.number_field("leaves", stats.reduct.regions.leaves)?;

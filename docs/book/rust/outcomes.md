@@ -57,10 +57,10 @@ nodes, retained/peak bytes and its subtotal of cumulative search work. A history
 refusal retains any already checked answer prefix and reports incomplete coverage;
 it does not turn a completed answer into a rejected candidate. Under
 `--search regions` the history stays empty and
-`statistics.search.regions` reports the regions visited, refuted and reached as
+`statistics.search.candidate_regions` reports the regions visited, refuted and reached as
 leaves, the propagations, atoms held and cut, whether the support cut
 applied, and the reading work, a subtotal of cumulative search work, and
-`statistics.search.reduct_regions` the regions of the reduct queries; under
+`statistics.search.reduct_query_regions` the regions of the reduct queries; under
 `--search clauses` the former is `null` and the latter zero.
 
 Under `--workers` above one the answer sets of the formula route

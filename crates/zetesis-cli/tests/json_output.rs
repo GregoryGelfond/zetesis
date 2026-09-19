@@ -183,7 +183,7 @@ fn support_statistics_identify_the_outer_restriction_under_clauses() {
         assert_eq!(support["status"], status);
         assert_eq!(support["construction_work"], measured.construction_work);
         assert_eq!(support["encoding_work"], measured.encoding_work);
-        assert!(value["statistics"]["search"]["regions"].is_null());
+        assert!(value["statistics"]["search"]["candidate_regions"].is_null());
     }
 }
 
@@ -200,7 +200,7 @@ fn region_statistics_identify_the_support_cut() {
         let statistics = report.countermodel_statistics.unwrap();
         assert!(statistics.support.is_none());
         let measured = statistics.regions.unwrap();
-        let regions = &value["statistics"]["search"]["regions"];
+        let regions = &value["statistics"]["search"]["candidate_regions"];
         assert_eq!(regions["support_cut"], support_cut);
         assert_eq!(regions["visited"], measured.counts.regions);
         assert_eq!(regions["leaves"], measured.counts.leaves);

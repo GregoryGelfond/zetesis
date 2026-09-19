@@ -2295,3 +2295,4 @@ The records above keep the spellings of their day. A later record spells these k
 | --- | --- |
 | `necessary_gate_atoms`, `underivable_gate_atoms` under `carrier_bounds` | `held_gate_atoms`, `cut_gate_atoms` |
 | `carrier_bounds` with `narrowing_passes` | `carrier_narrowing` with `passes` |
+| `regions`, `reduct_regions` under `search` | `candidate_regions`, `reduct_query_regions` |
