@@ -5,11 +5,25 @@
 
 use std::collections::BTreeSet;
 
-use zetesis_cpu::Control;
+use zetesis_cpu::{Control, Stop};
 use zetesis_ferraris::{
-    AdmissionLimits, Interpretation, Limits, Narrower, Narrowing, Node, Region, RegionLimits,
-    Theory, check, narrow, producers,
+    AdmissionLimits, Interpretation, Limits, Narrower, Narrowing, NarrowingStatistics, Node,
+    Producers, Region, RegionLimits, Theory, check, producers,
 };
+
+/// One narrowing of a region with a fresh index of the theory and knowledge
+/// of nothing: the root's narrowing, for one region.
+fn narrow_fresh(
+    theory: &Theory,
+    producers: Option<&Producers>,
+    region: &mut Region,
+    limits: RegionLimits,
+    control: &Control,
+) -> Result<(Narrowing, NarrowingStatistics), Stop> {
+    let narrower = Narrower::new(theory);
+    let mut knowledge = narrower.knowledge();
+    narrower.narrow_known(theory, producers, region, &mut knowledge, limits, control)
+}
 
 fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
     Theory::new(atoms, nodes, roots, AdmissionLimits::default()).unwrap()
@@ -43,7 +57,7 @@ fn region(theory: &Theory, held: &[usize], cut: &[usize]) -> Region {
 
 fn narrowed(theory: &Theory, region: &mut Region) -> Narrowing {
     let extracted = producers(theory, RegionLimits::default(), &Control::default()).unwrap();
-    narrow(
+    narrow_fresh(
         theory,
         extracted.producers.as_ref(),
         region,
@@ -167,7 +181,7 @@ fn a_unit_root_decides_its_one_open_atom() {
     let nodes = vec![Node::Atom(0), Node::Atom(1), Node::Or(0, 1)];
     let t = theory(2, nodes, vec![2]);
     let by_readings = |region: &mut Region| {
-        narrow(
+        narrow_fresh(
             &t,
             None,
             region,
@@ -380,7 +394,7 @@ fn a_failing_consequent_teaches_the_antecedent_to_fail() {
     ];
     let t = theory(3, nodes, vec![4]);
     let mut region = region(&t, &[0], &[2]);
-    let (outcome, _) = narrow(
+    let (outcome, _) = narrow_fresh(
         &t,
         None,
         &mut region,
@@ -442,7 +456,7 @@ fn a_clause_of_three_literals_forces_its_last_open_one() {
     ];
     let t = theory(3, nodes, vec![4]);
     let by_readings = |region: &mut Region| {
-        narrow(
+        narrow_fresh(
             &t,
             None,
             region,
@@ -477,7 +491,7 @@ fn a_node_reached_on_both_sides_of_a_chain_is_one_operand() {
     let t = theory(2, nodes, vec![3]);
     let mut both_cut = region(&t, &[], &[0, 1]);
     assert!(matches!(
-        narrow(
+        narrow_fresh(
             &t,
             None,
             &mut both_cut,
@@ -490,7 +504,7 @@ fn a_node_reached_on_both_sides_of_a_chain_is_one_operand() {
     ));
     let mut a_cut = region(&t, &[], &[0]);
     assert!(matches!(
-        narrow(
+        narrow_fresh(
             &t,
             None,
             &mut a_cut,
@@ -523,7 +537,7 @@ fn a_subformula_shared_by_two_parents_serves_both_as_one_operand() {
     let t = theory(4, nodes, vec![4, 8]);
     let mut cut_c = region(&t, &[], &[2]);
     assert!(matches!(
-        narrow(
+        narrow_fresh(
             &t,
             None,
             &mut cut_c,
@@ -569,10 +583,11 @@ fn a_frozen_mask_on_a_chain_node_reads_as_its_operands_masks() {
             subsets.cut(atom);
         }
         let (narrowing, _) = narrower
-            .narrow_frozen(
+            .narrow_frozen_known(
                 &t,
                 truth,
                 &mut subsets,
+                &mut narrower.knowledge(),
                 RegionLimits::default(),
                 &Control::default(),
             )
@@ -614,10 +629,11 @@ fn carried_knowledge_narrows_every_region_as_a_fresh_narrowing_does() {
         while let Some((mut carried, mut knowledge)) = stack.pop() {
             let mut fresh = carried.clone();
             let (from_fresh, _) = narrower
-                .narrow(
+                .narrow_known(
                     &t,
                     producers,
                     &mut fresh,
+                    &mut narrower.knowledge(),
                     RegionLimits::default(),
                     &Control::default(),
                 )
@@ -662,7 +678,7 @@ fn holding_an_atom_without_producers_rechecks_no_support() {
     // producers there is no support to recheck, so none is queued.
     let t = theory(1, vec![Node::Atom(0)], vec![0]);
     let mut region = Region::undecided(1);
-    let (narrowing, statistics) = narrow(
+    let (narrowing, statistics) = narrow_fresh(
         &t,
         None,
         &mut region,

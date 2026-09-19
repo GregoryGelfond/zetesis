@@ -395,40 +395,18 @@ impl Narrower {
         }
     }
 
-    /// Narrow the region to the fixed point of the three rules.
+    /// Narrow the region to the fixed point of the closure's rules from
+    /// what is already known about it, [`Self::knowledge`] for the root and
+    /// the parent's knowledge for a child, learning only the decisions the
+    /// knowledge has not seen, and leave the knowledge closed for the
+    /// region's children.
     ///
     /// # Errors
     /// Returns the stop when the narrowing exceeds its work or propagation
     /// ceiling, or control stops it. The region then holds the decisions the
-    /// closure had learned before the stop, sound but not closed, and is not
-    /// to be narrowed again; the proposers abandon it.
-    pub fn narrow(
-        &self,
-        theory: &Theory,
-        producers: Option<&Producers>,
-        region: &mut Region,
-        limits: RegionLimits,
-        control: &Control,
-    ) -> Result<(Narrowing, NarrowingStatistics), Stop> {
-        let mut knowledge = self.knowledge();
-        self.narrow_with(
-            theory,
-            producers,
-            None,
-            region,
-            &mut knowledge,
-            limits,
-            control,
-        )
-    }
-
-    /// Narrow the region from what is already known about it, learning
-    /// only the decisions the knowledge has not seen, and leave the
-    /// knowledge closed for the region's children.
-    ///
-    /// # Errors
-    /// As [`Self::narrow`]; the knowledge is then partly closed, sound but
-    /// not to be reused, as the region is.
+    /// closure had learned before the stop, and the knowledge is partly
+    /// closed: both sound, neither to be reused; the proposers abandon the
+    /// region.
     pub fn narrow_known(
         &self,
         theory: &Theory,
@@ -441,12 +419,16 @@ impl Narrower {
         self.narrow_with(theory, producers, None, region, knowledge, limits, control)
     }
 
-    /// [`Self::narrow_frozen`] from existing knowledge, as
-    /// [`Self::narrow_known`] is to [`Self::narrow`].
+    /// Narrow a region of the theory's frozen reduct under a candidate from
+    /// what is already known about it, as [`Self::narrow_known`] does for
+    /// the candidate tree: a node false in `truth`, the candidate's truth of
+    /// every node, reads as falsum (`FerrarisMask`), and the rest of the DAG
+    /// is read unchanged. No support cut applies, since a model of the
+    /// reduct need not be supported: this narrows the proper-subset query,
+    /// not the candidate tree.
     ///
     /// # Errors
-    /// As [`Self::narrow`]; the knowledge is then partly closed, sound but
-    /// not to be reused, as the region is.
+    /// As [`Self::narrow_known`].
     pub fn narrow_frozen_known(
         &self,
         theory: &Theory,
@@ -462,35 +444,6 @@ impl Narrower {
             Some(truth),
             region,
             knowledge,
-            limits,
-            control,
-        )
-    }
-
-    /// Narrow a region of the theory's frozen reduct under a candidate: a
-    /// node false in `truth`, the candidate's truth of every node, reads as
-    /// falsum (`FerrarisMask`), and the rest of the DAG is read unchanged.
-    /// No support cut applies, since a model of the reduct need not be
-    /// supported: this narrows the proper-subset query, not the candidate
-    /// tree.
-    ///
-    /// # Errors
-    /// As [`Self::narrow`].
-    pub fn narrow_frozen(
-        &self,
-        theory: &Theory,
-        truth: &[bool],
-        region: &mut Region,
-        limits: RegionLimits,
-        control: &Control,
-    ) -> Result<(Narrowing, NarrowingStatistics), Stop> {
-        let mut knowledge = self.knowledge();
-        self.narrow_with(
-            theory,
-            None,
-            Some(truth),
-            region,
-            &mut knowledge,
             limits,
             control,
         )
@@ -568,21 +521,6 @@ fn most_constrained(
         }
     }
     Ok(best.map(|(atom, _)| atom))
-}
-
-/// Narrow the region with a fresh index of the theory; for one narrowing
-/// of a theory. A proposer keeps a [`Narrower`] and narrows many regions.
-///
-/// # Errors
-/// As [`Narrower::narrow`].
-pub fn narrow(
-    theory: &Theory,
-    producers: Option<&Producers>,
-    region: &mut Region,
-    limits: RegionLimits,
-    control: &Control,
-) -> Result<(Narrowing, NarrowingStatistics), Stop> {
-    Narrower::new(theory).narrow(theory, producers, region, limits, control)
 }
 
 /// What every candidate of the region must make of each node and each

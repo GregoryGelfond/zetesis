@@ -2,7 +2,8 @@
 //! atoms, narrowed by the theory's readings.
 //!
 //! The root region leaves every atom open. Each region is narrowed to the
-//! fixed point of `zetesis_ferraris::narrow` over the original theory, with
+//! fixed point of `zetesis_ferraris::Narrower::narrow_known` over the
+//! original theory, from its parent's knowledge, with
 //! its producers for the support cut, and over every candidate-only
 //! restriction, without producers, since a restriction is not a rule of the
 //! program and supports nothing. A region no reading refutes is split on

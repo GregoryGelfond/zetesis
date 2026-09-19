@@ -94,7 +94,8 @@ Under `SearchMethod::Regions`, reachable in the solve session as
 `--search regions`, no clause form of the theory is built. The candidate space is the coverage tree of
 `Search.lean` over the theory's atoms, walked by `zetesis_cpu::regions`: the
 root leaves every atom open, each region is narrowed by
-`zetesis_ferraris::narrow` to the fixed point of the theory's readings, with
+`zetesis_ferraris::Narrower::narrow_known`, from its parent's knowledge, to
+the fixed point of the theory's readings, with
 the theory's producers for the support cut, and by every candidate-only
 restriction without producers, since a restriction supports nothing. A region
 the readings refute is dropped with its whole subtree; a region with an open

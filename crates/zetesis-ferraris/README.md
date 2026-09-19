@@ -126,8 +126,9 @@ two readings: *sure* when every candidate of the region satisfies it and
 *impossible* when none does. A held atom is sure, a cut atom impossible, and
 the connectives combine the readings as the closure route's definite and
 possible gates do; the knowledge the narrowing closes means them, a node
-known to hold being sure and one known to fail impossible. `narrow` applies three rules
-to a fixed point: every root and every decided atom is known, a node learns
+known to hold being sure and one known to fail impossible.
+`Narrower::narrow_known` closes the knowledge to a fixed point: every root
+and every decided atom is known, a node learns
 from its operands and teaches its operands what its own knowledge leaves
 them, in both directions until nothing changes, which is what unit
 propagation over a clause form decides, and an atom known both to hold and
@@ -143,7 +144,8 @@ The result is `Refuted`, or `Fixed` with whether any atom was decided; the
 statistics count charged node visits and producer checks, the propagation
 events, and the atoms held and cut. Every event follows a newly learned bit,
 so the events are bounded by the bits. A `Narrower` indexes the theory once
-and narrows any region of it; `narrow` indexes for one narrowing. The index
+and narrows any region of it, the root from knowledge of nothing and a child
+from its parent's knowledge. The index
 reads each maximal tree of one connective, a clause or a body, as one node
 over its operands, a *chain*, when its inner nodes have that one parent and
 are not roots; the closure keeps two counters per chain, the operands known
