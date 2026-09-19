@@ -81,7 +81,8 @@ impl fmt::Display for Error {
 impl std::error::Error for Error {}
 
 impl Family {
-    /// Every family, in presentation order.
+    /// Every family, in presentation order, for a consumer that enumerates
+    /// them; the library itself names the families it measures.
     pub const ALL: [Self; 13] = [
         Self::IndependentChoice,
         Self::IndependentNegation,

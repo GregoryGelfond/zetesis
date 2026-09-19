@@ -21,8 +21,9 @@ use super::{Error, Limits};
 use crate::answers::native_json;
 use crate::examples;
 
-/// Number of cells in the series.
-pub const CELLS: usize = 22;
+/// Number of cells in the series: the generated programs, the amended
+/// boards and the unchanged entries.
+pub const CELLS: usize = GENERATED.len() + QUEENS.len() + ORIGINAL.len();
 
 /// Per-invocation capture ceiling the cells were sized against, in bytes.
 pub const CAPTURE_BYTES: usize = 16 * 1024 * 1024;
