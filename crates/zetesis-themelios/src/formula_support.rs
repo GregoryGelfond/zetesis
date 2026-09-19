@@ -573,7 +573,7 @@ impl<'a, 'source> Join<'a, 'source> {
         Ok(join)
     }
 
-    /// Attach necessary domains only to their exact final rule and support owner.
+    /// Attach necessary domains to their exact rule and support owner.
     pub(super) fn domain_rule(
         rule: &'a crate::formula_ir::RuleIr,
         support: &'a Support<'source>,

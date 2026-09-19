@@ -53,7 +53,8 @@ struct Restriction<'a, 'source> {
     ids: Vec<u32>,
 }
 
-/// Immutable restrictions for exactly one rule and one completed query owner.
+/// Immutable restrictions for exactly one rule and one support owner, applied
+/// in each completion round and in the final instantiation alike.
 /// The lease includes live guards and preparation scratch beside all table masks.
 pub(crate) struct Guards<'a, 'source> {
     support: &'a Support<'source>,

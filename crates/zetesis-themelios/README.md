@@ -91,11 +91,19 @@ is not a process-memory measurement.
 
 Prepared formula and bundle values can additionally request
 `with_domain_analysis(Some(DomainLimits { .. }))`, disabled by default. The
-initial consumer requires the exact normalized whole positive flat program;
-unsupported profiles, Unknown and Stopped retain complete fallback. It resolves
-necessary variable meets through the existing completed-support dictionary and
-filters final-rule rows before binding/deeper probes. It does not narrow support
-discovery or dependency projections, and preserves authored-error validation.
+analysis requires the exact normalized whole positive flat program;
+unsupported profiles, Unknown and Stopped retain complete fallback. Where it
+prepares candidates, a rule's variable is narrowed to the meet of its
+argument domains less the values a comparison over that variable alone
+excludes, decided before any row is read, and the guards apply in every
+support-completion round and in the final instantiation, so a row a guard
+rejects has no continuation. It does not touch dependency projections, and
+preserves authored-error validation. Whether or not the analysis runs, a
+comparison over relationally bound variables that is defined and false
+excludes its substitution, the join criterion places bound occurrences and
+decided comparisons before generators, and a constraint over a keyed value
+is asked as the one atom its key admits, counted by `keyed_constraints` on
+the admitted value; a key with an anonymous position is left as written.
 Analyzer logical populations and bounded standard allocations are separate from
 named support/guard byte accounting; actual analysis and guard work consume the
 original cumulative formula budget. No new cancellation, allocator or RSS cap
