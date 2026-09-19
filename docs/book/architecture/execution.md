@@ -197,10 +197,11 @@ and [disjunctive support laws](https://github.com/GregoryGelfond/zetesis/blob/ma
 state these necessary conditions. Source binding coverage and the executable
 certificate constructors retain separate refinement obligations.
 
-Exact projection exclusions have one owner across candidate restrictions. The
-outer cursor retains an index of previously proposed semantic interpretations;
-strengthening the candidate query rebuilds its traversal while preserving that
-index. Original and restriction clauses alone enter the watch lists. A completed
+Under the clauses method, exact projection exclusions have one owner across
+candidate restrictions: the outer cursor retains an index of previously
+proposed semantic interpretations, and strengthening the candidate query
+rebuilds its traversal while preserving that index; the regions method keeps
+no such index, since it visits a leaf once. Original and restriction clauses alone enter the watch lists. A completed
 assignment is independently checked against those clauses and looked up in the
 exclusion index before becoming another candidate. The original theory and its
 reduct remain separate from both operations. The

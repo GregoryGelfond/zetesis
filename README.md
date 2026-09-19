@@ -172,8 +172,10 @@ independently of terminal rendering. The CLI consumes its public session API.
 A reusable
 `zetesis_ferraris::FrozenReduct` binds a reduct to the interpretation that defines
 it. Independent satisfaction queries can share that immutable reduct.
-Ordinary general checking also retains one `PreparedReduct` across candidates,
-with authenticated candidate parameters and disjoint scalar/Rayon query state.
+General checking under `--search clauses` also retains one `PreparedReduct`
+across candidates, with authenticated candidate parameters and disjoint
+scalar/Rayon query state; the default regions method queries the reduct as a
+region tree instead.
 See the [working Rust examples](docs/book/rust/libraries.md).
 
 The session API returns checked `AnswerSet` values. `Session::enumerate` streams

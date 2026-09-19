@@ -115,8 +115,10 @@ selected plan; the search statistics retain attempted construction, restrictions
 and checking work. Use `Oracle::Countermodel` to select the general comparison
 path explicitly. Explicit device execution currently retains that general path.
 
-General completion lazily constructs one `PreparedReduct` for the exact original
-theory. Subsequent candidates supply membership and authenticated original-truth
+General completion under the clauses method lazily constructs one
+`PreparedReduct` for the exact original theory; under the default regions
+method the proper-subset query is a region tree over the original formulas and
+no encoding is built. Subsequent candidates supply membership and authenticated original-truth
 parameters, rather than rebuilding the encoding. Scalar checking reuses one
 workspace; Rayon workers borrow the shared encoding with disjoint query state.
 A workspace retains a complete watch index and completed unconditional unit

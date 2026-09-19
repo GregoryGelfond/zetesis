@@ -59,8 +59,11 @@ enclosing work budget; catalog membership alone does not establish truth.
 
 ## Prepared formula queries
 
-An ordinary formula enumeration constructs its `PreparedReduct` lazily, when a
-candidate first needs exact subset checking. One immutable encoding represents
+A formula enumeration under the clauses method (`--search clauses`) constructs
+its `PreparedReduct` lazily, when a candidate first needs exact subset
+checking; the regions method, the default, queries the reduct as a region tree
+over the original formulas under the candidate's mask and builds no encoding,
+as the [execution chapter](execution.md) describes. One immutable encoding represents
 the original theory's reduct for every candidate. The encoding separates the
 prospective subset's atom values from the candidate's membership and original
 implication truth. A successful `EvaluationWorkspace` operation authenticates
