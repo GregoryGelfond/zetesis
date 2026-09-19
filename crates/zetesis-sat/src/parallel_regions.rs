@@ -308,8 +308,16 @@ impl ParallelRegions {
 
     /// Restrict every region not yet visited to the classical models of
     /// `restriction`; the workers read it before their next narrowing.
-    pub(crate) fn restrict(&mut self, restriction: &Theory) -> Result<(), Incomplete> {
+    /// Indexing it is charged to the shared allowance the workers draw on,
+    /// and the enumeration's counters take the charge at once.
+    pub(crate) fn restrict(
+        &mut self,
+        restriction: &Theory,
+        budget: &mut Budget<'_>,
+    ) -> Result<(), Incomplete> {
         let narrower = Narrower::new(restriction);
+        self.shared.budget.charge(narrower.work())?;
+        self.account(budget);
         self.statistics.work += narrower.work();
         let mut restrictions = self
             .shared

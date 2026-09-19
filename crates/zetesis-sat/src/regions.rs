@@ -65,7 +65,8 @@ pub struct RegionSearchStatistics {
     pub forced: u64,
     /// Atoms the readings cut.
     pub cut: u64,
-    /// Node reads, root tests and producer checks, included in search work.
+    /// Indexing the theory and each restriction, producer extraction, node
+    /// reads, root tests and producer checks; included in search work.
     pub work: u64,
     /// Whether the theory lies in the producer fragment, so the support
     /// cut applies.
@@ -120,12 +121,18 @@ impl RegionSearch {
         }
     }
 
-    /// Narrow the regions still to visit by a candidate-only restriction.
-    pub(crate) fn restrict(&mut self, restriction: &Theory) -> Result<(), Incomplete> {
+    /// Narrow the regions still to visit by a candidate-only restriction;
+    /// indexing it is charged to the budget, as the theory's was.
+    pub(crate) fn restrict(
+        &mut self,
+        restriction: &Theory,
+        budget: &mut Budget<'_>,
+    ) -> Result<(), Incomplete> {
         self.restrictions
             .try_reserve(1)
             .map_err(|_| Incomplete::Allocation)?;
         let narrower = Narrower::new(restriction);
+        budget.charge(narrower.work())?;
         self.statistics.work += narrower.work();
         self.restrictions.push((restriction.clone(), narrower));
         Ok(())

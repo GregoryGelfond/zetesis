@@ -41,6 +41,23 @@ fn exhausted_available_permits_wait_for_outstanding_grants() {
 }
 
 #[test]
+fn a_charge_commits_available_permits_and_is_refused_beyond_them() {
+    let shared = budget(WORK_QUANTUM + 3);
+    let control = Control::default();
+    let lease = shared.lease(&control);
+    lease.tick().unwrap();
+    state(&shared, (0, 3, WORK_QUANTUM));
+    shared.charge(2).unwrap();
+    state(&shared, (2, 1, WORK_QUANTUM));
+    // The lease's unused permits could cover the charge, but they are not
+    // waited for.
+    assert_eq!(shared.charge(2), Err(Incomplete::WorkLimit));
+    state(&shared, (2, 1, WORK_QUANTUM));
+    drop(lease);
+    state(&shared, (3, WORK_QUANTUM, 0));
+}
+
+#[test]
 fn each_grant_conserves_used_available_and_outstanding_permits() {
     let shared = budget(2 * WORK_QUANTUM + 3);
     let control = Control::default();

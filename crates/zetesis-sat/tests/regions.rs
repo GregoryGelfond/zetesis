@@ -137,6 +137,44 @@ fn a_restriction_narrows_the_remaining_regions_without_restarting() {
     assert_eq!(search.statistics().candidate_restrictions, 1);
 }
 
+#[test]
+fn a_restriction_charges_its_indexing_to_the_search_work() {
+    // Indexing the theory is charged when the search is built; indexing a
+    // restriction is charged when it is added, and the region receipts
+    // count the same figure.
+    let theory = choices(3);
+    let mut search = regions(&theory, Limits::default());
+    let before = search.statistics();
+    let restriction = theory_over(&theory, vec![Node::Atom(2)], vec![0]);
+    search.restrict_candidates(&restriction).unwrap();
+    let after = search.statistics();
+    let indexed = after.regions.unwrap().work - before.regions.unwrap().work;
+    assert!(indexed > 0);
+    assert_eq!(after.search.work - before.search.work, indexed);
+}
+
+#[test]
+fn a_restriction_beyond_the_remaining_search_work_is_refused() {
+    // The ceiling is exactly what construction charged, so no work remains
+    // for the restriction's indexing.
+    let theory = choices(3);
+    let construction = regions(&theory, Limits::default()).statistics().search.work;
+    let limits = Limits {
+        search: SearchLimits {
+            max_work: construction,
+            ..SearchLimits::default()
+        },
+        ..Limits::default()
+    };
+    let mut search = regions(&theory, limits);
+    let restriction = theory_over(&theory, vec![Node::Atom(2)], vec![0]);
+    assert!(matches!(
+        search.restrict_candidates(&restriction),
+        Err(Incomplete::WorkLimit)
+    ));
+    assert_eq!(search.statistics().candidate_restrictions, 0);
+}
+
 fn theory_over(original: &Theory, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
     theory(original.atom_count(), nodes, roots)
 }

@@ -122,6 +122,58 @@ fn a_restriction_reaches_the_workers_for_what_they_have_not_visited() {
     assert!(all.iter().filter(|model| model.contains(&7)).count() >= 1);
 }
 
+#[test]
+fn a_restriction_charges_its_indexing_to_the_shared_search_work() {
+    // The workers start on the first proposal, so before it the only work
+    // between the two readings is the restriction's indexing, which the
+    // shared allowance is charged and the region receipts count.
+    let theory = choices(8);
+    let mut parallel = StableModels::with_region_workers(
+        &theory,
+        workers(4),
+        Limits::default(),
+        Control::default(),
+    )
+    .unwrap();
+    let before = parallel.statistics();
+    let restriction = theory_over(&theory, vec![Node::Atom(7)], vec![0]);
+    parallel.restrict_candidates(&restriction).unwrap();
+    let after = parallel.statistics();
+    let indexed = after.regions.unwrap().work - before.regions.unwrap().work;
+    assert!(indexed > 0);
+    assert_eq!(after.search.work - before.search.work, indexed);
+}
+
+#[test]
+fn a_restriction_beyond_the_shared_search_work_is_refused() {
+    let theory = choices(8);
+    let construction = StableModels::with_region_workers(
+        &theory,
+        workers(4),
+        Limits::default(),
+        Control::default(),
+    )
+    .unwrap()
+    .statistics()
+    .search
+    .work;
+    let limits = Limits {
+        search: SearchLimits {
+            max_work: construction,
+            ..SearchLimits::default()
+        },
+        ..Limits::default()
+    };
+    let mut parallel =
+        StableModels::with_region_workers(&theory, workers(4), limits, Control::default()).unwrap();
+    let restriction = theory_over(&theory, vec![Node::Atom(7)], vec![0]);
+    assert!(matches!(
+        parallel.restrict_candidates(&restriction),
+        Err(Incomplete::WorkLimit)
+    ));
+    assert_eq!(parallel.statistics().candidate_restrictions, 0);
+}
+
 fn theory_over(original: &Theory, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
     theory(original.atom_count(), nodes, roots)
 }

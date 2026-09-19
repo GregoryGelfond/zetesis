@@ -718,8 +718,8 @@ impl Proposer {
                 clauses.cursor.restart();
                 Ok(())
             }
-            Self::Regions(regions) => regions.restrict(restriction),
-            Self::Parallel(parallel) => parallel.restrict(restriction),
+            Self::Regions(regions) => regions.restrict(restriction, budget),
+            Self::Parallel(parallel) => parallel.restrict(restriction, budget),
         }
     }
 }

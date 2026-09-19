@@ -88,6 +88,21 @@ impl SharedBudget {
             .map_err(|_| Incomplete::DecisionLimit)
     }
 
+    /// Commit `work` permits at once, for work done outside any lease. The
+    /// permits are taken from those available; when they do not cover it
+    /// the charge is refused as exhaustion without waiting for outstanding
+    /// grants to return, so a charge within the workers' grants of the
+    /// ceiling, at most `WORK_QUANTUM` each, is refused early.
+    pub(crate) fn charge(&self, work: u64) -> Result<(), Incomplete> {
+        let mut permits = self.lock();
+        if permits.available < work {
+            return Err(Incomplete::WorkLimit);
+        }
+        permits.available -= work;
+        permits.spent += work;
+        Ok(())
+    }
+
     /// The work committed so far, while leases may still hold permits: a
     /// lower bound on the work spent, exact once every lease has dropped.
     pub(crate) fn snapshot(&self, statistics: &mut SearchStatistics) {
