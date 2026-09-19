@@ -642,7 +642,7 @@ fn scoreboard_tables(
         }
         writeln!(
             f,
-            "\n{name}. Milliseconds: ours and the reference's medians and their ratio; ours split into grounding, candidate proposal and membership; the reference's into grounding and solving from its own report.\n\n| Cell | ours | reference | ours/reference | grounding | proposal | membership | reference grounding | reference solving |\n|---|---:|---:|---:|---:|---:|---:|---:|---:|"
+            "\n{name}. Milliseconds: the native and the reference medians and their ratio; the native split into grounding, candidate proposal and membership; the reference's into grounding and solving from its own report.\n\n| Cell | native | reference | native/reference | grounding | proposal | membership | reference grounding | reference solving |\n|---|---:|---:|---:|---:|---:|---:|---:|---:|"
         )?;
         for verdict in verdicts {
             writeln!(
@@ -667,7 +667,7 @@ fn scoreboard_tables(
     }) {
         writeln!(
             f,
-            "\nPeak memory, MiB: the resident set of ours and of the reference over the memory rounds, and the device memory ours accounted.\n\n| Cell | ours | reference | device |\n|---|---:|---:|---:|"
+            "\nPeak memory, MiB: the resident set of the native and of the reference over the memory rounds, and the device memory the native accounted.\n\n| Cell | native | reference | device |\n|---|---:|---:|---:|"
         )?;
         for verdict in &scoreboard.verdicts {
             writeln!(
