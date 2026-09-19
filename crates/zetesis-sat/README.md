@@ -126,8 +126,8 @@ children, so a child's narrowing starts from its parent's and learns only
 what the split decided (`FormulaBounds.known_mono`), and the regions still
 share nothing. The reduct query carries its knowledge the same way. Node visits and producer
 checks are charged as search work and each split as a decision, against
-the same cumulative `SearchLimits`. Regions are the default method, measured
-beside the clauses on the same cells; the clauses are kept for comparison.
+the same cumulative `SearchLimits`. Regions are the default method; the
+clauses remain a method a session may select.
 `Statistics::regions` reports regions visited, refuted and reached as leaves,
 propagations (a node learned and its parents revisited, a chain learning by
 one counter step, or an atom's support rechecked), atoms held and cut, whether the support cut applied, and

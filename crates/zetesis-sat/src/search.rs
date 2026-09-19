@@ -480,8 +480,7 @@ impl State {
         // A complete assignment that propagation left without conflict
         // satisfies every clause: a clause with both watches false would
         // have propagated or conflicted. The truth-table tests state that
-        // property; a debug build re-checks it, uncharged, and a release
-        // build does not rescan the clauses per witness.
+        // property; a debug build re-checks it, uncharged.
         debug_assert!(
             cnf.clauses().take(self.base_clauses).all(|clause| clause
                 .iter()

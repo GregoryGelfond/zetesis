@@ -30,13 +30,11 @@ use crate::search::{Budget, Quota};
 pub enum SearchMethod {
     /// Regions of the candidate space narrowed by the theory's readings;
     /// every leaf is a classical model and no clause form is built. The
-    /// default: measured beside the clauses on the same cells, it is the
-    /// better method overall once more than one worker walks the tree.
+    /// default.
     #[default]
     Regions,
-    /// A retained chronological search over a clause form of the theory,
-    /// with exact exclusion of every candidate already proposed. Kept for
-    /// comparison.
+    /// A chronological search over a clause form of the theory, with exact
+    /// exclusion of every candidate already proposed.
     Clauses,
 }
 
