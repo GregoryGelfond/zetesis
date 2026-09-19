@@ -28,10 +28,14 @@ pub const RECORD_SCHEMA_VERSION: u32 = 2;
 /// copying the atom.
 #[derive(Debug)]
 pub struct AtomTable {
-    /// Placed by the standard library's randomized hasher: the program's
-    /// author spells the atoms, and their placement is not his to drive
-    /// into collisions.
-    indices: HashMap<Entry, usize>,
+    /// Placed by the crate's fixed word hash. The program's author spells
+    /// the atoms and could choose them to collide; a collision costs a
+    /// lookup a scan of the table, bounded by its ceiling of distinct
+    /// atoms, and the solving his program commands already costs him more
+    /// than any table could. The randomized hasher was measured at 1.09 to
+    /// 1.16 of the cell time on the series' large-model cells, hashing
+    /// every atom of every model on the way out (the observations record).
+    indices: HashMap<Entry, usize, std::hash::BuildHasherDefault<crate::word_hash::WordHasher>>,
     /// The first record's model, whose atoms hold the indices `0..len` in
     /// model order and are indexed only when a second record asks.
     deferred: Option<Model>,
@@ -237,14 +241,16 @@ impl std::error::Error for Failure {}
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
-    use std::hash::RandomState;
+    use std::hash::BuildHasherDefault;
 
-    /// The program's author spells the atoms, so the table places them by
-    /// the standard library's randomized hasher, which he cannot drive into
-    /// collisions; this compiles only while it does.
+    /// The table places the atoms by the crate's fixed word hash, the
+    /// placement an author could drive into collisions being bounded by the
+    /// table's ceiling and dwarfed by the solving his program already
+    /// commands; this compiles only while it does.
     #[test]
-    fn the_atom_table_places_spelled_atoms_by_the_randomized_hasher() {
+    fn the_atom_table_places_spelled_atoms_by_the_word_hash() {
         let table = super::AtomTable::new(1);
-        let _: &HashMap<super::Entry, usize, RandomState> = &table.indices;
+        let _: &HashMap<super::Entry, usize, BuildHasherDefault<crate::word_hash::WordHasher>> =
+            &table.indices;
     }
 }

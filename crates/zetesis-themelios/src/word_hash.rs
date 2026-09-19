@@ -1,12 +1,15 @@
 //! The fixed word hash the crate's indexes share.
 //!
-//! An index keyed by identities the crate assigns itself, the formula node
-//! index, is placed by this hash rather than the standard library's
-//! randomized one: such a key carries nothing a program's author chooses,
-//! so no input drives it into collisions, the placement is reproducible,
-//! and the mixing is a few instructions per word. An index keyed by what
-//! an author spells, such as the JSON document's table of spelled atoms,
-//! keeps the randomized hasher.
+//! An index the crate keeps is placed by this hash rather than the
+//! standard library's randomized one, for a placement that is reproducible
+//! and a mixing that is a few instructions per word. The formula node
+//! index is keyed by identities the builder assigns, which no input drives
+//! into collisions. The JSON document's table of spelled atoms is keyed by
+//! what a program's author spells, and he could choose atoms that collide;
+//! that costs a lookup a scan of the table, bounded by its ceiling, and the
+//! solving his program commands already costs him more than any table
+//! could, while the randomized hasher was measured at 1.09 to 1.16 of the
+//! cell time on the series' large-model cells.
 
 use std::hash::Hasher;
 
