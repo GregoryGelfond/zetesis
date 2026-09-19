@@ -336,14 +336,13 @@ fn compile_bundle(
         span: entry.source().span(),
     };
     let source = SourceProgram::of_nodes(statements);
-    let (program, template_origins, expansion) =
-        extended::compile_owned(&source, options.core_limits, limits, location)?;
-    Ok(extended::Compilation {
-        program,
-        template_origins,
-        metadata: source_metadata.finish(),
-        expansion,
-    })
+    Ok(extended::compile_owned(
+        &source,
+        options.core_limits,
+        limits,
+        location,
+        source_metadata.finish(),
+    )?)
 }
 
 pub(crate) fn check_include_identity(bundle: &SourceBundle) -> Result<(), BundleAdmissionError> {

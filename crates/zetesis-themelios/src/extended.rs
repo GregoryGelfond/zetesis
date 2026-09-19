@@ -95,22 +95,24 @@ fn compile_parsed(
         source: source.source().id(),
         span: source.source().span(),
     };
-    let (program, template_origins, expansion) =
-        compile_owned(raised.program(), options.core_limits, limits, location)?;
-    Ok(Compilation {
-        program,
-        template_origins,
-        metadata: source_metadata.finish(),
-        expansion,
-    })
+    compile_owned(
+        raised.program(),
+        options.core_limits,
+        limits,
+        location,
+        source_metadata.finish(),
+    )
 }
 
+/// Compile the source into the program with its template origins and the
+/// expansion charges it accepted, as one compilation with `metadata`.
 pub(crate) fn compile_owned(
     source: &SourceProgram,
     core_limits: AdmissionLimits,
     limits: ExpansionLimits,
     location: Location,
-) -> Result<(Program, Vec<Vec<Location>>, ExpansionUsage), ExpansionFailure> {
+    metadata: SourceMetadata,
+) -> Result<Compilation, ExpansionFailure> {
     let mut budget = Budget::new(limits, core_limits.max_templates);
     let constants = resolve(source, &mut budget, location)?;
     let (mut templates, mut template_origins) =
@@ -131,7 +133,12 @@ pub(crate) fn compile_owned(
             .unwrap_or(location);
         AdmissionFailure::Core { error, location }
     })?;
-    Ok((program, template_origins, budget.usage()))
+    Ok(Compilation {
+        program,
+        template_origins,
+        metadata,
+        expansion: budget.usage(),
+    })
 }
 
 fn check_definitions(

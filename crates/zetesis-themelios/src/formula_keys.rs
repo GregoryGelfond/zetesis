@@ -413,17 +413,22 @@ fn admits_within(analysis: &Analysis<'_>, key: &Key<'_>, low: i64, high: i64) ->
     });
     // The value is bound by the condition, so a literal names it; every one
     // that does bounds it, and one within range suffices.
-    positions.any(|(signature, position)| {
-        match analysis.domain(&signature, position) {
+    positions.any(|(signature, position)| within(analysis.domain(&signature, position), low, high))
+}
+
+/// Whether every value of the domain is a number in `low..=high`.
+fn within(domain: &Domain<'_>, low: i64, high: i64) -> bool {
+    match domain {
         Domain::Finite(values) => values.iter().all(|value| {
             matches!(value, Symbol::Number(number) if (low..=high).contains(&i64::from(*number)))
         }),
         Domain::Unknown => false,
     }
-    })
 }
 
 /// The key's body with its key variables replaced by the demand's terms.
+/// The key's analysis admits a body of positive plain atoms with one
+/// argument tuple each, so no other literal occurs here.
 fn key_body(demand: &Demand<'_>) -> Vec<Literal> {
     let substitution: BTreeMap<&VarName, &Term> = demand
         .terms
@@ -435,16 +440,16 @@ fn key_body(demand: &Demand<'_>) -> Vec<Literal> {
         .key
         .body()
         .elements()
-        .filter_map(|element| match element.get() {
+        .map(|element| match element.get() {
             BodyElement::Literal(Literal {
                 negation: DefaultNegation::None,
                 inner: LiteralInner::Atom(atom),
             }) => {
                 let atom = atom.get();
                 let Arguments::Single(terms) = &atom.arguments else {
-                    return None;
+                    unreachable!("a key's body atom has one argument tuple")
                 };
-                Some(Literal {
+                Literal {
                     negation: DefaultNegation::None,
                     inner: LiteralInner::Atom(WithProvenance::constructed(Atom {
                         sign: atom.sign,
@@ -461,9 +466,9 @@ fn key_body(demand: &Demand<'_>) -> Vec<Literal> {
                                 .collect(),
                         ),
                     })),
-                })
+                }
             }
-            _ => None,
+            _ => unreachable!("a key's body holds only positive plain atoms"),
         })
         .collect()
 }

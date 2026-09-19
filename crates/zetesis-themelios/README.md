@@ -24,7 +24,7 @@ cargo doc --locked -p zetesis-themelios --no-deps --open
 | `admit` | Relational templates for the strict normal-rule profile. |
 | `admit_extended`, `admit_bundle_extended` | Relational templates with bounded scalar expansion and source metadata, with the expansion charges each admission accepted under its `ExpansionLimits`. Suitable input for lazy relational solving. |
 | `prepare_formula`, `prepare_bundle_formula` | An owned preparation that separates source preparation from eager formula grounding. |
-| `admit_formula`, `admit_bundle_formula` | A complete finite Ferraris theory, dense original-atom mapping, lifted objectives and source metadata. Composes preparation and grounding. |
+| `admit_formula`, `admit_bundle_formula` | A complete finite Ferraris theory, dense original-atom mapping, lifted objectives and source metadata. Composes preparation and grounding. Expansion is charged under the same `ExpansionLimits`; the usage is not reported. |
 
 The strict profile contains normal rules, constraints, singleton unconditioned
 choices, closed logical values, positive/default-negated atoms and

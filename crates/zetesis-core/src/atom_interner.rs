@@ -125,6 +125,8 @@ impl<E: std::error::Error + 'static> std::error::Error for Failure<E> {
 pub struct AtomInterner {
     committed: Vec<Atom>,
     pending: Vec<Atom>,
+    /// The shared node index. Its own root goes unused here: each relation
+    /// keeps the root of its subtree, and the index publishes nodes alone.
     index: Index,
     relations: Vec<Relation>,
 }

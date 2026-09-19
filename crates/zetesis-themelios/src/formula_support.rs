@@ -751,7 +751,9 @@ impl<'a, 'source> Join<'a, 'source> {
                 slots[index] = Slot::Excluded;
             }
         }
-        let mut join = Self {
+        let prefix: Vec<bool> = values.iter().map(Option::is_some).collect();
+        let decisions = order::Decisions::of(literals, &patterns, &prefix);
+        Ok(Self {
             bindings: None,
             literals,
             generated: literals
@@ -761,7 +763,7 @@ impl<'a, 'source> Join<'a, 'source> {
             pending_head: None,
             head_slots: variables..variables,
             comparisons: Comparisons::Deferred,
-            decisions: order::Decisions::of(literals, &[], &[]),
+            decisions,
             verdicts: vec![true; count.max(1)],
             failure: None,
             evaluation: Evaluation::default(),
@@ -777,9 +779,7 @@ impl<'a, 'source> Join<'a, 'source> {
             depth: 0,
             empty_yielded: false,
             finished: false,
-        };
-        join.decide();
-        Ok(join)
+        })
     }
     /// Fix, for the current order and prefix, the depth at which each
     /// comparison is decided and whether any check waits for the complete
@@ -1135,42 +1135,40 @@ impl<'a, 'source> Join<'a, 'source> {
     ) -> Result<bool, FormulaFailure> {
         let depth = self.depth;
         let mut passes = depth == 0 || self.verdicts[depth - 1];
-        {
-            for index in self.decisions.decided_at(depth) {
-                let (left, relation, right) =
-                    comparison(&self.literals[index]).expect("a decided literal is a comparison");
-                let values = (|| {
-                    let left = partial_value(
-                        left,
-                        &self.values,
-                        &mut self.evaluation,
-                        limits,
-                        budget,
-                        counters,
-                        location,
-                    )?;
-                    let right = partial_value(
-                        right,
-                        &self.values,
-                        &mut self.evaluation,
-                        limits,
-                        budget,
-                        counters,
-                        location,
-                    )?;
-                    Ok((left, right))
-                })();
-                match values {
-                    Ok((left, right)) => passes &= compare(&left, relation, &right),
-                    Err(FormulaFailure::Expansion(error @ ExpansionFailure::Evaluation { .. })) => {
-                        // Retained, not raised: a comparison decided here or
-                        // deeper may still exclude the substitution.
-                        if self.failure.is_none() {
-                            self.failure = Some((depth, error));
-                        }
+        for index in self.decisions.decided_at(depth) {
+            let (left, relation, right) =
+                comparison(&self.literals[index]).expect("a decided literal is a comparison");
+            let values = (|| {
+                let left = partial_value(
+                    left,
+                    &self.values,
+                    &mut self.evaluation,
+                    limits,
+                    budget,
+                    counters,
+                    location,
+                )?;
+                let right = partial_value(
+                    right,
+                    &self.values,
+                    &mut self.evaluation,
+                    limits,
+                    budget,
+                    counters,
+                    location,
+                )?;
+                Ok((left, right))
+            })();
+            match values {
+                Ok((left, right)) => passes &= compare(&left, relation, &right),
+                Err(FormulaFailure::Expansion(error @ ExpansionFailure::Evaluation { .. })) => {
+                    // Retained, not raised: a comparison decided here or
+                    // deeper may still exclude the substitution.
+                    if self.failure.is_none() {
+                        self.failure = Some((depth, error));
                     }
-                    Err(error) => return Err(error),
                 }
+                Err(error) => return Err(error),
             }
         }
         self.verdicts[depth] = passes;
