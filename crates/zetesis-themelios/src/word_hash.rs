@@ -1,9 +1,12 @@
 //! The fixed word hash the crate's indexes share.
 //!
-//! An index keyed by a structure the crate builds itself, such as a formula
-//! node or a spelled atom, is placed by this hash rather than the standard
-//! library's randomized one: the keys are not adversarial, the placement is
-//! reproducible, and the mixing is a few instructions per word.
+//! An index keyed by identities the crate assigns itself, the formula node
+//! index, is placed by this hash rather than the standard library's
+//! randomized one: such a key carries nothing a program's author chooses,
+//! so no input drives it into collisions, the placement is reproducible,
+//! and the mixing is a few instructions per word. An index keyed by what
+//! an author spells, such as the JSON document's table of spelled atoms,
+//! keeps the randomized hasher.
 
 use std::hash::Hasher;
 

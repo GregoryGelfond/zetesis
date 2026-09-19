@@ -31,7 +31,10 @@ pub const RECORD_SCHEMA_VERSION: u32 = 2;
 /// copying the atom.
 #[derive(Debug)]
 pub struct AtomTable {
-    indices: HashMap<Entry, usize, std::hash::BuildHasherDefault<crate::word_hash::WordHasher>>,
+    /// Placed by the standard library's randomized hasher: the program's
+    /// author spells the atoms, and their placement is not his to drive
+    /// into collisions.
+    indices: HashMap<Entry, usize>,
     /// The first record's model, whose atoms hold the indices `0..len` in
     /// model order and are indexed only when a second record asks.
     deferred: Option<Model>,
@@ -233,3 +236,18 @@ impl fmt::Display for Failure {
     }
 }
 impl std::error::Error for Failure {}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use std::hash::RandomState;
+
+    /// The program's author spells the atoms, so the table places them by
+    /// the standard library's randomized hasher, which he cannot drive into
+    /// collisions; this compiles only while it does.
+    #[test]
+    fn the_atom_table_places_spelled_atoms_by_the_randomized_hasher() {
+        let table = super::AtomTable::new(1);
+        let _: &HashMap<super::Entry, usize, RandomState> = &table.indices;
+    }
+}
