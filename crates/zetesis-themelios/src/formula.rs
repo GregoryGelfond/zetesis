@@ -487,6 +487,14 @@ impl AdmittedFormula {
         self.compiled.keyed_constraints
     }
 
+    /// What preparation and grounding charged under the expansion limits:
+    /// the receipt the extended profile reports, from the one budget this
+    /// admission kept from its first statement to its last root.
+    #[must_use]
+    pub fn expansion_usage(&self) -> &crate::ExpansionUsage {
+        &self.compiled.expansion
+    }
+
     /// The admitted general formula theory.
     #[must_use]
     pub fn theory(&self) -> &Theory {
@@ -584,6 +592,14 @@ impl AdmittedFormulaBundle {
     #[must_use]
     pub fn keyed_constraints(&self) -> usize {
         self.compiled.keyed_constraints
+    }
+
+    /// What preparation and grounding charged under the expansion limits:
+    /// the receipt the extended profile reports, from the one budget this
+    /// admission kept from its first statement to its last root.
+    #[must_use]
+    pub fn expansion_usage(&self) -> &crate::ExpansionUsage {
+        &self.compiled.expansion
     }
 
     /// The admitted general formula theory.
@@ -703,6 +719,7 @@ pub(crate) struct Compiled {
     pub objective_origins: Vec<Vec<Location>>,
     pub objective_declarations: Vec<Location>,
     pub keyed_constraints: usize,
+    pub expansion: crate::ExpansionUsage,
 }
 
 /// Admit the extended scalar profile, finite conditional choices and body

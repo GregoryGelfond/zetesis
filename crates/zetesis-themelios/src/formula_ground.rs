@@ -96,6 +96,7 @@ pub(crate) fn ground(
         objective_origins,
         objective_declarations,
         keyed_constraints,
+        expansion: budget.usage(),
     })
 }
 
