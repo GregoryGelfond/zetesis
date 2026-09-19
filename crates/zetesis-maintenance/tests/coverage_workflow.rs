@@ -8,7 +8,7 @@ pub mod subprocess;
 use subprocess::{Command, Output};
 #[path = "support/coverage_fixture.rs"]
 mod fixture;
-use fixture::{Fixture, groups};
+use fixture::{Fixture, groups, vulkan_groups};
 use std::fs;
 
 #[test]
@@ -750,4 +750,57 @@ fn live_audit_stderr_prevents_record_acceptance() {
     assert_eq!(result.status.code(), Some(2));
     assert!(!fixture.read("trace").contains("maintenance proof-record"));
     assert!(String::from_utf8_lossy(&result.stdout).contains("synthetic unexpected Audit stderr"));
+}
+
+#[test]
+fn invalid_hardware_arguments_are_refused() {
+    for args in [vec!["--bad"], vec!["--metal", "extra"], vec!["vulkan"]] {
+        let f = Fixture::new();
+        let result = f.command("scripts/hardware.sh").args(args).bounded_output();
+        assert_eq!(result.status.code(), Some(2));
+    }
+}
+
+#[test]
+fn hardware_qualification_publishes_each_groups_status() {
+    let f = Fixture::new();
+    let result = f
+        .command("scripts/hardware.sh")
+        .arg("--vulkan")
+        .bounded_output();
+    assert_eq!(result.status.code(), Some(0));
+    assert_eq!(f.read("target/hardware/vulkan-status.txt"), "passed\n");
+    for fields in vulkan_groups() {
+        assert_eq!(
+            f.read(&format!("target/hardware/vulkan-{}-status.txt", fields[0])),
+            "passed\n"
+        );
+    }
+}
+
+#[test]
+fn a_failed_hardware_group_keeps_the_qualification_incomplete() {
+    // The groups before the failing one passed and are so recorded; the
+    // failing one, the ones after it and the whole stay incomplete, and the
+    // gate exits with the group's own code.
+    let f = Fixture::new();
+    let result = f
+        .command("scripts/hardware.sh")
+        .arg("--vulkan")
+        .env("COVERAGE_TEST_PHYSICAL", "failed")
+        .env("COVERAGE_TEST_PHYSICAL_GROUP", "relation")
+        .bounded_output();
+    assert_eq!(result.status.code(), Some(37));
+    assert_eq!(f.read("target/hardware/vulkan-status.txt"), "incomplete\n");
+    let mut failed = false;
+    for fields in vulkan_groups() {
+        failed |= fields[0] == "relation";
+        let status = if failed { "incomplete\n" } else { "passed\n" };
+        assert_eq!(
+            f.read(&format!("target/hardware/vulkan-{}-status.txt", fields[0])),
+            status,
+            "{}",
+            fields[0]
+        );
+    }
 }

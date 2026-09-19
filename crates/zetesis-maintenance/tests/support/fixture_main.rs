@@ -74,16 +74,20 @@ fn physical(arguments: &[String]) -> Result<(), String> {
         .position(|arg| arg == "--exact")
         .ok_or("missing exact filter")?;
     let filters = &arguments[position + 1..];
-    let fields: Vec<_> = include_str!("physical-selection.txt")
-        .lines()
-        .map(|line| line.split('|').collect::<Vec<_>>())
-        .find(|fields| {
-            fields[1] == target
-                && fields[3]
-                    .split_whitespace()
-                    .any(|name| filters.iter().any(|filter| filter == name))
-        })
-        .ok_or("unexpected physical target")?;
+    let fields: Vec<_> = [
+        include_str!("physical-selection.txt"),
+        include_str!("physical-selection-vulkan.txt"),
+    ]
+    .into_iter()
+    .flat_map(str::lines)
+    .map(|line| line.split('|').collect::<Vec<_>>())
+    .find(|fields| {
+        fields[1] == target
+            && fields[3]
+                .split_whitespace()
+                .any(|name| filters.iter().any(|filter| filter == name))
+    })
+    .ok_or("unexpected physical target")?;
     let group = fields[0];
     let mut mode = variable("COVERAGE_TEST_PHYSICAL", "passed");
     if variable("COVERAGE_TEST_PHYSICAL_GROUP", "wgpu-lib") != group {
@@ -174,6 +178,14 @@ fn cargo(arguments: &[String]) -> Result<(), String> {
             println!("{}", json!({"reason":"build-finished","success":true}));
         }
         return Ok(());
+    }
+    if arguments
+        .get(..2)
+        .is_some_and(|args| args == ["+1.97.1", "test"])
+        && has(arguments, "--ignored")
+    {
+        // The hardware gate's exact test runs, without instrumentation.
+        return physical(arguments);
     }
     if arguments == ["+1.97.1", "llvm-cov", "--version"] {
         println!(

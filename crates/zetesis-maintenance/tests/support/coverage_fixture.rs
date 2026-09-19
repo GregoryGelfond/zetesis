@@ -7,6 +7,7 @@ use std::{
 };
 
 pub const TABLE: &str = include_str!("physical-selection.txt");
+pub const VULKAN_TABLE: &str = include_str!("physical-selection-vulkan.txt");
 pub struct Fixture {
     pub directory: tempfile::TempDir,
 }
@@ -31,10 +32,23 @@ impl Fixture {
                 "coverage-ratchet.sh",
                 include_bytes!("../../../../scripts/coverage-ratchet.sh").as_slice(),
             ),
+            (
+                "hardware.sh",
+                include_bytes!("../../../../scripts/hardware.sh").as_slice(),
+            ),
         ] {
             fixture.write(&format!("scripts/{name}"), bytes);
             fixture.executable(&format!("scripts/{name}"));
         }
+        // The reviewed selections the hardware gate reads from the source tree.
+        fixture.write(
+            "crates/zetesis-maintenance/src/coverage/physical-selection.txt",
+            TABLE.as_bytes(),
+        );
+        fixture.write(
+            "crates/zetesis-maintenance/src/coverage/physical-selection-vulkan.txt",
+            VULKAN_TABLE.as_bytes(),
+        );
         fixture.write("scripts/coverage-floor.txt", b"91\n");
         fixture.write("target/coverage/status.txt", b"gate-passed\n");
         fixture.write("target/coverage/floors.tsv", b"workspace\t0\ncli-cpu\t0\n");
@@ -272,6 +286,12 @@ impl Fixture {
 }
 pub fn groups() -> Vec<Vec<&'static str>> {
     TABLE.lines().map(|row| row.split('|').collect()).collect()
+}
+pub fn vulkan_groups() -> Vec<Vec<&'static str>> {
+    VULKAN_TABLE
+        .lines()
+        .map(|row| row.split('|').collect())
+        .collect()
 }
 fn strings(values: &[&str]) -> Vec<String> {
     values.iter().map(|value| (*value).into()).collect()
