@@ -336,7 +336,7 @@ fn account<Q: Quota>(
     budget: &mut Budget<'_, Q>,
     counts: &mut RegionCounts,
 ) -> Result<Narrowing, Incomplete> {
-    let (narrowing, pass) = match result {
+    let (narrowing, charges) = match result {
         Ok(outcome) => outcome,
         Err(Stop::WorkLimit) => {
             let remaining = budget.remaining_work();
@@ -346,11 +346,11 @@ fn account<Q: Quota>(
         }
         Err(stop) => return Err(stopped(stop)),
     };
-    counts.propagations += pass.propagations;
-    counts.held += pass.held;
-    counts.cut += pass.cut;
-    counts.work += pass.work;
-    budget.charge(pass.work)?;
+    counts.propagations += charges.propagations;
+    counts.held += charges.held;
+    counts.cut += charges.cut;
+    counts.work += charges.work;
+    budget.charge(charges.work)?;
     Ok(narrowing)
 }
 
