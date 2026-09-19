@@ -102,7 +102,9 @@ pub struct Progress {
     pub membership_completed: u64,
     /// Original classical-model failures among completed standalone calls.
     pub not_models: u64,
-    /// Completed standalone calls with an actual proper-subset witness.
+    /// Completed standalone calls refuted as not minimal: those with an
+    /// actual proper-subset witness, and those the support law refuted, a
+    /// present atom having no producer with a true body.
     pub nonminimal: u64,
     /// Candidates rejected by a retained conditional witness; saved native calls.
     pub filtered: u64,

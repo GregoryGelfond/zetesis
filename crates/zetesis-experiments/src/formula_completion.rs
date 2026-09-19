@@ -11,6 +11,8 @@ use crate::formula_fixtures::reserve;
 pub(super) enum Membership {
     NotModel,
     Stable,
+    /// Refuted as not minimal, by a proper-subset witness or by the
+    /// support law.
     NonMinimal,
 }
 
