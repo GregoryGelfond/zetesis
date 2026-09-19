@@ -530,16 +530,16 @@ fn least_closure_with(
                 program,
                 gates,
                 closure,
-                incremental.then_some(rules),
-                DenseHeads {
+                incremental,
+                RoundPlan {
+                    rules,
                     layouts,
                     row_steps,
-                    pending: &mut *pending,
                 },
-                Frame {
+                RoundScratch {
                     assignment: &mut assignment,
                     buffers: &mut *buffers,
-                    selection: Selection::All,
+                    pending: &mut *pending,
                 },
                 work,
             )?
@@ -638,11 +638,21 @@ fn record_head(
     Ok(())
 }
 
-/// Where a round records a head of a dense relation: the layouts name the
-/// head's slot, and the pending rows take its position.
-struct DenseHeads<'a> {
+/// The prepared parts a round reads and never changes: the rule index of
+/// the incremental rounds, the dense layouts, which name a head's slot, and
+/// the row-step plan.
+#[derive(Clone, Copy)]
+struct RoundPlan<'a> {
+    rules: &'a prepared::Rules,
     layouts: &'a Layouts,
     row_steps: &'a RowSteps,
+}
+
+/// The scratch a round writes: the assignment, the join buffers and the
+/// pending rows, which take a dense head's position.
+struct RoundScratch<'a, 'source> {
+    assignment: &'a mut [Option<&'source Value>],
+    buffers: &'a mut prepared::Buffers,
     pending: &'a mut PendingRows,
 }
 
@@ -779,47 +789,47 @@ fn visit_round<'source>(
     program: &Program,
     gates: Gates<'_>,
     closure: &'source Catalogs,
-    incremental: Option<&prepared::Rules>,
-    dense_heads: DenseHeads<'_>,
-    frame: Frame<'_, 'source>,
+    incremental: bool,
+    plan: RoundPlan<'_>,
+    scratch: RoundScratch<'_, 'source>,
     work: &mut Work<'_>,
 ) -> Result<RoundConsequences, Stop> {
-    let DenseHeads {
+    let RoundPlan {
+        rules,
         layouts,
         row_steps,
-        pending,
-    } = dense_heads;
-    let Frame {
+    } = plan;
+    let RoundScratch {
         assignment,
         buffers,
-        ..
-    } = frame;
+        pending,
+    } = scratch;
     let mut result = RoundConsequences {
         atoms: BTreeSet::new(),
         bytes: 0,
         constraint_violated: false,
     };
-    let visited = match incremental {
-        None => program.templates().len(),
-        Some(rules) => {
-            buffers.rules.clear();
-            for predicate in closure.predicates_with_new() {
+    let visited = if incremental {
+        buffers.rules.clear();
+        for predicate in closure.predicates_with_new() {
+            work.tick()?;
+            for &index in rules.naming(predicate) {
                 work.tick()?;
-                for &index in rules.naming(predicate) {
-                    work.tick()?;
-                    buffers.rules.push(index);
-                }
+                buffers.rules.push(index);
             }
-            work.charge(buffers.rules.len())?;
-            buffers.rules.sort_unstable();
-            buffers.rules.dedup();
-            buffers.rules.len()
         }
+        work.charge(buffers.rules.len())?;
+        buffers.rules.sort_unstable();
+        buffers.rules.dedup();
+        buffers.rules.len()
+    } else {
+        program.templates().len()
     };
     for position in 0..visited {
-        let index = match incremental {
-            None => position,
-            Some(_) => buffers.rules[position],
+        let index = if incremental {
+            buffers.rules[position]
+        } else {
+            position
         };
         let template = &program.templates()[index];
         work.tick()?;
@@ -845,7 +855,7 @@ fn visit_round<'source>(
             result: &mut result,
             pending: &mut *pending,
         };
-        if incremental.is_some() {
+        if incremental {
             // Repeated predicates retain distinct occurrences. Earlier Old,
             // this New and later Current rows select the unique first new row.
             for (pivot, pattern) in template.positive().iter().enumerate() {
