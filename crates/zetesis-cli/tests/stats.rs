@@ -477,3 +477,22 @@ fn the_regions_of_independent_pairs_are_the_answers() {
         "{diagnostics}"
     );
 }
+
+#[test]
+fn a_root_refuted_program_states_the_constraint_once() {
+    // The root's narrowing refutes every seed: the carrier receipt says a
+    // definite constraint fired, the execution line says no route ran, and
+    // the unavailable oracle work is said once.
+    let (report, _, text) = solve("{a}. p. :- p.", &options(&["--stats"]));
+    assert_eq!(report.models, 0);
+    assert_eq!(text.matches("definite constraint").count(), 1, "{text}");
+    assert_eq!(
+        text.matches("oracle work: unavailable").count(),
+        1,
+        "{text}"
+    );
+    assert!(
+        text.contains("effective execution: none needed; the root narrowing refuted every seed\n"),
+        "{text}"
+    );
+}

@@ -373,26 +373,24 @@ fn details(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io
         )?;
     } else if report.checked > 0 {
         closure(sink, options, report)?;
-    } else if report
-        .candidate_statistics
-        .is_some_and(|stats| stats.bounds_refuted)
-    {
-        // The root's narrowing settled the program: no seed was offered and
-        // no execution route ran.
-        writeln!(
-            sink,
-            "  effective execution: none needed; the root narrowing refuted every seed (a definite constraint fired)"
-        )?;
-        writeln!(
-            sink,
-            "  oracle work: unavailable; discovered gate tuples: {}",
-            report.discovered_gate_atoms
-        )?;
     } else {
-        writeln!(
-            sink,
-            "  effective execution: unavailable (stopped before execution counters)"
-        )?;
+        if report
+            .candidate_statistics
+            .is_some_and(|stats| stats.bounds_refuted)
+        {
+            // The root's narrowing settled the program: no seed was offered
+            // and no execution route ran; the carrier receipt above says
+            // what refuted it.
+            writeln!(
+                sink,
+                "  effective execution: none needed; the root narrowing refuted every seed"
+            )?;
+        } else {
+            writeln!(
+                sink,
+                "  effective execution: unavailable (stopped before execution counters)"
+            )?;
+        }
         writeln!(
             sink,
             "  oracle work: unavailable; discovered gate tuples: {}",
@@ -448,7 +446,7 @@ fn candidates(sink: &mut impl Write, stats: zetesis_cpu::CandidateStatistics) ->
     if let Some(stop) = stats.bounds_stop {
         writeln!(
             sink,
-            "  carrier bounds: narrowing stopped ({stop}); the completed passes' bounds were kept"
+            "  carrier bounds stop: {stop}; the completed passes' bounds were kept"
         )?;
     }
     if stats.regions > 0 {
