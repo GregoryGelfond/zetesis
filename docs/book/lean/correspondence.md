@@ -130,40 +130,36 @@ membership. Rust comparison/hash equivalence, index construction and binding
 lifetimes remain implementation obligations.
 
 A dense relation stores a bounded predicate's rows as bits over the
-mixed-radix index of the arguments' ranks in their bounds. The obligations
-are that the inferred bounds are an upper domain of every derivable head,
-which holds because each head argument's bound is closed under every
-template's contribution to it; that the index is a bijection between the
-tuples inside the bounds and the bit positions, which is the mixed-radix
-arithmetic; and that position order is canonical atom order, which follows
-from each argument's values being kept in canonical order with the first
-argument most significant. A round's dense heads are marked as pending bits
-and joined into the relation after the round; because the index is a
-bijection and only positions absent from the relation are marked, the marks
-are exactly the new atoms the round would have built, one bit for each. A
-row step marks a block of heads from a block of rows by words; because the
-two relations list the stepped argument's values alike and every other
-argument is fixed, a row's place in its block is its head's place in the
-other, so the step marks what binding each row would, and the row-step
-plan, kernel and family tests check it.
-Under them, the closure over dense relations is
-the closure over catalogs, step for step. [`RowSteps`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/RowSteps.lean)
-states the two laws under these steps over an abstract position function:
+mixed-radix index of the arguments' ranks in their bounds. A round's dense
+heads are marked as pending bits and joined into the relation after the
+round, and a row step marks a block of heads from a block of rows by words.
+[`RowSteps`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/RowSteps.lean)
+states the laws of these steps over an abstract position function:
 `marks_are_new_atoms` and `absorbed_is_union`, that under a position
 injective on a carrier holding every derived head the marks are exactly the
 new atoms and joining them publishes the held and the derived atoms;
 `marks_distinct`, that distinct new atoms have distinct marks, so the marks
 count what the derived-atom limit bounds; `block_heads`, that when no filter
-or gate reads the stepped value and every other positive atom is fixed, the
-heads derived through the occurrence are the heads of the values whose row
-the relation holds; and `block_places`, that relations placing a value by the
-same rank after a base give a row and its head the same offset. That the
-mixed-radix index is such a position, that the inferred bounds are such a
-carrier, that the row-step plan admits only such rules and relations, and the
-word arithmetic of the join are Rust obligations, checked by the argument
-bound, dense relation, row-step plan and family tests; the consequence step
-and constraint verdict of `DeltaRounds` are the same whichever store holds
-the rows.
+or gate reads the stepped value, every other positive atom is fixed, and
+the fixed part of the rule is live at some value of the stepped argument,
+the other positive atoms holding and the filters and gates passing there,
+the heads derived through the occurrence are the heads of the values whose
+row the relation holds; and `block_places`, that relations placing a value
+by the same rank after a base give a row and its head the same offset. The
+Rust obligations are that the mixed-radix index is such a position, a
+bijection between the tuples inside the bounds and the bit positions; that
+the inferred bounds are such a carrier, an upper domain of every derivable
+head, which holds because each head argument's bound is closed under every
+template's contribution to it; that position order is canonical atom order,
+which follows from each argument's values being kept in canonical order with
+the first argument most significant; that the row-step plan admits only
+rules and relations meeting the block's conditions, and a block is stepped
+only at the innermost depth of a join, where every guard of the rule has
+been judged; and the word arithmetic of the join. The argument bound, dense
+relation, row-step plan and family tests check them. Under the laws and the
+obligations, the closure over dense relations is the closure over catalogs,
+step for step; the consequence step and constraint verdict of `DeltaRounds`
+are the same whichever store holds the rows.
 
 The objective consumers use `AtomLookup` over immutable model selections or an
 `AtomIndex` over the original catalog. The index owns permutations of row IDs,
