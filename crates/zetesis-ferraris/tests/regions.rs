@@ -150,9 +150,8 @@ fn an_impossible_root_refutes_the_region() {
     assert!(open.is_held(0), "the fact is forced");
 }
 
-#[test]
-fn a_sure_body_forces_its_head_and_refutes_a_constraint() {
-    // d. p :- d. :- p, s.  With s held, p is forced and the constraint fires.
+/// d. p :- d. :- p, s.
+fn derived_head_under_a_constraint() -> Theory {
     let nodes = vec![
         Node::Atom(0),       // d
         Node::Atom(1),       // p
@@ -162,14 +161,33 @@ fn a_sure_body_forces_its_head_and_refutes_a_constraint() {
         Node::False,
         Node::Implies(4, 5), // :- p, s
     ];
-    let t = theory(3, nodes, vec![0, 2, 6]);
+    theory(3, nodes, vec![0, 2, 6])
+}
+
+#[test]
+fn a_sure_body_forces_its_head() {
+    let t = derived_head_under_a_constraint();
     let mut open = region(&t, &[], &[]);
     assert!(matches!(
         narrowed(&t, &mut open),
         Narrowing::Fixed { changed: true }
     ));
     assert!(open.is_held(0) && open.is_held(1));
-    assert!(open.is_cut(2), "the constraint's one open atom is cut");
+}
+
+#[test]
+fn a_constraint_with_one_open_atom_cuts_it() {
+    // With p forced, the constraint's only open atom is s.
+    let t = derived_head_under_a_constraint();
+    let mut open = region(&t, &[], &[]);
+    narrowed(&t, &mut open);
+    assert!(open.is_cut(2));
+}
+
+#[test]
+fn a_constraint_whose_body_is_sure_refutes_the_region() {
+    // With s held, p is forced and the constraint fires.
+    let t = derived_head_under_a_constraint();
     let mut held = region(&t, &[2], &[]);
     assert!(matches!(narrowed(&t, &mut held), Narrowing::Refuted));
 }

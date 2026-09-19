@@ -3,50 +3,19 @@
 //! schedule's and not a property of the result; a restriction narrows what
 //! the workers have not yet visited; a shared ceiling stops them all.
 
+#[path = "support/choice_theories.rs"]
+mod choice_theories;
+#[path = "support/formula_theories.rs"]
+mod theories;
+
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 
-use zetesis_ferraris::{AdmissionLimits, Node, Theory, TightPlanLimits};
+use zetesis_ferraris::{Node, TightPlanLimits};
 use zetesis_sat::{Control, Incomplete, Limits, SearchLimits, SearchMethod, StableModels};
 
-fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
-    Theory::new(atoms, nodes, roots, AdmissionLimits::default()).unwrap()
-}
-
-/// p | q <- d.  d.  r <- not p.  :- q, r.  s | not s.
-fn mixed() -> Theory {
-    let nodes = vec![
-        Node::Atom(0),
-        Node::Atom(1),
-        Node::Atom(2),
-        Node::Atom(3),
-        Node::Or(1, 2),
-        Node::Implies(0, 4),
-        Node::False,
-        Node::Implies(1, 6),
-        Node::Implies(7, 3),
-        Node::And(2, 3),
-        Node::Implies(9, 6),
-        Node::Atom(4),
-        Node::Implies(11, 6),
-        Node::Or(11, 12),
-    ];
-    theory(5, nodes, vec![0, 5, 8, 10, 13])
-}
-
-/// Independent choices: a | not a, for each atom.
-fn choices(atoms: usize) -> Theory {
-    let mut nodes = vec![Node::False];
-    let mut roots = Vec::new();
-    for atom in 0..atoms {
-        let a = nodes.len();
-        nodes.push(Node::Atom(atom));
-        nodes.push(Node::Implies(a, 0));
-        nodes.push(Node::Or(a, a + 1));
-        roots.push(a + 2);
-    }
-    theory(atoms, nodes, roots)
-}
+use choice_theories::{choices, theory_over};
+use theories::mixed;
 
 fn workers(n: usize) -> NonZeroUsize {
     NonZeroUsize::new(n).unwrap()
@@ -172,10 +141,6 @@ fn a_restriction_beyond_the_shared_search_work_is_refused() {
         Err(Incomplete::WorkLimit)
     ));
     assert_eq!(parallel.statistics().candidate_restrictions, 0);
-}
-
-fn theory_over(original: &Theory, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
-    theory(original.atom_count(), nodes, roots)
 }
 
 #[test]
@@ -313,7 +278,10 @@ fn four_workers_report_the_scalar_walks_reading_work() {
 }
 
 #[test]
-fn one_worker_is_the_scalar_walk() {
+fn one_worker_returns_the_scalar_walks_sequence() {
+    // The sequence, not only the family: the scalar walk returns the models
+    // in the tree's order, cut branch first, which the parallel walk does
+    // not promise.
     let theory = mixed();
     let mut one = StableModels::with_region_workers(
         &theory,

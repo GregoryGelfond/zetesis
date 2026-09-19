@@ -4,14 +4,15 @@
 //! on every candidate of small theories, its witnesses are validated proper
 //! subsets, and its resources stop it without a verdict.
 
+#[path = "support/formula_theories.rs"]
+mod theories;
+
 use std::collections::BTreeSet;
 
-use zetesis_ferraris::{AdmissionLimits, Interpretation, Node, Theory, Verdict};
+use zetesis_ferraris::{Interpretation, Node, Theory, Verdict};
 use zetesis_sat::{Check, Control, Incomplete, Limits, SearchLimits, SearchMethod, check_with};
 
-fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
-    Theory::new(atoms, nodes, roots, AdmissionLimits::default()).unwrap()
-}
+use theories::{mixed, theory};
 
 fn interpretation(theory: &Theory, mask: usize) -> Interpretation {
     Interpretation::new(
@@ -19,27 +20,6 @@ fn interpretation(theory: &Theory, mask: usize) -> Interpretation {
         (0..theory.atom_count()).filter(|atom| mask & (1 << atom) != 0),
     )
     .unwrap()
-}
-
-/// p | q <- d.  d.  r <- not p.  :- q, r.  s | not s.
-fn mixed() -> Theory {
-    let nodes = vec![
-        Node::Atom(0),
-        Node::Atom(1),
-        Node::Atom(2),
-        Node::Atom(3),
-        Node::Or(1, 2),
-        Node::Implies(0, 4),
-        Node::False,
-        Node::Implies(1, 6),
-        Node::Implies(7, 3),
-        Node::And(2, 3),
-        Node::Implies(9, 6),
-        Node::Atom(4),
-        Node::Implies(11, 6),
-        Node::Or(11, 12),
-    ];
-    theory(5, nodes, vec![0, 5, 8, 10, 13])
 }
 
 /// a <- b.  b <- a.  a | b | c.  A positive cycle the support law misses.
@@ -208,10 +188,4 @@ fn a_work_limit_stops_the_region_query_without_a_verdict() {
         verdict,
         Check::Inconclusive(Incomplete::WorkLimit)
     ));
-}
-
-#[test]
-fn the_search_method_names_both_halves() {
-    assert_eq!(SearchMethod::Regions.label(), "regions");
-    assert_eq!(SearchMethod::Clauses.label(), "clauses");
 }

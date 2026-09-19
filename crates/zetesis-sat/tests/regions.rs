@@ -5,53 +5,21 @@
 //! query, never proposes a nonmodel, and takes a restriction without
 //! restarting.
 
+#[path = "support/choice_theories.rs"]
+mod choice_theories;
+#[path = "support/formula_theories.rs"]
+mod theories;
+
 use std::collections::BTreeSet;
 
-use zetesis_ferraris::{AdmissionLimits, Node, Theory, TightPlanLimits};
+use zetesis_ferraris::{Node, Theory, TightPlanLimits};
 use zetesis_sat::{
     BatchLimits, BatchVerdict, Control, Incomplete, Limits, SearchLimits, SearchMethod,
     StableModels,
 };
 
-fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
-    Theory::new(atoms, nodes, roots, AdmissionLimits::default()).unwrap()
-}
-
-/// p | q <- d.  d.  r <- not p.  :- q, r.  s | not s.
-fn mixed() -> Theory {
-    let nodes = vec![
-        Node::Atom(0),        // d
-        Node::Atom(1),        // p
-        Node::Atom(2),        // q
-        Node::Atom(3),        // r
-        Node::Or(1, 2),       // p | q
-        Node::Implies(0, 4),  // d -> p | q
-        Node::False,          // 6
-        Node::Implies(1, 6),  // not p
-        Node::Implies(7, 3),  // not p -> r
-        Node::And(2, 3),      // q & r
-        Node::Implies(9, 6),  // :- q, r
-        Node::Atom(4),        // s
-        Node::Implies(11, 6), // not s
-        Node::Or(11, 12),     // s | not s
-    ];
-    theory(5, nodes, vec![0, 5, 8, 10, 13])
-}
-
-/// Independent choices: a | not a, for each atom.
-fn choices(atoms: usize) -> Theory {
-    let mut nodes = Vec::new();
-    let mut roots = Vec::new();
-    nodes.push(Node::False);
-    for atom in 0..atoms {
-        let a = nodes.len();
-        nodes.push(Node::Atom(atom));
-        nodes.push(Node::Implies(a, 0));
-        nodes.push(Node::Or(a, a + 1));
-        roots.push(a + 2);
-    }
-    theory(atoms, nodes, roots)
-}
+use choice_theories::{choices, theory_over};
+use theories::mixed;
 
 fn regions(theory: &Theory, limits: Limits) -> StableModels {
     StableModels::with_method(theory, SearchMethod::Regions, limits, Control::default()).unwrap()
@@ -78,11 +46,16 @@ fn regions_and_clauses_return_the_same_stable_models() {
     }
 }
 
-#[test]
-fn regions_propose_no_classical_query_and_no_nonmodel() {
+/// The mixed theory's models by regions, with the search's receipts.
+fn mixed_by_regions() -> (Vec<Vec<usize>>, zetesis_sat::Statistics) {
     let mut search = regions(&mixed(), Limits::default());
     let found = models(&mut search);
-    let statistics = search.statistics();
+    (found, search.statistics())
+}
+
+#[test]
+fn regions_ask_no_classical_query() {
+    let (_, statistics) = mixed_by_regions();
     assert_eq!(statistics.candidate_queries, 0);
     let receipts = statistics.regions.expect("regions receipts");
     assert_eq!(
@@ -92,7 +65,12 @@ fn regions_propose_no_classical_query_and_no_nonmodel() {
     );
     assert!(receipts.refuted > 0, "the constraint refutes a region");
     assert!(receipts.regions > receipts.leaves);
+}
+
+#[test]
+fn regions_propose_no_nonmodel() {
     // Every leaf was a classical model: the only rejections are reduct ones.
+    let (found, statistics) = mixed_by_regions();
     assert_eq!(
         statistics.candidates,
         statistics.stable_models + statistics.countermodels,
@@ -101,6 +79,11 @@ fn regions_propose_no_classical_query_and_no_nonmodel() {
         u64::try_from(found.len()).unwrap(),
         statistics.stable_models
     );
+}
+
+#[test]
+fn regions_build_no_support_certificate() {
+    let (_, statistics) = mixed_by_regions();
     assert!(statistics.support.is_none());
 }
 
@@ -173,10 +156,6 @@ fn a_restriction_beyond_the_remaining_search_work_is_refused() {
         Err(Incomplete::WorkLimit)
     ));
     assert_eq!(search.statistics().candidate_restrictions, 0);
-}
-
-fn theory_over(original: &Theory, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
-    theory(original.atom_count(), nodes, roots)
 }
 
 #[test]
@@ -274,16 +253,19 @@ fn a_tight_certificate_decides_region_leaves_without_a_countermodel_query() {
 }
 
 #[test]
-fn under_regions_the_reduct_is_queried_by_regions_and_never_encoded() {
-    let mut search = regions(&mixed(), Limits::default());
-    let found = models(&mut search);
+fn under_regions_the_reduct_is_never_encoded() {
+    let (found, statistics) = mixed_by_regions();
     assert!(!found.is_empty());
-    let statistics = search.statistics();
     assert!(
         statistics.reduct.preparation.is_none(),
         "no reduct encoding"
     );
     assert_eq!(statistics.reduct.parameter_work, 0);
+}
+
+#[test]
+fn under_regions_the_reduct_is_queried_by_regions() {
+    let (_, statistics) = mixed_by_regions();
     assert!(statistics.countermodel_queries > 0);
     assert!(statistics.reduct.regions.regions > 0);
     assert_eq!(
@@ -294,8 +276,12 @@ fn under_regions_the_reduct_is_queried_by_regions_and_never_encoded() {
 }
 
 #[test]
-fn the_search_policy_has_a_stable_spelling() {
+fn the_search_methods_have_stable_spellings() {
     assert_eq!(SearchMethod::Regions.label(), "regions");
     assert_eq!(SearchMethod::Clauses.label(), "clauses");
+}
+
+#[test]
+fn the_default_search_method_is_regions() {
     assert_eq!(SearchMethod::default(), SearchMethod::Regions);
 }
