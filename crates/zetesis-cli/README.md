@@ -276,8 +276,8 @@ views of the same information. Unavailable counters remain unavailable, not zero
 
 For independent relational CPU execution, `query_execution` reports actual
 preparation builds/work, assigned and reused workspace slots, current retained
-capacity and the latest reservation envelope. These are ownership receipts, not
-completed candidate counts or RSS. Reports retain a typed snapshot fault
+capacity and the latest reservation envelope. These count what was reserved, not
+completed candidates or RSS. Reports retain a typed snapshot fault
 separately from any earlier successful snapshot and any checked answers. Other
 execution routes leave this observation absent.
 

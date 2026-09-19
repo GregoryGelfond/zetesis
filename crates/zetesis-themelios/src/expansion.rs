@@ -66,7 +66,7 @@ impl Default for ExpansionLimits {
 
 /// Charges accumulated by one admission under [`ExpansionLimits`], in the
 /// units of the ceiling each names. Every count is at most its ceiling; a
-/// refused admission returns no receipt. Plain S0 admission expands nothing
+/// refused admission reports no usage. Plain S0 admission expands nothing
 /// and reports zero throughout.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ExpansionUsage {

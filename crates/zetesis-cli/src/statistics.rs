@@ -396,7 +396,7 @@ fn details(
             .is_some_and(|stats| stats.root_refuted)
         {
             // The root's narrowing settled the program: no seed was offered
-            // and no execution route ran; the carrier receipt above says
+            // and no execution route ran; the carrier statistics above say
             // what refuted it.
             writeln!(
                 sink,
@@ -897,7 +897,7 @@ fn formula_gpu(
 }
 
 fn closure(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io::Result<()> {
-    // The receipt says which route ran; without one, the requested policy
+    // The statistics say which route ran; without one, the requested policy
     // says which would have.
     let grounder = report.closure_execution.map_or(
         if options.grounder == Grounder::Eager {

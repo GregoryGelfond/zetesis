@@ -144,7 +144,7 @@ pub(crate) struct RegionSearch {
 }
 
 /// What opening a region search over a theory establishes: its producers,
-/// when it lies in the producer fragment, its index, and the receipts of
+/// when it lies in the producer fragment, its index, and the statistics of
 /// the extraction and the indexing, both charged to the budget.
 pub(crate) struct Opened {
     pub(crate) producers: Option<Producers>,
@@ -425,10 +425,10 @@ impl ReductQuery {
                 )
             });
             let after = traversal.statistics();
-            let receipts = &mut statistics.reduct.regions;
-            receipts.regions += after.regions - before.regions;
-            receipts.refuted += after.refuted - before.refuted;
-            receipts.leaves += after.decided - before.decided;
+            let counts = &mut statistics.reduct.regions;
+            counts.regions += after.regions - before.regions;
+            counts.refuted += after.refuted - before.refuted;
+            counts.leaves += after.decided - before.decided;
             for _ in 0..after.splits_since(before) {
                 budget.decide()?;
             }
@@ -458,7 +458,7 @@ fn narrow_frozen<Q: Quota>(
     region: &mut Region,
     knowledge: &mut Knowledge,
     budget: &mut Budget<'_, Q>,
-    receipts: &mut RegionCounts,
+    counts: &mut RegionCounts,
 ) -> Result<Narrowing, Incomplete> {
     let result = narrower.narrow_frozen_known(
         theory,
@@ -468,5 +468,5 @@ fn narrow_frozen<Q: Quota>(
         limits(budget),
         budget.control,
     );
-    account(result, budget, receipts)
+    account(result, budget, counts)
 }

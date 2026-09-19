@@ -140,7 +140,7 @@ pub struct Statistics {
     /// Standalone membership checks do not construct this optional restriction,
     /// and the regions proposer has the support cut in its narrowing instead.
     pub support: Option<SupportStatistics>,
-    /// The regions proposer's receipts; absent under the clauses proposer.
+    /// The regions proposer's statistics; absent under the clauses proposer.
     pub regions: Option<RegionSearchStatistics>,
     /// Actual persistent-reduct construction and query work, including failures.
     pub reduct: crate::ReductStatistics,
