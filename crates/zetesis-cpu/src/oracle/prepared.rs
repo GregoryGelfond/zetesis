@@ -28,7 +28,10 @@ pub struct PreparationLimits {
     pub max_bytes: usize,
     /// The most tuples a dense relation may index: a predicate whose bounded
     /// arguments admit more keeps its tree. Zero keeps every tree. A dense
-    /// relation's words are charged to each candidate's closure bytes.
+    /// relation's words are charged to each candidate's closure bytes. The
+    /// same number is the widest argument bound the inference keeps, since
+    /// an argument wider than the product of widths could lie in no dense
+    /// relation under it; an argument wider is unknown to the inference.
     pub max_dense_atoms: usize,
 }
 
@@ -161,7 +164,7 @@ impl PreparedQueries {
                 }
             }
         }
-        let bounds = bounds::infer_with(program, max_dense_atoms, work)?;
+        let bounds = bounds::infer(program, max_dense_atoms, work)?;
         let mut layouts = Layouts::default();
         for predicate in program.predicates() {
             work.tick()?;

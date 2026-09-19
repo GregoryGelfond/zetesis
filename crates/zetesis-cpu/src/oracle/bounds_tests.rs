@@ -2,9 +2,12 @@
 //! constants contribute themselves, a head variable ranges within the
 //! positions binding it, and a too-wide argument is unknown.
 use zetesis_core::{AtomPattern, Predicate, Program, Template, Term, Value};
-use zetesis_cpu::{ArgumentBounds, Bound, BoundLimits, Control};
 
-#[path = "support/programs.rs"]
+use super::{ArgumentBounds, Bound, infer};
+use crate::oracle::{PreparationLimits, Work};
+use crate::{Control, Limits, Stop};
+
+#[path = "../../tests/support/programs.rs"]
 mod programs;
 
 use programs::{fact, number, pattern, program};
@@ -17,8 +20,26 @@ fn rule(head: AtomPattern, body: Vec<AtomPattern>) -> Template {
     Template::new(Some(head), body, vec![], vec![], vec![])
 }
 
+/// The bound of one argument; unknown for a predicate or an argument the
+/// program does not have.
+fn bound<'a>(bounds: &'a ArgumentBounds, predicate: &Predicate, argument: usize) -> &'a Bound {
+    const UNKNOWN: Bound = Bound::Unknown;
+    bounds
+        .bounds(predicate)
+        .and_then(|bounds| bounds.get(argument))
+        .unwrap_or(&UNKNOWN)
+}
+
+/// The bounds under preparation's ceiling and an unlimited work.
 fn bounds(program: &Program) -> ArgumentBounds {
-    ArgumentBounds::infer(program, BoundLimits::default(), &Control::default()).unwrap()
+    let control = Control::default();
+    let mut work = Work::source(&control, Limits::default().max_work);
+    infer(
+        program,
+        PreparationLimits::default().max_dense_atoms,
+        &mut work,
+    )
+    .unwrap()
 }
 
 /// e(0,1). e(1,2). r(0). r(Y) :- r(X), e(X,Y).
@@ -39,11 +60,18 @@ fn reachability() -> Program {
 
 #[test]
 fn facts_bound_their_arguments() {
-    let bounds = bounds(&reachability());
+    let control = Control::default();
+    let mut work = Work::source(&control, Limits::default().max_work);
+    let bounds = infer(
+        &reachability(),
+        PreparationLimits::default().max_dense_atoms,
+        &mut work,
+    )
+    .unwrap();
     let e = Predicate::new("e", 2).unwrap();
-    assert_eq!(*bounds.bound(&e, 0), numbers(&[0, 1]));
-    assert_eq!(*bounds.bound(&e, 1), numbers(&[1, 2]));
-    assert!(bounds.work() > 0);
+    assert_eq!(*bound(&bounds, &e, 0), numbers(&[0, 1]));
+    assert_eq!(*bound(&bounds, &e, 1), numbers(&[1, 2]));
+    assert!(work.statistics.work > 0);
 }
 
 #[test]
@@ -52,7 +80,7 @@ fn a_derivation_closes_its_head_argument_over_the_positions_binding_it() {
     // argument may bind Y to.
     let bounds = bounds(&reachability());
     let r = Predicate::new("r", 1).unwrap();
-    assert_eq!(*bounds.bound(&r, 0), numbers(&[0, 1, 2]));
+    assert_eq!(*bound(&bounds, &r, 0), numbers(&[0, 1, 2]));
     assert_eq!(bounds.bounds(&r).map(<[Bound]>::len), Some(1));
 }
 
@@ -74,7 +102,7 @@ fn a_variable_bound_at_two_positions_takes_their_intersection() {
     ]);
     let bounds = bounds(&program);
     assert_eq!(
-        *bounds.bound(&Predicate::new("q", 1).unwrap(), 0),
+        *bound(&bounds, &Predicate::new("q", 1).unwrap(), 0),
         numbers(&[2])
     );
 }
@@ -91,12 +119,12 @@ fn a_constant_head_argument_contributes_itself() {
     ]);
     let bounds = bounds(&program);
     let s = Predicate::new("s", 2).unwrap();
-    assert_eq!(*bounds.bound(&s, 0), numbers(&[7]));
-    assert_eq!(*bounds.bound(&s, 1), numbers(&[1]));
+    assert_eq!(*bound(&bounds, &s, 0), numbers(&[7]));
+    assert_eq!(*bound(&bounds, &s, 1), numbers(&[1]));
     // An argument the program does not have is unknown.
-    assert_eq!(*bounds.bound(&s, 2), Bound::Unknown);
+    assert_eq!(*bound(&bounds, &s, 2), Bound::Unknown);
     assert_eq!(
-        *bounds.bound(&Predicate::new("missing", 1).unwrap(), 0),
+        *bound(&bounds, &Predicate::new("missing", 1).unwrap(), 0),
         Bound::Unknown
     );
 }
@@ -120,22 +148,16 @@ fn three_values_through_two_rules() -> Program {
 
 /// The bounds with two values the widest bound kept.
 fn narrow_bounds(program: &Program) -> ArgumentBounds {
-    ArgumentBounds::infer(
-        program,
-        BoundLimits {
-            max_values: 2,
-            ..BoundLimits::default()
-        },
-        &Control::default(),
-    )
-    .unwrap()
+    let control = Control::default();
+    let mut work = Work::source(&control, Limits::default().max_work);
+    infer(program, 2, &mut work).unwrap()
 }
 
 #[test]
 fn an_argument_wider_than_the_ceiling_is_unknown() {
     let bounds = narrow_bounds(&three_values_through_two_rules());
     assert_eq!(
-        *bounds.bound(&Predicate::new("a", 1).unwrap(), 0),
+        *bound(&bounds, &Predicate::new("a", 1).unwrap(), 0),
         Bound::Unknown
     );
 }
@@ -145,7 +167,7 @@ fn an_unknown_argument_makes_the_arguments_bound_through_it_unknown() {
     let bounds = narrow_bounds(&three_values_through_two_rules());
     for name in ["q", "t"] {
         assert_eq!(
-            *bounds.bound(&Predicate::new(name, 1).unwrap(), 0),
+            *bound(&bounds, &Predicate::new(name, 1).unwrap(), 0),
             Bound::Unknown,
             "{name}"
         );
@@ -155,13 +177,12 @@ fn an_unknown_argument_makes_the_arguments_bound_through_it_unknown() {
 #[test]
 fn a_work_ceiling_stops_the_inference() {
     let program = program(vec![fact("a", vec![number(1)]), fact("a", vec![number(2)])]);
-    let stopped = ArgumentBounds::infer(
+    let control = Control::default();
+    let mut work = Work::source(&control, 1);
+    let stopped = infer(
         &program,
-        BoundLimits {
-            max_work: 1,
-            ..BoundLimits::default()
-        },
-        &Control::default(),
+        PreparationLimits::default().max_dense_atoms,
+        &mut work,
     );
-    assert!(matches!(stopped, Err(zetesis_cpu::Stop::WorkLimit)));
+    assert!(matches!(stopped, Err(Stop::WorkLimit)));
 }

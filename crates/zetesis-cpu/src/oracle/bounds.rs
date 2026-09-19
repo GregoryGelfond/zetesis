@@ -16,48 +16,30 @@
 //! runs and where a range such as `node(1..16)` is already its facts. A
 //! bounded predicate whose product of widths fits a ceiling is read as a
 //! dense relation, a bit array over the mixed-radix index of its arguments'
-//! ranks; every other predicate keeps its tree.
+//! ranks; every other predicate keeps its tree. The inference serves
+//! preparation alone and takes its width ceiling and its work from it.
 
 use std::collections::BTreeSet;
 
 use zetesis_core::{Predicate, Program, Term, Value};
 
-use super::{Limits, Statistics, Work};
-use crate::{Control, Stop};
+use super::Work;
+use crate::Stop;
 
 /// An upper bound on one argument's values.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Bound {
+pub(crate) enum Bound {
     /// Only these values occur, in canonical order and without repetition.
     Finite(Vec<Value>),
     /// No finite bound: the argument is unbounded or too wide to keep.
     Unknown,
 }
 
-/// Ceilings on one inference.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct BoundLimits {
-    /// Charged head-term visits and value insertions.
-    pub max_work: u64,
-    /// The widest finite bound kept; a wider argument is unknown.
-    pub max_values: usize,
-}
-
-impl Default for BoundLimits {
-    fn default() -> Self {
-        Self {
-            max_work: 100_000_000,
-            max_values: 1 << 20,
-        }
-    }
-}
-
 /// The bounds of every argument of every predicate of one program.
 #[derive(Clone, Debug)]
-pub struct ArgumentBounds {
+pub(crate) struct ArgumentBounds {
     predicates: Vec<Predicate>,
     bounds: Vec<Vec<Bound>>,
-    work: u64,
 }
 
 /// One argument's growing bound during the fixed point.
@@ -68,60 +50,26 @@ enum Growing {
 }
 
 impl ArgumentBounds {
-    /// Infer the bounds of the program's predicates.
-    ///
-    /// # Errors
-    /// Returns the stop when the inference exceeds its work ceiling or
-    /// control stops it.
-    pub fn infer(program: &Program, limits: BoundLimits, control: &Control) -> Result<Self, Stop> {
-        let mut work = Work {
-            control,
-            limits: Limits {
-                max_work: limits.max_work,
-                ..Limits::default()
-            },
-            statistics: Statistics::default(),
-            mask_words: 0,
-            pruned_prefixes: 0,
-            mask_bytes: 0,
-        };
-        infer_with(program, limits.max_values, &mut work)
-    }
-
-    /// The bound of one argument; unknown for a predicate or an argument the
-    /// program does not have.
-    #[must_use]
-    pub fn bound(&self, predicate: &Predicate, argument: usize) -> &Bound {
-        const UNKNOWN: Bound = Bound::Unknown;
-        self.bounds(predicate)
-            .and_then(|bounds| bounds.get(argument))
-            .unwrap_or(&UNKNOWN)
-    }
-
     /// The bounds of every argument of a predicate, in argument order.
-    #[must_use]
-    pub fn bounds(&self, predicate: &Predicate) -> Option<&[Bound]> {
+    pub(crate) fn bounds(&self, predicate: &Predicate) -> Option<&[Bound]> {
         self.predicates
             .binary_search(predicate)
             .ok()
             .map(|table| self.bounds[table].as_slice())
     }
-
-    /// The work the inference charged.
-    #[must_use]
-    pub fn work(&self) -> u64 {
-        self.work
-    }
 }
 
-/// Infer the bounds, charging the given work; the width ceiling is
-/// `max_values`.
-pub(super) fn infer_with(
+/// Infer the bounds of the program's predicates, charging the given work;
+/// the width ceiling is `max_values`, an argument wider than it unknown.
+///
+/// # Errors
+/// Returns the stop when the inference exceeds the work's ceiling or its
+/// control stops it.
+pub(super) fn infer(
     program: &Program,
     max_values: usize,
     work: &mut Work<'_>,
 ) -> Result<ArgumentBounds, Stop> {
-    let before = work.statistics.work;
     let predicates: Vec<Predicate> = program.predicates().to_vec();
     let mut growing: Vec<Vec<Growing>> = predicates
         .iter()
@@ -173,11 +121,7 @@ pub(super) fn infer_with(
                 .collect()
         })
         .collect();
-    Ok(ArgumentBounds {
-        predicates,
-        bounds,
-        work: work.statistics.work - before,
-    })
+    Ok(ArgumentBounds { predicates, bounds })
 }
 
 /// The values a head variable can take: the intersection of the bounds of
@@ -239,3 +183,7 @@ fn widen(
         }
     }
 }
+
+#[cfg(test)]
+#[path = "bounds_tests.rs"]
+mod tests;
