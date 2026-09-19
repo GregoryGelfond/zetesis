@@ -14,10 +14,10 @@ use super::GroundingObserver;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum GroundingPhase {
-    /// Complete the finite possible-support relation, including its indices.
-    SupportCompletion,
     /// Attempt optional domains over the exact normalized positive source.
     DomainAnalysis,
+    /// Complete the finite possible-support relation, including its indices.
+    SupportCompletion,
     /// Determine active objective templates and construct their program.
     ObjectiveActivation,
     /// Initialize formula storage and the false/true nodes.
@@ -38,8 +38,8 @@ impl GroundingPhase {
     /// This supports fixed-size caller aggregation without enum discriminants
     /// or retention of the individual per-rule callbacks.
     pub const ALL: [Self; 8] = [
-        Self::SupportCompletion,
         Self::DomainAnalysis,
+        Self::SupportCompletion,
         Self::ObjectiveActivation,
         Self::FormulaInitialization,
         Self::RuleInstantiation,
@@ -52,8 +52,8 @@ impl GroundingPhase {
     #[must_use]
     pub const fn label(self) -> &'static str {
         match self {
-            Self::SupportCompletion => "support_completion",
             Self::DomainAnalysis => "domain_analysis",
+            Self::SupportCompletion => "support_completion",
             Self::ObjectiveActivation => "objective_activation",
             Self::FormulaInitialization => "formula_initialization",
             Self::RuleInstantiation => "rule_instantiation",

@@ -4,9 +4,9 @@ use std::cell::{Cell, RefCell};
 
 use themelios_base::span::Location;
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
-    FormulaResource, GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork,
-    admit_formula_with_grounding_observer,
+    AdmissionOptions, AdmittedFormula, DomainLimits, ExpansionLimits, FormulaFailure,
+    FormulaLimits, FormulaResource, GroundingObserver, GroundingOutcome, GroundingPhase,
+    GroundingWork, admit_formula_with_grounding_observer, prepare_formula,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -396,6 +396,45 @@ fn work_aggregation_preserves_field_availability() {
     assert_eq!(sum.expression_nodes, None);
     assert_eq!(sum.roots, Some(5));
     assert_eq!(sum.atoms_inserted, Some(0));
+}
+
+#[test]
+fn phases_are_entered_in_the_order_the_catalog_lists() {
+    // The catalog promises materialization order. The observer records each
+    // phase as it exits, so the first exit of every phase, the domain analysis
+    // included when it runs, must follow the catalog's order.
+    let observer = Observer::default();
+    prepare_formula(
+        "p(1..3). q(X) :- p(X), X < 3.".into(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .unwrap()
+    .with_domain_analysis(Some(DomainLimits::default()))
+    .ground_with_observer(Some(&observer))
+    .unwrap();
+    let records = observer.records.borrow();
+    let mut entered: Vec<GroundingPhase> = Vec::new();
+    for record in records.iter() {
+        if !entered.contains(&record.phase) {
+            entered.push(record.phase);
+        }
+    }
+    assert!(entered.contains(&GroundingPhase::DomainAnalysis));
+    let positions: Vec<usize> = entered
+        .iter()
+        .map(|phase| {
+            GroundingPhase::ALL
+                .iter()
+                .position(|listed| listed == phase)
+                .unwrap()
+        })
+        .collect();
+    assert!(
+        positions.windows(2).all(|pair| pair[0] < pair[1]),
+        "{entered:?}"
+    );
 }
 
 #[test]
