@@ -280,6 +280,17 @@ fn oracle_spellings_select_typed_policies() {
 }
 
 #[test]
+fn search_spellings_select_typed_policies() {
+    for (spelling, expected) in [
+        ("regions", SearchMethod::Regions),
+        ("clauses", SearchMethod::Clauses),
+    ] {
+        let options = Options::try_parse_from(["zetesis", "--search", spelling]).unwrap();
+        assert_eq!(options.search, expected);
+    }
+}
+
+#[test]
 fn policy_defaults_match_the_solver_configuration() {
     let options = Options::try_parse_from(["zetesis"]).unwrap();
     assert_eq!(options.backend, SolveConfig::DEFAULT.backend);
@@ -289,6 +300,7 @@ fn policy_defaults_match_the_solver_configuration() {
         SolveConfig::DEFAULT.source_batching
     );
     assert_eq!(options.oracle, SolveConfig::DEFAULT.oracle);
+    assert_eq!(options.search, SolveConfig::DEFAULT.search);
 }
 
 #[test]
@@ -298,6 +310,7 @@ fn policy_values_retain_case_sensitive_refusal() {
         ("--grounder", "LAZY"),
         ("--source-batching", "WORLDS"),
         ("--oracle", "COUNTERMODEL"),
+        ("--search", "CLAUSES"),
     ] {
         let error = Options::try_parse_from(["zetesis", flag, value]).unwrap_err();
         assert_eq!(error.kind(), ErrorKind::InvalidValue);
