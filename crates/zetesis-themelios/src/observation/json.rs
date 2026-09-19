@@ -154,10 +154,13 @@ impl AtomTable {
         );
         Ok(index)
     }
-    /// Withdraw the atoms a refused record entered, so the table is as it
-    /// was before the record.
-    pub(super) fn retract(&mut self, atoms: &[&Atom]) {
-        if self.deferred.take().is_some() {
+    /// Withdraw what a refused record gave the table, so it is as it was
+    /// before the record: the record's deferral when it was the first
+    /// record, else the atoms it entered. A later record refused before its
+    /// first lookup gave nothing, and the first record's deferral stands.
+    pub(super) fn retract(&mut self, atoms: &[&Atom], deferred: bool) {
+        if deferred {
+            self.deferred = None;
             return;
         }
         for atom in atoms {

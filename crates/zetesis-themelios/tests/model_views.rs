@@ -69,6 +69,41 @@ impl ObservationFixture {
     }
 }
 
+#[test]
+fn a_refused_record_after_the_first_leaves_the_first_records_atoms_indexed() {
+    // The first record's atoms are indexed on the first lookup after it. A
+    // second record refused before its first lookup withdraws nothing of the
+    // first, so a third record refers to the first's atoms by their indices
+    // and spells only its own new atom.
+    use zetesis_themelios::observation::json::AtomTable;
+    let first = ObservationFixture::plain(Model::new([atom("a", vec![]), atom("b", vec![])]));
+    let later = ObservationFixture::plain(Model::new([atom("a", vec![]), atom("c", vec![])]));
+    let mut table = AtomTable::new(16);
+    first
+        .view()
+        .record(&mut table, ViewLimits::default(), &first.control)
+        .unwrap();
+    let refused = later.view().record(
+        &mut table,
+        ViewLimits {
+            max_bytes: 1,
+            ..ViewLimits::default()
+        },
+        &later.control,
+    );
+    assert!(matches!(refused, Err(ViewError::Bytes)));
+    let third: Json = serde_json::from_str(
+        &later
+            .view()
+            .record(&mut table, ViewLimits::default(), &later.control)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(third["atoms"].as_array().unwrap().len(), 1);
+    assert_eq!(third["full_model"], json!([0, 2]));
+    assert_eq!(table.len(), 3);
+}
+
 fn json_string_sample() -> String {
     let text: String = (0..32)
         .map(|value| char::from_u32(value).unwrap())

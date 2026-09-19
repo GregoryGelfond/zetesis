@@ -218,7 +218,8 @@ impl ModelView<'_> {
         // The atoms this record spells are entered as it spells them, so a
         // lookup is one hash probe; a refused record withdraws its entries.
         let mut added = Vec::new();
-        let result = self.encode_record_into(&mut out, table, &mut added);
+        let mut deferred = false;
+        let result = self.encode_record_into(&mut out, table, &mut added, &mut deferred);
         let statistics = super::json::Statistics {
             work: out.work,
             buffered_bytes: out.text.len(),
@@ -226,17 +227,20 @@ impl ModelView<'_> {
         match result {
             Ok(()) => Ok(super::json::Encoded::new(out.text, statistics)),
             Err(cause) => {
-                table.retract(&added);
+                table.retract(&added, deferred);
                 Err(super::json::Failure::new(cause, statistics))
             }
         }
     }
 
+    /// `deferred` says whether this record was the document's first, whose
+    /// whole model the table defers.
     fn encode_record_into<'m>(
         &'m self,
         out: &mut Buffer<'_>,
         table: &mut AtomTable,
         added: &mut Vec<&'m Atom>,
+        deferred: &mut bool,
     ) -> Result<(), ViewError> {
         // One lookup per atom: the index of each atom of the model, in model
         // order, serves the spelling pass and both index lists. The first
@@ -257,6 +261,7 @@ impl ModelView<'_> {
                 indices.push(position);
             }
             table.defer(self.model)?;
+            *deferred = true;
         } else {
             for (position, atom) in self.model.atoms().iter().enumerate() {
                 let index = if let Some(index) = table.index(atom)? {
