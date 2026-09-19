@@ -2287,6 +2287,152 @@ eight final displayed digits from its earlier presentation. For example, 32,871,
 32.8715 ms and rounds to 32.872; 6,094,848 bytes is exactly 5.8125 MiB and rounds
 to 5.812. The raw observation and provenance JSON remain unchanged.
 
+## The review's remedies at the head, and a hasher measured and reversed
+
+Two campaigns, each of two series runs, two corpus runs and a second series
+pair, on 19 September 2026 UTC, same machine, profile, four workers and
+clingo as above, the machine otherwise idle. `before` is the executable of
+`9c0ec6d0` (SHA-256
+`a9f308922432ae76f4506b68a7e0498fc887717ade3fe12f995bf34702272fbc`), the
+one the sections above record. The first `after` is built from `669b23cd`
+(SHA-256
+`90355121932eb515fe1b4a28dfef91a382b8bd26656962ed89677bf7dadcbca0`), the
+head of the third audit's review remedies, 123 commits after `before`,
+among them the source-preparation fast path on plain statements
+(3c007684), the keyed rewrite prepared once (512c80db) and the renames of
+the one-name rule; its reports were written between 23:11:57 and 23:13:15
+and the second pair's, run after, before, after, before, between 23:14:19
+and 23:15:52. The second `after` is built from `77fb091f` (SHA-256
+`37a940dd51d41408152c91b6a267ebb1add93933c9654ad29fb707c346a761bd`), one
+commit later, the reversal described below; its reports were written
+between 23:46:40 and 23:47:57 and its second pair's between 23:48:00 and
+23:49:31.
+[series-669b23cd-cpu-auto.json](series-669b23cd-cpu-auto.json), its
+[table view](series-669b23cd-cpu-auto-tables.md),
+[corpus-669b23cd-cpu-auto.json](corpus-669b23cd-cpu-auto.json), its
+[table view](corpus-669b23cd-cpu-auto-tables.md),
+[series-669b23cd-cpu-auto-recheck.json](series-669b23cd-cpu-auto-recheck.json)
+and its [table view](series-669b23cd-cpu-auto-recheck-tables.md) are the
+first campaign's derived comparisons;
+[series-77fb091f-cpu-auto.json](series-77fb091f-cpu-auto.json), its
+[table view](series-77fb091f-cpu-auto-tables.md),
+[corpus-77fb091f-cpu-auto.json](corpus-77fb091f-cpu-auto.json), its
+[table view](corpus-77fb091f-cpu-auto-tables.md),
+[series-77fb091f-cpu-auto-recheck.json](series-77fb091f-cpu-auto-recheck.json)
+and its [table view](series-77fb091f-cpu-auto-recheck-tables.md) the
+second's. Raw report SHA-256, first campaign:
+`66c1534ae956174fff3ef7c78229ff6a21fb8edbd74e0150c59cbb35cb65f1d6`
+(series, before),
+`3cc105750528edcf0517bbe0caadfb9583bf7b6b5e47b21babb6990b578f9db2`
+(series, after),
+`33267d6e88558bfb7327c941cf961dd481723cde54c5f28bbf1046542a81347f`
+(corpus, before),
+`19fe2ad807eb4a40abde050a68d04f644faec3a9af7b2e865bb4ad7aade87986`
+(corpus, after), and its pair
+`ec711a38b3075182d33c3da586709194f5ec258ca3dbe2c69ae275a8a0a24907`,
+`c62fc5ccbd0519b706690e9d746802eef07eac56a1f1eebaa013c7f16eee0de1`,
+`cc6e091d78098339f5778dcaa31797defcf2a0b8a1cdb3a046529354980289cb` and
+`1dc01dcb96ad93352675adbc9ed3e56c0bc2d7db81bfe4fe2fcd88845f31bb1a`
+(after, before, after, before); second campaign:
+`b745aabbd2f951f42282d1a1e780ee4a9b2e1026329dd85d6bc01ce464aa0b38`
+(series, before),
+`1a3d7139469fd23f583017a9c26f0e53969e6d4b563581e8c1d7cd5ce9df6ad5`
+(series, after),
+`63c1e31cb1b9db14eee43615fa119f30b78f7a7e35c9540c15b222281510727e`
+(corpus, before),
+`35964403d3b13b896b86a96dd4c500bf781c3ae855116642690463a013ccb7ba`
+(corpus, after), and its pair
+`2b99876514e6034631f874219c1d969392901a702ad26850810f5fdbca978cf9`,
+`4e13b2c341e4a08ddc9696bce861d756747e8f4d8da82a197814f6aece6b22f3`,
+`74b79182b0968335143e1906740906af26b105fb625333314ebb0b99407253c0` and
+`601774897b1e03399f530c582460e79cc1e35358924681e4994fcccd4ed40d93`
+(after, before, after, before).
+
+Six hypotheses were written before the first campaign. That the
+closure-route cells of plain facts and rules, whose source preparation was
+three quarters of their time at `before`, would fall to 0.60 to 0.75 by the
+fast path; that the cells whose time is the search would stay within 0.95
+to 1.05; that send-money and the other keyed cells would keep their time
+with the second preparation pass gone; that the corpus would pass 94 of 94
+and every other cell stay within noise; that every statistic but the
+timings, the receipts of the keyed programs and the renamed keys would
+print the same; and, added before the campaign for the day's fifteen late
+remedies, that none of them would move a cell, the record's atom table
+hashing with the randomized hasher among them, "which touches the writing
+of the records the harness captures and nothing the solver times".
+
+The first campaign bore out the first and third and the corpus, and refuted
+the sixth. The chain cells fell, less than predicted at the smallest size:
+
+| Cell | before | 669b23cd | after/before | pair | 77fb091f | after/before | pair |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| chain-1000 | 19.5 | 16.3 | 0.834 | 0.777 | 15.4 | 0.880 | 0.821 |
+| chain-2000 | 38.1 | 28.1 | 0.739 | 0.901 | 28.7 | 0.844 | 0.839 |
+| producer-chain-700 | 27.4 | 20.4 | 0.745 | 0.808 | 21.6 | 0.840 | 0.870 |
+| send-money/send-money | 13.1 | 14.2 | 1.087 | 1.009 | 14.1 | 1.034 | 0.971 |
+
+(medians in milliseconds; `pair` is after2 over before2 of the second
+pair of that campaign). The corpus compared 94 cells of 94 in both
+campaigns, the native executable ahead of clingo on 8 cells before and 12
+after in the first, 9 and 9 in the second, its cells of five to fifteen
+milliseconds moving both ways within the spread such cells show between
+two runs of one executable. But the cells the regions method decides were
+slower at `669b23cd`, and slower again in its pair:
+
+| Cell | before | 669b23cd | after/before | pair | 77fb091f | after/before | pair |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| planning-14 | 38.3 [37.6, 39.6] | 44.3 [43.2, 50.2] | 1.157 | 1.090 | 36.5 [36.0, 36.9] | 0.972 | 0.984 |
+| n-queens/variant-01 8→11 | 89.0 [87.7, 93.6] | 97.4 [95.4, 97.4] | 1.094 | 1.083 | 89.9 [88.2, 92.5] | 0.995 | 1.033 |
+| n-queens/variant-04 8→11 | 82.5 [82.4, 85.0] | 85.1 [84.8, 85.4] | 1.032 | 1.075 | 81.7 [80.6, 82.0] | 1.005 | 1.042 |
+| disjunction-12 | 23.5 [22.5, 24.2] | 24.2 [23.5, 26.1] | 1.029 | 1.073 | 22.0 [21.8, 22.1] | 0.965 | 1.009 |
+| transitive-dense-40 | 34.2 [33.8, 38.8] | 36.6 [36.6, 38.1] | 1.071 | 1.057 | 33.3 [33.0, 33.3] | 0.997 | 0.972 |
+
+A bisection of the 123 commits between `before` and `669b23cd`, each step
+a release build of the command and one series run, judged by planning-14's
+median (at or under 41 ms good, above bad), took seven steps and named
+`9b39079c`, the commit that had put the standard library's randomized
+hasher on the JSON document's atom table for the atoms a program's author
+spells:
+
+| Commit | planning-14 |
+|---|---:|
+| bfc8443a | 38.8 |
+| 9676f57e | 37.5 |
+| 521770d2 | 38.2 |
+| d991e5ec (the parent) | 37.7 |
+| 9b39079c (the hasher) | 43.3 |
+| 1f46103e | 42.5 |
+| b31549c8 | 42.4 |
+
+(raw report SHA-256, in that order,
+`3eb501b74a3ff6dcf20a0ade7f839ad7522587c2dd341c2f6dab9c84e4eb8c22`,
+`be6e299eba2c3b1421c5f9ba32443f984d94eeb7722f72233f1f54765f26c2ad`,
+`48949a818c2a24d5ec887fadf11da5e9e6b7d459905043d09e3e26541c0afeba`,
+`ff8d58cbbb458a0a0a95b70be4486b6be17b927035de83a797afe8b3dae1ce41`,
+`366a01ceab041398282da05e69736345679ceb7d8f73efb554e3c146101e7a24`,
+`6c14e745455b64e0e5cb75be3bcbb08dbc6b38fe15fecceb6807ab91ddf8a001` and
+`7bb4d8e1b6bcabeae2cf60dcf9eca80238e6d580840eee600adac7af833c2d29`).
+
+In the problem's words: the writer of the JSON document looks every atom
+of every model up in the document's table once on the way out, to refer
+to it by index rather than spell it again, and the cells that lost nine to
+sixteen percent are the ones that write many models with many atoms;
+hashing an atom's name and values with SipHash costs what the crate's word
+hash, a few multiplies per word, does not, and the chain cells, which
+write little, kept their gain. The hasher had been changed because the
+word hash's module claimed its keys are not adversarial, which atoms an
+author spells are not. The change is reversed at `77fb091f` with the
+argument the first change lacked: a collision an author arranges costs a
+lookup a scan of the table, bounded by its ceiling of distinct atoms, and
+the solving his program commands already costs him more than any table
+could. At `77fb091f` every series cell but one lies within 0.95 to 1.05 of
+`before` or below it (independent-negation-10 at 1.054), the queens cells
+at 1.00 to 1.04 across the campaign and its pair, within the spread the
+cells show between two runs of one executable (chain-arithmetic-1000 at
+0.904 and 1.105 in that pair). Every statistic the runs print is the same
+line for line but the timings, the receipts of the eleven keyed programs
+and the renamed keys, as the fifth hypothesis said.
+
 ## Keys renamed since these records
 
 The records above keep the spellings of their day. A later record spells these keys as the second column says.
