@@ -488,7 +488,7 @@ impl Narrower {
             &mut statistics,
         );
         statistics.work = work.spent;
-        if closed? == Sweep::Contradiction {
+        if closed? == Step::Contradiction {
             return Ok((Narrowing::Refuted, statistics));
         }
         // The atoms this closure learned decide the region; the region's own
@@ -578,14 +578,14 @@ struct Known {
 
 /// What a step of the closure did.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Sweep {
+enum Step {
     Unchanged,
     Changed,
     /// A node or atom became known both to hold and to fail.
     Contradiction,
 }
 
-impl Sweep {
+impl Step {
     fn join(self, other: Self) -> Self {
         match (self, other) {
             (Self::Contradiction, _) | (_, Self::Contradiction) => Self::Contradiction,
@@ -595,14 +595,14 @@ impl Sweep {
     }
 }
 
-fn learn(known: &mut [bool], opposite: &[bool], index: usize) -> Sweep {
+fn learn(known: &mut [bool], opposite: &[bool], index: usize) -> Step {
     if known[index] {
-        Sweep::Unchanged
+        Step::Unchanged
     } else if opposite[index] {
-        Sweep::Contradiction
+        Step::Contradiction
     } else {
         known[index] = true;
-        Sweep::Changed
+        Step::Changed
     }
 }
 
@@ -625,18 +625,18 @@ impl Known {
     }
 
     /// A node learns to hold; it is revisited if that is new.
-    fn sure(&mut self, index: usize) -> Sweep {
+    fn sure(&mut self, index: usize) -> Step {
         let step = learn(&mut self.sure, &self.never, index);
-        if step == Sweep::Changed {
+        if step == Step::Changed {
             self.nodes.push((index, true));
         }
         step
     }
 
     /// A node learns to fail; it is revisited if that is new.
-    fn never(&mut self, index: usize) -> Sweep {
+    fn never(&mut self, index: usize) -> Step {
         let step = learn(&mut self.never, &self.sure, index);
-        if step == Sweep::Changed {
+        if step == Step::Changed {
             self.nodes.push((index, false));
         }
         step
@@ -651,13 +651,13 @@ impl Known {
         producers: Option<&Producers>,
         atom: usize,
         value: bool,
-    ) -> Sweep {
+    ) -> Step {
         let step = if value {
             learn(&mut self.atom_sure, &self.atom_never, atom)
         } else {
             learn(&mut self.atom_never, &self.atom_sure, atom)
         };
-        if step != Sweep::Changed {
+        if step != Step::Changed {
             return step;
         }
         self.learned.push(atom);
@@ -688,9 +688,9 @@ impl Known {
         region: &Region,
         work: &mut Work,
         statistics: &mut NarrowingStatistics,
-    ) -> Result<Sweep, Stop> {
+    ) -> Result<Step, Stop> {
         let nodes = theory.nodes();
-        let mut step = Sweep::Unchanged;
+        let mut step = Step::Unchanged;
         if !self.seeded {
             for (node, kind) in nodes.iter().enumerate() {
                 if index.absorbed[node] {
@@ -715,7 +715,7 @@ impl Known {
             step = step.join(self.atom(index, producers, atom, value));
         }
         self.seen = region.decisions().len();
-        if step == Sweep::Contradiction {
+        if step == Step::Contradiction {
             return Ok(step);
         }
         loop {
@@ -728,9 +728,9 @@ impl Known {
                     producers.expect("a support recheck is queued only when producers are known");
                 self.recheck(index, producers, atom, work)?
             } else {
-                return Ok(Sweep::Changed);
+                return Ok(Step::Changed);
             };
-            if step == Sweep::Contradiction {
+            if step == Step::Contradiction {
                 return Ok(step);
             }
         }
@@ -753,7 +753,7 @@ impl Known {
         node: usize,
         value: bool,
         work: &mut Work,
-    ) -> Result<Sweep, Stop> {
+    ) -> Result<Step, Stop> {
         work.tick()?;
         let masked = |node: usize| frozen.is_some_and(|truth| !truth[node]);
         for &atom in &index.atom_operands[node] {
@@ -761,7 +761,7 @@ impl Known {
                 .checked_sub(1)
                 .expect("a parent is counted before it is revisited");
         }
-        let mut step = Sweep::Unchanged;
+        let mut step = Step::Unchanged;
         if !masked(node) {
             step = step.join(self.teach_operands(nodes, index, producers, node));
         }
@@ -789,7 +789,7 @@ impl Known {
     /// disjunction known to hold with all but one failing forces that one;
     /// a conjunction dually (`disj_chain_sure`, `disj_chain_never`,
     /// `disj_chain_unit` and the conjunction laws).
-    fn operand_changed(&mut self, index: &Narrower, chain: usize, value: bool) -> Sweep {
+    fn operand_changed(&mut self, index: &Narrower, chain: usize, value: bool) -> Step {
         let Chain {
             disjunction,
             root,
@@ -809,7 +809,7 @@ impl Known {
             (false, false) => self.never(root),
             (false, true) if sure == total => self.sure(root),
             (false, true) if self.never[root] && sure + 1 == total => self.unit(index, chain),
-            _ => Sweep::Unchanged,
+            _ => Step::Unchanged,
         }
     }
 
@@ -820,7 +820,7 @@ impl Known {
     /// set when it learns and counted when it is revisited, so the scan
     /// may find none, every operand being known with one count pending,
     /// and then the pending step decides the chain.
-    fn unit(&mut self, index: &Narrower, chain: usize) -> Sweep {
+    fn unit(&mut self, index: &Narrower, chain: usize) -> Step {
         let Chain {
             disjunction,
             ref operands,
@@ -836,7 +836,7 @@ impl Known {
         match open {
             Some(operand) if disjunction => self.sure(operand),
             Some(operand) => self.never(operand),
-            None => Sweep::Unchanged,
+            None => Step::Unchanged,
         }
     }
 
@@ -852,8 +852,8 @@ impl Known {
         index: &Narrower,
         producers: Option<&Producers>,
         node: usize,
-    ) -> Sweep {
-        let mut step = Sweep::Unchanged;
+    ) -> Step {
+        let mut step = Step::Unchanged;
         if let Some(chain) = index.chain_of[node] {
             step = step.join(self.teach_chain(index, chain));
         }
@@ -874,15 +874,15 @@ impl Known {
                     }
                     self.atom(index, producers, atom, true)
                 }
-                Node::False => Sweep::Contradiction,
-                Node::And(..) | Node::Or(..) => Sweep::Unchanged,
+                Node::False => Step::Contradiction,
+                Node::And(..) | Node::Or(..) => Step::Unchanged,
                 Node::Implies(a, b) => {
                     if self.sure[a] {
                         self.sure(b)
                     } else if self.never[b] {
                         self.never(a)
                     } else {
-                        Sweep::Unchanged
+                        Step::Unchanged
                     }
                 }
             });
@@ -890,7 +890,7 @@ impl Known {
         if self.never[node] {
             step = step.join(match nodes[node] {
                 Node::Atom(atom) => self.atom(index, producers, atom, false),
-                Node::False | Node::And(..) | Node::Or(..) => Sweep::Unchanged,
+                Node::False | Node::And(..) | Node::Or(..) => Step::Unchanged,
                 Node::Implies(a, b) => self.sure(a).join(self.never(b)),
             });
             if let Some(producers) = producers {
@@ -904,14 +904,14 @@ impl Known {
     }
 
     /// What a chain's own knowledge leaves its operands.
-    fn teach_chain(&mut self, index: &Narrower, chain: usize) -> Sweep {
+    fn teach_chain(&mut self, index: &Narrower, chain: usize) -> Step {
         let Chain {
             disjunction,
             root,
             ref operands,
         } = index.chains[chain];
         let total = operands.len();
-        let mut step = Sweep::Unchanged;
+        let mut step = Step::Unchanged;
         if self.sure[root] {
             if disjunction {
                 if self.never_operands[chain] + 1 == total {
@@ -937,10 +937,10 @@ impl Known {
 
     /// An implication learns from its operands what the connective
     /// dictates; chains learn by their counters.
-    fn learn_from_operands(&mut self, nodes: &[Node], node: usize) -> Sweep {
+    fn learn_from_operands(&mut self, nodes: &[Node], node: usize) -> Step {
         match nodes[node] {
             Node::Implies(a, b) => {
-                let mut up = Sweep::Unchanged;
+                let mut up = Step::Unchanged;
                 if self.never[a] || self.sure[b] {
                     up = up.join(self.sure(node));
                 }
@@ -949,7 +949,7 @@ impl Known {
                 }
                 up
             }
-            Node::Atom(_) | Node::False | Node::And(..) | Node::Or(..) => Sweep::Unchanged,
+            Node::Atom(_) | Node::False | Node::And(..) | Node::Or(..) => Step::Unchanged,
         }
     }
 
@@ -965,9 +965,9 @@ impl Known {
         producers: &Producers,
         atom: usize,
         work: &mut Work,
-    ) -> Result<Sweep, Stop> {
+    ) -> Result<Step, Stop> {
         if self.atom_never[atom] {
-            return Ok(Sweep::Unchanged);
+            return Ok(Step::Unchanged);
         }
         let mut supporters = 0;
         let mut sole = None;
@@ -988,7 +988,7 @@ impl Known {
         Ok(match (supporters, sole) {
             (0, _) => self.atom(index, Some(producers), atom, false),
             (1, Some(body)) if self.atom_sure[atom] => self.sure(body),
-            _ => Sweep::Unchanged,
+            _ => Step::Unchanged,
         })
     }
 }
