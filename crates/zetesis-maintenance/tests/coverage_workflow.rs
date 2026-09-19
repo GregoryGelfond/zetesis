@@ -529,7 +529,7 @@ fn mock_report_parser_refuses_unsupported_feature_flags() {
 
 #[test]
 fn oracle_campaigns_continue_after_independent_failures() {
-    const CAMPAIGNS: usize = 14;
+    const CAMPAIGNS: usize = 15;
     for (failed, failed_positions) in [
         ("", &[][..]),
         ("arithmetic_validation", &[1][..]),

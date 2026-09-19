@@ -204,6 +204,25 @@ fn every_interpretation_of_a_small_asked_program_matches_clingo() {
 
 #[test]
 #[ignore = "requires independent clingo 5.8.2"]
+fn a_constraint_with_an_anonymous_key_matches_clingo_as_written() {
+    // The rewrite declines an anonymous key, so the written constraint
+    // decides the family: both letters hold 3, and the column has its one
+    // solution at every letter.
+    for source in [
+        format!("{LETTERS} :- assign(_, Y), Y != 3."),
+        format!("{COLUMN} :- assign(_, C), carry(1, K), 3 != C + 2 * K."),
+    ] {
+        assert_eq!(admitted(&source).keyed_constraints(), 0, "{source}");
+        let family: BTreeSet<_> = stable(&admitted(&source))
+            .into_iter()
+            .map(|atoms| (atoms.iter().map(source_records::canonical).collect(), None))
+            .collect();
+        assert_eq!(family, source_oracle::records(&source), "{source}");
+    }
+}
+
+#[test]
+#[ignore = "requires independent clingo 5.8.2"]
 fn asked_constraints_match_clingo() {
     // Four digits keep the families within the oracle's capture; the digits
     // still lie within the column's base.

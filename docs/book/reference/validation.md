@@ -61,12 +61,17 @@ export PATH="$(dirname "$CLINGO"):$PATH"
 ```
 
 The oracle gate checks that both names select the same executable file and that
-its reported version is 5.8.2 before starting a test campaign. It then runs all
-13 independent Cargo campaigns, preserving each argument list and exit status
+its reported version is 5.8.2 before starting a test campaign. It then runs its
+15 independent Cargo campaigns, preserving each argument list and exit status
 under a fresh `target/oracle-checks/run.*` directory. One campaign failure does
 not skip the remaining campaigns; setup or receipt-write failures stop the run.
 The gate returns the first failed campaign's status after collection. Normal
 stdout/stderr remain attached to the caller for full log capture.
+
+The campaigns' test targets are listed by hand in the script. The portable
+gate's `oracle_selection` regression checks that list against the sources:
+every ignored test whose reason names clingo must be in a named target, and
+every named target must hold one.
 
 The comparison commands also accept explicit executable paths.
 
