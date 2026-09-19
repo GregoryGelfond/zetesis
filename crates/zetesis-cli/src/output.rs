@@ -23,7 +23,11 @@ impl<'a, W: Write> Document<'a, W> {
             failed: false,
         };
         if json {
-            document.write_all(b"{\"schema\":2,\"format\":\"zetesis\",\"models\":[")?;
+            let head = format!(
+                "{{\"schema\":{},\"format\":\"zetesis\",\"models\":[",
+                zetesis_themelios::observation::json::RECORD_SCHEMA_VERSION
+            );
+            document.write_all(head.as_bytes())?;
         }
         Ok(document)
     }
