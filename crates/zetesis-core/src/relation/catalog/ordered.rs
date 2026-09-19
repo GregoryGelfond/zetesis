@@ -128,9 +128,12 @@ impl Catalog {
     }
 
     /// The complete canonical order of a prepared extent as one sequence of
-    /// row IDs, merged from the runs: O(n log k) charged comparisons for `k`
-    /// runs and `n` copies, into a new vector the caller owns. This is the
-    /// rank access the runs themselves do not offer.
+    /// row IDs, merged from the runs, into a new vector the caller owns: each
+    /// of the `n` rows is copied after a scan of the `k` run heads for the
+    /// least, `O(n·k)` charged comparisons, the runs being few (one per level
+    /// and the tail). The run slices and cursors are reserved through the
+    /// work beside the merged ids. This is the rank access the runs
+    /// themselves do not offer.
     ///
     /// # Errors
     /// Refuses an unprepared extent as [`Failure::Order`], or work and bytes
@@ -138,15 +141,18 @@ impl Catalog {
     pub fn canonical(&self, limits: Limits) -> Result<Canonical, CatalogFailure> {
         let mut work = self.work(limits)?;
         let merge = (|| {
-            if self.prepared != self.atoms.len() {
+            let Some(prepared) = self.ordered() else {
                 return Err(Failure::Order);
-            }
+            };
             let mut merged = work.reserve::<usize>(self.atoms.len())?;
-            let runs: Vec<&[usize]> = self
-                .ordered()
-                .map_or(Vec::new(), |runs| runs.runs().collect());
-            let mut cursors = vec![0; runs.len()];
-            for _ in 0..self.atoms.len() {
+            let mut runs = work.reserve::<&[usize]>(prepared.runs().count())?;
+            runs.extend(prepared.runs());
+            let mut cursors = work.reserve::<usize>(runs.len())?;
+            cursors.resize(runs.len(), 0);
+            // The least head among the runs, until every run is exhausted:
+            // the runs hold every prepared row once, so the merge then holds
+            // them all.
+            loop {
                 let mut least: Option<usize> = None;
                 for (run, &cursor) in cursors.iter().enumerate() {
                     if cursor == runs[run].len() {
@@ -163,7 +169,9 @@ impl Catalog {
                         _ => run,
                     });
                 }
-                let run = least.ok_or(Failure::Order)?;
+                let Some(run) = least else {
+                    break;
+                };
                 work.tick(1)?;
                 merged.push(runs[run][cursors[run]]);
                 cursors[run] += 1;

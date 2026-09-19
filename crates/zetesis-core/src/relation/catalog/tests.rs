@@ -923,3 +923,27 @@ proptest! {
         }
     }
 }
+
+#[test]
+fn the_merge_charges_its_run_slices_and_cursors_to_the_byte_ceiling() {
+    // Beside the merged ids the merge holds one slice and one cursor per
+    // run; all three are reserved through the work, so the peak reports
+    // them and the byte ceiling bounds them.
+    let mut catalog = owner();
+    for value in [9, 2, 5] {
+        catalog.insert(atom(value, 0), Limits::default()).unwrap();
+    }
+    catalog.prepare_ordered(Limits::default()).unwrap();
+    catalog.insert(atom(7, 0), Limits::default()).unwrap();
+    catalog.prepare_ordered(Limits::default()).unwrap();
+    let runs = catalog.ordered().unwrap().runs().count();
+    assert_eq!(runs, 2);
+    let canonical = catalog.canonical(Limits::default()).unwrap();
+    let scratch = canonical.storage.peak_construction_bytes - canonical.storage.retained_bytes;
+    let ids = canonical.ids.len() * size_of::<usize>();
+    let per_run = size_of::<&[usize]>() + size_of::<usize>();
+    assert!(
+        scratch >= ids + runs * per_run,
+        "{scratch} < {ids} + {runs} * {per_run}"
+    );
+}
