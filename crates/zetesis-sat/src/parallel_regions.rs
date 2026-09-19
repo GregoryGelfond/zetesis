@@ -562,12 +562,13 @@ fn step<'a>(
     membership: &mut crate::prepared_reduct::State,
     report: &mut WorkerReport,
 ) -> Result<Option<Interpretation>, Incomplete> {
+    // The restrictions current when the region is taken, held for its
+    // narrowing without the lock.
     let restrictions: Vec<Arc<(Theory, Narrower)>> = shared
         .restrictions
         .read()
         .unwrap_or_else(PoisonError::into_inner)
         .clone();
-    let restricted: Vec<&(Theory, Narrower)> = restrictions.iter().map(|r| &**r).collect();
     report.regions.regions += 1;
     Live::add(&shared.live.regions, 1);
     let before = report.regions;
@@ -575,7 +576,7 @@ fn step<'a>(
     let narrowing = super::regions::narrow(
         (&shared.theory, &shared.narrower),
         shared.producers.as_ref(),
-        &restricted,
+        &restrictions,
         &mut region,
         &mut knowledge,
         budget,

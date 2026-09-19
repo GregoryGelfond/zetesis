@@ -154,12 +154,11 @@ impl RegionSearch {
             statistics,
         } = self;
         let before = traversal.statistics();
-        let restricted: Vec<&(Theory, Narrower)> = restrictions.iter().collect();
         let visit = traversal.next(|region, knowledge| {
             narrow(
                 (theory, narrower),
                 producers.as_ref(),
-                &restricted,
+                restrictions,
                 region,
                 knowledge,
                 budget,
@@ -197,10 +196,10 @@ impl RegionSearch {
 /// on the work ceiling has spent at least the remaining work, which is
 /// charged.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn narrow<Q: Quota>(
+pub(crate) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
     theory: (&Theory, &Narrower),
     producers: Option<&Producers>,
-    restrictions: &[&(Theory, Narrower)],
+    restrictions: &[R],
     region: &mut Region,
     knowledge: &mut Vec<Knowledge>,
     budget: &mut Budget<'_, Q>,
@@ -210,11 +209,10 @@ pub(crate) fn narrow<Q: Quota>(
     loop {
         let mut round = false;
         for (index, (formulas, narrower)) in std::iter::once(theory)
-            .chain(
-                restrictions
-                    .iter()
-                    .map(|(theory, narrower)| (theory, narrower)),
-            )
+            .chain(restrictions.iter().map(|restriction| {
+                let (theory, narrower) = restriction.borrow();
+                (theory, narrower)
+            }))
             .enumerate()
         {
             let producers = if index == 0 { producers } else { None };
