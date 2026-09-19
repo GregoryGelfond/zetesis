@@ -77,7 +77,8 @@ zetesis-series --report main=/path/series-main.json \
 The view prints Markdown tables of medians, ratios and counters, and a
 scoreboard against the reference solver per report and profile, described in
 the validation crate's README; it refuses reports whose cells or profiles
-differ. Run the baseline again beside every
+differ, the search method excepted under its present and its earlier
+spellings, which that README names. Run the baseline again beside every
 comparison: a change that also appears in the baseline column is drift, not
 a gain.
 

@@ -278,7 +278,10 @@ native and reference intervals, later-over-earlier ratios of medians in the
 order given, the counters the native records carry (published models,
 candidates examined, charged search work, driver and phase medians), and each
 report's native executable seal. A cell that did not pass is listed by its
-decisions, never averaged. The comparison also scores each report against
+decisions, never averaged. The reports may differ in the search method
+alone, which a profile spells as `search`, or as `candidates` in a report
+written before that field, with `region_workers` beside it in one
+campaign's reports. The comparison also scores each report against
 the reference solver: a scoreboard per report and profile lists the cells
 where both passed, counts the wins, the cells whose native median lies below
 the reference's, and gives every compared cell, fastest ratio first, with

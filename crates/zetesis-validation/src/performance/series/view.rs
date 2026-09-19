@@ -304,7 +304,10 @@ pub struct Comparison {
     /// The formula search method each report requested, by label, where a
     /// report requested one; the executable's default otherwise. Reports may
     /// differ in this field alone, since the methods are compared on the
-    /// same cells by design.
+    /// same cells by design. A report written before the `search` field
+    /// carries the method as `candidates`, and one campaign's reports name
+    /// the region workers beside it as `region_workers`; both are read as
+    /// the method and left out of the profile comparison.
     pub methods: BTreeMap<String, String>,
     /// Each report's and profile's standing against the reference, in report
     /// order and then profile order.
@@ -312,7 +315,8 @@ pub struct Comparison {
 }
 
 /// Compare published reports over the same cells and profiles. The formula
-/// search method is the one profile field the reports may differ in.
+/// search method is the one profile field the reports may differ in, under
+/// any of its spellings ([`Comparison::methods`]).
 ///
 /// # Errors
 /// Refuses an empty list, repeated labels, reports whose cells or profiles
@@ -836,10 +840,11 @@ fn cases(labelled: &Labelled<'_>) -> Result<Vec<String>, ViewError> {
         })
 }
 
-/// The search method is the one field a comparison may vary; the profiles
-/// are compared without it. Reports before the field spell it in neither of
-/// its two names and are compared as they are; one campaign's reports name
-/// region workers separately, which is read the same way.
+/// The fields that spell a profile's search method, left out of the profile
+/// comparison: `search`, the method's name; `candidates`, its name in
+/// reports written before `search`; and `region_workers`, the workers one
+/// campaign's reports named beside it. A profile without any of them
+/// requested the executable's default.
 const METHOD_FIELDS: [&str; 3] = ["search", "candidates", "region_workers"];
 
 fn profiles(labelled: &Labelled<'_>) -> Result<Vec<Value>, ViewError> {

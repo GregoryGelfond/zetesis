@@ -528,3 +528,70 @@ fn blocked_positions_name_their_blocking_decision() {
         json!({"blocked by timeout": 2})
     );
 }
+
+#[test]
+fn reports_may_differ_in_the_search_method_alone() {
+    let mut regions = report(&["generated/chain-1000.lp"], &[&[1]], &[1], None);
+    regions["report"]["plan"]["profiles"][0]["search"] = json!("regions");
+    let mut clauses = regions.clone();
+    clauses["report"]["plan"]["profiles"][0]["search"] = json!("clauses");
+    let comparison = compare(&[
+        Labelled {
+            label: "regions",
+            report: &regions,
+        },
+        Labelled {
+            label: "clauses",
+            report: &clauses,
+        },
+    ])
+    .unwrap();
+    assert_eq!(comparison.methods["regions"], "regions");
+    assert_eq!(comparison.methods["clauses"], "clauses");
+}
+
+#[test]
+fn a_report_before_the_search_field_spells_its_method_as_candidates() {
+    // Reports written before the `search` field carried the method under
+    // the name `candidates`; it is read as the method and left out of the
+    // profile comparison.
+    let mut current = report(&["generated/chain-1000.lp"], &[&[1]], &[1], None);
+    current["report"]["plan"]["profiles"][0]["search"] = json!("clauses");
+    let mut older = report(&["generated/chain-1000.lp"], &[&[1]], &[1], None);
+    older["report"]["plan"]["profiles"][0]["candidates"] = json!("clauses");
+    let comparison = compare(&[
+        Labelled {
+            label: "current",
+            report: &current,
+        },
+        Labelled {
+            label: "older",
+            report: &older,
+        },
+    ])
+    .unwrap();
+    assert_eq!(comparison.methods["older"], "clauses");
+}
+
+#[test]
+fn a_report_naming_region_workers_separately_is_read_with_them() {
+    // One campaign's reports named the region workers beside the method;
+    // they are read into the method and left out of the profile comparison.
+    let mut current = report(&["generated/chain-1000.lp"], &[&[1]], &[1], None);
+    current["report"]["plan"]["profiles"][0]["search"] = json!("regions");
+    let mut workers = report(&["generated/chain-1000.lp"], &[&[1]], &[1], None);
+    workers["report"]["plan"]["profiles"][0]["search"] = json!("regions");
+    workers["report"]["plan"]["profiles"][0]["region_workers"] = json!(4);
+    let comparison = compare(&[
+        Labelled {
+            label: "current",
+            report: &current,
+        },
+        Labelled {
+            label: "workers",
+            report: &workers,
+        },
+    ])
+    .unwrap();
+    assert_eq!(comparison.methods["workers"], "regions with 4 workers");
+}
