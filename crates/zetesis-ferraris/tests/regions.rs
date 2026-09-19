@@ -734,3 +734,36 @@ fn an_implication_from_an_atom_to_itself_is_one_parent_of_the_atom() {
     assert!(matches!(narrowing, Narrowing::Fixed { changed: false }));
     assert_eq!(region.split_atom(), Some(0));
 }
+
+#[test]
+fn every_propagation_event_is_charged_work() {
+    // The disjunctive theory narrows by several propagations, each a node
+    // revisited or a support rechecked, and each reads at least one node:
+    // the work spent bounds the events, so a work ceiling below the events
+    // stops the narrowing with the work stop. The work ceiling is the one
+    // ceiling a narrowing needs.
+    let t = disjunctive();
+    let extracted = producers(&t, RegionLimits::default(), &Control::default()).unwrap();
+    let mut region = Region::undecided(4);
+    let (_, statistics) = narrow_fresh(
+        &t,
+        extracted.producers.as_ref(),
+        &mut region,
+        RegionLimits::default(),
+        &Control::default(),
+    )
+    .unwrap();
+    assert!(statistics.propagations > 1);
+    assert!(statistics.propagations <= statistics.work);
+    let mut region = Region::undecided(4);
+    let stopped = narrow_fresh(
+        &t,
+        extracted.producers.as_ref(),
+        &mut region,
+        RegionLimits {
+            max_work: statistics.propagations - 1,
+        },
+        &Control::default(),
+    );
+    assert!(matches!(stopped, Err(Stop::WorkLimit)));
+}

@@ -163,7 +163,7 @@ closed for them: the knowledge of a region holds in every region inside it
 (`known_mono`), so a child learns only the decisions its parent did not know. `Narrower::narrow_frozen` narrows a region of the
 theory's frozen reduct under a candidate, reading a node false in the
 candidate's truth as falsum and applying no support cut, which is the
-proper-subset query's narrowing; `FormulaEvaluation::truth` is that mask. `RegionLimits` bounds the work and the events;
+proper-subset query's narrowing; `FormulaEvaluation::truth` is that mask. `RegionLimits` bounds the work, and through it the events;
 exhausting either, or a control stop, returns the stop, and the region and
 the knowledge then hold what the closure had learned before it, sound but
 not closed, which the proposers abandon. A narrowing that does not refute also prefers the open atom with

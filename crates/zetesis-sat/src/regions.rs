@@ -357,7 +357,6 @@ fn account<Q: Quota>(
 pub(crate) fn limits<Q: Quota>(budget: &Budget<'_, Q>) -> RegionLimits {
     RegionLimits {
         max_work: budget.remaining_work(),
-        max_propagations: u64::MAX,
     }
 }
 

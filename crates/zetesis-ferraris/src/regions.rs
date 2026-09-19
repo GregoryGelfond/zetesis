@@ -43,20 +43,18 @@ use zetesis_cpu::{Control, Stop};
 
 use crate::{Node, Theory};
 
-/// Ceilings on one narrowing and on producer extraction.
+/// The work ceiling of one narrowing, and of producer extraction. Every
+/// propagation event reads at least one node, so the work bounds the
+/// events too.
 #[derive(Clone, Copy, Debug)]
 pub struct RegionLimits {
     /// Charged node reads, root tests and producer checks.
     pub max_work: u64,
-    /// Propagation events in one narrowing: a node or atom learned and
-    /// its neighbours revisited, or an atom's support rechecked.
-    pub max_propagations: u64,
 }
 impl Default for RegionLimits {
     fn default() -> Self {
         Self {
             max_work: 100_000_000,
-            max_propagations: 1_000_000_000,
         }
     }
 }
@@ -471,7 +469,6 @@ impl Narrower {
             frozen,
             region,
             &mut work,
-            limits.max_propagations,
             &mut statistics,
         );
         statistics.work = work.spent;
@@ -674,7 +671,6 @@ impl Known {
         frozen: Option<&[bool]>,
         region: &Region,
         work: &mut Work,
-        max_propagations: u64,
         statistics: &mut NarrowingStatistics,
     ) -> Result<Sweep, Stop> {
         let nodes = theory.nodes();
@@ -707,9 +703,6 @@ impl Known {
             return Ok(step);
         }
         loop {
-            if statistics.propagations >= max_propagations {
-                return Err(Stop::WorkLimit);
-            }
             let step = if let Some((node, value)) = self.nodes.pop() {
                 statistics.propagations += 1;
                 self.revisit(nodes, index, producers, frozen, node, value, work)?
