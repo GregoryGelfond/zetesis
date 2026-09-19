@@ -128,7 +128,8 @@ The reduct decides membership either way, and a countermodel is validated
 independently of the method that found it; the flag changes which
 candidate is proposed next and the work charged, never whether one is
 accepted. `--stats` reports the regions visited, refuted and reached as
-leaves for the candidate tree and for the reduct queries under the latter.
+leaves for the candidate tree and, under `--search regions`, for the reduct
+queries.
 
 `--workers N`, the host's available parallelism by default, is the one
 worker count: the closure route's pool, and under `--search regions` the
@@ -283,16 +284,17 @@ execution routes leave this observation absent.
 For the independent CPU closure routes, lazy and eager, `closure_execution`
 sums the counters every completed check returns: completed and stopped checks,
 source rounds or rule passes, charged work in the route's `--max-work` units,
-derived atoms and, for the lazy route, catalog work, bindings, tuple probes and
-the largest admitted closure envelope. A stopped check returns no counters, so
+derived atoms and, for the lazy route, catalog work, bindings, tuple probes,
+the heads recorded as bits of dense relations, the blocks of rows joined by
+words and the largest admitted closure envelope. A stopped check returns no counters, so
 its partial work is absent from the sums and counted only as a stop. The text
 form is the `independent closure` and `closure joins` lines.
 
-When relational admission expanded the source, the `expansion used` line and
-the JSON `expansion` object state each accepted charge beside the ceiling it
-was checked against: term work, templates, values, scalar bytes and origin
-locations. The formula route admits through its own budgets and reports no
-expansion usage.
+When relational admission expanded the source, the `expansion used` line
+states each accepted charge beside the ceiling it was checked against, term
+work, templates, values, scalar bytes and origin locations, and the JSON
+`expansion` object holds the charges. The formula route admits through its
+own budgets and reports no expansion usage.
 
 Stage timings separate source preparation, eager grounding, solving and output.
 Lazy joins are interleaved with solving, so a separate lazy grounding duration
