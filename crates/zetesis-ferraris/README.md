@@ -161,8 +161,9 @@ closed for them: the knowledge of a region holds in every region inside it
 theory's frozen reduct under a candidate, reading a node false in the
 candidate's truth as falsum and applying no support cut, which is the
 proper-subset query's narrowing; `FormulaEvaluation::truth` is that mask. `RegionLimits` bounds the work and the events;
-exhausting either, or a control stop, returns the stop with the region
-unchanged. A narrowing that does not refute also prefers the open atom with
+exhausting either, or a control stop, returns the stop, and the region and
+the knowledge then hold what the closure had learned before it, sound but
+not closed, which the proposers abandon. A narrowing that does not refute also prefers the open atom with
 the most parents still unknown as the region's next split, which the
 traversal honours; without a preference it splits the highest open atom. The traversal that splits regions and
 covers the tree is `zetesis_cpu::regions::Traversal`, shared with the closure

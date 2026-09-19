@@ -398,7 +398,9 @@ impl Narrower {
     ///
     /// # Errors
     /// Returns the stop when the narrowing exceeds its work or propagation
-    /// ceiling, or control stops it; the region is then unchanged.
+    /// ceiling, or control stops it. The region then holds the decisions the
+    /// closure had learned before the stop, sound but not closed, and is not
+    /// to be narrowed again; the proposers abandon it.
     pub fn narrow(
         &self,
         theory: &Theory,
@@ -424,7 +426,8 @@ impl Narrower {
     /// knowledge closed for the region's children.
     ///
     /// # Errors
-    /// As [`Self::narrow`]; the knowledge is then unchanged.
+    /// As [`Self::narrow`]; the knowledge is then partly closed, sound but
+    /// not to be reused, as the region is.
     pub fn narrow_known(
         &self,
         theory: &Theory,
@@ -441,7 +444,8 @@ impl Narrower {
     /// [`Self::narrow_known`] is to [`Self::narrow`].
     ///
     /// # Errors
-    /// As [`Self::narrow`]; the knowledge is then unchanged.
+    /// As [`Self::narrow`]; the knowledge is then partly closed, sound but
+    /// not to be reused, as the region is.
     pub fn narrow_frozen_known(
         &self,
         theory: &Theory,
