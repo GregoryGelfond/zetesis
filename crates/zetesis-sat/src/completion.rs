@@ -537,24 +537,7 @@ fn merge(
         &mut statistics.reduct.parameter_work,
         worker.reduct.parameter_work,
     )?;
-    let regions = &mut statistics.reduct.regions;
-    regions.regions = regions
-        .regions
-        .checked_add(worker.reduct.regions.regions)
-        .ok_or(Incomplete::CounterOverflow)?;
-    regions.refuted = regions
-        .refuted
-        .checked_add(worker.reduct.regions.refuted)
-        .ok_or(Incomplete::CounterOverflow)?;
-    regions.leaves = regions
-        .leaves
-        .checked_add(worker.reduct.regions.leaves)
-        .ok_or(Incomplete::CounterOverflow)?;
-    add(
-        &mut regions.propagations,
-        worker.reduct.regions.propagations,
-    )?;
-    add(&mut regions.work, worker.reduct.regions.work)?;
+    statistics.reduct.regions.add(worker.reduct.regions)?;
     statistics.reduct.peak_workspace_bytes = statistics
         .reduct
         .peak_workspace_bytes

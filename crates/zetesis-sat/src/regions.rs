@@ -50,25 +50,79 @@ impl SearchMethod {
     }
 }
 
-/// What the region proposer did, cumulatively.
+/// What a walk over a region tree counted, cumulatively: the candidate
+/// tree's walk, or the proper-subset queries' walks together.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct RegionSearchStatistics {
+pub struct RegionCounts {
     /// Regions narrowed, the root included.
     pub regions: usize,
     /// Regions the readings refuted.
     pub refuted: usize,
-    /// Regions with every atom decided: the classical candidates proposed.
+    /// Regions with every atom decided: the classical candidates proposed,
+    /// or the proper-subset models and the candidate itself.
     pub leaves: usize,
-    /// Propagation events over the theory and the restrictions: nodes and
-    /// atoms learned and their neighbours revisited, and support rechecks.
+    /// Propagation events: nodes and atoms learned and their neighbours
+    /// revisited, and support rechecks.
     pub propagations: u64,
     /// Atoms the readings held.
     pub forced: u64,
     /// Atoms the readings cut.
     pub cut: u64,
-    /// Indexing the theory and each restriction, producer extraction, node
-    /// reads, root tests and producer checks; included in search work.
+    /// Node reads, root tests and producer checks, and for the candidate
+    /// tree the indexing of the theory and each restriction and the
+    /// producer extraction; included in search work.
     pub work: u64,
+}
+
+impl RegionCounts {
+    /// Add another walk's counts to these.
+    ///
+    /// # Errors
+    /// A sum beyond its counter's width is the counter refusal, with these
+    /// counts unchanged.
+    pub fn add(&mut self, other: Self) -> Result<(), Incomplete> {
+        let sum = Self {
+            regions: self
+                .regions
+                .checked_add(other.regions)
+                .ok_or(Incomplete::CounterOverflow)?,
+            refuted: self
+                .refuted
+                .checked_add(other.refuted)
+                .ok_or(Incomplete::CounterOverflow)?,
+            leaves: self
+                .leaves
+                .checked_add(other.leaves)
+                .ok_or(Incomplete::CounterOverflow)?,
+            propagations: self
+                .propagations
+                .checked_add(other.propagations)
+                .ok_or(Incomplete::CounterOverflow)?,
+            forced: self
+                .forced
+                .checked_add(other.forced)
+                .ok_or(Incomplete::CounterOverflow)?,
+            cut: self
+                .cut
+                .checked_add(other.cut)
+                .ok_or(Incomplete::CounterOverflow)?,
+            work: self
+                .work
+                .checked_add(other.work)
+                .ok_or(Incomplete::CounterOverflow)?,
+        };
+        *self = sum;
+        Ok(())
+    }
+}
+
+/// What the region proposer did, cumulatively: the counts of its walk over
+/// the candidate tree, and whether the theory lies in the producer
+/// fragment.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RegionSearchStatistics {
+    /// The walk's counts.
+    pub counts: RegionCounts,
     /// Whether the theory lies in the producer fragment, so the support
     /// cut applies.
     pub producers: bool,
@@ -97,9 +151,11 @@ impl RegionSearch {
         budget.charge(narrower.work())?;
         Ok(Self {
             statistics: RegionSearchStatistics {
-                work: extraction.work + narrower.work(),
+                counts: RegionCounts {
+                    work: extraction.work + narrower.work(),
+                    ..Default::default()
+                },
                 producers: extraction.producers.is_some(),
-                ..Default::default()
             },
             producers: extraction.producers,
             traversal: Traversal::with_state(
@@ -115,10 +171,13 @@ impl RegionSearch {
     pub(crate) fn statistics(&self) -> RegionSearchStatistics {
         let regions = self.traversal.statistics();
         RegionSearchStatistics {
-            regions: regions.regions,
-            refuted: regions.refuted,
-            leaves: regions.decided,
-            ..self.statistics
+            counts: RegionCounts {
+                regions: regions.regions,
+                refuted: regions.refuted,
+                leaves: regions.decided,
+                ..self.statistics.counts
+            },
+            producers: self.statistics.producers,
         }
     }
 
@@ -134,7 +193,7 @@ impl RegionSearch {
             .map_err(|_| Incomplete::Allocation)?;
         let narrower = Narrower::new(restriction);
         budget.charge(narrower.work())?;
-        self.statistics.work += narrower.work();
+        self.statistics.counts.work += narrower.work();
         self.restrictions.push((restriction.clone(), narrower));
         Ok(())
     }
@@ -162,7 +221,7 @@ impl RegionSearch {
                 region,
                 knowledge,
                 budget,
-                statistics,
+                &mut statistics.counts,
             )
         });
         let after = traversal.statistics();
@@ -203,7 +262,7 @@ pub(crate) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
     region: &mut Region,
     knowledge: &mut Vec<Knowledge>,
     budget: &mut Budget<'_, Q>,
-    statistics: &mut RegionSearchStatistics,
+    counts: &mut RegionCounts,
 ) -> Result<Narrowing, Incomplete> {
     let mut changed = false;
     loop {
@@ -234,16 +293,16 @@ pub(crate) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
                 Ok(outcome) => outcome,
                 Err(Stop::WorkLimit) => {
                     let remaining = budget.remaining_work();
-                    statistics.work += remaining;
+                    counts.work += remaining;
                     budget.charge(remaining)?;
                     return Err(Incomplete::WorkLimit);
                 }
                 Err(stop) => return Err(stopped(stop)),
             };
-            statistics.propagations += pass.propagations;
-            statistics.forced += pass.forced;
-            statistics.cut += pass.cut;
-            statistics.work += pass.work;
+            counts.propagations += pass.propagations;
+            counts.forced += pass.forced;
+            counts.cut += pass.cut;
+            counts.work += pass.work;
             budget.charge(pass.work)?;
             match narrowing {
                 Narrowing::Refuted => return Ok(Narrowing::Refuted),
@@ -269,21 +328,6 @@ pub(crate) fn stopped(stop: Stop) -> Incomplete {
         Stop::WorkLimit => Incomplete::WorkLimit,
         other => other.into(),
     }
-}
-
-/// What the region queries of one enumeration did, cumulatively.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct RegionQueryStatistics {
-    /// Regions of the proper-subset trees narrowed.
-    pub regions: usize,
-    /// Regions the frozen reduct's knowledge refuted.
-    pub refuted: usize,
-    /// Leaves reached: proper-subset models, and the candidate itself.
-    pub leaves: usize,
-    /// Propagation events over the frozen reducts.
-    pub propagations: u64,
-    /// Node visits, included in search work.
-    pub work: u64,
 }
 
 /// The proper-subset query of a classical model as a region tree: the
@@ -386,7 +430,7 @@ fn narrow_frozen<Q: Quota>(
     region: &mut Region,
     knowledge: &mut Knowledge,
     budget: &mut Budget<'_, Q>,
-    receipts: &mut RegionQueryStatistics,
+    receipts: &mut RegionCounts,
 ) -> Result<Narrowing, Incomplete> {
     let result = narrower.narrow_frozen_known(
         theory,
@@ -407,6 +451,8 @@ fn narrow_frozen<Q: Quota>(
         Err(stop) => return Err(stopped(stop)),
     };
     receipts.propagations += pass.propagations;
+    receipts.forced += pass.forced;
+    receipts.cut += pass.cut;
     receipts.work += pass.work;
     budget.charge(pass.work)?;
     Ok(narrowing)

@@ -56,7 +56,7 @@ fn four_workers_return_the_scalar_family_once_each() {
             statistics.stable_models,
             u64::try_from(found.len()).unwrap()
         );
-        assert!(statistics.regions.expect("region receipts").regions > 0);
+        assert!(statistics.regions.expect("region receipts").counts.regions > 0);
         assert_eq!(statistics.candidate_queries, 0);
     }
 }
@@ -108,7 +108,7 @@ fn a_restriction_charges_its_indexing_to_the_shared_search_work() {
     let restriction = theory_over(&theory, vec![Node::Atom(7)], vec![0]);
     parallel.restrict_candidates(&restriction).unwrap();
     let after = parallel.statistics();
-    let indexed = after.regions.unwrap().work - before.regions.unwrap().work;
+    let indexed = after.regions.unwrap().counts.work - before.regions.unwrap().counts.work;
     assert!(indexed > 0);
     assert_eq!(after.search.work - before.search.work, indexed);
 }
@@ -271,9 +271,9 @@ fn four_workers_report_the_scalar_walks_reading_work() {
         assert_eq!(family(&mut parallel).len(), models);
         let one = scalar.statistics().regions.unwrap();
         let four = parallel.statistics().regions.unwrap();
-        assert_eq!(four.regions, one.regions);
-        assert_eq!(four.leaves, one.leaves);
-        assert_eq!(four.work, one.work);
+        assert_eq!(four.counts.regions, one.counts.regions);
+        assert_eq!(four.counts.leaves, one.counts.leaves);
+        assert_eq!(four.counts.work, one.counts.work);
     }
 }
 

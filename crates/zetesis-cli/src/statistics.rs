@@ -642,21 +642,22 @@ fn countermodel(
         )?;
     }
     if let Some(regions) = stats.regions {
+        let counts = regions.counts;
         writeln!(
             sink,
             "  candidate regions: visited={}; refuted={}; leaves={}; propagations={}; held={}; cut={}; support cut={}; reading work={} (included in search work)",
-            regions.regions,
-            regions.refuted,
-            regions.leaves,
-            regions.propagations,
-            regions.forced,
-            regions.cut,
+            counts.regions,
+            counts.refuted,
+            counts.leaves,
+            counts.propagations,
+            counts.forced,
+            counts.cut,
             if regions.producers {
                 "applied"
             } else {
                 "not applicable"
             },
-            regions.work,
+            counts.work,
         )?;
     }
     writeln!(

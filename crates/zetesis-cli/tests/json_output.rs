@@ -202,9 +202,9 @@ fn region_statistics_identify_the_support_cut() {
         let measured = statistics.regions.unwrap();
         let regions = &value["statistics"]["search"]["regions"];
         assert_eq!(regions["support_cut"], support_cut);
-        assert_eq!(regions["visited"], measured.regions);
-        assert_eq!(regions["leaves"], measured.leaves);
-        assert_eq!(regions["reading_work"], measured.work);
+        assert_eq!(regions["visited"], measured.counts.regions);
+        assert_eq!(regions["leaves"], measured.counts.leaves);
+        assert_eq!(regions["reading_work"], measured.counts.work);
         assert!(value["statistics"]["search"]["necessary_support"].is_null());
     }
 }

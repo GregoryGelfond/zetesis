@@ -38,7 +38,7 @@ mod parallel_regions;
 use parallel_regions::ParallelRegions;
 pub(crate) use regions::ReductQuery;
 use regions::RegionSearch;
-pub use regions::{RegionQueryStatistics, RegionSearchStatistics, SearchMethod};
+pub use regions::{RegionCounts, RegionSearchStatistics, SearchMethod};
 
 /// Whole-operation ceilings for a membership check or stable-model enumeration.
 #[derive(Clone, Copy, Debug)]

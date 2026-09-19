@@ -769,20 +769,21 @@ fn region_statistics(
     let Some(stats) = statistics else {
         return out.text("null");
     };
+    let counts = stats.counts;
     out.text("{\"visited\":")?;
-    out.text(&stats.regions.to_string())?;
-    out.number_field("refuted", stats.refuted)?;
-    out.number_field("leaves", stats.leaves)?;
-    out.number_field("propagations", stats.propagations)?;
-    out.number_field("held", stats.forced)?;
-    out.number_field("cut", stats.cut)?;
+    out.text(&counts.regions.to_string())?;
+    out.number_field("refuted", counts.refuted)?;
+    out.number_field("leaves", counts.leaves)?;
+    out.number_field("propagations", counts.propagations)?;
+    out.number_field("held", counts.forced)?;
+    out.number_field("cut", counts.cut)?;
     out.text(",\"support_cut\":")?;
     out.string(if stats.producers {
         "applied"
     } else {
         "not_applicable"
     })?;
-    out.number_field("reading_work", stats.work)?;
+    out.number_field("reading_work", counts.work)?;
     out.text("}")
 }
 

@@ -31,9 +31,9 @@ pub struct ReductStatistics {
     /// including failure. Shared preparation and temporary witness vectors are
     /// excluded; this is not the aggregate completion peak or process RSS.
     pub peak_workspace_bytes: u128,
-    /// The proper-subset queries run as region trees, under the regions
-    /// method; zero under the clause kernel.
-    pub regions: crate::RegionQueryStatistics,
+    /// What the proper-subset queries walked as region trees, under the
+    /// regions method; zero under the clause kernel.
+    pub regions: crate::RegionCounts,
 }
 
 /// One returned attempt, including work and retained storage after a refusal.

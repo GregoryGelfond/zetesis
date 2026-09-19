@@ -59,12 +59,15 @@ fn regions_ask_no_classical_query() {
     assert_eq!(statistics.candidate_queries, 0);
     let receipts = statistics.regions.expect("regions receipts");
     assert_eq!(
-        u64::try_from(receipts.leaves).unwrap(),
+        u64::try_from(receipts.counts.leaves).unwrap(),
         statistics.candidates,
         "every leaf is a candidate"
     );
-    assert!(receipts.refuted > 0, "the constraint refutes a region");
-    assert!(receipts.regions > receipts.leaves);
+    assert!(
+        receipts.counts.refuted > 0,
+        "the constraint refutes a region"
+    );
+    assert!(receipts.counts.regions > receipts.counts.leaves);
 }
 
 #[test]
@@ -131,7 +134,7 @@ fn a_restriction_charges_its_indexing_to_the_search_work() {
     let restriction = theory_over(&theory, vec![Node::Atom(2)], vec![0]);
     search.restrict_candidates(&restriction).unwrap();
     let after = search.statistics();
-    let indexed = after.regions.unwrap().work - before.regions.unwrap().work;
+    let indexed = after.regions.unwrap().counts.work - before.regions.unwrap().counts.work;
     assert!(indexed > 0);
     assert_eq!(after.search.work - before.search.work, indexed);
 }

@@ -42,7 +42,7 @@ use zetesis_cpu::regions::{Narrowing, Region};
 use zetesis_ferraris::{Interpretation, Knowledge, Narrower, Producers, Theory};
 
 use super::certified::{self, Certification};
-use super::regions::{RegionSearchStatistics, SearchMethod};
+use super::regions::{RegionCounts, RegionSearchStatistics, SearchMethod};
 use super::timing::{self, Phase, PhaseMeasurement};
 use crate::search::{Budget, SharedBudget, WorkLease};
 use crate::{Check, Control, Incomplete, Limits, SearchPhaseTimings, SearchStatistics, Statistics};
@@ -197,7 +197,7 @@ pub(crate) struct ParallelRegions {
 
 /// What a worker did, returned when it finishes.
 struct WorkerReport {
-    regions: RegionSearchStatistics,
+    regions: RegionCounts,
     statistics: Statistics,
 }
 
@@ -228,9 +228,11 @@ impl ParallelRegions {
         let narrower = Narrower::new(theory);
         budget.charge(narrower.work())?;
         let statistics = RegionSearchStatistics {
-            work: extraction.work + narrower.work(),
+            counts: RegionCounts {
+                work: extraction.work + narrower.work(),
+                ..Default::default()
+            },
             producers: extraction.producers.is_some(),
-            ..Default::default()
         };
         let (sender, receiver) = sync_channel(workers.get() * CHANNEL_SLACK);
         let mut pending = Vec::new();
@@ -280,13 +282,19 @@ impl ParallelRegions {
         let count =
             |counter: &AtomicU64| usize::try_from(Live::read(counter)).unwrap_or(usize::MAX);
         RegionSearchStatistics {
-            regions: count(&live.regions),
-            refuted: count(&live.refuted),
-            leaves: count(&live.leaves),
-            propagations: Live::read(&live.propagations),
-            forced: Live::read(&live.forced),
-            cut: Live::read(&live.cut),
-            work: self.statistics.work.saturating_add(Live::read(&live.work)),
+            counts: RegionCounts {
+                regions: count(&live.regions),
+                refuted: count(&live.refuted),
+                leaves: count(&live.leaves),
+                propagations: Live::read(&live.propagations),
+                forced: Live::read(&live.forced),
+                cut: Live::read(&live.cut),
+                work: self
+                    .statistics
+                    .counts
+                    .work
+                    .saturating_add(Live::read(&live.work)),
+            },
             producers: self.statistics.producers,
         }
     }
@@ -316,7 +324,7 @@ impl ParallelRegions {
         let narrower = Narrower::new(restriction);
         self.shared.budget.charge(narrower.work())?;
         self.account(budget);
-        self.statistics.work += narrower.work();
+        self.statistics.counts.work += narrower.work();
         let mut restrictions = self
             .shared
             .restrictions
@@ -358,7 +366,7 @@ impl ParallelRegions {
                     // Every worker has finished: the channel holds nothing
                     // more, so the stop, if one was raised, follows every
                     // model the workers verified.
-                    self.join();
+                    self.join()?;
                     self.account(budget);
                     if let Some(error) = self.shared.lock().stopped {
                         return Err(error);
@@ -400,12 +408,16 @@ impl ParallelRegions {
 
     /// Wait for every worker and merge its membership receipts; its region
     /// receipts are already in the live counters.
-    fn join(&mut self) {
+    ///
+    /// # Errors
+    /// A merged count beyond its width is the counter refusal.
+    fn join(&mut self) -> Result<(), Incomplete> {
         for handle in self.handles.drain(..) {
             if let Ok(report) = handle.join() {
-                merge_membership(&mut self.merged, &report.statistics);
+                merge_membership(&mut self.merged, &report.statistics)?;
             }
         }
+        Ok(())
     }
 
     /// The shared allowance's spent work and decisions become the
@@ -422,25 +434,30 @@ impl Drop for ParallelRegions {
     fn drop(&mut self) {
         self.shared.close();
         // Dropping the receiver makes every pending send fail, so a worker
-        // blocked on a full channel exits at once.
-        self.join();
+        // blocked on a full channel exits at once. The receipts of a dropped
+        // enumeration have no reader, so an overflow in them has none.
+        let _ = self.join();
     }
 }
 
 /// Merge a joined worker's certificate and reduct receipts; its candidate,
 /// query and countermodel counts reached the live counters as it went, and
-/// the coordinator counts the stable models it returns.
-fn merge_membership(into: &mut Statistics, from: &Statistics) {
-    into.reduct.original_work = into
-        .reduct
-        .original_work
-        .saturating_add(from.reduct.original_work);
+/// the coordinator counts the stable models it returns. A sum beyond its
+/// counter's width is the counter refusal.
+fn merge_membership(into: &mut Statistics, from: &Statistics) -> Result<(), Incomplete> {
+    fn add(counter: &mut u64, value: u64) -> Result<(), Incomplete> {
+        *counter = counter
+            .checked_add(value)
+            .ok_or(Incomplete::CounterOverflow)?;
+        Ok(())
+    }
+    add(&mut into.reduct.original_work, from.reduct.original_work)?;
     if let (Some(into), Some(from)) = (into.certified.as_mut(), from.certified.as_ref()) {
-        into.checks = into.checks.saturating_add(from.checks);
-        into.stable = into.stable.saturating_add(from.stable);
-        into.refuted = into.refuted.saturating_add(from.refuted);
-        into.failed = into.failed.saturating_add(from.failed);
-        into.checking_work = into.checking_work.saturating_add(from.checking_work);
+        add(&mut into.checks, from.checks)?;
+        add(&mut into.stable, from.stable)?;
+        add(&mut into.refuted, from.refuted)?;
+        add(&mut into.failed, from.failed)?;
+        add(&mut into.checking_work, from.checking_work)?;
         into.positive_check_peak_bytes = match (
             into.positive_check_peak_bytes,
             from.positive_check_peak_bytes,
@@ -449,21 +466,14 @@ fn merge_membership(into: &mut Statistics, from: &Statistics) {
             (a, b) => a.or(b),
         };
     }
-    let regions = &mut into.reduct.regions;
-    regions.regions = regions.regions.saturating_add(from.reduct.regions.regions);
-    regions.refuted = regions.refuted.saturating_add(from.reduct.regions.refuted);
-    regions.leaves = regions.leaves.saturating_add(from.reduct.regions.leaves);
-    regions.propagations = regions
-        .propagations
-        .saturating_add(from.reduct.regions.propagations);
-    regions.work = regions.work.saturating_add(from.reduct.regions.work);
+    into.reduct.regions.add(from.reduct.regions)
 }
 
 /// One worker's walk, until the pool closes, a stop is raised, or the
 /// enumeration stops listening.
 fn worker(shared: &Shared, sender: &SyncSender<Interpretation>) -> WorkerReport {
     let mut report = WorkerReport {
-        regions: RegionSearchStatistics::default(),
+        regions: RegionCounts::default(),
         statistics: Statistics {
             // The certificate records its checks in these receipts.
             certified: shared
