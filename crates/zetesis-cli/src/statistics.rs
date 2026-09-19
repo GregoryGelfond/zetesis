@@ -5,7 +5,12 @@ use std::time::Duration;
 
 use crate::{Backend, Completion, Grounder, Options, PublicationFailure, Report};
 
-fn header(sink: &mut impl Write, options: &Options, elapsed: Duration) -> io::Result<()> {
+fn header(
+    sink: &mut impl Write,
+    options: &Options,
+    config: &crate::SolveConfig,
+    elapsed: Duration,
+) -> io::Result<()> {
     writeln!(
         sink,
         "Statistics: zetesis {}; GPU compiled={}",
@@ -40,7 +45,7 @@ fn header(sink: &mut impl Write, options: &Options, elapsed: Duration) -> io::Re
             zetesis_themelios::JoinStrategy::Table => "table",
         }
     )?;
-    limits(sink, options)?;
+    limits(sink, options, config)?;
     writeln!(
         sink,
         "  driver wall time: {:.3} ms (admission, search and output; excludes source loading and statistics)",
@@ -62,7 +67,8 @@ pub(crate) fn write_progress(
     let semantic = progress
         .semantic()
         .ok_or_else(|| io::Error::other("statistics require semantic progress"))?;
-    header(sink, options, elapsed)?;
+    let config = crate::SolveConfig::from(options);
+    header(sink, options, &config, elapsed)?;
     if let Some(stop) = &progress.stop {
         writeln!(
             sink,
@@ -83,6 +89,7 @@ pub(crate) fn write_progress(
     details(
         sink,
         options,
+        &config,
         &Details {
             models: progress.publication.models,
             checked: semantic.candidate_progress(),
@@ -108,9 +115,10 @@ pub(crate) fn write_detailed(
     result: Result<&Report, &PublicationFailure>,
     elapsed: Duration,
 ) -> io::Result<()> {
-    header(sink, options, elapsed)?;
+    let config = crate::SolveConfig::from(options);
+    header(sink, options, &config, elapsed)?;
     match result {
-        Ok(report) => completed(sink, options, report),
+        Ok(report) => completed(sink, options, &config, report),
         Err(failure) => {
             writeln!(sink, "  status: failed; completion=unavailable")?;
             if let Some(partial) = &failure.partial_report {
@@ -122,7 +130,7 @@ pub(crate) fn write_detailed(
                     partial.completion,
                     partial.summary_published,
                 )?;
-                details(sink, options, &Details::from(partial.as_ref()))?;
+                details(sink, options, &config, &Details::from(partial.as_ref()))?;
             } else {
                 writeln!(
                     sink,
@@ -150,8 +158,7 @@ fn closure_limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
 }
 
 /// The ceilings as the session takes them: given, or scaled by the allowance.
-fn limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
-    let c = crate::SolveConfig::from(o);
+fn limits(sink: &mut impl Write, o: &Options, c: &crate::SolveConfig) -> io::Result<()> {
     if let Some(seconds) = o.time_limit {
         writeln!(
             sink,
@@ -250,14 +257,19 @@ fn limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
     )
 }
 
-fn completed(sink: &mut impl Write, options: &Options, report: &Report) -> io::Result<()> {
+fn completed(
+    sink: &mut impl Write,
+    options: &Options,
+    config: &crate::SolveConfig,
+    report: &Report,
+) -> io::Result<()> {
     let status = match report.completion {
         Completion::Exhausted => "exhausted",
         Completion::RequestedModels => "requested models reached (partial coverage)",
         Completion::Interrupted => "interrupted (partial coverage)",
     };
     writeln!(sink, "  completion: {status}")?;
-    details(sink, options, &Details::from(report))
+    details(sink, options, config, &Details::from(report))
 }
 
 /// Borrow the shared statistics fields without inventing a successful report.
@@ -321,7 +333,12 @@ impl<'a> From<&'a crate::PartialReport> for Details<'a> {
     }
 }
 
-fn details(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io::Result<()> {
+fn details(
+    sink: &mut impl Write,
+    options: &Options,
+    config: &crate::SolveConfig,
+    report: &Details<'_>,
+) -> io::Result<()> {
     if let Some(usage) = report.expansion {
         let limits = crate::admission::expansion_limits(options);
         writeln!(
@@ -365,8 +382,8 @@ fn details(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io
         writeln!(sink, "  interruption: {reason}")?;
     }
     if let Some(stats) = report.countermodel_statistics {
-        formula(sink, options, report)?;
-        countermodel(sink, options, stats)?;
+        formula(sink, options, config, report)?;
+        countermodel(sink, config, stats)?;
         writeln!(
             sink,
             "  discovered gate tuples: inapplicable (complete semantic candidates)"
@@ -614,7 +631,7 @@ fn lazy_buffer_usage(sink: &mut impl Write, usage: crate::LazyTransportUsage) ->
 
 fn countermodel(
     sink: &mut impl Write,
-    options: &Options,
+    config: &crate::SolveConfig,
     stats: &zetesis_sat::Statistics,
 ) -> io::Result<()> {
     if let Some(support) = stats.support {
@@ -691,11 +708,7 @@ fn countermodel(
         )?;
     }
     if let Some(certified) = stats.certified {
-        certificate(
-            sink,
-            &certified,
-            crate::SolveConfig::from(options).max_completion_scratch_bytes,
-        )?;
+        certificate(sink, &certified, config.max_completion_scratch_bytes)?;
     }
     Ok(())
 }
@@ -766,7 +779,12 @@ fn certificate(
     Ok(())
 }
 
-fn formula(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io::Result<()> {
+fn formula(
+    sink: &mut impl Write,
+    options: &Options,
+    config: &crate::SolveConfig,
+    report: &Details<'_>,
+) -> io::Result<()> {
     let oracle = match report
         .countermodel_statistics
         .and_then(|s| s.certified)
@@ -796,7 +814,7 @@ fn formula(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io
             execution.completion.failed,
             execution.completion.requested_scratch_bytes,
             execution.completion.peak_scratch_bytes,
-            crate::SolveConfig::from(options).max_completion_scratch_bytes,
+            config.max_completion_scratch_bytes,
             execution.completion.overflowed
         )?;
         writeln!(
@@ -830,8 +848,7 @@ fn formula(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io
         writeln!(
             sink,
             "  formula batch limits: candidates={}; pending bytes={}",
-            options.batch_size,
-            crate::SolveConfig::from(options).max_batch_bytes
+            options.batch_size, config.max_batch_bytes
         )?;
         if !execution.adapter.is_empty() {
             formula_gpu(sink, execution)?;
