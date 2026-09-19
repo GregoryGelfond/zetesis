@@ -97,7 +97,6 @@ struct Live {
     work: AtomicU64,
     countermodel_queries: AtomicU64,
     countermodels: AtomicU64,
-    stable_models: AtomicU64,
     /// The workers' phase timings, one pair of counters per phase.
     timings: [LivePhase; 5],
 }
@@ -300,7 +299,6 @@ impl ParallelRegions {
             candidates: Live::read(&self.shared.candidates),
             countermodel_queries: Live::read(&live.countermodel_queries),
             countermodels: Live::read(&live.countermodels),
-            stable_models: Live::read(&live.stable_models),
             phase_timings: self.shared.timed.then(|| live.timings()),
             ..self.merged
         }
@@ -429,13 +427,10 @@ impl Drop for ParallelRegions {
     }
 }
 
+/// Merge a joined worker's certificate and reduct receipts; its candidate,
+/// query and countermodel counts reached the live counters as it went, and
+/// the coordinator counts the stable models it returns.
 fn merge_membership(into: &mut Statistics, from: &Statistics) {
-    into.candidates = into.candidates.saturating_add(from.candidates);
-    into.countermodel_queries = into
-        .countermodel_queries
-        .saturating_add(from.countermodel_queries);
-    into.countermodels = into.countermodels.saturating_add(from.countermodels);
-    into.stable_models = into.stable_models.saturating_add(from.stable_models);
     into.reduct.original_work = into
         .reduct
         .original_work
@@ -689,11 +684,7 @@ fn leaf<'a>(
         report.statistics.countermodels - countermodels_before,
     );
     match verdict {
-        Check::Stable => {
-            report.statistics.stable_models += 1;
-            Live::add(&shared.live.stable_models, 1);
-            Ok(Some(candidate))
-        }
+        Check::Stable => Ok(Some(candidate)),
         Check::NonMinimal(_) | Check::Unsupported { .. } => Ok(None),
         Check::NotModel | Check::Inconclusive(_) => Err(Incomplete::InvalidWitness),
     }
