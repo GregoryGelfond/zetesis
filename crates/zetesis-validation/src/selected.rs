@@ -140,6 +140,51 @@ pub struct NativeExecution {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub time_limit_seconds: Option<std::num::NonZeroU64>,
 }
+impl NativeExecution {
+    /// The command-line arguments that request this execution of the native
+    /// solver, in one fixed order: the backend, oracle, grounder, workers,
+    /// completion workers, batch size, completion scratch and model count,
+    /// then the join strategy, the search method and the deadline when the
+    /// profile names them. A campaign appends its output flags and the input.
+    pub(crate) fn arguments(&self) -> Vec<std::ffi::OsString> {
+        let values = [
+            ("--backend", self.backend.label().into()),
+            ("--oracle", self.oracle.label().into()),
+            ("--grounder", self.grounder.label().into()),
+            ("--workers", self.workers.to_string()),
+            ("--completion-workers", self.completion_workers.to_string()),
+            ("--batch-size", self.batch_size.to_string()),
+            (
+                "--max-completion-scratch-bytes",
+                self.max_completion_scratch_bytes.to_string(),
+            ),
+            ("--models", "0".into()),
+        ];
+        values
+            .into_iter()
+            .flat_map(|(flag, value)| [flag.into(), value.into()])
+            .chain(self.formula_joins.into_iter().flat_map(|joins| {
+                [
+                    std::ffi::OsString::from("--formula-joins"),
+                    std::ffi::OsString::from(joins.label()),
+                ]
+            }))
+            .chain(self.search.into_iter().flat_map(|search| {
+                [
+                    std::ffi::OsString::from("--search"),
+                    std::ffi::OsString::from(search.label()),
+                ]
+            }))
+            .chain(self.time_limit_seconds.into_iter().flat_map(|seconds| {
+                [
+                    std::ffi::OsString::from("--time-limit"),
+                    std::ffi::OsString::from(seconds.to_string()),
+                ]
+            }))
+            .collect()
+    }
+}
+
 impl Default for NativeExecution {
     fn default() -> Self {
         Self {

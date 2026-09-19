@@ -24,6 +24,36 @@ fn complete(exit: i32) -> InvocationRecord {
 }
 
 #[test]
+fn a_deadline_profile_passes_its_time_limit_to_the_native_solver() {
+    // The limit is part of the profile's identity and the report records it,
+    // so the solver must be asked for it: after the search method, before the
+    // output flags, as the matrix campaign asks.
+    let input = Path::new("/unused/case.lp");
+    let plain: Vec<String> = native_arguments(NativeExecution::default(), input)
+        .iter()
+        .map(|argument| argument.to_string_lossy().into_owned())
+        .collect();
+    assert!(!plain.iter().any(|flag| flag == "--time-limit"));
+    let deadline: Vec<String> = native_arguments(
+        NativeExecution {
+            time_limit_seconds: std::num::NonZeroU64::new(3600),
+            ..Default::default()
+        },
+        input,
+    )
+    .iter()
+    .map(|argument| argument.to_string_lossy().into_owned())
+    .collect();
+    let position = deadline
+        .iter()
+        .position(|flag| flag == "--time-limit")
+        .unwrap();
+    assert_eq!(deadline[position + 1], "3600");
+    assert_eq!(deadline[position + 2], "--json");
+    assert_eq!(deadline.last().unwrap(), "/unused/case.lp");
+}
+
+#[test]
 fn unreaped_children_preclude_completed_evidence() {
     let mut record = complete(0);
     record.unresolved_child = Some(123);

@@ -440,43 +440,12 @@ fn arguments<'a>(
         ),
         Producer::Native { profile } => {
             let profile = request.plan.profiles[profile];
-            let values = [
-                ("--backend", profile.backend.label().into()),
-                ("--grounder", profile.grounder.label().into()),
-                ("--oracle", profile.oracle.label().into()),
-                ("--workers", profile.workers.to_string()),
-                (
-                    "--completion-workers",
-                    profile.completion_workers.to_string(),
-                ),
-                ("--batch-size", profile.batch_size.to_string()),
-                (
-                    "--max-completion-scratch-bytes",
-                    profile.max_completion_scratch_bytes.to_string(),
-                ),
-                ("--models", "0".into()),
-                ("--color", "never".into()),
-            ];
             (
                 request.native,
-                values
+                profile
+                    .arguments()
                     .into_iter()
-                    .flat_map(|(flag, value)| [flag.into(), value.into()])
-                    .chain(profile.formula_joins.into_iter().flat_map(|joins| {
-                        [
-                            OsString::from("--formula-joins"),
-                            OsString::from(joins.label()),
-                        ]
-                    }))
-                    .chain(profile.search.into_iter().flat_map(|search| {
-                        [OsString::from("--search"), OsString::from(search.label())]
-                    }))
-                    .chain(profile.time_limit_seconds.into_iter().flat_map(|seconds| {
-                        [
-                            OsString::from("--time-limit"),
-                            OsString::from(seconds.to_string()),
-                        ]
-                    }))
+                    .chain(["--color".into(), "never".into()])
                     .chain(["--json".into(), "--stats".into()])
                     .collect(),
             )
