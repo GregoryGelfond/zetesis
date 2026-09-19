@@ -58,7 +58,13 @@ fn compare(input: &Theory) {
             },
             &control,
         );
-        let fresh = zetesis_sat::check(input, &current, Limits::default(), &control);
+        let fresh = zetesis_sat::check_with(
+            input,
+            &current,
+            zetesis_sat::SearchMethod::Clauses,
+            Limits::default(),
+            &control,
+        );
         let exhaustive = zetesis_ferraris::check(
             input,
             &current,

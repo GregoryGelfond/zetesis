@@ -288,3 +288,13 @@ fn the_search_methods_have_stable_spellings() {
 fn the_default_search_method_is_regions() {
     assert_eq!(SearchMethod::default(), SearchMethod::Regions);
 }
+
+#[test]
+fn the_default_entry_enumerates_by_regions() {
+    // `new` follows the type's default: the regions proposer's counts are
+    // present and no clause form was built.
+    let theory = mixed();
+    let search = StableModels::new(&theory, Limits::default(), Control::default()).unwrap();
+    assert!(search.statistics().regions.is_some());
+    assert!(search.statistics().support.is_none());
+}

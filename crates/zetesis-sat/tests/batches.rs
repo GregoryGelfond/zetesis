@@ -9,6 +9,20 @@ use zetesis_sat::{
     BatchError, BatchLimits, BatchVerdict, Control, Incomplete, Limits, StableModels,
 };
 
+/// Enumerate by the clause forms, the subject of the tests below.
+fn by_clauses(
+    theory: &zetesis_ferraris::Theory,
+    limits: zetesis_sat::Limits,
+    control: zetesis_sat::Control,
+) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
+    zetesis_sat::StableModels::with_method(
+        theory,
+        zetesis_sat::SearchMethod::Clauses,
+        limits,
+        control,
+    )
+}
+
 fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
     Theory::new(atoms, nodes, roots, AdmissionLimits::default()).unwrap()
 }
@@ -269,7 +283,7 @@ fn history_limit_preserves_the_checked_batch_prefix() {
         },
         ..Default::default()
     };
-    let mut search = StableModels::new(&empty, bounded, Control::default()).unwrap();
+    let mut search = by_clauses(&empty, bounded, Control::default()).unwrap();
     let batch = search
         .next_batch(limits(2), |_, c| {
             Ok::<_, Infallible>(vec![BatchVerdict::NoProperSubset; c.len()])

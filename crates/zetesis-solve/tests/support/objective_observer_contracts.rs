@@ -16,6 +16,20 @@ use crate::countermodel::Input;
 use crate::execution_observation::Observer;
 use crate::{ExecutionObservation, ExecutionObserver, SolveConfig, SolveError};
 
+/// Enumerate by the clause forms, the subject of the tests below.
+fn by_clauses(
+    theory: &zetesis_ferraris::Theory,
+    limits: zetesis_sat::Limits,
+    control: zetesis_sat::Control,
+) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
+    zetesis_sat::StableModels::with_method(
+        theory,
+        zetesis_sat::SearchMethod::Clauses,
+        limits,
+        control,
+    )
+}
+
 fn admitted(source: &str) -> AdmittedFormula {
     admit_formula(
         source.into(),
@@ -73,7 +87,7 @@ fn attempt(
     if !foreign {
         limits.admission.max_variables = original.atoms().len();
     }
-    let mut models = StableModels::new(original.theory(), limits, Control::default()).unwrap();
+    let mut models = by_clauses(original.theory(), limits, Control::default()).unwrap();
     let result = bounds.improve(
         score.score(),
         &mut models,

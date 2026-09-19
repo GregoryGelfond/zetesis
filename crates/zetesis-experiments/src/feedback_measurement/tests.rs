@@ -2,6 +2,20 @@ use super::*;
 use zetesis_cpu::{Control, Stop};
 use zetesis_sat::{Check, CheckedInterpretation};
 
+/// Enumerate by the clause forms, the subject of the tests below.
+fn by_clauses(
+    theory: &zetesis_ferraris::Theory,
+    limits: zetesis_sat::Limits,
+    control: zetesis_sat::Control,
+) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
+    zetesis_sat::StableModels::with_method(
+        theory,
+        zetesis_sat::SearchMethod::Clauses,
+        limits,
+        control,
+    )
+}
+
 fn checked(source: &zetesis_ferraris::Theory, bits: u64) -> CheckedInterpretation {
     zetesis_sat::check_interpretation(
         fixtures::interpretation(source, bits).unwrap(),
@@ -484,8 +498,7 @@ fn refused_installation_retains_the_first_answer() {
     )
     .unwrap();
     assert!(!store.guards.is_empty());
-    let mut reference =
-        zetesis_sat::StableModels::new(&source, configuration.native(), control.clone()).unwrap();
+    let mut reference = by_clauses(&source, configuration.native(), control.clone()).unwrap();
     let first = fixtures::bits(&reference.next().unwrap().unwrap());
     // An actually observed native work boundary, not a guessed timeout or quota.
     // The identical setup and first next call fit; the first extra restriction

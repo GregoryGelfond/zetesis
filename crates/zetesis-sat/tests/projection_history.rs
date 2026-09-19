@@ -5,8 +5,22 @@ use std::num::NonZeroUsize;
 use zetesis_ferraris::{AdmissionLimits, Node, Theory};
 use zetesis_sat::{
     BatchError, BatchLimits, BatchVerdict, Control, Incomplete, Limits, ProjectionLimits,
-    ProjectionResource, StableModels,
+    ProjectionResource,
 };
+
+/// Enumerate by the clause forms, the subject of the tests below.
+fn by_clauses(
+    theory: &zetesis_ferraris::Theory,
+    limits: zetesis_sat::Limits,
+    control: zetesis_sat::Control,
+) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
+    zetesis_sat::StableModels::with_method(
+        theory,
+        zetesis_sat::SearchMethod::Clauses,
+        limits,
+        control,
+    )
+}
 
 fn choices() -> Theory {
     // Two independent choices: every one of the four interpretations is stable.
@@ -30,7 +44,7 @@ fn choices() -> Theory {
 #[test]
 fn history_refusals_preserve_the_checked_answer() {
     let input = choices();
-    let mut reference = StableModels::new(&input, Limits::default(), Control::default()).unwrap();
+    let mut reference = by_clauses(&input, Limits::default(), Control::default()).unwrap();
     let header = usize::try_from(reference.statistics().projections.retained_bytes).unwrap();
     let expected: Vec<_> = reference.next().unwrap().unwrap().atoms().collect();
     for (resource, projections, required, limit) in [
@@ -62,7 +76,7 @@ fn history_refusals_preserve_the_checked_answer() {
             header as u128,
         ),
     ] {
-        let mut search = StableModels::new(
+        let mut search = by_clauses(
             &input,
             Limits {
                 projections,
@@ -107,7 +121,7 @@ fn history_refusals_preserve_the_checked_answer() {
 #[test]
 fn checker_retry_keeps_the_original_history_stop() {
     let input = Theory::new(0, vec![], vec![], AdmissionLimits::default()).unwrap();
-    let mut search = StableModels::new(
+    let mut search = by_clauses(
         &input,
         Limits {
             projections: ProjectionLimits {

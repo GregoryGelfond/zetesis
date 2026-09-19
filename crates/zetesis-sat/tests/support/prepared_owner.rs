@@ -22,7 +22,13 @@ fn choice() -> Theory {
 #[test]
 fn ordinary_restrictions_keep_the_original_prepared_owner() {
     let theory = choice();
-    let mut search = StableModels::new(&theory, Limits::default(), Control::default()).unwrap();
+    let mut search = StableModels::with_method(
+        &theory,
+        crate::SearchMethod::Clauses,
+        Limits::default(),
+        Control::default(),
+    )
+    .unwrap();
     search.enable_phase_timing();
     let first = search.next().unwrap().unwrap();
     assert_eq!(first.atoms().count(), 0);
@@ -56,7 +62,13 @@ fn ordinary_restrictions_keep_the_original_prepared_owner() {
 
 #[test]
 fn all_certified_batches_do_not_prepare_a_reduct() {
-    let mut search = StableModels::new(&choice(), Limits::default(), Control::default()).unwrap();
+    let mut search = StableModels::with_method(
+        &choice(),
+        crate::SearchMethod::Clauses,
+        Limits::default(),
+        Control::default(),
+    )
+    .unwrap();
     search.enable_phase_timing();
     let output = search
         .next_batch(
@@ -89,7 +101,13 @@ fn preparation_refusal_preserves_pending_candidate_coverage() {
         max_reduct_bytes: 0,
         ..Default::default()
     };
-    let mut search = StableModels::new(&choice(), limits, Control::default()).unwrap();
+    let mut search = StableModels::with_method(
+        &choice(),
+        crate::SearchMethod::Clauses,
+        limits,
+        Control::default(),
+    )
+    .unwrap();
     let result = search.next_batch(
         BatchLimits {
             max_candidates: NonZeroUsize::new(2).unwrap(),

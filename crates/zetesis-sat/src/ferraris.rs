@@ -153,9 +153,11 @@ fn verification(limits: Limits) -> zetesis_ferraris::Limits {
     }
 }
 
-/// Check stability through a classical proper-subset query of the frozen reduct
-/// on the clause kernel. No enumeration of all subsets or invocation of an
-/// external solver occurs. `max_candidates` applies only to [`StableModels`].
+/// Check stability through the proper-subset query of the frozen reduct by
+/// the default method, [`SearchMethod::default`]: a region tree narrowed by
+/// the reduct's readings. [`check_with`] chooses the method. No enumeration
+/// of all subsets or invocation of an external solver occurs.
+/// `max_candidates` applies only to [`StableModels`].
 #[must_use]
 pub fn check(
     theory: &Theory,
@@ -163,7 +165,7 @@ pub fn check(
     limits: Limits,
     control: &Control,
 ) -> Check {
-    check_with(theory, candidate, SearchMethod::Clauses, limits, control)
+    check_with(theory, candidate, SearchMethod::default(), limits, control)
 }
 
 /// Check stability by the chosen method: the proper-subset query of the
@@ -338,19 +340,19 @@ pub struct StableModels {
     reduct: crate::prepared_reduct::State,
 }
 impl StableModels {
-    /// Enumerate with the clauses proposer: encode the original theory once,
-    /// retaining its immutable instance identity, and try a complete ordinary
-    /// disjunctive support restriction on the outer CNF. Rich asserted heads
-    /// and optional formula/CNF shape limits retain general candidate search.
-    /// Construction and failed encoding work stay charged. The optional
-    /// formula bounds map SAT variables to atoms, literal units to nodes and
-    /// clause units to roots; final encoding uses remaining CNF limits.
-    /// Original-model and frozen-reduct checks always use the original theory.
+    /// Enumerate by the default method, [`SearchMethod::default`]: regions
+    /// of the candidate space narrowed by the theory's readings, with no
+    /// clause form built. [`Self::with_method`] chooses the method; under
+    /// [`SearchMethod::Clauses`] the original theory is encoded once,
+    /// retaining its immutable instance identity, with a complete ordinary
+    /// disjunctive support restriction on the outer CNF, and construction and
+    /// failed encoding work stay charged. Original-model and frozen-reduct
+    /// checks always use the original theory, whichever the method.
     ///
     /// # Errors
-    /// Refuses encoding/history admission, work limits, cancellation or allocation.
+    /// Refuses admission, work limits, cancellation or allocation.
     pub fn new(theory: &Theory, limits: Limits, control: Control) -> Result<Self, Incomplete> {
-        Self::with_method(theory, SearchMethod::Clauses, limits, control)
+        Self::with_method(theory, SearchMethod::default(), limits, control)
     }
 
     /// Enumerate by regions with several workers walking the tree at once,
