@@ -366,7 +366,7 @@ fn non_pass_cells_are_reported_by_decision_not_averaged() {
 }
 
 #[test]
-fn reports_must_share_their_cells_and_profiles() {
+fn reports_must_share_their_cells() {
     let one = report(&["generated/chain-1000.lp"], &[&[1]], &[1], None);
     let other = report(&["generated/chain-2000.lp"], &[&[1]], &[1], None);
     assert!(matches!(
@@ -382,7 +382,36 @@ fn reports_must_share_their_cells_and_profiles() {
         ]),
         Err(ViewError::Cells { .. })
     ));
+}
+
+#[test]
+fn reports_must_share_their_profiles() {
+    let one = report(&["generated/chain-1000.lp"], &[&[1]], &[1], None);
+    let mut other = one.clone();
+    other["report"]["plan"]["profiles"][0]["workers"] = json!(2);
+    assert!(matches!(
+        compare(&[
+            Labelled {
+                label: "a",
+                report: &one
+            },
+            Labelled {
+                label: "b",
+                report: &other
+            }
+        ]),
+        Err(ViewError::Profiles { .. })
+    ));
+}
+
+#[test]
+fn an_empty_comparison_is_refused() {
     assert!(matches!(compare(&[]), Err(ViewError::Empty)));
+}
+
+#[test]
+fn a_repeated_label_is_refused() {
+    let one = report(&["generated/chain-1000.lp"], &[&[1]], &[1], None);
     let duplicate = compare(&[
         Labelled {
             label: "a",
