@@ -2732,27 +2732,27 @@
     },
     {
       "file": "Zetesis/Frontier.lean",
-      "line": 36,
+      "line": 37,
       "name": "Zetesis.Pending.outputs_append"
     },
     {
       "file": "Zetesis/Frontier.lean",
-      "line": 40,
+      "line": 41,
       "name": "Zetesis.Pending.outputs_cons"
     },
     {
       "file": "Zetesis/Frontier.lean",
-      "line": 72,
+      "line": 73,
       "name": "Zetesis.Pending.Step.perm"
     },
     {
       "file": "Zetesis/Frontier.lean",
-      "line": 107,
+      "line": 108,
       "name": "Zetesis.Pending.Walk.perm"
     },
     {
       "file": "Zetesis/Frontier.lean",
-      "line": 118,
+      "line": 119,
       "name": "Zetesis.Pending.Walk.exhausted"
     },
     {
@@ -6591,7 +6591,7 @@
     "Zetesis/FormulaBounds.lean": "f9ac905d0dd31cbc5f1a72d3dbb993bc7cf4e45d83fed3f3d96d343ba91fc248",
     "Zetesis/FormulaChains.lean": "77be5aa437b90dde0fbc145363bf9e533d28dfad8f48f3d27682fb13684bd4e9",
     "Zetesis/FormulaRegions.lean": "64a8e7764e6e5afa11355dc71601c3a19b8f77bbea71c2c497aa5b77cc62451a",
-    "Zetesis/Frontier.lean": "d60b411083cadfbc3b2ccb95e9991c05b9ac66bd37c3db6539d8b4b1a6e524ff",
+    "Zetesis/Frontier.lean": "1fe9dd24a672de72b6e3fdb567f9dc1e3aae69382b36557523bd5895b693804f",
     "Zetesis/GatePositions.lean": "0ce62d9226db2cf7b0a9374461b65050aab1e15dd39bd939c37190e8729dac6d",
     "Zetesis/GateProjection.lean": "d8fffb8e150ab7a0852b097c188da9c4d14f51242ac05be843d98f07940693a6",
     "Zetesis/GateRestrictions.lean": "935995f17824d3eeb895cd7368c20b029585efe30f24590870a1331fa8a9011c",

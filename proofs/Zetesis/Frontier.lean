@@ -5,7 +5,8 @@ import Zetesis.Search
 
 A coverage tree is walked by keeping a frontier: the regions reached and not
 yet visited, each with the subtree that covers it, as a worker's stack and the
-shared pool hold them under `--workers`. A step takes any pending region,
+shared pool hold them when several workers walk the tree. A step takes any
+pending region,
 whichever worker holds it, and does what its subtree says: a refuted region is
 dropped, an accepted leaf is emitted, a split region is replaced by its two
 children, a narrowed region by its child. Steps interleave in any order, and a
