@@ -26,8 +26,7 @@ pub(crate) fn validate_combination(options: &SolveConfig) -> Result<(), SolveErr
         validate_countermodel(options)?;
     }
     // Each assigned worker is admitted at the full per-closure allowance, so
-    // the product is what the collective ceiling must hold; a session would
-    // otherwise learn this from its first batch.
+    // the collective ceiling must hold the product before a session starts.
     let workers = options.workers.get();
     if workers
         .checked_mul(options.max_closure_bytes)

@@ -69,9 +69,9 @@ pub struct Options {
     /// Advanced formula search method, for proposing candidates and for the
     /// reduct's proper-subset query alike. Regions, the default, narrow the
     /// candidate space and the reduct's subsets by the theory's readings;
-    /// clauses is the classical search over a clause form, kept for
-    /// comparison, with its own batched completion, `--completion-workers`
-    /// and scratch ceiling. The reduct decides membership either way.
+    /// clauses is the classical search over a clause form, with its own
+    /// batched completion, `--completion-workers` and scratch ceiling. The
+    /// reduct decides membership either way.
     #[arg(long, value_parser = search_parser(), default_value = "regions", hide_short_help = true)]
     pub search: SearchMethod,
     /// Print grounding, solving and execution statistics on stderr.
@@ -571,7 +571,7 @@ fn search_parser() -> impl TypedValueParser<Value = SearchMethod> {
         (
             SearchMethod::Clauses,
             PossibleValue::new(SearchMethod::Clauses.label())
-                .help("The retained clause search for candidates and the clause query for the reduct."),
+                .help("The classical search over a clause form for candidates, and the clause query for the reduct."),
         ),
     ])
 }

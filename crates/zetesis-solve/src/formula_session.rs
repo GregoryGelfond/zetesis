@@ -81,7 +81,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         let models = phases.measure(SolvePhase::CandidateSetup, || {
             // Several workers decide their leaves themselves, which the
             // device protocol cannot take: a device backend keeps the scalar
-            // walk and batches its leaves as before.
+            // walk and batches its leaves.
             if config.search == crate::SearchMethod::Regions
                 && config.workers.get() > 1
                 && matches!(config.backend, crate::Backend::Auto | crate::Backend::Cpu)

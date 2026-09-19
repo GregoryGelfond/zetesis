@@ -123,7 +123,7 @@ tree are proposed, and the proper subsets of a candidate are searched as a
 second tree under the frozen reduct, so no clause form is built at all.
 Clauses is the classical search over a Tseitin encoding for both, exact
 exclusion of every candidate proposed and a clause query of the frozen
-reduct, kept for comparison.
+reduct.
 The reduct decides membership either way, and a countermodel is validated
 independently of the method that found it; the flag changes which
 candidate is proposed next and the work charged, never whether one is
