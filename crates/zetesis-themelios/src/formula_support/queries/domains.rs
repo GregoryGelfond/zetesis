@@ -65,8 +65,10 @@ pub(crate) struct Guards<'a, 'source> {
 
 /// The narrowed candidates of one rule's variables: a property of the rule
 /// and the analysis alone, prepared once and resolved into every completion
-/// snapshot and the final one. Its storage is bounded by the analysis's value
-/// entries, as the analysis heap is, and lies outside the support allowance.
+/// snapshot and the final one. Its storage is one reference per candidate
+/// value of each variable of each rule, every reference charged one unit of
+/// the grounding work as it is kept, so the work ceiling bounds it; it is
+/// kept for the whole grounding and lies outside the support allowance.
 pub(crate) struct Candidates<'source> {
     /// Each variable's candidates, in canonical order; `None` when no
     /// argument the variable occurs at has a finite domain, so every value
@@ -84,6 +86,9 @@ impl<'source> Candidates<'source> {
         counters: &mut Counters,
     ) -> Result<Self, FormulaFailure> {
         let mut by_variable = Vec::new();
+        by_variable
+            .try_reserve_exact(rule.variables)
+            .map_err(|_| failure(Failure::Allocation, rule.location))?;
         for _ in 0..rule.variables {
             counters.work(limits, rule.location)?;
             by_variable.push(None);
@@ -124,6 +129,10 @@ impl<'source> Candidates<'source> {
                     meet(variable_candidates, domain, limits, counters, rule.location)?;
                 }
                 counters.work(limits, rule.location)?;
+                candidates
+                    .occurrences
+                    .try_reserve(1)
+                    .map_err(|_| failure(Failure::Allocation, rule.location))?;
                 candidates.occurrences.push(Occurrence {
                     literal,
                     pattern,
