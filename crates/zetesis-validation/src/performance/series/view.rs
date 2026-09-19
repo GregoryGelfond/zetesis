@@ -951,18 +951,15 @@ fn timing(labelled: &Labelled<'_>, samples: &[&Value]) -> Result<Timing, ViewErr
                 })
         })
         .collect::<Result<Vec<_>, _>>()?;
-    intervals.sort_unstable();
-    let count = intervals.len();
-    let median = if count.is_multiple_of(2) {
-        u64::midpoint(intervals[count / 2 - 1], intervals[count / 2])
-    } else {
-        intervals[count / 2]
-    };
+    let median_ns = median(&mut intervals).ok_or(ViewError::Malformed {
+        label: labelled.label.into(),
+        field: "report.samples",
+    })?;
     Ok(Timing {
-        samples: count,
+        samples: intervals.len(),
         minimum_ns: intervals[0],
-        median_ns: median,
-        maximum_ns: intervals[count - 1],
+        median_ns,
+        maximum_ns: intervals[intervals.len() - 1],
     })
 }
 
@@ -1009,8 +1006,7 @@ fn native(labelled: &Labelled<'_>, case: usize, profile: usize) -> Result<Native
         .iter()
         .filter_map(|record| record["observation"]["timing"]["driver_elapsed_ns"].as_u64())
         .collect();
-    drivers.sort_unstable();
-    let driver_median_ns = (!drivers.is_empty()).then(|| drivers[drivers.len() / 2]);
+    let driver_median_ns = median(&mut drivers);
     let mut phases: BTreeMap<String, Vec<u64>> = BTreeMap::new();
     for record in &records {
         if let Some(measured) = record["observation"]["timing"]["phases"].as_object() {
@@ -1023,10 +1019,8 @@ fn native(labelled: &Labelled<'_>, case: usize, profile: usize) -> Result<Native
     }
     let phases = phases
         .into_iter()
-        .map(|(name, mut values)| {
-            values.sort_unstable();
-            let median_ns = values[values.len() / 2];
-            (name, PhaseTiming { median_ns })
+        .filter_map(|(name, mut values)| {
+            median(&mut values).map(|median_ns| (name, PhaseTiming { median_ns }))
         })
         .collect();
     let peak_rss_bytes = memory(labelled, case, |producer| {
@@ -1096,8 +1090,8 @@ fn reference(labelled: &Labelled<'_>, case: usize) -> Result<Option<Reference>, 
     }
     Ok(Some(Reference {
         timing,
-        grounding_ns: upper_median(&mut grounding),
-        solving_ns: upper_median(&mut solving),
+        grounding_ns: median(&mut grounding),
+        solving_ns: median(&mut solving),
         peak_rss_bytes: memory(labelled, case, |producer| producer["solver"] == "reference")?,
     }))
 }
@@ -1123,9 +1117,9 @@ fn breakdown(records: &[&Value]) -> Breakdown {
         membership.extend(sum(&MEMBERSHIP_PHASES));
     }
     Breakdown {
-        grounding: upper_median(&mut grounding),
-        proposal: upper_median(&mut proposal),
-        membership: upper_median(&mut membership),
+        grounding: median(&mut grounding),
+        proposal: median(&mut proposal),
+        membership: median(&mut membership),
     }
 }
 
@@ -1146,13 +1140,21 @@ fn memory(
         })
         .filter_map(|sample| sample["memory"]["peak_rss_bytes"].as_u64())
         .collect();
-    Ok(upper_median(&mut peaks))
+    Ok(median(&mut peaks))
 }
 
-/// The upper median, as the phase medians are taken; `None` of nothing.
-fn upper_median(values: &mut [u64]) -> Option<u64> {
+/// The one median of the file: the middle value, or the midpoint of the two
+/// middle values for an even count; `None` of nothing.
+fn median(values: &mut [u64]) -> Option<u64> {
     values.sort_unstable();
-    values.get(values.len() / 2).copied()
+    let count = values.len();
+    match count {
+        0 => None,
+        _ if count.is_multiple_of(2) => {
+            Some(u64::midpoint(values[count / 2 - 1], values[count / 2]))
+        }
+        _ => Some(values[count / 2]),
+    }
 }
 
 /// Seconds as the reference prints them to whole nanoseconds; a negative
