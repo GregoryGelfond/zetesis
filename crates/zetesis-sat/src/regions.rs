@@ -21,7 +21,9 @@
 
 use zetesis_cpu::Stop;
 use zetesis_cpu::regions::{Counting, Narrowing, Region, Traversal, Visit};
-use zetesis_ferraris::{Interpretation, Knowledge, Narrower, Producers, RegionLimits, Theory};
+use zetesis_ferraris::{
+    Interpretation, Knowledge, Narrower, NarrowingStatistics, Producers, RegionLimits, Theory,
+};
 
 use crate::Incomplete;
 use crate::search::{Budget, Quota};
@@ -141,23 +143,60 @@ pub(crate) struct RegionSearch {
     statistics: RegionSearchStatistics,
 }
 
+/// What opening a region search over a theory establishes: its producers,
+/// when it lies in the producer fragment, its index, and the receipts of
+/// the extraction and the indexing, both charged to the budget.
+pub(crate) struct Opened {
+    pub(crate) producers: Option<Producers>,
+    pub(crate) narrower: Narrower,
+    pub(crate) statistics: RegionSearchStatistics,
+}
+
+/// Open a region search over the theory: extract its producers and index
+/// it, charging both.
+pub(crate) fn open(theory: &Theory, budget: &mut Budget<'_>) -> Result<Opened, Incomplete> {
+    let extraction =
+        zetesis_ferraris::producers(theory, limits(budget), budget.control).map_err(stopped)?;
+    budget.charge(extraction.work)?;
+    let narrower = Narrower::new(theory);
+    budget.charge(narrower.work())?;
+    Ok(Opened {
+        statistics: RegionSearchStatistics {
+            counts: RegionCounts {
+                work: extraction.work + narrower.work(),
+                ..Default::default()
+            },
+            producers: extraction.producers.is_some(),
+        },
+        producers: extraction.producers,
+        narrower,
+    })
+}
+
+/// The interpretation a leaf proposes: the atoms the region holds.
+pub(crate) fn leaf_interpretation(
+    theory: &Theory,
+    region: &Region,
+) -> Result<Interpretation, Incomplete> {
+    let mut selected = crate::search::storage(theory.atom_count())?;
+    selected.extend(region.held());
+    Interpretation::new(theory, selected).map_err(|error| match error {
+        zetesis_ferraris::AdmissionError::Allocation => Incomplete::Allocation,
+        _ => Incomplete::InvalidWitness,
+    })
+}
+
 impl RegionSearch {
     /// Extract the producers and open the root region.
     pub(crate) fn new(theory: &Theory, budget: &mut Budget<'_>) -> Result<Self, Incomplete> {
-        let extraction =
-            zetesis_ferraris::producers(theory, limits(budget), budget.control).map_err(stopped)?;
-        budget.charge(extraction.work)?;
-        let narrower = Narrower::new(theory);
-        budget.charge(narrower.work())?;
+        let Opened {
+            producers,
+            narrower,
+            statistics,
+        } = open(theory, budget)?;
         Ok(Self {
-            statistics: RegionSearchStatistics {
-                counts: RegionCounts {
-                    work: extraction.work + narrower.work(),
-                    ..Default::default()
-                },
-                producers: extraction.producers.is_some(),
-            },
-            producers: extraction.producers,
+            statistics,
+            producers,
             traversal: Traversal::with_state(
                 Region::undecided(theory.atom_count()),
                 Counting::Never,
@@ -225,25 +264,12 @@ impl RegionSearch {
             )
         });
         let after = traversal.statistics();
-        // Every region visited that was neither refuted nor a leaf was split.
-        let splits = (after.regions - before.regions)
-            - (after.refuted - before.refuted)
-            - (after.decided - before.decided);
-        for _ in 0..splits {
+        for _ in 0..after.splits_since(before) {
             budget.decide()?;
         }
         match visit? {
             None | Some(Visit::Counted(..)) => Ok(None),
-            Some(Visit::Leaf(region, _)) => {
-                let mut selected = crate::search::storage(theory.atom_count())?;
-                selected.extend(region.held());
-                Interpretation::new(theory, selected)
-                    .map_err(|error| match error {
-                        zetesis_ferraris::AdmissionError::Allocation => Incomplete::Allocation,
-                        _ => Incomplete::InvalidWitness,
-                    })
-                    .map(Some)
-            }
+            Some(Visit::Leaf(region, _)) => leaf_interpretation(theory, &region).map(Some),
         }
     }
 }
@@ -289,22 +315,7 @@ pub(crate) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
                 limits(budget),
                 budget.control,
             );
-            let (narrowing, pass) = match result {
-                Ok(outcome) => outcome,
-                Err(Stop::WorkLimit) => {
-                    let remaining = budget.remaining_work();
-                    counts.work += remaining;
-                    budget.charge(remaining)?;
-                    return Err(Incomplete::WorkLimit);
-                }
-                Err(stop) => return Err(stopped(stop)),
-            };
-            counts.propagations += pass.propagations;
-            counts.forced += pass.forced;
-            counts.cut += pass.cut;
-            counts.work += pass.work;
-            budget.charge(pass.work)?;
-            match narrowing {
+            match account(result, budget, counts)? {
                 Narrowing::Refuted => return Ok(Narrowing::Refuted),
                 Narrowing::Fixed { changed: moved } => round |= moved,
             }
@@ -314,6 +325,33 @@ pub(crate) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
             return Ok(Narrowing::Fixed { changed });
         }
     }
+}
+
+/// Account one narrowing's outcome: its figures into `counts` and its work
+/// to the budget. A narrowing stopped on the work ceiling has spent at
+/// least the remaining work, which is charged; any other stop is returned
+/// as it is.
+fn account<Q: Quota>(
+    result: Result<(Narrowing, NarrowingStatistics), Stop>,
+    budget: &mut Budget<'_, Q>,
+    counts: &mut RegionCounts,
+) -> Result<Narrowing, Incomplete> {
+    let (narrowing, pass) = match result {
+        Ok(outcome) => outcome,
+        Err(Stop::WorkLimit) => {
+            let remaining = budget.remaining_work();
+            counts.work += remaining;
+            budget.charge(remaining)?;
+            return Err(Incomplete::WorkLimit);
+        }
+        Err(stop) => return Err(stopped(stop)),
+    };
+    counts.propagations += pass.propagations;
+    counts.forced += pass.forced;
+    counts.cut += pass.cut;
+    counts.work += pass.work;
+    budget.charge(pass.work)?;
+    Ok(narrowing)
 }
 
 pub(crate) fn limits<Q: Quota>(budget: &Budget<'_, Q>) -> RegionLimits {
@@ -392,10 +430,7 @@ impl ReductQuery {
             receipts.regions += after.regions - before.regions;
             receipts.refuted += after.refuted - before.refuted;
             receipts.leaves += after.decided - before.decided;
-            let splits = (after.regions - before.regions)
-                - (after.refuted - before.refuted)
-                - (after.decided - before.decided);
-            for _ in 0..splits {
+            for _ in 0..after.splits_since(before) {
                 budget.decide()?;
             }
             match visit? {
@@ -406,13 +441,7 @@ impl ReductQuery {
                     if candidate.atoms().all(|atom| region.is_held(atom)) {
                         continue;
                     }
-                    let mut selected = crate::search::storage(theory.atom_count())?;
-                    selected.extend(region.held());
-                    let subset =
-                        Interpretation::new(theory, selected).map_err(|error| match error {
-                            zetesis_ferraris::AdmissionError::Allocation => Incomplete::Allocation,
-                            _ => Incomplete::InvalidWitness,
-                        })?;
+                    let subset = leaf_interpretation(theory, &region)?;
                     return crate::ferraris::checked_countermodel(
                         theory, candidate, subset, limits, budget, statistics,
                     );
@@ -440,20 +469,5 @@ fn narrow_frozen<Q: Quota>(
         limits(budget),
         budget.control,
     );
-    let (narrowing, pass) = match result {
-        Ok(outcome) => outcome,
-        Err(Stop::WorkLimit) => {
-            let remaining = budget.remaining_work();
-            receipts.work += remaining;
-            budget.charge(remaining)?;
-            return Err(Incomplete::WorkLimit);
-        }
-        Err(stop) => return Err(stopped(stop)),
-    };
-    receipts.propagations += pass.propagations;
-    receipts.forced += pass.forced;
-    receipts.cut += pass.cut;
-    receipts.work += pass.work;
-    budget.charge(pass.work)?;
-    Ok(narrowing)
+    account(result, budget, receipts)
 }

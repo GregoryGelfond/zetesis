@@ -66,11 +66,9 @@ pub struct ReductWorkspace {
 }
 
 impl ReductWorkspace {
-    /// Evaluate the candidate's original truth into this workspace, under
-    /// the workspace's retained-storage ceiling, charging the evaluation
-    /// work to the reduct receipts. The truth is the frozen mask of the
-    /// candidate's reduct; the second value is the evaluation's retained
-    /// storage.
+    /// Evaluate the candidate's original truth into this workspace: the
+    /// truth as `evaluate_truth` gives it, under this workspace's ceiling
+    /// and with its evaluation workspace.
     pub(crate) fn evaluate<'a>(
         &'a mut self,
         candidate: &'a Interpretation,

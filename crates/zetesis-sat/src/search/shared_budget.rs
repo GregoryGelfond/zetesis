@@ -111,12 +111,11 @@ impl SharedBudget {
         statistics.decisions = self.decisions.load(Ordering::Relaxed);
     }
 
-    /// Every lease has dropped and all workers have joined before this read.
+    /// Every lease has dropped and all workers have joined before this read,
+    /// so the snapshot is exact.
     pub(crate) fn record(&self, statistics: &mut SearchStatistics) {
-        let work = self.lock();
-        debug_assert_eq!(work.outstanding, 0);
-        statistics.work = work.spent;
-        statistics.decisions = self.decisions.load(Ordering::Relaxed);
+        debug_assert_eq!(self.lock().outstanding, 0);
+        self.snapshot(statistics);
     }
 }
 

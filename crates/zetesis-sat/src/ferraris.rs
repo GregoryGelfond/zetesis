@@ -758,18 +758,15 @@ fn advance(
         };
         increment(&mut statistics.candidates)?;
         let result = if let Some(certificate) = certificate {
-            match certified::classify(
+            certified::classify(
                 certificate,
                 &candidate,
                 limits,
                 budget.control,
                 statistics,
                 &mut budget.statistics,
-            )? {
-                certified::Verdict::Stable => Check::Stable,
-                certified::Verdict::NotModel => Check::NotModel,
-                certified::Verdict::Unsupported { atom } => Check::Unsupported { atom },
-            }
+            )?
+            .into()
         } else {
             reduct.check(theory, &candidate, limits, budget, statistics)?
         };

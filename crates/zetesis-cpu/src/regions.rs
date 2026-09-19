@@ -210,6 +210,18 @@ pub struct RegionStatistics {
     pub counted: usize,
 }
 
+impl RegionStatistics {
+    /// The regions split since `before`: every region visited that was
+    /// neither refuted nor a leaf nor counted.
+    #[must_use]
+    pub fn splits_since(self, before: Self) -> usize {
+        (self.regions - before.regions)
+            - (self.refuted - before.refuted)
+            - (self.decided - before.decided)
+            - (self.counted - before.counted)
+    }
+}
+
 /// The coverage tree of a root region, walked depth first. Each region
 /// carries the caller's state `S`, what the narrowing knows about the
 /// region; a split clones it into both children, so that a child starts

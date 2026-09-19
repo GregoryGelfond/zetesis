@@ -221,19 +221,11 @@ impl ParallelRegions {
         control: Control,
         budget: &mut Budget<'_>,
     ) -> Result<Self, Incomplete> {
-        let extraction =
-            zetesis_ferraris::producers(theory, super::regions::limits(budget), budget.control)
-                .map_err(super::regions::stopped)?;
-        budget.charge(extraction.work)?;
-        let narrower = Narrower::new(theory);
-        budget.charge(narrower.work())?;
-        let statistics = RegionSearchStatistics {
-            counts: RegionCounts {
-                work: extraction.work + narrower.work(),
-                ..Default::default()
-            },
-            producers: extraction.producers.is_some(),
-        };
+        let super::regions::Opened {
+            producers,
+            narrower,
+            statistics,
+        } = super::regions::open(theory, budget)?;
         let (sender, receiver) = sync_channel(workers.get() * CHANNEL_SLACK);
         let mut pending = Vec::new();
         pending.try_reserve(1).map_err(|_| Incomplete::Allocation)?;
@@ -244,7 +236,7 @@ impl ParallelRegions {
         Ok(Self {
             shared: Arc::new(Shared {
                 theory: theory.clone(),
-                producers: extraction.producers,
+                producers,
                 narrower,
                 certificate: None,
                 restrictions: RwLock::new(Vec::new()),
@@ -646,12 +638,7 @@ fn leaf<'a>(
     membership: &mut crate::prepared_reduct::State,
     report: &mut WorkerReport,
 ) -> Result<Option<Interpretation>, Incomplete> {
-    let mut selected = crate::search::storage(shared.theory.atom_count())?;
-    selected.extend(region.held());
-    let candidate = Interpretation::new(&shared.theory, selected).map_err(|error| match error {
-        zetesis_ferraris::AdmissionError::Allocation => Incomplete::Allocation,
-        _ => Incomplete::InvalidWitness,
-    })?;
+    let candidate = super::regions::leaf_interpretation(&shared.theory, region)?;
     shared
         .candidates
         .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |count| {
@@ -672,11 +659,7 @@ fn leaf<'a>(
             &mut search,
         );
         budget.statistics = search;
-        match verdict? {
-            certified::Verdict::Stable => Check::Stable,
-            certified::Verdict::NotModel => Check::NotModel,
-            certified::Verdict::Unsupported { atom } => Check::Unsupported { atom },
-        }
+        verdict?.into()
     } else {
         membership.check(
             &shared.theory,

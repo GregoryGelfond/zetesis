@@ -48,6 +48,18 @@ pub(super) enum Verdict {
     },
 }
 
+impl From<Verdict> for crate::Check {
+    /// The check a certificate's verdict is: stable, not a model, or
+    /// unsupported at the atom.
+    fn from(verdict: Verdict) -> Self {
+        match verdict {
+            Verdict::Stable => Self::Stable,
+            Verdict::NotModel => Self::NotModel,
+            Verdict::Unsupported { atom } => Self::Unsupported { atom },
+        }
+    }
+}
+
 impl StableModels {
     /// Try only a tight normal/choice certificate for the original theory.
     /// This compatibility operation never selects the positive-cycle algorithm.
