@@ -280,7 +280,6 @@ impl RegionSearch {
 /// point is reached when a full round changes nothing. A narrowing stopped
 /// on the work ceiling has spent at least the remaining work, which is
 /// charged.
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
     theory: (&Theory, &Narrower),
     producers: Option<&Producers>,

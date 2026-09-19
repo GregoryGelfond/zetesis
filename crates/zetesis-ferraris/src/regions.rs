@@ -68,6 +68,18 @@ struct Producer {
     choice: bool,
 }
 
+/// What one narrowing reads: the theory; the producers of its support
+/// fragment, when the support cut applies; and the frozen truth of every
+/// node under which the theory is read as a candidate's reduct, when it
+/// is. A knowledge is closed under one subject and reused under the same
+/// ([`Knowledge`]).
+#[derive(Clone, Copy)]
+struct Subject<'a> {
+    theory: &'a Theory,
+    producers: Option<&'a Producers>,
+    frozen: Option<&'a [bool]>,
+}
+
 /// The producers of a theory in the support fragment, by head atom.
 #[derive(Clone, Debug)]
 pub struct Producers {
@@ -433,7 +445,12 @@ impl Narrower {
         limits: RegionLimits,
         control: &Control,
     ) -> Result<(Narrowing, NarrowingStatistics), Stop> {
-        self.narrow_with(theory, producers, None, region, knowledge, limits, control)
+        let subject = Subject {
+            theory,
+            producers,
+            frozen: None,
+        };
+        self.narrow_with(subject, region, knowledge, limits, control)
     }
 
     /// Narrow a region of the theory's frozen reduct under a candidate from
@@ -457,23 +474,17 @@ impl Narrower {
         limits: RegionLimits,
         control: &Control,
     ) -> Result<(Narrowing, NarrowingStatistics), Stop> {
-        self.narrow_with(
+        let subject = Subject {
             theory,
-            None,
-            Some(truth),
-            region,
-            knowledge,
-            limits,
-            control,
-        )
+            producers: None,
+            frozen: Some(truth),
+        };
+        self.narrow_with(subject, region, knowledge, limits, control)
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn narrow_with(
         &self,
-        theory: &Theory,
-        producers: Option<&Producers>,
-        frozen: Option<&[bool]>,
+        subject: Subject<'_>,
         region: &mut Region,
         knowledge: &mut Knowledge,
         limits: RegionLimits,
@@ -483,15 +494,7 @@ impl Narrower {
         let known = &mut knowledge.known;
         let mut work = Work::new(limits.max_work);
         let mut statistics = NarrowingStatistics::default();
-        let closed = known.close(
-            theory,
-            self,
-            producers,
-            frozen,
-            region,
-            &mut work,
-            &mut statistics,
-        );
+        let closed = known.close(subject, self, region, &mut work, &mut statistics);
         statistics.work = work.spent;
         if closed? == Step::Contradiction {
             return Ok((Narrowing::Refuted, statistics));
@@ -683,17 +686,19 @@ impl Known {
     /// Close the knowledge from the region's decisions, falsum and the
     /// roots. Each event on the worklist follows a new bit, or is one of
     /// the initial seeds, so the events are bounded by the bits.
-    #[allow(clippy::too_many_arguments)]
     fn close(
         &mut self,
-        theory: &Theory,
+        subject: Subject<'_>,
         index: &Narrower,
-        producers: Option<&Producers>,
-        frozen: Option<&[bool]>,
         region: &Region,
         work: &mut Work,
         statistics: &mut NarrowingStatistics,
     ) -> Result<Step, Stop> {
+        let Subject {
+            theory,
+            producers,
+            frozen,
+        } = subject;
         let nodes = theory.nodes();
         let mut step = Step::Unchanged;
         if !self.seeded {
@@ -726,7 +731,7 @@ impl Known {
         loop {
             let step = if let Some((node, value)) = self.nodes.pop() {
                 statistics.propagations += 1;
-                self.revisit(nodes, index, producers, frozen, node, value, work)?
+                self.revisit(subject, index, node, value, work)?
             } else if let Some(atom) = self.heads.pop() {
                 statistics.propagations += 1;
                 let producers =
@@ -748,18 +753,21 @@ impl Known {
     /// under a frozen mask is falsum in the reduct, a constant with no
     /// operands: it teaches nothing and learns nothing from them, and a
     /// parent under the mask likewise.
-    #[allow(clippy::too_many_arguments)]
     fn revisit(
         &mut self,
-        nodes: &[Node],
+        subject: Subject<'_>,
         index: &Narrower,
-        producers: Option<&Producers>,
-        frozen: Option<&[bool]>,
         node: usize,
         value: bool,
         work: &mut Work,
     ) -> Result<Step, Stop> {
         work.tick()?;
+        let Subject {
+            theory,
+            producers,
+            frozen,
+        } = subject;
+        let nodes = theory.nodes();
         let masked = |node: usize| frozen.is_some_and(|truth| !truth[node]);
         for &atom in &index.atom_operands[node] {
             self.unknown[atom] = self.unknown[atom]

@@ -302,7 +302,6 @@ impl PreparedReduct {
 /// under the workspace's retained-storage ceiling, charging the work to the
 /// reduct receipts. The truth is the frozen mask of the candidate's reduct;
 /// the second value is the evaluation's retained storage.
-#[allow(clippy::too_many_arguments)]
 fn evaluate_truth<'a>(
     evaluation: &'a mut EvaluationWorkspace,
     other_bytes: u128,
