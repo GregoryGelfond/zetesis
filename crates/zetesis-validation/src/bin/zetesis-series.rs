@@ -8,7 +8,7 @@ use zetesis_validation::performance::series::{Labelled, compare};
 #[derive(Parser)]
 #[command(
     version,
-    about = "Compare published series reports: medians, ratios and counters per cell"
+    about = "Compare published series reports: medians, ratios, counters and a scoreboard against the reference per cell"
 )]
 struct Options {
     /// `LABEL=PATH` of a published report; repeat in comparison order, for
