@@ -104,7 +104,7 @@ impl ArgumentBounds {
         self.predicates
             .binary_search(predicate)
             .ok()
-            .map(|slot| self.bounds[slot].as_slice())
+            .map(|table| self.bounds[table].as_slice())
     }
 
     /// The work the inference charged.
@@ -131,7 +131,7 @@ pub(super) fn infer_with(
                 .collect()
         })
         .collect();
-    let slot = |predicate: &Predicate| {
+    let table = |predicate: &Predicate| {
         predicates
             .binary_search(predicate)
             .map_err(|_| Stop::InvalidProgram)
@@ -145,13 +145,13 @@ pub(super) fn infer_with(
             let Some(head) = template.head() else {
                 continue;
             };
-            let target = slot(head.predicate())?;
+            let target = table(head.predicate())?;
             for (index, term) in head.terms().iter().enumerate() {
                 work.tick()?;
                 let contribution = match term {
                     Term::Constant(value) => Growing::Finite(BTreeSet::from([value.clone()])),
                     Term::Variable(variable) => {
-                        variable_bound(template, *variable, &growing, &slot, work)?
+                        variable_bound(template, *variable, &growing, &table, work)?
                     }
                 };
                 changed |= widen(&mut growing[target][index], contribution, max_values, work)?;
@@ -188,12 +188,12 @@ fn variable_bound(
     template: &zetesis_core::Template,
     variable: usize,
     growing: &[Vec<Growing>],
-    slot: &impl Fn(&Predicate) -> Result<usize, Stop>,
+    table: &impl Fn(&Predicate) -> Result<usize, Stop>,
     work: &mut Work<'_>,
 ) -> Result<Growing, Stop> {
     let mut bound: Option<BTreeSet<Value>> = None;
     for pattern in template.positive() {
-        let source = slot(pattern.predicate())?;
+        let source = table(pattern.predicate())?;
         for (index, term) in pattern.terms().iter().enumerate() {
             if *term != Term::Variable(variable) {
                 continue;

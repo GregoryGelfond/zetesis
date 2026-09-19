@@ -15,7 +15,8 @@ mod prepared;
 pub mod bounds;
 pub use prepared::{ClosureWorkspace, PreparationLimits, PreparationStatistics, PreparedQueries};
 use relations::{
-    Block, Catalogs, Dense, Layouts, PendingRows, Relational, Relations, Row, RowSet, Rows, Slot,
+    Block, Catalogs, Dense, Layouts, PendingRows, Relational, Relations, Resolution, Row, RowSet,
+    Rows,
 };
 pub(crate) mod restrictions;
 mod row_steps;
@@ -986,11 +987,11 @@ fn visit_with<'source, E: From<Stop>>(
     // None means this depth has not yet been opened for the current parent
     // assignment. A retained range advances in the original relation order.
     let cursors = &mut buffers.cursors[..count];
-    let slots = &mut buffers.slots[..count];
+    let resolutions = &mut buffers.resolutions[..count];
     let undo = &mut buffers.undo[..count];
     work.charge(count)?;
     cursors.fill(None);
-    slots.fill(Slot::Unresolved);
+    resolutions.fill(Resolution::Unresolved);
     for row in undo.iter_mut() {
         work.tick()?;
         row.clear();
@@ -1012,15 +1013,15 @@ fn visit_with<'source, E: From<Stop>>(
         let pattern = &template.positive()[occurrence];
         // The relation is fixed for the depth: resolve it on first entry and
         // index it on every later probe.
-        if slots[depth] == Slot::Unresolved {
+        if resolutions[depth] == Resolution::Unresolved {
             work.tick()?;
-            slots[depth] = relations
+            resolutions[depth] = relations
                 .resolve(pattern.predicate())
-                .map_or(Slot::Absent, Slot::At);
+                .map_or(Resolution::Absent, Resolution::At);
         }
-        let tuples = match slots[depth] {
-            Slot::At(handle) => relations.rows_at(handle, selection.rows(occurrence))?,
-            Slot::Absent | Slot::Unresolved => Rows::Borrowed(&[]),
+        let tuples = match resolutions[depth] {
+            Resolution::At(handle) => relations.rows_at(handle, selection.rows(occurrence))?,
+            Resolution::Absent | Resolution::Unresolved => Rows::Borrowed(&[]),
         };
         let cursor = &mut cursors[depth];
         // The innermost depth, entered for this parent assignment. A

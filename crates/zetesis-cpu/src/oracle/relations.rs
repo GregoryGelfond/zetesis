@@ -183,9 +183,9 @@ pub(super) trait Relational {
     }
 }
 
-/// A handle resolved for one join depth.
+/// The resolution of one join depth's predicate to a relation handle.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Slot {
+pub(super) enum Resolution {
     /// The depth has not been entered in this visit.
     Unresolved,
     /// The source has no relation for the depth's predicate.
@@ -704,8 +704,8 @@ impl Catalogs {
                 .checked_sub(payload)
                 .ok_or(Stop::InvalidProgram)?;
             account_storage(work, other, extracted.storage)?;
-            // Move each atom to its canonical position; the slots and the
-            // order are transient and released with this loop iteration.
+            // Move each atom to its canonical position; the taken atoms and
+            // the order are transient and released with this loop iteration.
             storage::admit(
                 work,
                 self.bytes
@@ -713,10 +713,10 @@ impl Catalogs {
                     .ok_or(Stop::StorageLimit)?,
             )?;
             work.charge(order.len())?;
-            let mut slots: Vec<Option<Atom>> = extracted.atoms.into_iter().map(Some).collect();
+            let mut taken: Vec<Option<Atom>> = extracted.atoms.into_iter().map(Some).collect();
             for id in order {
                 atoms.push(
-                    slots
+                    taken
                         .get_mut(id)
                         .and_then(Option::take)
                         .ok_or(Stop::InvalidProgram)?,
