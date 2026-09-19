@@ -176,8 +176,7 @@ Cancellation is observed at cooperative polling boundaries, not by forcibly
 terminating arbitrary work. A deadline is observed the same way: a control
 armed with one owns a timer thread that sets an expiry flag at the deadline
 and retires then or when the last clone drops, and a poll reads two flags
-and never the clock. This replaced a clock read on every poll, which had
-made runs with an unreached `--time-limit` two to eight times slower. In particular, an already-started bounded static
+and never the clock. In particular, an already-started bounded static
 compilation is not preemptible; session setup polls before it and subsequent
 work polls again. A deadline is therefore not a hard process-kill guarantee.
 

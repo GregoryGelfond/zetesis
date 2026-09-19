@@ -490,8 +490,7 @@ run. The levels are the rows present before the last appending preparation and
 the run is what it added, both borrowable until the next one. Row access
 within a run is constant time and borrows the authoritative tuple. A duplicate
 or refused insertion preserves an existing prepared extent; a successful
-append invalidates it. Each round previously traversed the whole extent twice,
-which made a derivation of depth R cost O(n R).
+append invalidates it.
 
 A predicate whose every argument is bounded is held as a dense relation
 instead of a catalog. Preparation infers an upper bound on each argument's
