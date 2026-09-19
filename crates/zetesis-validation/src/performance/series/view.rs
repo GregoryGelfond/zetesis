@@ -427,12 +427,19 @@ fn scoreboards(
     scoreboards
 }
 
-fn verdict(cell: &str, passed: &Passed, reference: &Reference) -> Verdict {
+/// The native median over the reference median; a reference median of zero
+/// reads as one nanosecond, so the ratio is always a number.
+fn ratio(native_ns: u64, reference_ns: u64) -> f64 {
     #[expect(
         clippy::cast_precision_loss,
         reason = "a ratio of intervals is reported to three decimals"
     )]
-    let ratio = passed.timing.median_ns as f64 / reference.timing.median_ns.max(1) as f64;
+    let ratio = native_ns as f64 / reference_ns.max(1) as f64;
+    ratio
+}
+
+fn verdict(cell: &str, passed: &Passed, reference: &Reference) -> Verdict {
+    let ratio = ratio(passed.timing.median_ns, reference.timing.median_ns);
     Verdict {
         cell: cell.to_owned(),
         native_ns: passed.timing.median_ns,
@@ -804,15 +811,11 @@ fn reference_ratios(
 ) -> BTreeMap<String, f64> {
     let mut ratios = BTreeMap::new();
     for (label, record) in records {
-        if let (Native::Passed(passed), Some(other)) = (record, reference.get(label))
-            && other.timing.median_ns > 0
-        {
-            #[expect(
-                clippy::cast_precision_loss,
-                reason = "a ratio of intervals is reported to three decimals"
-            )]
-            let ratio = passed.timing.median_ns as f64 / other.timing.median_ns as f64;
-            ratios.insert(label.clone(), ratio);
+        if let (Native::Passed(passed), Some(other)) = (record, reference.get(label)) {
+            ratios.insert(
+                label.clone(),
+                ratio(passed.timing.median_ns, other.timing.median_ns),
+            );
         }
     }
     ratios
