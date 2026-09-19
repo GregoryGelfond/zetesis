@@ -25,6 +25,11 @@
 //! fires; `s \ c` is then negative or zero with `s / c` negative, so an asked
 //! atom is absent and an asked constraint fires. Division by `c ≥ 2` is
 //! defined, and `s` is evaluated where the written constraint evaluated it.
+//! The values `p` admits are those of its choice's condition, and the
+//! condition's are read from the facts of a literal binding the value when
+//! facts are all that produces it ([`zetesis_domain::facts`]): what the facts
+//! admit is exactly what the relation admits. A condition produced otherwise
+//! bounds nothing, and the constraint is left as written.
 //!
 //! A key position must name its value in both patterns. The asked atom stands
 //! under `not`, where `p(_, t)` holds when some key has the value `t`, so
@@ -32,10 +37,14 @@
 //! forbids a wrong value at every key. A constraint with an anonymous key
 //! position is left as written.
 //!
-//! The rewrite reads the normalized program, where facts are expanded and
-//! constants resolved, and replaces the written constraint's source
-//! statement. Every asked statement carries the written constraint's
-//! provenance and the transformation's tag. Nothing is claimed for a
+//! The rewrite reads the analyzed program, where facts are expanded and
+//! constants resolved, once every statement is compiled, and names the
+//! written constraints to replace by their parsed origin; preparation then
+//! compiles the asked constraints in their place, so nothing is prepared
+//! twice. The key analysis and its readings of facts run under the key work
+//! ceiling and the preparation's remaining term work, and their steps are
+//! charged to the term work; a stop ends the asking, leaves every constraint
+//! not yet asked as written, and is reported. Nothing is claimed for a
 //! constraint outside the two patterns, which is left as written.
 
 use std::collections::BTreeMap;
@@ -45,88 +54,113 @@ use themelios_program::program::{
     Arguments, Atom, Body, BodyElement, DefaultNegation, Head, Literal, LiteralInner,
     Program as SourceProgram, Relation, Rule, Statement,
 };
-use themelios_program::provenance::{Origin, Provenance, TransformTag, WithProvenance};
+use themelios_program::provenance::{Provenance, WithProvenance};
 use themelios_program::symbol::{Signature, Symbol, VarName};
 use themelios_program::term::{BinaryOp, Term, Variable};
-use zetesis_domain::{Analysis, Domain, Key, Status, atom_signature};
+use zetesis_domain::{Key, KeyWork, Stop, atom_signature};
 
 use crate::expansion::Budget;
-use crate::formula_ir::Prepared;
-use crate::{DomainLimits, ExpansionResource, FormulaFailure};
+use crate::{ExpansionResource, FormulaFailure, FormulaLimits};
 
-/// The program with its keyed constraints asked, and how many were.
-pub(crate) struct Rewritten {
-    pub program: SourceProgram,
-    pub constraints: usize,
+/// How the key analysis of one preparation ended.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KeyAnalysis {
+    /// Every keyed relation was read, and every constraint in one of the two
+    /// patterns asked.
+    Complete,
+    /// The analysis exceeded its work ceiling: every constraint not yet
+    /// asked was left as written, which changes no answer set.
+    Stopped(Stop),
 }
 
-/// Ask every keyed constraint of the prepared program's source.
+/// The constraints asked in place of written ones, by the parsed origin of
+/// the written constraint each set replaces, with that constraint's
+/// provenance; and how the key analysis ended.
+pub(crate) struct Asked {
+    pub rules: BTreeMap<Location, (Provenance, Vec<Rule>)>,
+    pub analysis: KeyAnalysis,
+}
+
+/// What one written constraint became.
+enum Outcome {
+    Asked(Vec<Rule>),
+    Written,
+    Stopped(Stop),
+}
+
+/// Ask every keyed constraint of the analyzed program. The key analysis and
+/// every reading of facts spend at most `limits.max_key_work` steps and no
+/// more than the term work remaining, and the steps spent are charged to
+/// the term work whether the analysis completed or stopped.
 ///
 /// # Errors
-/// Returns the budget refusal when the inspection exhausts the term work.
-/// A stopped key analysis rewrites nothing.
-pub(crate) fn rewrite(
-    source: &SourceProgram,
-    prepared: &Prepared,
+/// Returns the budget refusal when the inspection of a statement exhausts
+/// the term work.
+pub(crate) fn ask_all(
+    analyzed: &SourceProgram,
+    limits: &FormulaLimits,
     budget: &mut Budget,
     location: Location,
-) -> Result<Option<Rewritten>, FormulaFailure> {
-    let Ok(keys) = zetesis_domain::keys(&prepared.analyzed, &DomainLimits::default()) else {
-        return Ok(None);
+) -> Result<Asked, FormulaFailure> {
+    let mut work = KeyWork::new(limits.max_key_work.min(budget.remaining_term_work()));
+    let asked = ask_under(analyzed, &mut work, budget, location);
+    budget.charge(
+        ExpansionResource::TermWork,
+        u128::from(work.steps()),
+        location,
+    )?;
+    asked
+}
+
+fn ask_under(
+    analyzed: &SourceProgram,
+    work: &mut KeyWork,
+    budget: &mut Budget,
+    location: Location,
+) -> Result<Asked, FormulaFailure> {
+    let mut asked = Asked {
+        rules: BTreeMap::new(),
+        analysis: KeyAnalysis::Complete,
+    };
+    let keys = match zetesis_domain::keys(analyzed, work) {
+        Ok(keys) => keys,
+        Err(stop) => {
+            asked.analysis = KeyAnalysis::Stopped(stop);
+            return Ok(asked);
+        }
     };
     if keys.is_empty() {
-        return Ok(None);
+        return Ok(asked);
     }
     let keys: BTreeMap<&Signature, &Key<'_>> =
         keys.iter().map(|key| (key.signature(), key)).collect();
-    // The normalized statement of each source statement, by parsed origin;
-    // a source statement normalized into several is left as written.
-    let mut normalized: BTreeMap<Location, Vec<&WithProvenance<Statement>>> = BTreeMap::new();
-    for carrier in prepared.analyzed.statements() {
+    // The analyzed statement of each source statement, by parsed origin; a
+    // source statement normalized into several is left as written.
+    let mut by_origin: BTreeMap<Location, Vec<&WithProvenance<Statement>>> = BTreeMap::new();
+    for carrier in analyzed.statements() {
         budget.charge(ExpansionResource::TermWork, 1, location)?;
         if let [origin] = crate::extended::parsed_origins(carrier)[..] {
-            normalized.entry(origin).or_default().push(carrier);
+            by_origin.entry(origin).or_default().push(carrier);
         }
     }
-    let mut analysis = None;
-    let mut statements = Vec::new();
-    let mut constraints = 0;
-    for carrier in source.statements() {
-        budget.charge(ExpansionResource::TermWork, 1, location)?;
-        let asked = match crate::extended::parsed_origins(carrier)[..] {
-            [origin] => match normalized.get(&origin).map(Vec::as_slice) {
-                Some([statement]) => ask(
-                    statement,
-                    &keys,
-                    &prepared.analyzed,
-                    &mut analysis,
-                    budget,
-                    location,
-                )?,
-                _ => None,
-            },
-            _ => None,
+    for (origin, statements) in by_origin {
+        let [statement] = statements[..] else {
+            continue;
         };
-        match asked {
-            Some(rules) => {
-                constraints += 1;
-                let tag = Provenance::from(Origin::Transformed(TransformTag::new(
-                    "zetesis-keyed-constraint",
-                )));
-                for rule in rules {
-                    statements.push(WithProvenance::new(
-                        Statement::Rule(rule),
-                        carrier.provenance().clone().merge(tag.clone()),
-                    ));
-                }
+        match ask(statement, &keys, analyzed, work, budget, location)? {
+            Outcome::Asked(rules) => {
+                asked
+                    .rules
+                    .insert(origin, (statement.provenance().clone(), rules));
             }
-            None => statements.push(carrier.clone()),
+            Outcome::Written => {}
+            Outcome::Stopped(stop) => {
+                asked.analysis = KeyAnalysis::Stopped(stop);
+                return Ok(asked);
+            }
         }
     }
-    Ok((constraints > 0).then(|| Rewritten {
-        program: SourceProgram::of_nodes(statements),
-        constraints,
-    }))
+    Ok(asked)
 }
 
 /// A positive atom of the constraint whose value position names a variable
@@ -140,19 +174,19 @@ struct Demand<'a> {
 
 /// The asked constraints for one written constraint, or `None` when it is
 /// outside both patterns.
-fn ask<'p>(
+fn ask(
     statement: &WithProvenance<Statement>,
     keys: &BTreeMap<&Signature, &Key<'_>>,
-    program: &'p SourceProgram,
-    analysis: &mut Option<Analysis<'p>>,
+    program: &SourceProgram,
+    work: &mut KeyWork,
     budget: &mut Budget,
     location: Location,
-) -> Result<Option<Vec<Rule>>, FormulaFailure> {
+) -> Result<Outcome, FormulaFailure> {
     let Statement::Rule(rule) = statement.get() else {
-        return Ok(None);
+        return Ok(Outcome::Written);
     };
     if !matches!(rule.head().get(), Head::Falsum) {
-        return Ok(None);
+        return Ok(Outcome::Written);
     }
     let body = rule.body().get();
     let mut elements = Vec::new();
@@ -161,15 +195,15 @@ fn ask<'p>(
     for (index, element) in body.elements().enumerate() {
         budget.charge(ExpansionResource::TermWork, 1, location)?;
         let BodyElement::Literal(literal) = element.get() else {
-            return Ok(None);
+            return Ok(Outcome::Written);
         };
         if literal.negation != DefaultNegation::None {
-            return Ok(None);
+            return Ok(Outcome::Written);
         }
         match &literal.inner {
             LiteralInner::Atom(atom) => {
                 let Arguments::Single(terms) = &atom.get().arguments else {
-                    return Ok(None);
+                    return Ok(Outcome::Written);
                 };
                 for term in terms {
                     count(term, &mut occurrences);
@@ -180,30 +214,32 @@ fn ask<'p>(
                 let chain = chain.get();
                 let mut steps = chain.steps();
                 let (Some((relation, second)), None) = (steps.next(), steps.next()) else {
-                    return Ok(None);
+                    return Ok(Outcome::Written);
                 };
                 count(chain.first(), &mut occurrences);
                 count(second, &mut occurrences);
                 if relation == Relation::Neq {
                     if comparison.replace((index, chain.first(), second)).is_some() {
-                        return Ok(None);
+                        return Ok(Outcome::Written);
                     }
                 } else {
                     elements.push(literal);
                 }
             }
-            LiteralInner::True | LiteralInner::False => return Ok(None),
+            LiteralInner::True | LiteralInner::False => return Ok(Outcome::Written),
         }
     }
     let Some((skipped, left, right)) = comparison else {
-        return Ok(None);
+        return Ok(Outcome::Written);
     };
     let demands = demands(body, skipped, keys, &occurrences);
-    let asked = one_value(left, right, &demands)
-        .map(|(demand, value)| vec![(demand, value)])
-        .or_else(|| digit_and_carry(left, right, &demands, program, analysis));
-    let Some(asked) = asked else {
-        return Ok(None);
+    let asked = match one_value(left, right, &demands) {
+        Some((demand, value)) => vec![(demand, value)],
+        None => match digit_and_carry(left, right, &demands, program, work) {
+            Ok(Some(asked)) => asked,
+            Ok(None) => return Ok(Outcome::Written),
+            Err(stop) => return Ok(Outcome::Stopped(stop)),
+        },
     };
     let rest: Vec<&Literal> = body
         .elements()
@@ -237,7 +273,7 @@ fn ask<'p>(
             Body::new(literals.into_iter().map(BodyElement::Literal)),
         ));
     }
-    Ok(Some(rules))
+    Ok(Outcome::Asked(rules))
 }
 
 /// Every keyed atom of the body whose value is a variable read only there
@@ -314,14 +350,17 @@ fn one_value<'a>(
 
 /// `s != Y + c*C` in any order of sides and summands, with `Y` and `C`
 /// demanded, `s` free of both, `Y` a digit in base `c` and `C` a natural
-/// number by the analysis of the values their keys admit.
-fn digit_and_carry<'a, 'p>(
+/// number by the facts of the conditions binding them.
+///
+/// # Errors
+/// Returns the key work's stop while reading facts.
+fn digit_and_carry<'a>(
     left: &Term,
     right: &Term,
     demands: &'a [Demand<'a>],
-    program: &'p SourceProgram,
-    analysis: &mut Option<Analysis<'p>>,
-) -> Option<Vec<(&'a Demand<'a>, Term)>> {
+    program: &SourceProgram,
+    work: &mut KeyWork,
+) -> Result<Option<Vec<(&'a Demand<'a>, Term)>>, Stop> {
     for (sum, other) in [(left, right), (right, left)] {
         let Some((digit, base, carry)) = digit_plus_carry(sum, demands) else {
             continue;
@@ -329,11 +368,8 @@ fn digit_and_carry<'a, 'p>(
         if mentions(other, digit.variable) || mentions(other, carry.variable) {
             continue;
         }
-        let analysis = analysis
-            .get_or_insert_with(|| zetesis_domain::analyze(program, DomainLimits::default()));
-        if analysis.status() != Status::FixedPoint
-            || !admits_within(analysis, digit.key, 0, i64::from(base) - 1)
-            || !admits_within(analysis, carry.key, 0, i64::from(i32::MAX))
+        if !admits_within(program, digit.key, 0, i64::from(base) - 1, work)?
+            || !admits_within(program, carry.key, 0, i64::from(i32::MAX), work)?
         {
             continue;
         }
@@ -342,12 +378,12 @@ fn digit_and_carry<'a, 'p>(
             left: Box::new(other.clone()),
             right: Box::new(Term::Symbolic(Symbol::Number(base))),
         };
-        return Some(vec![
+        return Ok(Some(vec![
             (digit, quotient(BinaryOp::Mod)),
             (carry, quotient(BinaryOp::Div)),
-        ]);
+        ]));
     }
-    None
+    Ok(None)
 }
 
 /// `Y + c*C`, `c*C + Y`, `Y + C*c` or `C*c + Y` over two distinct demands.
@@ -396,9 +432,22 @@ fn digit_plus_carry<'a>(
     None
 }
 
-/// Whether every value the key's condition admits is a number in `low..=high`.
-fn admits_within(analysis: &Analysis<'_>, key: &Key<'_>, low: i64, high: i64) -> bool {
-    let mut positions = key.condition().literals().filter_map(|literal| {
+/// Whether every value the key's condition admits is a number in
+/// `low..=high`, read from the facts of a literal of the condition binding
+/// the value. The value is bound by the condition, so a literal names it;
+/// every one that does bounds it, and one within range suffices. A literal
+/// over a predicate produced by anything but facts bounds nothing.
+///
+/// # Errors
+/// Returns the key work's stop.
+fn admits_within(
+    program: &SourceProgram,
+    key: &Key<'_>,
+    low: i64,
+    high: i64,
+    work: &mut KeyWork,
+) -> Result<bool, Stop> {
+    let positions = key.condition().literals().filter_map(|literal| {
         let LiteralInner::Atom(atom) = &literal.get().inner else {
             return None;
         };
@@ -411,19 +460,21 @@ fn admits_within(analysis: &Analysis<'_>, key: &Key<'_>, low: i64, high: i64) ->
             .position(|term| mentions(term, key.value_variable()))?;
         Some((atom_signature(atom, terms.len())?, position))
     });
-    // The value is bound by the condition, so a literal names it; every one
-    // that does bounds it, and one within range suffices.
-    positions.any(|(signature, position)| within(analysis.domain(&signature, position), low, high))
+    for (signature, position) in positions {
+        if let Some(values) = zetesis_domain::facts(program, &signature, position, work)?
+            && within(&values, low, high)
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
-/// Whether every value of the domain is a number in `low..=high`.
-fn within(domain: &Domain<'_>, low: i64, high: i64) -> bool {
-    match domain {
-        Domain::Finite(values) => values.iter().all(|value| {
-            matches!(value, Symbol::Number(number) if (low..=high).contains(&i64::from(*number)))
-        }),
-        Domain::Unknown => false,
-    }
+/// Whether every value is a number in `low..=high`.
+fn within(values: &[&Symbol], low: i64, high: i64) -> bool {
+    values.iter().all(|value| {
+        matches!(value, Symbol::Number(number) if (low..=high).contains(&i64::from(*number)))
+    })
 }
 
 /// The key's body with its key variables replaced by the demand's terms.

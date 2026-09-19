@@ -3,9 +3,9 @@
 use themelios_base::source::{Source, SourceId};
 use themelios_program::program::{Arguments, Atom, Program};
 use themelios_program::raise::raise;
-use themelios_program::symbol::{Name, Sign, Signature, VarName};
+use themelios_program::symbol::{Name, Sign, Signature, Symbol, VarName};
 use themelios_syntax::{dialect::Dialect, parse::parse};
-use zetesis_domain::{Limits, atom_signature, keys};
+use zetesis_domain::{KeyWork, Limits, atom_signature, facts, keys};
 
 fn source(text: &str) -> Program {
     let source = Source::new(SourceId::new(17), text.to_owned()).unwrap();
@@ -25,7 +25,7 @@ fn signature(name: &str, arity: u32) -> Signature {
 }
 
 fn keyed(text: &str) -> Vec<(Signature, usize)> {
-    keys(&source(text), &Limits::default())
+    keys(&source(text), &mut KeyWork::new(Limits::default().max_work))
         .unwrap()
         .iter()
         .map(|key| (key.signature().clone(), key.value()))
@@ -128,7 +128,7 @@ const ONE_KEY: &str = "letter(a). digit(0..9). 1 { assign(L,D) : digit(D) } 1 :-
 #[test]
 fn the_key_names_its_variables() {
     let program = source(ONE_KEY);
-    let keys = keys(&program, &Limits::default()).unwrap();
+    let keys = keys(&program, &mut KeyWork::new(Limits::default().max_work)).unwrap();
     let key = &keys[0];
     assert_eq!(key.key_variable(0).map(VarName::as_str), Some("L"));
     assert_eq!(key.key_variable(1), None);
@@ -138,7 +138,7 @@ fn the_key_names_its_variables() {
 #[test]
 fn the_key_names_its_condition_and_body() {
     let program = source(ONE_KEY);
-    let keys = keys(&program, &Limits::default()).unwrap();
+    let keys = keys(&program, &mut KeyWork::new(Limits::default().max_work)).unwrap();
     let key = &keys[0];
     assert_eq!(key.condition().literals().count(), 1);
     assert_eq!(key.body().elements().count(), 1);
@@ -147,13 +147,11 @@ fn the_key_names_its_condition_and_body() {
 #[test]
 fn the_analysis_stops_within_its_work_limit() {
     let program = "letter(a). digit(0..9). 1 { assign(L,D) : digit(D) } 1 :- letter(L).";
-    let limits = Limits {
-        max_work: 3,
-        ..Limits::default()
-    };
-    let stop = keys(&source(program), &limits).unwrap_err();
+    let mut work = KeyWork::new(3);
+    let stop = keys(&source(program), &mut work).unwrap_err();
     assert_eq!(stop.limit, 3);
     assert!(stop.observed > 3);
+    assert_eq!(work.steps(), 3);
 }
 
 #[test]
@@ -165,4 +163,53 @@ fn an_arity_beyond_a_signatures_width_has_no_signature() {
     };
     assert_eq!(atom_signature(&atom, 2), Some(signature("p", 2)));
     assert_eq!(atom_signature(&atom, usize::MAX), None);
+}
+
+fn numbers(values: &[&Symbol]) -> Vec<i32> {
+    values
+        .iter()
+        .map(|symbol| match symbol {
+            Symbol::Number(number) => *number,
+            other => panic!("{other:?}"),
+        })
+        .collect()
+}
+
+#[test]
+fn the_facts_of_a_predicate_are_read_when_facts_are_all_that_produces_it() {
+    let program = source("digit(0;1;2). letter(a). 1 { assign(L,D) : digit(D) } 1 :- letter(L).");
+    let mut work = KeyWork::new(1_000);
+    let values = facts(&program, &signature("digit", 1), 0, &mut work)
+        .unwrap()
+        .unwrap();
+    assert_eq!(numbers(&values), [0, 1, 2]);
+    assert_eq!(work.steps(), 3);
+}
+
+#[test]
+fn a_predicate_with_a_rule_producer_has_no_facts_to_read() {
+    let program = source("span(0;1). digit(D) :- span(D). digit(2).");
+    let mut work = KeyWork::new(1_000);
+    assert_eq!(
+        facts(&program, &signature("digit", 1), 0, &mut work).unwrap(),
+        None
+    );
+}
+
+#[test]
+fn a_predicate_produced_by_a_choice_has_no_facts_to_read() {
+    let program = source("{ digit(1) }. digit(2).");
+    let mut work = KeyWork::new(1_000);
+    assert_eq!(
+        facts(&program, &signature("digit", 1), 0, &mut work).unwrap(),
+        None
+    );
+}
+
+#[test]
+fn reading_facts_stops_within_the_key_work() {
+    let program = source("digit(0). digit(1). digit(2).");
+    let mut work = KeyWork::new(2);
+    let stop = facts(&program, &signature("digit", 1), 0, &mut work).unwrap_err();
+    assert_eq!((stop.limit, work.steps()), (2, 2));
 }

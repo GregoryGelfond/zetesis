@@ -31,6 +31,7 @@ fn input(admitted: &AdmittedFormula) -> Input<'_> {
         atoms: admitted.atom_catalog(),
         gate_atoms: 0,
         keyed_constraints: 0,
+        key_analysis: zetesis_themelios::KeyAnalysis::Complete,
         objectives: admitted.objectives(),
         certificate_order: zetesis_sat::CertificateOrder::TightFirst,
     }

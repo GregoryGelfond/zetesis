@@ -293,6 +293,13 @@ impl Budget {
 
     /// The charges accepted so far. Each is at most its ceiling, so the
     /// narrowing cannot fail.
+    /// The term work still allowed under the ceiling, for a reading that
+    /// bounds itself by it before it starts.
+    pub(crate) fn remaining_term_work(&self) -> u64 {
+        u64::try_from((self.limits.max_term_work as u128).saturating_sub(self.work))
+            .unwrap_or(u64::MAX)
+    }
+
     pub(crate) fn usage(&self) -> ExpansionUsage {
         let narrow = |charged: u128| {
             usize::try_from(charged).expect("an accepted charge is at most its usize ceiling")

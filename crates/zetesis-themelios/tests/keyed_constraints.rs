@@ -10,7 +10,7 @@ mod stable_models;
 use std::collections::BTreeSet;
 
 use stable_models::stable;
-use zetesis_themelios::{AdmittedFormula, FormulaLimits};
+use zetesis_themelios::{AdmittedFormula, FormulaLimits, KeyAnalysis};
 
 const CHOICES: &str = "letter(a;b;c). digit(0..9). carry_value(0;1). idx(1). \
     1 { assign(L,D) : digit(D) } 1 :- letter(L). \
@@ -225,4 +225,68 @@ fn asked_constraints_match_clingo() {
             .collect();
         assert_eq!(family, source_oracle::records(&source), "{source}");
     }
+}
+
+#[test]
+fn the_rest_of_a_keyed_program_is_prepared_once() {
+    // The written constraint is compiled once, charged its one origin, and
+    // replaced by the asked constraint, charged one more: the receipt exceeds
+    // the hand-asked program's by exactly the written constraint's origin,
+    // and the facts and choices are charged once.
+    let written = format!("{CHOICES} :- assign(a,X), assign(b,Y), X != Y + 1.");
+    let asked = format!("{CHOICES} :- assign(b,Y), letter(a), not assign(a, Y + 1).");
+    let (written, asked) = (admitted(&written), admitted(&asked));
+    assert_eq!(
+        written.expansion_usage().origin_locations,
+        asked.expansion_usage().origin_locations + 1
+    );
+}
+
+#[test]
+fn a_digit_produced_by_a_rule_keeps_the_written_column() {
+    // The column pattern reads the digits' range from the facts of the
+    // condition binding the digit; a digit predicate produced by a rule has
+    // no facts to read, so the constraint stays as written, and the answer
+    // sets are the same.
+    let choices = CHOICES.replace("digit(0..9).", "span(0..9). digit(D) :- span(D).");
+    let written = format!(
+        "{choices} :- assign(a,A), assign(b,B), assign(c,C), carry(1,K), A + B != C + 10 * K."
+    );
+    let asked = format!(
+        "{choices} :- assign(a,A), assign(b,B), letter(c), idx(1), not assign(c, (A + B) \\ 10). \
+         :- assign(a,A), assign(b,B), letter(c), idx(1), not carry(1, (A + B) / 10)."
+    );
+    let (written, asked) = (admitted(&written), admitted(&asked));
+    assert_eq!(written.keyed_constraints(), 0);
+    assert_eq!(stable(&written), stable(&asked));
+}
+
+#[test]
+fn a_stopped_key_analysis_leaves_every_constraint_written_and_is_reported() {
+    // Three steps read three statements and no key: the analysis stops, the
+    // constraint is grounded as written, the admission succeeds and the
+    // answer sets are those of the asked form. The three steps are charged
+    // to the term work: against no step at all the receipt differs by three.
+    let written = format!("{CHOICES} :- assign(a,X), assign(b,Y), X != Y + 1.");
+    let under = |max_key_work| {
+        source_records::admit(
+            &written,
+            &FormulaLimits {
+                max_key_work,
+                ..FormulaLimits::default()
+            },
+        )
+        .unwrap()
+    };
+    let stopped = under(3);
+    assert_eq!(stopped.keyed_constraints(), 0);
+    assert!(matches!(stopped.key_analysis(), KeyAnalysis::Stopped(stop) if stop.limit == 3));
+    let complete = admitted(&written);
+    assert_eq!(complete.keyed_constraints(), 1);
+    assert_eq!(complete.key_analysis(), KeyAnalysis::Complete);
+    assert_eq!(stable(&stopped), stable(&complete));
+    assert_eq!(
+        stopped.expansion_usage().term_work,
+        under(0).expansion_usage().term_work + 3
+    );
 }

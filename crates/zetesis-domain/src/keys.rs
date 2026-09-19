@@ -23,7 +23,7 @@ use themelios_program::provenance::WithProvenance;
 use themelios_program::symbol::{Signature, Symbol, VarName};
 use themelios_program::term::{Term, Variable};
 
-use crate::limits::{Limits, Resource, Stop, check};
+use crate::limits::{Resource, Stop, check};
 
 /// A relation whose value position is a function of its key positions,
 /// total over the body of the one choice rule that produces it.
@@ -79,35 +79,31 @@ impl<'p> Key<'p> {
 /// Every keyed relation of the program, in statement order.
 ///
 /// # Errors
-/// Returns the work stop when the inspection exceeds `limits.max_work`; no
-/// partial result is published.
-pub fn keys<'p>(program: &'p Program, limits: &Limits) -> Result<Vec<Key<'p>>, Stop> {
-    let mut work = Work {
-        steps: 0,
-        limit: limits.max_work,
-    };
+/// Returns the work stop when the inspection exceeds `work`'s ceiling; no
+/// partial result is published, and the steps before the stop stay spent.
+pub fn keys<'p>(program: &'p Program, work: &mut KeyWork) -> Result<Vec<Key<'p>>, Stop> {
     let mut producers: BTreeMap<Signature, usize> = BTreeMap::new();
     let mut opaque = false;
     for carrier in program.statements() {
         work.step()?;
         match carrier.get() {
             Statement::Rule(rule) => match rule.head().get() {
-                Head::Literal(literal) => produced(literal, &mut producers, &mut work)?,
+                Head::Literal(literal) => produced(literal, &mut producers, work)?,
                 Head::Choice(choice) => {
                     for element in choice.elements() {
-                        produced(element.get().literal(), &mut producers, &mut work)?;
+                        produced(element.get().literal(), &mut producers, work)?;
                     }
                 }
                 Head::Disjunction(disjunction) => {
                     for element in disjunction.elements() {
-                        produced(element.get().literal(), &mut producers, &mut work)?;
+                        produced(element.get().literal(), &mut producers, work)?;
                     }
                 }
                 Head::Falsum | Head::Verum => {}
                 Head::Aggregate(_) | Head::TheoryAtom(_) => opaque = true,
             },
             Statement::External(external) => {
-                atom_produced(external.atom().get(), &mut producers, &mut work)?;
+                atom_produced(external.atom().get(), &mut producers, work)?;
             }
             _ => {}
         }
@@ -124,19 +120,35 @@ pub fn keys<'p>(program: &'p Program, limits: &Limits) -> Result<Vec<Key<'p>>, S
         let Head::Choice(choice) = rule.head().get() else {
             continue;
         };
-        if let Some(key) = key(choice, rule.body().get(), &producers, &mut work)? {
+        if let Some(key) = key(choice, rule.body().get(), &producers, work)? {
             keys.push(key);
         }
     }
     Ok(keys)
 }
 
-struct Work {
+/// The steps one key analysis and its readings of facts may spend, and the
+/// steps spent so far, under one ceiling: a statement read, a head atom
+/// registered, a body literal or a term inspected is one step each.
+#[derive(Debug)]
+pub struct KeyWork {
     steps: u64,
     limit: u64,
 }
 
-impl Work {
+impl KeyWork {
+    /// Work up to `limit` steps, none spent yet.
+    #[must_use]
+    pub const fn new(limit: u64) -> Self {
+        Self { steps: 0, limit }
+    }
+
+    /// The steps spent, by a completed or a stopped reading alike.
+    #[must_use]
+    pub const fn steps(&self) -> u64 {
+        self.steps
+    }
+
     fn step(&mut self) -> Result<(), Stop> {
         let observed = u128::from(self.steps) + 1;
         check(Resource::Work, observed, u128::from(self.limit))?;
@@ -145,10 +157,90 @@ impl Work {
     }
 }
 
+/// The values at `position` of the facts of `signature`, when facts are its
+/// only producers: `None` when a rule with a body, a choice, a disjunction,
+/// an aggregate or theory head, or an external declaration produces it, or
+/// a fact holds something other than a scalar at that position. What the
+/// facts admit is then exactly what the relation admits; a consumer that
+/// needs a bound on a keyed relation's condition reads it here rather than
+/// from an analysis of derived values. One step per statement read.
+///
+/// # Errors
+/// Returns the work stop; the steps before it stay spent.
+pub fn facts<'p>(
+    program: &'p Program,
+    signature: &Signature,
+    position: usize,
+    work: &mut KeyWork,
+) -> Result<Option<Vec<&'p Symbol>>, Stop> {
+    let mut values = Vec::new();
+    for carrier in program.statements() {
+        work.step()?;
+        match carrier.get() {
+            Statement::Rule(rule) => match rule.head().get() {
+                Head::Literal(literal) => {
+                    let LiteralInner::Atom(atom) = &literal.inner else {
+                        continue;
+                    };
+                    let atom = atom.get();
+                    for terms in atom.alternatives() {
+                        if atom_signature(atom, terms.len()).as_ref() != Some(signature) {
+                            continue;
+                        }
+                        if literal.negation != DefaultNegation::None
+                            || rule.body().get().elements().next().is_some()
+                        {
+                            return Ok(None);
+                        }
+                        match terms.get(position) {
+                            Some(Term::Symbolic(symbol)) => values.push(symbol),
+                            _ => return Ok(None),
+                        }
+                    }
+                }
+                Head::Choice(choice)
+                    if choice
+                        .elements()
+                        .any(|element| names(element.get().literal(), signature)) =>
+                {
+                    return Ok(None);
+                }
+                Head::Disjunction(disjunction)
+                    if disjunction
+                        .elements()
+                        .any(|element| names(element.get().literal(), signature)) =>
+                {
+                    return Ok(None);
+                }
+                Head::Choice(_) | Head::Disjunction(_) | Head::Falsum | Head::Verum => {}
+                Head::Aggregate(_) | Head::TheoryAtom(_) => return Ok(None),
+            },
+            Statement::External(external) if atom_names(external.atom().get(), signature) => {
+                return Ok(None);
+            }
+            _ => {}
+        }
+    }
+    Ok(Some(values))
+}
+
+/// Whether the literal's atom has `signature` under any of its alternatives.
+fn names(literal: &Literal, signature: &Signature) -> bool {
+    match &literal.inner {
+        LiteralInner::Atom(atom) => atom_names(atom.get(), signature),
+        _ => false,
+    }
+}
+
+fn atom_names(atom: &Atom, signature: &Signature) -> bool {
+    atom.alternatives()
+        .any(|terms| atom_signature(atom, terms.len()).as_ref() == Some(signature))
+}
+
 fn produced(
     literal: &Literal,
     producers: &mut BTreeMap<Signature, usize>,
-    work: &mut Work,
+    work: &mut KeyWork,
 ) -> Result<(), Stop> {
     if let LiteralInner::Atom(atom) = &literal.inner {
         atom_produced(atom.get(), producers, work)?;
@@ -159,7 +251,7 @@ fn produced(
 fn atom_produced(
     atom: &Atom,
     producers: &mut BTreeMap<Signature, usize>,
-    work: &mut Work,
+    work: &mut KeyWork,
 ) -> Result<(), Stop> {
     for terms in atom.alternatives() {
         work.step()?;
@@ -187,7 +279,7 @@ fn key<'p>(
     choice: &'p Choice,
     body: &'p Body,
     producers: &BTreeMap<Signature, usize>,
-    work: &mut Work,
+    work: &mut KeyWork,
 ) -> Result<Option<Key<'p>>, Stop> {
     if !exactly_one(choice.left_guard(), choice.right_guard()) {
         return Ok(None);
@@ -244,7 +336,7 @@ fn key<'p>(
 fn key_variables<'p>(
     body: &'p Body,
     keyed: &Signature,
-    work: &mut Work,
+    work: &mut KeyWork,
 ) -> Result<Option<BTreeSet<&'p VarName>>, Stop> {
     let mut variables = BTreeSet::new();
     for element in body.elements() {
@@ -284,7 +376,7 @@ struct Positions<'p> {
 fn value_position<'p>(
     terms: &'p [Term],
     key_variables: &BTreeSet<&'p VarName>,
-    work: &mut Work,
+    work: &mut KeyWork,
 ) -> Result<Option<Positions<'p>>, Stop> {
     let mut arguments = Vec::with_capacity(terms.len());
     let mut seen = BTreeSet::new();
@@ -326,7 +418,7 @@ fn binds_value(
     keyed: &Signature,
     key_variables: &BTreeSet<&VarName>,
     value_variable: &VarName,
-    work: &mut Work,
+    work: &mut KeyWork,
 ) -> Result<bool, Stop> {
     let mut bound = false;
     for literal in condition.literals() {

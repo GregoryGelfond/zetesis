@@ -108,6 +108,9 @@ pub enum ExecutionObservation<'a> {
         /// key admits before grounding; zero when no constraint had the form.
         keyed_constraints: usize,
     },
+    /// The key analysis behind the asked constraints stopped at its work
+    /// ceiling; every constraint not yet asked was grounded as written.
+    KeyAnalysisStopped(zetesis_themelios::DomainStop),
     /// A checked tight certificate enables specialized membership checking.
     TightMembership,
     /// Complete positive atomic-head classification and least consequences enable

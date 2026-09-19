@@ -119,10 +119,11 @@ mod grounding_options;
 mod formula_domains;
 mod formula_keys;
 mod word_hash;
+pub use formula_keys::KeyAnalysis;
 pub use grounding_observer::{
     DomainObservation, GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork,
 };
-pub use grounding_options::{DomainLimits, GroundingOptions, JoinStrategy};
+pub use grounding_options::{DomainLimits, DomainStop, GroundingOptions, JoinStrategy};
 pub use metadata::{
     AtomSelection, AtomSelectionError, AtomSelectionLimits, LocatedDirective, MetadataError,
     MetadataFeature, MetadataLimits, MetadataResource, OutputSelection, PreparedProjection,

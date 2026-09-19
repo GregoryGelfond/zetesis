@@ -215,7 +215,11 @@ their meaning arguments. The transformation is per rule and changes no
 answer set; what it changes is the grounding: a disequality over a product
 of a demanded value with every value the key admits becomes a negated lookup
 of the demanded atom, and the product is never formed. The asked statements
-keep the written constraint's provenance; the written constraint is dropped.
+keep the written constraint's provenance and take the place of its compiled
+rules; the rest of the program is compiled once. The analysis is bounded by
+the key work ceiling and the term work remaining, charged to the term work,
+and a stop, reported on the admitted formula and by the CLI, leaves the
+constraints not yet asked as written.
 
 ### Completed possible support
 

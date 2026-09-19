@@ -56,6 +56,7 @@ pub(crate) fn ground(
 
     let profile = Profile::new(observer);
     let keyed_constraints = prepared.keyed_constraints;
+    let key_analysis = prepared.key_analysis;
     let Instantiation {
         projection,
         builder,
@@ -96,6 +97,7 @@ pub(crate) fn ground(
         objective_origins,
         objective_declarations,
         keyed_constraints,
+        key_analysis,
         expansion: budget.usage(),
     })
 }

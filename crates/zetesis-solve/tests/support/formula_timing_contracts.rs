@@ -53,6 +53,7 @@ fn interleaved_sessions_preserve_all_phase_attempts() {
         objectives: admitted.objectives(),
         gate_atoms: 0,
         keyed_constraints: 0,
+        key_analysis: zetesis_themelios::KeyAnalysis::Complete,
         certificate_order: zetesis_sat::CertificateOrder::TightFirst,
     };
     let mut sessions = [(), ()].map(|()| {

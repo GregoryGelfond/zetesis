@@ -165,13 +165,22 @@ admits. `:- G, p(k, Y), Y != t.`, with `Y` read nowhere else, `t` free of
 one `p(k, y)` holds, and the written constraint fires exactly when that `y` is
 not `t`, which is exactly when `p(k, t)` is absent. A column with a digit and a
 carry, `:- G, p(k, Y), q(j, C), s != Y + 10*C.`, is prepared as two such
-constraints demanding `s \ 10` of `p` and `s / 10` of `q`, when the domain
-analysis shows every value `p` admits is a digit in `0..9` and every value `q`
-admits a natural number; the equation then has one solution, and for a
+constraints demanding `s \ 10` of `p` and `s / 10` of `q`, when the facts of
+the conditions binding the digit and the carry admit only digits in `0..9`
+and only natural numbers, facts being all that produces them
+(`zetesis_domain::facts`); the equation then has one solution, and for a
 negative `s` no solution, in which case both forms fire. The product of the
 demanded value with every value the key admits is never formed: the
 send-money puzzle's column constraints ground to two hundred instances each
 instead of two thousand.
+
+The written constraint is compiled once and its rules replaced in place by
+the asked constraints', so nothing is prepared twice. The key analysis and
+its readings of facts run under `FormulaLimits::max_key_work` and the term
+work remaining, and their steps are charged to the term work;
+`AdmittedFormula::key_analysis` says whether it completed or stopped, and a
+stop leaves every constraint not yet asked as written, which changes no
+answer set.
 
 The asked program is prepared again under the remaining expansion budget.
 Every asked statement carries the written constraint's source location and

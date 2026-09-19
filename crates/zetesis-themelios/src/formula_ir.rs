@@ -45,8 +45,10 @@ pub(crate) struct Prepared {
     /// refinement after support completion.
     pub objective_extrema: BTreeSet<usize>,
     /// Written constraints over a keyed value that were asked as the one atom
-    /// their key admits, before this preparation.
+    /// their key admits, in place, during this preparation.
     pub keyed_constraints: usize,
+    /// How the key analysis that asked them ended.
+    pub key_analysis: crate::KeyAnalysis,
 }
 pub(crate) struct ObjectiveIr {
     pub weight: ObjectiveField,
@@ -349,13 +351,7 @@ pub(crate) fn prepare(
     fallback: Location,
 ) -> Result<Prepared, FormulaFailure> {
     let constants = extended::resolve(source, budget, fallback)?;
-    let mut rules = Vec::new();
-    let mut projection = Vec::new();
-    let mut project_selection = crate::ProjectSelection::default();
-    let mut analyzed = Vec::new();
-    let mut pool_projection_nodes = 0;
-    let mut objectives = Vec::new();
-    let mut objective_declarations = Vec::new();
+    let mut parts = Parts::default();
     let mut compiler = Compiler {
         options,
         limits,
@@ -374,63 +370,28 @@ pub(crate) fn prepare(
         ) {
             continue;
         }
-        compiler.location = extended::origin(carrier, fallback);
-        let rewritten = compiler.normalize_statement(carrier, &constants)?;
-        let statement = rewritten.statements().next().expect("rewrite keeps a rule");
-        let origins = extended::parsed_origins(carrier);
-        if compiler.project_statement(
-            statement,
-            &origins,
-            &mut pool_projection_nodes,
-            &mut projection,
-            &mut project_selection,
-        )? {
-            continue;
-        }
-        if let Some(observation) = compiler.objective_statement(
-            statement,
-            &origins,
-            &mut objectives,
-            &mut objective_declarations,
-            &mut pool_projection_nodes,
-        )? {
-            analyzed.extend(observation);
-            continue;
-        }
-        if let Some(facts) = if generated_fact(statement.get()) {
-            None
-        } else {
-            fact_expansion::facts(statement, compiler.budget, compiler.location)?
-        } {
-            compiler.budget.charge(
-                ExpansionResource::Origins,
-                (facts.len() as u128).saturating_mul(origins.len() as u128),
-                compiler.location,
-            )?;
-            for fact in facts {
-                let head = fact.head().expect("expanded facts have a head").clone();
-                analyzed.push(crate::formula_analysis::fact(
-                    &head,
-                    statement,
-                    compiler.location,
-                )?);
-                rules.push(compiler.fact_rule(head, &origins)?);
-            }
-        } else {
-            compiler.source_rules(
-                statement,
-                &origins,
-                &mut pool_projection_nodes,
-                &mut rules,
-                &mut analyzed,
-            )?;
-        }
+        compiler.compile(carrier, &constants, &mut parts, fallback)?;
     }
-    let analyzed = SourceProgram::of_nodes(analyzed);
+    let mut analyzed = SourceProgram::of_nodes(std::mem::take(&mut parts.analyzed));
+    let asked = crate::formula_keys::ask_all(&analyzed, limits, compiler.budget, fallback)?;
+    let keyed_constraints = asked.rules.len();
+    if keyed_constraints > 0 {
+        analyzed = replace_asked(
+            &mut compiler,
+            &constants,
+            &mut parts,
+            &analyzed,
+            asked.rules,
+            fallback,
+        )?;
+    }
     let analysis = crate::formula_analysis::analyze(&analyzed, limits, compiler.budget, fallback)?;
-    let objective_extrema =
-        crate::formula_objective_dependencies::check(&rules, &mut objectives, &analysis);
-    validate_objectives(&objectives, limits)?;
+    let objective_extrema = crate::formula_objective_dependencies::check(
+        &parts.rules,
+        &mut parts.objectives,
+        &analysis,
+    );
+    validate_objectives(&parts.objectives, limits)?;
     let analysis_basis = if compiler.dependency_projection {
         crate::AnalysisBasis::DependencyProjection
     } else {
@@ -440,14 +401,67 @@ pub(crate) fn prepare(
         analysis,
         analysis_basis,
         analyzed,
-        rules,
-        projection,
-        project_selection: project_selection.finish(),
-        objectives,
-        objective_declarations,
+        rules: parts.rules,
+        projection: parts.projection,
+        project_selection: parts.project_selection.finish(),
+        objectives: parts.objectives,
+        objective_declarations: parts.objective_declarations,
         objective_extrema,
-        keyed_constraints: 0,
+        keyed_constraints,
+        key_analysis: asked.analysis,
     })
+}
+
+/// What the statements compile to, in source order: the rules and the
+/// projection's, the analyzed statements, the objectives and their
+/// declarations, and the projection nodes charged so far.
+#[derive(Default)]
+struct Parts {
+    rules: Vec<RuleIr>,
+    projection: Vec<RuleIr>,
+    project_selection: crate::ProjectSelection,
+    analyzed: Vec<WithProvenance<Statement>>,
+    pool_projection_nodes: u128,
+    objectives: Vec<ObjectiveIr>,
+    objective_declarations: Vec<Location>,
+}
+
+/// Replace each written constraint's rules and analyzed statement by those
+/// of the constraints asked in its place, compiled as any statement is,
+/// under the written constraint's provenance and the transformation's tag.
+/// The analyzed statements of the rest are kept as they are; the program is
+/// rebuilt once. The written constraint's charges stay charged: it was
+/// compiled.
+fn replace_asked(
+    compiler: &mut Compiler<'_>,
+    constants: &BTreeMap<String, Symbol>,
+    parts: &mut Parts,
+    analyzed: &SourceProgram,
+    asked: BTreeMap<Location, (themelios_program::provenance::Provenance, Vec<Rule>)>,
+    fallback: Location,
+) -> Result<SourceProgram, FormulaFailure> {
+    parts
+        .rules
+        .retain(|rule| !asked.contains_key(&rule.location));
+    parts.analyzed = analyzed
+        .statements()
+        .filter(|carrier| match extended::parsed_origins(carrier)[..] {
+            [origin] => !asked.contains_key(&origin),
+            _ => true,
+        })
+        .cloned()
+        .collect();
+    let tag = themelios_program::provenance::Provenance::from(Origin::Transformed(
+        TransformTag::new("zetesis-keyed-constraint"),
+    ));
+    for (provenance, rules) in asked.into_values() {
+        for rule in rules {
+            let carrier =
+                WithProvenance::new(Statement::Rule(rule), provenance.clone().merge(tag.clone()));
+            compiler.compile(&carrier, constants, parts, fallback)?;
+        }
+    }
+    Ok(SourceProgram::of_nodes(std::mem::take(&mut parts.analyzed)))
 }
 
 fn validate_objectives(
@@ -628,6 +642,69 @@ impl Compiler<'_> {
         }
         self.predicates.insert(predicate.clone());
         predicate
+    }
+
+    /// Compile one statement into the parts: a projection or objective
+    /// declaration, expanded facts, or its rules, after normalizing it.
+    fn compile(
+        &mut self,
+        carrier: &WithProvenance<Statement>,
+        constants: &BTreeMap<String, Symbol>,
+        parts: &mut Parts,
+        fallback: Location,
+    ) -> Result<(), FormulaFailure> {
+        self.location = extended::origin(carrier, fallback);
+        let rewritten = self.normalize_statement(carrier, constants)?;
+        let statement = rewritten.statements().next().expect("rewrite keeps a rule");
+        let origins = extended::parsed_origins(carrier);
+        if self.project_statement(
+            statement,
+            &origins,
+            &mut parts.pool_projection_nodes,
+            &mut parts.projection,
+            &mut parts.project_selection,
+        )? {
+            return Ok(());
+        }
+        if let Some(observation) = self.objective_statement(
+            statement,
+            &origins,
+            &mut parts.objectives,
+            &mut parts.objective_declarations,
+            &mut parts.pool_projection_nodes,
+        )? {
+            parts.analyzed.extend(observation);
+            return Ok(());
+        }
+        if let Some(facts) = if generated_fact(statement.get()) {
+            None
+        } else {
+            fact_expansion::facts(statement, self.budget, self.location)?
+        } {
+            self.budget.charge(
+                ExpansionResource::Origins,
+                (facts.len() as u128).saturating_mul(origins.len() as u128),
+                self.location,
+            )?;
+            for fact in facts {
+                let head = fact.head().expect("expanded facts have a head").clone();
+                parts.analyzed.push(crate::formula_analysis::fact(
+                    &head,
+                    statement,
+                    self.location,
+                )?);
+                parts.rules.push(self.fact_rule(head, &origins)?);
+            }
+        } else {
+            self.source_rules(
+                statement,
+                &origins,
+                &mut parts.pool_projection_nodes,
+                &mut parts.rules,
+                &mut parts.analyzed,
+            )?;
+        }
+        Ok(())
     }
 
     /// Keep the rewritten owner private until every normalization step has succeeded.

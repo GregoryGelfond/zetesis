@@ -13,7 +13,7 @@ use zetesis_ferraris::Theory;
 use crate::{
     AdmissionFailure, AdmissionOptions, BundleAdmissionError, BundleAdmissionOptions,
     ExpansionFailure, ExpansionLimits, ParsedSource, SourceBundle, SourceFailure, SourceMetadata,
-    bundle_admission, extended, formula_ir, formula_keys, metadata, profile,
+    bundle_admission, extended, formula_ir, metadata, profile,
 };
 
 mod preparation;
@@ -104,6 +104,11 @@ pub struct FormulaLimits {
     pub max_support_rounds: u64,
     /// Original source locations retained in emitted formula-root evidence.
     pub max_origin_locations: usize,
+    /// Steps of the key analysis that asks constraints over keyed values, and
+    /// of its readings of facts, also bounded by the term work remaining; the
+    /// steps spent are charged to the term work. A stop leaves every
+    /// constraint not yet asked as written and is reported.
+    pub max_key_work: u64,
     /// Final dense atom, formula-node, and theory-root storage ceilings.
     pub theory: zetesis_ferraris::AdmissionLimits,
     /// Per-aggregate translation ceilings, additionally capped by total formula work/nodes.
@@ -139,6 +144,7 @@ impl Default for FormulaLimits {
             max_work: 10_000_000,
             max_support_rounds: 1_000_000,
             max_origin_locations: 1_000_000,
+            max_key_work: 1_000_000,
             theory: zetesis_ferraris::AdmissionLimits::default(),
             objective: zetesis_objective::AdmissionLimits::default(),
             observation: crate::observation::AdmissionLimits::default(),
@@ -495,6 +501,14 @@ impl AdmittedFormula {
         &self.compiled.expansion
     }
 
+    /// How the key analysis behind [`Self::keyed_constraints`] ended: complete,
+    /// or stopped by its work ceiling with every constraint not yet asked
+    /// left as written.
+    #[must_use]
+    pub fn key_analysis(&self) -> crate::KeyAnalysis {
+        self.compiled.key_analysis
+    }
+
     /// The admitted general formula theory.
     #[must_use]
     pub fn theory(&self) -> &Theory {
@@ -600,6 +614,14 @@ impl AdmittedFormulaBundle {
     #[must_use]
     pub fn expansion_usage(&self) -> &crate::ExpansionUsage {
         &self.compiled.expansion
+    }
+
+    /// How the key analysis behind [`Self::keyed_constraints`] ended: complete,
+    /// or stopped by its work ceiling with every constraint not yet asked
+    /// left as written.
+    #[must_use]
+    pub fn key_analysis(&self) -> crate::KeyAnalysis {
+        self.compiled.key_analysis
     }
 
     /// The admitted general formula theory.
@@ -719,6 +741,7 @@ pub(crate) struct Compiled {
     pub objective_origins: Vec<Vec<Location>>,
     pub objective_declarations: Vec<Location>,
     pub keyed_constraints: usize,
+    pub key_analysis: crate::KeyAnalysis,
     pub expansion: crate::ExpansionUsage,
 }
 
@@ -1072,23 +1095,6 @@ fn prepare(
     metadata.observations =
         crate::observation::compile(source, options, limits.observation, &mut budget, location)?;
     let prepared = formula_ir::prepare(source, choices, options, limits, &mut budget, location)?;
-    // A constraint over a keyed value is asked as the one atom its key admits;
-    // the asked program is prepared again under the remaining budget.
-    let prepared = match formula_keys::rewrite(source, &prepared, &mut budget, location)? {
-        Some(asked) => {
-            let mut prepared = formula_ir::prepare(
-                &asked.program,
-                choices,
-                options,
-                limits,
-                &mut budget,
-                location,
-            )?;
-            prepared.keyed_constraints = asked.constraints;
-            prepared
-        }
-        None => prepared,
-    };
     Ok(Preparation::new(prepared, budget, limits, location))
 }
 

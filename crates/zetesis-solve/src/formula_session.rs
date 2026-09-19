@@ -78,6 +78,9 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             roots: self.input.theory.roots().len(),
             keyed_constraints: self.input.keyed_constraints,
         })?;
+        if let zetesis_themelios::KeyAnalysis::Stopped(stop) = self.input.key_analysis {
+            observations.record(Event::KeyAnalysisStopped(stop))?;
+        }
         let models = phases.measure(SolvePhase::CandidateSetup, || {
             // Several workers decide their leaves themselves, which the
             // device protocol cannot take: a device backend keeps the scalar
