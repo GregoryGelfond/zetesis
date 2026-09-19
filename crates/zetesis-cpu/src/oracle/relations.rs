@@ -48,7 +48,7 @@ pub(super) enum Rows<'a> {
 #[derive(Clone, Copy)]
 pub(super) enum Row<'a> {
     Atom(&'a Atom),
-    Dense { layout: &'a Layout, index: usize },
+    Dense { layout: &'a Layout, position: usize },
 }
 
 impl<'a> Row<'a> {
@@ -56,11 +56,11 @@ impl<'a> Row<'a> {
     pub(super) fn values(self) -> impl Iterator<Item = &'a Value> {
         let (atom, dense) = match self {
             Self::Atom(atom) => (Some(atom.values().iter()), None),
-            Self::Dense { layout, index } => (
+            Self::Dense { layout, position } => (
                 None,
                 Some(
                     (0..layout.predicate().arity())
-                        .map(move |argument| layout.value(argument, index)),
+                        .map(move |argument| layout.value(argument, position)),
                 ),
             ),
         };
@@ -94,7 +94,7 @@ impl<'a> Rows<'a> {
         match self {
             Self::Borrowed(rows) => rows.len(),
             Self::Runs { levels, tail, .. } => levels.get(run).map_or(tail.len(), Vec::len),
-            Self::Dense { relation, .. } => relation.layout().cells(),
+            Self::Dense { relation, .. } => relation.layout().positions(),
         }
     }
 
@@ -127,9 +127,9 @@ impl<'a> Rows<'a> {
                 .and_then(|&id| atoms.get(id))
                 .map(Row::Atom),
             Self::Dense { relation, .. } => {
-                (position < relation.layout().cells()).then_some(Row::Dense {
+                (position < relation.layout().positions()).then_some(Row::Dense {
                     layout: relation.layout(),
-                    index: position,
+                    position,
                 })
             }
         }
@@ -979,7 +979,7 @@ mod tests {
             .all()
             .into_iter()
             .map(|row| match row {
-                Row::Dense { index, .. } => index,
+                Row::Dense { position, .. } => position,
                 Row::Atom(_) => unreachable!(),
             })
             .collect();

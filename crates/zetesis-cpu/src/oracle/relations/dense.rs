@@ -31,7 +31,7 @@ pub(in crate::oracle) struct Layout {
     axes: Vec<Vec<Value>>,
     /// `strides[k]` is the product of the widths of the arguments after `k`.
     strides: Vec<usize>,
-    cells: usize,
+    positions: usize,
 }
 
 impl Layout {
@@ -53,19 +53,19 @@ impl Layout {
             }
         }
         let mut strides = vec![1; axes.len()];
-        let mut cells = 1usize;
+        let mut positions = 1usize;
         for (k, axis) in axes.iter().enumerate().rev() {
-            strides[k] = cells;
-            cells = cells.checked_mul(axis.len())?;
+            strides[k] = positions;
+            positions = positions.checked_mul(axis.len())?;
         }
-        if cells > ceiling {
+        if positions > ceiling {
             return None;
         }
         Some(Self {
             predicate: predicate.clone(),
             axes,
             strides,
-            cells,
+            positions,
         })
     }
 
@@ -73,13 +73,13 @@ impl Layout {
         &self.predicate
     }
 
-    /// Tuples inside the bounds: the bit positions.
-    pub(in crate::oracle) fn cells(&self) -> usize {
-        self.cells
+    /// The number of positions: one for each tuple inside the bounds.
+    pub(in crate::oracle) fn positions(&self) -> usize {
+        self.positions
     }
 
     fn words(&self) -> usize {
-        self.cells.div_ceil(64)
+        self.positions.div_ceil(64)
     }
 
     /// Retained bytes: the value lists and strides. A shared name is counted
@@ -87,11 +87,11 @@ impl Layout {
     /// does not fit.
     pub(in crate::oracle) fn bytes(&self) -> Option<u128> {
         let axes = self.axes.iter().try_fold(0u128, |sum, axis| {
-            let cells = (axis.capacity() as u128).checked_mul(size_of::<Value>() as u128)?;
+            let positions = (axis.capacity() as u128).checked_mul(size_of::<Value>() as u128)?;
             let payload = axis.iter().try_fold(0u128, |sum, value| {
                 sum.checked_add(value.checked_payload_capacity_bytes()?)
             })?;
-            sum.checked_add(cells)?.checked_add(payload)
+            sum.checked_add(positions)?.checked_add(payload)
         })?;
         (size_of::<Self>() as u128)
             .checked_add(self.predicate.payload_capacity_bytes() as u128)?
@@ -108,17 +108,17 @@ impl Layout {
 
     /// The position of a tuple, or `None` when a value lies outside its
     /// argument's bound.
-    pub(in crate::oracle) fn index_of<'v>(
+    pub(in crate::oracle) fn position_of<'v>(
         &self,
         values: impl IntoIterator<Item = &'v Value>,
     ) -> Option<usize> {
-        let mut index = 0;
+        let mut position = 0;
         let mut arguments = 0;
         for (argument, value) in values.into_iter().enumerate() {
-            index += self.rank(argument, value)? * *self.strides.get(argument)?;
+            position += self.rank(argument, value)? * *self.strides.get(argument)?;
             arguments += 1;
         }
-        (arguments == self.axes.len()).then_some(index)
+        (arguments == self.axes.len()).then_some(position)
     }
 
     /// The values of the last argument in canonical order, which index a
@@ -128,9 +128,9 @@ impl Layout {
     }
 
     /// The value of a position's tuple at an argument.
-    pub(in crate::oracle) fn value(&self, argument: usize, index: usize) -> &Value {
+    pub(in crate::oracle) fn value(&self, argument: usize, position: usize) -> &Value {
         let axis = &self.axes[argument];
-        &axis[(index / self.strides[argument]) % axis.len()]
+        &axis[(position / self.strides[argument]) % axis.len()]
     }
 
     /// The positions of the tuples whose first `bound` arguments take the
@@ -141,7 +141,7 @@ impl Layout {
         prefix: impl IntoIterator<Item = &'v Value>,
     ) -> Range<usize> {
         let mut base = 0;
-        let mut block = self.cells;
+        let mut block = self.positions;
         for (argument, value) in prefix.into_iter().enumerate() {
             let Some(rank) = self.rank(argument, value) else {
                 return 0..0;
@@ -266,7 +266,8 @@ impl Dense {
 
     /// Whether the tuple at a position is in the set.
     pub(super) fn holds(&self, set: RowSet, position: usize) -> bool {
-        position < self.layout.cells && self.word(set, position / 64) >> (position % 64) & 1 == 1
+        position < self.layout.positions
+            && self.word(set, position / 64) >> (position % 64) & 1 == 1
     }
 
     pub(in crate::oracle) fn contains(&self, position: usize) -> bool {
@@ -277,7 +278,7 @@ impl Dense {
     /// the key is incomplete or a value lies outside its argument's bound.
     pub(in crate::oracle) fn position(&self, key: &AtomKey<'_>) -> Option<usize> {
         self.layout
-            .index_of((0..key.predicate().arity()).filter_map(|column| key.value(column)))
+            .position_of((0..key.predicate().arity()).filter_map(|column| key.value(column)))
     }
 
     /// Move the cutoff to the present extent: nothing is new.
@@ -309,7 +310,7 @@ impl Dense {
         range: &mut Range<usize>,
         work: &mut Work<'_>,
     ) -> Result<Option<usize>, Stop> {
-        let end = range.end.min(self.layout.cells);
+        let end = range.end.min(self.layout.positions);
         let mut position = range.start;
         while position < end {
             charge(work, 1)?;
@@ -341,7 +342,7 @@ impl Dense {
         work: &mut Work<'_>,
     ) -> Result<(), Stop> {
         let mut live = base;
-        let mut range = 0..self.layout.cells;
+        let mut range = 0..self.layout.positions;
         while let Some(position) = self.next_row(RowSet::Current, &mut range, work)? {
             let values: Vec<Value> = (0..self.layout.axes.len())
                 .map(|argument| self.layout.value(argument, position).clone())
@@ -638,8 +639,8 @@ mod tests {
     #[test]
     fn positions_are_mixed_radix_with_the_first_argument_most_significant() {
         let layout = layout();
-        assert_eq!(layout.cells(), 6);
-        let index = |a: i32, b: i32| layout.index_of([&Value::Number(a), &Value::Number(b)]);
+        assert_eq!(layout.positions(), 6);
+        let index = |a: i32, b: i32| layout.position_of([&Value::Number(a), &Value::Number(b)]);
         assert_eq!(index(1, 10), Some(0));
         assert_eq!(index(1, 20), Some(1));
         assert_eq!(index(3, 20), Some(5));
