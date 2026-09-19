@@ -236,8 +236,8 @@ clingo. Complete native records remain available in the captures.
 before retention. Combined workloads must also fit the request's existing
 source/metadata ceilings. Each launched private source closure is sealed before
 and after execution. Derived-workload reports use matrix schema 2; unchanged
-suite reports retain schema 1. No first-answer or RSS phase is added by this
-entry point. See [workload admission](tests/workload_admission.rs) and
+suite reports retain schema 1. No first-answer phase is added by this entry
+point; memory rounds follow the plan when requested. See [workload admission](tests/workload_admission.rs) and
 [matrix acquisition](tests/matrix_campaign.rs) for checked library usage.
 The [manual's runnable client](../../docs/book/reference/validation.md#compare-a-parameterized-workload)
 shows a complete N=4 comparison using this API, with explicit executable paths

@@ -82,7 +82,7 @@ a gain.
 ## Separate memory observations
 
 `--memory-runs N` appends zero through 41 paired resource observations per case.
-It applies to ordinary CPU comparisons. Each starts a fresh Rust helper that
+It applies to ordinary CPU comparisons and to the matrix and series campaigns. Each starts a fresh Rust helper that
 waits for exactly one solver, then reads `RUSAGE_CHILDREN.ru_maxrss`. macOS reports
 bytes; Linux reports KiB, converted explicitly to bytes. The raw value/unit,
 solver PID and exit, helper PID and exit, command, output and bounded resource
