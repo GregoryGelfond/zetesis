@@ -108,8 +108,8 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
                 Some((atoms, rules)) => self.metadata(Label::Backend, format_args!("gpu ({}, {}; vendor=0x{:04x}; static atoms={atoms}, rules={rules})", adapter.name, adapter.backend, adapter.vendor_id)),
             },
             #[cfg(feature = "gpu")]
-            Event::DeviceFormula { adapter, grounder, batch_size, completion_workers, .. } => self.metadata(Label::Backend,
-                format_args!("hybrid GPU propagation + exact CPU residual search ({}, {}; vendor=0x{:04x}); oracle: Ferraris reduct countermodel; grounder: eager (requested {}); batch={batch_size}; CPU completion requested workers={completion_workers}", adapter.name, adapter.backend, adapter.vendor_id, grounder.label())),
+            Event::DeviceFormula { adapter, grounder, search, batch_size, completion_workers, .. } => self.metadata(Label::Backend,
+                format_args!("hybrid GPU propagation + exact CPU residual search ({}, {}; vendor=0x{:04x}); oracle: Ferraris reduct countermodel; search: {}; grounder: eager (requested {}); batch={batch_size}; CPU completion requested workers={completion_workers}", adapter.name, adapter.backend, adapter.vendor_id, search.label(), grounder.label())),
             Event::Formula { atoms, nodes, roots, keyed_constraints: 0 } => writeln!(self, "Formula: {atoms} atoms, {nodes} nodes, {roots} roots"),
             Event::Formula { atoms, nodes, roots, keyed_constraints } => writeln!(self,
                 "Formula: {atoms} atoms, {nodes} nodes, {roots} roots; {keyed_constraints} constraints asked by key"),
@@ -128,3 +128,7 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
 #[cfg(test)]
 #[path = "../../tests/support/objective_writer_contracts.rs"]
 mod objective_diagnostic_tests;
+
+#[cfg(all(test, feature = "gpu"))]
+#[path = "../../tests/support/backend_writer_contracts.rs"]
+mod backend_diagnostic_tests;

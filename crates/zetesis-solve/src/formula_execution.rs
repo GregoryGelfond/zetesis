@@ -168,6 +168,7 @@ impl Execution {
             adapter: oracle.info().metadata(),
             projection: oracle.projection(),
             grounder: options.grounder,
+            search: options.search,
             batch_size: options.batch_size,
             completion_workers: options.completion_workers,
         })?;

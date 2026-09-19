@@ -96,6 +96,7 @@ impl ExecutionObserver for Route<'_> {
                 adapter,
                 projection,
                 grounder,
+                search,
                 batch_size,
                 completion_workers,
             } => {
@@ -106,6 +107,7 @@ impl ExecutionObserver for Route<'_> {
                     || projection != expected.projection()
                     || adapter != expected.info().metadata()
                     || grounder != self.config.grounder
+                    || search != self.config.search
                     || batch_size != self.config.batch_size
                     || completion_workers != self.config.completion_workers
                 {

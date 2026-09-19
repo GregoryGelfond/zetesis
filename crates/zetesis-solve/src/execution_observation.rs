@@ -89,6 +89,8 @@ pub enum ExecutionObservation<'a> {
         projection: zetesis_wgpu::GateProjection,
         /// Requested materialization policy.
         grounder: Grounder,
+        /// How candidates are proposed and the reduct queried.
+        search: SearchMethod,
         /// Candidate batch ceiling.
         batch_size: NonZeroUsize,
         /// Requested CPU completion population.
