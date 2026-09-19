@@ -348,11 +348,11 @@ impl Narrower {
         }
         for (index, node) in nodes.iter().enumerate() {
             if let Node::Implies(a, b) = *node {
-                parents[a].push(index);
-                if b != a {
-                    parents[b].push(index);
-                }
-                for operand in [a, b] {
+                // An implication from a node to itself is one parent of it,
+                // counted once here and once among the atom operands.
+                let operands: &[usize] = if b == a { &[a] } else { &[a, b] };
+                for &operand in operands {
+                    parents[operand].push(index);
                     if let Some(atom) = atom_of(operand) {
                         atom_operands[index].push(atom);
                     }
@@ -384,10 +384,10 @@ impl Narrower {
     /// Knowledge of nothing, for the root of a tree over this theory.
     #[must_use]
     pub fn knowledge(&self) -> Knowledge {
-        let mut unknown = vec![0u32; self.atom_nodes.len()];
+        let mut unknown = vec![0usize; self.atom_nodes.len()];
         for (atom, nodes) in self.atom_nodes.iter().enumerate() {
             for &node in nodes {
-                unknown[atom] += u32::try_from(self.parents[node].len()).unwrap_or(u32::MAX);
+                unknown[atom] += self.parents[node].len();
             }
         }
         Knowledge {
@@ -512,7 +512,7 @@ fn most_constrained(
     known: &Known,
     work: &mut Work,
 ) -> Result<Option<usize>, Stop> {
-    let mut best: Option<(usize, u32)> = None;
+    let mut best: Option<(usize, usize)> = None;
     for atom in region.open() {
         work.tick()?;
         let unknown = known.unknown[atom];
@@ -542,11 +542,13 @@ struct Known {
     atom_sure: Vec<bool>,
     atom_never: Vec<bool>,
     /// Per chain, the operands known to hold.
-    sure_operands: Vec<u32>,
+    sure_operands: Vec<usize>,
     /// Per chain, the operands known to fail.
-    never_operands: Vec<u32>,
+    never_operands: Vec<usize>,
     /// Per atom, the parents of its nodes not yet known: the split ranking.
-    unknown: Vec<u32>,
+    /// A parent is counted once here and taken off once when it is
+    /// revisited, so the count never goes below zero.
+    unknown: Vec<usize>,
     /// The atoms this closure decided, not yet told to the region.
     learned: Vec<usize>,
     /// Nodes that learned something, with what, and have not been revisited.
@@ -592,7 +594,7 @@ fn learn(known: &mut [bool], opposite: &[bool], index: usize) -> Sweep {
 }
 
 impl Known {
-    fn empty(nodes: usize, chains: usize, unknown: Vec<u32>) -> Self {
+    fn empty(nodes: usize, chains: usize, unknown: Vec<usize>) -> Self {
         Self {
             sure: vec![false; nodes],
             never: vec![false; nodes],
@@ -746,7 +748,9 @@ impl Known {
         work.tick()?;
         let masked = |node: usize| frozen.is_some_and(|truth| !truth[node]);
         for &atom in &index.atom_operands[node] {
-            self.unknown[atom] = self.unknown[atom].saturating_sub(1);
+            self.unknown[atom] = self.unknown[atom]
+                .checked_sub(1)
+                .expect("a parent is counted before it is revisited");
         }
         let mut step = Sweep::Unchanged;
         if !masked(node) {
@@ -782,7 +786,7 @@ impl Known {
             root,
             ref operands,
         } = index.chains[chain];
-        let total = u32::try_from(operands.len()).unwrap_or(u32::MAX);
+        let total = operands.len();
         if value {
             self.sure_operands[chain] += 1;
         } else {
@@ -897,7 +901,7 @@ impl Known {
             root,
             ref operands,
         } = index.chains[chain];
-        let total = u32::try_from(operands.len()).unwrap_or(u32::MAX);
+        let total = operands.len();
         let mut step = Sweep::Unchanged;
         if self.sure[root] {
             if disjunction {

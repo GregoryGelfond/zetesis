@@ -711,3 +711,26 @@ fn holding_an_atom_without_producers_rechecks_no_support() {
     assert!(region.is_held(0));
     assert_eq!(statistics.propagations, 1);
 }
+
+#[test]
+fn an_implication_from_an_atom_to_itself_is_one_parent_of_the_atom() {
+    // a -> a: the implication is one parent of a's node, counted once in
+    // the split ranking and taken off once when the node is revisited; the
+    // root holds and decides nothing, so a stays the atom to split on.
+    let t = theory(1, vec![Node::Atom(0), Node::Implies(0, 0)], vec![1]);
+    let narrower = Narrower::new(&t);
+    let mut knowledge = narrower.knowledge();
+    let mut region = Region::undecided(1);
+    let (narrowing, _) = narrower
+        .narrow_known(
+            &t,
+            None,
+            &mut region,
+            &mut knowledge,
+            RegionLimits::default(),
+            &Control::default(),
+        )
+        .unwrap();
+    assert!(matches!(narrowing, Narrowing::Fixed { changed: false }));
+    assert_eq!(region.split_atom(), Some(0));
+}
