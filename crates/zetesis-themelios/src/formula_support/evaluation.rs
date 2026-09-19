@@ -117,12 +117,8 @@ enum Prefix {
     /// Every node was a number, the root included.
     Complete(Value),
     /// The node at `evaluated - 1` produced `first`, the first value that is
-    /// not a number, already admitted; or the plan ran out with `first`
-    /// absent, which cannot happen since the root ends the integer prefix.
-    Ended {
-        evaluated: usize,
-        first: Option<Value>,
-    },
+    /// not a number, already admitted.
+    Ended { evaluated: usize, first: Value },
 }
 
 /// Evaluate nodes as integers while every value is a number. Each node is
@@ -141,19 +137,13 @@ fn integer_prefix<'a, V: Fn(usize) -> Result<&'a Value, FormulaFailure>>(
             Operation::Constant(Value::Number(number)) => Ok(number),
             Operation::Constant(ref value) => {
                 let first = copy(value, context.budget, context.location)?;
-                return Ok(Prefix::Ended {
-                    evaluated,
-                    first: Some(first),
-                });
+                return Ok(Prefix::Ended { evaluated, first });
             }
             Operation::Variable(index) => match (context.variable)(index)? {
                 Value::Number(number) => Ok(*number),
                 value => {
                     let first = copy(value, context.budget, context.location)?;
-                    return Ok(Prefix::Ended {
-                        evaluated,
-                        first: Some(first),
-                    });
+                    return Ok(Prefix::Ended { evaluated, first });
                 }
             },
             Operation::Unary(operator, argument) => {
@@ -172,10 +162,7 @@ fn integer_prefix<'a, V: Fn(usize) -> Result<&'a Value, FormulaFailure>>(
                     context.counters,
                     context.location,
                 )?;
-                return Ok(Prefix::Ended {
-                    evaluated,
-                    first: Some(first),
-                });
+                return Ok(Prefix::Ended { evaluated, first });
             }
         };
         let number = result.map_err(|error| ExpansionFailure::Evaluation {
@@ -187,10 +174,7 @@ fn integer_prefix<'a, V: Fn(usize) -> Result<&'a Value, FormulaFailure>>(
         }
         frame.integers.push(number);
     }
-    Ok(Prefix::Ended {
-        evaluated,
-        first: None,
-    })
+    unreachable!("the root ends the integer prefix: an expression has a root")
 }
 
 /// Continue on value cells: the integer prefix moves into them, the first
@@ -199,17 +183,15 @@ fn value_suffix<'a, V: Fn(usize) -> Result<&'a Value, FormulaFailure>>(
     frame: &mut Frame<'_>,
     nodes: &[Operation],
     evaluated: usize,
-    first: Option<Value>,
+    first: Value,
     context: &mut Context<'_, 'a, V>,
 ) -> Result<Value, FormulaFailure> {
     frame.materialize();
-    if let Some(value) = first {
-        context.payload(&value)?;
-        if evaluated == nodes.len() {
-            return Ok(value);
-        }
-        frame.values.push(value);
+    context.payload(&first)?;
+    if evaluated == nodes.len() {
+        return Ok(first);
     }
+    frame.values.push(first);
     let (root, prefix) = nodes.split_last().expect("expression has root");
     for node in &prefix[evaluated..] {
         let value = evaluate(node, frame.values, context)?;
