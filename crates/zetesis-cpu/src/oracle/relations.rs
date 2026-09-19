@@ -426,12 +426,9 @@ impl Catalogs {
         };
         let catalog = match &self.relations[handle] {
             Relation::Tree { catalog, .. } => catalog,
-            Relation::Dense(dense) => {
-                work.charge(key.predicate().arity())?;
-                return Ok(dense
-                    .position(key)
-                    .is_some_and(|position| dense.contains(position)));
-            }
+            // A dense relation is asked through its layout by the round,
+            // never through the catalogs.
+            Relation::Dense(_) => return Err(Stop::InvalidProgram),
         };
         let other = self
             .bytes
@@ -909,10 +906,25 @@ mod tests {
         let held = [Some(&Value::Number(3))];
         let absent = [Some(&Value::Number(2))];
         let outside = [Some(&Value::Number(9))];
+        let Relation::Dense(dense) = catalogs.relation(&predicate) else {
+            unreachable!("the predicate is laid out");
+        };
         for (assignment, expected) in [(&held, true), (&absent, false), (&outside, false)] {
             let key = key_pattern.key(&assignment[..]).unwrap();
-            assert_eq!(catalogs.contains(&key, 0, &mut work).unwrap(), expected);
+            assert_eq!(
+                dense
+                    .position(&key)
+                    .is_some_and(|position| dense.contains(position)),
+                expected
+            );
         }
+        // The catalogs answer for trees alone; a dense relation asked here
+        // is an invariant violation.
+        let key = key_pattern.key(&held[..]).unwrap();
+        assert_eq!(
+            catalogs.contains(&key, 0, &mut work),
+            Err(Stop::InvalidProgram)
+        );
         let positions: Vec<usize> = catalogs
             .rows(&predicate)
             .all()
