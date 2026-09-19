@@ -4,9 +4,7 @@
 use std::fmt::Write as _;
 
 use zetesis_core::{Atom, Model, Seed};
-use zetesis_cpu::{
-    ClosureWorkspace, Control, Limits, PreparationLimits, PreparedQueries, upper_closure,
-};
+use zetesis_cpu::{ClosureWorkspace, Control, Limits, PreparationLimits, PreparedQueries};
 
 fn edges(name: &str, first: u32, last: u32) -> String {
     let mut text = String::new();
@@ -62,15 +60,12 @@ fn families() -> Vec<(&'static str, String)> {
     ]
 }
 
-/// The seeds a family is checked under: nothing, every gate atom the upper
-/// closure allows, and every other one of them.
-fn seeds(program: &zetesis_core::Program, control: &Control) -> Vec<Seed> {
-    let upper = upper_closure(program, Limits::default(), control).unwrap();
-    let gates: Vec<Atom> = upper
-        .atoms()
-        .iter()
-        .filter(|atom| program.gate_predicates().contains(atom.predicate()))
-        .cloned()
+/// The seeds a family is checked under: nothing, every symbolic gate atom,
+/// and every other one of them.
+fn seeds(program: &zetesis_core::Program) -> Vec<Seed> {
+    let gates: Vec<Atom> = program
+        .indexed_gate_atoms()
+        .map(|gate| gate.unwrap().atom().clone())
         .collect();
     let alternate: Vec<Atom> = gates.iter().step_by(2).cloned().collect();
     [Vec::new(), gates, alternate]
@@ -119,7 +114,7 @@ fn dense_and_tree_closures_agree_atom_for_atom_on_every_family() {
         )
         .unwrap_or_else(|error| panic!("{name}: {error:?}"));
         let program = owner.program();
-        let seeds = seeds(program, &control);
+        let seeds = seeds(program);
         let (dense_predicates, with_dense) = closures(program, dense, &seeds, &control);
         let (tree_predicates, with_trees) = closures(program, tree, &seeds, &control);
         assert!(dense_predicates > 0, "{name}: no predicate was laid out");
@@ -265,7 +260,7 @@ fn a_predicate_wider_than_the_ceiling_keeps_its_tree_beside_dense_ones() {
     )
     .unwrap();
     let program = owner.program();
-    let seeds = seeds(program, &control);
+    let seeds = seeds(program);
     let mixed = PreparationLimits {
         max_dense_atoms: 4,
         ..PreparationLimits::default()

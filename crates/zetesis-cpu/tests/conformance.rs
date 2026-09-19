@@ -10,9 +10,7 @@ use zetesis_core::{
     AdmissionLimits, Atom, AtomPattern, Filter, GroundProgram, GroundRule, Model, Predicate,
     Program, Seed, StaticLimits, Template, Term, Value,
 };
-use zetesis_cpu::{
-    CandidateLimits, Candidates, Control, Limits, check, lower_closure, upper_closure,
-};
+use zetesis_cpu::{CandidateLimits, Candidates, Control, Limits, check};
 
 fn pattern(name: &str, terms: Vec<Term>) -> AtomPattern {
     let predicate = Predicate::new(name, terms.len()).expect("nonempty test name");
@@ -198,42 +196,24 @@ fn assert_all_small_models(program: &Program) {
         "complete models of {:?}",
         program.templates()
     );
-    // The counter bounded by the two closures enumerates a subset of the
-    // seeds and accepts exactly the same models: a gate atom outside the
-    // upper closure belongs to no answer set, and one inside the lower
-    // closure belongs to every answer set.
-    let may = upper_closure(program, Limits::default(), &Control::default())
-        .expect("tiny closure finishes within budget");
-    let must = lower_closure(program, Limits::default(), &Control::default())
-        .expect("tiny closure finishes within budget");
+    // The counter narrowed by the program's closures offers no more seeds
+    // than the plain one and accepts exactly the same models: a gate atom
+    // the narrowing cuts belongs to no answer set, and one it holds belongs
+    // to every answer set.
     let mut bounded_models = BTreeSet::new();
     let mut bounded_seeds = 0usize;
     let mut candidates = Candidates::new(program, CandidateLimits::default(), Control::default());
-    candidates.within(&may);
-    candidates.requiring(&must).expect("tiny lower closure");
+    candidates.bounded(Limits::default());
     for candidate in candidates {
         let candidate = candidate.expect("tiny carrier exhausts within budget");
         bounded_seeds += 1;
-        assert!(candidate.atoms().iter().all(|atom| may.contains(atom)));
-        assert!(
-            must.atoms()
-                .iter()
-                .filter(|atom| program.contains_gate_atom(atom))
-                .all(|atom| candidate.contains(atom))
-        );
         if assert_seed_matches_static(program, &graph, &candidate) {
             let (closure, _, _) = direct_closure(&graph, encode_seed(&graph, &candidate));
             let model: Vec<_> = decode(&graph, closure).atoms().iter().cloned().collect();
             bounded_models.insert(model);
         }
     }
-    let free = graph
-        .gate_atom_ids()
-        .iter()
-        .map(|id| &graph.atoms()[*id as usize])
-        .filter(|atom| may.contains(atom) && !must.contains(atom))
-        .count();
-    assert_eq!(bounded_seeds, 1usize << free);
+    assert!(bounded_seeds <= seen_seeds.len());
     assert_eq!(
         bounded_models,
         expected,

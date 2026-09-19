@@ -176,10 +176,12 @@ undecided cube, `Bounds.lower_constraint_refutes` and
 tree of `Search.lean`, whose `split` node with `split_partition` and
 `split_disjoint` makes the regions a partition of their parent and whose
 `mem_outputs_iff` makes the leaves exactly the accepted seeds of the root.
-Each closure is charged as one candidate check; a resource stop inside a
+The program is prepared once for the narrowing and charged as one
+preparation; each closure then runs on that preparation in one retained
+workspace and is charged as one candidate check. A resource stop inside a
 region keeps the completed passes' decisions and counts the region, a stop
-in the root keeps the bounds of the completed passes, and a program without
-gate predicates computes no closure.
+in the preparation or the root keeps the bounds of the completed passes, and
+a program without gate predicates computes no closure.
 
 For a theory whose complete asserted-head grammar is ordinary disjunction,
 every true atom in an answer set must have an original producer whose body is

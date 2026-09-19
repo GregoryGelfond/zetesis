@@ -27,7 +27,7 @@ pub use oracle::bounds::{ArgumentBounds, Bound, BoundLimits};
 pub use oracle::source;
 pub use oracle::{
     Check, ClosureWorkspace, Limits, PreparationLimits, PreparationStatistics, PreparedQueries,
-    Statistics, check, check_view, lower_closure, upper_closure,
+    Statistics, check, check_view,
 };
 pub use static_oracle::{StaticCheck, StaticStatistics, check_static, check_static_view};
 pub use verified::StableInterpretation;

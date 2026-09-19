@@ -392,80 +392,42 @@ impl Gates<'_> {
     }
 }
 
-/// The closure with every gate treated as possible: a rule fires whenever its
-/// positive body holds, whatever a seed decides. Every answer set lies inside
-/// it and every accepted seed inside its gate atoms
-/// (`Bounds.undecided_bounds_accepted`), so a gate atom outside it belongs to
-/// no answer set and the seed counter may omit it. No seed is fixed, so no
-/// constraint is judged.
+/// The lower closure of `cube` over `prepared`, computed in `workspace`:
+/// rules fire only under gates every seed of the cube satisfies, so the
+/// closure lies inside every answer set of the cube and its gate atoms
+/// inside every accepted seed (`Bounds.undecided_bounds_accepted` from the
+/// undecided cube). A fired constraint refutes the whole cube.
 ///
 /// # Errors
 /// Returns [`Stop`] for cancellation, deadlines and the closure budgets of
-/// `limits`, which it charges as one candidate check would; no partial
-/// closure is returned.
-pub fn upper_closure(program: &Program, limits: Limits, control: &Control) -> Result<Model, Stop> {
-    Ok(possible_closure(program, &Cube::undecided(), limits, control)?.atoms)
+/// `limits`, charged as one candidate check would be; the workspace is then
+/// retired and no partial closure is returned.
+pub(crate) fn definite_closure(
+    prepared: &PreparedQueries,
+    workspace: &mut ClosureWorkspace,
+    cube: &Cube,
+    limits: Limits,
+    control: &Control,
+) -> Result<CompletedClosure, Stop> {
+    prepared.closure_of(Gates::Definite(cube), workspace, limits, control)
 }
 
-/// The closure with no gate treated as passing: only gate-free rules fire.
-/// It lies inside every answer set and its gate atoms inside every accepted
-/// seed (`Bounds.undecided_bounds_accepted`), so the seed counter may hold
-/// them in every seed instead of enumerating them.
+/// The upper closure of `cube` over `prepared`, computed in `workspace`:
+/// rules fire under gates some seed of the cube satisfies, so every answer
+/// set of the cube lies inside it and every accepted seed inside its gate
+/// atoms; a gate atom outside it belongs to no answer set of the cube. Its
+/// constraint verdict says nothing about any seed.
 ///
 /// # Errors
-/// As [`upper_closure`].
-pub fn lower_closure(program: &Program, limits: Limits, control: &Control) -> Result<Model, Stop> {
-    Ok(definite_closure(program, &Cube::undecided(), limits, control)?.atoms)
-}
-
-/// The lower closure of `cube`: rules fire only under gates every seed of the
-/// cube satisfies. A fired constraint refutes the whole cube.
-pub(crate) fn definite_closure(
-    program: &Program,
-    cube: &Cube,
-    limits: Limits,
-    control: &Control,
-) -> Result<CompletedClosure, Stop> {
-    closure_under(program, Gates::Definite(cube), limits, control)
-}
-
-/// The upper closure of `cube`: rules fire under gates some seed of the cube
-/// satisfies. Its constraint verdict says nothing about any seed.
+/// As [`definite_closure`].
 pub(crate) fn possible_closure(
-    program: &Program,
+    prepared: &PreparedQueries,
+    workspace: &mut ClosureWorkspace,
     cube: &Cube,
     limits: Limits,
     control: &Control,
 ) -> Result<CompletedClosure, Stop> {
-    closure_under(program, Gates::Possible(cube), limits, control)
-}
-
-fn closure_under(
-    program: &Program,
-    gates: Gates<'_>,
-    limits: Limits,
-    control: &Control,
-) -> Result<CompletedClosure, Stop> {
-    control.poll()?;
-    let mut work = Work {
-        control,
-        limits,
-        statistics: Statistics::default(),
-        mask_words: 0,
-        pruned_prefixes: 0,
-        mask_bytes: 0,
-    };
-    let prepared = PreparedQueries::prepare(
-        program,
-        PreparationLimits::default().max_dense_atoms,
-        &mut work,
-    )?;
-    prepared.closure_with(
-        gates,
-        &mut ClosureWorkspace::default(),
-        Schedule::Delta,
-        &mut work,
-    )
+    prepared.closure_of(Gates::Possible(cube), workspace, limits, control)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

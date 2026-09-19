@@ -3,12 +3,14 @@
 use std::iter::FusedIterator;
 use std::sync::Arc;
 use zetesis_core::{
-    Atom, GateAtom, GateAtomError, GateAtoms, Model, Program, Seed, SeedSelection,
-    SeedSelectionError,
+    Atom, GateAtom, GateAtomError, GateAtoms, Program, Seed, SeedSelection, SeedSelectionError,
 };
 
 use crate::oracle::restrictions::{Conflict, Restrictions};
-use crate::oracle::{Cube, Limits, definite_closure, possible_closure};
+use crate::oracle::{
+    ClosureWorkspace, Cube, Limits, PreparationLimits, PreparedQueries, definite_closure,
+    possible_closure,
+};
 use crate::regions::{Counting, Narrowing, Region, Traversal, Visit};
 use crate::{Control, Stop};
 use std::collections::BTreeSet;
@@ -78,17 +80,17 @@ pub struct CandidateStatistics {
     pub restriction_conjunctions: usize,
     /// Certified impossible binary intervals skipped, not individual seeds.
     pub conflicts: u64,
-    /// Symbolic gate atoms outside the supplied upper closure, never offered to
-    /// the counter: no rule derives them under any gate assumption, so no
-    /// answer set holds them.
+    /// Symbolic gate atoms outside the narrowing's upper closure, never
+    /// offered to the counter: no rule derives them under any gate
+    /// assumption, so no answer set holds them.
     pub underivable_gate_atoms: usize,
-    /// Gate atoms of the supplied lower closure, held in every seed instead of
-    /// counted: gate-free rules derive them, so every answer set holds them.
+    /// Gate atoms of the narrowing's lower closure, held in every seed
+    /// instead of counted: every answer set holds them.
     pub necessary_gate_atoms: usize,
-    /// Why the narrowing stopped early: a closure stopped on a resource
-    /// ceiling, and the counter kept the bounds of the passes that completed,
-    /// the whole symbolic carrier when none had. `None` when no bound was
-    /// requested or the narrowing reached its fixed point.
+    /// Why the narrowing stopped early: its preparation or a closure stopped
+    /// on a resource ceiling, and the counter kept the bounds of the passes
+    /// that completed, the whole symbolic carrier when none had. `None` when
+    /// no bound was requested or the narrowing reached its fixed point.
     pub bounds_stop: Option<Stop>,
     /// Completed narrowing passes, each two closures; the last one changed
     /// neither bound, unless a stop or a refutation ended the narrowing.
@@ -124,13 +126,114 @@ enum RestrictionState {
 }
 
 /// Whether the program's closures narrow the carrier, and how far that got.
-#[derive(Clone, Copy)]
 enum BoundsState {
     Disabled,
     Pending(Limits),
-    /// The root is narrowed; its regions are narrowed under the same limits.
-    Applied(Limits),
+    /// The root is narrowed; its regions are narrowed by the same closures,
+    /// held behind one allocation made when the bounds are applied.
+    Applied(Box<Closures>),
+    /// The carrier is empty: the one seed needs no closure.
+    Trivial,
+    /// The preparation or a closure stopped on a resource ceiling; the
+    /// counter keeps the bounds of the passes that completed.
     Unavailable,
+}
+
+/// The closures of the narrowing: the program prepared once for every
+/// closure the narrowing computes, one workspace, since one closure is live
+/// at a time, and the limits each closure is charged under. Built when the
+/// bounds are first applied, it lives with the iterator and retains the
+/// preparation's bytes and the workspace's capacity; every closure admits
+/// both under `limits.max_closure_bytes` before it runs, and a closure a
+/// resource ceiling stops retires the workspace. Its work is one
+/// preparation, charged once under `limits.max_work`, and then each
+/// closure's, charged as one candidate check's is.
+struct Closures {
+    prepared: PreparedQueries,
+    workspace: ClosureWorkspace,
+    limits: Limits,
+    control: Control,
+}
+
+impl Closures {
+    /// Prepare `program` under `limits`.
+    ///
+    /// # Errors
+    /// Returns the preparation's stop: cancellation, a deadline, or its work
+    /// or storage ceiling.
+    fn new(program: &Program, limits: Limits, control: Control) -> Result<Self, Stop> {
+        let prepared = PreparedQueries::new(
+            program,
+            PreparationLimits {
+                max_work: limits.max_work,
+                max_bytes: limits.max_closure_bytes,
+                max_dense_atoms: PreparationLimits::default().max_dense_atoms,
+            },
+            &control,
+        )?;
+        Ok(Self {
+            prepared,
+            workspace: ClosureWorkspace::default(),
+            limits,
+            control,
+        })
+    }
+
+    /// One narrowing pass over `cube`: its lower closure, then its upper one.
+    fn narrow(&mut self, cube: &mut Cube) -> Result<Pass, Stop> {
+        let lower = definite_closure(
+            &self.prepared,
+            &mut self.workspace,
+            cube,
+            self.limits,
+            &self.control,
+        )?;
+        if lower.constraint_violated {
+            return Ok(Pass::Refuted);
+        }
+        let upper = possible_closure(
+            &self.prepared,
+            &mut self.workspace,
+            cube,
+            self.limits,
+            &self.control,
+        )?;
+        let program = self.prepared.program();
+        let before = (cube.must.len(), cube.may.as_ref().map(BTreeSet::len));
+        for atom in lower.atoms.atoms() {
+            if program.contains_gate_atom(atom) {
+                cube.must.insert(atom.clone());
+            }
+        }
+        let derivable: BTreeSet<Atom> = upper
+            .atoms
+            .atoms()
+            .iter()
+            .filter(|atom| program.contains_gate_atom(atom))
+            .cloned()
+            .collect();
+        cube.may = Some(match cube.may.take() {
+            None => derivable,
+            Some(may) => may.intersection(&derivable).cloned().collect(),
+        });
+        // A gate atom every seed of the region holds that no seed of it can
+        // derive: the region holds no accepted seed
+        // (`Bounds.conflicting_atom_refutes`). From the undecided cube the
+        // lower closure lies inside the upper one; a split can part them.
+        if cube
+            .must
+            .iter()
+            .any(|atom| cube.may.as_ref().is_some_and(|may| !may.contains(atom)))
+        {
+            return Ok(Pass::Refuted);
+        }
+        let after = (cube.must.len(), cube.may.as_ref().map(BTreeSet::len));
+        Ok(if after == before {
+            Pass::Fixed
+        } else {
+            Pass::Changed
+        })
+    }
 }
 
 /// How the seeds are offered once the bounds are applied.
@@ -163,10 +266,12 @@ pub enum CandidateTermination {
 
 /// Enumerate empty, `{a}`, `{b}`, `{a,b}`, `{c}`, and so on. A new carrier
 /// atom is requested only on carry beyond the known binary counter. Creation
-/// and the first successful empty seed never request a carrier tuple. Between
-/// the program's two closures ([`Self::within`], [`Self::requiring`]) the
-/// counter runs over the gate atoms some seed could derive and not every
-/// seed must hold; the others are omitted or held throughout.
+/// and the first successful empty seed never request a carrier tuple.
+/// Narrowed by the program's closures ([`Self::bounded`]), the counter runs
+/// region by region over the gate atoms some seed could derive and not
+/// every seed must hold; the others are omitted or held throughout, and the
+/// narrowing's preparation and closure workspace are retained with the
+/// iterator once the bounds are applied.
 /// Each discovered atom payload is retained once in an immutable shared owner.
 /// Creating that Arc uses infallible allocation under the carrier-count bound;
 /// carrier and selected-handle vectors use typed fallible reservation.
@@ -253,51 +358,22 @@ impl<'a> Candidates<'a> {
         candidates
     }
 
-    /// Narrow the carrier before the first pull. Starting from the region in
-    /// which nothing is decided, each pass computes the region's two closures
-    /// under `limits`, as one candidate check would be, adds the lower one's
-    /// gate atoms to those every seed must hold and cuts the gate atoms
-    /// outside the upper one from those a seed may hold, until a pass changes
-    /// neither; every accepted seed lies in every pass's region
+    /// Narrow the carrier before the first pull. The program is prepared
+    /// once, under `limits` as one preparation; then, starting from the
+    /// region in which nothing is decided, each pass computes the region's
+    /// two closures on that preparation in one retained workspace, each
+    /// charged under `limits` as one candidate check would be, adds the
+    /// lower one's gate atoms to those every seed must hold and cuts the
+    /// gate atoms outside the upper one from those a seed may hold, until a
+    /// pass changes neither; every accepted seed lies in every pass's region
     /// (`Bounds.narrowed_contains_accepted`). A constraint that fires in a
     /// lower closure refutes the region, and the counter offers no seed. A
-    /// closure stopped by a resource ceiling keeps the bounds of the completed
-    /// passes and is retained in the statistics; cancellation or a deadline
-    /// stops the pull that met it.
+    /// preparation or closure stopped by a resource ceiling keeps the bounds
+    /// of the completed passes and is retained in the statistics;
+    /// cancellation or a deadline stops the pull that met it.
     pub fn bounded(&mut self, limits: Limits) {
         debug_assert!(!self.started, "the bound precedes the first pull");
         self.bounds = BoundsState::Pending(limits);
-    }
-
-    /// Offer the counter only the gate atoms inside `may`, the program's
-    /// upper closure from [`crate::upper_closure`]. A gate atom outside it
-    /// belongs to no answer set, so the returned seeds remain a necessary
-    /// superset of answer-set gate projections while the carrier shrinks from
-    /// the symbolic gate atoms to the derivable ones. The bound precedes the
-    /// first pull; carrier positions keep their symbolic order.
-    pub fn within(&mut self, may: &Model) {
-        debug_assert!(!self.started, "the bound precedes the first pull");
-        self.may = Some(may.atoms().iter().cloned().collect());
-    }
-
-    /// Hold the gate atoms of `must`, the program's lower closure from
-    /// [`crate::lower_closure`], in every seed instead of counting them.
-    /// Every answer set holds them, so no seed without them is accepted and
-    /// the counter loses no answer set by never clearing them. The bound
-    /// precedes the first pull and lies inside any upper bound given.
-    ///
-    /// # Errors
-    /// Returns [`Stop::Allocation`] when the necessary atoms cannot be retained.
-    pub fn requiring(&mut self, must: &Model) -> Result<(), Stop> {
-        debug_assert!(!self.started, "the bound precedes the first pull");
-        for atom in must.atoms() {
-            if self.program.contains_gate_atom(atom) {
-                self.must.try_reserve(1).map_err(|_| Stop::Allocation)?;
-                self.must.push(Arc::new(atom.clone()));
-            }
-        }
-        self.statistics.necessary_gate_atoms = self.must.len();
-        Ok(())
     }
 
     /// Accounted necessary-condition work and copied payload through this pull.
@@ -455,13 +531,13 @@ impl<'a> Candidates<'a> {
     /// the completed passes' decisions and reports no change, so the region
     /// is counted with them; cancellation or a deadline stops the pull.
     fn narrow_region(&mut self, region: &mut Region) -> Result<Narrowing, Stop> {
-        let BoundsState::Applied(limits) = self.bounds else {
-            return Ok(Narrowing::Fixed { changed: false });
-        };
         let mut cube = self.cube_of(region);
         let mut changed = false;
         loop {
-            match self.narrow(&mut cube, limits) {
+            let BoundsState::Applied(closures) = &mut self.bounds else {
+                return Ok(Narrowing::Fixed { changed: false });
+            };
+            match closures.narrow(&mut cube) {
                 Ok(Pass::Changed) => {
                     self.statistics.region_passes += 1;
                     changed |= self.decide(region, &cube);
@@ -573,29 +649,39 @@ impl<'a> Candidates<'a> {
     }
 
     fn prepare_bounds(&mut self) -> Result<(), Stop> {
-        let BoundsState::Pending(limits) = self.bounds else {
+        let BoundsState::Pending(limits) = &self.bounds else {
             return Ok(());
         };
+        let limits = *limits;
         // An empty carrier has nothing to bound; the one seed costs no closure.
         if self.program.gate_predicates().is_empty() {
-            self.bounds = BoundsState::Applied(limits);
+            self.bounds = BoundsState::Trivial;
             return Ok(());
         }
+        let mut closures = match Closures::new(self.program, limits, self.control.clone()) {
+            Ok(closures) => closures,
+            Err(stop @ (Stop::Cancelled | Stop::Deadline)) => return Err(stop),
+            Err(stop) => {
+                self.statistics.bounds_stop = Some(stop);
+                self.bounds = BoundsState::Unavailable;
+                return Ok(());
+            }
+        };
         let mut cube = Cube::undecided();
         // Each pass either refutes, strictly grows `must`, strictly shrinks
         // `may` or is the last; both sets lie within the finite gate atoms
         // of the first upper closure, so the loop ends.
         self.bounds = loop {
-            match self.narrow(&mut cube, limits) {
+            match closures.narrow(&mut cube) {
                 Ok(Pass::Changed) => self.statistics.bounds_passes += 1,
                 Ok(Pass::Fixed) => {
                     self.statistics.bounds_passes += 1;
-                    break BoundsState::Applied(limits);
+                    break BoundsState::Applied(Box::new(closures));
                 }
                 Ok(Pass::Refuted) => {
                     self.refuted = true;
                     self.statistics.bounds_refuted = true;
-                    break BoundsState::Applied(limits);
+                    break BoundsState::Applied(Box::new(closures));
                 }
                 Err(stop @ (Stop::Cancelled | Stop::Deadline)) => return Err(stop),
                 Err(stop) => {
@@ -612,10 +698,11 @@ impl<'a> Candidates<'a> {
         if self.refuted {
             return Ok(());
         }
-        match (self.bounds, cube.may) {
+        let applied = matches!(self.bounds, BoundsState::Applied(_));
+        match (applied, cube.may) {
             // The narrowed root's undecided atoms, in carrier order, are the
             // region tree's coordinates; the carrier is read once for them.
-            (BoundsState::Applied(_), Some(may)) => {
+            (true, Some(may)) => {
                 self.root_must = cube.must;
                 self.materialize_root(&may)?;
                 self.traversal = Some(Traversal::new(
@@ -648,49 +735,6 @@ impl<'a> Candidates<'a> {
             }
         }
         Ok(())
-    }
-
-    /// One narrowing pass over `cube`, counted when both closures complete.
-    fn narrow(&mut self, cube: &mut Cube, limits: Limits) -> Result<Pass, Stop> {
-        let lower = definite_closure(self.program, cube, limits, &self.control)?;
-        if lower.constraint_violated {
-            return Ok(Pass::Refuted);
-        }
-        let upper = possible_closure(self.program, cube, limits, &self.control)?;
-        let before = (cube.must.len(), cube.may.as_ref().map(BTreeSet::len));
-        for atom in lower.atoms.atoms() {
-            if self.program.contains_gate_atom(atom) {
-                cube.must.insert(atom.clone());
-            }
-        }
-        let derivable: BTreeSet<Atom> = upper
-            .atoms
-            .atoms()
-            .iter()
-            .filter(|atom| self.program.contains_gate_atom(atom))
-            .cloned()
-            .collect();
-        cube.may = Some(match cube.may.take() {
-            None => derivable,
-            Some(may) => may.intersection(&derivable).cloned().collect(),
-        });
-        // A gate atom every seed of the region holds that no seed of it can
-        // derive: the region holds no accepted seed
-        // (`Bounds.conflicting_atom_refutes`). From the undecided cube the
-        // lower closure lies inside the upper one; a split can part them.
-        if cube
-            .must
-            .iter()
-            .any(|atom| cube.may.as_ref().is_some_and(|may| !may.contains(atom)))
-        {
-            return Ok(Pass::Refuted);
-        }
-        let after = (cube.must.len(), cube.may.as_ref().map(BTreeSet::len));
-        Ok(if after == before {
-            Pass::Fixed
-        } else {
-            Pass::Changed
-        })
     }
 
     fn prepare_restrictions(&mut self) -> Result<(), Stop> {
@@ -801,3 +845,6 @@ impl FusedIterator for Candidates<'_> {}
 #[cfg(test)]
 #[path = "../tests/support/selection_cursor.rs"]
 mod selection_tests;
+#[cfg(test)]
+#[path = "../tests/support/narrowing_closures.rs"]
+mod narrowing_tests;

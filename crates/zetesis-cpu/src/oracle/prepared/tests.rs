@@ -157,6 +157,58 @@ fn failed_candidates_cannot_retain_truth() {
 }
 
 #[test]
+fn a_stopped_cube_closure_retires_the_workspace() {
+    // Every work ceiling below a cube closure's need stops it with the
+    // workspace retired, and the next closure on that workspace is the
+    // closure a fresh one computes.
+    let program = program();
+    let control = Control::default();
+    let prepared = PreparedQueries::new(&program, PreparationLimits::default(), &control).unwrap();
+    let cube = super::super::Cube::undecided();
+    let reference = prepared
+        .closure_of(
+            super::super::Gates::Definite(&cube),
+            &mut ClosureWorkspace::default(),
+            Limits::default(),
+            &control,
+        )
+        .unwrap();
+    let empty = ClosureWorkspace::default().retained_bytes().unwrap();
+    let mut workspace = ClosureWorkspace::default();
+    let mut stopped = 0;
+    for max_work in 0..64 {
+        let result = prepared.closure_of(
+            super::super::Gates::Definite(&cube),
+            &mut workspace,
+            Limits {
+                max_work,
+                ..Limits::default()
+            },
+            &control,
+        );
+        match result {
+            Err(stop) => {
+                stopped += 1;
+                assert_eq!(stop, Stop::WorkLimit);
+                assert_eq!(workspace.retained_bytes().unwrap(), empty);
+                assert_eq!(workspace.catalogs.len(), 0);
+                let next = prepared
+                    .closure_of(
+                        super::super::Gates::Possible(&cube),
+                        &mut workspace,
+                        Limits::default(),
+                        &control,
+                    )
+                    .unwrap();
+                assert!(next.atoms.atoms().len() >= reference.atoms.atoms().len());
+            }
+            Ok(completed) => assert_eq!(completed.atoms, reference.atoms),
+        }
+    }
+    assert!(stopped > 0, "some ceiling stops the closure");
+}
+
+#[test]
 fn changed_byte_limits_admit_retained_capacity_first() {
     let program = program();
     let control = Control::default();

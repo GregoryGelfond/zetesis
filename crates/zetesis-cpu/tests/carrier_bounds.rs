@@ -4,10 +4,10 @@
 //! omits the first and holds the second.
 
 use zetesis_core::{
-    AdmissionLimits, Atom, AtomPattern, Model, Predicate, Program, Template, Term, Value,
+    AdmissionLimits, Atom, AtomPattern, Predicate, Program, Seed, Template, Term, Value,
 };
 use zetesis_cpu::{
-    CandidateLimits, Candidates, Control, Limits, check, lower_closure, upper_closure,
+    CandidateLimits, Candidates, Control, Limits, PreparationLimits, PreparedQueries, check,
 };
 
 fn pattern(name: &str, terms: Vec<Term>) -> AtomPattern {
@@ -27,14 +27,6 @@ fn program(templates: Vec<Template>) -> Program {
 fn fact(name: &str, values: Vec<Term>) -> Template {
     Template::new(Some(pattern(name, values)), vec![], vec![], vec![], vec![])
 }
-fn names(model: &Model) -> Vec<&str> {
-    model
-        .atoms()
-        .iter()
-        .map(|atom| atom.predicate().name())
-        .collect()
-}
-
 /// p :- not q.  q :- not p.  r :- p, not s.  s :- t.  u.
 fn gated_program() -> Program {
     let head = |name: &str| pattern(name, vec![]);
@@ -53,20 +45,50 @@ fn gated_program() -> Program {
     ])
 }
 
-#[test]
-fn the_upper_closure_treats_every_gate_as_possible() {
-    // Every gate passes, so p, q and r are proposed; s waits on t, which
-    // nothing proposes. Two seeds contradict each other's gates, but the
-    // upper closure asks only whether some seed could enable each rule.
-    let closure = upper_closure(&gated_program(), Limits::default(), &Control::default()).unwrap();
-    assert_eq!(names(&closure), ["p", "q", "r", "u"]);
+/// p :- not q.  q :- not p.  s.  r :- p, not s.
+fn held_program() -> Program {
+    let head = |name: &str| pattern(name, vec![]);
+    program(vec![
+        Template::new(Some(head("p")), vec![], vec![], vec![head("q")], vec![]),
+        Template::new(Some(head("q")), vec![], vec![], vec![head("p")], vec![]),
+        fact("s", vec![]),
+        Template::new(
+            Some(head("r")),
+            vec![head("p")],
+            vec![],
+            vec![head("s")],
+            vec![],
+        ),
+    ])
+}
+
+/// The seeds the narrowed counter offers for `program`, with the statistics.
+fn narrowed(program: &Program) -> (Vec<Seed>, zetesis_cpu::CandidateStatistics) {
+    let mut candidates = Candidates::new(program, CandidateLimits::default(), Control::default());
+    candidates.bounded(Limits::default());
+    let seeds = candidates.by_ref().map(Result::unwrap).collect();
+    (seeds, candidates.statistics())
 }
 
 #[test]
-fn the_lower_closure_fires_only_gate_free_rules() {
-    // No gate passes, so only the fact u fires; s still waits on t.
-    let closure = lower_closure(&gated_program(), Limits::default(), &Control::default()).unwrap();
-    assert_eq!(names(&closure), ["u"]);
+fn the_narrowing_never_offers_a_gate_atom_no_rule_derives() {
+    // s waits on t, which nothing derives, so under no seed does a rule
+    // derive s: the counter omits it, and the two seeds offered decide p
+    // against q.
+    let (seeds, statistics) = narrowed(&gated_program());
+    assert_eq!(seeds.len(), 2);
+    assert!(seeds.iter().all(|seed| !seed.contains(&atom("s", vec![]))));
+    assert_eq!(statistics.underivable_gate_atoms, 1);
+}
+
+#[test]
+fn the_narrowing_holds_a_gate_atom_the_gate_free_rules_derive() {
+    // s is a fact and a gate, so every answer set holds it: the counter
+    // holds it in both seeds offered instead of counting it.
+    let (seeds, statistics) = narrowed(&held_program());
+    assert_eq!(seeds.len(), 2);
+    assert!(seeds.iter().all(|seed| seed.contains(&atom("s", vec![]))));
+    assert_eq!(statistics.necessary_gate_atoms, 1);
 }
 
 /// d(1..4). blocked(2). r(X) :- d(X), not blocked(X). :- not r(1).
@@ -104,57 +126,14 @@ fn enumerate(program: &Program, candidates: Candidates<'_>) -> Vec<(usize, bool)
 }
 
 #[test]
-fn the_bounded_counter_omits_gate_atoms_no_rule_derives_and_holds_the_necessary() {
-    // The symbolic carrier holds blocked(1..4) and r(1..4): eight atoms and
-    // 256 seeds. With every gate passing the upper closure derives blocked(2)
-    // and all of r(1..4), r(2) included, since it reads no gate; the lower
-    // closure derives blocked(2) alone, since r waits on a gate. Four free
-    // gate atoms remain: sixteen seeds, each holding blocked(2).
-    let program = blocked_program();
-    let may = upper_closure(&program, Limits::default(), &Control::default()).unwrap();
-    let must = lower_closure(&program, Limits::default(), &Control::default()).unwrap();
-    assert!(may.contains(&atom("blocked", vec![Value::Number(2)])));
-    assert!(!may.contains(&atom("blocked", vec![Value::Number(1)])));
-    assert!(may.contains(&atom("r", vec![Value::Number(2)])));
-    assert_eq!(names(&must), ["blocked", "d", "d", "d", "d"]);
-
-    let mut candidates = Candidates::new(&program, CandidateLimits::default(), Control::default());
-    candidates.within(&may);
-    candidates.requiring(&must).unwrap();
-    assert_eq!(candidates.statistics().necessary_gate_atoms, 1);
-    let seeds = enumerate(&program, candidates);
-    assert_eq!(seeds.len(), 16);
-    assert!(
-        seeds.iter().all(|(size, _)| *size >= 1),
-        "blocked(2) is held"
-    );
-    assert_eq!(
-        seeds.iter().filter(|(_, accepted)| *accepted).count(),
-        1,
-        "d(1..4), blocked(2), r(1), r(3), r(4)"
-    );
-}
-
-#[test]
 fn the_unbounded_counter_enumerates_the_whole_symbolic_carrier() {
+    // The symbolic carrier holds blocked(1..4) and r(1..4): eight atoms and
+    // 256 seeds, of which one is the answer.
     let program = blocked_program();
     let candidates = Candidates::new(&program, CandidateLimits::default(), Control::default());
     let seeds = enumerate(&program, candidates);
     assert_eq!(seeds.len(), 256);
     assert_eq!(seeds.iter().filter(|(_, accepted)| *accepted).count(), 1);
-}
-
-#[test]
-fn the_bounded_counter_reports_the_atoms_it_omitted() {
-    // blocked(1), blocked(3) and blocked(4) are outside the upper closure;
-    // the five remaining gate atoms give thirty-two seeds.
-    let program = blocked_program();
-    let may = upper_closure(&program, Limits::default(), &Control::default()).unwrap();
-    let mut candidates = Candidates::new(&program, CandidateLimits::default(), Control::default());
-    candidates.within(&may);
-    assert_eq!(candidates.by_ref().map(Result::unwrap).count(), 32);
-    assert_eq!(candidates.statistics().underivable_gate_atoms, 3);
-    assert_eq!(candidates.statistics().necessary_gate_atoms, 0);
 }
 
 #[test]
@@ -293,6 +272,36 @@ fn the_narrowing_reports_its_passes_and_decisions() {
     assert_eq!(statistics.underivable_gate_atoms, 8);
     assert!(!statistics.bounds_refuted);
     assert_eq!(statistics.bounds_stop, None);
+}
+
+#[test]
+fn the_narrowing_charges_its_preparation_apart_from_its_closures() {
+    // The stratified program's preparation charges 329 units and its
+    // largest closure 876 on the workspace the narrowing keeps, 884 on a
+    // fresh one that must be sized. Each is admitted under the work ceiling
+    // on its own, as a prepared candidate check's are, so the least ceiling
+    // under which the narrowing completes is the larger of the two; charged
+    // together, closure by closure on a fresh workspace, they would need
+    // 1,213.
+    let program = stratified_program();
+    let preparation =
+        PreparedQueries::new(&program, PreparationLimits::default(), &Control::default())
+            .unwrap()
+            .statistics()
+            .work;
+    assert_eq!(preparation, 329);
+    let stop = |max_work| {
+        let mut candidates =
+            Candidates::new(&program, CandidateLimits::default(), Control::default());
+        candidates.bounded(Limits {
+            max_work,
+            ..Limits::default()
+        });
+        let _ = candidates.next();
+        candidates.statistics().bounds_stop
+    };
+    assert_eq!(stop(876), None);
+    assert_eq!(stop(875), Some(zetesis_cpu::Stop::WorkLimit));
 }
 
 #[test]

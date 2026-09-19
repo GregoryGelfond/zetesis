@@ -246,6 +246,20 @@ impl PreparedQueries {
         schedule: super::Schedule,
         work: &mut Work<'_>,
     ) -> Result<Check, Stop> {
+        self.with_workspace(workspace, |workspace| {
+            self.evaluate(seed, workspace, schedule, work)
+        })
+    }
+
+    /// Run `evaluate` in `workspace`: a workspace left dirty by a failed
+    /// call, or used for another program instance, is replaced by an empty
+    /// one first; a completed call leaves it clean and reusable, a failed
+    /// one retires it.
+    fn with_workspace<T>(
+        &self,
+        workspace: &mut ClosureWorkspace,
+        evaluate: impl FnOnce(&mut ClosureWorkspace) -> Result<T, Stop>,
+    ) -> Result<T, Stop> {
         if !workspace.clean
             || workspace
                 .program
@@ -256,13 +270,37 @@ impl PreparedQueries {
         }
         workspace.clean = false;
         workspace.program = Some(self.program.clone());
-        let result = self.evaluate(seed, workspace, schedule, work);
+        let result = evaluate(workspace);
         if result.is_ok() {
             workspace.clean = true;
         } else {
             *workspace = ClosureWorkspace::default();
         }
         result
+    }
+
+    /// The closure of the prepared program under `gates`, computed in
+    /// `workspace` and charged under `limits` as one candidate check is,
+    /// with the preparation apart. The workspace is reusable after a
+    /// completed closure and retired by a stop, as [`Self::check_view`]
+    /// leaves it.
+    ///
+    /// # Errors
+    /// Returns the same typed stops as [`Self::check_view`]; no partial
+    /// closure is returned.
+    pub(super) fn closure_of(
+        &self,
+        gates: super::Gates<'_>,
+        workspace: &mut ClosureWorkspace,
+        limits: Limits,
+        control: &Control,
+    ) -> Result<super::CompletedClosure, Stop> {
+        control.poll()?;
+        let mut work = Work::source(control, limits.max_work);
+        work.limits = limits;
+        self.with_workspace(workspace, |workspace| {
+            self.closure_with(gates, workspace, super::Schedule::Delta, &mut work)
+        })
     }
 
     fn evaluate(
