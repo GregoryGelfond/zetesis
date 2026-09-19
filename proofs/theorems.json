@@ -602,77 +602,77 @@
   {
     "name": "Zetesis.Bounds.gate_sandwich",
     "file": "Zetesis/Bounds.lean",
-    "line": 50
+    "line": 69
   },
   {
     "name": "Zetesis.Bounds.selected_consequence_mono",
     "file": "Zetesis/Bounds.lean",
-    "line": 67
+    "line": 86
   },
   {
     "name": "Zetesis.Bounds.selected_consequence_refines",
     "file": "Zetesis/Bounds.lean",
-    "line": 73
+    "line": 92
   },
   {
     "name": "Zetesis.Bounds.consequence_sandwich",
     "file": "Zetesis/Bounds.lean",
-    "line": 80
+    "line": 99
   },
   {
     "name": "Zetesis.Bounds.gamma_sandwich",
     "file": "Zetesis/Bounds.lean",
-    "line": 89
+    "line": 108
   },
   {
     "name": "Zetesis.Bounds.lower_prefix_sound",
     "file": "Zetesis/Bounds.lean",
-    "line": 96
+    "line": 115
   },
   {
     "name": "Zetesis.Bounds.closed_upper_sound",
     "file": "Zetesis/Bounds.lean",
-    "line": 103
+    "line": 122
   },
   {
     "name": "Zetesis.Bounds.accepted_seed_agrees",
     "file": "Zetesis/Bounds.lean",
-    "line": 108
+    "line": 127
   },
   {
     "name": "Zetesis.Bounds.acceptance_survives_narrowing",
     "file": "Zetesis/Bounds.lean",
-    "line": 120
+    "line": 139
   },
   {
     "name": "Zetesis.Bounds.undecided_bounds_accepted",
     "file": "Zetesis/Bounds.lean",
-    "line": 148
+    "line": 167
   },
   {
     "name": "Zetesis.Bounds.narrowed_contains_accepted",
     "file": "Zetesis/Bounds.lean",
-    "line": 170
+    "line": 189
   },
   {
     "name": "Zetesis.Bounds.inconsistent_narrowing_refutes",
     "file": "Zetesis/Bounds.lean",
-    "line": 187
+    "line": 206
   },
   {
     "name": "Zetesis.Bounds.conflicting_atom_refutes",
     "file": "Zetesis/Bounds.lean",
-    "line": 196
+    "line": 215
   },
   {
     "name": "Zetesis.Bounds.lower_constraint_refutes",
     "file": "Zetesis/Bounds.lean",
-    "line": 203
+    "line": 222
   },
   {
     "name": "Zetesis.Bounds.lower_prefix_constraint_refutes",
     "file": "Zetesis/Bounds.lean",
-    "line": 212
+    "line": 231
   },
   {
     "name": "Zetesis.CandidateCursor.next_preserves",
@@ -2677,37 +2677,37 @@
   {
     "name": "Zetesis.FormulaBounds.position_in_append",
     "file": "Zetesis/FormulaChains.lean",
-    "line": 46
+    "line": 53
   },
   {
     "name": "Zetesis.FormulaBounds.disj_chain_sure",
     "file": "Zetesis/FormulaChains.lean",
-    "line": 70
+    "line": 77
   },
   {
     "name": "Zetesis.FormulaBounds.disj_chain_never",
     "file": "Zetesis/FormulaChains.lean",
-    "line": 83
+    "line": 90
   },
   {
     "name": "Zetesis.FormulaBounds.disj_chain_unit",
     "file": "Zetesis/FormulaChains.lean",
-    "line": 95
+    "line": 102
   },
   {
     "name": "Zetesis.FormulaBounds.conj_chain_sure",
     "file": "Zetesis/FormulaChains.lean",
-    "line": 132
+    "line": 139
   },
   {
     "name": "Zetesis.FormulaBounds.conj_chain_never",
     "file": "Zetesis/FormulaChains.lean",
-    "line": 142
+    "line": 149
   },
   {
     "name": "Zetesis.FormulaBounds.conj_chain_unit",
     "file": "Zetesis/FormulaChains.lean",
-    "line": 156
+    "line": 163
   },
   {
     "name": "Zetesis.FormulaRegions.classical_consequence_forces",
@@ -2732,27 +2732,27 @@
   {
     "name": "Zetesis.Pending.outputs_append",
     "file": "Zetesis/Frontier.lean",
-    "line": 37
+    "line": 42
   },
   {
     "name": "Zetesis.Pending.outputs_cons",
     "file": "Zetesis/Frontier.lean",
-    "line": 41
+    "line": 46
   },
   {
     "name": "Zetesis.Pending.Step.perm",
     "file": "Zetesis/Frontier.lean",
-    "line": 73
+    "line": 78
   },
   {
     "name": "Zetesis.Pending.Walk.perm",
     "file": "Zetesis/Frontier.lean",
-    "line": 108
+    "line": 113
   },
   {
     "name": "Zetesis.Pending.Walk.exhausted",
     "file": "Zetesis/Frontier.lean",
-    "line": 119
+    "line": 124
   },
   {
     "name": "Zetesis.GatePositions.atoms_exact",

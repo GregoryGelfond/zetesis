@@ -19,6 +19,13 @@ A chain is any tree of one connective whose leaves are arbitrary formulas; the
 leaves are listed left to right, one per operand position, so a formula
 occurring at two positions is two leaves. Nothing restricts what a leaf is: a
 shared subformula with parents outside the chain is a leaf of it.
+
+The declarations live in the `FormulaBounds` namespace, since they extend its
+`Known` with derived rules; the module rests on `FormulaBounds` for the
+knowledge and its binary rules. That the Rust chains are such trees, maximal
+trees of one connective whose inner nodes have that one parent, and that the
+two counters count the operands known to hold and to fail, are the Rust
+obligations.
 -/
 
 namespace Zetesis.FormulaBounds

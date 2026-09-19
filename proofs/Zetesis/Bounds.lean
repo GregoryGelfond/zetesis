@@ -4,9 +4,28 @@ import Zetesis.Search
 /-!
 # Concrete must/may bounds for reduct search
 
-This module discharges the search geometry's enclosure obligations using the
-actual normalized rule semantics. Positive bodies, filters, and heads remain
-unchanged. Only frozen candidate gates are approximated.
+The objects are a cube of seeds, the region of a search, and two readings of
+a rule's gates under it: `MustGate`, the gates every seed of the cube
+satisfies, and `MayGate`, the gates some seed does. Each reading selects the
+rules that fire and gives a least consequence set, `LowerGamma` and
+`UpperGamma`, over the actual normalized rule semantics; positive bodies,
+filters and heads are read unchanged, and only the frozen candidate gates
+are approximated.
+
+The central laws are `gamma_sandwich`, that every seed's own closure lies
+between the two; `acceptance_survives_narrowing`, that an accepted seed
+lies in the cube narrowed by them, `Narrow`; `narrowed_contains_accepted`,
+that it lies in every region of the narrowing iterated from the undecided
+cube; and `lower_constraint_refutes`, that a constraint whose gates must
+hold and whose body the lower closure satisfies leaves no accepted seed in
+the cube. `lower_prefix_sound` and `closed_upper_sound` say what an
+unfinished lower run and a closed upper approximation may still claim.
+
+The module rests on `Semantics` for acceptance and on `Search` for the
+cube and its narrowing node, `coverage_narrowed`. That the Rust closures
+are the least fixed points of the two consequence operators over the exact
+admitted program, and that the counter enumerates exactly the seeds of a
+counted region, are the Rust obligations.
 -/
 namespace Zetesis
 namespace Bounds

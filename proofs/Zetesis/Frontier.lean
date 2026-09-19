@@ -16,6 +16,11 @@ emitted and the leaves still pending are together a permutation of the tree's
 outputs after every step, so a walk that empties the frontier has emitted every
 accepted leaf exactly once, in the schedule's order: the family is exact at any
 worker count, and the order is not a property of the result.
+
+The module rests on `Search.CoverageTree` for the tree and its outputs. That
+the workers' pops, pool offers and stacks together form one frontier of the
+tree, a step being one worker's visit of the region it popped, is the Rust
+obligation.
 -/
 namespace Zetesis
 
