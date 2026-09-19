@@ -87,6 +87,39 @@ struct Generated {
     bytes: usize,
 }
 
+impl Generated {
+    /// The entry path of a generated program of the family and size.
+    fn entry_of(family: Family, size: u32) -> String {
+        format!("generated/{}-{size}.lp", family.label())
+    }
+
+    /// The entry path of the generated program.
+    fn entry(&self) -> String {
+        Self::entry_of(self.family, self.size)
+    }
+
+    /// The program the generator produces now, when it is the one admitted:
+    /// the same length and digest.
+    ///
+    /// # Errors
+    /// Refuses a size the family no longer admits, or a program other than
+    /// the admitted one.
+    fn regenerate(&self) -> Result<String, Error> {
+        let source = self
+            .family
+            .source(self.size)
+            .map_err(|_| Error::Configuration("generated workload size is not admitted"))?;
+        if source.len() != self.bytes
+            || format!("{:x}", Sha256::digest(source.as_bytes())) != self.sha256
+        {
+            return Err(Error::Configuration(
+                "generated program differs from its admitted program",
+            ));
+        }
+        Ok(source)
+    }
+}
+
 #[derive(Clone, Debug, Serialize)]
 struct Source {
     path: String,
@@ -249,7 +282,7 @@ impl Workload {
         };
         budget.source(source.len())?;
         let digest = format!("{:x}", Sha256::digest(source.as_bytes()));
-        let entry = budget.text(&format!("generated/{}-{size}.lp", family.label()))?;
+        let entry = budget.text(&Generated::entry_of(family, size))?;
         let mut hash = Sha256::new();
         hash.update(b"zetesis-generated-workload-v1\0");
         field(&mut hash, family.label().as_bytes());
@@ -313,18 +346,8 @@ impl Workload {
         limits: super::super::Limits,
     ) -> Result<(), Error> {
         if let Some(generated) = &self.generated {
-            let source = generated
-                .family
-                .source(generated.size)
-                .map_err(|_| Error::Configuration("generated workload size is not admitted"))?;
-            if self.entry
-                != format!(
-                    "generated/{}-{}.lp",
-                    generated.family.label(),
-                    generated.size
-                )
-                || source.len() != generated.bytes
-                || format!("{:x}", Sha256::digest(source.as_bytes())) != generated.sha256
+            generated.regenerate()?;
+            if self.entry != generated.entry()
                 || generated.bytes > limits.corpus.source_bytes
                 || self.metadata_bytes > limits.corpus.manifest_bytes
             {
@@ -375,17 +398,7 @@ impl Workload {
         limit: usize,
     ) -> Result<Vec<crate::selected::FileSeal>, Error> {
         if let Some(generated) = &self.generated {
-            let source = generated
-                .family
-                .source(generated.size)
-                .map_err(|_| Error::Configuration("generated workload size is not admitted"))?;
-            if source.len() != generated.bytes
-                || format!("{:x}", Sha256::digest(source.as_bytes())) != generated.sha256
-            {
-                return Err(Error::Configuration(
-                    "generated program differs from its admitted hash",
-                ));
-            }
+            let source = generated.regenerate()?;
             let path = directory.join(&self.entry);
             let parent = path
                 .parent()

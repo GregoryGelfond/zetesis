@@ -108,30 +108,55 @@ pub(super) fn campaign(
 
 struct Prepared<'a> {
     input: Input<'a>,
-    workload: Option<&'a Workload>,
     directory: PathBuf,
 }
 
-/// Where a cell's program comes from: a sealed corpus entry, possibly with
-/// constant amendments, or a generated program with no corpus source at all.
+/// Where a cell's program comes from: a sealed corpus entry, unchanged or
+/// through a workload that amends it, or a generated program with no corpus
+/// source at all.
 enum Input<'a> {
-    Corpus(&'a examples::Case),
+    Corpus {
+        case: &'a examples::Case,
+        workload: Option<&'a Workload>,
+    },
     Generated(&'a Workload),
 }
-impl Input<'_> {
+impl<'a> Input<'a> {
     fn path(&self) -> &str {
         match self {
-            Self::Corpus(case) => case.path(),
+            Self::Corpus { case, .. } => case.path(),
             Self::Generated(workload) => workload.entry(),
         }
     }
     /// Corpus files this input reads; a generated program reads none.
     fn corpus_source_paths(&self) -> impl Iterator<Item = &str> {
         match self {
-            Self::Corpus(case) => case.transitive_source_paths().iter(),
+            Self::Corpus { case, .. } => case.transitive_source_paths().iter(),
             Self::Generated(_) => [].iter(),
         }
         .map(String::as_str)
+    }
+    /// The workload the input runs through, when it runs through one.
+    fn workload(&self) -> Option<&'a Workload> {
+        match self {
+            Self::Corpus { workload, .. } => *workload,
+            Self::Generated(workload) => Some(workload),
+        }
+    }
+    /// The contract the campaign checks: the corpus contract of an
+    /// unchanged entry, and the workload's otherwise.
+    fn contract(&self) -> Option<&'a examples::Contract> {
+        match self {
+            Self::Corpus {
+                case,
+                workload: None,
+            } => Some(case.contract()),
+            Self::Corpus {
+                workload: Some(workload),
+                ..
+            }
+            | Self::Generated(workload) => workload.contract(),
+        }
     }
 }
 
@@ -145,8 +170,10 @@ fn prepare<'a>(
         return Ok(allowed
             .into_iter()
             .map(|original| Prepared {
-                input: Input::Corpus(original),
-                workload: None,
+                input: Input::Corpus {
+                    case: original,
+                    workload: None,
+                },
                 directory: PathBuf::new(),
             })
             .collect());
@@ -192,18 +219,18 @@ fn prepare<'a>(
         let input = if workload.is_generated() {
             Input::Generated(workload)
         } else {
-            Input::Corpus(
-                allowed
+            Input::Corpus {
+                case: allowed
                     .iter()
                     .find(|case| case.path() == workload.entry())
                     .ok_or(Error::Configuration(
                         "workload is outside the plan's allowed suite",
                     ))?,
-            )
+                workload: Some(workload),
+            }
         };
         prepared.push(Prepared {
             input,
-            workload: Some(workload),
             directory: format!("workload-{position:02}").into(),
         });
     }
@@ -217,7 +244,7 @@ fn materialize(
     directory: &Path,
     request: &Request<'_>,
 ) -> Result<Vec<crate::selected::FileSeal>, Error> {
-    if cases.iter().all(|case| case.workload.is_none()) {
+    if cases.iter().all(|case| case.input.workload().is_none()) {
         return super::super::run::copy_sources(
             corpus,
             sources,
@@ -228,7 +255,8 @@ fn materialize(
     let mut sealed = Vec::new();
     for case in cases {
         let workload = case
-            .workload
+            .input
+            .workload()
             .ok_or(Error::Configuration("mixed workload preparation"))?;
         sealed.extend(workload.materialize(
             corpus,
@@ -388,11 +416,7 @@ fn execute(
         if slot.phase == Phase::Memory && !measured(&mut sample, &record, report) {
             continue;
         }
-        let contract = match (&selected.input, selected.workload) {
-            (_, Some(workload)) => workload.contract(),
-            (Input::Corpus(case), None) => Some(case.contract()),
-            (Input::Generated(_), None) => None,
-        };
+        let contract = selected.input.contract();
         let result = qualify(
             &mut sample,
             contract,
