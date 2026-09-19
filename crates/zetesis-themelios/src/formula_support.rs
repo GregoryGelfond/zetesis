@@ -434,13 +434,17 @@ impl Derivation<'_, '_> {
 
 /// Validation evidence for one complete positive binding. A comparison that
 /// is defined and false excludes the substitution before this certificate is
-/// issued. An arithmetic failure is retained until the positive join has a
-/// complete extension no comparison excludes; an incomplete prefix alone does
-/// not require evaluating a ground source instance.
+/// issued, so a certificate says at most that every comparison was decided
+/// at its depth and passed. An arithmetic failure is retained until the
+/// positive join has a complete extension no comparison excludes; an
+/// incomplete prefix alone does not require evaluating a ground source
+/// instance.
 enum Comparisons {
+    /// Some check waits for the complete row.
     Deferred,
     Failed(ExpansionFailure),
-    Verified(bool),
+    /// Every comparison was decided at its depth, and passed.
+    Verified,
 }
 
 // The same whole-argument index serves flat atoms and structural captures.
@@ -1173,14 +1177,16 @@ impl<'a, 'source> Join<'a, 'source> {
         Ok(passes)
     }
     /// The certificate of the completed prefix: a retained failure, the
-    /// conjunction of every comparison when all are decided, or deferral.
+    /// verdict when every comparison is decided, or deferral. A prefix
+    /// advances only when its comparisons pass, so a completed one passed
+    /// them all.
     fn certificate(&mut self) -> Comparisons {
         if let Some((_, error)) = self.failure.take() {
             return Comparisons::Failed(error);
         }
         let depth = self.patterns.len().saturating_sub(1);
         if self.decisions.certifies(depth) {
-            Comparisons::Verified(self.verdicts[depth])
+            Comparisons::Verified
         } else {
             Comparisons::Deferred
         }
@@ -1307,22 +1313,24 @@ impl Join<'_, '_> {
         counters: &mut Counters,
         location: Location,
     ) -> Result<bool, FormulaFailure> {
-        let (verified, mut passes) = match comparisons {
-            Comparisons::Verified(passes) => (true, passes),
-            Comparisons::Deferred => (false, true),
+        let mut passes = match comparisons {
+            Comparisons::Verified | Comparisons::Deferred => true,
             Comparisons::Failed(error) => return Err(error.into()),
         };
         // Falsehood does not discharge another expression's validation duty.
         // These complete-row checks deliberately continue after a false filter.
-        for literal in self.literals {
+        for (index, literal) in self.literals.iter().enumerate() {
             if crate::formula_binding_cursor::target(literal)
                 .is_some_and(|target| target >= assignment.len())
             {
                 continue;
             }
-            if let Some((left, relation, right)) = comparison(literal)
-                && !verified
-            {
+            if let Some((left, relation, right)) = comparison(literal) {
+                // A comparison a prefix decided was evaluated there, once,
+                // and passed, or the row would not be complete.
+                if self.decisions.decides(index) {
+                    continue;
+                }
                 let left = self.evaluation.expression(
                     left,
                     |variable| assignment.read(variable, location),

@@ -142,3 +142,14 @@ fn rule_instantiation_reads_only_the_substitutions_the_comparisons_leave() {
     let rows = instantiation_rows("d(1..40). p(X,Y,Z) :- d(X), d(Y), X < Y, d(Z).");
     assert_eq!(rows, 40 + 1_600 + 780 * 40);
 }
+
+#[test]
+fn a_comparison_a_prefix_decided_is_not_evaluated_again_for_the_complete_row() {
+    // q(1). r(2).  X < Y is decided once r binds Y: two evaluations, one per
+    // side. The tuple comparison waits for the complete row and costs four
+    // more, and nothing else is evaluated: the decided comparison is not
+    // read a second time.
+    let (_, evaluations) =
+        support_counts("q(1). r(2). p(X,Y) :- q(X), r(Y), X < Y, (X,Y) != (1,2).");
+    assert_eq!(evaluations, 6);
+}

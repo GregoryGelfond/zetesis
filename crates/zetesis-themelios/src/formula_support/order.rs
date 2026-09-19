@@ -165,6 +165,12 @@ impl Decisions {
         }
     }
 
+    /// Whether some prefix decides the literal's comparison, so that a
+    /// complete row has already passed it.
+    pub(super) fn decides(&self, literal: usize) -> bool {
+        self.at.get(literal).is_some_and(Option::is_some)
+    }
+
     /// The literals whose comparisons `depth` decides.
     pub(super) fn decided_at(&self, depth: usize) -> impl Iterator<Item = usize> + '_ {
         self.at
