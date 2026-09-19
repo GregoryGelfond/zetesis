@@ -98,11 +98,15 @@ impl<'a, V: Fn(usize) -> Result<&'a Value, FormulaFailure>> Context<'_, 'a, V> {
         self.counters.record(Event::ExpressionNode);
         Ok(())
     }
+    /// Charge a value's payload at once, so a refusal states that
+    /// requirement, as the pattern match and the row match charge theirs.
     fn payload(&mut self, value: &Value) -> Result<(), FormulaFailure> {
         if let Value::Structured(structure) = value {
-            for _ in 0..structure.payload_bytes() {
-                self.counters.work(self.limits, self.location)?;
-            }
+            self.counters.charge_work(
+                structure.payload_bytes() as u128,
+                self.limits,
+                self.location,
+            )?;
         }
         Ok(())
     }

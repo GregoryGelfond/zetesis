@@ -10,7 +10,10 @@ use themelios_program::term::{BinaryOp, EvalError};
 use zetesis_core::{Sign, Value, ValueLimits, ValueNode};
 
 use super::{Budget, Counters, Evaluation, Expression, Operation, RETAINED_VALUE_CELLS};
-use crate::{ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits};
+use crate::{
+    ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits,
+    FormulaResource,
+};
 
 fn location() -> Location {
     Location {
@@ -386,4 +389,53 @@ fn constructor_root_reads_its_ordered_prefix() {
     )
     .unwrap();
     assert_eq!(actual, expected);
+}
+
+#[test]
+fn a_refused_payload_charge_states_the_whole_requirement() {
+    // The node is admitted for one unit and its payload is then charged at
+    // once. A ceiling of one refuses the payload, and the refusal names what
+    // that charge required, not the ceiling plus one.
+    let value = Value::from_nodes(
+        vec![
+            ValueNode::Function {
+                name: "f".into(),
+                sign: Sign::Positive,
+                arity: 1,
+            },
+            ValueNode::String("argument".into()),
+        ],
+        ValueLimits::default(),
+    )
+    .unwrap();
+    let Value::Structured(structure) = &value else {
+        panic!("a function is a structured value")
+    };
+    let payload = structure.payload_bytes() as u128;
+    assert!(payload > 1);
+    let mut evaluation = Evaluation::default();
+    let error = evaluation
+        .expression(
+            &Expression {
+                nodes: vec![Operation::Constant(value.clone())],
+            },
+            |_| -> Result<&Value, FormulaFailure> { unreachable!("no variable") },
+            &FormulaLimits {
+                max_work: 1,
+                ..FormulaLimits::default()
+            },
+            &mut Budget::new(ExpansionLimits::default(), usize::MAX),
+            &mut Counters::default(),
+            location(),
+        )
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        FormulaFailure::Limit {
+            resource: FormulaResource::Work,
+            observed,
+            limit: 1,
+            ..
+        } if observed == 1 + payload
+    ));
 }
