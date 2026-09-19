@@ -2074,6 +2074,151 @@ a law about one fixed key, and was never a law about this case; that the
 recognition stays inside the law's premise is the Rust obligation the
 correspondence names.
 
+## The narrowing's closures prepared once
+
+One ladder, two series campaigns and three corpus campaigns on 19 September
+2026 UTC, the ladder written at 03:46:28, the series reports at 03:46:55 and
+03:47:22 and the corpus reports between 03:47:35 and 03:48:01, same machine,
+profile and clingo as above, one session. `before` is the executable of
+`0b971adb` (SHA-256
+`101a449b4d9b4bf3247394fd05718a7cf64bcb5a76f41e7e36cb0185f970787f`), the
+head at the correction above; `after` is built from `9c0ec6d0` (SHA-256
+`a9f308922432ae76f4506b68a7e0498fc887717ade3fe12f995bf34702272fbc`), where
+the closure route's narrowing prepares its program once, when the bounds are
+applied, and computes every closure of every region on that preparation in
+one retained workspace, each closure charged as one candidate check with the
+preparation apart, and where the one-shot doors of the first carrier-bound
+step, which the narrowing had replaced and no session called, are gone. The
+corpus runs are `after` on all 94 cases with four workers, with one worker,
+and with one worker under `--search clauses`.
+[series-9c0ec6d0-cpu-auto.json](series-9c0ec6d0-cpu-auto.json), its
+[table view](series-9c0ec6d0-cpu-auto-tables.md),
+[corpus-9c0ec6d0-cpu-auto.json](corpus-9c0ec6d0-cpu-auto.json), its
+[table view](corpus-9c0ec6d0-cpu-auto-tables.md),
+[corpus-9c0ec6d0-cpu-auto-one-worker.json](corpus-9c0ec6d0-cpu-auto-one-worker.json),
+its [table view](corpus-9c0ec6d0-cpu-auto-one-worker-tables.md),
+[ladder-9c0ec6d0.json](ladder-9c0ec6d0.json) and
+[interleaved-9c0ec6d0.json](interleaved-9c0ec6d0.json) are the derived
+comparisons, the ladder's runs and the re-measurement described below; raw
+report SHA-256
+`e97c414a05fa1dcc36990ebae9ec3eb96f69f730925a6a314cfb4c9496c1dc60` (before),
+`9aca19f4e965dcdb06bb351c037fa6f57e14dd556115bea68e1825588dcb81e2` (after),
+`e0fb34a1d672ad8d379c0b411df361acefaf0d2476310f916dcfac0c64b4249f`
+(corpus, four workers),
+`9765372e3c47392da0a67e64e530a6adaa3c331dd89f3ecfa775d7d58530f6c8`
+(corpus, one worker) and
+`f4c191ffb80d10a226f7b3bae463e6ba496b5e73a938048774c5eec204c9da15`
+(corpus, one worker, clauses).
+
+The review of the tranche as one change found that each narrowing pass ran
+a region's two closures through a door that prepared the program from
+nothing and allocated a fresh workspace, twice per pass, for the root and
+for every region below it, while preparation had grown to infer the
+argument bounds, lay out the dense relations and plan the row steps, and a
+fresh workspace to allocate every dense layout's bit arrays and pending
+rows. The hypotheses, written before the campaigns: the enumeration cells of
+the closure route fall to between 0.75 and 0.90 of `before`, about the same
+at every size, since the saved preparation and the closure it preceded grow
+together with the program while only the number of regions grows with the
+cell; transitive-path and chain stay within the noise of a rung, one region
+and two or three passes; transitive-complete moves a few hundredths at most;
+the formula-route cells and the corpus do not move; and every statistic the
+runs print stays the same but the timings.
+
+The ladder is the one of the sections above with the two executables of
+this change alone, the dense round's executables having been retired when
+its record closed, and its programs regenerated from the families' texts
+and the description above. Median process wall time in milliseconds, and
+the charged closure work, which is the same under both:
+
+| Rung | before | after | after/before | closure work |
+|---|---:|---:|---:|---:|
+| independent-negation-8 | 13.3 | 9.6 | 0.72 | 28,784 |
+| independent-negation-10 | 38.6 | 22.4 | 0.58 | 91,687 |
+| independent-negation-12 | 111.9 | 71.1 | 0.64 | 280,758 |
+| independent-negation-14 | 340.8 | 208.1 | 0.61 | 857,156 |
+| transitive-path-100 | 7.4 | 6.5 | 0.88 | 111,564 |
+| transitive-path-200 | 14.7 | 14.7 | 1.00 | 664,776 |
+| transitive-path-400 | 44.8 | 46.5 | 1.04 | 4,382,983 |
+| transitive-path-800 | 183.1 | 180.3 | 0.98 | 31,419,753 |
+| chain-1000 | 17.7 | 16.7 | 0.94 | 211,573 |
+| chain-2000 | 31.1 | 32.3 | 1.04 | 736,073 |
+| chain-4000 | 66.5 | 67.7 | 1.02 | 2,720,073 |
+| transitive-complete-40 | 12.8 | 14.3 | 1.12 | 44,027 |
+| transitive-complete-80 | 50.5 | 49.8 | 0.99 | 415,182 |
+| transitive-complete-160 | 219.7 | 220.9 | 1.01 | 5,474,591 |
+
+Every run exhausted its search and exited 0.
+
+Against the hypotheses. The enumeration cells fall further than predicted,
+to 0.58, 0.64 and 0.61 from ten to fourteen nodes and 0.72 at eight, and
+flat in size, as predicted: at fourteen nodes the narrowing visits 3,191
+regions in 5,162 passes, 10,324 closures, each of which prepared the four
+predicates' layouts and allocated their words before this change, a larger
+share of a closure over a few rules than the prediction allowed. The
+transitive-path and chain rungs stand within noise, 0.88 to 1.04, as
+predicted: one region, two passes. Transitive-complete gains nothing where a
+few hundredths were predicted; its rung at 40 nodes reads 1.12, which a
+re-measurement alternating the two executables over five rounds of one
+warmup and three timed runs each, retained beside the ladder, reads as 1.03
+with the runs of the two overlapping, so it is not a change. Every closure
+work count is the same under both executables, and so is every other
+statistic the runs print.
+
+The series is where the second refutation lies. Its closure-route cells,
+with the charged closure work of one run and the peak resident set of the
+memory round:
+
+| Cell | before | after | after/before | clingo | after/clingo | work before | work after | MiB before | MiB after |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| independent-negation-10 | 38.8 | 23.5 | 0.61 | 4.5 | 5.18 | 91,687 | 91,687 | 9.1 | 9.0 |
+| independent-negation-8 | 14.2 | 9.4 | 0.66 | 4.6 | 2.05 | 28,784 | 28,784 | 9.2 | 8.5 |
+| transitive-path-100 | 15.0 | 10.3 | 0.68 | 8.9 | 1.15 | 111,564 | 111,564 | 10.8 | 9.9 |
+| stratified-16 | 3.6 | 3.4 | 0.96 | 4.4 | 0.78 | 1,669 | 1,669 | 9.6 | 8.4 |
+| transitive-path-200 | 21.7 | 20.9 | 0.96 | 22.8 | 0.92 | 664,776 | 664,776 | 15.0 | 14.4 |
+| chain-2000 | 32.3 | 32.5 | 1.01 | 9.9 | 3.29 | 736,073 | 736,073 | 22.2 | 21.4 |
+| independent-choice-16 | 24.8 | 25.3 | 1.02 | 27.7 | 0.91 | 2,117,111 | 2,117,111 | 9.1 | 8.6 |
+| chain-1000 | 17.3 | 18.5 | 1.07 | 6.6 | 2.79 | 211,573 | 211,573 | 15.2 | 14.6 |
+| producer-chain-700 | 25.9 | 27.9 | 1.08 | 9.8 | 2.86 | 48,256 | 48,256 | 25.1 | 24.2 |
+| independent-choice-12 | 5.7 | 6.8 | 1.20 | 6.7 | 1.01 | 227,172 | 227,172 | 8.9 | 8.4 |
+
+The independent-negation cells fall as the ladder says, 0.66 and 0.61. The
+independent-choice cells do not move, though they take the closure route
+with regions: their narrowing decides nothing beyond each split, so the
+tree is three regions and two passes below the root, counted, and the run
+is the 377 or 2,584 candidate checks, which were prepared once already.
+Their 1.20 and 1.02 here are medians of three runs of five and twenty-five
+milliseconds, and the alternating re-measurement reads them at 1.04 and
+0.97, the runs of the two executables overlapping. transitive-path-100 at
+0.68 is the bimodal cell of the section above, a `before` median of 15.0
+over runs from 8.5 to 16.0; on the ladder and alternated it reads 0.88 and
+1.06. The formula-route cells, which this change does not reach, lie
+between 0.98 and 1.10 with the `after` campaign run second, a band the
+sections above also show, while the reference's own medians move between
+the two campaigns by 0.80 to 1.20 of themselves on the smallest cells and
+0.99 at the median. The scoreboard reads twelve of twenty-two for `before`
+and ten for `after`; the two cells that moved, independent-choice-12 from
+0.83 to 1.01 of the reference and disjunction-12 from 0.98 to 1.03, are
+ties that fell on the other side. The peak resident set is unchanged,
+chain-2000 at 22.2 and 21.4 MiB: the retained workspace is one closure's.
+
+The corpus passed on both solvers, all 94 cases in each of the three
+configurations: four workers, faster than the reference on nine, median
+ratio 1.29, widest loss 2.13; one worker, eight, 1.29 and 1.88; one worker
+under `--search clauses`, six, 1.30 and 2.05, the clause search 1.01 of the
+default at the median of the cases and between 0.74 and 1.41 on single
+ones. No corpus case takes the closure route, so these runs establish that
+the change disturbed nothing there; against the campaign of the section
+before the correction, the median case is 1.00 of its earlier time, single
+cases between 0.84 and 1.37, the spread between sessions already recorded.
+
+In the problem's words: where the seed counter narrows region by region and
+the regions are many, each closure no longer prepares the program and
+builds its workspace anew, and those cells run in three fifths of the time;
+where the narrowing decides nothing beyond a split, or there is one region,
+the closures were few and nothing moves; and the corpus, which does not use
+this route, stands where it stood.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
