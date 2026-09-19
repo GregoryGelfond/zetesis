@@ -39,7 +39,7 @@ const RETAINED_VALUE_CELLS: usize = 32;
 /// entirely in the integer cells: no value is constructed or copied and no
 /// payload is charged, since a number has none. The first value that is not a
 /// number moves the integer prefix into value cells, and the plan continues
-/// there with the same charges it always had.
+/// there, charging each value's payload as the value cells do.
 #[derive(Default)]
 pub(crate) struct Evaluation {
     values: Vec<Value>,

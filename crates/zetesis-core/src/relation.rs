@@ -18,15 +18,14 @@
 //! row access; device consumers use the same representation for equality masks.
 //! Structured-value clones already share their payload through `Arc`.
 //!
-//! The pre-1.0 `Catalog::ordered_row` operation is replaced by explicit
-//! [`Catalog::prepare_ordered`] and [`Catalog::ordered`] views over sorted runs.
+//! Ordered access is through the explicit [`Catalog::prepare_ordered`] and
+//! [`Catalog::ordered`] views over sorted runs.
 //! A missing prepared view denotes required preparation, never an empty
 //! relation; preparation after appends sorts them into a new run and keeps the
 //! older runs as geometrically shrinking levels, so no preparation copies the
 //! whole extent. [`Catalog::canonical`] merges the runs into one sequence when
 //! rank access is needed. Relation and
-//! catalog work now charge actual typed descriptor/text-prefix comparisons;
-//! previous numerical work ceilings are not equivalent units.
+//! catalog work charge actual typed descriptor/text-prefix comparisons.
 //!
 //! Limits cover one operation's relation, supplied query/selection and newly
 //! allocated buffers. Other live caller frames and borrowed source allocations

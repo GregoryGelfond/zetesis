@@ -3,8 +3,8 @@
 //! A variable's candidates are the meet of its argument domains, less every
 //! value a comparison over that variable alone is defined and false at. The
 //! candidates that remain are exactly the values the exclusion rule leaves for
-//! the variable, decided before any row is read rather than at the depth that
-//! binds it. A guard is prepared only where the candidates are fewer than the
+//! the variable, decided before any row is read. A guard is prepared only
+//! where the candidates are fewer than the
 //! argument's domain, since a relation offers no value outside its domain.
 
 #[cfg(test)]

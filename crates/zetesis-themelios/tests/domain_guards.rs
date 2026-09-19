@@ -206,8 +206,8 @@ fn completion_reads_the_narrowed_rows() {
     let (before, after) = (off.support.get(), on.support.get());
     assert_eq!(after.domain_rejected_rows, Some(198));
     assert_eq!(after.join_rows, before.join_rows);
-    // X < 3 was evaluated on both sides of every offered row; now on the
-    // two rows the guard admits.
+    // Without the analysis X < 3 is evaluated on both sides of every offered
+    // row; with it, on the two rows the guard admits.
     assert_eq!(before.expression_evaluations, Some(400));
     assert_eq!(after.expression_evaluations, Some(4));
     assert_eq!(on.work.get().domain_narrowed_candidates, Some(198));

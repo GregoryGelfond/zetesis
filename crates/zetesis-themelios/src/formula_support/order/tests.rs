@@ -103,8 +103,7 @@ fn a_bound_occurrence_is_a_test_and_precedes_every_generator() {
 proptest::proptest! {
     #![proptest_config(proptest::test_runner::Config { cases: 256, rng_seed: proptest::test_runner::RngSeed::Fixed(20_260_917), ..Default::default() })]
     /// Without comparisons or shared variables the order is the stable sort
-    /// by relation size, which is the order the join used before the
-    /// criterion was named.
+    /// by relation size.
     #[test]
     fn without_comparisons_disjoint_occurrences_sort_stably_by_size(sizes in proptest::collection::vec(0_usize..4, 0..8)) {
         let literals: Vec<_> = sizes

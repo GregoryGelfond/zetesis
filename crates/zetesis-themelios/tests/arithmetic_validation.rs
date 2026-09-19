@@ -233,9 +233,8 @@ fn reached_operations_differ_from_clingo() {
 #[test]
 #[ignore = "requires independent clingo 5.8.2"]
 fn excluded_substitutions_match_clingo() {
-    // These sources once refused natively because a false comparison was not
-    // permitted to hide an operation to its side; the excluded substitution is
-    // now not reached, as in the reference.
+    // A comparison that is defined and false excludes its substitution, so
+    // an operation to its side is not reached, as in the reference.
     for source in [
         "d(0..2).p(X):-d(X),1=2,1/X=1.",
         "d(0..2).p(X):-d(X),1/X=1,1=2.",
