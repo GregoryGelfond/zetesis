@@ -51,9 +51,7 @@ unsatisfiability. Zero is a real limit for every resource.
 
 Without `--max-expansion-work`, ordinary admission preserves the independent
 library defaults: 1,048,576 source-term expansion operations and 10,000,000 eager
-formula-grounding operations. A ground instance of an ordinary rule costs the
-formula grounder between 480 and 640 operations on the measured corpus, so the
-default admits roughly sixteen to twenty thousand instances.
+formula-grounding operations.
 `--max-expansion-bytes` separately bounds the canonical payload the grounder
 retains, 16 MiB by default, counted once per retained atom. An explicit work
 value overrides both work ceilings; each counter applies it independently. `--stats` reports both effective limits.

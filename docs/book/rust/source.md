@@ -170,9 +170,10 @@ the conditions binding the digit and the carry admit only digits in `0..9`
 and only natural numbers, facts being all that produces them
 (`zetesis_domain::facts`); the equation then has one solution, and for a
 negative `s` no solution, in which case both forms fire. The product of the
-demanded value with every value the key admits is never formed: the
-send-money puzzle's column constraints ground to two hundred instances each
-instead of two thousand.
+demanded value with every value the key admits is never formed; the
+[observation record](../reference/observations/README.md#keyed-constraints-the-one-atom-the-key-admits)
+measures the send-money puzzle's columns at one hundred instances each in
+place of eighteen hundred forbidden combinations.
 
 The written constraint is compiled once and its rules replaced in place by
 the asked constraints', so nothing is prepared twice. The key analysis and

@@ -126,9 +126,10 @@ arrive is the schedule's, is not promised to repeat between runs, and is
 not a property of the result. Verification rests on the laws and on the
 oracle comparison of answer sets as sets, not on order or determinism.
 
-The regions method is the default, chosen by measurement beside the
-classical search over a clause form on the same cells, with the host's
-workers on the tree; the classical search remains reachable for
+The regions method is the default, chosen by
+[measurement](../reference/observations/README.md#the-regions-default-and-one-worker-count)
+beside the classical search over a clause form on the same cells, with the
+host's workers on the tree; the classical search remains reachable for
 comparison. Read as regions the classical search is the same tree:
 a search node holds some atoms in and some out, propagation adds the atoms
 every classical model agrees on under those decisions, a conflict closes the
