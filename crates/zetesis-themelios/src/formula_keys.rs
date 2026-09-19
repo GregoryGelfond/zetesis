@@ -46,6 +46,20 @@
 //! charged to the term work; a stop ends the asking, leaves every constraint
 //! not yet asked as written, and is reported. Nothing is claimed for a
 //! constraint outside the two patterns, which is left as written.
+//!
+//! The analyzed program may be a dependency projection
+//! ([`crate::AnalysisBasis`]): a statement with a pool that outlives
+//! normalization, such as one inside a condition or an aggregate element,
+//! stands in it as one pool-free copy per alternative, read as several
+//! statements where the program means one. The rewrite is sound over it. A
+//! key is claimed only for a relation with one producer, and every copy of
+//! a projected statement produces what the statement produces, since a pool
+//! never changes an atom's signature and a pooled argument list is unpooled
+//! before the projection, into the elements of its choice or into whole
+//! rules; so a projected statement, of two copies at least, is never a
+//! key's producer, and a projected constraint, several statements under one
+//! origin, is never asked. Copies that coincide come from coinciding
+//! alternatives, which the choice reads as one element.
 
 use std::collections::BTreeMap;
 

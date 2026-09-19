@@ -10,7 +10,7 @@ mod stable_models;
 use std::collections::BTreeSet;
 
 use stable_models::stable;
-use zetesis_themelios::{AdmittedFormula, FormulaLimits, KeyAnalysis};
+use zetesis_themelios::{AdmittedFormula, AnalysisBasis, FormulaLimits, KeyAnalysis};
 
 const CHOICES: &str = "letter(a;b;c). digit(0..9). carry_value(0;1). idx(1). \
     1 { assign(L,D) : digit(D) } 1 :- letter(L). \
@@ -289,4 +289,35 @@ fn a_stopped_key_analysis_leaves_every_constraint_written_and_is_reported() {
         stopped.expansion_usage().term_work,
         under(0).expansion_usage().term_work + 3
     );
+}
+
+#[test]
+fn a_producer_projected_for_a_pool_yields_no_key() {
+    // A pool inside the choice outlives normalization into the analysis
+    // input as one pool-free copy of the choice per alternative, each a
+    // producer of the relation; with several producers no key is claimed,
+    // though the program means one choice.
+    let source = "b(1..2). c(1..2). d(1..2). \
+        1 { p(K,V) : c(V), d((1;2)) } 1 :- b(K). :- p(K,Y), Y != 1.";
+    let admitted = admitted(source);
+    assert_eq!(
+        admitted.analysis_basis(),
+        AnalysisBasis::DependencyProjection
+    );
+    assert_eq!(admitted.keyed_constraints(), 0);
+}
+
+#[test]
+fn a_projection_elsewhere_leaves_the_keyed_constraint_asked() {
+    // The projection copies only the statements with a pool; a keyed
+    // choice without one stands in it as written, the relation's one
+    // producer.
+    let source = "b(1..2). c(1..2). 1 { p(K,V) : c(V) } 1 :- b(K). \
+        { q(K) : b(K), c((1;2)) }. :- p(K,Y), Y != 1.";
+    let admitted = admitted(source);
+    assert_eq!(
+        admitted.analysis_basis(),
+        AnalysisBasis::DependencyProjection
+    );
+    assert_eq!(admitted.keyed_constraints(), 1);
 }

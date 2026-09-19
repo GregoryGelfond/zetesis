@@ -723,7 +723,10 @@ pub enum AnalysisBasis {
     /// A bounded, pool-free normalization of the admitted source program.
     NormalizedProgram,
     /// A pool-free signature/polarity projection. Safety and class verdicts
-    /// describe this projection; they are not conclusions about source semantics.
+    /// describe this projection; they are not conclusions about source
+    /// semantics. The keyed rewrite reads it soundly, as its module argues:
+    /// a projected statement is never a key's producer nor an asked
+    /// constraint.
     DependencyProjection,
 }
 
