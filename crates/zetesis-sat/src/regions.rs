@@ -67,7 +67,7 @@ pub struct RegionCounts {
     /// revisited, and support rechecks.
     pub propagations: u64,
     /// Atoms the readings held.
-    pub forced: u64,
+    pub held: u64,
     /// Atoms the readings cut.
     pub cut: u64,
     /// Node reads, root tests and producer checks, and for the candidate
@@ -100,9 +100,9 @@ impl RegionCounts {
                 .propagations
                 .checked_add(other.propagations)
                 .ok_or(Incomplete::CounterOverflow)?,
-            forced: self
-                .forced
-                .checked_add(other.forced)
+            held: self
+                .held
+                .checked_add(other.held)
                 .ok_or(Incomplete::CounterOverflow)?,
             cut: self
                 .cut
@@ -347,7 +347,7 @@ fn account<Q: Quota>(
         Err(stop) => return Err(stopped(stop)),
     };
     counts.propagations += pass.propagations;
-    counts.forced += pass.forced;
+    counts.held += pass.held;
     counts.cut += pass.cut;
     counts.work += pass.work;
     budget.charge(pass.work)?;

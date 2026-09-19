@@ -775,7 +775,7 @@ fn region_statistics(
     out.number_field("refuted", counts.refuted)?;
     out.number_field("leaves", counts.leaves)?;
     out.number_field("propagations", counts.propagations)?;
-    out.number_field("held", counts.forced)?;
+    out.number_field("held", counts.held)?;
     out.number_field("cut", counts.cut)?;
     out.text(",\"support_cut\":")?;
     out.string(if stats.producers {

@@ -179,7 +179,7 @@ pub struct NarrowingStatistics {
     /// revisited, and atoms whose support was rechecked.
     pub propagations: u64,
     /// Atoms held by the narrowing.
-    pub forced: u64,
+    pub held: u64,
     /// Atoms cut by the narrowing.
     pub cut: u64,
 }
@@ -497,7 +497,7 @@ impl Narrower {
         for atom in known.learned.drain(..) {
             let was_open = region.is_open(atom);
             let decided = if known.atom_sure[atom] {
-                statistics.forced += u64::from(was_open);
+                statistics.held += u64::from(was_open);
                 region.hold(atom)
             } else {
                 statistics.cut += u64::from(was_open);

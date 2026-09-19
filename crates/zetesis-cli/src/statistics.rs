@@ -650,7 +650,7 @@ fn countermodel(
             counts.refuted,
             counts.leaves,
             counts.propagations,
-            counts.forced,
+            counts.held,
             counts.cut,
             if regions.producers {
                 "applied"

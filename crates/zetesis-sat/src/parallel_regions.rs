@@ -92,7 +92,7 @@ struct Live {
     refuted: AtomicU64,
     leaves: AtomicU64,
     propagations: AtomicU64,
-    forced: AtomicU64,
+    held: AtomicU64,
     cut: AtomicU64,
     work: AtomicU64,
     countermodel_queries: AtomicU64,
@@ -279,7 +279,7 @@ impl ParallelRegions {
                 refuted: count(&live.refuted),
                 leaves: count(&live.leaves),
                 propagations: Live::read(&live.propagations),
-                forced: Live::read(&live.forced),
+                held: Live::read(&live.held),
                 cut: Live::read(&live.cut),
                 work: self
                     .statistics
@@ -595,7 +595,7 @@ fn step<'a>(
         &shared.live.propagations,
         after.propagations - before.propagations,
     );
-    Live::add(&shared.live.forced, after.forced - before.forced);
+    Live::add(&shared.live.held, after.held - before.held);
     Live::add(&shared.live.cut, after.cut - before.cut);
     Live::add(&shared.live.work, after.work - before.work);
     if narrowing == Narrowing::Refuted {
