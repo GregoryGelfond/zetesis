@@ -8,13 +8,13 @@ import Zetesis.DisjunctiveSupport
 A region of candidates over a formula theory is a cube: the atoms every
 seed holds and the atoms some seed may hold. A formula has two readings
 under a region, both decided by one pass over its structure: it is *sure*
-when every seed of the region satisfies it, and *impossible* when no seed
-does; an atom held is sure, an atom cut is impossible, and the connectives
+when every seed of the region satisfies it, and *never* when no seed
+does; an atom held is sure, an atom cut is never, and the connectives
 combine the readings as the closure route's definite and possible gates do.
 The readings are sound by induction on the formula.
 
 Three narrowing rules follow, each over the acceptance `Ferraris.Stable`. A
-root impossible under the region refutes it: no seed is a classical model.
+root never under the region refutes it: no seed is a classical model.
 A rule-shaped root whose body is sure forces its atomic head into every
 stable model of the region, and a constraint whose body is sure refutes the
 region; both are instances of the first rule read through the implication.
@@ -22,8 +22,8 @@ region; both are instances of the first rule read through the implication.
 which is what unit propagation over a clause form of the theory decides,
 and `known_sound` says every classical model inside the region agrees. In
 the producer fragment of `DisjunctiveSupport`, an atom none of whose
-producers can support it under the region, because each has an impossible
-body or another head held, is cut, and an atom held with one producer
+producers can support it under the region, because each has a body never
+satisfied or another head held, is cut, and an atom held with one producer
 left unblocked has that producer's body: `answer_set_supported` says every
 atom of a stable model has a supporting producer. An atomic choice is a
 producer of its atom, blocked only when its body cannot hold, since a choice
@@ -50,7 +50,7 @@ universe u
 
 variable {α : Type u}
 
-/-- The two readings of a formula under a region: sure, and impossible. -/
+/-- The two readings of a formula under a region: sure, and never. -/
 def read (c : Cube α) : Formula α → Prop × Prop
   | .atom a => (c.lower a, ¬ c.upper a)
   | .bot => (False, True)

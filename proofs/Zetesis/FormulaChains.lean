@@ -6,7 +6,7 @@ import Zetesis.FormulaBounds
 A clause of `k` literals is admitted as a chain of `k − 1` binary
 disjunctions, and a body of `k` literals as a chain of conjunctions. The
 narrowing reads such a chain as one node with `k` operands: a disjunction is
-sure when one operand is, impossible when all are, and a disjunction known to
+sure when one operand is, never when all are, and a disjunction known to
 hold with all operands but one known to fail forces that one; a conjunction
 dually. Each of these rules is admissible in `FormulaBounds.Known`: it is a
 sequence of the binary rules along the chain, one per internal node, which is
