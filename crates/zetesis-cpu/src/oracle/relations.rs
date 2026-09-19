@@ -356,7 +356,7 @@ impl Catalogs {
         self.prepare(work)?;
         for relation in &self.relations {
             if let Relation::Tree { catalog, partition } = relation {
-                partition.prepare(catalog, work)?;
+                partition.confirm(catalog, work)?;
             }
         }
         Ok(())

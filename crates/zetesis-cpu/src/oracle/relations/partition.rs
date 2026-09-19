@@ -7,8 +7,7 @@ use crate::Stop;
 
 /// The round cutoff over one catalog: rows with an insertion ID below it are
 /// Old, the rest New. The catalog's last appending preparation keeps the Old
-/// rows as its levels and the New rows as its tail, so no derived ID buffer
-/// is needed here.
+/// rows as its levels and the New rows as its tail.
 #[derive(Default)]
 pub(in crate::oracle) struct Partition {
     old_end: usize,
@@ -31,10 +30,10 @@ impl Partition {
         self.old_end < length
     }
 
-    /// Check that the catalog's runs fall at this cutoff. The catalog prepares
-    /// once per round, after the cutoff advanced and the round's heads were
-    /// appended, so its levels hold exactly the Old extent.
-    pub(super) fn prepare(&self, catalog: &Catalog, work: &mut Work<'_>) -> Result<(), Stop> {
+    /// Confirm that the catalog's runs fall at this cutoff. The catalog
+    /// prepares once per round, after the cutoff advanced and the round's
+    /// heads were appended, so its levels hold exactly the Old extent.
+    pub(super) fn confirm(&self, catalog: &Catalog, work: &mut Work<'_>) -> Result<(), Stop> {
         charge(work, 1)?;
         let runs = catalog.ordered().ok_or(Stop::InvalidProgram)?;
         let length = runs.len();
