@@ -2286,3 +2286,11 @@ For the historical Table-grounding comparison, direct integer rounding corrects
 eight final displayed digits from its earlier presentation. For example, 32,871,500 ns is exactly
 32.8715 ms and rounds to 32.872; 6,094,848 bytes is exactly 5.8125 MiB and rounds
 to 5.812. The raw observation and provenance JSON remain unchanged.
+
+## Keys renamed since these records
+
+The records above keep the spellings of their day. A later record spells these keys as the second column says.
+
+| In these records | Since |
+| --- | --- |
+| `necessary_gate_atoms`, `underivable_gate_atoms` under `carrier_bounds` | `held_gate_atoms`, `cut_gate_atoms` |

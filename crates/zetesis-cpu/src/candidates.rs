@@ -80,13 +80,13 @@ pub struct CandidateStatistics {
     pub restriction_conjunctions: usize,
     /// Certified impossible binary intervals skipped, not individual seeds.
     pub conflicts: u64,
-    /// Symbolic gate atoms outside the narrowing's upper closure, never
+    /// Gate atoms the narrowing cut, outside its upper closure and never
     /// offered to the counter: no rule derives them under any gate
     /// assumption, so no answer set holds them.
-    pub underivable_gate_atoms: usize,
-    /// Gate atoms of the narrowing's lower closure, held in every seed
-    /// instead of counted: every answer set holds them.
-    pub necessary_gate_atoms: usize,
+    pub cut_gate_atoms: usize,
+    /// Gate atoms the narrowing held, in its lower closure and held in
+    /// every seed instead of counted: every answer set holds them.
+    pub held_gate_atoms: usize,
     /// Why a narrowing stopped early, the root's or any region's below it:
     /// the preparation or a closure stopped on a resource ceiling, and the
     /// counter kept the bounds of the passes that completed, the whole
@@ -221,7 +221,7 @@ impl Closures {
         });
         // A gate atom every seed of the region holds that no seed of it can
         // derive: the region holds no accepted seed
-        // (`Bounds.conflicting_atom_refutes`). From the undecided cube the
+        // (`Bounds.conflicting_atom_refutes`). From the open cube the
         // lower closure lies inside the upper one; a split can part them.
         if cube
             .must
@@ -294,7 +294,7 @@ pub struct Candidates<'a> {
     restrictions: RestrictionState,
     bounds: BoundsState,
     enumeration: Enumeration,
-    /// The undecided gate atoms of the narrowed root, in carrier order; a
+    /// The open gate atoms of the narrowed root, in carrier order; a
     /// region decides over their indices.
     root: Vec<Arc<GateAtom>>,
     /// The gate atoms every seed holds, from the root's narrowing.
@@ -394,7 +394,7 @@ impl<'a> Candidates<'a> {
     }
 
     /// Carrier atoms successfully retained so far: the narrowed root's
-    /// undecided atoms once the bounds are applied, else the counter's.
+    /// open atoms once the bounds are applied, else the counter's.
     #[must_use]
     pub fn discovered_atoms(&self) -> usize {
         match self.enumeration {
@@ -455,7 +455,7 @@ impl<'a> Candidates<'a> {
 
     /// The seeds of the narrowed root, region by region: a region is
     /// narrowed to its fixed point, refuted by a definite constraint,
-    /// decided outright, split on its highest undecided atom with the out
+    /// decided outright, split on its highest open atom with the out
     /// branch first, or counted when its narrowing decided nothing beyond
     /// the split. The leaves come in the counter's order, and every accepted
     /// seed of the root lies in exactly one region visited
@@ -483,8 +483,8 @@ impl<'a> Candidates<'a> {
                     return self.selected();
                 }
                 Some(Visit::Counted(region, ())) => {
-                    let undecided: Vec<usize> = region.open().collect();
-                    self.hold(&region, &undecided)?;
+                    let open: Vec<usize> = region.open().collect();
+                    self.hold(&region, &open)?;
                     self.started = false;
                     self.counting = true;
                 }
@@ -492,9 +492,9 @@ impl<'a> Candidates<'a> {
         }
     }
 
-    /// Hold the region's decided atoms in every seed and offer its undecided
+    /// Hold the region's decided atoms in every seed and offer its open
     /// ones to the counter.
-    fn hold(&mut self, region: &Region, undecided: &[usize]) -> Result<(), Stop> {
+    fn hold(&mut self, region: &Region, open: &[usize]) -> Result<(), Stop> {
         self.must.clear();
         self.atoms.clear();
         self.bits.clear();
@@ -510,12 +510,12 @@ impl<'a> Candidates<'a> {
             self.must.push(Arc::new(atom.clone()));
         }
         self.atoms
-            .try_reserve(undecided.len())
+            .try_reserve(open.len())
             .map_err(|_| Stop::Allocation)?;
         self.bits
-            .try_reserve(undecided.len())
+            .try_reserve(open.len())
             .map_err(|_| Stop::Allocation)?;
-        for &index in undecided {
+        for &index in open {
             self.atoms.push(self.root[index].clone());
             self.bits.push(false);
         }
@@ -600,7 +600,7 @@ impl<'a> Candidates<'a> {
         if self.emitted >= self.limits.max_candidates {
             return Err(Stop::CandidateLimit);
         }
-        let seed = SeedSelection::necessary_and_selected(
+        let seed = SeedSelection::held_and_selected(
             self.program,
             self.must.iter().cloned(),
             self.atoms
@@ -663,7 +663,7 @@ impl<'a> Candidates<'a> {
                 return Ok(());
             }
         };
-        let mut cube = Cube::undecided();
+        let mut cube = Cube::all_open();
         // Each pass either refutes, strictly grows `must`, strictly shrinks
         // `may` or is the last; both sets lie within the finite gate atoms
         // of the first upper closure, so the loop ends.
@@ -690,19 +690,19 @@ impl<'a> Candidates<'a> {
             self.must.try_reserve(1).map_err(|_| Stop::Allocation)?;
             self.must.push(Arc::new(atom.clone()));
         }
-        self.statistics.necessary_gate_atoms = self.must.len();
+        self.statistics.held_gate_atoms = self.must.len();
         if self.refuted {
             return Ok(());
         }
         let applied = matches!(self.bounds, BoundsState::Applied(_));
         match (applied, cube.may) {
-            // The narrowed root's undecided atoms, in carrier order, are the
+            // The narrowed root's open atoms, in carrier order, are the
             // region tree's coordinates; the carrier is read once for them.
             (true, Some(may)) => {
                 self.root_must = cube.must;
                 self.materialize_root(&may)?;
                 self.traversal = Some(Traversal::with_narrowed_root(
-                    Region::undecided(self.root.len()),
+                    Region::all_open(self.root.len()),
                     Counting::Unchanged,
                     (),
                 ));
@@ -722,7 +722,7 @@ impl<'a> Candidates<'a> {
                 GateAtomError::OrdinalOverflow => Stop::CarrierLimit,
             })?;
             if !may.contains(atom.atom()) {
-                self.statistics.underivable_gate_atoms += 1;
+                self.statistics.cut_gate_atoms += 1;
             } else if !self.root_must.contains(atom.atom()) {
                 if self.root.len() >= self.limits.max_carrier_atoms {
                     return Err(Stop::CarrierLimit);
@@ -809,7 +809,7 @@ impl<'a> Candidates<'a> {
                 .as_ref()
                 .is_some_and(|may| !may.contains(atom.atom()))
             {
-                self.statistics.underivable_gate_atoms += 1;
+                self.statistics.cut_gate_atoms += 1;
             } else if self
                 .must
                 .binary_search_by(|necessary| necessary.as_ref().cmp(atom.atom()))

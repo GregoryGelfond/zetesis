@@ -269,14 +269,8 @@ fn candidate_statistics_carry_the_carrier_bounds_and_regions() {
     let stats = &value["statistics"]["candidate_restrictions"];
     let bounds = &stats["carrier_bounds"];
     assert_eq!(bounds["narrowing_passes"], measured.bounds_passes);
-    assert_eq!(
-        bounds["underivable_gate_atoms"],
-        measured.underivable_gate_atoms
-    );
-    assert_eq!(
-        bounds["necessary_gate_atoms"],
-        measured.necessary_gate_atoms
-    );
+    assert_eq!(bounds["cut_gate_atoms"], measured.cut_gate_atoms);
+    assert_eq!(bounds["held_gate_atoms"], measured.held_gate_atoms);
     assert_eq!(bounds["refuted"], false);
     assert_eq!(bounds["stopped"], Json::Null);
     let regions = &stats["carrier_regions"];

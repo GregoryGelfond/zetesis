@@ -198,7 +198,7 @@ impl RegionSearch {
             statistics,
             producers,
             traversal: Traversal::with_state(
-                Region::undecided(theory.atom_count()),
+                Region::all_open(theory.atom_count()),
                 Counting::Never,
                 vec![narrower.knowledge()],
             ),
@@ -406,7 +406,7 @@ impl ReductQuery {
         budget: &mut Budget<'_, Q>,
         statistics: &mut crate::Statistics,
     ) -> Result<crate::Check, Incomplete> {
-        let mut root = Region::undecided(theory.atom_count());
+        let mut root = Region::all_open(theory.atom_count());
         for atom in (0..theory.atom_count()).filter(|&atom| !candidate.contains(atom)) {
             root.cut(atom);
         }

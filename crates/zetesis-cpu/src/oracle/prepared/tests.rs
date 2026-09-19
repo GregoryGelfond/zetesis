@@ -164,7 +164,7 @@ fn a_stopped_cube_closure_retires_the_workspace() {
     let program = program();
     let control = Control::default();
     let prepared = PreparedQueries::new(&program, PreparationLimits::default(), &control).unwrap();
-    let cube = super::super::Cube::undecided();
+    let cube = super::super::Cube::all_open();
     let reference = prepared
         .closure_of(
             super::super::Gates::Definite(&cube),

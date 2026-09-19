@@ -68,7 +68,7 @@ fn the_narrowing_never_offers_a_gate_atom_no_rule_derives() {
     let (seeds, statistics) = narrowed(&gated_program());
     assert_eq!(seeds.len(), 2);
     assert!(seeds.iter().all(|seed| !seed.contains(&atom("s", vec![]))));
-    assert_eq!(statistics.underivable_gate_atoms, 1);
+    assert_eq!(statistics.cut_gate_atoms, 1);
 }
 
 #[test]
@@ -78,7 +78,7 @@ fn the_narrowing_holds_a_gate_atom_the_gate_free_rules_derive() {
     let (seeds, statistics) = narrowed(&held_program());
     assert_eq!(seeds.len(), 2);
     assert!(seeds.iter().all(|seed| seed.contains(&atom("s", vec![]))));
-    assert_eq!(statistics.necessary_gate_atoms, 1);
+    assert_eq!(statistics.held_gate_atoms, 1);
 }
 
 /// d(1..4). blocked(2). r(X) :- d(X), not blocked(X). :- not r(1).
@@ -139,8 +139,8 @@ fn a_resource_stop_while_bounding_leaves_the_symbolic_carrier() {
     assert_eq!(candidates.by_ref().map(Result::unwrap).count(), 256);
     let statistics = candidates.statistics();
     assert_eq!(statistics.bounds_stop, Some(zetesis_cpu::Stop::WorkLimit));
-    assert_eq!(statistics.underivable_gate_atoms, 0);
-    assert_eq!(statistics.necessary_gate_atoms, 0);
+    assert_eq!(statistics.cut_gate_atoms, 0);
+    assert_eq!(statistics.held_gate_atoms, 0);
 }
 
 #[test]
@@ -270,8 +270,8 @@ fn the_narrowing_reports_its_passes() {
 #[test]
 fn the_narrowing_reports_its_decisions() {
     let statistics = stratified_statistics();
-    assert_eq!(statistics.necessary_gate_atoms, 8);
-    assert_eq!(statistics.underivable_gate_atoms, 8);
+    assert_eq!(statistics.held_gate_atoms, 8);
+    assert_eq!(statistics.cut_gate_atoms, 8);
 }
 
 #[test]

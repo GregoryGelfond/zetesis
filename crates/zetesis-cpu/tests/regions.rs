@@ -26,7 +26,7 @@ fn held(region: &Region) -> Vec<usize> {
 
 #[test]
 fn a_region_holds_cuts_or_leaves_each_atom_open() {
-    let mut region = Region::undecided(3);
+    let mut region = Region::all_open(3);
     assert!(region.is_open(0) && region.is_open(1) && region.is_open(2));
     assert!(region.hold(1));
     assert!(region.cut(2));
@@ -43,7 +43,7 @@ fn a_region_holds_cuts_or_leaves_each_atom_open() {
 
 #[test]
 fn a_region_logs_its_decisions_in_order() {
-    let mut region = Region::undecided(3);
+    let mut region = Region::all_open(3);
     assert!(region.hold(2));
     assert!(region.cut(0));
     assert!(region.hold(2), "an idle hold is not a decision");
@@ -55,10 +55,10 @@ fn a_region_logs_its_decisions_in_order() {
 
 #[test]
 fn regions_are_equal_by_their_decisions_whatever_their_order() {
-    let mut region = Region::undecided(3);
+    let mut region = Region::all_open(3);
     assert!(region.hold(2));
     assert!(region.cut(0));
-    let mut other = Region::undecided(3);
+    let mut other = Region::all_open(3);
     assert!(other.cut(0));
     assert!(other.hold(2));
     assert_eq!(other, region);
@@ -67,7 +67,7 @@ fn regions_are_equal_by_their_decisions_whatever_their_order() {
 
 #[test]
 fn a_split_partitions_a_region_on_one_atom_cut_first() {
-    let region = Region::undecided(2);
+    let region = Region::all_open(2);
     let (cut, held) = region.split(1);
     assert!(cut.is_cut(1) && cut.is_open(0));
     assert!(held.is_held(1) && held.is_open(0));
@@ -75,7 +75,7 @@ fn a_split_partitions_a_region_on_one_atom_cut_first() {
 
 #[test]
 fn never_counting_visits_every_leaf_in_counter_order() {
-    let traversal = Traversal::new(Region::undecided(2), Counting::Never);
+    let traversal = Traversal::new(Region::all_open(2), Counting::Never);
     let leaves: Vec<Vec<usize>> = visits(traversal)
         .iter()
         .map(|visit| match visit {
@@ -89,7 +89,7 @@ fn never_counting_visits_every_leaf_in_counter_order() {
 
 #[test]
 fn the_root_is_split_even_when_its_narrowing_changes_nothing() {
-    let traversal = Traversal::new(Region::undecided(2), Counting::Unchanged);
+    let traversal = Traversal::new(Region::all_open(2), Counting::Unchanged);
     let visits = visits(traversal);
     // The root splits on atom 1; each child, unchanged by narrowing, is counted.
     assert_eq!(visits.len(), 2);
@@ -101,7 +101,7 @@ fn the_root_is_split_even_when_its_narrowing_changes_nothing() {
 fn a_narrowing_that_decides_an_atom_keeps_splitting_below_it() {
     // Narrowing cuts atom 0 whenever atom 2 is held: the held branch then
     // has one open atom left and is split, not counted.
-    let mut traversal = Traversal::new(Region::undecided(3), Counting::Unchanged);
+    let mut traversal = Traversal::new(Region::all_open(3), Counting::Unchanged);
     let mut seen = Vec::new();
     while let Some(visit) = traversal
         .next(|region, ()| {
@@ -124,7 +124,7 @@ fn a_narrowing_that_decides_an_atom_keeps_splitting_below_it() {
 
 #[test]
 fn a_refuted_region_is_skipped_with_its_whole_subtree() {
-    let mut traversal = Traversal::new(Region::undecided(3), Counting::Never);
+    let mut traversal = Traversal::new(Region::all_open(3), Counting::Never);
     let mut leaves = Vec::new();
     while let Some(visit) = traversal
         .next(|region, ()| {
@@ -151,7 +151,7 @@ fn a_refuted_region_is_skipped_with_its_whole_subtree() {
 
 #[test]
 fn a_decided_root_is_one_leaf() {
-    let mut root = Region::undecided(2);
+    let mut root = Region::all_open(2);
     assert!(root.hold(0) && root.cut(1));
     let visits = visits(Traversal::new(root, Counting::Unchanged));
     assert_eq!(visits.len(), 1);
@@ -160,7 +160,7 @@ fn a_decided_root_is_one_leaf() {
 
 #[test]
 fn a_stopped_narrowing_stops_the_traversal_and_keeps_the_region() {
-    let mut traversal = Traversal::new(Region::undecided(2), Counting::Never);
+    let mut traversal = Traversal::new(Region::all_open(2), Counting::Never);
     assert_eq!(
         traversal.next(|_, ()| Err(Stop::WorkLimit)).unwrap_err(),
         Stop::WorkLimit
@@ -174,7 +174,7 @@ fn a_stopped_narrowing_stops_the_traversal_and_keeps_the_region() {
 fn a_narrowing_may_choose_the_split_atom() {
     // Preferring atom 0 at every region visits the leaves with atom 0 as
     // the high bit of the order: empty, {1}, {0}, {0,1}.
-    let mut traversal = Traversal::new(Region::undecided(2), Counting::Never);
+    let mut traversal = Traversal::new(Region::all_open(2), Counting::Never);
     let mut leaves = Vec::new();
     while let Some(visit) = traversal
         .next(|region, ()| {
@@ -188,7 +188,7 @@ fn a_narrowing_may_choose_the_split_atom() {
         }
     }
     assert_eq!(leaves, vec![vec![], vec![1], vec![0], vec![0, 1]]);
-    let mut region = Region::undecided(2);
+    let mut region = Region::all_open(2);
     region.prefer(1);
     assert!(region.hold(1));
     assert_eq!(region.split_atom(), Some(0), "a decided preference lapses");
@@ -200,7 +200,7 @@ fn each_leaf_carries_the_state_of_its_own_lineage() {
     // regions on its own lineage: each narrowing adds one, so a leaf at
     // depth two has seen three regions, and siblings do not see each
     // other's count.
-    let mut traversal = Traversal::with_state(Region::undecided(2), Counting::Never, 0usize);
+    let mut traversal = Traversal::with_state(Region::all_open(2), Counting::Never, 0usize);
     let mut depths = Vec::new();
     while let Some(visit) = traversal
         .next(|_, seen: &mut usize| {
@@ -221,8 +221,7 @@ fn a_traversal_from_a_narrowed_root_does_not_narrow_it_again() {
     // The caller narrowed the root before the traversal began: the root is
     // split without a narrowing, and every region below it is narrowed
     // once, the counting never counting the root as a flat interval.
-    let mut traversal =
-        Traversal::with_narrowed_root(Region::undecided(2), Counting::Unchanged, ());
+    let mut traversal = Traversal::with_narrowed_root(Region::all_open(2), Counting::Unchanged, ());
     let mut narrowed = Vec::new();
     while let Some(visit) = traversal
         .next(|region, ()| {

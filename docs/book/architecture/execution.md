@@ -151,20 +151,20 @@ the region's two closures: the lower one, in which a rule fires only if its
 gates hold under every seed of the region, and the upper one, in which a
 rule fires if its gates hold under some seed. A gate atom the lower closure
 derives belongs to every answer set and is held in every seed; a gate atom
-the upper closure does not derive belongs to no answer set and is never
-offered. The next pass reads those decisions, and the passes stop when one
-changes nothing. The statistics report the passes, the omitted atoms as
-underivable and the held ones as necessary. A constraint that fires in a
+the upper closure does not derive belongs to no answer set and is cut,
+never offered. The next pass reads those decisions, and the passes stop
+when one changes nothing. The statistics report the passes and the atoms
+held and cut; the rest are open. A constraint that fires in a
 lower closure holds under every seed of the region, so no seed is offered
 and the program has no answer set.
 
 The narrowed root is then visited region by region rather than counted. A
-region holds some of the root's undecided gate atoms in, cuts some out and
-leaves the rest undecided; it is narrowed to its fixed point by the same two
+region holds some of the root's open gate atoms in, cuts some out and
+leaves the rest open; it is narrowed to its fixed point by the same two
 closures, and the passes decide more of its atoms. A region a definite
 constraint refutes, or in which a held atom is not derivable, offers no seed.
-A region with nothing left undecided offers its one seed. Otherwise the
-region is split on its highest undecided atom, into the region where that
+A region with no atom left open offers its one seed. Otherwise the
+region is split on its highest open atom, into the region where that
 atom is out and the region where it is in, visited in that order, which is
 the order the flat counter would offer the same seeds in; the root is always
 split. A region whose narrowing decided nothing beyond the split that formed
@@ -174,7 +174,7 @@ counted region and no more. The statistics report the regions visited,
 refuted, decided and counted and the narrowing passes below the root. Each
 offered seed is still checked in full against the whole gate carrier. The
 laws are `Bounds.narrowed_contains_accepted`, the iterated narrowing of the
-undecided cube, `Bounds.lower_constraint_refutes` and
+open cube (`Bounds.undecided` in the Lean), `Bounds.lower_constraint_refutes` and
 `Bounds.conflicting_atom_refutes` for the refutations, and the coverage
 tree of `Search.lean`, whose `split` node with `Cube.split_partition` and
 `Cube.split_disjoint` makes the regions a partition of their parent and

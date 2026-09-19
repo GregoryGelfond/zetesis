@@ -45,7 +45,7 @@ fn stable_models(theory: &Theory) -> BTreeSet<usize> {
 }
 
 fn region(theory: &Theory, held: &[usize], cut: &[usize]) -> Region {
-    let mut region = Region::undecided(theory.atom_count());
+    let mut region = Region::all_open(theory.atom_count());
     for &atom in held {
         assert!(region.hold(atom));
     }
@@ -75,7 +75,7 @@ fn narrowing_keeps_every_stable_model(theory: &Theory) {
     let models = stable_models(theory);
     let regions = 3usize.pow(u32::try_from(atoms).unwrap());
     for code in 0..regions {
-        let mut region = Region::undecided(theory.atom_count());
+        let mut region = Region::all_open(theory.atom_count());
         let mut digits = code;
         for atom in 0..atoms {
             match digits % 3 {
@@ -342,7 +342,7 @@ fn the_leaves_of_the_region_tree_are_the_stable_models() {
     }
     let t = disjunctive();
     let mut found = Vec::new();
-    leaves(&t, Region::undecided(t.atom_count()), &mut found);
+    leaves(&t, Region::all_open(t.atom_count()), &mut found);
     assert_eq!(
         found.iter().copied().collect::<BTreeSet<_>>(),
         stable_models(&t)
@@ -599,7 +599,7 @@ fn a_frozen_mask_on_a_chain_node_reads_as_its_operands_masks() {
         );
         let evaluation = attempt.result.unwrap();
         let truth = evaluation.truth();
-        let mut subsets = Region::undecided(3);
+        let mut subsets = Region::all_open(3);
         for atom in (0..3).filter(|atom| !candidate.contains(atom)) {
             subsets.cut(atom);
         }
@@ -645,7 +645,7 @@ fn carried_knowledge_narrows_every_region_as_a_fresh_narrowing_does() {
         let narrower = Narrower::new(&t);
         let extracted = producers(&t, RegionLimits::default(), &Control::default()).unwrap();
         let producers = extracted.producers.as_ref();
-        let mut stack = vec![(Region::undecided(t.atom_count()), narrower.knowledge())];
+        let mut stack = vec![(Region::all_open(t.atom_count()), narrower.knowledge())];
         let mut leaves = 0;
         while let Some((mut carried, mut knowledge)) = stack.pop() {
             let mut fresh = carried.clone();
@@ -698,7 +698,7 @@ fn holding_an_atom_without_producers_rechecks_no_support() {
     // revisited, which holds its atom. That is the one propagation; without
     // producers there is no support to recheck, so none is queued.
     let t = theory(1, vec![Node::Atom(0)], vec![0]);
-    let mut region = Region::undecided(1);
+    let mut region = Region::all_open(1);
     let (narrowing, statistics) = narrow_fresh(
         &t,
         None,
@@ -720,7 +720,7 @@ fn an_implication_from_an_atom_to_itself_is_one_parent_of_the_atom() {
     let t = theory(1, vec![Node::Atom(0), Node::Implies(0, 0)], vec![1]);
     let narrower = Narrower::new(&t);
     let mut knowledge = narrower.knowledge();
-    let mut region = Region::undecided(1);
+    let mut region = Region::all_open(1);
     let (narrowing, _) = narrower
         .narrow_known(
             &t,
@@ -744,7 +744,7 @@ fn every_propagation_event_is_charged_work() {
     // ceiling a narrowing needs.
     let t = disjunctive();
     let extracted = producers(&t, RegionLimits::default(), &Control::default()).unwrap();
-    let mut region = Region::undecided(4);
+    let mut region = Region::all_open(4);
     let (_, statistics) = narrow_fresh(
         &t,
         extracted.producers.as_ref(),
@@ -755,7 +755,7 @@ fn every_propagation_event_is_charged_work() {
     .unwrap();
     assert!(statistics.propagations > 1);
     assert!(statistics.propagations <= statistics.work);
-    let mut region = Region::undecided(4);
+    let mut region = Region::all_open(4);
     let stopped = narrow_fresh(
         &t,
         extracted.producers.as_ref(),

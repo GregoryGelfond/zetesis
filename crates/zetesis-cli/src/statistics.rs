@@ -457,8 +457,8 @@ fn candidates(sink: &mut impl Write, stats: zetesis_cpu::CandidateStatistics) ->
     }
     writeln!(
         sink,
-        "  carrier bounds: narrowing passes={}; underivable gate atoms={}; necessary gate atoms={}",
-        stats.bounds_passes, stats.underivable_gate_atoms, stats.necessary_gate_atoms
+        "  carrier bounds: narrowing passes={}; cut gate atoms={}; held gate atoms={}",
+        stats.bounds_passes, stats.cut_gate_atoms, stats.held_gate_atoms
     )?;
     if let Some(stop) = stats.bounds_stop {
         writeln!(

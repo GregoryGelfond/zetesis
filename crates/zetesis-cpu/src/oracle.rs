@@ -312,14 +312,16 @@ pub(crate) struct CompletedClosure {
 /// atoms some seed of it may hold. `None` for `may` is the whole symbolic
 /// carrier, which is never materialized. This is the `Cube` of
 /// `Search.lean`, with `Bounds.undecided` as its origin; a `Region` of the
-/// traversal is the same cube indexed over the narrowed root's atoms.
+/// traversal is the same cube indexed over the narrowed root's atoms. Its
+/// sides are the region's: `must` is the held set, the complement of
+/// `may` the cut set, and the rest is open.
 pub(crate) struct Cube {
     pub(crate) must: BTreeSet<Atom>,
     pub(crate) may: Option<BTreeSet<Atom>>,
 }
 impl Cube {
-    /// Nothing decided: every seed lies in this cube.
-    pub(crate) fn undecided() -> Self {
+    /// Every atom open: every seed lies in this cube.
+    pub(crate) fn all_open() -> Self {
         Self {
             must: BTreeSet::new(),
             may: None,

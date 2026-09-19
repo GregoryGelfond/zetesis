@@ -49,9 +49,9 @@ impl PartialEq for Region {
 impl Eq for Region {}
 
 impl Region {
-    /// The region in which nothing is decided: every candidate lies in it.
+    /// The region in which every atom is open: every candidate lies in it.
     #[must_use]
-    pub fn undecided(atoms: usize) -> Self {
+    pub fn all_open(atoms: usize) -> Self {
         Self {
             decided: vec![None; atoms],
             preferred: None,
@@ -110,7 +110,7 @@ impl Region {
     pub fn is_cut(&self, atom: usize) -> bool {
         self.decision(atom) == Some(false)
     }
-    /// Whether the atom is undecided: some candidates hold it and some do not.
+    /// Whether the atom is open: some candidates hold it and some do not.
     #[must_use]
     pub fn is_open(&self, atom: usize) -> bool {
         self.decided.get(atom).is_some_and(Option::is_none)

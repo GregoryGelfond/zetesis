@@ -111,22 +111,22 @@ impl SeedSelection {
     }
 
     /// Retain gate atoms every candidate of an enumeration holds beside the
-    /// core-minted atoms the counter selected. The necessary atoms are checked
+    /// core-minted atoms the counter selected. The held atoms are checked
     /// against the symbolic gate carrier and the minted ones against program
     /// identity; both sort in the canonical atom order, which is also the
     /// minted position order, and a payload present in both is kept once.
     /// Vector growth is fallible; no payload is copied.
     ///
     /// # Errors
-    /// Refuses an outside-carrier necessary atom, foreign program identity or
+    /// Refuses an outside-carrier held atom, foreign program identity or
     /// unavailable selection storage.
-    pub fn necessary_and_selected(
+    pub fn held_and_selected(
         program: &Program,
-        necessary: impl IntoIterator<Item = Arc<Atom>>,
+        held: impl IntoIterator<Item = Arc<Atom>>,
         selected: impl IntoIterator<Item = Arc<GateAtom>>,
     ) -> Result<Self, SeedSelectionError> {
         let mut entries = Vec::new();
-        for atom in necessary {
+        for atom in held {
             if !program.contains_gate_atom(&atom) {
                 return Err(SeedSelectionError::OutsideCarrier { atom });
             }

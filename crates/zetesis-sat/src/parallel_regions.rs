@@ -230,7 +230,7 @@ impl ParallelRegions {
         let mut pending = Vec::new();
         pending.try_reserve(1).map_err(|_| Incomplete::Allocation)?;
         pending.push((
-            Region::undecided(theory.atom_count()),
+            Region::all_open(theory.atom_count()),
             vec![narrower.knowledge()],
         ));
         Ok(Self {

@@ -804,8 +804,8 @@ fn candidate_statistics(
     // The carrier bounds and regions, under the words of the text lines.
     out.text(",\"carrier_bounds\":{\"narrowing_passes\":")?;
     out.text(&stats.bounds_passes.to_string())?;
-    out.number_field("underivable_gate_atoms", stats.underivable_gate_atoms)?;
-    out.number_field("necessary_gate_atoms", stats.necessary_gate_atoms)?;
+    out.number_field("cut_gate_atoms", stats.cut_gate_atoms)?;
+    out.number_field("held_gate_atoms", stats.held_gate_atoms)?;
     out.text(",\"refuted\":")?;
     out.text(if stats.bounds_refuted {
         "true"
