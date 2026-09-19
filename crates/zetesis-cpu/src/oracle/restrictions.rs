@@ -189,7 +189,7 @@ fn compile(
             visit(
                 &template,
                 &relations,
-                super::Gates::Possible(&super::Cube::undecided()),
+                super::Gates::Unjudged,
                 None,
                 work,
                 |assignment, work| {

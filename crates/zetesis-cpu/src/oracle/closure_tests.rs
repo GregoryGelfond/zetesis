@@ -59,7 +59,7 @@ fn join_bindings_borrow_their_source_values() {
     super::visit(
         &template,
         &relations,
-        super::Gates::Possible(&super::Cube::undecided()),
+        super::Gates::Unjudged,
         None,
         &mut work,
         |assignment, _| -> Result<(), Stop> {
@@ -336,7 +336,7 @@ fn tuple_probes_include_whole_row_rejections() {
     super::visit(
         &template,
         &relations,
-        super::Gates::Possible(&super::Cube::undecided()),
+        super::Gates::Unjudged,
         None,
         &mut work,
         |assignment, _| -> Result<(), Stop> {
@@ -349,4 +349,47 @@ fn tuple_probes_include_whole_row_rejections() {
     assert_eq!(work.statistics.tuple_probes, 2);
     assert_eq!(work.statistics.bindings, 1);
     assert!(work.statistics.tuple_probes <= work.statistics.work);
+}
+
+#[test]
+fn a_join_that_judges_no_gates_charges_no_gate_work() {
+    // A rule with one positive occurrence and one gate. Under the possible
+    // reading of the undecided cube every gate passes, but each binding
+    // still builds and tests the gate's key; unjudged, the join charges the
+    // binding alone and offers the same bindings.
+    let predicate = Predicate::new("row", 1).unwrap();
+    let rows: Vec<Atom> = (0..4)
+        .map(|value| Atom::new(predicate.clone(), vec![Value::Number(value)]).unwrap())
+        .collect();
+    let pattern = AtomPattern::new(predicate.clone(), vec![Term::Variable(0)]).unwrap();
+    let gate =
+        AtomPattern::new(Predicate::new("gate", 1).unwrap(), vec![Term::Variable(0)]).unwrap();
+    let template = Template::new(None, vec![pattern], vec![gate], vec![], vec![]);
+    let relations = super::Relations::from([(&predicate, rows.iter().collect())]);
+    let control = Control::default();
+    let charged = |gates: super::Gates<'_>| {
+        let mut work = work(&control, Limits::default().max_work);
+        let mut bindings = 0;
+        super::visit(
+            &template,
+            &relations,
+            gates,
+            None,
+            &mut work,
+            |_, _| -> Result<(), Stop> {
+                bindings += 1;
+                Ok(())
+            },
+        )
+        .unwrap();
+        (bindings, work.statistics.work)
+    };
+    let undecided = super::Cube::undecided();
+    let (judged, judged_work) = charged(super::Gates::Possible(&undecided));
+    let (unjudged, unjudged_work) = charged(super::Gates::Unjudged);
+    assert_eq!((judged, unjudged), (4, 4));
+    assert!(
+        unjudged_work < judged_work,
+        "{unjudged_work} against {judged_work}"
+    );
 }

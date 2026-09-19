@@ -368,6 +368,10 @@ enum Gates<'a> {
     /// A gate holds if it holds under some seed of the cube, so every answer
     /// set the cube contains lies inside the closure: its upper closure.
     Possible(&'a Cube),
+    /// Every gate passes without being read: the join is asked for its
+    /// bindings alone, as the source scan and the restriction plan ask, and
+    /// no gate key is built.
+    Unjudged,
 }
 impl Gates<'_> {
     /// Whether a rule can fire under this reading before its gates are
@@ -376,7 +380,7 @@ impl Gates<'_> {
     /// rules out for the whole template.
     fn admits(self, template: &Template) -> bool {
         match self {
-            Self::Frozen(_) | Self::Possible(_) => true,
+            Self::Frozen(_) | Self::Possible(_) | Self::Unjudged => true,
             Self::Definite(cube) => {
                 (template.gate_true().is_empty() || !cube.must.is_empty())
                     && (template.gate_false().is_empty() || cube.may.is_some())
@@ -387,6 +391,7 @@ impl Gates<'_> {
     /// `required` is true for a `not not` gate and false for a `not` gate.
     fn holds(self, key: &zetesis_core::AtomKey<'_>, required: bool) -> bool {
         match (self, required) {
+            (Self::Unjudged, _) => true,
             (Self::Frozen(seed), _) => seed.contains_key(key) == required,
             (Self::Definite(cube), true) => cube.must_hold(key),
             (Self::Definite(cube), false) => !cube.may_hold(key),
@@ -1168,6 +1173,9 @@ fn guards(
                 return Ok(false);
             }
         }
+    }
+    if matches!(gates, Gates::Unjudged) {
+        return Ok(true);
     }
     for (patterns, required) in [(template.gate_true(), true), (template.gate_false(), false)] {
         for pattern in patterns {
