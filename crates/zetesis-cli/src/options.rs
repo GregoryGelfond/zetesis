@@ -329,9 +329,18 @@ fn host_workers() -> NonZeroUsize {
     std::thread::available_parallelism().unwrap_or(NonZeroUsize::MIN)
 }
 
+/// The host's physical memory in bytes, read once per process the first
+/// time it is asked for, when the default allowance is taken or the
+/// statistics header prints it: the header prints the reading the allowance
+/// came from.
+pub(crate) fn host_memory() -> Option<u64> {
+    static HOST_MEMORY: std::sync::OnceLock<Option<u64>> = std::sync::OnceLock::new();
+    *HOST_MEMORY.get_or_init(read_host_memory)
+}
+
 /// The host's physical memory in bytes, from `/proc/meminfo`.
 #[cfg(target_os = "linux")]
-pub(crate) fn host_memory() -> Option<u64> {
+fn read_host_memory() -> Option<u64> {
     let text = std::fs::read_to_string("/proc/meminfo").ok()?;
     let kibibytes: u64 = text
         .lines()
@@ -343,11 +352,11 @@ pub(crate) fn host_memory() -> Option<u64> {
     kibibytes.checked_mul(1024)
 }
 
-/// The host's physical memory in bytes, from the system's `sysctl`, run once
-/// when the default allowance is taken: the crate forbids foreign calls, and
-/// the system command is the reading without one.
+/// The host's physical memory in bytes, from the system's `sysctl`: the
+/// crate forbids foreign calls, and the system command is the reading
+/// without one.
 #[cfg(target_os = "macos")]
-pub(crate) fn host_memory() -> Option<u64> {
+fn read_host_memory() -> Option<u64> {
     let output = std::process::Command::new("sysctl")
         .args(["-n", "hw.memsize"])
         .output()
@@ -361,7 +370,7 @@ pub(crate) fn host_memory() -> Option<u64> {
 
 /// The host does not report its physical memory on this platform.
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-pub(crate) fn host_memory() -> Option<u64> {
+fn read_host_memory() -> Option<u64> {
     None
 }
 
