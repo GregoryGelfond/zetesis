@@ -625,8 +625,11 @@ struct Membership<'a> {
     reduct: &'a mut crate::prepared_reduct::State,
 }
 
-/// How classical candidates are proposed: from a clause form of the theory
-/// by the retained cursor, or from regions narrowed by the theory's readings.
+/// The component that proposes classical candidates: it realizes the
+/// [`SearchMethod`] the enumeration was asked for, from a clause form of the
+/// theory by the retained cursor or from regions narrowed by the theory's
+/// readings, and under several workers the regions method walked in
+/// parallel, which no method names.
 #[derive(Debug)]
 enum Proposer {
     Clauses(Box<ClauseProposer>),
