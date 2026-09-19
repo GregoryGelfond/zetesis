@@ -63,6 +63,27 @@ when the name adds knowledge; avoid aliases for literals that already express
 their meaning. Represent absence explicitly rather than borrowing a valid value
 as an undocumented sentinel.
 
+One concept, one name. A word that denotes several things under-represents each
+of them: give each thing its own name and use it in its context, and let a
+shared mechanism keep its one name beneath them. Two words for one thing are the
+same defect the other way: choose the name the thing's own module defines and
+use it in the fields, the text, the serialized keys and the manual alike. Two
+words that name two different things are not a conflict, even when the things
+are related; state the relation once, where the second is defined. A generic
+word qualified by its module, such as one measurement's `Case`, names the same
+concept in each context and stays.
+
+Use the logic programmer's word at a semantic boundary and an execution word for
+an execution primitive, and let neither stand in for the other. A fluent reader
+is surprised most by an unmarked departure from the field's term, so a departure
+is documented where it happens. A name of the formalism carries a plain gloss
+where a reader first meets it, "never: no seed of the region satisfies it", and
+the name alone afterwards; the manual's [Vocabulary](docs/book/vocabulary.md)
+page is the registry of the chosen names. A consumer-facing name, a serialized
+key or a table column, changes only with its older spelling recorded beside the
+retained records that use it, so that a record written before the change stays
+readable.
+
 Design an algorithm with its correctness argument: preconditions, postconditions,
 maintained invariants and a decreasing measure or finite bound for termination.
 Name the concepts carrying that argument. Use pure transformations where they
