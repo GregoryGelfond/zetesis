@@ -125,21 +125,27 @@ impl ModelView<'_> {
         self.terms.statistics()
     }
 
-    /// Derive one complete JSON model value, without writing external bytes.
+    /// Encode the model as a record of a document, without writing external
+    /// bytes: the atoms the document has not spelled are spelled and entered
+    /// into `table`, and every atom of the model, shown or not, is referred
+    /// to by its index in the table.
     ///
-    /// Terms use a flat preorder node sequence: constructor arities determine
-    /// their children. Scalars have one node. Full atoms are typed name/sign/
-    /// argument records; shown atom indices address that array and shown terms
-    /// form their own channel. This preserves identity without parsing ASP text.
-    /// Costs retain descending priority/value pairs, or `null` when absent.
+    /// A spelled atom is a typed name/sign/argument record whose terms use a
+    /// flat preorder node sequence: constructor arities determine their
+    /// children, and scalars have one node. Shown atom indices address the
+    /// table, and shown terms form their own channel, which preserves
+    /// identity without parsing ASP text. Costs retain descending
+    /// priority/value pairs, or `null` when absent.
     ///
     /// # Cost and space
-    /// Encoding traverses every full-model atom, value node, shown term node, and
-    /// cost entry, together with their emitted UTF-8 bytes. Signature selection
-    /// uses the same binary lookup as [`OutputSelection::includes`], with at most
-    /// `floor(log2(S)) + 1` comparisons per atom for nonempty `S` signatures.
-    /// Each probe charges one unit plus both predicate-name byte lengths.
-    /// Observation evaluation has already occurred and is not repeated here.
+    /// Encoding looks every atom of the model up in the table once and
+    /// traverses the value nodes of the atoms it spells, every shown term
+    /// node and every cost entry, together with their emitted UTF-8 bytes.
+    /// Signature selection uses the same binary lookup as
+    /// [`OutputSelection::includes`], with at most `floor(log2(S)) + 1`
+    /// comparisons per atom for nonempty `S` signatures. Each probe charges
+    /// one unit plus both predicate-name byte lengths. Observation
+    /// evaluation has already occurred and is not repeated here.
     ///
     /// The returned record retains `B` bytes, bounded by `max_bytes`. Encoding
     /// additionally holds a cursor of at most `D` frames for one shown term, bounded
@@ -151,46 +157,10 @@ impl ModelView<'_> {
     /// charged by `max_work`; the complete operation is not uniformly linear in `B`.
     ///
     /// # Errors
-    /// Refuses before exceeding the record, work or traversal-depth ceilings;
-    /// allocation/control failures return no partial JSON value.
-    pub fn json(&self, limits: ViewLimits, control: &Control) -> Result<String, ViewError> {
-        self.encode_json(limits, control)
-            .map(super::json::Encoded::into_text)
-            .map_err(|failure| failure.cause())
-    }
-
-    /// Encode schema [`super::json::SCHEMA_VERSION`] with retained work accounting.
-    /// The data is byte-identical to [`Self::json`]. The returned statistics exclude
-    /// observation evaluation and external writes. A failure contains accounting
-    /// for the discarded private prefix, never that prefix itself.
-    ///
-    /// # Errors
-    /// Returns the same causes as [`Self::json`], with work charged before refusal.
-    pub fn encode_json(
-        &self,
-        limits: super::json::Limits,
-        control: &Control,
-    ) -> Result<super::json::Encoded, super::json::Failure> {
-        let mut out = Buffer::new(limits, control);
-        let result = self.encode_json_into(&mut out);
-        let statistics = super::json::Statistics {
-            work: out.work,
-            buffered_bytes: out.text.len(),
-        };
-        match result {
-            Ok(()) => Ok(super::json::Encoded::new(out.text, statistics)),
-            Err(cause) => Err(super::json::Failure::new(cause, statistics)),
-        }
-    }
-
-    /// Encode the model as a record of a document: the atoms the document
-    /// has not spelled are spelled and entered into `table`, and every atom of
-    /// the model, shown or not, is referred to by its index in the table. The
-    /// terms and costs are encoded as in [`Self::json`].
-    ///
-    /// # Errors
-    /// Refuses as [`Self::json`] does, and with [`ViewError::Table`] when the
-    /// table would exceed its ceiling; a refused record enters no atom.
+    /// Refuses before exceeding the record, work or traversal-depth ceilings,
+    /// and with [`ViewError::Table`] when the table would exceed its ceiling;
+    /// a refused record enters no atom, and allocation/control failures
+    /// return no partial JSON value.
     pub fn record(
         &self,
         table: &mut AtomTable,
@@ -203,7 +173,9 @@ impl ModelView<'_> {
     }
 
     /// Encode a document record with retained work accounting; the data is
-    /// byte-identical to [`Self::record`].
+    /// byte-identical to [`Self::record`]. The returned statistics exclude
+    /// observation evaluation and external writes. A failure contains
+    /// accounting for the discarded private prefix, never that prefix itself.
     ///
     /// # Errors
     /// Returns the same causes as [`Self::record`], with work charged before
@@ -289,29 +261,6 @@ impl ModelView<'_> {
         out.text("],\"shown\":{\"atom_indices\":[")?;
         let mut first = true;
         for (atom, &index) in self.model.atoms().iter().zip(&indices) {
-            if self.selection.try_includes(atom, |units| out.step(units))? {
-                if !first {
-                    out.text(",")?;
-                }
-                first = false;
-                out.number(index)?;
-            }
-        }
-        out.text("],\"terms\":[")?;
-        self.encode_terms_and_costs(out)
-    }
-
-    fn encode_json_into(&self, out: &mut Buffer<'_>) -> Result<(), ViewError> {
-        out.text("{\"full_model\":[")?;
-        for (index, atom) in self.model.atoms().iter().enumerate() {
-            if index != 0 {
-                out.text(",")?;
-            }
-            out.atom(atom)?;
-        }
-        out.text("],\"shown\":{\"atom_indices\":[")?;
-        let mut first = true;
-        for (index, atom) in self.model.atoms().iter().enumerate() {
             if self.selection.try_includes(atom, |units| out.step(units))? {
                 if !first {
                     out.text(",")?;

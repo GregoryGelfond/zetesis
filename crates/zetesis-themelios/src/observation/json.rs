@@ -1,13 +1,13 @@
-//! Pure model-value JSON encoding vocabulary, independent of a CLI envelope.
+//! Pure model-record JSON encoding vocabulary, independent of a CLI envelope.
 //!
-//! A model value spells its atoms in full: typed atoms, preorder term nodes,
-//! separate shown channels and descending priority/cost pairs (schema 1). A
-//! model *record* inside a document spells only the atoms the document has
-//! not spelled before and refers to every atom by its index in the document's
-//! [`AtomTable`], the atoms in the order the document spelled them (schema 2).
-//! All integers are exact decimal JSON numbers; consumers must preserve
-//! integers beyond JavaScript's exact Number range. The version is supplied
-//! out of band; it adds no field to existing model values.
+//! A model *record* inside a document spells only the atoms the document has
+//! not spelled before, as typed atoms with preorder term nodes, and refers to
+//! every atom by its index in the document's [`AtomTable`], the atoms in the
+//! order the document spelled them; the shown channels are separate, and the
+//! costs are descending priority/value pairs (schema 2). All integers are
+//! exact decimal JSON numbers; consumers must preserve integers beyond
+//! JavaScript's exact Number range. The version is supplied out of band; it
+//! adds no field to the record.
 
 use std::collections::HashMap;
 use std::fmt;
@@ -15,9 +15,6 @@ use std::fmt;
 use zetesis_core::{Atom, Model};
 
 pub use super::view::{ViewError as Error, ViewLimits as Limits};
-
-/// Version of the model-value representation, independent of a stream envelope.
-pub const SCHEMA_VERSION: u32 = 1;
 
 /// Version of the model-record representation: a record refers to its atoms
 /// by index into the document's [`AtomTable`] and spells only the new ones.
@@ -182,7 +179,7 @@ pub struct Statistics {
     pub buffered_bytes: usize,
 }
 
-/// One complete private model-value record with its encoding accounting.
+/// One complete private model record with its encoding accounting.
 #[derive(Debug)]
 pub struct Encoded {
     text: String,
@@ -192,7 +189,7 @@ impl Encoded {
     pub(super) fn new(text: String, statistics: Statistics) -> Self {
         Self { text, statistics }
     }
-    /// Complete model-value or record text; no external bytes have been written.
+    /// Complete record text; no external bytes have been written.
     #[must_use]
     pub fn text(&self) -> &str {
         &self.text
