@@ -2,7 +2,8 @@
 //!
 //! A region decides some atoms in, some out, and leaves the rest open; its
 //! candidates are the sets that agree with its decisions, the `Cube` of
-//! `Search.lean`. The traversal walks the coverage tree of that chapter
+//! `Search.lean` indexed over the atoms of a root, as the oracle's `Cube`
+//! is the same cube over atoms. The traversal walks the coverage tree of that chapter
 //! with a stack: a region is narrowed by a caller-supplied narrowing, and
 //! is then refuted, a leaf when every atom is decided, split on the open
 //! atom its narrowing preferred or else its highest open atom, or counted

@@ -308,7 +308,8 @@ pub(crate) struct CompletedClosure {
 /// A region of seeds: the gate atoms every seed of it holds and the gate
 /// atoms some seed of it may hold. `None` for `may` is the whole symbolic
 /// carrier, which is never materialized. This is the `Cube` of
-/// `Bounds.lean` with `undecided` as its origin.
+/// `Search.lean`, with `Bounds.undecided` as its origin; a `Region` of the
+/// traversal is the same cube indexed over the narrowed root's atoms.
 pub(crate) struct Cube {
     pub(crate) must: BTreeSet<Atom>,
     pub(crate) may: Option<BTreeSet<Atom>>,
