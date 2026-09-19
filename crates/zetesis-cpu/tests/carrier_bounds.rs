@@ -3,29 +3,19 @@
 //! gate-free rules derive belongs to every answer set, so the seed counter
 //! omits the first and holds the second.
 
-use zetesis_core::{
-    AdmissionLimits, Atom, AtomPattern, Predicate, Program, Seed, Template, Term, Value,
-};
+use zetesis_core::{Atom, Predicate, Program, Seed, Template, Term, Value};
 use zetesis_cpu::{
     CandidateLimits, Candidates, Control, Limits, PreparationLimits, PreparedQueries, check,
 };
 
-fn pattern(name: &str, terms: Vec<Term>) -> AtomPattern {
-    let predicate = Predicate::new(name, terms.len()).expect("nonempty test name");
-    AtomPattern::new(predicate, terms).expect("matching arity")
-}
+#[path = "support/programs.rs"]
+mod programs;
+
+use programs::{fact, number, pattern, program};
+
 fn atom(name: &str, values: Vec<Value>) -> Atom {
     let predicate = Predicate::new(name, values.len()).expect("nonempty test name");
     Atom::new(predicate, values).expect("matching arity")
-}
-fn number(value: i32) -> Term {
-    Term::Constant(Value::Number(value))
-}
-fn program(templates: Vec<Template>) -> Program {
-    Program::new(templates, AdmissionLimits::default()).expect("safe finite test program")
-}
-fn fact(name: &str, values: Vec<Term>) -> Template {
-    Template::new(Some(pattern(name, values)), vec![], vec![], vec![], vec![])
 }
 /// p :- not q.  q :- not p.  r :- p, not s.  s :- t.  u.
 fn gated_program() -> Program {

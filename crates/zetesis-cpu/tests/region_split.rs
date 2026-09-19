@@ -2,24 +2,13 @@
 //! constraint, decided outright, split on its highest undecided atom, or
 //! counted when its narrowing decided nothing beyond the split.
 
-use zetesis_core::{
-    AdmissionLimits, Atom, AtomPattern, Predicate, Program, Seed, Template, Term, Value,
-};
+use zetesis_core::{Atom, Program, Seed, Template, Term};
 use zetesis_cpu::{CandidateLimits, Candidates, Control, Limits, Stop, check};
 
-fn pattern(name: &str, terms: Vec<Term>) -> AtomPattern {
-    let predicate = Predicate::new(name, terms.len()).expect("nonempty test name");
-    AtomPattern::new(predicate, terms).expect("matching arity")
-}
-fn number(value: i32) -> Term {
-    Term::Constant(Value::Number(value))
-}
-fn fact(name: &str, values: Vec<Term>) -> Template {
-    Template::new(Some(pattern(name, values)), vec![], vec![], vec![], vec![])
-}
-fn program(templates: Vec<Template>) -> Program {
-    Program::new(templates, AdmissionLimits::default()).expect("safe finite test program")
-}
+#[path = "support/programs.rs"]
+mod programs;
+
+use programs::{fact, number, pattern, program};
 
 /// node(1..n). in(X) :- node(X), not out(X). out(X) :- node(X), not in(X).
 /// With `path`, edge(i,i+1) and :- edge(X,Y), in(X), in(Y).

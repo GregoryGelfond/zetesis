@@ -1,40 +1,20 @@
 //! The bounds of each argument are an upper domain of every closure's atoms:
 //! constants contribute themselves, a head variable ranges within the
 //! positions binding it, and a too-wide argument is unknown.
-use zetesis_core::{AdmissionLimits, AtomPattern, Predicate, Program, Template, Term, Value};
+use zetesis_core::{AtomPattern, Predicate, Program, Template, Term, Value};
 use zetesis_cpu::{ArgumentBounds, Bound, BoundLimits, Control};
 
-fn number(value: i32) -> Term {
-    Term::Constant(Value::Number(value))
-}
+#[path = "support/programs.rs"]
+mod programs;
+
+use programs::{fact, number, pattern, program};
 
 fn numbers(values: &[i32]) -> Bound {
     Bound::Finite(values.iter().map(|&value| Value::Number(value)).collect())
 }
 
-fn pattern(name: &str, terms: Vec<Term>) -> AtomPattern {
-    AtomPattern::new(Predicate::new(name, terms.len()).unwrap(), terms).unwrap()
-}
-
-fn fact(name: &str, values: &[i32]) -> Template {
-    Template::new(
-        Some(pattern(
-            name,
-            values.iter().map(|&value| number(value)).collect(),
-        )),
-        vec![],
-        vec![],
-        vec![],
-        vec![],
-    )
-}
-
 fn rule(head: AtomPattern, body: Vec<AtomPattern>) -> Template {
     Template::new(Some(head), body, vec![], vec![], vec![])
-}
-
-fn program(templates: Vec<Template>) -> Program {
-    Program::new(templates, AdmissionLimits::default()).unwrap()
 }
 
 fn bounds(program: &Program) -> ArgumentBounds {
@@ -44,9 +24,9 @@ fn bounds(program: &Program) -> ArgumentBounds {
 /// e(0,1). e(1,2). r(0). r(Y) :- r(X), e(X,Y).
 fn reachability() -> Program {
     program(vec![
-        fact("e", &[0, 1]),
-        fact("e", &[1, 2]),
-        fact("r", &[0]),
+        fact("e", vec![number(0), number(1)]),
+        fact("e", vec![number(1), number(2)]),
+        fact("r", vec![number(0)]),
         rule(
             pattern("r", vec![Term::Variable(1)]),
             vec![
@@ -80,10 +60,10 @@ fn a_derivation_closes_its_head_argument_over_the_positions_binding_it() {
 fn a_variable_bound_at_two_positions_takes_their_intersection() {
     // a(1). a(2). b(2). b(3). q(X) :- a(X), b(X).
     let program = program(vec![
-        fact("a", &[1]),
-        fact("a", &[2]),
-        fact("b", &[2]),
-        fact("b", &[3]),
+        fact("a", vec![number(1)]),
+        fact("a", vec![number(2)]),
+        fact("b", vec![number(2)]),
+        fact("b", vec![number(3)]),
         rule(
             pattern("q", vec![Term::Variable(0)]),
             vec![
@@ -103,7 +83,7 @@ fn a_variable_bound_at_two_positions_takes_their_intersection() {
 fn a_constant_head_argument_contributes_itself() {
     // a(1). s(7,X) :- a(X).
     let program = program(vec![
-        fact("a", &[1]),
+        fact("a", vec![number(1)]),
         rule(
             pattern("s", vec![number(7), Term::Variable(0)]),
             vec![pattern("a", vec![Term::Variable(0)])],
@@ -124,9 +104,9 @@ fn a_constant_head_argument_contributes_itself() {
 /// a(1). a(2). a(3). q(X) :- a(X). t(X) :- q(X).
 fn three_values_through_two_rules() -> Program {
     program(vec![
-        fact("a", &[1]),
-        fact("a", &[2]),
-        fact("a", &[3]),
+        fact("a", vec![number(1)]),
+        fact("a", vec![number(2)]),
+        fact("a", vec![number(3)]),
         rule(
             pattern("q", vec![Term::Variable(0)]),
             vec![pattern("a", vec![Term::Variable(0)])],
@@ -174,7 +154,7 @@ fn an_unknown_argument_makes_the_arguments_bound_through_it_unknown() {
 
 #[test]
 fn a_work_ceiling_stops_the_inference() {
-    let program = program(vec![fact("a", &[1]), fact("a", &[2])]);
+    let program = program(vec![fact("a", vec![number(1)]), fact("a", vec![number(2)])]);
     let stopped = ArgumentBounds::infer(
         &program,
         BoundLimits {
