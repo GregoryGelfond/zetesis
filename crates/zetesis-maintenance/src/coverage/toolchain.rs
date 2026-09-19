@@ -102,9 +102,18 @@ pub fn metadata(request: Metadata<'_>) -> Result<Value, Error> {
         .strip_prefix("cargo-llvm-cov ")
         .ok_or_else(|| Error::Invalid("invalid cargo-llvm-cov banner".into()))?;
     Floor::parse(request.floor)?.admit(request.mode)?;
-    let groups: Vec<Group> = request
-        .physical_table
-        .map_or_else(|| Ok(Vec::new()), selection)?;
+    // The recorded coverage scope is the Metal qualification.
+    let groups: Vec<Group> = match request.physical_table {
+        None => Vec::new(),
+        Some(table) => {
+            let selection = selection(table)?;
+            require(
+                selection.backend == super::PhysicalBackend::Metal,
+                "coverage metadata records the Metal qualification only",
+            )?;
+            selection.groups
+        }
+    };
     let tests: Vec<_> = groups.iter().flat_map(|group| group.tests.iter()).collect();
     let physical = !tests.is_empty();
     Ok(json!({

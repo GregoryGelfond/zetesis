@@ -18,19 +18,43 @@ pub struct Group {
     /// Independently specified count for this group.
     pub expected_tests: usize,
 }
+/// The device backend a reviewed selection qualifies.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PhysicalBackend {
+    /// The Metal selection.
+    Metal,
+    /// The Vulkan selection.
+    Vulkan,
+}
+
+/// A reviewed physical selection: the backend it qualifies and its groups.
+#[derive(Clone, Debug)]
+pub struct Selection {
+    /// The backend whose reviewed table this is.
+    pub backend: PhysicalBackend,
+    /// The sixteen groups with their exact tests.
+    pub groups: Vec<Group>,
+}
+
 /// The reviewed selections: the Metal one and the Vulkan one, the same
 /// sixteen groups and counts, each naming the tests of its own backend.
-const SELECTIONS: [&str; 2] = [
-    include_str!("physical-selection.txt"),
-    include_str!("physical-selection-vulkan.txt"),
+const SELECTIONS: [(PhysicalBackend, &str); 2] = [
+    (
+        PhysicalBackend::Metal,
+        include_str!("physical-selection.txt"),
+    ),
+    (
+        PhysicalBackend::Vulkan,
+        include_str!("physical-selection-vulkan.txt"),
+    ),
 ];
 
 /// Parse the maintained shell table, checking its finite inventory independently.
 /// The table must be one reviewed selection whole; a backend's tests cannot
-/// stand in for the other's.
+/// stand in for the other's, and the selection says which backend's it is.
 /// # Errors
 /// Refuses missing/extra groups, altered target/count identities or duplicate tests.
-pub fn selection(table: &str) -> Result<Vec<Group>, Error> {
+pub fn selection(table: &str) -> Result<Selection, Error> {
     const EXPECTED: [(&str, &str, usize); 16] = [
         ("wgpu-lib", "lib", 14),
         ("tight", "hardware_tight", 4),
@@ -49,30 +73,36 @@ pub fn selection(table: &str) -> Result<Vec<Group>, Error> {
         ("language-consumers", "language_consumers", 2),
         ("static", "hardware", 2),
     ];
-    require(
-        SELECTIONS
-            .iter()
-            .any(|selection| table.trim() == selection.trim()),
-        "physical qualification requires one reviewed selection of 56 exact test identities",
-    )?;
+    let backend = SELECTIONS
+        .iter()
+        .find(|(_, selection)| table.trim() == selection.trim())
+        .map(|(backend, _)| *backend)
+        .ok_or_else(|| {
+            Error::Invalid(
+                "physical qualification requires one reviewed selection of 56 exact test identities".into(),
+            )
+        })?;
     let rows: Vec<_> = table.lines().collect();
     require(
         rows.len() == EXPECTED.len(),
-        "physical coverage requires all sixteen groups and 56 named tests",
+        "physical qualification requires all sixteen groups and 56 named tests",
     )?;
     let mut groups = Vec::new();
     let mut all_names = BTreeSet::new();
     for (row, (name, target, count)) in rows.iter().zip(EXPECTED) {
         let fields: Vec<_> = row.split('|').collect();
-        require(fields.len() == 4, "invalid physical coverage table row")?;
+        require(
+            fields.len() == 4,
+            "invalid physical qualification table row",
+        )?;
         require(
             fields[0] == name && fields[1] == target && fields[2].parse::<usize>() == Ok(count),
-            "changed physical coverage group identity",
+            "changed physical qualification group identity",
         )?;
         let tests: Vec<String> = fields[3].split_whitespace().map(str::to_owned).collect();
         require(
             tests.len() == count && tests.iter().all(|test| all_names.insert(test.clone())),
-            "invalid physical coverage selection",
+            "invalid physical qualification selection",
         )?;
         groups.push(Group {
             group: name.into(),
@@ -87,7 +117,7 @@ pub fn selection(table: &str) -> Result<Vec<Group>, Error> {
             expected_tests: count,
         });
     }
-    Ok(groups)
+    Ok(Selection { backend, groups })
 }
 static RECORD: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^test (\S+) \.\.\.[ \t]*(.*)$").unwrap());
@@ -160,11 +190,11 @@ pub fn physical_result(output: &str, group: &Group) -> Result<(), Error> {
     expected.sort();
     require(
         selected == expected,
-        "physical coverage requires exactly the named passing tests",
+        "physical qualification requires exactly the named passing tests",
     )?;
     let positive: Vec<_> = counts.iter().copied().filter(|count| *count > 0).collect();
     require(
         positive == [group.expected_tests] && (group.target_kind == "lib" || counts.len() == 1),
-        "physical coverage requires complete libtest summaries",
+        "physical qualification requires complete libtest summaries",
     )
 }

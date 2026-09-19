@@ -276,7 +276,7 @@ fn execute(action: Action, output: &mut impl Write) -> Result<(), Error> {
             coverage::render(&coverage::metadata(request)?)?
         }
         Action::CoveragePhysical { log, group, table } => {
-            let groups = coverage::selection(&table)?;
+            let groups = coverage::selection(&table)?.groups;
             let selected = groups
                 .iter()
                 .find(|entry| entry.group == group)

@@ -82,7 +82,7 @@ fn malformed_history_is_refused() {
 }
 #[test]
 fn every_physical_target_requires_complete_individual_results() {
-    for group in coverage::selection(TABLE).unwrap() {
+    for group in coverage::selection(TABLE).unwrap().groups {
         coverage::physical_result(&output(&group.tests, group.target_kind == "lib"), &group)
             .unwrap();
         for output in [
@@ -127,6 +127,7 @@ fn physical_selection_is_a_fixed_contract() {
 fn library_groups_require_one_positive_summary() {
     for group in coverage::selection(TABLE)
         .unwrap()
+        .groups
         .into_iter()
         .filter(|group| group.target_kind == "lib")
     {
@@ -137,7 +138,7 @@ fn library_groups_require_one_positive_summary() {
 }
 #[test]
 fn library_results_cannot_qualify_another_group() {
-    let groups = coverage::selection(TABLE).unwrap();
+    let groups = coverage::selection(TABLE).unwrap().groups;
     let libraries: Vec<_> = groups
         .iter()
         .filter(|group| group.target_kind == "lib")
@@ -149,8 +150,8 @@ fn library_results_cannot_qualify_another_group() {
 }
 #[test]
 fn the_vulkan_selection_is_the_metal_selection_on_its_own_backend() {
-    let metal = coverage::selection(TABLE).unwrap();
-    let vulkan = coverage::selection(VULKAN_TABLE).unwrap();
+    let metal = coverage::selection(TABLE).unwrap().groups;
+    let vulkan = coverage::selection(VULKAN_TABLE).unwrap().groups;
     assert_eq!(metal.len(), vulkan.len());
     for (metal, vulkan) in metal.iter().zip(&vulkan) {
         assert_eq!(metal.group, vulkan.group);
@@ -268,6 +269,14 @@ fn metadata_with_cargo(
     physical: bool,
     cargo_llvm_cov: &str,
 ) -> Result<serde_json::Value, zetesis_maintenance::Error> {
+    metadata_over(version, physical.then_some(TABLE), cargo_llvm_cov)
+}
+
+fn metadata_over(
+    version: &str,
+    physical_table: Option<&str>,
+    cargo_llvm_cov: &str,
+) -> Result<serde_json::Value, zetesis_maintenance::Error> {
     let digest = "a".repeat(64);
     let tool = Tool {
         path: Path::new("/fixture/llvm"),
@@ -277,7 +286,7 @@ fn metadata_with_cargo(
     coverage::metadata(Metadata {
         mode: Mode::Gate,
         floor: "91",
-        physical_table: physical.then_some(TABLE),
+        physical_table,
         observation: Observation {
             rustc: "rustc 1.97.1\nhost: fixture\nLLVM version: 22.1.6",
             cargo_llvm_cov,
@@ -412,7 +421,7 @@ fn coverage_inputs_enforce_their_byte_ceiling() {
         coverage::previous_revision(oversized.as_bytes()),
         Err(zetesis_maintenance::Error::Limit { .. })
     ));
-    let group = coverage::selection(TABLE).unwrap().remove(0);
+    let group = coverage::selection(TABLE).unwrap().groups.remove(0);
     assert!(matches!(
         coverage::physical_result(&oversized, &group),
         Err(zetesis_maintenance::Error::Limit { .. })
@@ -425,7 +434,7 @@ fn coverage_inputs_enforce_their_byte_ceiling() {
 
 #[test]
 fn unknown_test_boundaries_cannot_hide_missing_outcomes() {
-    let group = coverage::selection(TABLE).unwrap().remove(0);
+    let group = coverage::selection(TABLE).unwrap().groups.remove(0);
     let output = output(&group.tests, true).replacen(
         "adapter=fixture\nok",
         "adapter=fixture\ntest malformed boundary\nok",
@@ -448,4 +457,31 @@ fn coverage_version_requires_a_current_observation() {
         metadata_with_cargo("LLVM version 22.1.6", false, "cargo-llvm-cov 0.8.7\n").unwrap();
     assert_eq!(record["cargo_llvm_cov"], "0.8.7");
     assert_eq!(record["cargo_llvm_cov_observation"], "cargo-llvm-cov 0.8.7");
+}
+
+#[test]
+fn a_selection_names_the_backend_of_its_table() {
+    assert_eq!(
+        coverage::selection(TABLE).unwrap().backend,
+        coverage::PhysicalBackend::Metal
+    );
+    assert_eq!(
+        coverage::selection(VULKAN_TABLE).unwrap().backend,
+        coverage::PhysicalBackend::Vulkan
+    );
+}
+
+#[test]
+fn coverage_metadata_refuses_the_vulkan_selection() {
+    // The recorded coverage scope is the Metal qualification; a Vulkan
+    // table would be recorded as Metal tests.
+    assert!(
+        metadata_over(
+            "LLVM version 22.1.6",
+            Some(VULKAN_TABLE),
+            "cargo-llvm-cov 0.8.7"
+        )
+        .is_err()
+    );
+    assert!(metadata_over("LLVM version 22.1.6", Some(TABLE), "cargo-llvm-cov 0.8.7").is_ok());
 }
