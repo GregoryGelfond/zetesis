@@ -329,7 +329,7 @@ impl Cube {
     }
 }
 
-// Positive bodies, pure equality filters and frozen gates make old enabled
+// Positive bodies, pure equality filters and the closure's gate reading make old enabled
 // bindings persist. Complete bootstrap plus disjoint first-new scans therefore
 // cover the same inflationary step as full rescanning. Constraints latch only
 // after a complete selected family; they never truncate another occurrence.
@@ -849,7 +849,7 @@ fn visit_round<'source>(
             }
         } else {
             // Bootstrap includes every zero-positive head and constraint under
-            // the frozen gates. The test reference repeats this complete scan.
+            // the closure's gate reading. The test reference repeats this complete scan.
             visit_with(
                 template,
                 closure,
