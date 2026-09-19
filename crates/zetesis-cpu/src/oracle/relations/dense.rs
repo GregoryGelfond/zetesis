@@ -331,14 +331,15 @@ impl Dense {
     }
 
     /// The present tuples as atoms in position order, which is canonical
-    /// order, leaving the relation empty. Each atom's bytes are admitted
-    /// against the base before it is built.
+    /// order, leaving the relation empty. Each atom is built, then its bytes
+    /// admitted and recorded against the base before the next is built; a
+    /// refusal leaves the atoms taken so far in `atoms`.
     pub(super) fn take_atoms(
         &mut self,
         atoms: &mut Vec<Atom>,
         base: u128,
         work: &mut Work<'_>,
-    ) -> Result<u128, Stop> {
+    ) -> Result<(), Stop> {
         let mut live = base;
         let mut range = 0..self.layout.cells;
         while let Some(position) = self.next_row(RowSet::Current, &mut range, work)? {
@@ -355,7 +356,7 @@ impl Dense {
             atoms.push(atom);
         }
         self.reset(work)?;
-        Ok(live)
+        Ok(())
     }
 }
 
