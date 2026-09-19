@@ -549,6 +549,8 @@ tests check this atom for atom with dense relations enabled and disabled.
 Whether a predicate is laid out depends on its bounds and the ceiling alone,
 never on how many tuples it holds: a relation sparse in a wide box is dense
 all the same, at the cost of its words, and the ceiling is the one control.
+It is `PreparationLimits::max_dense_atoms`, 16,777,216 positions by default,
+and a session takes that default: nothing outside the library sets it.
 Every other predicate keeps its catalog, and the preparation receipt reports
 how many predicates were laid out.
 
