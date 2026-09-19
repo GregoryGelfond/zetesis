@@ -389,8 +389,10 @@ are shared: the first worker to exhaust one raises the stop and the others
 stop at their next charge or their next region; the models the workers
 verified before they stopped are delivered first and the stop after them,
 so a leaf admitted under the candidate ceiling is never lost to a worker
-the ceiling refused. Receipts are merged when the workers finish; a snapshot
-taken while they run reports what has been merged so far. One worker is
+the ceiling refused. The region counts and reading work, the candidates, the
+countermodel counts and the phase timings are the workers' live counters,
+current while they run; the certificate and reduct receipts are merged when
+the workers finish, so a snapshot taken earlier lacks them. One worker is
 the scalar regions walk. The batched protocol is not used with workers,
 since the workers decide their leaves themselves.
 

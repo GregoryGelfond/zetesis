@@ -230,6 +230,37 @@ fn phase_timings_sum_the_workers_narrowing_and_leaf_decisions() {
 }
 
 #[test]
+fn four_workers_report_the_scalar_walks_reading_work() {
+    // The workers walk the tree the scalar walk walks, so the regions and
+    // leaves they report are its, and so is the reading work, counted once:
+    // a worker's narrowing work goes to the live counters as it goes and
+    // is not added again when the workers are joined.
+    for theory in [mixed(), choices(6)] {
+        let mut scalar = StableModels::with_method(
+            &theory,
+            SearchMethod::Regions,
+            Limits::default(),
+            Control::default(),
+        )
+        .unwrap();
+        let models = family(&mut scalar).len();
+        let mut parallel = StableModels::with_region_workers(
+            &theory,
+            workers(4),
+            Limits::default(),
+            Control::default(),
+        )
+        .unwrap();
+        assert_eq!(family(&mut parallel).len(), models);
+        let one = scalar.statistics().regions.unwrap();
+        let four = parallel.statistics().regions.unwrap();
+        assert_eq!(four.regions, one.regions);
+        assert_eq!(four.leaves, one.leaves);
+        assert_eq!(four.work, one.work);
+    }
+}
+
+#[test]
 fn one_worker_is_the_scalar_walk() {
     let theory = mixed();
     let mut one = StableModels::with_region_workers(

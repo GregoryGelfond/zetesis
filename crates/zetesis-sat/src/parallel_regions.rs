@@ -23,10 +23,12 @@
 //! their next region, and the enumeration is incomplete. The models the
 //! workers verified before they stopped are delivered first and the stop
 //! after them, so a leaf admitted under the candidate ceiling is never
-//! lost to a worker the ceiling refused. Statistics are merged when the
-//! workers have finished; a snapshot taken earlier reports the
-//! coordinator's view. Phase timings, when enabled, are the workers' own
-//! narrowing and leaf decisions summed over the workers, so they may
+//! lost to a worker the ceiling refused. The region counts and reading
+//! work, the candidates, the countermodel counts and the phase timings are
+//! the workers' live counters, current while they run; the certificate and
+//! reduct receipts are merged when the workers have finished, so a snapshot
+//! taken earlier lacks them. Phase timings, when enabled, are the workers'
+//! own narrowing and leaf decisions summed over the workers, so they may
 //! exceed the wall time of the walk.
 
 use std::num::NonZeroUsize;
@@ -270,7 +272,10 @@ impl ParallelRegions {
         })
     }
 
-    /// The region receipts, current while the workers run.
+    /// The region receipts: the workers' live counters, current while they
+    /// run and complete when they have finished, and the set-up work. A
+    /// worker's narrowing work reaches the live counter as it goes and is
+    /// counted nowhere else.
     pub(crate) fn statistics(&self) -> RegionSearchStatistics {
         let live = &self.shared.live;
         let count =
@@ -387,11 +392,11 @@ impl ParallelRegions {
         Ok(())
     }
 
-    /// Wait for every worker and merge what it did.
+    /// Wait for every worker and merge its membership receipts; its region
+    /// receipts are already in the live counters.
     fn join(&mut self) {
         for handle in self.handles.drain(..) {
             if let Ok(report) = handle.join() {
-                merge_regions(&mut self.statistics, &report.regions);
                 merge_membership(&mut self.merged, &report.statistics);
             }
         }
@@ -414,16 +419,6 @@ impl Drop for ParallelRegions {
         // blocked on a full channel exits at once.
         self.join();
     }
-}
-
-fn merge_regions(into: &mut RegionSearchStatistics, from: &RegionSearchStatistics) {
-    into.regions = into.regions.saturating_add(from.regions);
-    into.refuted = into.refuted.saturating_add(from.refuted);
-    into.leaves = into.leaves.saturating_add(from.leaves);
-    into.propagations = into.propagations.saturating_add(from.propagations);
-    into.forced = into.forced.saturating_add(from.forced);
-    into.cut = into.cut.saturating_add(from.cut);
-    into.work = into.work.saturating_add(from.work);
 }
 
 fn merge_membership(into: &mut Statistics, from: &Statistics) {
