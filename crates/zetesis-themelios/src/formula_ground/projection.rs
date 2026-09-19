@@ -282,7 +282,7 @@ impl Domain {
 }
 
 fn key_payload(key: AtomKey<'_>, context: &mut Context<'_>) -> Result<u128, FormulaFailure> {
-    let mut bytes = key.predicate().payload_capacity_bytes() as u128
+    let mut bytes = key.predicate().name_bytes() as u128
         + key.predicate().arity() as u128 * size_of::<Value>() as u128;
     for column in 0..key.predicate().arity() {
         let value = key.value(column).expect("checked projection key");

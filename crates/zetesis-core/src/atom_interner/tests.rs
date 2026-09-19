@@ -58,9 +58,9 @@ fn validate(owner: &AtomInterner) {
     }
     let mut seen = BTreeSet::new();
     let mut actual = Vec::new();
-    for (index, relation) in owner.relations.iter().enumerate() {
+    for (index, relation) in owner.subtrees.iter().enumerate() {
         if let Some(previous) = index.checked_sub(1) {
-            assert!(owner.relations[previous].predicate < relation.predicate);
+            assert!(owner.subtrees[previous].predicate < relation.predicate);
         }
         let (_, atoms) = subtree(owner, relation.root, &mut seen);
         assert!(

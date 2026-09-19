@@ -159,12 +159,12 @@ impl Predicate {
     pub fn name(&self) -> &str {
         &self.name
     }
-    /// The shared name buffer's bytes, excluding this inline signature and
-    /// the allocation's reference counts. Constant time. Allocator
-    /// bookkeeping is outside this named capacity, and a name shared by many
-    /// predicates is counted by each.
+    /// The name's bytes, excluding this inline signature and the shared
+    /// allocation's reference counts. Constant time. Allocator bookkeeping
+    /// is outside it, and a name shared by many predicates is counted by
+    /// each.
     #[must_use]
-    pub fn payload_capacity_bytes(&self) -> usize {
+    pub fn name_bytes(&self) -> usize {
         self.name.len()
     }
 
@@ -229,7 +229,7 @@ impl Atom {
     pub fn checked_payload_capacity_bytes(&self) -> Option<u128> {
         let fixed = (self.values.capacity() as u128)
             .checked_mul(std::mem::size_of::<Value>() as u128)?
-            .checked_add(self.predicate.payload_capacity_bytes() as u128)?;
+            .checked_add(self.predicate.name_bytes() as u128)?;
         self.values.iter().try_fold(fixed, |bytes, value| {
             bytes.checked_add(value.checked_payload_capacity_bytes()?)
         })

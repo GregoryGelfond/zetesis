@@ -22,11 +22,11 @@ stable answers.
 
 ## Keyed relations
 
-`keys(&Program, &Limits) -> Result<Vec<Key<'_>>, Stop>` lists the relations
+`keys(&Program, &mut KeyWork) -> Result<Vec<KeyedRelation<'_>>, Stop>` lists the relations
 whose value is a function of their key: for the choice rule
 `1 { p(K, V) : c(V) } 1 :- b(K).`, the one producer of `p`, every answer set
 holds exactly one `p(k, v)` for every `k` that `b` admits and no other atom
-of `p`. A `Key` names the signature, the value position, the key variable at
+of `p`. A `KeyedRelation` names the signature, the value position, the key variable at
 each other position, the value variable, the element's condition and the
 body. `atom_signature(&Atom, arity)` is the signed signature an atom's arity
 fits, `None` when it does not fit a signature's width. The reading is

@@ -28,7 +28,7 @@ fn keyed(text: &str) -> Vec<(Signature, usize)> {
     keys(&source(text), &mut KeyWork::new(Limits::default().max_work))
         .unwrap()
         .iter()
-        .map(|key| (key.signature().clone(), key.value()))
+        .map(|key| (key.signature().clone(), key.value_position()))
         .collect()
 }
 

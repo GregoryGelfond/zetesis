@@ -28,7 +28,7 @@ use crate::limits::{Resource, Stop, check};
 /// A relation whose value position is a function of its key positions,
 /// total over the body of the one choice rule that produces it.
 #[derive(Debug)]
-pub struct Key<'p> {
+pub struct KeyedRelation<'p> {
     signature: Signature,
     /// The key variable at each argument position; `None` at the value.
     arguments: Vec<Option<&'p VarName>>,
@@ -38,7 +38,7 @@ pub struct Key<'p> {
     body: &'p Body,
 }
 
-impl<'p> Key<'p> {
+impl<'p> KeyedRelation<'p> {
     /// The relation's signed signature.
     #[must_use]
     pub fn signature(&self) -> &Signature {
@@ -47,7 +47,7 @@ impl<'p> Key<'p> {
 
     /// The value position.
     #[must_use]
-    pub fn value(&self) -> usize {
+    pub fn value_position(&self) -> usize {
         self.value
     }
 
@@ -81,7 +81,7 @@ impl<'p> Key<'p> {
 /// # Errors
 /// Returns the work stop when the inspection exceeds `work`'s ceiling; no
 /// partial result is published, and the steps before the stop stay spent.
-pub fn keys<'p>(program: &'p Program, work: &mut KeyWork) -> Result<Vec<Key<'p>>, Stop> {
+pub fn keys<'p>(program: &'p Program, work: &mut KeyWork) -> Result<Vec<KeyedRelation<'p>>, Stop> {
     let mut producers: BTreeMap<Signature, usize> = BTreeMap::new();
     let mut opaque = false;
     for carrier in program.statements() {
@@ -280,7 +280,7 @@ fn key<'p>(
     body: &'p Body,
     producers: &BTreeMap<Signature, usize>,
     work: &mut KeyWork,
-) -> Result<Option<Key<'p>>, Stop> {
+) -> Result<Option<KeyedRelation<'p>>, Stop> {
     if !exactly_one(choice.left_guard(), choice.right_guard()) {
         return Ok(None);
     }
@@ -321,7 +321,7 @@ fn key<'p>(
     )? {
         return Ok(None);
     }
-    Ok(Some(Key {
+    Ok(Some(KeyedRelation {
         signature: keyed,
         arguments: positions.arguments,
         value: positions.value,

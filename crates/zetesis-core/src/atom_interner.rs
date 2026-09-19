@@ -128,30 +128,30 @@ pub struct AtomInterner {
     /// The shared node index. Its own root goes unused here: each relation
     /// keeps the root of its subtree, and the index publishes nodes alone.
     index: Index,
-    relations: Vec<Relation>,
+    subtrees: Vec<Subtree>,
 }
 
 /// One predicate's atoms: the root of its subtree in the shared node index.
-/// Relations are kept in the predicate's canonical identity order, so the
-/// trees in relation order give the canonical order of all atoms.
-struct Relation {
+/// Subtrees are kept in the predicate's canonical identity order, so the
+/// trees in subtree order give the canonical order of all atoms.
+struct Subtree {
     predicate: Predicate,
     root: Link,
 }
 
-/// Find the relation of `predicate`, or the position that keeps the relations
+/// Find the subtree of `predicate`, or the position that keeps the subtrees
 /// ordered if none exists, comparing predicates with the charged identity
 /// comparator at each probe.
-fn relation_of<E>(
-    relations: &[Relation],
+fn subtree_of<E>(
+    subtrees: &[Subtree],
     predicate: &Predicate,
     before: &mut impl FnMut() -> Result<(), E>,
 ) -> Result<Result<usize, usize>, E> {
-    let (mut start, mut end) = (0, relations.len());
+    let (mut start, mut end) = (0, subtrees.len());
     while start < end {
         let middle = start + (end - start) / 2;
         before()?;
-        match identity::predicate(&relations[middle].predicate, predicate, before)? {
+        match identity::predicate(&subtrees[middle].predicate, predicate, before)? {
             Ordering::Less => start = middle + 1,
             Ordering::Greater => end = middle,
             Ordering::Equal => return Ok(Ok(middle)),
@@ -227,14 +227,14 @@ impl AtomInterner {
         population(self.len(), limits)?;
         admit(self.storage_bytes(), limits)?;
         let mut checked = || before().map_err(Failure::Stopped);
-        let Ok(relation) = relation_of(&self.relations, query.predicate(), &mut checked)? else {
+        let Ok(relation) = subtree_of(&self.subtrees, query.predicate(), &mut checked)? else {
             return Ok(None);
         };
         query.search(
             &self.committed,
             &self.pending,
             &self.index.nodes,
-            self.relations[relation].root,
+            self.subtrees[relation].root,
             &mut checked,
             |_| {},
         )
@@ -248,7 +248,7 @@ impl AtomInterner {
             self.pending.capacity(),
             self.index.nodes.capacity(),
             self.index.path.capacity(),
-            self.relations.capacity(),
+            self.subtrees.capacity(),
         )
     }
 
@@ -283,7 +283,7 @@ impl AtomInterner {
                 committed_capacity: capacity,
                 pending: &mut self.pending,
                 index: &mut self.index,
-                relations: &mut self.relations,
+                subtrees: &mut self.subtrees,
             },
         )
     }
@@ -357,9 +357,9 @@ impl AtomInterner {
         self.index.path.clear();
         // Relations are in predicate order and each tree in argument order,
         // so this visits every atom in canonical order.
-        for relation in 0..self.relations.len() {
+        for relation in 0..self.subtrees.len() {
             checked()?;
-            let mut cursor = self.relations[relation].root;
+            let mut cursor = self.subtrees[relation].root;
             loop {
                 while let Some(next) = cursor {
                     checked()?;
@@ -494,7 +494,7 @@ pub struct AtomAppender<'a> {
     committed_capacity: usize,
     pending: &'a mut Vec<Atom>,
     index: &'a mut Index,
-    relations: &'a mut Vec<Relation>,
+    subtrees: &'a mut Vec<Subtree>,
 }
 impl AtomAppender<'_> {
     /// Distinct committed plus pending count.
@@ -520,7 +520,7 @@ impl AtomAppender<'_> {
             self.pending.capacity(),
             self.index.nodes.capacity(),
             self.index.path.capacity(),
-            self.relations.capacity(),
+            self.subtrees.capacity(),
         )
     }
     /// Peak named conservative capacity; nested payload remains caller-owned accounting.
@@ -535,7 +535,7 @@ impl AtomAppender<'_> {
             committed_capacity: self.committed_capacity,
             pending: self.pending,
             index: self.index,
-            relations: self.relations,
+            subtrees: self.subtrees,
         }
     }
 
@@ -577,21 +577,21 @@ impl<'a> AtomAppender<'a> {
         let mut checked = || before().map_err(Failure::Stopped);
         population(self.len(), limits)?;
         admit(self.storage_bytes(), limits)?;
-        let relation = relation_of(self.relations, query.predicate(), &mut checked)?;
+        let relation = subtree_of(self.subtrees, query.predicate(), &mut checked)?;
         let mut directions = Directions::default();
         let found = match relation {
             Ok(relation) => query.search(
                 self.committed,
                 self.pending,
                 &self.index.nodes,
-                self.relations[relation].root,
+                self.subtrees[relation].root,
                 &mut checked,
                 |right| directions.push(right).expect("AVL height fits two words"),
             )?,
             Err(_) => None,
         };
         if found.is_none() {
-            let root = relation.map_or(None, |relation| self.relations[relation].root);
+            let root = relation.map_or(None, |relation| self.subtrees[relation].root);
             self.prepare_path(root, &directions, limits, &mut checked)?;
         }
         Ok(AtomEntry {
@@ -615,7 +615,7 @@ impl<'a> AtomAppender<'a> {
             self.pending.capacity(),
             self.index.nodes.capacity(),
             0,
-            self.relations.capacity(),
+            self.subtrees.capacity(),
         );
         let Index {
             nodes, path, peak, ..
@@ -653,7 +653,7 @@ impl<'a> AtomAppender<'a> {
 pub struct AtomEntry<'owner, 'key> {
     appender: AtomAppender<'owner>,
     query: Query<'key>,
-    /// The predicate's relation, or where a new one keeps the relations ordered.
+    /// The predicate's subtree, or where a new one keeps the subtrees ordered.
     relation: Result<usize, usize>,
     found: Option<usize>,
 }
@@ -735,7 +735,7 @@ impl AtomEntry<'_, '_> {
         if self.relation.is_err() {
             let live = self.storage_bytes();
             reserve(
-                self.appender.relations,
+                self.appender.subtrees,
                 1,
                 limits.max_atoms,
                 live,
@@ -753,7 +753,7 @@ impl AtomEntry<'_, '_> {
         });
         let previous = self
             .relation
-            .map_or(None, |relation| self.appender.relations[relation].root);
+            .map_or(None, |relation| self.appender.subtrees[relation].root);
         let root = self.appender.index.plan_from(previous, id, &mut checked)?;
         self.query.prepare_copy(&mut checked)?;
         if let Err(at) = self.relation {
@@ -761,7 +761,7 @@ impl AtomEntry<'_, '_> {
             for _ in self.query.predicate().name().as_bytes() {
                 checked()?;
             }
-            for _ in at..self.appender.relations.len() {
+            for _ in at..self.appender.subtrees.len() {
                 checked()?;
             }
         }
@@ -778,12 +778,12 @@ impl AtomEntry<'_, '_> {
         match self.relation {
             Ok(relation) => {
                 // Every atom of the relation refers to the relation's one name.
-                atom.share_predicate(self.appender.relations[relation].predicate.clone());
-                self.appender.relations[relation].root = root;
+                atom.share_predicate(self.appender.subtrees[relation].predicate.clone());
+                self.appender.subtrees[relation].root = root;
             }
-            Err(at) => self.appender.relations.insert(
+            Err(at) => self.appender.subtrees.insert(
                 at,
-                Relation {
+                Subtree {
                     predicate: atom.predicate().clone(),
                     root,
                 },
@@ -802,13 +802,13 @@ fn get<'a>(committed: &'a [Atom], pending: &'a [Atom], id: usize) -> Option<&'a 
     }
 }
 
-fn storage(committed: usize, pending: usize, nodes: usize, path: usize, relations: usize) -> u128 {
+fn storage(committed: usize, pending: usize, nodes: usize, path: usize, subtrees: usize) -> u128 {
     size_of::<AtomInterner>() as u128
         + cells::<Atom>(committed)
         + cells::<Atom>(pending)
         + cells::<Node>(nodes)
         + cells::<Step>(path)
-        + cells::<Relation>(relations)
+        + cells::<Subtree>(subtrees)
 }
 fn cells<T>(count: usize) -> u128 {
     count as u128 * size_of::<T>() as u128

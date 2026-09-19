@@ -94,7 +94,7 @@ impl Layout {
             sum.checked_add(positions)?.checked_add(payload)
         })?;
         (size_of::<Self>() as u128)
-            .checked_add(self.predicate.payload_capacity_bytes() as u128)?
+            .checked_add(self.predicate.name_bytes() as u128)?
             .checked_add(
                 (self.axes.capacity() as u128).checked_mul(size_of::<Vec<Value>>() as u128)?,
             )?

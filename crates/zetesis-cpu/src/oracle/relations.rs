@@ -533,7 +533,7 @@ impl Catalogs {
             .checked_add(size_of::<Catalog>() as u128)
             .ok_or(Stop::StorageLimit)?;
         let signature = storage::predicate(predicate, headers, work)?;
-        let names = signature.payload_capacity_bytes() as u128;
+        let names = signature.name_bytes() as u128;
         let other = base.checked_add(names).ok_or(Stop::StorageLimit)?;
         let catalog = completed(Catalog::new(signature, limits(work, other)?), other, work)?;
         account_storage(work, other, catalog.construction())?;

@@ -71,7 +71,7 @@ use themelios_program::program::{
 use themelios_program::provenance::{Provenance, WithProvenance};
 use themelios_program::symbol::{Signature, Symbol, VarName};
 use themelios_program::term::{BinaryOp, Term, Variable};
-use zetesis_domain::{Key, KeyWork, Stop, atom_signature};
+use zetesis_domain::{KeyWork, KeyedRelation, Stop, atom_signature};
 
 use crate::expansion::Budget;
 use crate::{ExpansionResource, FormulaFailure, FormulaLimits};
@@ -146,7 +146,7 @@ fn ask_under(
     if keys.is_empty() {
         return Ok(asked);
     }
-    let keys: BTreeMap<&Signature, &Key<'_>> =
+    let keys: BTreeMap<&Signature, &KeyedRelation<'_>> =
         keys.iter().map(|key| (key.signature(), key)).collect();
     // The analyzed statement of each source statement, by parsed origin; a
     // source statement normalized into several is left as written.
@@ -181,7 +181,7 @@ fn ask_under(
 /// read only there and in the comparison: the one the constraint demands.
 struct Demand<'a> {
     element: usize,
-    key: &'a Key<'a>,
+    key: &'a KeyedRelation<'a>,
     terms: &'a [Term],
     variable: &'a VarName,
 }
@@ -190,7 +190,7 @@ struct Demand<'a> {
 /// outside both patterns.
 fn ask(
     statement: &WithProvenance<Statement>,
-    keys: &BTreeMap<&Signature, &Key<'_>>,
+    keys: &BTreeMap<&Signature, &KeyedRelation<'_>>,
     program: &SourceProgram,
     work: &mut KeyWork,
     budget: &mut Budget,
@@ -273,7 +273,7 @@ fn ask(
             literals.extend(key_body(demand));
         }
         let mut terms = demand.terms.to_vec();
-        terms[demand.key.value()] = value.clone();
+        terms[demand.key.value_position()] = value.clone();
         literals.push(Literal {
             negation: DefaultNegation::Not,
             inner: LiteralInner::Atom(WithProvenance::constructed(Atom {
@@ -295,7 +295,7 @@ fn ask(
 fn demands<'a>(
     body: &'a Body,
     skipped: usize,
-    keys: &BTreeMap<&Signature, &'a Key<'a>>,
+    keys: &BTreeMap<&Signature, &'a KeyedRelation<'a>>,
     occurrences: &BTreeMap<&VarName, usize>,
 ) -> Vec<Demand<'a>> {
     let mut demands = Vec::new();
@@ -320,7 +320,8 @@ fn demands<'a>(
         let Some(key) = keys.get(&signature) else {
             continue;
         };
-        let Some(Term::Variable(Variable::Named(variable))) = terms.get(key.value()) else {
+        let Some(Term::Variable(Variable::Named(variable))) = terms.get(key.value_position())
+        else {
             continue;
         };
         // The asked atom stands under `not`, where an anonymous argument
@@ -328,7 +329,7 @@ fn demands<'a>(
         // atom only when every key position names its value.
         if occurrences.get(variable) != Some(&2)
             || terms.iter().enumerate().any(|(position, term)| {
-                position != key.value() && (mentions(term, variable) || anonymous(term))
+                position != key.value_position() && (mentions(term, variable) || anonymous(term))
             })
         {
             continue;
@@ -456,7 +457,7 @@ fn digit_plus_carry<'a>(
 /// Returns the key work's stop.
 fn admits_within(
     program: &SourceProgram,
-    key: &Key<'_>,
+    key: &KeyedRelation<'_>,
     low: i64,
     high: i64,
     work: &mut KeyWork,
