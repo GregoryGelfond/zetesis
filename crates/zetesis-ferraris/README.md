@@ -122,10 +122,11 @@ See [support API](src/support.rs) and [complete small-family controls](tests/sup
 A `Region` (`zetesis_cpu::regions`) holds some atoms in every candidate, cuts
 some from every candidate and leaves the rest open; here it decides over the
 theory's atoms. Under a region every node of the DAG has
-two readings, decided by one pass in index order: *sure* when every candidate
-of the region satisfies it and *impossible* when none does. A held atom is
-sure, a cut atom impossible, and the connectives combine the readings as the
-closure route's definite and possible gates do. `narrow` applies three rules
+two readings: *sure* when every candidate of the region satisfies it and
+*impossible* when none does. A held atom is sure, a cut atom impossible, and
+the connectives combine the readings as the closure route's definite and
+possible gates do; the knowledge the narrowing closes means them, a node
+known to hold being sure and one known to fail impossible. `narrow` applies three rules
 to a fixed point: every root and every decided atom is known, a node learns
 from its operands and teaches its operands what its own knowledge leaves
 them, in both directions until nothing changes, which is what unit
@@ -172,7 +173,7 @@ route; `zetesis-sat` uses it with this narrowing to propose candidates.
 sound (`Known`, `known_sound`), and the support cut and the sole-support
 demand sound for stable models on the fragment `DisjunctiveSupport` names
 (`unsupported_cut`, `sole_support_forces`); the
-choice reading and the agreement of the Rust pass with `read` are Rust
+choice reading and the agreement of the Rust closure with `Known` are Rust
 obligations. See [regions API](src/regions.rs) and
 [the rule propositions](tests/regions.rs).
 

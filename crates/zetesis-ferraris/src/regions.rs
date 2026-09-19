@@ -2,11 +2,12 @@
 //!
 //! A region (`zetesis_cpu::regions::Region`) holds some atoms in, cuts some
 //! out and leaves the rest open; here it decides over the theory's atoms. A
-//! formula has two readings under a region, decided by one pass over the
-//! DAG: it is *sure* when every seed of the region satisfies it and
-//! *impossible* when none does, with a held atom sure, a cut atom
-//! impossible, and the connectives combining the readings as the closure
-//! route's definite and possible gates do (`FormulaBounds.read`).
+//! formula has two readings under a region: it is *sure* when every seed of
+//! the region satisfies it and *impossible* when none does, with a held atom
+//! sure, a cut atom impossible, and the connectives combining the readings
+//! as the closure route's definite and possible gates do
+//! (`FormulaBounds.read`). The readings are what the knowledge below means:
+//! a node known to hold is sure, and a node known to fail is impossible.
 //!
 //! One narrowing closes, to a fixed point, what every candidate of the
 //! region must make of each node and each atom: known to hold, known to
@@ -33,7 +34,7 @@
 //! held or cut.
 //!
 //! Work is charged per node read, per root tested and per producer checked,
-//! against `RegionLimits`, and control is polled once per pass.
+//! against `RegionLimits`, and control is polled once per narrowing.
 
 use std::collections::BTreeSet;
 
