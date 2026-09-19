@@ -293,10 +293,12 @@ impl Relational for Relations<'_> {
     }
 }
 
-/// The scalar closure owns each atom once until final interpretation assembly.
-/// Views borrow the retained row index; rounds do not rebuild tuple snapshots.
-/// Relations are kept in predicate order, so the final model is their
-/// concatenation and a handle is a position in this vector.
+/// The scalar closure's relations, of two kinds: a tree relation owns each
+/// of its atoms once until final interpretation assembly, and a dense
+/// relation owns no atom, holding its tuples as bits until the assembly
+/// builds them. Views borrow the retained row index; rounds do not rebuild
+/// tuple snapshots. Relations are kept in predicate order, so the final
+/// model is their concatenation and a handle is a position in this vector.
 pub(super) struct Catalogs {
     relations: Vec<Relation>,
     atoms: usize,

@@ -207,7 +207,8 @@ impl PreparedQueries {
     ///
     /// All candidate truth is empty initially. A completed call transfers atom
     /// payload to its returned `Check`; only empty catalog metadata, predicate
-    /// names and reference-free join/old-new ID capacity remain. Frontiers and
+    /// names, reference-free join and prepared-order capacity, and the dense
+    /// relations' words and pending rows' marks, zeroed, remain. Frontiers and
     /// all logical ID lengths are reset before another candidate is evaluated.
     /// Assignment references live
     /// within one immutable round. A different program instance retires the old

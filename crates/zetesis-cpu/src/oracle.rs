@@ -43,12 +43,14 @@ pub struct Limits {
     /// Maximum distinct derived atoms, including pending round outputs.
     pub max_derived_atoms: usize,
     /// Named capacity per scalar closure: predicate/catalog cells and names,
-    /// tuple/index/column/prepared-order and old/new ID buffers, nested tuple payload, pending
-    /// tuples and operation scratch/growth overlap. Shared structural buffers
-    /// are counted per occurrence. Tree-container allocations (including vacant
-    /// slots), allocator metadata and Arc-counter overhead,
-    /// and final `Model` retention are excluded. Prepared scalar checks include
-    /// the preparation's retained bytes and assignment/cursor/undo capacities.
+    /// the tree relations' tuples, indexes, columns and prepared-order runs,
+    /// nested tuple payload, the dense relations' words and the pending rows'
+    /// marks, pending tuples and operation scratch/growth overlap. Shared
+    /// structural buffers are counted per occurrence. Tree-container
+    /// allocations (including vacant slots), allocator metadata and
+    /// Arc-counter overhead, and final `Model` retention are excluded.
+    /// Prepared scalar checks include the preparation's retained bytes and
+    /// assignment/cursor/undo capacities.
     /// Actual allocator slack can exceed the proposed reservation before refusal;
     /// only completed checks publish their observed peak statistics.
     /// This is an independent finite allowance, not a process RSS ceiling.
@@ -75,8 +77,8 @@ pub struct Statistics {
     /// Charged operations, as described by [`Limits::max_work`].
     pub work: u64,
     /// Subset of work spent constructing, extending and probing retained typed
-    /// catalogs and their old/new ID views. Source joins and final interpretation
-    /// assembly are separate.
+    /// catalogs and their prepared-order runs. Source joins and final
+    /// interpretation assembly are separate.
     pub catalog_work: u64,
     /// Largest admitted or actually reserved named scalar closure envelope,
     /// under [`Limits::max_closure_bytes`]. Refused unallocated proposals do not
