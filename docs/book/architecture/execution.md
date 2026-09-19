@@ -101,7 +101,10 @@ shape: data-parallel work inside a region and share-nothing regions beside
 one another. A candidate-only restriction narrows the regions still to visit
 without a restart, and no exclusion index is kept, because a leaf is visited
 once. The traversal itself is one operation in `zetesis-cpu`, shared by both
-routes; the closure route narrows by its two closures, the formula route by
+routes when one worker walks; with several workers the formula route walks
+the same tree in `zetesis-sat`'s parallel regions, each worker owning a stack
+of regions and a shared pool offering regions to idle workers. The closure
+route narrows by its two closures, the formula route by
 the readings.
 
 Under the same method the reduct's proper-subset query is a second region
