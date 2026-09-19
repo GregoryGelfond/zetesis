@@ -32,7 +32,7 @@ fn header(
     )?;
     writeln!(
         sink,
-        "  memory allowance: {} bytes (host physical memory {}); each byte ceiling not given is the library default scaled by the allowance over 2 GiB",
+        "  memory allowance: {} bytes (host physical memory {}); each session byte ceiling not given is the library default scaled by the allowance over 2 GiB; the admission and output ceilings keep their defaults",
         options.memory,
         crate::options::host_memory()
             .map_or_else(|| "unreported".to_owned(), |bytes| bytes.to_string())

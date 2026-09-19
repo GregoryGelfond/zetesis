@@ -222,12 +222,16 @@ the workers decide their leaves and it is unused. The default of one is the
 scalar cursor. `--workers` is described above.
 `--memory` is the session's memory allowance in bytes, half of the host's
 physical memory by default and at least two gibibytes, or two gibibytes when
-the host does not report its memory (Linux and macOS report it). The library's
-byte ceilings are the shares of a two-gibibyte allowance; each one not given
-on the command line is that share scaled by the allowance, and the closure
-ceiling is shared by the workers, as `SolveConfig::for_allowance` states, so
-a larger host admits larger problems before a ceiling refuses, and a given
-ceiling is taken as given. Work, count and structural ceilings are not memory and do not scale.
+the host does not report its memory (Linux and macOS report it). The session's
+byte ceilings, the projection, objective key, optimal, reduct, completion
+scratch, candidate, closure, closure batch and batch bytes, are the shares of
+a two-gibibyte allowance; each one not given on the command line is that
+share scaled by the allowance, and the closure ceiling is shared by the
+workers, as `SolveConfig::for_allowance` states, so a larger host admits
+larger problems before one refuses, and a given ceiling is taken as given.
+The admission and output ceilings, the source, expansion, support, JSON
+record and observation bytes, keep their fixed defaults. Work, count and
+structural ceilings are not memory and do not scale.
 The ceilings bound named storage, not resident memory; `--stats` prints the
 allowance, the host's memory and each ceiling as the session takes it.
 `--batch-size`, `--max-batch-bytes` and

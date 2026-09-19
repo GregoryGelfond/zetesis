@@ -99,14 +99,18 @@ pub struct Options {
     /// Library callers supply their own Control instead of this process option.
     #[arg(long, value_name = "SECONDS")]
     pub time_limit: Option<u64>,
-    /// The session's memory allowance in bytes. The library's byte ceilings
-    /// are the shares of a two-gibibyte allowance; each ceiling not given is
-    /// its library default scaled by this allowance over two gibibytes, so a
-    /// larger host admits larger problems before a ceiling refuses. The
-    /// default is half of the host's physical memory and at least two
-    /// gibibytes, or two gibibytes when the host does not report its memory.
-    /// Work, count and structural ceilings are not memory and do not scale.
-    /// The ceilings bound named storage, not resident memory.
+    /// The session's memory allowance in bytes. The session's byte ceilings
+    /// are the shares of a two-gibibyte allowance; each one not given (the
+    /// projection, objective key, optimal, reduct, completion scratch,
+    /// candidate, closure, closure batch and batch bytes) is its library
+    /// default scaled by this allowance over two gibibytes, so a larger
+    /// host admits larger problems before one refuses. The admission and
+    /// output ceilings (the source, expansion, support, JSON record and
+    /// observation bytes) keep their fixed defaults. The default allowance
+    /// is half of the host's physical memory and at least two gibibytes, or
+    /// two gibibytes when the host does not report its memory. Work, count
+    /// and structural ceilings are not memory and do not scale. The
+    /// ceilings bound named storage, not resident memory.
     #[arg(long, default_value_t = host_memory_allowance(), hide_short_help = true)]
     pub memory: u64,
     /// Maximum encoded JSON bytes per model record or terminal outcome; not an all-model buffer.
