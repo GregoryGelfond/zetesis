@@ -138,7 +138,10 @@ fn a_resource_stop_while_bounding_leaves_the_symbolic_carrier() {
     });
     assert_eq!(candidates.by_ref().map(Result::unwrap).count(), 256);
     let statistics = candidates.statistics();
-    assert_eq!(statistics.bounds_stop, Some(zetesis_cpu::Stop::WorkLimit));
+    assert_eq!(
+        statistics.narrowing_stop,
+        Some(zetesis_cpu::Stop::WorkLimit)
+    );
     assert_eq!(statistics.cut_gate_atoms, 0);
     assert_eq!(statistics.held_gate_atoms, 0);
 }
@@ -188,7 +191,7 @@ fn a_program_without_gate_predicates_computes_no_closure_for_its_bounds() {
         ..Limits::default()
     });
     assert_eq!(candidates.by_ref().map(Result::unwrap).count(), 1);
-    assert_eq!(candidates.statistics().bounds_stop, None);
+    assert_eq!(candidates.statistics().narrowing_stop, None);
 }
 
 /// Eight nodes with a bad third one, as in the stratified family: blocked
@@ -262,9 +265,9 @@ fn stratified_statistics() -> zetesis_cpu::CandidateStatistics {
 #[test]
 fn the_narrowing_reports_its_passes() {
     let statistics = stratified_statistics();
-    assert_eq!(statistics.bounds_passes, 3);
-    assert!(!statistics.bounds_refuted);
-    assert_eq!(statistics.bounds_stop, None);
+    assert_eq!(statistics.narrowing_passes, 3);
+    assert!(!statistics.root_refuted);
+    assert_eq!(statistics.narrowing_stop, None);
 }
 
 #[test]
@@ -298,7 +301,7 @@ fn the_narrowing_charges_its_preparation_apart_from_its_closures() {
             ..Limits::default()
         });
         let _ = candidates.next();
-        candidates.statistics().bounds_stop
+        candidates.statistics().narrowing_stop
     };
     assert_eq!(stop(876), None);
     assert_eq!(stop(875), Some(zetesis_cpu::Stop::WorkLimit));
@@ -324,8 +327,8 @@ fn a_definite_constraint_refutes_the_whole_carrier() {
     candidates.bounded(Limits::default());
     assert_eq!(candidates.by_ref().count(), 0);
     let statistics = candidates.statistics();
-    assert!(statistics.bounds_refuted);
-    assert_eq!(statistics.bounds_passes, 1);
+    assert!(statistics.root_refuted);
+    assert_eq!(statistics.narrowing_passes, 1);
     // The unbounded counter finds the same absence the long way.
     let unbounded = Candidates::new(&program, CandidateLimits::default(), Control::default());
     assert!(

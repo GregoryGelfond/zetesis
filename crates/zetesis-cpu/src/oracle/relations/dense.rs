@@ -20,7 +20,7 @@ use std::{mem::size_of, ops::Range, sync::Arc};
 
 use zetesis_core::{Atom, AtomKey, Predicate, Value};
 
-use super::super::bounds::Bound;
+use super::super::argument_bounds::Bound;
 use super::{RowSet, Work, charge};
 use crate::Stop;
 

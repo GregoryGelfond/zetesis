@@ -260,19 +260,19 @@ fn candidate_statistics_preserve_restriction_accounting() {
 }
 
 #[test]
-fn candidate_statistics_carry_the_carrier_bounds_and_regions() {
+fn candidate_statistics_carry_the_carrier_narrowing_and_regions() {
     let (report, value) = solve(
         "{a}. {b}. :- a,b.",
         &options(&["--stats", "--grounder", "lazy"]),
     );
     let measured = report.unwrap().candidate_statistics.unwrap();
     let stats = &value["statistics"]["candidate_restrictions"];
-    let bounds = &stats["carrier_bounds"];
-    assert_eq!(bounds["narrowing_passes"], measured.bounds_passes);
-    assert_eq!(bounds["cut_gate_atoms"], measured.cut_gate_atoms);
-    assert_eq!(bounds["held_gate_atoms"], measured.held_gate_atoms);
-    assert_eq!(bounds["refuted"], false);
-    assert_eq!(bounds["stopped"], Json::Null);
+    let narrowing = &stats["carrier_narrowing"];
+    assert_eq!(narrowing["passes"], measured.narrowing_passes);
+    assert_eq!(narrowing["cut_gate_atoms"], measured.cut_gate_atoms);
+    assert_eq!(narrowing["held_gate_atoms"], measured.held_gate_atoms);
+    assert_eq!(narrowing["refuted"], false);
+    assert_eq!(narrowing["stopped"], Json::Null);
     let regions = &stats["carrier_regions"];
     assert_eq!(regions["visited"], measured.regions);
     assert_eq!(regions["refuted"], measured.regions_refuted);
@@ -285,10 +285,10 @@ fn candidate_statistics_carry_the_carrier_bounds_and_regions() {
 fn candidate_statistics_say_when_the_root_narrowing_refuted_every_seed() {
     let (report, value) = solve("{a}. p. :- p.", &options(&["--stats"]));
     let measured = report.unwrap().candidate_statistics.unwrap();
-    assert!(measured.bounds_refuted);
-    let bounds = &value["statistics"]["candidate_restrictions"]["carrier_bounds"];
-    assert_eq!(bounds["refuted"], true);
-    assert_eq!(bounds["narrowing_passes"], measured.bounds_passes);
+    assert!(measured.root_refuted);
+    let narrowing = &value["statistics"]["candidate_restrictions"]["carrier_narrowing"];
+    assert_eq!(narrowing["refuted"], true);
+    assert_eq!(narrowing["passes"], measured.narrowing_passes);
 }
 
 #[test]

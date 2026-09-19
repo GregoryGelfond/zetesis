@@ -6,7 +6,7 @@ use std::mem::size_of;
 use zetesis_core::{Predicate, Program, SeedView, Value};
 
 use super::{
-    Check, Limits, Work, bounds,
+    Check, Limits, Work, argument_bounds,
     relations::{Catalogs, Layout, Layouts, PendingRows, storage},
     row_steps::RowSteps,
 };
@@ -164,7 +164,7 @@ impl PreparedQueries {
                 }
             }
         }
-        let bounds = bounds::infer(program, max_dense_atoms, work)?;
+        let bounds = argument_bounds::infer(program, max_dense_atoms, work)?;
         let mut layouts = Layouts::default();
         for predicate in program.predicates() {
             work.tick()?;

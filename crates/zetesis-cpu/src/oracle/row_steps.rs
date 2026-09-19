@@ -146,7 +146,7 @@ mod tests {
     use zetesis_core::{Filter, Predicate, Value};
 
     use super::*;
-    use crate::oracle::bounds::Bound;
+    use crate::oracle::argument_bounds::Bound;
     use crate::oracle::relations::Layout;
 
     fn pattern(name: &str, terms: &[Term]) -> AtomPattern {

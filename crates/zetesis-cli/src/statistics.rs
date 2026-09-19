@@ -393,7 +393,7 @@ fn details(
     } else {
         if report
             .candidate_statistics
-            .is_some_and(|stats| stats.bounds_refuted)
+            .is_some_and(|stats| stats.root_refuted)
         {
             // The root's narrowing settled the program: no seed was offered
             // and no execution route ran; the carrier receipt above says
@@ -448,22 +448,22 @@ fn candidates(sink: &mut impl Write, stats: zetesis_cpu::CandidateStatistics) ->
         stats.restriction_bytes,
         stats.restriction_peak_bytes
     )?;
-    if stats.bounds_refuted {
+    if stats.root_refuted {
         return writeln!(
             sink,
-            "  carrier bounds: refuted by a definite constraint after {} narrowing passes; no seed offered",
-            stats.bounds_passes
+            "  carrier narrowing: refuted by a definite constraint after {} passes; no seed offered",
+            stats.narrowing_passes
         );
     }
     writeln!(
         sink,
-        "  carrier bounds: narrowing passes={}; cut gate atoms={}; held gate atoms={}",
-        stats.bounds_passes, stats.cut_gate_atoms, stats.held_gate_atoms
+        "  carrier narrowing: passes={}; cut gate atoms={}; held gate atoms={}",
+        stats.narrowing_passes, stats.cut_gate_atoms, stats.held_gate_atoms
     )?;
-    if let Some(stop) = stats.bounds_stop {
+    if let Some(stop) = stats.narrowing_stop {
         writeln!(
             sink,
-            "  carrier bounds stop: {stop}; the completed passes' bounds were kept"
+            "  carrier narrowing stop: {stop}; the completed passes' bounds were kept"
         )?;
     }
     if stats.regions > 0 {

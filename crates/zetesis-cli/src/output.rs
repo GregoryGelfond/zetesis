@@ -801,19 +801,15 @@ fn candidate_statistics(
     out.number_field("prepared_atom_occurrences", stats.restriction_atoms)?;
     out.number_field("copied_payload_bytes", stats.restriction_bytes)?;
     out.number_field("peak_copied_payload_bytes", stats.restriction_peak_bytes)?;
-    // The carrier bounds and regions, under the words of the text lines.
-    out.text(",\"carrier_bounds\":{\"narrowing_passes\":")?;
-    out.text(&stats.bounds_passes.to_string())?;
+    // The carrier narrowing and regions, under the words of the text lines.
+    out.text(",\"carrier_narrowing\":{\"passes\":")?;
+    out.text(&stats.narrowing_passes.to_string())?;
     out.number_field("cut_gate_atoms", stats.cut_gate_atoms)?;
     out.number_field("held_gate_atoms", stats.held_gate_atoms)?;
     out.text(",\"refuted\":")?;
-    out.text(if stats.bounds_refuted {
-        "true"
-    } else {
-        "false"
-    })?;
+    out.text(if stats.root_refuted { "true" } else { "false" })?;
     out.text(",\"stopped\":")?;
-    match &stats.bounds_stop {
+    match &stats.narrowing_stop {
         None => out.text("null")?,
         Some(stop) => out.string(&stop.to_string())?,
     }

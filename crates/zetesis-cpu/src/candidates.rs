@@ -92,15 +92,15 @@ pub struct CandidateStatistics {
     /// counter kept the bounds of the passes that completed, the whole
     /// symbolic carrier when none had. The first stop is kept. `None` when
     /// no bound was requested or every narrowing reached its fixed point.
-    pub bounds_stop: Option<Stop>,
+    pub narrowing_stop: Option<Stop>,
     /// The root's narrowing passes that changed a bound or found the fixed
     /// point, each two closures; a pass that refuted the root or stopped is
     /// not counted.
-    pub bounds_passes: usize,
-    /// A constraint fired in the lower closure of the narrowed region, so no
+    pub narrowing_passes: usize,
+    /// A constraint fired in the lower closure of the narrowed root, so no
     /// seed of it is accepted and the counter offered none
     /// (`Bounds.lower_constraint_refutes`).
-    pub bounds_refuted: bool,
+    pub root_refuted: bool,
     /// Regions the split visited, the narrowed root included.
     pub regions: usize,
     /// Regions a definite constraint refuted in their lower closure: no seed
@@ -115,7 +115,7 @@ pub struct CandidateStatistics {
     pub regions_counted: usize,
     /// The narrowing passes over the regions below the root that changed a
     /// bound or found a fixed point, each two closures, as
-    /// [`Self::bounds_passes`] counts the root's.
+    /// [`Self::narrowing_passes`] counts the root's.
     pub region_passes: usize,
 }
 
@@ -128,8 +128,8 @@ enum RestrictionState {
     },
 }
 
-/// Whether the program's closures narrow the carrier, and how far that got.
-enum BoundsState {
+/// Whether the program's two closures narrow the carrier, and how far that got.
+enum NarrowingState {
     Disabled,
     Pending(Limits),
     /// The root is narrowed; its regions are narrowed by the same closures,
@@ -292,7 +292,7 @@ pub struct Candidates<'a> {
     started: bool,
     termination: Option<CandidateTermination>,
     restrictions: RestrictionState,
-    bounds: BoundsState,
+    narrowing: NarrowingState,
     enumeration: Enumeration,
     /// The open gate atoms of the narrowed root, in carrier order; a
     /// region decides over their indices.
@@ -324,7 +324,7 @@ impl<'a> Candidates<'a> {
             started: false,
             termination: None,
             restrictions: RestrictionState::Disabled,
-            bounds: BoundsState::Disabled,
+            narrowing: NarrowingState::Disabled,
             enumeration: Enumeration::Carrier,
             root: Vec::new(),
             root_must: BTreeSet::new(),
@@ -376,7 +376,7 @@ impl<'a> Candidates<'a> {
     /// cancellation or a deadline stops the pull that met it.
     pub fn bounded(&mut self, limits: Limits) {
         debug_assert!(!self.started, "the bound precedes the first pull");
-        self.bounds = BoundsState::Pending(limits);
+        self.narrowing = NarrowingState::Pending(limits);
     }
 
     /// Accounted necessary-condition work and copied payload through this pull.
@@ -530,7 +530,7 @@ impl<'a> Candidates<'a> {
         let mut cube = self.cube_of(region);
         let mut changed = false;
         loop {
-            let BoundsState::Applied(closures) = &mut self.bounds else {
+            let NarrowingState::Applied(closures) = &mut self.narrowing else {
                 return Ok(Narrowing::Fixed { changed: false });
             };
             match closures.narrow(&mut cube) {
@@ -545,7 +545,7 @@ impl<'a> Candidates<'a> {
                 Ok(Pass::Refuted) => return Ok(Narrowing::Refuted),
                 Err(stop @ (Stop::Cancelled | Stop::Deadline)) => return Err(stop),
                 Err(stop) => {
-                    self.statistics.bounds_stop.get_or_insert(stop);
+                    self.statistics.narrowing_stop.get_or_insert(stop);
                     return Ok(Narrowing::Fixed { changed: false });
                 }
             }
@@ -645,21 +645,21 @@ impl<'a> Candidates<'a> {
     }
 
     fn prepare_bounds(&mut self) -> Result<(), Stop> {
-        let BoundsState::Pending(limits) = &self.bounds else {
+        let NarrowingState::Pending(limits) = &self.narrowing else {
             return Ok(());
         };
         let limits = *limits;
         // An empty carrier has nothing to bound; the one seed costs no closure.
         if self.program.gate_predicates().is_empty() {
-            self.bounds = BoundsState::Trivial;
+            self.narrowing = NarrowingState::Trivial;
             return Ok(());
         }
         let mut closures = match Closures::new(self.program, limits, self.control.clone()) {
             Ok(closures) => closures,
             Err(stop @ (Stop::Cancelled | Stop::Deadline)) => return Err(stop),
             Err(stop) => {
-                self.statistics.bounds_stop = Some(stop);
-                self.bounds = BoundsState::Unavailable;
+                self.statistics.narrowing_stop = Some(stop);
+                self.narrowing = NarrowingState::Unavailable;
                 return Ok(());
             }
         };
@@ -667,22 +667,22 @@ impl<'a> Candidates<'a> {
         // Each pass either refutes, strictly grows `must`, strictly shrinks
         // `may` or is the last; both sets lie within the finite gate atoms
         // of the first upper closure, so the loop ends.
-        self.bounds = loop {
+        self.narrowing = loop {
             match closures.narrow(&mut cube) {
-                Ok(Pass::Changed) => self.statistics.bounds_passes += 1,
+                Ok(Pass::Changed) => self.statistics.narrowing_passes += 1,
                 Ok(Pass::Fixed) => {
-                    self.statistics.bounds_passes += 1;
-                    break BoundsState::Applied(Box::new(closures));
+                    self.statistics.narrowing_passes += 1;
+                    break NarrowingState::Applied(Box::new(closures));
                 }
                 Ok(Pass::Refuted) => {
                     self.refuted = true;
-                    self.statistics.bounds_refuted = true;
-                    break BoundsState::Applied(Box::new(closures));
+                    self.statistics.root_refuted = true;
+                    break NarrowingState::Applied(Box::new(closures));
                 }
                 Err(stop @ (Stop::Cancelled | Stop::Deadline)) => return Err(stop),
                 Err(stop) => {
-                    self.statistics.bounds_stop = Some(stop);
-                    break BoundsState::Unavailable;
+                    self.statistics.narrowing_stop = Some(stop);
+                    break NarrowingState::Unavailable;
                 }
             }
         };
@@ -694,7 +694,7 @@ impl<'a> Candidates<'a> {
         if self.refuted {
             return Ok(());
         }
-        let applied = matches!(self.bounds, BoundsState::Applied(_));
+        let applied = matches!(self.narrowing, NarrowingState::Applied(_));
         match (applied, cube.may) {
             // The narrowed root's open atoms, in carrier order, are the
             // region tree's coordinates; the carrier is read once for them.

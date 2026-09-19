@@ -455,8 +455,7 @@ fn the_counter_runs_between_the_program_closures() {
     assert_eq!(report.models, 1);
     assert_eq!(report.checked, 1, "{diagnostics}");
     assert!(
-        diagnostics
-            .contains("carrier bounds: narrowing passes=3; cut gate atoms=8; held gate atoms=8"),
+        diagnostics.contains("carrier narrowing: passes=3; cut gate atoms=8; held gate atoms=8"),
         "{diagnostics}"
     );
     // The root is decided, so it is the one region and its one seed.

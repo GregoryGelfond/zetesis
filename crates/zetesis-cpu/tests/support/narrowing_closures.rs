@@ -44,7 +44,7 @@ fn the_narrowing_keeps_the_capacity_its_closures_reserved() {
     candidates.bounded(Limits::default());
     assert_eq!(candidates.by_ref().map(Result::unwrap).count(), 8);
     assert_eq!(candidates.statistics().regions, 15);
-    let BoundsState::Applied(closures) = &candidates.bounds else {
+    let NarrowingState::Applied(closures) = &candidates.narrowing else {
         panic!("the bounds are applied");
     };
     let empty = ClosureWorkspace::default().retained_bytes().unwrap();
@@ -62,6 +62,9 @@ fn a_stopped_preparation_is_the_narrowings_stop() {
         ..Limits::default()
     });
     assert_eq!(candidates.by_ref().map(Result::unwrap).count(), 16);
-    assert_eq!(candidates.statistics().bounds_stop, Some(Stop::WorkLimit));
-    assert!(matches!(candidates.bounds, BoundsState::Unavailable));
+    assert_eq!(
+        candidates.statistics().narrowing_stop,
+        Some(Stop::WorkLimit)
+    );
+    assert!(matches!(candidates.narrowing, NarrowingState::Unavailable));
 }

@@ -871,7 +871,7 @@ mod tests {
     /// 1 marked and absorbed: the predicate, the layouts, the catalogs and
     /// the pending rows.
     fn laid_out(work: &mut Work<'_>) -> (Predicate, Layouts, Catalogs, PendingRows) {
-        use crate::oracle::bounds::Bound;
+        use crate::oracle::argument_bounds::Bound;
         let predicate = Predicate::new("p", 1).unwrap();
         let mut layouts = Layouts::default();
         layouts.push(

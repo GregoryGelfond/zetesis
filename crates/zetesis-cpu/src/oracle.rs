@@ -12,7 +12,7 @@ use crate::{Control, Stop};
 mod window;
 mod relations;
 mod prepared;
-mod bounds;
+mod argument_bounds;
 pub use prepared::{ClosureWorkspace, PreparationLimits, PreparationStatistics, PreparedQueries};
 use relations::{
     Block, Catalogs, Dense, Layouts, PendingRows, Relational, Relations, Resolution, Row, RowSet,

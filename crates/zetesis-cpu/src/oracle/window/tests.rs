@@ -152,7 +152,7 @@ fn lookup_charges_compared_text_payloads() {
 
 #[test]
 fn a_bound_prefix_of_a_dense_relation_is_its_block_of_positions() {
-    use crate::oracle::bounds::Bound;
+    use crate::oracle::argument_bounds::Bound;
     use crate::oracle::relations::{Catalogs, Layout, Layouts, RowSet};
 
     // Three values by two: six positions, the first argument most significant.
