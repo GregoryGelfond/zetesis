@@ -328,9 +328,6 @@ fn host_workers() -> NonZeroUsize {
     std::thread::available_parallelism().unwrap_or(NonZeroUsize::MIN)
 }
 
-/// Two gibibytes: the allowance the library's byte ceilings are the shares of.
-const REFERENCE_MEMORY: u64 = 2 * 1024 * 1024 * 1024;
-
 /// The host's physical memory in bytes, from `/proc/meminfo`.
 #[cfg(target_os = "linux")]
 pub(crate) fn host_memory() -> Option<u64> {
@@ -369,50 +366,42 @@ pub(crate) fn host_memory() -> Option<u64> {
 
 /// The default allowance: half of the host's memory, at least the reference.
 fn host_memory_allowance() -> u64 {
-    host_memory().map_or(REFERENCE_MEMORY, |memory| {
-        (memory / 2).max(REFERENCE_MEMORY)
+    host_memory().map_or(crate::SolveConfig::REFERENCE_MEMORY, |memory| {
+        (memory / 2).max(crate::SolveConfig::REFERENCE_MEMORY)
     })
 }
 
 impl Options {
+    /// The library's defaults for the allowance and the workers: what each
+    /// byte ceiling not given on the command line is.
+    fn allowed(&self) -> crate::SolveConfig {
+        crate::SolveConfig::for_allowance(self.memory, self.workers)
+    }
+
     /// The per-closure allowance: the given value, or each worker's share of
     /// the collective ceiling.
     #[must_use]
     pub fn closure_allowance(&self) -> usize {
-        self.max_closure_bytes
-            .unwrap_or(self.closure_collective() / self.workers.get())
+        self.max_closure_bytes.unwrap_or_else(|| {
+            self.max_closure_batch_bytes.map_or_else(
+                || self.allowed().max_closure_bytes,
+                |collective| collective / self.workers.get(),
+            )
+        })
     }
 
     /// The collective closure ceiling: the given value, or the library
     /// default scaled by the allowance.
     #[must_use]
     pub fn closure_collective(&self) -> usize {
-        self.scaled_usize(
-            self.max_closure_batch_bytes,
-            crate::SolveConfig::DEFAULT.max_closure_batch_bytes,
-        )
-    }
-
-    /// A byte ceiling: the given value, or the library default, a share of
-    /// the reference allowance, scaled by the allowance over the reference.
-    fn scaled_u64(&self, given: Option<u64>, default: u64) -> u64 {
-        given.unwrap_or_else(|| {
-            let scaled =
-                u128::from(default) * u128::from(self.memory) / u128::from(REFERENCE_MEMORY);
-            u64::try_from(scaled).unwrap_or(u64::MAX)
-        })
-    }
-
-    fn scaled_usize(&self, given: Option<usize>, default: usize) -> usize {
-        given.unwrap_or_else(|| {
-            let default = u64::try_from(default).unwrap_or(u64::MAX);
-            usize::try_from(self.scaled_u64(None, default)).unwrap_or(usize::MAX)
-        })
+        self.max_closure_batch_bytes
+            .unwrap_or_else(|| self.allowed().max_closure_batch_bytes)
     }
 }
 
 impl From<&Options> for crate::SolveConfig {
     fn from(options: &Options) -> Self {
+        let allowed = options.allowed();
         Self {
             backend: options.backend,
             grounder: options.grounder,
@@ -425,36 +414,32 @@ impl From<&Options> for crate::SolveConfig {
             max_search_decisions: options.max_search_decisions,
             max_projection_entries: options.max_projection_entries,
             max_projection_nodes: options.max_projection_nodes,
-            max_projection_bytes: options.scaled_usize(
-                options.max_projection_bytes,
-                Self::DEFAULT.max_projection_bytes,
-            ),
+            max_projection_bytes: options
+                .max_projection_bytes
+                .unwrap_or(allowed.max_projection_bytes),
             max_objective_work: options.max_objective_work,
             max_objective_bound_work: options.max_objective_bound_work,
             max_objective_bindings: options.max_objective_bindings,
             max_objective_keys: options.max_objective_keys,
-            max_objective_key_bytes: options.scaled_usize(
-                options.max_objective_key_bytes,
-                Self::DEFAULT.max_objective_key_bytes,
-            ),
+            max_objective_key_bytes: options
+                .max_objective_key_bytes
+                .unwrap_or(allowed.max_objective_key_bytes),
             max_optimal_models: options.max_optimal_models,
             max_optimal_atoms: options.max_optimal_atoms,
             max_optimal_bytes: options
-                .scaled_usize(options.max_optimal_bytes, Self::DEFAULT.max_optimal_bytes),
+                .max_optimal_bytes
+                .unwrap_or(allowed.max_optimal_bytes),
             batch_size: options.batch_size,
             workers: options.workers,
             completion_workers: options.completion_workers,
-            max_reduct_bytes: options
-                .scaled_u64(options.max_reduct_bytes, Self::DEFAULT.max_reduct_bytes),
-            max_completion_scratch_bytes: options.scaled_u64(
-                options.max_completion_scratch_bytes,
-                Self::DEFAULT.max_completion_scratch_bytes,
-            ),
+            max_reduct_bytes: options.max_reduct_bytes.unwrap_or(allowed.max_reduct_bytes),
+            max_completion_scratch_bytes: options
+                .max_completion_scratch_bytes
+                .unwrap_or(allowed.max_completion_scratch_bytes),
             max_candidates: options.max_candidates,
-            max_candidate_bytes: options.scaled_usize(
-                options.max_candidate_bytes,
-                Self::DEFAULT.max_candidate_bytes,
-            ),
+            max_candidate_bytes: options
+                .max_candidate_bytes
+                .unwrap_or(allowed.max_candidate_bytes),
             max_carrier_atoms: options.max_carrier_atoms,
             max_work: options.max_work,
             max_closure_bytes: options.closure_allowance(),
@@ -465,8 +450,7 @@ impl From<&Options> for crate::SolveConfig {
             max_atoms: options.max_atoms,
             max_substitutions: options.max_substitutions,
             max_ground_rules: options.max_ground_rules,
-            max_batch_bytes: options
-                .scaled_u64(options.max_batch_bytes, Self::DEFAULT.max_batch_bytes),
+            max_batch_bytes: options.max_batch_bytes.unwrap_or(allowed.max_batch_bytes),
         }
     }
 }

@@ -48,20 +48,18 @@ fn a_worker_product_above_the_collective_ceiling_is_refused_by_name() {
 fn a_product_at_the_ceiling_is_admitted() {
     assert!(with_workers(4).validate().is_ok());
     assert!(
-        SolveConfig {
-            max_closure_bytes: SolveConfig::DEFAULT.max_closure_batch_bytes / 8,
-            ..with_workers(8)
-        }
-        .validate()
-        .is_ok()
+        SolveConfig::for_allowance(SolveConfig::REFERENCE_MEMORY, NonZeroUsize::new(8).unwrap())
+            .validate()
+            .is_ok()
     );
 }
 
 #[test]
 fn eight_workers_complete_the_family_at_their_collective_share() {
     let config = SolveConfig {
-        max_closure_bytes: SolveConfig::DEFAULT.max_closure_batch_bytes / 8,
-        ..with_workers(8)
+        backend: Backend::Cpu,
+        models: 0,
+        ..SolveConfig::for_allowance(SolveConfig::REFERENCE_MEMORY, NonZeroUsize::new(8).unwrap())
     };
     let program = program();
     let mut session =

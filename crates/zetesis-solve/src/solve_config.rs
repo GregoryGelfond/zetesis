@@ -59,7 +59,9 @@ pub struct SolveConfig {
     pub batch_size: NonZeroUsize,
     /// Worker count: the closure route's pool, and the walkers of the
     /// region tree under the regions method, one being the scalar walk.
-    /// The command defaults it to the host's parallelism.
+    /// Every worker is admitted at `max_closure_bytes`, so raise the two
+    /// together, as [`Self::for_allowance`] does; the command defaults the
+    /// count to the host's parallelism.
     pub workers: NonZeroUsize,
     /// Formula exact-completion worker count under the clauses search; the
     /// regions search decides its leaves in `workers`.
@@ -127,9 +129,10 @@ impl SolveConfig {
     /// These finite session allowances differ from standalone primitive defaults.
     /// Logical work ceilings do not impose a wall-clock deadline or remove the
     /// independently configured source, storage and materialization limits.
-    /// The byte ceilings are the shares of a two-gibibyte memory allowance;
-    /// the command scales them by the host's memory, the library takes them
-    /// as they are.
+    /// The byte ceilings are the shares of [`Self::REFERENCE_MEMORY`];
+    /// [`Self::for_allowance`] scales them by a session's allowance and
+    /// shares the closure ceiling by its workers, which is how the command
+    /// takes the host's memory and parallelism.
     pub const DEFAULT: Self = Self {
         backend: Backend::Auto,
         grounder: Grounder::Auto,
@@ -179,13 +182,58 @@ impl Default for SolveConfig {
 }
 
 impl SolveConfig {
+    /// Two gibibytes: the memory allowance the byte ceilings of
+    /// [`Self::DEFAULT`] are the shares of.
+    pub const REFERENCE_MEMORY: u64 = 2 * 1024 * 1024 * 1024;
+
+    /// The defaults for a session allowed `memory` bytes over `workers`:
+    /// [`Self::DEFAULT`] with the nine byte ceilings that bound retained
+    /// storage scaled by `memory` over [`Self::REFERENCE_MEMORY`], each
+    /// saturating at its type's maximum, and the per-closure allowance each
+    /// worker's share of the scaled collective closure ceiling, so that the
+    /// product [`Self::validate`] checks holds. The projection, objective
+    /// key, incumbent, reduct, completion scratch, candidate, collective
+    /// closure and batch ceilings scale; work, count and structural
+    /// ceilings, and the ceilings of source admission, do not. Constant
+    /// time.
+    #[must_use]
+    pub fn for_allowance(memory: u64, workers: NonZeroUsize) -> Self {
+        let scale_u64 = |default: u64| {
+            let scaled =
+                u128::from(default) * u128::from(memory) / u128::from(Self::REFERENCE_MEMORY);
+            u64::try_from(scaled).unwrap_or(u64::MAX)
+        };
+        let scale_usize = |default: usize| {
+            usize::try_from(scale_u64(u64::try_from(default).unwrap_or(u64::MAX)))
+                .unwrap_or(usize::MAX)
+        };
+        let max_closure_batch_bytes = scale_usize(Self::DEFAULT.max_closure_batch_bytes);
+        Self {
+            workers,
+            max_projection_bytes: scale_usize(Self::DEFAULT.max_projection_bytes),
+            max_objective_key_bytes: scale_usize(Self::DEFAULT.max_objective_key_bytes),
+            max_optimal_bytes: scale_usize(Self::DEFAULT.max_optimal_bytes),
+            max_reduct_bytes: scale_u64(Self::DEFAULT.max_reduct_bytes),
+            max_completion_scratch_bytes: scale_u64(Self::DEFAULT.max_completion_scratch_bytes),
+            max_candidate_bytes: scale_usize(Self::DEFAULT.max_candidate_bytes),
+            max_closure_bytes: max_closure_batch_bytes / workers.get(),
+            max_closure_batch_bytes,
+            max_batch_bytes: scale_u64(Self::DEFAULT.max_batch_bytes),
+            ..Self::DEFAULT
+        }
+    }
+}
+
+impl SolveConfig {
     /// Validate execution-policy combinations before admitting a source.
     ///
     /// This performs no admission, execution, allocation or device discovery.
     /// A later prepared input can impose additional representation constraints.
     ///
     /// # Errors
-    /// Refuses incompatible oracle, grounding and shared-source policies.
+    /// Refuses incompatible oracle, grounding and shared-source policies, and
+    /// a worker count whose product with `max_closure_bytes` exceeds
+    /// `max_closure_batch_bytes`, whatever route the session would take.
     pub fn validate(&self) -> Result<(), crate::SolveError> {
         crate::engine::validate_combination(self)
     }

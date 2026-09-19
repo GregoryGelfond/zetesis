@@ -222,9 +222,10 @@ default of one.
 physical memory by default and at least two gibibytes, or two gibibytes when
 the host does not report its memory (Linux and macOS report it). The library's
 byte ceilings are the shares of a two-gibibyte allowance; each one not given
-on the command line is that share scaled by the allowance, so a larger host
-admits larger problems before a ceiling refuses, and a given ceiling is taken
-as given. Work, count and structural ceilings are not memory and do not scale.
+on the command line is that share scaled by the allowance, and the closure
+ceiling is shared by the workers, as `SolveConfig::for_allowance` states, so
+a larger host admits larger problems before a ceiling refuses, and a given
+ceiling is taken as given. Work, count and structural ceilings are not memory and do not scale.
 The ceilings bound named storage, not resident memory; `--stats` prints the
 allowance, the host's memory and each ceiling as the session takes it.
 `--batch-size`, `--max-batch-bytes` and
