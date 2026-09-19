@@ -268,9 +268,10 @@ fn latin_square(size: u32) -> String {
     )
 }
 
-// The reduced Latin squares of orders one through five, `(n − 1)!` of
-// each order's squares with the first row fixed being one reduced square
-// with its first column permuted below the first row.
+// The reduced Latin squares of orders one through five, those with the
+// first row and the first column in order; the squares with the first row
+// fixed are `(n − 1)!` times as many, one for each permutation of the first
+// column below its first cell.
 fn latin_squares(size: u32) -> u64 {
     const REDUCED: [u64; 5] = [1, 1, 1, 4, 56];
     let factorial: u64 = (1..u64::from(size)).product();

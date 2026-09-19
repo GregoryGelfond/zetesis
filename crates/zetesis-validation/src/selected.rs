@@ -227,7 +227,7 @@ impl FormulaJoins {
 pub enum SearchMethod {
     /// Leaves of the region tree narrowed by the theory's readings.
     Regions,
-    /// The retained classical search over a clause form of the theory.
+    /// The classical search over a clause form of the theory.
     Clauses,
 }
 

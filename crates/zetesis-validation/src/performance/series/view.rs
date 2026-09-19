@@ -179,8 +179,8 @@ pub struct Passed {
     /// the campaign ran none.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub peak_rss_bytes: Option<u64>,
-    /// Device memory the first timed record's execution accounted, bytes;
-    /// absent when no device ran.
+    /// Device memory the first timed record's formula execution accounted,
+    /// bytes; absent when no device formula execution reported it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub device_bytes: Option<u64>,
 }
@@ -1043,11 +1043,12 @@ fn native(labelled: &Labelled<'_>, case: usize, profile: usize) -> Result<Native
         published_models: stdout
             .as_ref()
             .and_then(|document| document["outcome"]["published_models"].as_u64()),
-        candidates_examined: candidates_examined(stderr).or_else(|| {
-            stdout
-                .as_ref()
-                .and_then(|document| document["statistics"]["search"]["candidates"].as_u64())
-        }),
+        // The formula route types the count as `statistics.search.candidates`;
+        // the closure route reports it only on the human results line.
+        candidates_examined: stdout
+            .as_ref()
+            .and_then(|document| document["statistics"]["search"]["candidates"].as_u64())
+            .or_else(|| candidates_examined(stderr)),
         search_work: stdout.as_ref().and_then(|document| {
             document["statistics"]["search"]["work"]
                 .as_u64()

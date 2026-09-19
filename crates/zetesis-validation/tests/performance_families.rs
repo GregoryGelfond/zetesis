@@ -93,7 +93,7 @@ fn constraint_and_planning_sources_keep_their_shapes() {
 
 #[test]
 fn constraint_and_planning_counts_follow_their_closed_forms() {
-    // (n - 1)! reduced Latin squares of orders one through five.
+    // (n - 1)! times the reduced Latin squares of orders one through five.
     for (size, count) in [(1, 1), (2, 1), (3, 2), (4, 24), (5, 1344)] {
         assert_eq!(
             Family::LatinSquare.contract(size).unwrap().model_count(),

@@ -302,21 +302,19 @@ fn terms_and_costs(
 
 /// One spelled atom: predicate, sign and typed arguments.
 fn decode_atom(atom: &Json, limits: Limits, count: &mut Counts) -> Result<Atom, Error> {
-    {
-        let raw_arguments = values::array(&atom["arguments"], "native atom arguments")?;
-        let predicate = Predicate::with_sign(
-            values::string(&atom["predicate"], "native predicate")?,
-            raw_arguments.len(),
-            values::sign(&atom["sign"])?,
-        )
-        .map_err(Error::Atom)?;
-        let mut arguments = Vec::new();
-        arguments
-            .try_reserve_exact(raw_arguments.len())
-            .map_err(|_| Error::Allocation)?;
-        for argument in raw_arguments {
-            arguments.push(values::value(argument, limits, &mut count.nodes)?);
-        }
-        Atom::new(predicate, arguments).map_err(Error::Atom)
+    let raw_arguments = values::array(&atom["arguments"], "native atom arguments")?;
+    let predicate = Predicate::with_sign(
+        values::string(&atom["predicate"], "native predicate")?,
+        raw_arguments.len(),
+        values::sign(&atom["sign"])?,
+    )
+    .map_err(Error::Atom)?;
+    let mut arguments = Vec::new();
+    arguments
+        .try_reserve_exact(raw_arguments.len())
+        .map_err(|_| Error::Allocation)?;
+    for argument in raw_arguments {
+        arguments.push(values::value(argument, limits, &mut count.nodes)?);
     }
+    Atom::new(predicate, arguments).map_err(Error::Atom)
 }
