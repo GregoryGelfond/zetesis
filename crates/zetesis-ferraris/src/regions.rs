@@ -319,6 +319,16 @@ fn chains(theory: &Theory) -> (Vec<Chain>, Vec<Option<usize>>, Vec<bool>) {
 /// (`FormulaBounds.known_mono`), so a child's narrowing starts from its
 /// parent's knowledge and learns only what the split decided. A fresh
 /// value knows nothing and is seeded in full on first use.
+///
+/// A value is linear in the theory: a bit pair over the nodes and one over
+/// the atoms, two counters per chain, a count per atom and the worklists.
+/// A split that offers one child to another worker clones it, so the
+/// clone is the split's cost. A knowledge belongs to the narrower that
+/// made it and to the region it was closed for: narrowing a region with a
+/// knowledge from another narrower, theory, producer set or frozen mask,
+/// or from a region not enclosing it, is unsound, and nothing checks it.
+/// The proposers keep the invariant by carrying each region's knowledge
+/// from its parent and by narrowing with the narrower that made it.
 #[derive(Clone, Debug)]
 pub struct Knowledge {
     known: Known,
@@ -399,6 +409,10 @@ impl Narrower {
     /// knowledge has not seen, and leave the knowledge closed for the
     /// region's children.
     ///
+    /// `knowledge` is this narrower's, closed for a region enclosing this
+    /// one under the same `producers` and `frozen` mask, as [`Knowledge`]
+    /// states; the narrowing cannot tell a foreign knowledge from its own.
+    ///
     /// # Errors
     /// Returns the stop when the narrowing exceeds its work or propagation
     /// ceiling, or control stops it. The region then holds the decisions the
@@ -423,7 +437,9 @@ impl Narrower {
     /// every node, reads as falsum (`FerrarisMask`), and the rest of the DAG
     /// is read unchanged. No support cut applies, since a model of the
     /// reduct need not be supported: this narrows the proper-subset query,
-    /// not the candidate tree.
+    /// not the candidate tree. `knowledge` is this narrower's, closed for an
+    /// enclosing region of the same query under the same `truth`, with the
+    /// precondition [`Knowledge`] states.
     ///
     /// # Errors
     /// As [`Self::narrow_known`].

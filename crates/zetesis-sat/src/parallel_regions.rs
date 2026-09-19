@@ -611,7 +611,9 @@ fn step<'a>(
     budget.decide()?;
     let (cut, held) = region.split(atom);
     // Keep the cut branch for this worker and offer the held one to the
-    // pool when the pool is short, else keep both.
+    // pool when the pool is short, else keep both. Each child takes its
+    // own copy of the knowledge, linear in the theory: what the parent
+    // learned holds in both.
     let mut pool = shared.lock();
     if pool.pending.len() < shared.workers {
         pool.pending
