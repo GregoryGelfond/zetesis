@@ -10,7 +10,7 @@
 //! proposer does, by the class certificate when one applies and else by
 //! the proper-subset query as a region tree; a stable model is sent to the
 //! enumeration. The regions partition the candidate space exactly
-//! (`Search.split_partition`, `split_disjoint`), so no leaf is visited by
+//! (`Cube.split_partition`, `Cube.split_disjoint` of `Search.lean`), so no leaf is visited by
 //! two workers and every leaf by one, whatever the interleaving; the order
 //! in which models arrive is the schedule's and is not a property of the
 //! result, and no two runs promise the same order.

@@ -173,9 +173,10 @@ offered seed is still checked in full against the whole gate carrier. The
 laws are `Bounds.narrowed_contains_accepted`, the iterated narrowing of the
 undecided cube, `Bounds.lower_constraint_refutes` and
 `Bounds.conflicting_atom_refutes` for the refutations, and the coverage
-tree of `Search.lean`, whose `split` node with `split_partition` and
-`split_disjoint` makes the regions a partition of their parent and whose
-`mem_outputs_iff` makes the leaves exactly the accepted seeds of the root.
+tree of `Search.lean`, whose `split` node with `Cube.split_partition` and
+`Cube.split_disjoint` makes the regions a partition of their parent and
+whose `CoverageTree.mem_outputs_iff` makes the leaves exactly the accepted
+seeds of the root.
 The program is prepared once for the narrowing and charged as one
 preparation; each closure then runs on that preparation in one retained
 workspace and is charged as one candidate check. A resource stop inside a

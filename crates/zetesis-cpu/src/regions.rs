@@ -9,8 +9,8 @@
 //! when its narrowing decided nothing beyond the split and the caller
 //! counts such regions. The cut branch is visited before the held one, so
 //! with no preference the leaves come in the order of a binary counter over
-//! the atoms with atom zero as its low bit (`Search.split_partition`,
-//! `split_disjoint`). The root is always split.
+//! the atoms with atom zero as its low bit (`Cube.split_partition` and
+//! `Cube.split_disjoint` of `Search.lean`). The root is always split.
 //!
 //! The narrowing is the caller's: on the closure route it is the program's
 //! two closures under the region's gate readings, on the formula route the
