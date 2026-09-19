@@ -178,7 +178,7 @@ impl<'source> Candidates<'source> {
                     counters,
                     rule.location,
                 )? {
-                    counters.record(Event::DomainNarrowedCandidate);
+                    counters.record(Event::DomainExcludedValue);
                 } else {
                     values[kept] = symbol;
                     kept += 1;

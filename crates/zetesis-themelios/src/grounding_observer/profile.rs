@@ -153,9 +153,9 @@ pub struct GroundingWork {
     /// Rows rejected before binding by a necessary-domain guard. These rows
     /// have no complete positive continuation in the admitted pure profile.
     pub domain_rejected_rows: Option<u64>,
-    /// Candidate values a comparison over one variable alone excluded from
-    /// that variable before any row was read.
-    pub domain_narrowed_candidates: Option<u64>,
+    /// Values a comparison over one variable alone excluded from that
+    /// variable's candidates before any row was read.
+    pub domain_excluded_values: Option<u64>,
     /// Existing support rows selected for an attempted pattern match.
     pub join_rows: Option<u64>,
     /// Base relational binding snapshots successfully copied by the join cursor.
@@ -202,7 +202,7 @@ impl Default for GroundingWork {
             domain_guard_rows: Some(0),
             domain_guard_checks: Some(0),
             domain_rejected_rows: Some(0),
-            domain_narrowed_candidates: Some(0),
+            domain_excluded_values: Some(0),
             join_rows: Some(0),
             binding_snapshots: Some(0),
             expression_evaluations: Some(0),
@@ -238,7 +238,7 @@ pub(crate) enum Event {
     DomainGuardRow,
     DomainGuardCheck,
     DomainRejectedRow,
-    DomainNarrowedCandidate,
+    DomainExcludedValue,
     JoinRow,
     BindingSnapshot,
     ExpressionEvaluation,
@@ -296,10 +296,7 @@ impl GroundingWork {
             domain_guard_rows: sum(self.domain_guard_rows, other.domain_guard_rows),
             domain_guard_checks: sum(self.domain_guard_checks, other.domain_guard_checks),
             domain_rejected_rows: sum(self.domain_rejected_rows, other.domain_rejected_rows),
-            domain_narrowed_candidates: sum(
-                self.domain_narrowed_candidates,
-                other.domain_narrowed_candidates,
-            ),
+            domain_excluded_values: sum(self.domain_excluded_values, other.domain_excluded_values),
             binding_snapshots: sum(self.binding_snapshots, other.binding_snapshots),
             expression_evaluations: sum(self.expression_evaluations, other.expression_evaluations),
             expression_nodes: sum(self.expression_nodes, other.expression_nodes),
@@ -345,7 +342,7 @@ impl GroundingWork {
             Event::DomainGuardRow => &mut self.domain_guard_rows,
             Event::DomainGuardCheck => &mut self.domain_guard_checks,
             Event::DomainRejectedRow => &mut self.domain_rejected_rows,
-            Event::DomainNarrowedCandidate => &mut self.domain_narrowed_candidates,
+            Event::DomainExcludedValue => &mut self.domain_excluded_values,
             Event::JoinRow => &mut self.join_rows,
             Event::BindingSnapshot => &mut self.binding_snapshots,
             Event::ExpressionEvaluation => &mut self.expression_evaluations,

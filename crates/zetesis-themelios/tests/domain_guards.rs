@@ -210,7 +210,7 @@ fn completion_reads_the_narrowed_rows() {
     // row; with it, on the two rows the guard admits.
     assert_eq!(before.expression_evaluations, Some(400));
     assert_eq!(after.expression_evaluations, Some(4));
-    assert_eq!(on.work.get().domain_narrowed_candidates, Some(198));
+    assert_eq!(on.work.get().domain_excluded_values, Some(198));
 }
 
 #[test]
@@ -349,7 +349,7 @@ fn a_comparison_over_one_variable_narrows_its_candidates() {
             .count(),
         2
     );
-    assert_eq!(on.work.get().domain_narrowed_candidates, Some(198));
+    assert_eq!(on.work.get().domain_excluded_values, Some(198));
     let rules = *on.rules.borrow().last().unwrap();
     assert_eq!(rules.domain_rejected_rows, Some(198));
     assert_eq!(rules.binding_snapshots, Some(2));
@@ -373,7 +373,7 @@ fn a_candidate_no_comparison_can_evaluate_is_kept() {
         &ground(source, JoinStrategy::Indexed, None, &Observation::default()).unwrap(),
         &narrowed,
     );
-    assert_eq!(on.work.get().domain_narrowed_candidates, Some(2));
+    assert_eq!(on.work.get().domain_excluded_values, Some(2));
     assert!(matches!(
         ground(
             "d(0..2). p(X) :- d(X), 1/X = 1.",
@@ -405,7 +405,7 @@ fn a_comparison_over_two_variables_narrows_no_candidate() {
         &ground(source, JoinStrategy::Indexed, None, &Observation::default()).unwrap(),
         &narrowed,
     );
-    assert_eq!(on.work.get().domain_narrowed_candidates, Some(0));
+    assert_eq!(on.work.get().domain_excluded_values, Some(0));
     assert_eq!(on.work.get().domain_guard_rows, Some(0));
 }
 

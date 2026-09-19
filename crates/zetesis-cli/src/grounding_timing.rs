@@ -32,10 +32,7 @@ pub(crate) fn work_fields(work: &GroundingWork) -> [(&'static str, Option<u64>);
         ("domain_guard_rows", work.domain_guard_rows),
         ("domain_guard_checks", work.domain_guard_checks),
         ("domain_rejected_rows", work.domain_rejected_rows),
-        (
-            "domain_narrowed_candidates",
-            work.domain_narrowed_candidates,
-        ),
+        ("domain_excluded_values", work.domain_excluded_values),
         ("binding_snapshots", work.binding_snapshots),
         ("expression_evaluations", work.expression_evaluations),
         ("expression_nodes", work.expression_nodes),

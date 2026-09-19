@@ -220,7 +220,7 @@ observation emits a sequential `domain_analysis` phase only when requested.
 `domain_prepare_work` includes charged applicability, analysis and guard
 preparation, including a stopped or failed prefix. `domain_guard_rows`,
 `domain_guard_checks` and `domain_rejected_rows` count actual row visits,
-dictionary-ID comparisons and rejections; `domain_narrowed_candidates` counts
+dictionary-ID comparisons and rejections; `domain_excluded_values` counts
 the values comparisons excluded before any row was read, charged to the
 analysis phase that prepares the candidates. Visited rows remain in `join_rows`
 and `table_rows`; avoided deeper work appears in the existing probe counts.

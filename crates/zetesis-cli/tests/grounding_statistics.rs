@@ -63,8 +63,8 @@ fn json_attribution_preserves_typed_measurements() {
                 measurement.work.domain_rejected_rows,
             ),
             (
-                "domain_narrowed_candidates",
-                measurement.work.domain_narrowed_candidates,
+                "domain_excluded_values",
+                measurement.work.domain_excluded_values,
             ),
         ] {
             assert_eq!(json["work"][name].as_u64(), count);
@@ -102,7 +102,7 @@ fn the_ordinary_command_requests_the_domain_analysis() {
     assert!(analysis.work.domain_prepare_work.unwrap() > 0);
     let rules = typed.get(GroundingPhase::RuleInstantiation).unwrap();
     assert_eq!(rules.work.domain_guard_rows, Some(0));
-    assert_eq!(rules.work.domain_narrowed_candidates, Some(0));
+    assert_eq!(rules.work.domain_excluded_values, Some(0));
 }
 
 #[test]
@@ -121,13 +121,13 @@ fn the_ordinary_command_narrows_candidates_by_comparison() {
     .unwrap();
     let typed = report.phase_timings.unwrap().grounding;
     let analysis = typed.get(GroundingPhase::DomainAnalysis).unwrap();
-    assert_eq!(analysis.work.domain_narrowed_candidates, Some(198));
+    assert_eq!(analysis.work.domain_excluded_values, Some(198));
     let rules = typed.get(GroundingPhase::RuleInstantiation).unwrap();
     assert_eq!(rules.work.domain_rejected_rows, Some(198));
     let document: Value = serde_json::from_slice(&output).unwrap();
     let json = &document["statistics"]["grounding_attribution"]["measurements"]
         [GroundingPhase::DomainAnalysis.label()]["work"];
-    assert_eq!(json["domain_narrowed_candidates"], 198);
+    assert_eq!(json["domain_excluded_values"], 198);
     let models = document["models"].as_array().unwrap();
     assert_eq!(models.len(), 1);
     // The one record spells every atom of the document and refers to them.

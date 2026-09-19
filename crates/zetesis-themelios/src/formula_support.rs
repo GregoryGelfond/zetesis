@@ -1304,7 +1304,7 @@ fn partial_value(
 impl Join<'_, '_> {
     fn filters(
         &mut self,
-        assignment: &Binding,
+        binding: &Binding,
         comparisons: Comparisons,
         limits: &FormulaLimits,
         budget: &mut Budget,
@@ -1319,7 +1319,7 @@ impl Join<'_, '_> {
         // These complete-row checks deliberately continue after a false filter.
         for (index, literal) in self.literals.iter().enumerate() {
             if crate::formula_binding_cursor::target(literal)
-                .is_some_and(|target| target >= assignment.len())
+                .is_some_and(|target| target >= binding.len())
             {
                 continue;
             }
@@ -1331,7 +1331,7 @@ impl Join<'_, '_> {
                 }
                 let left = self.evaluation.expression(
                     left,
-                    |variable| assignment.read(variable, location),
+                    |variable| binding.read(variable, location),
                     limits,
                     budget,
                     counters,
@@ -1339,7 +1339,7 @@ impl Join<'_, '_> {
                 )?;
                 let right = self.evaluation.expression(
                     right,
-                    |variable| assignment.read(variable, location),
+                    |variable| binding.read(variable, location),
                     limits,
                     budget,
                     counters,
@@ -1356,7 +1356,7 @@ impl Join<'_, '_> {
                         .map(|value| {
                             self.evaluation.expression(
                                 value,
-                                |variable| assignment.read(variable, location),
+                                |variable| binding.read(variable, location),
                                 limits,
                                 budget,
                                 counters,
@@ -1369,7 +1369,7 @@ impl Join<'_, '_> {
                         .map(|value| {
                             self.evaluation.expression(
                                 value,
-                                |variable| assignment.read(variable, location),
+                                |variable| binding.read(variable, location),
                                 limits,
                                 budget,
                                 counters,
@@ -1381,7 +1381,7 @@ impl Join<'_, '_> {
                 }
                 passes &= equal == (*relation == Relation::Eq);
             } else if let LiteralIr::Guard(guard) = literal {
-                passes &= guard.evaluate(assignment, limits, budget, counters, location)?;
+                passes &= guard.evaluate(binding, limits, budget, counters, location)?;
             } else if let LiteralIr::Range {
                 target,
                 lower,
@@ -1391,7 +1391,7 @@ impl Join<'_, '_> {
             {
                 let lower = self.evaluation.expression(
                     lower,
-                    |variable| assignment.read(variable, location),
+                    |variable| binding.read(variable, location),
                     limits,
                     budget,
                     counters,
@@ -1399,7 +1399,7 @@ impl Join<'_, '_> {
                 )?;
                 let upper = self.evaluation.expression(
                     upper,
-                    |variable| assignment.read(variable, location),
+                    |variable| binding.read(variable, location),
                     limits,
                     budget,
                     counters,
@@ -1409,7 +1409,7 @@ impl Join<'_, '_> {
                     passes = false;
                     continue;
                 };
-                passes &= matches!(assignment.read(*target, location)?, Value::Number(value) if *value >= lower && *value <= upper);
+                passes &= matches!(binding.read(*target, location)?, Value::Number(value) if *value >= lower && *value <= upper);
             }
         }
         Ok(passes)
