@@ -1,4 +1,4 @@
-//! Rule-local necessary domains, resolved into the completed owner's dictionary.
+//! Rule-local candidates, resolved into the completed owner's dictionary.
 //!
 //! A variable's candidates are the meet of its argument domains, less every
 //! value a comparison over that variable alone is defined and false at. The
@@ -68,7 +68,10 @@ pub(crate) struct Guards<'a, 'source> {
 /// snapshot and the final one. Its storage is bounded by the analysis's value
 /// entries, as the analysis heap is, and lies outside the support allowance.
 pub(crate) struct Candidates<'source> {
-    bounds: Vec<Option<Values<'source>>>,
+    /// Each variable's candidates, in canonical order; `None` when no
+    /// argument the variable occurs at has a finite domain, so every value
+    /// remains.
+    by_variable: Vec<Option<Values<'source>>>,
     occurrences: Vec<Occurrence<'source>>,
 }
 
@@ -80,13 +83,13 @@ impl<'source> Candidates<'source> {
         budget: &mut Budget,
         counters: &mut Counters,
     ) -> Result<Self, FormulaFailure> {
-        let mut bounds = Vec::new();
+        let mut by_variable = Vec::new();
         for _ in 0..rule.variables {
             counters.work(limits, rule.location)?;
-            bounds.push(None);
+            by_variable.push(None);
         }
         let mut candidates = Self {
-            bounds,
+            by_variable,
             occurrences: Vec::new(),
         };
         for (literal, element) in rule.body.iter().enumerate() {
@@ -111,16 +114,14 @@ impl<'source> Candidates<'source> {
                     counters,
                     rule.location,
                 )?;
-                let bound =
-                    candidates
-                        .bounds
-                        .get_mut(*slot)
-                        .ok_or(FormulaFailure::UnsafeVariable {
-                            variable: *slot,
-                            location: rule.location,
-                        })?;
+                let variable_candidates = candidates.by_variable.get_mut(*slot).ok_or(
+                    FormulaFailure::UnsafeVariable {
+                        variable: *slot,
+                        location: rule.location,
+                    },
+                )?;
                 if let Some(domain) = domain {
-                    meet(bound, domain, limits, counters, rule.location)?;
+                    meet(variable_candidates, domain, limits, counters, rule.location)?;
                 }
                 counters.work(limits, rule.location)?;
                 candidates.occurrences.push(Occurrence {
@@ -153,13 +154,12 @@ impl<'source> Candidates<'source> {
             let Some(comparison) = unary(literal) else {
                 continue;
             };
-            let Some(values) =
-                self.bounds
-                    .get_mut(comparison.slot)
-                    .ok_or(FormulaFailure::UnsafeVariable {
-                        variable: comparison.slot,
-                        location: rule.location,
-                    })?
+            let Some(values) = self.by_variable.get_mut(comparison.slot).ok_or(
+                FormulaFailure::UnsafeVariable {
+                    variable: comparison.slot,
+                    location: rule.location,
+                },
+            )?
             else {
                 continue;
             };
@@ -191,7 +191,7 @@ impl<'source> Candidates<'source> {
     }
 }
 
-/// Intersect a variable's bound with one more argument domain, in place.
+/// Intersect a variable's candidates with one more argument domain, in place.
 fn meet<'p>(
     target: &mut Option<Values<'p>>,
     source: &BTreeSet<&'p Symbol>,
@@ -319,7 +319,7 @@ impl<'a, 'source> Guards<'a, 'source> {
         )?;
         let restrictions = guards.restrict(
             &candidates.occurrences,
-            &candidates.bounds,
+            &candidates.by_variable,
             limits,
             budget,
             counters,
@@ -333,7 +333,7 @@ impl<'a, 'source> Guards<'a, 'source> {
     fn restrict(
         &mut self,
         occurrences: &[Occurrence<'a>],
-        bounds: &[Option<Values<'_>>],
+        candidates: &[Option<Values<'_>>],
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
@@ -352,11 +352,11 @@ impl<'a, 'source> Guards<'a, 'source> {
             if relation.column(occurrence.column).is_none() {
                 return Err(failure(Failure::Column, self.rule.location));
             }
-            let Some(values) = &bounds[occurrence.slot] else {
+            let Some(values) = &candidates[occurrence.slot] else {
                 continue;
             };
-            // A bound as wide as the argument's domain admits every value the
-            // relation can offer; only a narrower one can reject a row.
+            // Candidates as many as the argument's domain admit every value
+            // the relation can offer; only fewer can reject a row.
             if occurrence.width.is_some_and(|width| values.len() >= width) {
                 continue;
             }
