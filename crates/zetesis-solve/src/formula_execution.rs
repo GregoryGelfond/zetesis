@@ -111,12 +111,10 @@ impl Execution {
                 grounder: options.grounder,
                 search: options.search,
             })?;
-            if options.search == crate::SearchMethod::Regions && options.workers.get() > 1 {
+            if let Some(workers) = options.region_workers() {
                 // The workers decide their leaves themselves; the batched
                 // protocol would check them again.
-                observations.record(Event::ParallelRegions {
-                    workers: options.workers,
-                })?;
+                observations.record(Event::ParallelRegions { workers })?;
                 return Ok(Self::Cpu);
             }
             if options.completion_workers.get() > 1 {

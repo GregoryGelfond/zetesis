@@ -177,6 +177,20 @@ impl SolveConfig {
     };
 }
 
+impl SolveConfig {
+    /// The workers that walk the region tree together and decide its
+    /// leaves themselves: several, under the regions method on a CPU
+    /// backend. One worker, the clauses method or a device backend walk
+    /// the scalar tree and batch its leaves, so `None`.
+    #[must_use]
+    pub fn region_workers(&self) -> Option<NonZeroUsize> {
+        (self.search == SearchMethod::Regions
+            && self.workers.get() > 1
+            && matches!(self.backend, Backend::Auto | Backend::Cpu))
+        .then_some(self.workers)
+    }
+}
+
 impl Default for SolveConfig {
     fn default() -> Self {
         Self::DEFAULT

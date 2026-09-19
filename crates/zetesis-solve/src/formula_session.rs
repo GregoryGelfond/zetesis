@@ -82,13 +82,10 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             // Several workers decide their leaves themselves, which the
             // device protocol cannot take: a device backend keeps the scalar
             // walk and batches its leaves.
-            if config.search == crate::SearchMethod::Regions
-                && config.workers.get() > 1
-                && matches!(config.backend, crate::Backend::Auto | crate::Backend::Cpu)
-            {
+            if let Some(workers) = config.region_workers() {
                 StableModels::with_region_workers(
                     self.input.theory,
-                    config.workers,
+                    workers,
                     crate::countermodel::search_limits(config),
                     control.clone(),
                 )
