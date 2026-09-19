@@ -83,24 +83,23 @@ impl Layout {
     }
 
     /// Retained bytes: the value lists and strides. A shared name is counted
-    /// once per layout, as the catalogs count theirs.
-    pub(in crate::oracle) fn bytes(&self) -> u128 {
-        let axes: u128 = self
-            .axes
-            .iter()
-            .map(|axis| {
-                axis.capacity() as u128 * size_of::<Value>() as u128
-                    + axis
-                        .iter()
-                        .map(|value| value.checked_payload_capacity_bytes().unwrap_or(u128::MAX))
-                        .fold(0u128, u128::saturating_add)
-            })
-            .fold(0u128, u128::saturating_add);
+    /// once per layout, as the catalogs count theirs. `None` when the sum
+    /// does not fit.
+    pub(in crate::oracle) fn bytes(&self) -> Option<u128> {
+        let axes = self.axes.iter().try_fold(0u128, |sum, axis| {
+            let cells = (axis.capacity() as u128).checked_mul(size_of::<Value>() as u128)?;
+            let payload = axis.iter().try_fold(0u128, |sum, value| {
+                sum.checked_add(value.checked_payload_capacity_bytes()?)
+            })?;
+            sum.checked_add(cells)?.checked_add(payload)
+        })?;
         (size_of::<Self>() as u128)
-            .saturating_add(self.predicate.payload_capacity_bytes() as u128)
-            .saturating_add(self.axes.capacity() as u128 * size_of::<Vec<Value>>() as u128)
-            .saturating_add(axes)
-            .saturating_add(self.strides.capacity() as u128 * size_of::<usize>() as u128)
+            .checked_add(self.predicate.payload_capacity_bytes() as u128)?
+            .checked_add(
+                (self.axes.capacity() as u128).checked_mul(size_of::<Vec<Value>>() as u128)?,
+            )?
+            .checked_add(axes)?
+            .checked_add((self.strides.capacity() as u128).checked_mul(size_of::<usize>() as u128)?)
     }
 
     fn rank(&self, argument: usize, value: &Value) -> Option<usize> {
@@ -190,11 +189,12 @@ impl Layouts {
         self.0.len()
     }
 
-    pub(in crate::oracle) fn bytes(&self) -> u128 {
-        self.0.iter().map(|layout| layout.bytes()).fold(
-            self.0.capacity() as u128 * size_of::<Arc<Layout>>() as u128,
-            u128::saturating_add,
-        )
+    /// Retained bytes of every layout; `None` when the sum does not fit.
+    pub(in crate::oracle) fn bytes(&self) -> Option<u128> {
+        let handles = (self.0.capacity() as u128).checked_mul(size_of::<Arc<Layout>>() as u128)?;
+        self.0
+            .iter()
+            .try_fold(handles, |sum, layout| sum.checked_add(layout.bytes()?))
     }
 }
 
@@ -399,7 +399,7 @@ impl PendingRows {
         work: &mut Work<'_>,
     ) -> Result<(), Stop> {
         if self.rows.len() < layouts.len() {
-            let headers = (layouts.len() * size_of::<PendingRow>()) as u128;
+            let headers = layouts.len() as u128 * size_of::<PendingRow>() as u128;
             super::storage::admit(work, live.checked_add(headers).ok_or(Stop::StorageLimit)?)?;
             let old = self.header_bytes();
             self.rows
@@ -417,7 +417,7 @@ impl PendingRows {
             if row.words.len() == words {
                 continue;
             }
-            let added = (words * size_of::<u64>()) as u128;
+            let added = words as u128 * size_of::<u64>() as u128;
             super::storage::admit(work, live.checked_add(added).ok_or(Stop::StorageLimit)?)?;
             let old = row.bytes();
             row.words

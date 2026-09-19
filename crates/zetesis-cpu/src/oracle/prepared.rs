@@ -22,7 +22,9 @@ pub struct PreparationLimits {
     /// the row-step plan, which reads every term of a template once for
     /// each of its occurrences.
     pub max_work: u64,
-    /// Named immutable preparation bytes, excluding the shared source program.
+    /// Named immutable preparation bytes, excluding the shared source
+    /// program: what preparation retains, admitted once it is built. The
+    /// inference's working value sets are transient and outside it.
     pub max_bytes: usize,
     /// The most tuples a dense relation may index: a predicate whose bounded
     /// arguments admit more keeps its tree. Zero keeps every tree. A dense
@@ -102,15 +104,16 @@ impl Rules {
         self.by_predicate.get(predicate).map_or(&[], Vec::as_slice)
     }
 
-    fn bytes(&self) -> usize {
+    /// Retained bytes; `None` when the sum does not fit.
+    fn bytes(&self) -> Option<u128> {
         self.by_predicate
             .iter()
-            .map(|(predicate, indices)| {
-                size_of::<Predicate>()
-                    + predicate.name().len()
-                    + indices.capacity() * size_of::<usize>()
+            .try_fold(0u128, |sum, (predicate, indices)| {
+                let cells = (indices.capacity() as u128).checked_mul(size_of::<usize>() as u128)?;
+                sum.checked_add(size_of::<Predicate>() as u128)?
+                    .checked_add(predicate.name().len() as u128)?
+                    .checked_add(cells)
             })
-            .sum()
     }
 }
 
@@ -170,10 +173,12 @@ impl PreparedQueries {
             }
         }
         let row_steps = RowSteps::plan(program, &layouts, work)?;
-        let retained_bytes =
-            (size_of::<Self>() as u128 + rules.bytes() as u128 + row_steps.bytes() as u128)
-                .checked_add(layouts.bytes())
-                .ok_or(Stop::StorageLimit)?;
+        let retained_bytes = rules
+            .bytes()
+            .and_then(|bytes| bytes.checked_add(row_steps.bytes()?))
+            .and_then(|bytes| bytes.checked_add(layouts.bytes()?))
+            .and_then(|bytes| bytes.checked_add(size_of::<Self>() as u128))
+            .ok_or(Stop::StorageLimit)?;
         storage::admit(work, retained_bytes)?;
         storage::record(work, retained_bytes)?;
         Ok(Self {

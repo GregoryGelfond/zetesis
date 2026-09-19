@@ -64,8 +64,15 @@ impl RowSteps {
         self.0.get(template).map_or(&[], Vec::as_slice)
     }
 
-    pub(super) fn bytes(&self) -> usize {
-        self.0.capacity() * size_of::<Vec<bool>>() + self.0.iter().map(Vec::capacity).sum::<usize>()
+    /// Retained bytes; `None` when the sum does not fit.
+    pub(super) fn bytes(&self) -> Option<u128> {
+        let flags = self
+            .0
+            .iter()
+            .try_fold(0u128, |sum, plan| sum.checked_add(plan.capacity() as u128))?;
+        (self.0.capacity() as u128)
+            .checked_mul(size_of::<Vec<bool>>() as u128)?
+            .checked_add(flags)
     }
 }
 
