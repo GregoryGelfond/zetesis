@@ -1,10 +1,11 @@
 //! The fixed cell set on which a sequence of solver changes is measured.
 //!
 //! Each cell is one sealed workload: a generated family program at a size, a
-//! constant-amended queens board, or an unchanged corpus entry. The sizes are
-//! chosen so that every cell's complete native JSON output stays under
-//! [`CAPTURE_BYTES`], since the instrumented matrix retains and checks every
-//! reported model, and so that the whole set runs in minutes. Cells that a
+//! constant-amended queens board, or an unchanged corpus entry. The sizes
+//! were chosen, by measuring each cell's complete native JSON output when it
+//! joined, to stay under [`CAPTURE_BYTES`], since the instrumented matrix
+//! retains and checks every reported model, and so that the whole set runs in
+//! minutes; the library does not check that property. Cells that a
 //! change is meant to move (a refusal, a timeout) are kept as evidence rather
 //! than dropped: their typed decisions are the observation.
 

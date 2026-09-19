@@ -259,8 +259,9 @@ states. `Workload::generated(family, size, limits)` admits one as a sealed
 workload with entry `generated/<family>-<size>.lp`; the report retains the
 family, size, byte count and digest, and materialization checks that the
 generator still produces those bytes. Generated cells reach routes the corpus
-never takes, in particular the closure route; sizes keep every cell's
-complete native JSON output under `series::CAPTURE_BYTES`.
+never takes, in particular the closure route; the sizes were measured to keep
+every cell's complete native JSON output under `series::CAPTURE_BYTES`, which
+the library does not check.
 
 `zetesis-perf --suite series` runs the cells through the instrumented matrix.
 The `cpu-auto` profile requests the shipped defaults, automatic grounding and

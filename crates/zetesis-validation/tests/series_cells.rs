@@ -95,14 +95,13 @@ fn series_limits_raise_only_the_ceilings_the_cells_need() {
 }
 
 #[test]
-fn series_cells_respect_the_per_invocation_capture_ceiling() {
-    // Every cell's complete native JSON output was measured below 16 MiB at
-    // 896a5f73 (the largest, queens 01 at N = 11, near 10 MiB); the workload
-    // source ceiling is the smaller bound the library itself enforces here.
+fn series_sources_fit_a_small_source_ceiling() {
+    // The library enforces the source ceiling; that every cell's complete
+    // native output stays under the capture ceiling is a property the sizes
+    // were measured for, recorded in the observations, not one it checks.
     let limits = WorkloadLimits {
         source_bytes: 65_536,
         ..WorkloadLimits::default()
     };
     assert!(series::workloads(&corpus(), limits).is_ok());
-    assert_eq!(series::CAPTURE_BYTES, 16 * 1024 * 1024);
 }
