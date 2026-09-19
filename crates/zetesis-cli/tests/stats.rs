@@ -461,7 +461,7 @@ fn the_counter_runs_between_the_program_closures() {
     // The root is decided, so it is the one region and its one seed.
     assert!(
         diagnostics.contains(
-            "carrier regions: visited=1; refuted=0; decided=1; counted=0; narrowing passes=0"
+            "carrier regions: visited=1; refuted=0; leaves=1; counted=0; narrowing passes=0"
         ),
         "{diagnostics}"
     );
@@ -481,7 +481,7 @@ fn the_regions_of_independent_pairs_are_the_answers() {
     assert_eq!(report.checked, 13, "{diagnostics}");
     assert!(
         diagnostics.contains("carrier regions: visited=")
-            && diagnostics.contains("; decided=13; counted=0;"),
+            && diagnostics.contains("; leaves=13; counted=0;"),
         "{diagnostics}"
     );
 }

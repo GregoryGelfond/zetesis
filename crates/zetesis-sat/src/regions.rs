@@ -213,7 +213,7 @@ impl RegionSearch {
             counts: RegionCounts {
                 regions: regions.regions,
                 refuted: regions.refuted,
-                leaves: regions.decided,
+                leaves: regions.leaves,
                 ..self.statistics.counts
             },
             producers: self.statistics.producers,
@@ -428,7 +428,7 @@ impl ReductQuery {
             let counts = &mut statistics.reduct.regions;
             counts.regions += after.regions - before.regions;
             counts.refuted += after.refuted - before.refuted;
-            counts.leaves += after.decided - before.decided;
+            counts.leaves += after.leaves - before.leaves;
             for _ in 0..after.splits_since(before) {
                 budget.decide()?;
             }

@@ -204,8 +204,8 @@ pub struct RegionStatistics {
     pub regions: usize,
     /// Regions whose narrowing refuted them.
     pub refuted: usize,
-    /// Regions visited as leaves.
-    pub decided: usize,
+    /// Regions visited as leaves: every atom decided, one candidate each.
+    pub leaves: usize,
     /// Regions handed to the caller to count.
     pub counted: usize,
 }
@@ -217,7 +217,7 @@ impl RegionStatistics {
     pub fn splits_since(self, before: Self) -> usize {
         (self.regions - before.regions)
             - (self.refuted - before.refuted)
-            - (self.decided - before.decided)
+            - (self.leaves - before.leaves)
             - (self.counted - before.counted)
     }
 }
@@ -314,7 +314,7 @@ impl<S: Clone> Traversal<S> {
             self.statistics.regions += 1;
             let root = std::mem::replace(&mut self.root, false);
             let Some(atom) = region.split_atom() else {
-                self.statistics.decided += 1;
+                self.statistics.leaves += 1;
                 return Ok(Some(Visit::Leaf(region, state)));
             };
             if self.counting == Counting::Unchanged && !root && !changed {

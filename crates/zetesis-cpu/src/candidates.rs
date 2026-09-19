@@ -106,9 +106,9 @@ pub struct CandidateStatistics {
     /// Regions a definite constraint refuted in their lower closure: no seed
     /// of them was offered.
     pub regions_refuted: usize,
-    /// Regions whose narrowing decided every gate atom: one seed each,
-    /// offered without a count.
-    pub regions_decided: usize,
+    /// Regions visited as leaves, their narrowing having decided every gate
+    /// atom: one seed each, offered without a count.
+    pub regions_leaves: usize,
     /// Regions counted as a flat interval, because their narrowing decided
     /// nothing beyond the split that formed them or a closure stopped inside
     /// them; the count's restrictions still apply within.
@@ -387,7 +387,7 @@ impl<'a> Candidates<'a> {
             let regions = traversal.statistics();
             statistics.regions = regions.regions;
             statistics.regions_refuted = regions.refuted;
-            statistics.regions_decided = regions.decided;
+            statistics.regions_leaves = regions.leaves;
             statistics.regions_counted = regions.counted;
         }
         statistics

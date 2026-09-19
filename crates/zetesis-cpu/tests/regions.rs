@@ -143,7 +143,7 @@ fn a_refuted_region_is_skipped_with_its_whole_subtree() {
     assert_eq!(leaves, vec![vec![], vec![0], vec![1], vec![0, 1]]);
     let statistics = traversal.statistics();
     assert_eq!(statistics.refuted, 1);
-    assert_eq!(statistics.decided, 4);
+    assert_eq!(statistics.leaves, 4);
     assert_eq!(statistics.counted, 0);
     // The root, its two children, and the cut child's subtree of six.
     assert_eq!(statistics.regions, 1 + 2 + 6);

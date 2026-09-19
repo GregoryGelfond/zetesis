@@ -276,7 +276,7 @@ fn candidate_statistics_carry_the_carrier_narrowing_and_regions() {
     let regions = &stats["carrier_regions"];
     assert_eq!(regions["visited"], measured.regions);
     assert_eq!(regions["refuted"], measured.regions_refuted);
-    assert_eq!(regions["decided"], measured.regions_decided);
+    assert_eq!(regions["leaves"], measured.regions_leaves);
     assert_eq!(regions["counted"], measured.regions_counted);
     assert_eq!(regions["narrowing_passes"], measured.region_passes);
 }

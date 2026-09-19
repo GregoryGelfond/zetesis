@@ -171,7 +171,7 @@ split. A region whose narrowing decided nothing beyond the split that formed
 it is counted as a flat interval instead, with the counter's restrictions
 inside it, so a program whose gates do not propagate pays two closures per
 counted region and no more. The statistics report the regions visited,
-refuted, decided and counted and the narrowing passes below the root. Each
+refuted, reached as leaves and counted, and the narrowing passes below the root. Each
 offered seed is still checked in full against the whole gate carrier. The
 laws are `Bounds.narrowed_contains_accepted`, the iterated narrowing of the
 open cube (`Bounds.undecided` in the Lean), `Bounds.lower_constraint_refutes` and

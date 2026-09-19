@@ -80,7 +80,7 @@ fn each_pair_is_decided_by_one_split() {
     assert_eq!(seeds.len(), 8);
     assert!(seeds.iter().all(|(_, accepted)| *accepted));
     assert_eq!(statistics.regions, 1 + 2 + 4 + 8);
-    assert_eq!(statistics.regions_decided, 8);
+    assert_eq!(statistics.regions_leaves, 8);
     assert_eq!(statistics.regions_counted, 0);
     assert_eq!(statistics.regions_refuted, 0);
     assert!(statistics.region_passes >= 14);
@@ -96,7 +96,7 @@ fn an_edge_constraint_refutes_a_region_before_its_leaves() {
     assert_eq!(seeds.len(), 5);
     assert!(seeds.iter().all(|(_, accepted)| *accepted));
     assert!(statistics.regions_refuted >= 1);
-    assert_eq!(statistics.regions_decided, 5);
+    assert_eq!(statistics.regions_leaves, 5);
 }
 
 #[test]
@@ -158,7 +158,7 @@ fn a_region_the_narrowing_leaves_undecided_is_counted() {
     );
     assert_eq!(statistics.regions, 3);
     assert_eq!(statistics.regions_counted, 1);
-    assert_eq!(statistics.regions_decided, 1);
+    assert_eq!(statistics.regions_leaves, 1);
 }
 
 #[test]

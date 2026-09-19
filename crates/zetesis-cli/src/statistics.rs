@@ -469,10 +469,10 @@ fn candidates(sink: &mut impl Write, stats: zetesis_cpu::CandidateStatistics) ->
     if stats.regions > 0 {
         writeln!(
             sink,
-            "  carrier regions: visited={}; refuted={}; decided={}; counted={}; narrowing passes={}",
+            "  carrier regions: visited={}; refuted={}; leaves={}; counted={}; narrowing passes={}",
             stats.regions,
             stats.regions_refuted,
-            stats.regions_decided,
+            stats.regions_leaves,
             stats.regions_counted,
             stats.region_passes
         )?;

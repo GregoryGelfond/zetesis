@@ -816,7 +816,7 @@ fn candidate_statistics(
     out.text("},\"carrier_regions\":{\"visited\":")?;
     out.text(&stats.regions.to_string())?;
     out.number_field("refuted", stats.regions_refuted)?;
-    out.number_field("decided", stats.regions_decided)?;
+    out.number_field("leaves", stats.regions_leaves)?;
     out.number_field("counted", stats.regions_counted)?;
     out.number_field("narrowing_passes", stats.region_passes)?;
     out.text("}}")
