@@ -76,36 +76,70 @@ fn another_producer_of_the_relation_removes_the_key() {
 }
 
 #[test]
-fn the_key_is_exactly_the_body_and_the_value_is_bound_by_the_condition() {
+fn the_value_is_bound_by_the_condition_not_the_body() {
+    let program = "letter(a). digit(0..9). 1 { assign(L,D) : digit(D) } 1 :- letter(L), digit(D).";
+    assert_eq!(keyed(program), [], "{program}");
+}
+
+#[test]
+fn every_body_variable_is_a_key_argument() {
+    let program = "letter(a). digit(0..9). 1 { assign(L,D) : digit(D) } 1 :- letter(L), digit(X).";
+    assert_eq!(keyed(program), [], "{program}");
+}
+
+#[test]
+fn the_relation_has_one_value_position() {
+    let program =
+        "letter(a). digit(0..9). 1 { assign(L,D,E) : digit(D), digit(E) } 1 :- letter(L).";
+    assert_eq!(keyed(program), [], "{program}");
+}
+
+#[test]
+fn every_key_argument_is_a_variable() {
+    let program = "letter(a). digit(0..9). 1 { assign(f(L),D) : digit(D) } 1 :- letter(L).";
+    assert_eq!(keyed(program), [], "{program}");
+}
+
+#[test]
+fn a_negated_literal_in_the_condition_or_the_body_yields_no_key() {
     for program in [
-        // The value variable is bound by the body, not the condition.
-        "letter(a). digit(0..9). 1 { assign(L,D) : digit(D) } 1 :- letter(L), digit(D).",
-        // A body variable is not a key argument.
-        "letter(a). digit(0..9). 1 { assign(L,D) : digit(D) } 1 :- letter(L), digit(X).",
-        // Two value positions.
-        "letter(a). digit(0..9). 1 { assign(L,D,E) : digit(D), digit(E) } 1 :- letter(L).",
-        // A key argument that is a term, not a variable.
-        "letter(a). digit(0..9). 1 { assign(f(L),D) : digit(D) } 1 :- letter(L).",
-        // A negated condition or body literal.
         "letter(a). digit(0..9). 1 { assign(L,D) : digit(D), not odd(D) } 1 :- letter(L).",
         "letter(a). digit(0..9). 1 { assign(L,D) : digit(D) } 1 :- letter(L), not skip(L).",
-        // Two elements.
-        "letter(a). digit(0..9). 1 { assign(L,D) : digit(D); other(L,D) : digit(D) } 1 :- letter(L).",
-        // The relation appears in its own body.
-        "letter(a). digit(0..9). 1 { assign(L,D) : digit(D) } 1 :- letter(L), assign(L,0).",
     ] {
         assert_eq!(keyed(program), [], "{program}");
     }
 }
 
 #[test]
-fn the_key_names_its_variables_and_owner() {
-    let program = source("letter(a). digit(0..9). 1 { assign(L,D) : digit(D) } 1 :- letter(L).");
+fn the_choice_has_one_element() {
+    let program = "letter(a). digit(0..9). 1 { assign(L,D) : digit(D); other(L,D) : digit(D) } 1 :- letter(L).";
+    assert_eq!(keyed(program), [], "{program}");
+}
+
+#[test]
+fn the_relation_is_absent_from_its_own_body() {
+    let program =
+        "letter(a). digit(0..9). 1 { assign(L,D) : digit(D) } 1 :- letter(L), assign(L,0).";
+    assert_eq!(keyed(program), [], "{program}");
+}
+
+const ONE_KEY: &str = "letter(a). digit(0..9). 1 { assign(L,D) : digit(D) } 1 :- letter(L).";
+
+#[test]
+fn the_key_names_its_variables() {
+    let program = source(ONE_KEY);
     let keys = keys(&program, &Limits::default()).unwrap();
     let key = &keys[0];
     assert_eq!(key.key_variable(0).map(VarName::as_str), Some("L"));
     assert_eq!(key.key_variable(1), None);
     assert_eq!(key.value_variable().as_str(), "D");
+}
+
+#[test]
+fn the_key_names_its_condition_and_body() {
+    let program = source(ONE_KEY);
+    let keys = keys(&program, &Limits::default()).unwrap();
+    let key = &keys[0];
     assert_eq!(key.condition().literals().count(), 1);
     assert_eq!(key.body().elements().count(), 1);
 }

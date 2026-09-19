@@ -734,8 +734,23 @@ fn ordered_ids_preserve_complete_typed_identity() {
     }
 }
 
+/// Two rows prepared, then two more appended and prepared: the first view
+/// `[1, 0]` is the one level and the appended rows are the run `[3, 2]`.
+fn prepared_twice() -> Catalog {
+    let mut catalog = owner();
+    for value in [4, 2] {
+        catalog.insert(atom(value, 0), Limits::default()).unwrap();
+    }
+    catalog.prepare_ordered(Limits::default()).unwrap();
+    for value in [3, 1] {
+        catalog.insert(atom(value, 0), Limits::default()).unwrap();
+    }
+    catalog.prepare_ordered(Limits::default()).unwrap();
+    catalog
+}
+
 #[test]
-fn preparation_keeps_the_view_it_merged_from_and_the_run_it_merged_in() {
+fn a_preparation_merges_the_appended_rows_into_the_view() {
     let mut catalog = owner();
     for value in [4, 2] {
         catalog.insert(atom(value, 0), Limits::default()).unwrap();
@@ -751,7 +766,11 @@ fn preparation_keeps_the_view_it_merged_from_and_the_run_it_merged_in() {
     let runs = catalog.ordered().unwrap();
     assert_eq!(runs.levels(), [vec![1, 0]]);
     assert_eq!(runs.tail(), [3, 2]);
-    // A preparation with nothing appended reuses the view and keeps the runs.
+}
+
+#[test]
+fn a_preparation_with_nothing_appended_keeps_the_view_and_the_runs() {
+    let mut catalog = prepared_twice();
     catalog
         .prepare_ordered(Limits {
             max_work: 0,
@@ -801,38 +820,48 @@ fn one_append_to_a_large_extent_costs_its_own_run_not_a_copy_of_the_extent() {
     assert_eq!(runs.tail(), [2048]);
 }
 
+/// Append `count` rows one at a time, preparing after each and showing
+/// `each` the levels after every preparation; the charged construction
+/// work of all the preparations.
+fn append_one_at_a_time(count: i32, mut each: impl FnMut(&[Vec<usize>])) -> u128 {
+    let mut catalog = owner();
+    let mut work = 0;
+    for value in 0..count {
+        catalog
+            .insert(atom(value * 7 % count, value), Limits::default())
+            .unwrap();
+        work += catalog
+            .prepare_ordered(Limits::default())
+            .unwrap()
+            .storage
+            .construction_work;
+        each(catalog.ordered().unwrap().levels());
+    }
+    assert_eq!(ids(&catalog).len(), usize::try_from(count).unwrap());
+    work
+}
+
 #[test]
-fn levels_shrink_geometrically_and_rows_are_merged_logarithmically() {
-    // Appending one row at a time and preparing after each: the level
-    // lengths must fall by more than half at every step, and the charged
-    // work over n appends must grow like n log n, not n squared.
-    let total = |count: i32| {
-        let mut catalog = owner();
-        let mut work = 0;
-        for value in 0..count {
-            catalog
-                .insert(atom(value * 7 % count, value), Limits::default())
-                .unwrap();
-            work += catalog
-                .prepare_ordered(Limits::default())
-                .unwrap()
-                .storage
-                .construction_work;
-            let runs = catalog.ordered().unwrap();
-            for pair in runs.levels().windows(2) {
-                assert!(
-                    pair[1].len() * 2 < pair[0].len(),
-                    "{:?}",
-                    runs.levels().iter().map(Vec::len).collect::<Vec<_>>()
-                );
-            }
-            assert!(runs.levels().len() <= 13);
+fn levels_shrink_by_more_than_half_at_every_step() {
+    append_one_at_a_time(4096, |levels| {
+        for pair in levels.windows(2) {
+            assert!(
+                pair[1].len() * 2 < pair[0].len(),
+                "{:?}",
+                levels.iter().map(Vec::len).collect::<Vec<_>>()
+            );
         }
-        assert_eq!(ids(&catalog).len(), usize::try_from(count).unwrap());
-        work
-    };
-    let (half, whole) = (total(2048), total(4096));
+        assert!(levels.len() <= 13);
+    });
+}
+
+#[test]
+fn merging_rows_one_at_a_time_costs_n_log_n() {
     // n log n doubles to 2.18 times; n squared to 4 times.
+    let (half, whole) = (
+        append_one_at_a_time(2048, |_| {}),
+        append_one_at_a_time(4096, |_| {}),
+    );
     assert!(whole < half * 5 / 2, "{half} then {whole}");
 }
 
