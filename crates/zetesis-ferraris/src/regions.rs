@@ -272,7 +272,12 @@ fn chains(theory: &Theory) -> (Vec<Chain>, Vec<Option<usize>>, Vec<bool>) {
             _ => continue,
         };
         let mut operands = Vec::new();
-        for operand in [a, b] {
+        // A node reached through both sides is one operand, seen once: seen
+        // twice, an absorbed one would return as an opaque second operand,
+        // its chain already dissolved, and the chain would wait for
+        // knowledge it never gets.
+        let sides: &[usize] = if b == a { &[a] } else { &[a, b] };
+        for &operand in sides {
             let inner = if roots[operand] || parent_count[operand] != 1 {
                 None
             } else {

@@ -767,3 +767,45 @@ fn every_propagation_event_is_charged_work() {
     );
     assert!(matches!(stopped, Err(Stop::WorkLimit)));
 }
+
+#[test]
+fn a_same_connective_node_reached_on_both_sides_is_absorbed_once() {
+    // Or(Or(⊥, ⊥), Or(⊥, ⊥)) with the inner disjunction one node reached
+    // through both sides of the root: the root's chain has the one operand
+    // ⊥ and reads never, so a root over it refutes every region. Read with
+    // the inner node as a second, opaque operand, the chain would wait for
+    // knowledge of a node that has none and never refute.
+    let t = theory(
+        0,
+        vec![Node::False, Node::Or(0, 0), Node::Or(1, 1)],
+        vec![2],
+    );
+    let mut region = Region::all_open(0);
+    let (narrowing, _) = narrow_fresh(
+        &t,
+        None,
+        &mut region,
+        RegionLimits::default(),
+        &Control::default(),
+    )
+    .unwrap();
+    assert!(matches!(narrowing, Narrowing::Refuted));
+    // The same shape over an atom forces the atom: the root holds, so its
+    // one operand does.
+    let t = theory(
+        1,
+        vec![Node::Atom(0), Node::Or(0, 0), Node::Or(1, 1)],
+        vec![2],
+    );
+    let mut region = Region::all_open(1);
+    let (narrowing, _) = narrow_fresh(
+        &t,
+        None,
+        &mut region,
+        RegionLimits::default(),
+        &Control::default(),
+    )
+    .unwrap();
+    assert!(matches!(narrowing, Narrowing::Fixed { changed: true }));
+    assert!(region.is_held(0));
+}
