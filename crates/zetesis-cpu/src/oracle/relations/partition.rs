@@ -2,7 +2,7 @@
 
 use zetesis_core::relation::Catalog;
 
-use super::{RowSet, Rows, Work};
+use super::{RowSet, Rows, Work, charge};
 use crate::Stop;
 
 /// The round cutoff over one catalog: rows with an insertion ID below it are
@@ -70,18 +70,6 @@ impl Partition {
             tail,
         })
     }
-}
-
-fn charge(work: &mut Work<'_>, amount: usize) -> Result<(), Stop> {
-    let before = work.statistics.work;
-    let result = work.charge(amount);
-    let charged = work.statistics.work - before;
-    work.statistics.catalog_work = work
-        .statistics
-        .catalog_work
-        .checked_add(charged)
-        .ok_or(Stop::InvalidProgram)?;
-    result
 }
 
 #[cfg(test)]

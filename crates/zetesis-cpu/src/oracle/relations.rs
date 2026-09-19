@@ -254,6 +254,19 @@ impl<'a> Relations<'a> {
     }
 }
 
+/// Charge relation work, which counts as catalog work.
+pub(super) fn charge(work: &mut Work<'_>, amount: usize) -> Result<(), Stop> {
+    let before = work.statistics.work;
+    let result = work.charge(amount);
+    let charged = work.statistics.work - before;
+    work.statistics.catalog_work = work
+        .statistics
+        .catalog_work
+        .checked_add(charged)
+        .ok_or(Stop::InvalidProgram)?;
+    result
+}
+
 impl<'a, const N: usize> From<[(&'a Predicate, Vec<&'a Atom>); N]> for Relations<'a> {
     fn from(groups: [(&'a Predicate, Vec<&'a Atom>); N]) -> Self {
         let mut groups = groups.to_vec();

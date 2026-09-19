@@ -21,7 +21,7 @@ use std::{mem::size_of, ops::Range, sync::Arc};
 use zetesis_core::{Atom, AtomKey, Predicate, Value};
 
 use super::super::bounds::Bound;
-use super::{RowSet, Work};
+use super::{RowSet, Work, charge};
 use crate::Stop;
 
 /// The shape of a dense relation: the predicate, each argument's values in
@@ -614,19 +614,6 @@ fn cover(range: &Range<usize>, word: usize) -> Range<usize> {
     } else {
         range.start.min(word)..range.end.max(word + 1)
     }
-}
-
-/// Charge relation work, which counts as catalog work.
-fn charge(work: &mut Work<'_>, amount: usize) -> Result<(), Stop> {
-    let before = work.statistics.work;
-    let result = work.charge(amount);
-    let charged = work.statistics.work - before;
-    work.statistics.catalog_work = work
-        .statistics
-        .catalog_work
-        .checked_add(charged)
-        .ok_or(Stop::InvalidProgram)?;
-    result
 }
 
 #[cfg(test)]
