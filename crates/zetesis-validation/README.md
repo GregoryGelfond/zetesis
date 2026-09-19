@@ -76,8 +76,9 @@ format. Unsupported or contradictory output is a failure, not a smaller answer
 collection. Refusal, timeout, incomplete coverage, output limits, malformed
 reports and semantic mismatch remain separate outcomes.
 
-`answers::native_json::parse` reads the native schema-1 view with typed full
-atoms, shown positions/terms, costs and terminal accounting.
+`answers::native_json::parse` reads the native view, schema 2 or the schema-1
+form of earlier executables, with typed full atoms, shown positions/terms,
+costs and terminal accounting.
 `answers::clingo_json` and `native_text` provide bounded reported-display views.
 These decoders validate a producer's claims; they do not independently prove
 stability. JSON integer consumers need lossless values, and the current JSON

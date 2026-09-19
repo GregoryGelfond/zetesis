@@ -10,7 +10,7 @@ use crate::answers::{Error, Issue, Resource, check, invalid};
 pub(super) fn parse(text: &str, limits: Limits) -> Result<NativeAnswers, Error> {
     let document: Json = serde_json::from_str(text).map_err(Error::Json)?;
     let schema = document["schema"].as_u64();
-    if !matches!(schema, Some(1 | 2)) || document["format"] != "zetesis" {
+    if !super::is_native_document(&document) {
         return Err(invalid(
             Issue::MalformedField,
             "unsupported native JSON schema",
