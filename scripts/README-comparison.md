@@ -51,11 +51,11 @@ attest dynamic libraries, hardware state or transient changes between checks.
 
 ## The fixed series
 
-`--suite series` measures twenty fixed cells through the instrumented matrix:
-generated family programs (independent sets, disjunction, tied optima,
-closures, chains, stratified negation, a producer chain) at sizes whose complete
-native output fits 16 MiB, three amended queens boards and two unchanged
-entries. Add `--profile cpu-auto` for the shipped defaults; the report retains
+`--suite series` measures twenty-two fixed cells through the instrumented
+matrix: generated family programs (independent sets, disjunction, tied optima,
+closures, chains, stratified negation, a producer chain, Latin squares and a
+planning line) at sizes whose complete native output fits 16 MiB, three amended
+queens boards and two unchanged entries. Add `--profile cpu-auto` for the shipped defaults; the report retains
 the grounding mode each cell took. `--time-limit SECONDS` gives every native
 profile a cooperative deadline; `--oracle closure|countermodel` requests a
 reduct procedure explicitly for every profile. The series raises the per-record, capture,
