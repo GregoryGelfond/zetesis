@@ -579,6 +579,32 @@ struct RoundConsequences {
 /// head of a dense relation as a pending bit, any other as a pending atom. The
 /// atoms the closure holds, the round's pending atoms and its pending bits are
 /// disjoint, so their sum is the count the derived-atom limit bounds.
+/// The atoms a round holds so far: the closure's, its pending atoms and its
+/// pending marks, which are disjoint, so their sum is what the derived-atom
+/// limit bounds.
+fn atoms_held(
+    closure: &Catalogs,
+    result: &RoundConsequences,
+    pending: &PendingRows,
+) -> Result<usize, Stop> {
+    closure
+        .len()
+        .checked_add(result.atoms.len())
+        .and_then(|atoms| atoms.checked_add(pending.len()))
+        .ok_or(Stop::DerivedAtomLimit)
+}
+
+/// Whether `more` atoms beyond those held stay within the derived-atom limit.
+fn admits_more(held: usize, more: usize, work: &Work<'_>) -> Result<(), Stop> {
+    if held
+        .checked_add(more)
+        .is_none_or(|atoms| atoms > work.limits.max_derived_atoms)
+    {
+        return Err(Stop::DerivedAtomLimit);
+    }
+    Ok(())
+}
+
 fn record_head(
     key: AtomKey<'_>,
     dense_head: Option<(usize, &Dense)>,
@@ -587,26 +613,18 @@ fn record_head(
     pending: &mut PendingRows,
     work: &mut Work<'_>,
 ) -> Result<(), Stop> {
-    let held = closure
-        .len()
-        .checked_add(result.atoms.len())
-        .and_then(|atoms| atoms.checked_add(pending.len()))
-        .ok_or(Stop::DerivedAtomLimit)?;
+    let held = atoms_held(closure, result, pending)?;
     if let Some((slot, dense)) = dense_head {
         // The bounds cover every derivable head: a key without a position
         // violates the admitted program's invariant.
         work.charge(key.predicate().arity())?;
         let position = dense.position(&key).ok_or(Stop::InvalidProgram)?;
         if !dense.contains(position) && pending.mark(slot, position) {
-            if held >= work.limits.max_derived_atoms {
-                return Err(Stop::DerivedAtomLimit);
-            }
+            admits_more(held, 1, work)?;
             work.statistics.dense_heads += 1;
         }
     } else if !closure.contains(&key, result.bytes, work)? && key.get(&result.atoms).is_none() {
-        if held >= work.limits.max_derived_atoms {
-            return Err(Stop::DerivedAtomLimit);
-        }
+        admits_more(held, 1, work)?;
         let (atom, bytes) = closure.pending(key, result.bytes, work)?;
         result.atoms.insert(atom);
         result.bytes = result.bytes.checked_add(bytes).ok_or(Stop::StorageLimit)?;
@@ -732,21 +750,11 @@ impl<'source> Sink<'source, Stop> for RoundSink<'_, 'source> {
                 Err(Stop::InvalidProgram)
             };
         }
-        let derived = self
-            .closure
-            .len()
-            .checked_add(self.result.atoms.len())
-            .and_then(|atoms| atoms.checked_add(self.pending.len()))
-            .ok_or(Stop::DerivedAtomLimit)?;
+        let held_atoms = atoms_held(self.closure, self.result, self.pending)?;
         let joined = self
             .pending
             .join_row(slot, dense, heads.start, rows, work)?;
-        if derived
-            .checked_add(joined.marked)
-            .is_none_or(|atoms| atoms > work.limits.max_derived_atoms)
-        {
-            return Err(Stop::DerivedAtomLimit);
-        }
+        admits_more(held_atoms, joined.marked, work)?;
         let count = |n: usize| u64::try_from(n).map_err(|_| Stop::InvalidProgram);
         work.statistics.bindings += count(joined.offered)?;
         work.statistics.dense_heads += count(joined.marked)?;
