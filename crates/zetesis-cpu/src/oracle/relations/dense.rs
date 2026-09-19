@@ -661,10 +661,20 @@ mod tests {
     }
 
     #[test]
-    fn a_product_above_the_ceiling_or_an_unknown_argument_keeps_the_tree() {
+    fn a_product_above_the_ceiling_keeps_the_tree() {
         let predicate = Predicate::new("e", 2).unwrap();
         assert!(Layout::new(&predicate, &[numbers(&[1, 2, 3]), numbers(&[10, 20])], 5).is_none());
+    }
+
+    #[test]
+    fn an_unknown_argument_keeps_the_tree() {
+        let predicate = Predicate::new("e", 2).unwrap();
         assert!(Layout::new(&predicate, &[numbers(&[1]), Bound::Unknown], 64).is_none());
+    }
+
+    #[test]
+    fn bounds_of_another_arity_lay_out_nothing() {
+        let predicate = Predicate::new("e", 2).unwrap();
         assert!(Layout::new(&predicate, &[numbers(&[1])], 64).is_none());
     }
 
@@ -888,16 +898,22 @@ mod tests {
         }
     }
 
+    /// The relation holding positions 5, 0 and 3 with its atoms taken.
+    fn taken(work: &mut Work<'_>) -> (Dense, Vec<Atom>) {
+        work.limits.max_closure_bytes = 1 << 20;
+        let (_, mut pending) = pending(work);
+        let mut dense = Dense::new(Arc::new(layout())).unwrap();
+        insert(&mut dense, &mut pending, &[5, 0, 3], work);
+        let mut atoms = Vec::new();
+        dense.take_atoms(&mut atoms, 0, work).unwrap();
+        (dense, atoms)
+    }
+
     #[test]
-    fn taken_atoms_are_in_canonical_order_and_empty_the_relation() {
+    fn taken_atoms_are_in_canonical_order() {
         let control = Control::default();
         let mut work = Work::source(&control, 10_000);
-        work.limits.max_closure_bytes = 1 << 20;
-        let (_, mut pending) = pending(&mut work);
-        let mut dense = Dense::new(Arc::new(layout())).unwrap();
-        insert(&mut dense, &mut pending, &[5, 0, 3], &mut work);
-        let mut atoms = Vec::new();
-        dense.take_atoms(&mut atoms, 0, &mut work).unwrap();
+        let (_, atoms) = taken(&mut work);
         let values: Vec<Vec<i32>> = atoms
             .iter()
             .map(|atom| {
@@ -912,6 +928,13 @@ mod tests {
             .collect();
         assert_eq!(values, vec![vec![1, 10], vec![2, 20], vec![3, 20]]);
         assert!(atoms.windows(2).all(|pair| pair[0] < pair[1]));
+    }
+
+    #[test]
+    fn taking_the_atoms_empties_the_relation() {
+        let control = Control::default();
+        let mut work = Work::source(&control, 10_000);
+        let (dense, _) = taken(&mut work);
         assert_eq!(dense.len(), 0);
         assert!(!dense.contains(5));
     }

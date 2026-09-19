@@ -260,18 +260,28 @@ fn the_narrowing_decides_a_stratified_program_in_three_passes() {
     assert_eq!(seeds, [(8, true)]);
 }
 
-#[test]
-fn the_narrowing_reports_its_passes_and_decisions() {
+/// The statistics of the stratified program's narrowing, after its one seed.
+fn stratified_statistics() -> zetesis_cpu::CandidateStatistics {
     let program = stratified_program();
     let mut candidates = Candidates::new(&program, CandidateLimits::default(), Control::default());
     candidates.bounded(Limits::default());
     assert_eq!(candidates.by_ref().map(Result::unwrap).count(), 1);
-    let statistics = candidates.statistics();
+    candidates.statistics()
+}
+
+#[test]
+fn the_narrowing_reports_its_passes() {
+    let statistics = stratified_statistics();
     assert_eq!(statistics.bounds_passes, 3);
-    assert_eq!(statistics.necessary_gate_atoms, 8);
-    assert_eq!(statistics.underivable_gate_atoms, 8);
     assert!(!statistics.bounds_refuted);
     assert_eq!(statistics.bounds_stop, None);
+}
+
+#[test]
+fn the_narrowing_reports_its_decisions() {
+    let statistics = stratified_statistics();
+    assert_eq!(statistics.necessary_gate_atoms, 8);
+    assert_eq!(statistics.underivable_gate_atoms, 8);
 }
 
 #[test]

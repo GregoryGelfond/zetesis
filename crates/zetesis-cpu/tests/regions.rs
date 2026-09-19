@@ -42,7 +42,7 @@ fn a_region_holds_cuts_or_leaves_each_atom_open() {
 }
 
 #[test]
-fn a_region_logs_its_decisions_in_order_and_is_equal_by_them() {
+fn a_region_logs_its_decisions_in_order() {
     let mut region = Region::undecided(3);
     assert!(region.hold(2));
     assert!(region.cut(0));
@@ -51,7 +51,13 @@ fn a_region_logs_its_decisions_in_order_and_is_equal_by_them() {
     let (cut, held) = region.split(1);
     assert_eq!(cut.decisions(), [2, 0, 1]);
     assert_eq!(held.decisions(), [2, 0, 1]);
-    // The same decisions made in another order are the same region.
+}
+
+#[test]
+fn regions_are_equal_by_their_decisions_whatever_their_order() {
+    let mut region = Region::undecided(3);
+    assert!(region.hold(2));
+    assert!(region.cut(0));
     let mut other = Region::undecided(3);
     assert!(other.cut(0));
     assert!(other.hold(2));
@@ -189,10 +195,11 @@ fn a_narrowing_may_choose_the_split_atom() {
 }
 
 #[test]
-fn a_split_clones_the_state_into_both_children_and_a_leaf_carries_it() {
-    // The state counts the regions on its own lineage: each narrowing adds
-    // one, so a leaf at depth two has seen three regions, and siblings do
-    // not see each other's count.
+fn each_leaf_carries_the_state_of_its_own_lineage() {
+    // A split clones the state into both children. The state counts the
+    // regions on its own lineage: each narrowing adds one, so a leaf at
+    // depth two has seen three regions, and siblings do not see each
+    // other's count.
     let mut traversal = Traversal::with_state(Region::undecided(2), Counting::Never, 0usize);
     let mut depths = Vec::new();
     while let Some(visit) = traversal

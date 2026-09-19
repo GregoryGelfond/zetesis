@@ -859,13 +859,20 @@ mod tests {
         assert!(std::ptr::eq(original, row.atom().unwrap()));
     }
 
-    #[test]
-    fn a_laid_out_predicate_is_a_dense_relation_that_reads_back_in_order() {
+    /// The work of the dense-relation propositions: a generous ceiling.
+    fn dense_work(control: &Control) -> Work<'_> {
+        let mut work = Work::source(control, u64::MAX);
+        work.limits.max_derived_atoms = 8;
+        work.limits.max_closure_bytes = 1 << 20;
+        work
+    }
+
+    /// `p` laid out over the values 1, 2 and 3, with the positions of 3 and
+    /// 1 marked and absorbed: the predicate, the layouts, the catalogs and
+    /// the pending rows.
+    fn laid_out(work: &mut Work<'_>) -> (Predicate, Layouts, Catalogs, PendingRows) {
         use crate::oracle::bounds::Bound;
         let predicate = Predicate::new("p", 1).unwrap();
-        let control = Control::default();
-        let mut work = Work::source(&control, u64::MAX);
-        work.limits.max_derived_atoms = 8;
         let mut layouts = Layouts::default();
         layouts.push(
             Layout::new(
@@ -879,40 +886,57 @@ mod tests {
             )
             .unwrap(),
         );
-        work.limits.max_closure_bytes = 1 << 20;
         let mut catalogs = Catalogs::default();
-        catalogs
-            .create_dense_relations(&layouts, &mut work)
-            .unwrap();
+        catalogs.create_dense_relations(&layouts, work).unwrap();
         let mut pending = PendingRows::default();
-        pending.prepare(&layouts, &mut 0, &mut work).unwrap();
+        pending.prepare(&layouts, &mut 0, work).unwrap();
         // Positions 2 and 0 are the values 3 and 1; a repeated mark is not a
         // second atom.
         assert!(pending.mark(0, 2));
         assert!(pending.mark(0, 0));
         assert!(!pending.mark(0, 2));
-        catalogs.absorb(&mut pending, &layouts, &mut work).unwrap();
+        catalogs.absorb(&mut pending, &layouts, work).unwrap();
+        (predicate, layouts, catalogs, pending)
+    }
+
+    #[test]
+    fn a_laid_out_predicate_is_a_dense_relation() {
+        let control = Control::default();
+        let mut work = dense_work(&control);
+        let (predicate, _, catalogs, _) = laid_out(&mut work);
         assert!(catalogs.relation(&predicate).is_dense());
-        // A dense relation takes no atom.
+        assert_eq!(catalogs.len(), 2);
+    }
+
+    #[test]
+    fn a_dense_relation_takes_no_atom() {
+        let control = Control::default();
+        let mut work = dense_work(&control);
+        let (_, _, mut catalogs, _) = laid_out(&mut work);
         assert_eq!(
             catalogs.insert(atom(Value::Number(2)), 0, &mut work),
             Err(Stop::InvalidProgram)
         );
-        assert_eq!(catalogs.len(), 2);
+    }
+
+    #[test]
+    fn a_dense_relation_answers_membership_by_position() {
+        let control = Control::default();
+        let mut work = dense_work(&control);
+        let (predicate, _, mut catalogs, _) = laid_out(&mut work);
         catalogs.prepare_delta(&mut work).unwrap();
-        let key_pattern = zetesis_core::AtomPattern::new(
-            predicate.clone(),
-            vec![zetesis_core::Term::Variable(0)],
-        )
-        .unwrap();
-        let held = [Some(&Value::Number(3))];
-        let absent = [Some(&Value::Number(2))];
-        let outside = [Some(&Value::Number(9))];
         let Relation::Dense(dense) = catalogs.relation(&predicate) else {
             unreachable!("the predicate is laid out");
         };
-        for (assignment, expected) in [(&held, true), (&absent, false), (&outside, false)] {
-            let key = key_pattern.key(&assignment[..]).unwrap();
+        for (value, expected) in [(3, true), (2, false), (9, false)] {
+            let value = Value::Number(value);
+            let pattern = zetesis_core::AtomPattern::new(
+                predicate.clone(),
+                vec![zetesis_core::Term::Variable(0)],
+            )
+            .unwrap();
+            let assignment = [Some(&value)];
+            let key = pattern.key(&assignment[..]).unwrap();
             assert_eq!(
                 dense
                     .position(&key)
@@ -920,13 +944,36 @@ mod tests {
                 expected
             );
         }
-        // The catalogs answer for trees alone; a dense relation asked here
-        // is an invariant violation.
-        let key = key_pattern.key(&held[..]).unwrap();
+    }
+
+    #[test]
+    fn the_catalogs_answer_membership_for_trees_alone() {
+        // A dense relation asked through the catalogs is an invariant
+        // violation: the round asks it through its layout.
+        let control = Control::default();
+        let mut work = dense_work(&control);
+        let (predicate, _, mut catalogs, _) = laid_out(&mut work);
+        catalogs.prepare_delta(&mut work).unwrap();
+        let value = Value::Number(3);
+        let pattern = zetesis_core::AtomPattern::new(
+            predicate.clone(),
+            vec![zetesis_core::Term::Variable(0)],
+        )
+        .unwrap();
+        let assignment = [Some(&value)];
+        let key = pattern.key(&assignment[..]).unwrap();
         assert_eq!(
             catalogs.contains(&key, 0, &mut work),
             Err(Stop::InvalidProgram)
         );
+    }
+
+    #[test]
+    fn a_dense_relations_rows_are_its_positions_new_until_advanced() {
+        let control = Control::default();
+        let mut work = dense_work(&control);
+        let (predicate, _, mut catalogs, _) = laid_out(&mut work);
+        catalogs.prepare_delta(&mut work).unwrap();
         let positions: Vec<usize> = catalogs
             .rows(&predicate)
             .all()
@@ -940,12 +987,30 @@ mod tests {
         assert!(catalogs.has_new(&predicate, &mut work).unwrap());
         catalogs.advance(&mut work).unwrap();
         assert!(!catalogs.has_new(&predicate, &mut work).unwrap());
+    }
+
+    #[test]
+    fn the_model_of_a_dense_relation_is_its_atoms_in_order() {
+        let control = Control::default();
+        let mut work = dense_work(&control);
+        let (_, _, mut catalogs, _) = laid_out(&mut work);
+        catalogs.prepare_delta(&mut work).unwrap();
+        catalogs.advance(&mut work).unwrap();
         let model = catalogs.take_model(&mut work).unwrap();
         assert_eq!(
             model,
             Model::new([atom(Value::Number(1)), atom(Value::Number(3))])
         );
-        // The emptied relation is reused as a dense one.
+    }
+
+    #[test]
+    fn an_emptied_dense_relation_is_reused_as_a_dense_one() {
+        let control = Control::default();
+        let mut work = dense_work(&control);
+        let (predicate, layouts, mut catalogs, mut pending) = laid_out(&mut work);
+        catalogs.prepare_delta(&mut work).unwrap();
+        catalogs.advance(&mut work).unwrap();
+        catalogs.take_model(&mut work).unwrap();
         assert!(pending.mark(0, 1));
         catalogs.absorb(&mut pending, &layouts, &mut work).unwrap();
         assert!(catalogs.relation(&predicate).is_dense());

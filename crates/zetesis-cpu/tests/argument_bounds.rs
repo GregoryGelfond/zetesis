@@ -41,10 +41,9 @@ fn bounds(program: &Program) -> ArgumentBounds {
     ArgumentBounds::infer(program, BoundLimits::default(), &Control::default()).unwrap()
 }
 
-#[test]
-fn facts_bound_their_arguments_and_a_derivation_closes_over_them() {
-    // e(0,1). e(1,2). r(0). r(Y) :- r(X), e(X,Y).
-    let program = program(vec![
+/// e(0,1). e(1,2). r(0). r(Y) :- r(X), e(X,Y).
+fn reachability() -> Program {
+    program(vec![
         fact("e", &[0, 1]),
         fact("e", &[1, 2]),
         fact("r", &[0]),
@@ -55,15 +54,26 @@ fn facts_bound_their_arguments_and_a_derivation_closes_over_them() {
                 pattern("e", vec![Term::Variable(0), Term::Variable(1)]),
             ],
         ),
-    ]);
-    let bounds = bounds(&program);
+    ])
+}
+
+#[test]
+fn facts_bound_their_arguments() {
+    let bounds = bounds(&reachability());
     let e = Predicate::new("e", 2).unwrap();
-    let r = Predicate::new("r", 1).unwrap();
     assert_eq!(*bounds.bound(&e, 0), numbers(&[0, 1]));
     assert_eq!(*bounds.bound(&e, 1), numbers(&[1, 2]));
+    assert!(bounds.work() > 0);
+}
+
+#[test]
+fn a_derivation_closes_its_head_argument_over_the_positions_binding_it() {
+    // r's argument takes r(0)'s constant and every value e's second
+    // argument may bind Y to.
+    let bounds = bounds(&reachability());
+    let r = Predicate::new("r", 1).unwrap();
     assert_eq!(*bounds.bound(&r, 0), numbers(&[0, 1, 2]));
     assert_eq!(bounds.bounds(&r).map(<[Bound]>::len), Some(1));
-    assert!(bounds.work() > 0);
 }
 
 #[test]
@@ -111,11 +121,9 @@ fn a_constant_head_argument_contributes_itself() {
     );
 }
 
-#[test]
-fn an_argument_wider_than_the_ceiling_is_unknown_and_absorbs() {
-    // a(1). a(2). a(3). q(X) :- a(X). t(X) :- q(X).  With two values the
-    // widest bound kept, a is unknown and so are q and t through it.
-    let program = program(vec![
+/// a(1). a(2). a(3). q(X) :- a(X). t(X) :- q(X).
+fn three_values_through_two_rules() -> Program {
+    program(vec![
         fact("a", &[1]),
         fact("a", &[2]),
         fact("a", &[3]),
@@ -127,17 +135,35 @@ fn an_argument_wider_than_the_ceiling_is_unknown_and_absorbs() {
             pattern("t", vec![Term::Variable(0)]),
             vec![pattern("q", vec![Term::Variable(0)])],
         ),
-    ]);
-    let bounds = ArgumentBounds::infer(
-        &program,
+    ])
+}
+
+/// The bounds with two values the widest bound kept.
+fn narrow_bounds(program: &Program) -> ArgumentBounds {
+    ArgumentBounds::infer(
+        program,
         BoundLimits {
             max_values: 2,
             ..BoundLimits::default()
         },
         &Control::default(),
     )
-    .unwrap();
-    for name in ["a", "q", "t"] {
+    .unwrap()
+}
+
+#[test]
+fn an_argument_wider_than_the_ceiling_is_unknown() {
+    let bounds = narrow_bounds(&three_values_through_two_rules());
+    assert_eq!(
+        *bounds.bound(&Predicate::new("a", 1).unwrap(), 0),
+        Bound::Unknown
+    );
+}
+
+#[test]
+fn an_unknown_argument_makes_the_arguments_bound_through_it_unknown() {
+    let bounds = narrow_bounds(&three_values_through_two_rules());
+    for name in ["q", "t"] {
         assert_eq!(
             *bounds.bound(&Predicate::new(name, 1).unwrap(), 0),
             Bound::Unknown,

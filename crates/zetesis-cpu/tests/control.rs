@@ -25,13 +25,20 @@ fn a_deadline_expires_while_the_control_is_not_polled() {
 }
 
 #[test]
-fn clones_share_the_deadline_and_the_cancellation() {
+fn clones_share_the_deadline() {
     let control = Control::with_deadline(Instant::now() + SOON).unwrap();
     let clone = control.clone();
     assert_eq!(clone.poll(), Ok(()));
     thread::sleep(LATER);
     assert_eq!(clone.poll(), Err(Stop::Deadline));
     assert_eq!(control.poll(), Err(Stop::Deadline));
+}
+
+#[test]
+fn clones_share_the_cancellation() {
+    let control = Control::default();
+    let clone = control.clone();
+    assert_eq!(control.poll(), Ok(()));
     clone.cancel();
     assert_eq!(control.poll(), Err(Stop::Cancelled));
 }
