@@ -7,7 +7,7 @@ use themelios_program::program::{
     Arguments, Atom, BodyElement, DefaultNegation, Head, Literal, LiteralInner,
     Program as SourceProgram, Relation, Rule, Statement,
 };
-use themelios_program::provenance::Origin;
+use themelios_program::provenance::{Origin, WithProvenance};
 use themelios_program::symbol::{Sign, Symbol};
 use themelios_program::term::{Term as SourceTerm, UnaryOp, Variable};
 use zetesis_core::{AtomPattern, Filter, Predicate, Template, Term, Value};
@@ -27,8 +27,8 @@ pub(crate) fn program(
         if part.key().name.as_str() != "base" || !part.key().formals.is_empty() {
             return Err(unsupported(ProfileFeature::ProgramPart, fallback));
         }
-        for statement in part.statements() {
-            let locations: Vec<_> = statement
+        for carrier in part.statements() {
+            let locations: Vec<_> = carrier
                 .provenance()
                 .origins()
                 .filter_map(|origin| match origin {
@@ -37,14 +37,22 @@ pub(crate) fn program(
                 })
                 .collect();
             let location = locations.first().copied().unwrap_or(fallback);
-            let Statement::Rule(source_rule) = statement.get() else {
-                return Err(unsupported(ProfileFeature::Statement, location));
-            };
-            templates.push(rule(source_rule, location)?);
+            templates.push(statement(carrier, location)?);
             origins.push(locations);
         }
     }
     Ok((templates, origins))
+}
+
+/// Compile the rule one statement must be; `location` locates its refusal.
+pub(crate) fn statement(
+    carrier: &WithProvenance<Statement>,
+    location: Location,
+) -> Result<Template, AdmissionFailure> {
+    let Statement::Rule(source_rule) = carrier.get() else {
+        return Err(unsupported(ProfileFeature::Statement, location));
+    };
+    rule(source_rule, location)
 }
 
 #[derive(Default)]

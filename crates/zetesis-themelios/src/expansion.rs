@@ -242,6 +242,9 @@ impl std::error::Error for ExpansionFailure {
     }
 }
 
+/// A clone is a tentative budget: charges made on it either become the
+/// budget as a whole or are discarded with it, never both.
+#[derive(Clone)]
 pub(crate) struct Budget {
     limits: ExpansionLimits,
     work: u128,
