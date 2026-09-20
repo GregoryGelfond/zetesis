@@ -1,0 +1,1197 @@
+{
+  "dataset": "workers-f8146e50-687f0d0b",
+  "date": "2026-09-20",
+  "host": {
+    "architecture": "arm64",
+    "os": "macOS 26.6.2",
+    "os_build": "25G83",
+    "metal_adapter": "Apple M4 Pro",
+    "observed_default_workers": 14,
+    "observed_native_memory_allowance_bytes": 25769803776
+  },
+  "executables": {
+    "A": {
+      "source": "f8146e50304aaff3186d827b84f1e4f91ab068f7",
+      "sha256": "9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965"
+    },
+    "B": {
+      "source": "687f0d0b473d015125d4e70040735625b4c042a3",
+      "sha256": "d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513"
+    }
+  },
+  "tools": {
+    "zetesis-perf": {
+      "source": "2e80d065dfb286a4a457d788e6b55955f583fae0",
+      "sha256": "f392e6c36cdc64e1fde282be2bb7917487bb89fc66d7fed3e8c8a6c20b5ea99b"
+    },
+    "zetesis-series": {
+      "source": "2e80d065dfb286a4a457d788e6b55955f583fae0",
+      "sha256": "b0a5276a580ea907c2cde243f0e91ae51bbefb4bd7a536a883f9bb082f646088"
+    },
+    "clingo": {
+      "version": "5.8.2",
+      "workers": 1,
+      "sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015"
+    }
+  },
+  "protocol": {
+    "limits": {
+      "answers": {
+        "max_cost_dimensions": 8388608,
+        "max_input_bytes": 8388608,
+        "max_symbols": 8388608,
+        "max_witnesses": 8388608
+      },
+      "campaign_timeout": {
+        "nanos": 0,
+        "secs": 180
+      },
+      "corpus": {
+        "cases": 94,
+        "contract_symbols": 65536,
+        "files": 108,
+        "manifest_bytes": 1048576,
+        "source_bytes": 1048576,
+        "total_source_bytes": 4194304
+      },
+      "max_executable_bytes": 268435456,
+      "max_report_bytes": 1073741824,
+      "max_total_capture_bytes": 536870912,
+      "process": {
+        "cleanup_timeout": {
+          "nanos": 0,
+          "secs": 1
+        },
+        "max_output_bytes": 33554432,
+        "timeout": {
+          "nanos": 0,
+          "secs": 10
+        }
+      }
+    },
+    "protocol": "instrumented_explicit_profile_matrix_v1",
+    "wall_scope": "fresh_process_spawn_capture_reap; native_json_and_stats_included; reference_json_included; comparison_hashing_excluded; no_cold_cache_claim",
+    "peak_rss": "memory_rounds: separate_fresh_helper_RUSAGE_CHILDREN; excludes_helper; may_include_usage_propagated_by_waited_descendants; not_simultaneous_tree_RSS_or_device_memory; macOS_bytes_Linux_KiB_converted_to_bytes",
+    "comparison_scope": "complete_selected_displays_with_symbol_and_model_multiplicities; final_optimum_ties_and_costs; native_full_records_retained; hidden_reference_interpretations_unavailable",
+    "native_normalization_limits": {
+      "atoms": 262144,
+      "cost_dimensions": 8388608,
+      "input_bytes": 33554432,
+      "spelling_bytes": 8388608,
+      "symbols": 8388608,
+      "value": {
+        "bytes": 16777216,
+        "depth": 128,
+        "nodes": 262144
+      },
+      "value_nodes": 1048576,
+      "witnesses": 8388608
+    },
+    "backends": [
+      "cpu",
+      "metal"
+    ],
+    "workers": [
+      1,
+      2,
+      4,
+      14
+    ],
+    "completion_workers": 1,
+    "completion_scratch_bytes": 268435456,
+    "batch_size": 64,
+    "grounder": "eager",
+    "formula_joins": "indexed",
+    "oracle": "auto",
+    "search": "regions",
+    "warmups": 1,
+    "repetitions": 2,
+    "memory_runs": 1,
+    "qualification_runs": 1,
+    "instrumentation": "native JSON plus stats on every invocation, fixed by the matrix runner",
+    "order": "CPU matrix, then Metal matrix. Within each matrix: A1(1,2,4,14), B1(1,2,4,14), B2(14,4,2,1), A2(14,4,2,1)."
+  },
+  "input_seals": [
+    {
+      "entry": "manifest.json",
+      "bytes": 176545,
+      "sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958"
+    },
+    {
+      "entry": "LICENSE",
+      "bytes": 1072,
+      "sha256": "663fd58c4daf8c2247da12c61b73474ee7a5f79f884c6f16d785a725fe9bfe99"
+    },
+    {
+      "entry": "encodings/equality-generalized-tsp/egtsp.lp",
+      "bytes": 1817,
+      "sha256": "74e697de87e40c0ece5bcb8c496a199f428aa763000a9e6ed176314fceb18a32"
+    },
+    {
+      "entry": "encodings/shortest-path/variant-01.lp",
+      "bytes": 2115,
+      "sha256": "ee593089ab5ecfa2cf1a1cef152686f9b5d99c2ab08d126f212050568f1179e7"
+    },
+    {
+      "entry": "encodings/shortest-path/variant-02.lp",
+      "bytes": 2867,
+      "sha256": "ea742a5d0e111cec895d6021baca8680c4115c230bd3928c0e60f0b86bed94fd"
+    },
+    {
+      "entry": "encodings/shortest-path/variant-03.lp",
+      "bytes": 2603,
+      "sha256": "8aed2918a5f15a4f42d70ea28c0bcfd8439aa5e6edf817d66f5fdbc65b882455"
+    },
+    {
+      "entry": "encodings/shortest-path/variant-04.lp",
+      "bytes": 3397,
+      "sha256": "12483188524d30c82df0df1ad376c658babeeb90567d8b2538d7edbeb42e67e1"
+    },
+    {
+      "entry": "encodings/task-allocation/variant-01.lp",
+      "bytes": 1161,
+      "sha256": "1a13880502a4a87f5863caa601d37f3bf3a77bdfc3ba816189a4656e637dfce8"
+    },
+    {
+      "entry": "encodings/task-allocation/variant-02.lp",
+      "bytes": 1880,
+      "sha256": "cabf96337859381ae25e8493ef770d1bda554241e0b3a465f7f744d0fa502af1"
+    },
+    {
+      "entry": "encodings/task-allocation/variant-03.lp",
+      "bytes": 1535,
+      "sha256": "4c93bef138e563e871ba05fb69635b6e9afba81bf31fc4b492d390cc9a5fc3b5"
+    },
+    {
+      "entry": "encodings/task-allocation/variant-04.lp",
+      "bytes": 3672,
+      "sha256": "7a16f9cb73d644ea061ee71a8aed3a5686f5dce3dc6e1015cdf83c603305e421"
+    },
+    {
+      "entry": "encodings/traveling-salesman/variant-01.lp",
+      "bytes": 1235,
+      "sha256": "104420b93621aae25970b2f5262e2c87083629dbccb094d1726bc655a78d596f"
+    },
+    {
+      "entry": "encodings/traveling-salesman/variant-02.lp",
+      "bytes": 1873,
+      "sha256": "e6111d95688af672202a318b08c20cafa2a78066f74ff32c1d8eee7cd928473b"
+    },
+    {
+      "entry": "encodings/traveling-salesman/variant-03.lp",
+      "bytes": 1907,
+      "sha256": "fd474ab7c535b7f5bb89e609e0dd43990aba94df628e6b2b42fcb5d6ef100f39"
+    },
+    {
+      "entry": "encodings/traveling-salesman/variant-04.lp",
+      "bytes": 4100,
+      "sha256": "cd7c3d9d67d163efa82ce3cb9ac5ac524d2eaf6992e3a3708a3f60d324a2a1ab"
+    },
+    {
+      "entry": "encodings/traveling-salesman/variant-05.lp",
+      "bytes": 4768,
+      "sha256": "5b30f9fab32f941e451eee4861a53e4a03509db62c920ce628cdfe5fea3abbce"
+    },
+    {
+      "entry": "scenarios/equality-generalized-tsp/01-basic.lp",
+      "bytes": 531,
+      "sha256": "76c97fe328024350c85e1124d51ef4c7bb627ff6b3be5978e78fcded9723f8a1"
+    },
+    {
+      "entry": "scenarios/equality-generalized-tsp/02-larger.lp",
+      "bytes": 898,
+      "sha256": "f028d6e5e9452171ae870abeb096cae9488db005c4bbc5702751d1ae4ada4f0e"
+    },
+    {
+      "entry": "scenarios/equality-generalized-tsp/03-unreachable-subset-unsat.lp",
+      "bytes": 441,
+      "sha256": "fc9ff982bf49daa7d588d9ed0502507a971b3045535efa032727bea8ac749bb8"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-01/01-basic.lp",
+      "bytes": 298,
+      "sha256": "e249cd28f18a406a41533ae04cd5e862c8a224acb53e91e97eb13f9bddbefdfb"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-01/02-start-equals-end.lp",
+      "bytes": 354,
+      "sha256": "ab2356f37f6017e8f7e38ec7bf02cb546109811cba8e6c35042105a438d8e253"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-01/03-zero-cost-detour.lp",
+      "bytes": 579,
+      "sha256": "753e991a57ece3f2d6fe6e281407a709f7732fd8e8c9832219980ec1de94d4d3"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-01/04-no-path.lp",
+      "bytes": 392,
+      "sha256": "e2733c011b338bd8a73e8ede412289dd3b02bcdca8f1a170168a683f31a4a520"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-01/05-multi-path.lp",
+      "bytes": 508,
+      "sha256": "3d1f190fb8b3e269194232d6dae1f31cb6547afa423edb7edae0ad90d83c51c4"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-01/06-layered-dag.lp",
+      "bytes": 837,
+      "sha256": "8c19d1d8dd791a19f235ce4e07d57becadc753c9e15a5cc264adfaef171b001e"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-01/07-cycles.lp",
+      "bytes": 843,
+      "sha256": "201d5134be5b10b3ff79756d1102b59388ad1a3c0896805bd3765e9fcb1ddcd5"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-01/08-negative-weights.lp",
+      "bytes": 922,
+      "sha256": "faefb984e282072722bbe34218663f2775254d287250e48ee5b808004ad1ae1b"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-02/01-basic.lp",
+      "bytes": 356,
+      "sha256": "719a9d3323e13c2e8e6ae846d1da38bdc440c3174ea5658a99a9fbb20452ec1f"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-02/02-start-equals-end.lp",
+      "bytes": 364,
+      "sha256": "17faddd2756c29bb9b27fc5a1a3063221fcc2a2dac5d1a8a030f4f49e485a6b5"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-02/03-before-forces-detour.lp",
+      "bytes": 553,
+      "sha256": "1a29e50013fa0ca1922dcab74eedb4b9c4fd5bc81a95568dc585da8f580d14e2"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-02/04-after-forces-extension.lp",
+      "bytes": 529,
+      "sha256": "73178c75be829c66c0912f8c4693660457be8c43baaff3c202a98b28702f1895"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-02/05-ordering-unsat.lp",
+      "bytes": 484,
+      "sha256": "b667b4d9105d4b8948612382a8ab88e2d907e60122cf6dab9f99911aad8f04e2"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-02/06-layered-dag-before.lp",
+      "bytes": 835,
+      "sha256": "508367c87a21e81d54bf51158ce18c0df54e8f8d101ccec56bcf9435eed9cdcd"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-02/07-layered-dag-before-after.lp",
+      "bytes": 863,
+      "sha256": "c3b0c457ad4ee779f8827ef694b8652d4c4913e4a17a693d4b8c457fb5f6d084"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-02/08-tie-break-under-ordering.lp",
+      "bytes": 733,
+      "sha256": "a066815261228b0c05a2a6b602e9a647fc88183c7610dbc13e618b258007a6a1"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-02/09-negative-weights.lp",
+      "bytes": 777,
+      "sha256": "9c609610a678ede5b6a830f3e5cd1b5a826a18995198e5e19c5c4d8fa598e2f7"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-03/01-basic.lp",
+      "bytes": 449,
+      "sha256": "eafe0dc5f74675bd6a86db9212de663c208f195ca9b31faeeea594030f508481"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-03/02-start-equals-end.lp",
+      "bytes": 408,
+      "sha256": "6e0a4e9b99a8bcf0513f50729810780e311b2abb89c2f6d8155a0d5d1f4b1940"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-03/03-budget-forces-detour.lp",
+      "bytes": 474,
+      "sha256": "289fed1c5128fccc334e93565a9e7b395b07bd25d5086341a919e000622a7d8f"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-03/04-cost-at-cap-allowed.lp",
+      "bytes": 485,
+      "sha256": "c1edddbf1c9d11b6d41c7c531935d16412664ad63ab772583213615ae878afac"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-03/05-budget-unsat.lp",
+      "bytes": 600,
+      "sha256": "89d8cffad19371bc5685e5caa79a79b7a661956e1edd494cdc28c721c58bff34"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-03/06-layered-dag-cap.lp",
+      "bytes": 948,
+      "sha256": "f5b3528e53e20ca38a0404a06f6058b70c1eab84d0e30a7f2d6bfdf6c44212da"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-03/07-layered-dag-tight-cap.lp",
+      "bytes": 823,
+      "sha256": "2506b90f8ed17820b209ef1be7773676b6a9b66277076417b51397aa0c669f49"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-03/08-tie-break-under-cap.lp",
+      "bytes": 781,
+      "sha256": "ece9203b2d3e1f436ce6808604de4d16c83d032d62ed02e0f23d168b40c4e1f3"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-03/09-negative-weights.lp",
+      "bytes": 875,
+      "sha256": "c0967d3d038af017a8ef7b9e9193514407b4614407e2a0f936b08e72a50f5a89"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-04/01-basic.lp",
+      "bytes": 465,
+      "sha256": "e9ff920114b39ba02c215318933b250f38929c8c2abf44e672ae70691d7850be"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-04/02-start-equals-end.lp",
+      "bytes": 386,
+      "sha256": "7aba7f834de00e51a83af1fcedc9fea6c5880dce27dcad7015bb7c42cb5c8917"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-04/03-before-forces-detour-within-budget.lp",
+      "bytes": 593,
+      "sha256": "a4db15bff43de8163658dd89752b01ca0702763a0b653781a6833ab6ac36b55f"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-04/04-ordering-violates-budget.lp",
+      "bytes": 511,
+      "sha256": "11e69db4df1b45ddf7ad34ae814f4b38cf1df2ac51a02b4e6e7bb87901107f3a"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-04/05-after-and-budget-interact.lp",
+      "bytes": 687,
+      "sha256": "c8b3cf5dd0d5c307d666b08f3dc048550a3d30b536f08fbe3951077515de0e81"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-04/06-layered-dag-ordering-cap.lp",
+      "bytes": 835,
+      "sha256": "fa9498f0023c6157b0da47ce4d79657933bce855e50c5f4eee18dfcd350599c7"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-04/07-layered-dag-combined.lp",
+      "bytes": 977,
+      "sha256": "c4fddc7024a5a54b7e4e0a5d079a1c56ce624a55a094296f57aa3a484c2bef2c"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-04/08-tie-break-under-ordering-and-cap.lp",
+      "bytes": 983,
+      "sha256": "b783be78443c6b134071319c8f9f9816776e08d73aa39a587ae517883b36ff75"
+    },
+    {
+      "entry": "scenarios/shortest-path/variant-04/09-negative-weights.lp",
+      "bytes": 906,
+      "sha256": "9560b6876ac69d8dc5586f5f4050bc30f948c987aa24ac617898e5be8cb254f9"
+    },
+    {
+      "entry": "scenarios/task-allocation/variant-01/01-basic.lp",
+      "bytes": 337,
+      "sha256": "3ceca57a8620f3d7eb8beb205e2a7e3ac5664120b9ba62b40929079ebdb24f3f"
+    },
+    {
+      "entry": "scenarios/task-allocation/variant-01/02-agent-reuse.lp",
+      "bytes": 537,
+      "sha256": "55e811dbfc0c4157535e34f96e39396d63e9768f901b9e67ec3d082f0271c163"
+    },
+    {
+      "entry": "scenarios/task-allocation/variant-01/03-selective-compatibility.lp",
+      "bytes": 451,
+      "sha256": "362049b67ddcd1e7a2a736f1511091bfcff3a2d0bc05433ab6ead746389b73c0"
+    },
+    {
+      "entry": "scenarios/task-allocation/variant-01/04-no-compatible-agent-unsat.lp",
+      "bytes": 516,
+      "sha256": "137b6eb58614f2dba11c4f2e592ea805b9549a08eb7ee18fa2869e08154a7184"
+    },
+    {
+      "entry": "scenarios/task-allocation/variant-01/05-larger-mix.lp",
+      "bytes": 505,
+      "sha256": "1cb73fdae195523ad9f32d19768adfa40fb43e344ac499ae5b527da3d28bddf5"
+    },
+    {
+      "entry": "scenarios/task-allocation/variant-02/01-basic.lp",
+      "bytes": 502,
+      "sha256": "f0f6c3b5634c1db0628a9c6e54cb7c7df56bdb0225c4a2da41d2eb419c372cc8"
+    },
+    {
+      "entry": "scenarios/task-allocation/variant-02/02-makespan-tiebreak.lp",
+      "bytes": 781,
+      "sha256": "156d2ae4362c3e86504b5db27ef5a65678398edc83d6fea7fcc7d502f6c80a89"
+    },
+    {
+      "entry": "scenarios/task-allocation/variant-02/03-cost-dominates.lp",
+      "bytes": 659,
+      "sha256": "607a563cf8fc2e29111ff984767ba0c90f8f496c5610bef8f6d8a114335c52cf"
+    },
+    {
+      "entry": "scenarios/task-allocation/variant-02/04-no-compatible-agent-unsat.lp",
+      "bytes": 618,
+      "sha256": "6da9f5dd7ffa9c74abc00407c08c5a8a6e226076a26ef6e37627e89cad6b99b9"
+    },
+    {
+      "entry": "scenarios/task-allocation/variant-02/05-larger-mix.lp",
+      "bytes": 766,
+      "sha256": "a7b80c85115956916dc5847943528a248f6709694ce73cad067daf1446f56dd3"
+    },
+    {
+      "entry": "scenarios/task-allocation/variant-03/01-basic.lp",
+      "bytes": 543,
+      "sha256": "83a2e4d611bcbb5adb4ee2648926d2580ec98a30ed8db2d05ed280354ffe49da"
+    },
+    {
+      "entry": "scenarios/task-allocation/variant-03/02-multiple-groups.lp",
+      "bytes": 589,
+      "sha256": "800abbbe2e0372e0488cde3f77e23a27ddd173a6c4e63c9bce0c27cd5c78dfc7"
+    },
+    {
+      "entry": "scenarios/task-allocation/variant-03/03-mixed-grouped-ungrouped.lp",
+      "bytes": 534,
+      "sha256": "264817e850a811bfea22fc1088924834cc6def78b3a74d78d7b4f3b3ff77fd18"
+    },
+    {
+      "entry": "scenarios/task-allocation/variant-03/04-incompatible-group-unsat.lp",
+      "bytes": 530,
+      "sha256": "36b7d9cf38cd4e10a630922903759c855faba4e02c7e5dfd9f1b9efea894ee15"
+    },
+    {
+      "entry": "scenarios/task-allocation/variant-03/05-larger-mix.lp",
+      "bytes": 639,
+      "sha256": "3aae4f66d290564711335ea56edcc7bd3b377669723fc421bdfcad219e24ee7b"
+    },
+    {
+      "entry": "scenarios/task-allocation/variant-04/01-basic.lp",
+      "bytes": 608,
+      "sha256": "b49dff9a9a38f3508d492bd7f96e0302c5b5928e2c2572bb6a2f8618587fb284"
+    },
+    {
+      "entry": "scenarios/task-allocation/variant-04/02-precedence.lp",
+      "bytes": 599,
+      "sha256": "8a9269a408ee42f41e1e353f6839244b8ce36973d88f2488be19d927da3bf823"
+    },
+    {
+      "entry": "scenarios/task-allocation/variant-04/03-agent-serialization.lp",
+      "bytes": 487,
+      "sha256": "4476bcc7a2f14a0f10d303e18bdaac21ce8ab9ba6395e77adc68164809088d17"
+    },
+    {
+      "entry": "scenarios/task-allocation/variant-04/04-window-too-tight-unsat.lp",
+      "bytes": 452,
+      "sha256": "072bd341d6cccb8c62ea3ea2d613fe2ead446eae8f5ec7f9bfcbcaf742cd3cfe"
+    },
+    {
+      "entry": "scenarios/task-allocation/variant-04/05-larger-mix.lp",
+      "bytes": 898,
+      "sha256": "a7d80af4886cff9c7a0b592f51f95afdf5943af5ebcbeadd57b4a650082393fe"
+    },
+    {
+      "entry": "scenarios/traveling-salesman/variant-01/01-basic.lp",
+      "bytes": 477,
+      "sha256": "7362df83a32d11c00fc06f5be37ad92fd6349971b32e1a1912afc2ea48a844eb"
+    },
+    {
+      "entry": "scenarios/traveling-salesman/variant-01/02-multiple-tours.lp",
+      "bytes": 630,
+      "sha256": "f0839010d93f8fcb8aeab313b8a485594d8f7accedbdab93c597066c68b62ec4"
+    },
+    {
+      "entry": "scenarios/traveling-salesman/variant-01/03-asymmetric.lp",
+      "bytes": 708,
+      "sha256": "25cbb6fdc6da3df66096f22f379cb8504096eec01c599345815f23d8318d4a21"
+    },
+    {
+      "entry": "scenarios/traveling-salesman/variant-01/04-subtour-unsat.lp",
+      "bytes": 735,
+      "sha256": "0dada99559dbe60660313f342fb61dcf22de8d9c2906592f7bf085f7385a6ee3"
+    },
+    {
+      "entry": "scenarios/traveling-salesman/variant-01/05-ring.lp",
+      "bytes": 806,
+      "sha256": "14421e3396a5defa56f2ccfb9ff9579420692fbc1f4387a8087f637a5a9ea7c3"
+    },
+    {
+      "entry": "scenarios/traveling-salesman/variant-02/01-basic.lp",
+      "bytes": 494,
+      "sha256": "f845d000b6e94616245282a7c72b92dafc3252dfbb7149c8bba9315e72d3d7c3"
+    },
+    {
+      "entry": "scenarios/traveling-salesman/variant-02/02-single-salesman.lp",
+      "bytes": 412,
+      "sha256": "3072b6bc79219a0b41514a7e81d0b1fa2c2fea15c472fce281f19aca66d46e97"
+    },
+    {
+      "entry": "scenarios/traveling-salesman/variant-02/03-too-many-salesmen-unsat.lp",
+      "bytes": 548,
+      "sha256": "a86ddcffdc23ec282a63c48d06a587cf48eb7c537413f4d618c57e1e45726bfa"
+    },
+    {
+      "entry": "scenarios/traveling-salesman/variant-02/04-equal-cost-split.lp",
+      "bytes": 440,
+      "sha256": "b77fa3411d5d125642c00239c106a0afc8796c73dd53a3bf671715f40fa4a8d8"
+    },
+    {
+      "entry": "scenarios/traveling-salesman/variant-02/05-larger-asymmetric.lp",
+      "bytes": 576,
+      "sha256": "0b8e488bcc12da0ad382b8cb322cb5cd576af4920dfc5baf16991359cf74321f"
+    },
+    {
+      "entry": "scenarios/traveling-salesman/variant-02/06-unreachable-edge.lp",
+      "bytes": 1285,
+      "sha256": "f68f3286b89e27414ed529b6b45e30fc010ec932c93ce5343183181969929c22"
+    },
+    {
+      "entry": "scenarios/traveling-salesman/variant-03/01-basic.lp",
+      "bytes": 478,
+      "sha256": "73876bac62f60faefc8e23c2d6c334222ac2118cb28f59400aaed15da3295934"
+    },
+    {
+      "entry": "scenarios/traveling-salesman/variant-03/02-single-salesman.lp",
+      "bytes": 409,
+      "sha256": "329a472dddf0af3797284a0627851788c1ad0b8904ff00f9c4d81d7bd7f51962"
+    },
+    {
+      "entry": "scenarios/traveling-salesman/variant-03/03-depot-crossing-unsat.lp",
+      "bytes": 737,
+      "sha256": "db1ddb756f52f719ceb9a5499c279d27aba006ffa9ca0d032aba14bd29303e11"
+    },
+    {
+      "entry": "scenarios/traveling-salesman/variant-03/04-equal-cost-split.lp",
+      "bytes": 521,
+      "sha256": "962941effa835eb0674ac22b35e401d56d4c252792b795f385f2636bb82f5765"
+    },
+    {
+      "entry": "scenarios/traveling-salesman/variant-03/05-larger-three-depots.lp",
+      "bytes": 697,
+      "sha256": "3bc00e8ffb03c40236b0471f8d707f52f0367cce736e496528335a96396be7fb"
+    },
+    {
+      "entry": "scenarios/traveling-salesman/variant-03/06-unreachable-edge.lp",
+      "bytes": 1316,
+      "sha256": "c86c03e653e48c84c6240278d790c96a130882691c6fe9f6ecb6adab7d517cc3"
+    },
+    {
+      "entry": "scenarios/traveling-salesman/variant-04/01-basic.lp",
+      "bytes": 654,
+      "sha256": "e94faf65e678b03b17fc1fbbb280cd5b7bfe3ea08012740e4c7a44f80c23e775"
+    },
+    {
+      "entry": "scenarios/traveling-salesman/variant-04/02-single-salesman.lp",
+      "bytes": 517,
+      "sha256": "da08be638955c848e7cc70ac8e3738cb00c045cfd03a99ccba027a6bb409a814"
+    },
+    {
+      "entry": "scenarios/traveling-salesman/variant-04/03-window-too-tight-unsat.lp",
+      "bytes": 563,
+      "sha256": "9bdc07024849da3f47c61e745383c1c3b97e6438d433e05641639db2f90ba881"
+    },
+    {
+      "entry": "scenarios/traveling-salesman/variant-04/04-depot-window-too-tight-unsat.lp",
+      "bytes": 723,
+      "sha256": "6f870c11dabde043851f1ccce1ac03a72428a0f02daf433fb14b4247b4ee24b1"
+    },
+    {
+      "entry": "scenarios/traveling-salesman/variant-04/05-three-depots-asymmetric-times.lp",
+      "bytes": 977,
+      "sha256": "43d7f3af847856c983c4a2721388a73333e9c022dd653b5f45cae05c61d2294b"
+    },
+    {
+      "entry": "scenarios/traveling-salesman/variant-04/06-unreachable-edge.lp",
+      "bytes": 1443,
+      "sha256": "cef5623cb089bc76e3b2894df562e6e0012473ad91a5ccd41f4edaf97447649c"
+    },
+    {
+      "entry": "scenarios/traveling-salesman/variant-05/01-basic.lp",
+      "bytes": 662,
+      "sha256": "bc42ded867fb0f5090c8d1d547d08b17ce20fec686529ade448ccd93555721b7"
+    },
+    {
+      "entry": "scenarios/traveling-salesman/variant-05/02-tight-bound-exact.lp",
+      "bytes": 535,
+      "sha256": "cdb95984fcedfb538221a9159d4b54328db8960748cc149ba826530b0037eca2"
+    },
+    {
+      "entry": "scenarios/traveling-salesman/variant-05/03-revisit-too-tight-unsat.lp",
+      "bytes": 547,
+      "sha256": "18f117cb3ef9d40b5bc4694129a72d69732348282ff37948ebd7c5b368eddc0b"
+    },
+    {
+      "entry": "scenarios/traveling-salesman/variant-05/04-depot-and-vertex-revisits.lp",
+      "bytes": 693,
+      "sha256": "93e638ab9999f4edb9adb4611505d2ce023cfd9e55aa89ee1ae731d8abb681ec"
+    },
+    {
+      "entry": "scenarios/traveling-salesman/variant-05/05-three-depots-mixed.lp",
+      "bytes": 1071,
+      "sha256": "0bedd57247c9206a158c91c10e2bf5fcebd5585b0a5b71f6e7864089a536f775"
+    },
+    {
+      "entry": "scenarios/traveling-salesman/variant-05/06-unreachable-edge.lp",
+      "bytes": 1443,
+      "sha256": "4f66bf9598410833e285724bb94bf1129c13591ef3b031317253fb02ad3b76b8"
+    },
+    {
+      "entry": "standalone/n-queens/variant-01.lp",
+      "bytes": 858,
+      "sha256": "c43d5ddf900ce2fd1d3328f2df337f1c1e8b85b63255473713b16a2dfd0dc1fd"
+    },
+    {
+      "entry": "standalone/n-queens/variant-02.lp",
+      "bytes": 960,
+      "sha256": "b6e636c06664e0e3b1a34b883e342f9c7b599f8625e154adb1927d41442fca02"
+    },
+    {
+      "entry": "standalone/n-queens/variant-03.lp",
+      "bytes": 878,
+      "sha256": "6e04e47594fd44b6ed2e17370f81ad3ae9db684af9e5aa4a85c7e1d98a5f5dd6"
+    },
+    {
+      "entry": "standalone/n-queens/variant-04.lp",
+      "bytes": 919,
+      "sha256": "d599e4b8e68f0b68df20bfaefb0a9916da69c6829cd340de301b08997cfb9295"
+    },
+    {
+      "entry": "standalone/n-queens/variant-05.lp",
+      "bytes": 1078,
+      "sha256": "42475b96940e06b957f45441cb5de66681a509d35f1c41ddc72fc36899cbfaaa"
+    },
+    {
+      "entry": "standalone/n-queens/variant-06.lp",
+      "bytes": 1116,
+      "sha256": "9d6ff26ac9bec747f4a237145ea732fd689d065545254186375afc682604fc3c"
+    },
+    {
+      "entry": "standalone/send-money/send-money.lp",
+      "bytes": 1954,
+      "sha256": "de33a9970b578cf06fa42a85b55aaefaea2fd12b6d78ae051a6654875cd9e704"
+    }
+  ],
+  "retention": "Eight JSON comparisons are byte-identical maintained zetesis-series outputs. Linked Markdown tables project each complete corpus entry, wall median/minimum/maximum and separate RSS observations from those JSON outputs. Raw matrix reports, streams and machine-local paths are not published here. Per-report integer timestamps and executable/manifest identities are preserved in each comparison's provenance.",
+  "qualification": {
+    "physical_tests": 59,
+    "physical_groups": 16,
+    "all_passed": true,
+    "physical_source": "687f0d0b473d015125d4e70040735625b4c042a3",
+    "ordinary_tests_only": true,
+    "coverage_profiles": false,
+    "implementation_proof": false,
+    "full_native_family_samples": 15040,
+    "cases": 94,
+    "pass_positions": 30080,
+    "raw_reports": 32,
+    "scope": "Retained matrix source/route receipts and complete native family parity, preserving hidden atoms, model multiplicity and objective priorities. No independent solver proof, clingo hidden-family comparison, live filesystem attestation or timing claim.",
+    "audit_receipt": "workers-687f0d0b-native-families.json"
+  },
+  "reports": [
+    {
+      "label": "cpu/A1-W1.json",
+      "bytes": 23465194,
+      "sha256": "a1f63b8bc37b922d8dcd4b5bb782e77ff5047d3291c7982ccfe9df72b9e824e8",
+      "backend": "cpu",
+      "workers": 1,
+      "native_sha256": "9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "pass_positions": 940,
+      "native_family_samples": 470,
+      "routes": {
+        "countermodel/cpu": 205,
+        "tight_support/cpu": 265
+      }
+    },
+    {
+      "label": "cpu/A1-W2.json",
+      "bytes": 23498759,
+      "sha256": "bbc7c0ff0b4ff23a84482daaf21fc792d54fe2fde77308cff5acced94605be90",
+      "backend": "cpu",
+      "workers": 2,
+      "native_sha256": "9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "pass_positions": 940,
+      "native_family_samples": 470,
+      "routes": {
+        "countermodel/cpu": 205,
+        "tight_support/cpu": 265
+      }
+    },
+    {
+      "label": "cpu/A1-W4.json",
+      "bytes": 23501797,
+      "sha256": "a39b7a611c1afc4b42100df9f3fd4e01e563a31b49b2640ab45c807432b9640e",
+      "backend": "cpu",
+      "workers": 4,
+      "native_sha256": "9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "pass_positions": 940,
+      "native_family_samples": 470,
+      "routes": {
+        "countermodel/cpu": 205,
+        "tight_support/cpu": 265
+      }
+    },
+    {
+      "label": "cpu/A1-W14.json",
+      "bytes": 23503698,
+      "sha256": "ea6973d53f4d656f84ed15dd6ad1bac34caac6d5bae09e478f30a313805a59ee",
+      "backend": "cpu",
+      "workers": 14,
+      "native_sha256": "9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "pass_positions": 940,
+      "native_family_samples": 470,
+      "routes": {
+        "countermodel/cpu": 205,
+        "tight_support/cpu": 265
+      }
+    },
+    {
+      "label": "cpu/B1-W1.json",
+      "bytes": 23465017,
+      "sha256": "b350eba83228be0e50d56b0cb89f78d37875045d225c3399feb69d0ec31189b0",
+      "backend": "cpu",
+      "workers": 1,
+      "native_sha256": "d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "pass_positions": 940,
+      "native_family_samples": 470,
+      "routes": {
+        "countermodel/cpu": 205,
+        "tight_support/cpu": 265
+      }
+    },
+    {
+      "label": "cpu/B1-W2.json",
+      "bytes": 23497819,
+      "sha256": "f5d84c0adb0a739248dcce8a0d5780b59914fdbe0624cfbcd6c5a24d6f4413ff",
+      "backend": "cpu",
+      "workers": 2,
+      "native_sha256": "d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "pass_positions": 940,
+      "native_family_samples": 470,
+      "routes": {
+        "countermodel/cpu": 205,
+        "tight_support/cpu": 265
+      }
+    },
+    {
+      "label": "cpu/B1-W4.json",
+      "bytes": 23500583,
+      "sha256": "4ce18802e02540eb843b62a45c627aeb281832d7ed2ee84c5f0d91bf0619b14c",
+      "backend": "cpu",
+      "workers": 4,
+      "native_sha256": "d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "pass_positions": 940,
+      "native_family_samples": 470,
+      "routes": {
+        "countermodel/cpu": 205,
+        "tight_support/cpu": 265
+      }
+    },
+    {
+      "label": "cpu/B1-W14.json",
+      "bytes": 23505158,
+      "sha256": "a0c800a508e3c8d02b2b4c08d1cf9014d7ab3c8979227495094254ff7dc0cdb9",
+      "backend": "cpu",
+      "workers": 14,
+      "native_sha256": "d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "pass_positions": 940,
+      "native_family_samples": 470,
+      "routes": {
+        "countermodel/cpu": 205,
+        "tight_support/cpu": 265
+      }
+    },
+    {
+      "label": "cpu/B2-W1.json",
+      "bytes": 23463666,
+      "sha256": "534cc501e0bbb85640b345dcc02e8ee010a68cff43439111bc91acaa1590a581",
+      "backend": "cpu",
+      "workers": 1,
+      "native_sha256": "d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "pass_positions": 940,
+      "native_family_samples": 470,
+      "routes": {
+        "countermodel/cpu": 205,
+        "tight_support/cpu": 265
+      }
+    },
+    {
+      "label": "cpu/B2-W2.json",
+      "bytes": 23496454,
+      "sha256": "ce1672c4c5ab522d73d92b49ffb630e0307adf423789137e8d1e7d9c832d598c",
+      "backend": "cpu",
+      "workers": 2,
+      "native_sha256": "d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "pass_positions": 940,
+      "native_family_samples": 470,
+      "routes": {
+        "countermodel/cpu": 205,
+        "tight_support/cpu": 265
+      }
+    },
+    {
+      "label": "cpu/B2-W4.json",
+      "bytes": 23498578,
+      "sha256": "2d251009fd19c7f5fd9b13229b2db933d45be269239c79274d42053c3a769579",
+      "backend": "cpu",
+      "workers": 4,
+      "native_sha256": "d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "pass_positions": 940,
+      "native_family_samples": 470,
+      "routes": {
+        "countermodel/cpu": 205,
+        "tight_support/cpu": 265
+      }
+    },
+    {
+      "label": "cpu/B2-W14.json",
+      "bytes": 23504197,
+      "sha256": "39f70ac32a5173e14152538be17110da4805da18924c46071b1eebec30930869",
+      "backend": "cpu",
+      "workers": 14,
+      "native_sha256": "d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "pass_positions": 940,
+      "native_family_samples": 470,
+      "routes": {
+        "countermodel/cpu": 205,
+        "tight_support/cpu": 265
+      }
+    },
+    {
+      "label": "cpu/A2-W1.json",
+      "bytes": 23466897,
+      "sha256": "bfa99d4579760c2ad0ffa76351db54a5585946f9b797502bf416a5605eadae0b",
+      "backend": "cpu",
+      "workers": 1,
+      "native_sha256": "9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "pass_positions": 940,
+      "native_family_samples": 470,
+      "routes": {
+        "countermodel/cpu": 205,
+        "tight_support/cpu": 265
+      }
+    },
+    {
+      "label": "cpu/A2-W2.json",
+      "bytes": 23498576,
+      "sha256": "40b42c2df494c55ced948165dab76488a512a2021b2a01334c1ccb3f179c82ad",
+      "backend": "cpu",
+      "workers": 2,
+      "native_sha256": "9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "pass_positions": 940,
+      "native_family_samples": 470,
+      "routes": {
+        "countermodel/cpu": 205,
+        "tight_support/cpu": 265
+      }
+    },
+    {
+      "label": "cpu/A2-W4.json",
+      "bytes": 23503349,
+      "sha256": "6cc0dfde7b75f3101e623881c9588fd4d1d8cdd4fa4a1360f6a6cb2eead0cb5d",
+      "backend": "cpu",
+      "workers": 4,
+      "native_sha256": "9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "pass_positions": 940,
+      "native_family_samples": 470,
+      "routes": {
+        "countermodel/cpu": 205,
+        "tight_support/cpu": 265
+      }
+    },
+    {
+      "label": "cpu/A2-W14.json",
+      "bytes": 23508991,
+      "sha256": "ebdfed4bd24ac9d4f2a3056061fa4fa67bc79d6a21e5c6cb73ffadd2d1dbbd5b",
+      "backend": "cpu",
+      "workers": 14,
+      "native_sha256": "9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "pass_positions": 940,
+      "native_family_samples": 470,
+      "routes": {
+        "countermodel/cpu": 205,
+        "tight_support/cpu": 265
+      }
+    },
+    {
+      "label": "metal/A1-W1.json",
+      "bytes": 24429916,
+      "sha256": "51d8ed13a045306c908ba0add4cf6bf584f1d0d968a249faca89f003c0591530",
+      "backend": "metal",
+      "workers": 1,
+      "native_sha256": "9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "pass_positions": 940,
+      "native_family_samples": 470,
+      "routes": {
+        "countermodel/formula": 205,
+        "tight_support/tight_support": 265
+      }
+    },
+    {
+      "label": "metal/A1-W2.json",
+      "bytes": 24525730,
+      "sha256": "10931cf7f7f297a8301d2881b7927bf80ccb139adfcb4ec473da692554a36370",
+      "backend": "metal",
+      "workers": 2,
+      "native_sha256": "9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "pass_positions": 940,
+      "native_family_samples": 470,
+      "routes": {
+        "countermodel/formula": 205,
+        "tight_support/tight_support": 265
+      }
+    },
+    {
+      "label": "metal/A1-W4.json",
+      "bytes": 24526739,
+      "sha256": "b64d68799335ed3e1e3fba37abc3a7e3aa114558b125ff060d5b4e73d3d1309f",
+      "backend": "metal",
+      "workers": 4,
+      "native_sha256": "9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "pass_positions": 940,
+      "native_family_samples": 470,
+      "routes": {
+        "countermodel/formula": 205,
+        "tight_support/tight_support": 265
+      }
+    },
+    {
+      "label": "metal/A1-W14.json",
+      "bytes": 24535321,
+      "sha256": "ae18709886a0b4a0770917be5ff52d08217a88e62ad4586aac09a0021ae888bd",
+      "backend": "metal",
+      "workers": 14,
+      "native_sha256": "9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "pass_positions": 940,
+      "native_family_samples": 470,
+      "routes": {
+        "countermodel/formula": 205,
+        "tight_support/tight_support": 265
+      }
+    },
+    {
+      "label": "metal/B1-W1.json",
+      "bytes": 24428922,
+      "sha256": "45d46bcc4f499df251b7a3cb74badb8f7c8f2e52f969adeb4e9fb3c723b4352d",
+      "backend": "metal",
+      "workers": 1,
+      "native_sha256": "d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "pass_positions": 940,
+      "native_family_samples": 470,
+      "routes": {
+        "countermodel/formula": 205,
+        "tight_support/tight_support": 265
+      }
+    },
+    {
+      "label": "metal/B1-W2.json",
+      "bytes": 24526086,
+      "sha256": "b15a359171a224c272f4f3e48576f0c3742d10f5078deefae993b45c04cf1baa",
+      "backend": "metal",
+      "workers": 2,
+      "native_sha256": "d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "pass_positions": 940,
+      "native_family_samples": 470,
+      "routes": {
+        "countermodel/formula": 205,
+        "tight_support/tight_support": 265
+      }
+    },
+    {
+      "label": "metal/B1-W4.json",
+      "bytes": 24526132,
+      "sha256": "315119df4f7d8588553a875e8dac1e7812bc2b7cef3bf44ea7c399d3fb447362",
+      "backend": "metal",
+      "workers": 4,
+      "native_sha256": "d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "pass_positions": 940,
+      "native_family_samples": 470,
+      "routes": {
+        "countermodel/formula": 205,
+        "tight_support/tight_support": 265
+      }
+    },
+    {
+      "label": "metal/B1-W14.json",
+      "bytes": 24535900,
+      "sha256": "7d43bf54ef6c25b3c8109aa38a4afa3f0ed196ad99c9cd59ad2418a54e8a5fb4",
+      "backend": "metal",
+      "workers": 14,
+      "native_sha256": "d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "pass_positions": 940,
+      "native_family_samples": 470,
+      "routes": {
+        "countermodel/formula": 205,
+        "tight_support/tight_support": 265
+      }
+    },
+    {
+      "label": "metal/B2-W1.json",
+      "bytes": 24428929,
+      "sha256": "d0d43764399c53a2f770cda36c9f304e2875048d6d9ae10af296133e5998efbc",
+      "backend": "metal",
+      "workers": 1,
+      "native_sha256": "d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "pass_positions": 940,
+      "native_family_samples": 470,
+      "routes": {
+        "countermodel/formula": 205,
+        "tight_support/tight_support": 265
+      }
+    },
+    {
+      "label": "metal/B2-W2.json",
+      "bytes": 24526129,
+      "sha256": "172b452996a55d2ed1a3d6ff5ba35ebc098bfc861a817c73ee863634487afb52",
+      "backend": "metal",
+      "workers": 2,
+      "native_sha256": "d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "pass_positions": 940,
+      "native_family_samples": 470,
+      "routes": {
+        "countermodel/formula": 205,
+        "tight_support/tight_support": 265
+      }
+    },
+    {
+      "label": "metal/B2-W4.json",
+      "bytes": 24527586,
+      "sha256": "bca23a1488bc4683f9e87db6854424d8252cce8832d4a11fd70809ec744dceaa",
+      "backend": "metal",
+      "workers": 4,
+      "native_sha256": "d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "pass_positions": 940,
+      "native_family_samples": 470,
+      "routes": {
+        "countermodel/formula": 205,
+        "tight_support/tight_support": 265
+      }
+    },
+    {
+      "label": "metal/B2-W14.json",
+      "bytes": 24534321,
+      "sha256": "a89271d709a1dc9769620290795cf7e46b5a1734401f80c39a1caf77b3ff9929",
+      "backend": "metal",
+      "workers": 14,
+      "native_sha256": "d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "pass_positions": 940,
+      "native_family_samples": 470,
+      "routes": {
+        "countermodel/formula": 205,
+        "tight_support/tight_support": 265
+      }
+    },
+    {
+      "label": "metal/A2-W1.json",
+      "bytes": 24430430,
+      "sha256": "82dd016862b6cbdc115292fad6c5189f204eee1f7b5c1f74a94ee943421aa7cf",
+      "backend": "metal",
+      "workers": 1,
+      "native_sha256": "9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "pass_positions": 940,
+      "native_family_samples": 470,
+      "routes": {
+        "countermodel/formula": 205,
+        "tight_support/tight_support": 265
+      }
+    },
+    {
+      "label": "metal/A2-W2.json",
+      "bytes": 24527315,
+      "sha256": "0f9ba01557b58f9826371f10fee1cabf4d3732b0a82e7113db8cb83e37c2e1c6",
+      "backend": "metal",
+      "workers": 2,
+      "native_sha256": "9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "pass_positions": 940,
+      "native_family_samples": 470,
+      "routes": {
+        "countermodel/formula": 205,
+        "tight_support/tight_support": 265
+      }
+    },
+    {
+      "label": "metal/A2-W4.json",
+      "bytes": 24527410,
+      "sha256": "cb6d9742e9c37b02c9755a7ad1276147281bc3403fe213d918e002670082cd4b",
+      "backend": "metal",
+      "workers": 4,
+      "native_sha256": "9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "pass_positions": 940,
+      "native_family_samples": 470,
+      "routes": {
+        "countermodel/formula": 205,
+        "tight_support/tight_support": 265
+      }
+    },
+    {
+      "label": "metal/A2-W14.json",
+      "bytes": 24537938,
+      "sha256": "7cacc36e637880d820091377928dcf7873a8df8bf14e53ca60398d73f168dff2",
+      "backend": "metal",
+      "workers": 14,
+      "native_sha256": "9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "pass_positions": 940,
+      "native_family_samples": 470,
+      "routes": {
+        "countermodel/formula": 205,
+        "tight_support/tight_support": 265
+      }
+    }
+  ],
+  "interpretation": "One host; instrumented fresh-process eager solves. Two timed and one separate RSS observation per producer/case/leg. ABBA leg medians remain separate; no pooled median, confidence interval, cold-cache condition, general speedup or device-kernel timing claim. Existing abstract Lean frontier laws do not verify the Rust scheduler."
+}

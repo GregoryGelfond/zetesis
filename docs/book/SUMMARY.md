@@ -46,6 +46,7 @@
 [Language coverage obligations](reference/language-coverage.md)
 [Validating an implementation change](reference/validation.md)
 [Performance comparisons](reference/performance.md)
+[Worker scaling: CPU and Metal](reference/worker-scaling.md)
 [Shared-plan execution: CPU and Metal](reference/plan-execution.md)
 [CPU and Metal execution series](reference/execution-series.md)
 [Reduct execution: CPU and Metal](reference/reduct-execution.md)

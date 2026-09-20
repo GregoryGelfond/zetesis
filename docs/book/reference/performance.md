@@ -1,6 +1,13 @@
 # Execution performance
 
-The latest [shared-plan execution comparison](plan-execution.md) compares
+The latest [worker-scaling comparison](worker-scaling.md) compares
+`f8146e50` with `687f0d0b` across all 94 corpus cases on Apple M4 Pro.
+It measures CPU and Metal at 1, 2, 4 and 14 host workers against stock clingo.
+Four CPU workers give the lowest observed corpus totals. Queens variant 2 is
+6–8% faster with the changed CPU scheduler at 14 workers, with higher RSS;
+the complete matrix does not establish a general Metal improvement.
+
+The preceding [shared-plan execution comparison](plan-execution.md) compares
 `eca5a1a7` with `2e80d065` on Apple M4 Pro. Metal queens and task allocation
 take about 35% and 65% less wall time; SEND takes 9–14% longer. Accounted device
 storage falls, while process RSS rises. Matched CPU eager execution remains

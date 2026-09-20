@@ -288,12 +288,12 @@ answer multisets, model counts, objective costs and optimum ties. Reproduce comp
 end-to-end solves from kernel measurements when comparing performance.
 The [validation chapter](docs/book/reference/validation.md) explains which
 claims the corpus, proof and physical execution checks can establish.
-The latest [CPU/Metal comparison](docs/book/reference/execution-series.md)
-records lower CPU wall medians on 19 of 20 commonly completed workloads, with
-mixed process-memory changes. Metal SEND and task allocation improve, while
-queens variant 2 takes 39–44% longer, concentrated in host candidate generation.
-The source-bound evidence retains that regression, non-pass outcomes and
-measurement limits; it does not establish a general GPU speedup.
+The [worker-scaling comparison](docs/book/reference/worker-scaling.md) covers all
+94 corpus cases on CPU and Metal at 1, 2, 4 and 14 host workers, against stock
+clingo. Four CPU workers give the lowest observed corpus totals. Queens variant 2
+and several task-allocation cases favor zetesis; most individual cases favor
+clingo. The complete tables retain timing and memory tradeoffs, source identities
+and measurement limits. These results do not establish a general GPU speedup.
 The [performance comparisons](docs/book/reference/performance.md) retain earlier
 grounding, atom-catalog, Table and LTO results with their source revisions and
 measurement scopes. Independent fixtures demonstrate less grounding work;
