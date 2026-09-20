@@ -31,6 +31,11 @@
 //! taken earlier lacks them. Phase timings, when enabled, are the workers'
 //! own narrowing and leaf decisions summed over the workers, so they may
 //! exceed the wall time of the walk.
+//!
+//! Local stack pops do not acquire the pool lock. One atomic closed flag
+//! controls both local and shared takes; every transition to closed holds
+//! the pool lock, which also protects idle registration and exhaustion.
+//! A worker with local, active or transferring regions is never idle.
 
 use std::num::NonZeroUsize;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -58,8 +63,6 @@ const CHANNEL_SLACK: usize = 16;
 struct Pool {
     pending: Vec<(Region, Vec<Knowledge>)>,
     idle: usize,
-    /// Every worker was idle with nothing pending, or a stop was raised.
-    closed: bool,
     /// The first stop a worker raised; read by the enumeration once the
     /// workers have finished, after their models.
     stopped: Option<Incomplete>,
@@ -71,6 +74,9 @@ struct Shared {
     certificate: Option<Arc<Certification>>,
     restrictions: RwLock<Vec<Arc<(Theory, Narrower)>>>,
     pool: Mutex<Pool>,
+    /// Every worker was idle with nothing pending, or a stop was raised.
+    /// Set only while holding the pool lock; local takes can read it alone.
+    closed: AtomicBool,
     pool_changed: Condvar,
     budget: SharedBudget,
     limits: Limits,
@@ -201,15 +207,16 @@ impl Shared {
     }
 
     fn close(&self) {
-        self.lock().closed = true;
+        let _pool = self.lock();
+        self.closed.store(true, Ordering::Release);
         self.pool_changed.notify_all();
     }
 
     /// Raise a stop: the pool closes, and the first stop is the one reported.
     fn stop(&self, error: Incomplete) {
         let mut pool = self.lock();
-        pool.closed = true;
         pool.stopped.get_or_insert(error);
+        self.closed.store(true, Ordering::Release);
         self.pool_changed.notify_all();
     }
 }
@@ -275,9 +282,9 @@ impl ParallelRegions {
                 pool: Mutex::new(Pool {
                     pending,
                     idle: 0,
-                    closed: false,
                     stopped: None,
                 }),
+                closed: AtomicBool::new(false),
                 pool_changed: Condvar::new(),
                 budget: SharedBudget::new(limits.search, budget.statistics),
                 limits,
@@ -598,20 +605,33 @@ fn take(
     shared: &Shared,
     local: &mut Vec<(Region, Vec<Knowledge>)>,
 ) -> Option<(Region, Vec<Knowledge>)> {
+    // This read admits the local take. A concurrent close may follow it,
+    // just as it could follow the former pool-lock release. Subsequent
+    // charges still poll control and the shared allowance; completed
+    // admitted leaves keep the same publication boundary.
+    if shared.closed.load(Ordering::Acquire) {
+        return None;
+    }
+    if let Some(entry) = local.pop() {
+        return Some(entry);
+    }
+    // Only an empty local stack can register as idle. Active work and
+    // child transfers stay owned by a non-idle worker, so the last idle
+    // worker can close only when the entire unfinished frontier is empty.
     let mut pool = shared.lock();
     loop {
-        if pool.closed {
+        if shared.closed.load(Ordering::Acquire) {
             return None;
-        }
-        if let Some(entry) = local.pop() {
-            return Some(entry);
         }
         if let Some(entry) = pool.pending.pop() {
             return Some(entry);
         }
         pool.idle += 1;
         if pool.idle == shared.workers {
-            pool.closed = true;
+            // This worker leaves without entering the wait. Every actual
+            // waiter removes its own registration after reacquiring the lock.
+            pool.idle -= 1;
+            shared.closed.store(true, Ordering::Release);
             shared.pool_changed.notify_all();
             return None;
         }
@@ -621,8 +641,12 @@ fn take(
             .unwrap_or_else(PoisonError::into_inner);
         pool = guard;
         pool.idle -= 1;
-        if shared.control.poll().is_err() {
-            pool.closed = true;
+        if let Err(error) = shared.control.poll() {
+            // The coordinator may already be waiting for a model after its
+            // own control poll. Preserve this stop before the last sender
+            // disconnects, so an unfinished frontier cannot look exhausted.
+            pool.stopped.get_or_insert(error.into());
+            shared.closed.store(true, Ordering::Release);
             shared.pool_changed.notify_all();
             return None;
         }
@@ -689,19 +713,22 @@ fn step<'a>(
     // Keep the cut branch for this worker and offer the held one to the
     // pool when the pool is short, else keep both. Each child takes its
     // own copy of the knowledge, linear in the theory: what the parent
-    // learned holds in both.
+    // learned holds in both. Prepare the owned child before locking, so
+    // the theory-linear clone cannot hold up other workers' pool access.
+    // Destination growth can still refuse after this preparation.
+    let held = (held, knowledge.clone());
     let mut pool = shared.lock();
     if pool.pending.len() < shared.workers {
         pool.pending
             .try_reserve(1)
             .map_err(|_| Incomplete::Allocation)?;
-        pool.pending.push((held, knowledge.clone()));
+        pool.pending.push(held);
         shared.pool_changed.notify_one();
         drop(pool);
     } else {
         drop(pool);
         local.try_reserve(1).map_err(|_| Incomplete::Allocation)?;
-        local.push((held, knowledge.clone()));
+        local.push(held);
     }
     local.try_reserve(1).map_err(|_| Incomplete::Allocation)?;
     local.push((cut, knowledge));
@@ -790,3 +817,7 @@ mod tests;
 #[cfg(test)]
 #[path = "../tests/support/parallel_timing.rs"]
 mod timing_tests;
+
+#[cfg(test)]
+#[path = "../tests/support/parallel_coordination.rs"]
+mod coordination_tests;

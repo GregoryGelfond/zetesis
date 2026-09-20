@@ -387,10 +387,11 @@ incomplete. The regions proposer needs no exclusion: a leaf is visited once.
 
 `StableModels::with_region_workers(&Theory, workers, Limits, Control)` walks
 the region tree with that many workers at once. Each worker owns a stack of
-regions with their knowledge, a budget leased for each region from the enumeration's shared
-allowance, its own index for the reduct query and its own evaluation
-workspace; the workers share a pool of regions still to visit and nothing
-else. A worker narrows a region, drops it when refuted, splits it and keeps
+regions with their knowledge, a budget leased for each region from the enumeration's
+shared allowance, and a mutable reduct evaluation workspace. Workers share the
+authenticated original-theory index, certificate, restrictions, cumulative
+limits, live counters and pool of donated regions. Candidate and reduct knowledge
+remain separate. A worker narrows a region, drops it when refuted, splits it and keeps
 both children, offering one to the pool when the pool runs short, and at a
 leaf decides membership as the scalar walk does, by the class certificate
 when one applies and else by the proper-subset query, sending a stable
@@ -411,6 +412,21 @@ current while they run; the certificate and reduct receipts are merged when
 the workers finish, so a snapshot taken earlier lacks them. One worker is
 the scalar regions walk. This particular operation does not use the batched
 protocol, since its workers decide their leaves themselves.
+
+Taking a worker-owned region reads the shared closure flag without acquiring the
+pool lock. Only an empty local stack enters the locked donation and idle protocol.
+Every closure transition holds that lock, so registering an idle worker and
+deciding that all workers are idle remain synchronized with donation. A worker
+with local or active work is never idle. An idle worker records an observed
+cancellation or deadline before closing the pool, so the coordinator cannot
+mistake the resulting disconnection for exhaustion.
+
+The held child's knowledge is copied before taking the donation lock; selecting
+and publishing a shared destination remain inside it, while local children stay
+worker-owned. These changes preserve
+the same split, one knowledge copy per split and the existing bound on the number
+of donated regions. They do not establish a bound on all local stacks or total
+process memory.
 
 `StableModels::with_region_producers` instead retains one prepared region index
 and an owned Rayon pool across bounded production rounds. It uses the same

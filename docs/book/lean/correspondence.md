@@ -426,6 +426,22 @@ shutdown and idle grants; the certificate regressions compare complete scalar
 and parallel work and reject an insufficient shared allowance. An injected
 worker unwind also checks that idle peers wake and coverage remains incomplete.
 
+The native parallel walk takes worker-owned regions without the pool mutex.
+Its single closure flag is read atomically; closing the frontier, donating a
+region and registering idle workers still synchronize through the pool mutex.
+An active worker retains ownership while copying and transferring children and
+cannot count as idle. Thus the intended frontier consists of pending, local and
+active regions until each is refuted, split or checked. `Pending.Step.perm` and
+`Pending.Walk.exhausted` describe the abstract preservation and exhaustion laws;
+the atomic flag, mutex protocol and absence of lost ownership remain Rust
+refinement obligations. An idle worker that observes cancellation or a deadline
+records the typed stop before publishing closure. The coordinator may already
+be waiting after its own control poll; channel disconnection must retain that
+stop instead of establishing exhausted coverage. A concurrent close may follow a
+worker's eligibility check; that already-active operation retains the existing
+bounded-stop contract.
+The Lean laws do not prove the scheduler's progress or Rust memory ordering.
+
 Original and frozen `Narrower` operations expose metered entry points returning
 an independent `NarrowingAttempt` receipt. The injected SAT budget acquires a
 local or shared permit before each charged read, so the shared ceiling bounds

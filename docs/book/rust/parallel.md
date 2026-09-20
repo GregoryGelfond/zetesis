@@ -116,6 +116,17 @@ Its worker setting is distinct from the relational closure pool. Scalar outer
 candidate search does not become parallel simply because residual membership
 queries use Rayon.
 
+The formula CPU route with several region workers performs candidate generation
+and membership checking in each worker. Workers consume their own region stacks
+without the shared pool lock and acquire it to exchange work or register as idle.
+The device route uses a different execution boundary: an owned Rayon pool
+produces a bounded candidate batch, joins, and then submits that batch for device
+membership checking. CPU residual completion has its own worker setting.
+The routes share semantic region readings and split laws, but their scheduling
+costs differ. A scaling comparison must record the producer and completion worker
+counts, batch size and observed membership route separately; increasing host
+workers does not change the number of GPU execution units.
+
 `SolveConfig::gpu_formula_work` and `gpu_formula_rounds` bound device propagation
 per candidate, independently of CPU work and residual-search quotas. Their
 defaults match `FormulaLimits`: 100,000,000 charged units and 64 sweeps. A work
