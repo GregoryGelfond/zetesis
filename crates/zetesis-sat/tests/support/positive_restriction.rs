@@ -142,7 +142,7 @@ fn positive_membership_rejects_equal_looking_foreign_owners() {
 }
 
 #[test]
-fn positive_membership_rejects_a_nonleast_search_witness() {
+fn positive_membership_refutes_a_nonleast_model() {
     let plan = plan();
     let candidate = zetesis_ferraris::Interpretation::new(plan.theory(), [0, 2]).unwrap();
     let mut search = SearchStatistics::default();
@@ -154,9 +154,26 @@ fn positive_membership_rejects_a_nonleast_search_witness() {
         &Control::default(),
         &mut search,
     );
-    assert!(matches!(result, Err(Incomplete::InvalidWitness)));
+    assert!(matches!(result, Ok(super::Verdict::NonMinimal)));
     assert_eq!(
-        search.work, 3,
-        "identity scan stops on the actual differing atom"
+        search.work, 5,
+        "atom comparison and original satisfaction both complete"
     );
+}
+
+#[test]
+fn positive_membership_identifies_a_nonmodel() {
+    let plan = plan();
+    let candidate = zetesis_ferraris::Interpretation::new(plan.theory(), []).unwrap();
+    let mut search = SearchStatistics::default();
+    let (result, _) = super::positive::check(
+        &plan,
+        &candidate,
+        usize::MAX,
+        crate::Limits::default(),
+        &Control::default(),
+        &mut search,
+    );
+    assert!(matches!(result, Ok(super::Verdict::NotModel)));
+    assert_eq!(search.work, 5);
 }

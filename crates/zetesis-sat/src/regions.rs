@@ -22,7 +22,7 @@
 use zetesis_cpu::Stop;
 use zetesis_cpu::regions::{Counting, Narrowing, Region, Traversal, Visit};
 use zetesis_ferraris::{
-    Interpretation, Knowledge, Narrower, NarrowingStatistics, Producers, RegionLimits, Theory,
+    Interpretation, Knowledge, Narrower, NarrowingAttempt, Producers, RegionLimits, Theory,
 };
 
 use crate::Incomplete;
@@ -277,9 +277,9 @@ impl RegionSearch {
 /// Narrow a region by the theory and every restriction until none decides
 /// an atom, or one refutes it, each from what the region already knows
 /// under it. Each narrowing runs to its own fixed point, so the joint fixed
-/// point is reached when a full round changes nothing. A narrowing stopped
-/// on the work ceiling has spent at least the remaining work, which is
-/// charged.
+/// point is reached when a full round changes nothing. Every charged read
+/// acquires its budget permit first, and even a failed narrowing contributes
+/// its admitted prefix to the counts.
 pub(crate) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
     theory: (&Theory, &Narrower),
     producers: Option<&Producers>,
@@ -306,15 +306,16 @@ pub(crate) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
                     .map_err(|_| Incomplete::Allocation)?;
                 knowledge.push(narrower.knowledge());
             }
-            let result = narrower.narrow_known(
+            let control = budget.control;
+            let attempt = narrower.narrow_known_metered(
                 formulas,
                 producers,
                 region,
                 &mut knowledge[index],
-                limits(budget),
-                budget.control,
+                control,
+                || budget.tick().map_err(NarrowingStop),
             );
-            match account(result, budget, counts)? {
+            match account(attempt, counts)? {
                 Narrowing::Refuted => return Ok(Narrowing::Refuted),
                 Narrowing::Fixed { changed: moved } => round |= moved,
             }
@@ -326,31 +327,28 @@ pub(crate) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
     }
 }
 
-/// Account one narrowing's outcome: its figures into `counts` and its work
-/// to the budget. A narrowing stopped on the work ceiling has spent at
-/// least the remaining work, which is charged; any other stop is returned
-/// as it is.
-fn account<Q: Quota>(
-    result: Result<(Narrowing, NarrowingStatistics), Stop>,
-    budget: &mut Budget<'_, Q>,
+/// Keep the search-level work refusal distinct from a verification refusal,
+/// while preserving any error supplied by the injected budget unchanged.
+struct NarrowingStop(Incomplete);
+
+impl From<Stop> for NarrowingStop {
+    fn from(stop: Stop) -> Self {
+        Self(stopped(stop))
+    }
+}
+
+/// Publish every admitted narrowing prefix before returning its result. Work
+/// has already passed through the local or shared budget before each read.
+fn account(
+    attempt: NarrowingAttempt<NarrowingStop>,
     counts: &mut RegionCounts,
 ) -> Result<Narrowing, Incomplete> {
-    let (narrowing, charges) = match result {
-        Ok(outcome) => outcome,
-        Err(Stop::WorkLimit) => {
-            let remaining = budget.remaining_work();
-            counts.work += remaining;
-            budget.charge(remaining)?;
-            return Err(Incomplete::WorkLimit);
-        }
-        Err(stop) => return Err(stopped(stop)),
-    };
+    let charges = attempt.statistics;
     counts.propagations += charges.propagations;
     counts.held += charges.held;
     counts.cut += charges.cut;
     counts.work += charges.work;
-    budget.charge(charges.work)?;
-    Ok(narrowing)
+    attempt.result.map_err(|error| error.0)
 }
 
 pub(crate) fn limits<Q: Quota>(budget: &Budget<'_, Q>) -> RegionLimits {
@@ -459,13 +457,10 @@ fn narrow_frozen<Q: Quota>(
     budget: &mut Budget<'_, Q>,
     counts: &mut RegionCounts,
 ) -> Result<Narrowing, Incomplete> {
-    let result = narrower.narrow_frozen_known(
-        theory,
-        truth,
-        region,
-        knowledge,
-        limits(budget),
-        budget.control,
-    );
-    account(result, budget, counts)
+    let control = budget.control;
+    let attempt =
+        narrower.narrow_frozen_known_metered(theory, truth, region, knowledge, control, || {
+            budget.tick().map_err(NarrowingStop)
+        });
+    account(attempt, counts)
 }

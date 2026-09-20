@@ -2,8 +2,8 @@
 //! of regions still to visit.
 //!
 //! Each worker owns a stack of regions with their knowledge, a budget
-//! leased from the enumeration's shared allowance, an index of the theory
-//! for the reduct query and its own evaluation workspace. It pops a region,
+//! leased for each region from the enumeration's shared allowance, an index
+//! of the theory for the reduct query and its own evaluation workspace. It pops a region,
 //! narrows it from the knowledge it carries, drops it when refuted, splits
 //! it otherwise and keeps both children, offering one to the pool when the
 //! pool runs short, and at a leaf decides membership as the scalar
@@ -186,9 +186,10 @@ impl Shared {
 /// The parallel proposer: verified stable models arrive from the workers.
 pub(crate) struct ParallelRegions {
     shared: Arc<Shared>,
-    receiver: Receiver<Interpretation>,
+    /// Taken before joining on drop, releasing workers blocked on a send.
+    receiver: Option<Receiver<Interpretation>>,
     sender: Option<SyncSender<Interpretation>>,
-    handles: Vec<JoinHandle<WorkerReport>>,
+    handles: Vec<JoinHandle<Option<WorkerReport>>>,
     started: bool,
     exhausted: bool,
     statistics: RegionSearchStatistics,
@@ -256,7 +257,7 @@ impl ParallelRegions {
                 candidates: AtomicU64::new(0),
                 live: Live::default(),
             }),
-            receiver,
+            receiver: Some(receiver),
             sender: Some(sender),
             handles: Vec::new(),
             started: false,
@@ -314,6 +315,9 @@ impl ParallelRegions {
         restriction: &Theory,
         budget: &mut Budget<'_>,
     ) -> Result<(), Incomplete> {
+        if !self.started {
+            self.synchronize_budget(budget.statistics)?;
+        }
         let narrower = Narrower::new(restriction);
         self.shared.budget.charge(narrower.work())?;
         self.account(budget);
@@ -345,11 +349,17 @@ impl ParallelRegions {
             return Ok(None);
         }
         if !self.started {
+            self.synchronize_budget(budget.statistics)?;
             self.start(certificate, timed)?;
         }
         loop {
             budget.control.poll()?;
-            match self.receiver.recv_timeout(POOL_WAIT) {
+            match self
+                .receiver
+                .as_ref()
+                .ok_or(Incomplete::ClosedEnumerator)?
+                .recv_timeout(POOL_WAIT)
+            {
                 Ok(model) => {
                     self.account(budget);
                     return Ok(Some(model));
@@ -371,6 +381,15 @@ impl ParallelRegions {
         }
     }
 
+    /// Before workers own leases, the coordinator's counters include every
+    /// setup charge, including certificate configuration since construction.
+    /// Reconcile them before another restriction or the first worker starts.
+    fn synchronize_budget(&mut self, statistics: SearchStatistics) -> Result<(), Incomplete> {
+        let shared = Arc::get_mut(&mut self.shared).ok_or(Incomplete::InvalidWitness)?;
+        shared.budget = SharedBudget::new(shared.limits.search, statistics);
+        Ok(())
+    }
+
     fn start(
         &mut self,
         certificate: Option<&Arc<Certification>>,
@@ -390,7 +409,7 @@ impl ParallelRegions {
             let sender = sender.clone();
             let handle = std::thread::Builder::new()
                 .name("zetesis-region".into())
-                .spawn(move || worker(&shared, &sender))
+                .spawn(move || contain_worker(&shared, || worker(&shared, &sender)))
                 .map_err(|_| Incomplete::Allocation)?;
             self.handles.push(handle);
         }
@@ -406,8 +425,10 @@ impl ParallelRegions {
     /// A merged count beyond its width is the counter refusal.
     fn join(&mut self) -> Result<(), Incomplete> {
         for handle in self.handles.drain(..) {
-            if let Ok(report) = handle.join() {
-                merge_membership(&mut self.merged, &report.statistics)?;
+            match handle.join() {
+                Ok(Some(report)) => merge_membership(&mut self.merged, &report.statistics)?,
+                Ok(None) => {}
+                Err(_) => self.shared.stop(Incomplete::WorkerPanicked),
             }
         }
         Ok(())
@@ -423,12 +444,24 @@ impl ParallelRegions {
     }
 }
 
+/// An unwinding worker cannot account for the frontier it held. Close the
+/// pool immediately, waking idle peers, and preserve an incomplete outcome.
+fn contain_worker(shared: &Shared, run: impl FnOnce() -> WorkerReport) -> Option<WorkerReport> {
+    if let Ok(report) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(run)) {
+        Some(report)
+    } else {
+        shared.stop(Incomplete::WorkerPanicked);
+        None
+    }
+}
+
 impl Drop for ParallelRegions {
     fn drop(&mut self) {
         self.shared.close();
         // Dropping the receiver makes every pending send fail, so a worker
         // blocked on a full channel exits at once. The receipts of a dropped
         // enumeration have no reader, so an overflow in them has none.
+        drop(self.receiver.take());
         let _ = self.join();
     }
 }
@@ -445,7 +478,8 @@ fn merge_membership(into: &mut Statistics, from: &Statistics) -> Result<(), Inco
         Ok(())
     }
     add(&mut into.reduct.original_work, from.reduct.original_work)?;
-    if let (Some(into), Some(from)) = (into.certified.as_mut(), from.certified.as_ref()) {
+    if let Some(from) = from.certified.as_ref() {
+        let into = into.certified.get_or_insert_default();
         add(&mut into.checks, from.checks)?;
         add(&mut into.stable, from.stable)?;
         add(&mut into.refuted, from.refuted)?;
@@ -478,25 +512,31 @@ fn worker(shared: &Shared, sender: &SyncSender<Interpretation>) -> WorkerReport 
         },
     };
     let mut reported = SearchPhaseTimings::default();
-    let lease = shared.budget.lease(&shared.control);
-    let mut budget = Budget {
-        quota: lease,
-        limits: shared.limits.search,
-        control: &shared.control,
-        statistics: SearchStatistics::default(),
-    };
+    let mut search = SearchStatistics::default();
     let mut membership = crate::prepared_reduct::State::new(SearchMethod::Regions);
     let mut local: Vec<(Region, Vec<Knowledge>)> = Vec::new();
     while let Some((region, knowledge)) = take(shared, &mut local) {
-        let stepped = step(
-            shared,
-            region,
-            knowledge,
-            &mut local,
-            &mut budget,
-            &mut membership,
-            &mut report,
-        );
+        // A region owns its grant. Settle it before waiting for another
+        // region or sending a model, so other workers can use unused permits.
+        let stepped = {
+            let mut budget = Budget {
+                quota: shared.budget.lease(&shared.control),
+                limits: shared.limits.search,
+                control: &shared.control,
+                statistics: search,
+            };
+            let result = step(
+                shared,
+                region,
+                knowledge,
+                &mut local,
+                &mut budget,
+                &mut membership,
+                &mut report,
+            );
+            search = budget.statistics;
+            result
+        };
         if let Some(measured) = report.statistics.phase_timings {
             shared.live.add_timings(&reported, &measured);
             reported = measured;
@@ -523,13 +563,13 @@ fn take(
     shared: &Shared,
     local: &mut Vec<(Region, Vec<Knowledge>)>,
 ) -> Option<(Region, Vec<Knowledge>)> {
-    if let Some(entry) = local.pop() {
-        return Some(entry);
-    }
     let mut pool = shared.lock();
     loop {
         if pool.closed {
             return None;
+        }
+        if let Some(entry) = local.pop() {
+            return Some(entry);
         }
         if let Some(entry) = pool.pending.pop() {
             return Some(entry);
@@ -590,7 +630,6 @@ fn step<'a>(
         Phase::Candidates,
         started,
     );
-    let narrowing = narrowing?;
     let after = report.regions;
     Live::add(
         &shared.live.propagations,
@@ -599,6 +638,7 @@ fn step<'a>(
     Live::add(&shared.live.held, after.held - before.held);
     Live::add(&shared.live.cut, after.cut - before.cut);
     Live::add(&shared.live.work, after.work - before.work);
+    let narrowing = narrowing?;
     if narrowing == Narrowing::Refuted {
         report.regions.refuted += 1;
         Live::add(&shared.live.refuted, 1);
@@ -651,18 +691,35 @@ fn leaf<'a>(
     report.statistics.candidates += 1;
     let queries_before = report.statistics.countermodel_queries;
     let countermodels_before = report.statistics.countermodels;
-    let decision: Decision = if let Some(certificate) = &shared.certificate {
+    let decision: Result<Decision, Incomplete> = if let Some(certificate) = &shared.certificate {
         let mut search = budget.statistics;
+        let wanted = certificate
+            .checking_work_bound()?
+            .min(shared.limits.max_verification_work);
+        let reservation = budget.quota.reserve(wanted)?;
+        let allowance = reservation.allowance();
+        let mut limits = shared.limits;
+        limits.max_verification_work = allowance;
+        if allowance < wanted {
+            // Only a shortage of global work lowers the search ceiling.
+            // A complete reservation preserves a stricter verification
+            // ceiling's own error attribution.
+            limits.search.max_work = search
+                .work
+                .checked_add(allowance)
+                .ok_or(Incomplete::CounterOverflow)?;
+        }
         let verdict = certified::classify(
             certificate,
             &candidate,
-            shared.limits,
+            limits,
             budget.control,
             &mut report.statistics,
             &mut search,
         );
+        reservation.finish(search.work - budget.statistics.work)?;
         budget.statistics = search;
-        verdict?.into()
+        verdict.map(Decision::from)
     } else {
         membership
             .check(
@@ -671,9 +728,11 @@ fn leaf<'a>(
                 shared.limits,
                 budget,
                 &mut report.statistics,
-            )?
-            .into()
+            )
+            .map(Decision::from)
     };
+    // Query entry is a receipt even when membership checking stops before
+    // producing a verdict. Publish it before propagating that failure.
     Live::add(
         &shared.live.countermodel_queries,
         report.statistics.countermodel_queries - queries_before,
@@ -682,9 +741,13 @@ fn leaf<'a>(
         &shared.live.countermodels,
         report.statistics.countermodels - countermodels_before,
     );
-    match decision {
+    match decision? {
         Decision::Stable => Ok(Some(candidate)),
         Decision::Refuted => Ok(None),
         Decision::Invalid => Err(Incomplete::InvalidWitness),
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/support/region_worker_failure.rs"]
+mod tests;

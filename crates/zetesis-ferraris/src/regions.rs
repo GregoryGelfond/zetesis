@@ -34,7 +34,9 @@
 //! held or cut.
 //!
 //! Work is charged per node read, per root tested and per producer checked,
-//! against `RegionLimits`, and control is polled once per narrowing.
+//! against `RegionLimits`, and control is polled once per narrowing. Metered
+//! entry points instead acquire each permit from the caller's quota, which can
+//! also poll control, and retain the admitted prefix on every returned failure.
 
 use std::collections::BTreeSet;
 
@@ -196,18 +198,44 @@ pub struct NarrowingStatistics {
     pub cut: u64,
 }
 
-struct Work {
+/// One narrowing's verdict or original quota/control failure, with the
+/// admitted work prefix on either outcome. A failed attempt leaves sound but
+/// partially closed knowledge and region state; both must be abandoned.
+#[derive(Debug)]
+pub struct NarrowingAttempt<E = Stop> {
+    /// Complete narrowing or the unchanged failure supplied by its quota.
+    pub result: Result<Narrowing, E>,
+    /// Charged reads and propagation progress, including a failed prefix.
+    pub statistics: NarrowingStatistics,
+}
+
+struct Work<F = fn() -> Result<(), Stop>> {
     spent: u64,
     ceiling: u64,
+    charge: F,
 }
 impl Work {
     fn new(ceiling: u64) -> Self {
-        Self { spent: 0, ceiling }
-    }
-    fn tick(&mut self) -> Result<(), Stop> {
-        if self.spent >= self.ceiling {
-            return Err(Stop::WorkLimit);
+        Self {
+            spent: 0,
+            ceiling,
+            charge: || Ok(()),
         }
+    }
+}
+impl<E: From<Stop>, F: FnMut() -> Result<(), E>> Work<F> {
+    fn metered(charge: F) -> Self {
+        Self {
+            spent: 0,
+            ceiling: u64::MAX,
+            charge,
+        }
+    }
+    fn tick(&mut self) -> Result<(), E> {
+        if self.spent >= self.ceiling {
+            return Err(Stop::WorkLimit.into());
+        }
+        (self.charge)()?;
         self.spent += 1;
         Ok(())
     }
@@ -450,7 +478,45 @@ impl Narrower {
             producers,
             frozen: None,
         };
-        self.narrow_with(subject, region, knowledge, limits, control)
+        let attempt = self.narrow_with(
+            subject,
+            region,
+            knowledge,
+            Work::new(limits.max_work),
+            control,
+        );
+        attempt
+            .result
+            .map(|narrowing| (narrowing, attempt.statistics))
+    }
+
+    /// Narrow original candidates with a caller-owned work quota. The quota
+    /// is invoked before every charged node, parent, producer or open-atom read;
+    /// a refused permit prevents that read. It owns the work ceiling and may
+    /// also poll control. This operation polls `control` before any mutation,
+    /// including when no charged read is necessary. The receipt counts only
+    /// successful permits and survives every returned failure.
+    ///
+    /// The ownership and ancestor-knowledge preconditions of
+    /// [`Self::narrow_known`] still apply. Any failed attempt's region and
+    /// knowledge must be abandoned. The quota's error is preserved; entry
+    /// control failures and exhaustion of the representable `u64` work count
+    /// use `E::from(Stop)`.
+    pub fn narrow_known_metered<E: From<Stop>>(
+        &self,
+        theory: &Theory,
+        producers: Option<&Producers>,
+        region: &mut Region,
+        knowledge: &mut Knowledge,
+        control: &Control,
+        charge: impl FnMut() -> Result<(), E>,
+    ) -> NarrowingAttempt<E> {
+        let subject = Subject {
+            theory,
+            producers,
+            frozen: None,
+        };
+        self.narrow_with(subject, region, knowledge, Work::metered(charge), control)
     }
 
     /// Narrow a region of the theory's frozen reduct under a candidate from
@@ -479,47 +545,78 @@ impl Narrower {
             producers: None,
             frozen: Some(truth),
         };
-        self.narrow_with(subject, region, knowledge, limits, control)
+        let attempt = self.narrow_with(
+            subject,
+            region,
+            knowledge,
+            Work::new(limits.max_work),
+            control,
+        );
+        attempt
+            .result
+            .map(|narrowing| (narrowing, attempt.statistics))
     }
 
-    fn narrow_with(
+    /// Narrow a frozen reduct with the quota and failure receipt contract of
+    /// [`Self::narrow_known_metered`]. The frozen mask and ancestor knowledge
+    /// retain the preconditions of [`Self::narrow_frozen_known`].
+    pub fn narrow_frozen_known_metered<E: From<Stop>>(
+        &self,
+        theory: &Theory,
+        truth: &[bool],
+        region: &mut Region,
+        knowledge: &mut Knowledge,
+        control: &Control,
+        charge: impl FnMut() -> Result<(), E>,
+    ) -> NarrowingAttempt<E> {
+        let subject = Subject {
+            theory,
+            producers: None,
+            frozen: Some(truth),
+        };
+        self.narrow_with(subject, region, knowledge, Work::metered(charge), control)
+    }
+
+    fn narrow_with<E: From<Stop>>(
         &self,
         subject: Subject<'_>,
         region: &mut Region,
         knowledge: &mut Knowledge,
-        limits: RegionLimits,
+        mut work: Work<impl FnMut() -> Result<(), E>>,
         control: &Control,
-    ) -> Result<(Narrowing, NarrowingStatistics), Stop> {
-        control.poll()?;
-        let known = &mut knowledge.known;
-        let mut work = Work::new(limits.max_work);
+    ) -> NarrowingAttempt<E> {
         let mut statistics = NarrowingStatistics::default();
-        let closed = known.close(subject, self, region, &mut work, &mut statistics);
+        let result = (|| {
+            control.poll().map_err(E::from)?;
+            let known = &mut knowledge.known;
+            if known.close(subject, self, region, &mut work, &mut statistics)?
+                == Step::Contradiction
+            {
+                return Ok(Narrowing::Refuted);
+            }
+            // The atoms this closure learned decide the region; the region's own
+            // decisions, the split's and those made here, are then all seen.
+            let mut changed = false;
+            for atom in known.learned.drain(..) {
+                let was_open = region.is_open(atom);
+                let decided = if known.atom_sure[atom] {
+                    statistics.held += u64::from(was_open);
+                    region.hold(atom)
+                } else {
+                    statistics.cut += u64::from(was_open);
+                    region.cut(atom)
+                };
+                debug_assert!(decided, "a learned atom agrees with the region");
+                changed |= was_open;
+            }
+            known.seen = region.decisions().len();
+            if let Some(atom) = most_constrained(region, known, &mut work)? {
+                region.prefer(atom);
+            }
+            Ok(Narrowing::Fixed { changed })
+        })();
         statistics.work = work.spent;
-        if closed? == Step::Contradiction {
-            return Ok((Narrowing::Refuted, statistics));
-        }
-        // The atoms this closure learned decide the region; the region's own
-        // decisions, the split's and those made here, are then all seen.
-        let mut changed = false;
-        for atom in known.learned.drain(..) {
-            let was_open = region.is_open(atom);
-            let decided = if known.atom_sure[atom] {
-                statistics.held += u64::from(was_open);
-                region.hold(atom)
-            } else {
-                statistics.cut += u64::from(was_open);
-                region.cut(atom)
-            };
-            debug_assert!(decided, "a learned atom agrees with the region");
-            changed |= was_open;
-        }
-        known.seen = region.decisions().len();
-        if let Some(atom) = most_constrained(region, known, &mut work)? {
-            region.prefer(atom);
-        }
-        statistics.work = work.spent;
-        Ok((Narrowing::Fixed { changed }, statistics))
+        NarrowingAttempt { result, statistics }
     }
 }
 
@@ -528,11 +625,11 @@ impl Narrower {
 /// This chooses the split, as the clause search branches on the variable
 /// with the most unresolved occurrences. The counts are kept as parents
 /// become known, so the ranking is one read per open atom.
-fn most_constrained(
+fn most_constrained<E: From<Stop>>(
     region: &Region,
     known: &Known,
-    work: &mut Work,
-) -> Result<Option<usize>, Stop> {
+    work: &mut Work<impl FnMut() -> Result<(), E>>,
+) -> Result<Option<usize>, E> {
     let mut best: Option<(usize, usize)> = None;
     for atom in region.open() {
         work.tick()?;
@@ -686,14 +783,14 @@ impl Known {
     /// Close the knowledge from the region's decisions, falsum and the
     /// roots. Each event on the worklist follows a new bit, or is one of
     /// the initial seeds, so the events are bounded by the bits.
-    fn close(
+    fn close<E: From<Stop>>(
         &mut self,
         subject: Subject<'_>,
         index: &Narrower,
         region: &Region,
-        work: &mut Work,
+        work: &mut Work<impl FnMut() -> Result<(), E>>,
         statistics: &mut NarrowingStatistics,
-    ) -> Result<Step, Stop> {
+    ) -> Result<Step, E> {
         let Subject {
             theory,
             producers,
@@ -753,14 +850,14 @@ impl Known {
     /// under a frozen mask is falsum in the reduct, a constant with no
     /// operands: it teaches nothing and learns nothing from them, and a
     /// parent under the mask likewise.
-    fn revisit(
+    fn revisit<E: From<Stop>>(
         &mut self,
         subject: Subject<'_>,
         index: &Narrower,
         node: usize,
         value: bool,
-        work: &mut Work,
-    ) -> Result<Step, Stop> {
+        work: &mut Work<impl FnMut() -> Result<(), E>>,
+    ) -> Result<Step, E> {
         work.tick()?;
         let Subject {
             theory,
@@ -972,13 +1069,13 @@ impl Known {
     /// `sole_support_forces`). A producer can support its atom when its
     /// body is not known to fail and, unless it is a choice, no other of
     /// its heads is known to hold.
-    fn recheck(
+    fn recheck<E: From<Stop>>(
         &mut self,
         index: &Narrower,
         producers: &Producers,
         atom: usize,
-        work: &mut Work,
-    ) -> Result<Step, Stop> {
+        work: &mut Work<impl FnMut() -> Result<(), E>>,
+    ) -> Result<Step, E> {
         if self.atom_never[atom] {
             return Ok(Step::Unchanged);
         }

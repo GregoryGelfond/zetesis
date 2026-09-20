@@ -160,7 +160,7 @@ parent applies only the decisions made since, and the count of parents
 still unknown that ranks the next split is kept as nodes become known. `Narrower::narrow_known` narrows from a
 `Knowledge` the caller carries from a region to its children and leaves it
 closed for them: the knowledge of a region holds in every region inside it
-(`known_mono`), so a child learns only the decisions its parent did not know. `Narrower::narrow_frozen` narrows a region of the
+(`known_mono`), so a child learns only the decisions its parent did not know. `Narrower::narrow_frozen_known` narrows a region of the
 theory's frozen reduct under a candidate, reading a node false in the
 candidate's truth as falsum and applying no support cut, which is the
 proper-subset query's narrowing; `FormulaEvaluation::truth` is that mask. `RegionLimits` bounds the work, and through it the events;
@@ -171,6 +171,18 @@ the most parents still unknown as the region's next split, which the
 traversal honours; without a preference it splits the highest open atom. The traversal that splits regions and
 covers the tree is `zetesis_cpu::regions::Traversal`, shared with the closure
 route; `zetesis-sat` uses it with this narrowing to propose candidates.
+
+`narrow_known_metered` and `narrow_frozen_known_metered` use the same closure with
+a caller-owned quota. They request a permit before each charged read and return
+`NarrowingAttempt { result, statistics }`, preserving the quota's typed refusal
+and the admitted work prefix. Entry control is checked even when no read is
+needed; the quota may additionally poll control at every read. The existing
+`RegionLimits` methods retain their local-ceiling API. SAT injects its search
+budget into the metered methods, so parallel workers acquire shared permits
+before candidate or frozen-reduct reads and retain their receipts after failure.
+Failed knowledge still must be abandoned. The [metering regressions](tests/region_work.rs)
+exercise every prefix of original and frozen narrowing and cancellation.
+
 `proofs/Zetesis/FormulaBounds.lean` proves the readings sound, the knowledge
 sound (`Known`, `known_sound`), and the support cut and the sole-support
 rule sound for stable models on the fragment `DisjunctiveSupport` names

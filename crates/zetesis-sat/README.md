@@ -70,8 +70,9 @@ candidate-simplified encoding; reuse does not promise a speedup.
 
 `StableModels::with_method(&Theory, SearchMethod, Limits, Control)`
 returns an iterator of `Result<Interpretation, Incomplete>` whose candidates
-come from the chosen proposer; `StableModels::new` is the clauses proposer,
-which builds the candidate CNF. Interpretations retain the original theory's
+come from the chosen proposer; `StableModels::new` uses regions without building
+a candidate CNF. `SearchMethod::Clauses` selects the clause proposer.
+Interpretations retain the original theory's
 immutable instance identity. The iterator is fused: after exhaustion or one
 terminal error it returns `None` forever. `exhausted()` becomes true only
 after the proposer proves that no classical candidate satisfying all
@@ -95,7 +96,7 @@ Under `SearchMethod::Regions`, reachable in the solve session as
 `--search regions`, no clause form of the theory is built. The candidate space is the coverage tree of
 `Search.lean` over the theory's atoms, walked by `zetesis_cpu::regions`: the
 root leaves every atom open, each region is narrowed by
-`zetesis_ferraris::Narrower::narrow_known`, from its parent's knowledge, to
+`zetesis_ferraris::Narrower::narrow_known_metered`, from its parent's knowledge, to
 the fixed point of the theory's readings, with
 the theory's producers for the support cut, and by every candidate-only
 restriction without producers, since a restriction supports nothing. A region
@@ -127,8 +128,12 @@ a region travels with the region: a split clones the knowledge into both
 children, so a child's narrowing starts from its parent's and learns only
 what the split decided (`FormulaBounds.known_mono`), and the regions still
 share nothing. The reduct query carries its knowledge the same way. Node visits and producer
-checks are charged as search work and each split as a decision, against
-the same cumulative `SearchLimits`. Regions are the default method; the
+checks acquire search-work permits before execution and each split is charged
+as a decision, against the same cumulative `SearchLimits`. The original and
+frozen narrowing receipts retain admitted work even on a control or quota
+failure; parallel live counters publish that prefix before reporting the stop.
+Started reduct queries also remain counted when their first narrowing fails.
+Regions are the default method; the
 clauses remain a method a session may select.
 `Statistics::regions` reports regions visited, refuted and reached as leaves,
 propagations (a node learned and its parents revisited, a chain learning by
@@ -157,15 +162,19 @@ interpretation; a failed constraint excludes answer sets, without claiming that
 there are no classical models. Choices and unsupported producer bodies decline
 this specialization.
 
-A successful positive plan adds one unit for every original semantic atom, or
-one empty candidate clause when the least interpretation violates a constraint.
-The units preserve all answer sets and avoid an exponential walk through other
-classical models. They use the existing CNF arena and admission, introduce no
-auxiliary atom or copied restriction DAG, and roll back together on failure.
-The immutable original theory remains the subject. Each emitted candidate must
-match the exact owner and least interpretation and independently satisfy that
-original theory. Complete positive execution therefore needs no reduct query;
-ranked support may still leave residual candidates for exact completion.
+In clause search, a successful positive plan adds one unit for every original
+semantic atom, or one empty candidate clause when the least interpretation
+violates a constraint. The units preserve all answer sets and avoid an
+exponential walk through other classical models. They use the existing CNF arena
+and admission, introduce no auxiliary atom or copied restriction DAG, and roll
+back together on failure. Region search retains its general traversal and may
+propose larger original models of positive cycles. Positive checking independently
+authenticates the original theory and compares the candidate with the least
+consequences. A larger original model is refuted by those least consequences as
+a proper-subset reduct model, even when they violate an original constraint:
+every constraint satisfied by the candidate has a tautological reduct. Only the
+least interpretation satisfying the original theory is emitted. Complete
+positive execution therefore needs no reduct query.
 The [constrained-positive laws](../../proofs/guide/constrained-positive.md)
 separate positive producer closure from arbitrary original constraint filtering;
 their premises do not establish the Rust CNF or resource refinement.
@@ -373,7 +382,7 @@ incomplete. The regions proposer needs no exclusion: a leaf is visited once.
 
 `StableModels::with_region_workers(&Theory, workers, Limits, Control)` walks
 the region tree with that many workers at once. Each worker owns a stack of
-regions with their knowledge, a budget leased from the enumeration's shared
+regions with their knowledge, a budget leased for each region from the enumeration's shared
 allowance, its own index for the reduct query and its own evaluation
 workspace; the workers share a pool of regions still to visit and nothing
 else. A worker narrows a region, drops it when refuted, splits it and keeps
@@ -397,6 +406,19 @@ current while they run; the certificate and reduct receipts are merged when
 the workers finish, so a snapshot taken earlier lacks them. One worker is
 the scalar regions walk. The batched protocol is not used with workers,
 since the workers decide their leaves themselves.
+
+Each region's lease settles before its worker waits for work or sends a model,
+returning unused permits to the other workers. The shared allowance includes
+certificate configuration performed before the workers start. A certificate
+check reserves its finite work bound, capped by the per-verification ceiling,
+before execution; returned attempts charge actual work and refund unused
+permits, including after a typed refusal. A short shared allowance bounds the
+check and yields a work stop without publication. Certificate configuration is refused after candidate
+generation begins. Dropping the iterator closes the region pool and drops its
+model receiver before joining the workers, releasing blocked sends as well as
+idle workers. An unwinding checker conservatively consumes its reservation;
+the worker closes the pool and reports `Incomplete::WorkerPanicked`, so this
+failure cannot establish exhaustive coverage.
 
 ## Search and limits
 

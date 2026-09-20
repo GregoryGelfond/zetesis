@@ -30,6 +30,30 @@ pub(super) enum Certification {
     },
 }
 
+impl Certification {
+    /// A complete check's work bound in the primitive's charged units:
+    /// tight checking visits every node, root, producer and atom once;
+    /// positive checking compares atoms, then visits nodes and roots. Early
+    /// refusals or refutations can consume less, never more.
+    pub(super) fn checking_work_bound(&self) -> Result<u64, Incomplete> {
+        let (theory, producers) = match self {
+            Self::Tight { plan, .. } => (plan.theory(), plan.producers().len()),
+            Self::Positive { plan, .. } => (plan.theory(), 0),
+        };
+        [
+            theory.atom_count(),
+            theory.nodes().len(),
+            theory.roots().len(),
+            producers,
+        ]
+        .into_iter()
+        .try_fold(0u64, |sum, count| {
+            sum.checked_add(u64::try_from(count).map_err(|_| Incomplete::CounterOverflow)?)
+                .ok_or(Incomplete::CounterOverflow)
+        })
+    }
+}
+
 #[derive(Clone, Copy)]
 enum Kind {
     Tight,
@@ -44,17 +68,20 @@ pub(super) enum Verdict {
     /// tight plan. By `TightPlans.stable_supported` the candidate is not an
     /// answer set: the candidate without that atom models its reduct.
     Unsupported,
+    /// An original model differs from the positive producers' least
+    /// consequences, which are a proper-subset model of its frozen reduct.
+    NonMinimal,
 }
 
 impl From<Verdict> for crate::ferraris::Decision {
     /// What the enumeration does with a certificate's verdict: a refutation
-    /// by the support law is a refutation, and a candidate that is not a
+    /// by support or least consequences is a refutation, and a candidate that is not a
     /// model is invalid, since every proposed candidate is one.
     fn from(verdict: Verdict) -> Self {
         match verdict {
             Verdict::Stable => Self::Stable,
             Verdict::NotModel => Self::Invalid,
-            Verdict::Unsupported => Self::Refuted,
+            Verdict::Unsupported | Verdict::NonMinimal => Self::Refuted,
         }
     }
 }
@@ -82,10 +109,12 @@ impl StableModels {
 
     /// Try complete-original-theory class certificates in the requested order.
     /// The order is only a scheduling hint; each plan checks every original root.
-    /// A positive plan installs exact original-atom units for its least model, or
-    /// an empty clause for a violated original constraint. Original theory and
-    /// reduct semantics are unchanged. Units are transactional and consume the
-    /// existing candidate CNF admission; no restriction formula DAG is copied.
+    /// For clause search, a positive plan installs exact original-atom units for
+    /// its least model, or an empty clause for a violated original constraint.
+    /// Units are transactional and consume the existing candidate CNF admission;
+    /// no restriction formula DAG is copied. Region search independently checks
+    /// original satisfaction and refutes models larger than the least closure.
+    /// Original theory and reduct semantics are unchanged.
     ///
     /// Optional shape/storage refusals leave the next plan and general reduct
     /// checking available. All preparation, failed attempts, unit construction
@@ -120,7 +149,7 @@ impl StableModels {
         if self.statistics.certified.is_some() {
             return Ok(self.certification.is_some());
         }
-        if self.statistics.candidate_queries != 0 {
+        if self.statistics.candidate_queries != 0 || self.statistics().candidates != 0 {
             return Err(Incomplete::LateCertificate);
         }
         let mut stats = CertifiedStatistics::default();
@@ -222,9 +251,9 @@ impl StableModels {
             control: &self.control,
             statistics: self.statistics.search,
         };
-        // The units are a candidate-only restriction in clause form; the
-        // regions proposer reads the plan's consequences through the
-        // theory's own readings and needs none.
+        // Units restrict only clause candidates. Regions retain their general
+        // traversal; positive classification refutes any larger original model
+        // using the least consequences as its proper-subset reduct model.
         let result = match &mut self.proposer {
             super::Proposer::Clauses(clauses) => {
                 positive::restrict(&plan, &mut clauses.cnf, &mut budget)
@@ -253,8 +282,9 @@ impl StableModels {
     }
 }
 
-/// Only the coordinator classifies certificates. Joined workers receive the
-/// remaining quota after these actual attempts have been charged.
+/// Classify a candidate and record the certificate's actual checking work.
+/// The coordinator owns its local allowance; a parallel caller reserves a
+/// bounded allowance first and settles the returned work before publication.
 pub(super) fn classify(
     certificate: &Certification,
     candidate: &Interpretation,
@@ -301,7 +331,7 @@ fn evaluate(
         .ok_or(Incomplete::CounterOverflow)?;
     match &result {
         Ok(Verdict::Stable) => increment(&mut stats.stable)?,
-        Ok(Verdict::Unsupported) => increment(&mut stats.refuted)?,
+        Ok(Verdict::Unsupported | Verdict::NonMinimal) => increment(&mut stats.refuted)?,
         Ok(Verdict::NotModel) => {}
         Err(_) => increment(&mut stats.failed)?,
     }

@@ -245,3 +245,71 @@ fn last_representable_reservation_never_wraps_or_spends_a_different_quota() {
     assert_eq!(spent.work, u64::MAX);
     assert_eq!(spent.decisions, 7);
 }
+
+#[test]
+fn an_accounted_attempt_refunds_its_unused_allowance() {
+    let shared = budget(100);
+    let control = Control::default();
+    let mut lease = shared.lease(&control);
+    lease.tick().unwrap();
+    let reservation = lease.reserve(20).unwrap();
+    assert_eq!(reservation.allowance(), 20);
+    state(&shared, (1, 79, 20));
+    // The same receipt is settled after success or a typed kernel refusal.
+    reservation.finish(3).unwrap();
+    state(&shared, (4, 96, 0));
+}
+
+#[test]
+fn a_kernel_can_execute_only_the_reserved_remainder() {
+    let shared = budget(7);
+    let control = Control::default();
+    let mut lease = shared.lease(&control);
+    let reservation = lease.reserve(20).unwrap();
+    assert_eq!(reservation.allowance(), 7);
+    state(&shared, (0, 0, 7));
+    reservation.finish(7).unwrap();
+    state(&shared, (7, 0, 0));
+    assert_eq!(lease.tick(), Err(Incomplete::WorkLimit));
+}
+
+#[test]
+fn a_kernel_reservation_returns_its_lease_before_waiting() {
+    let shared = budget(10);
+    let control = Control::with_deadline(Instant::now() + Duration::from_secs(2)).unwrap();
+    let mut first = shared.lease(&control);
+    let reservation = first.reserve(8).unwrap();
+    thread::scope(|scope| {
+        let (started, starting) = mpsc::sync_channel(1);
+        let (done, result) = mpsc::sync_channel(1);
+        let shared = &shared;
+        let control = &control;
+        scope.spawn(move || {
+            let mut lease = shared.lease(control);
+            lease.tick().unwrap();
+            started.send(()).unwrap();
+            let reservation = lease.reserve(4).unwrap();
+            assert_eq!(reservation.allowance(), 4);
+            reservation.finish(2).unwrap();
+            done.send(()).unwrap();
+        });
+        starting.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert_eq!(result.try_recv(), Err(mpsc::TryRecvError::Empty));
+        reservation.finish(3).unwrap();
+        result.recv_timeout(Duration::from_secs(2)).unwrap();
+    });
+    state(&shared, (6, 4, 0));
+}
+
+#[test]
+fn an_unwinding_kernel_consumes_its_reserved_allowance() {
+    let shared = budget(10);
+    let control = Control::default();
+    let mut lease = shared.lease(&control);
+    let stopped = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _reservation = lease.reserve(8).unwrap();
+        panic!("kernel unwound before returning its work receipt");
+    }));
+    assert!(stopped.is_err());
+    state(&shared, (8, 2, 0));
+}

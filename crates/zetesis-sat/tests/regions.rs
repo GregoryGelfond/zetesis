@@ -35,13 +35,21 @@ fn models(search: &mut StableModels) -> Vec<Vec<usize>> {
 #[test]
 fn regions_and_clauses_return_the_same_stable_models() {
     for theory in [mixed(), choices(3)] {
-        let mut clauses =
-            StableModels::new(&theory, Limits::default(), Control::default()).unwrap();
+        let mut clauses = StableModels::with_method(
+            &theory,
+            SearchMethod::Clauses,
+            Limits::default(),
+            Control::default(),
+        )
+        .unwrap();
         let expected: BTreeSet<Vec<usize>> = models(&mut clauses).into_iter().collect();
         assert!(clauses.exhausted());
+        assert!(clauses.statistics().candidate_queries > 0);
+        assert!(clauses.statistics().regions.is_none());
         let mut by_regions = regions(&theory, Limits::default());
         let found: BTreeSet<Vec<usize>> = models(&mut by_regions).into_iter().collect();
         assert!(by_regions.exhausted());
+        assert!(by_regions.statistics().regions.is_some());
         assert_eq!(found, expected);
     }
 }

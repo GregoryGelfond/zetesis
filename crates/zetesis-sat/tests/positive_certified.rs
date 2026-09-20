@@ -124,6 +124,112 @@ fn positive_plans_preserve_every_small_atomic_rule_family() {
 }
 
 #[test]
+fn region_positive_cycles_preserve_the_clause_family() {
+    let original = theory(
+        2,
+        vec![
+            Node::Atom(0),
+            Node::Atom(1),
+            Node::Implies(0, 1),
+            Node::Implies(1, 0),
+        ],
+        vec![2, 3],
+    );
+    let mut clauses = by_clauses(&original, Limits::default(), Control::default()).unwrap();
+    assert!(
+        clauses
+            .enable_class_checking(
+                CertificateLimits::default(),
+                CertificateOrder::PositiveFirst,
+            )
+            .unwrap()
+    );
+    let expected = collect(&mut clauses);
+    assert_eq!(expected, BTreeSet::from([Vec::new()]));
+    assert!(clauses.exhausted());
+    for workers in [1, 3] {
+        let mut regions = StableModels::with_region_workers(
+            &original,
+            NonZeroUsize::new(workers).unwrap(),
+            Limits::default(),
+            Control::default(),
+        )
+        .unwrap();
+        assert!(
+            regions
+                .enable_class_checking(
+                    CertificateLimits::default(),
+                    CertificateOrder::PositiveFirst,
+                )
+                .unwrap()
+        );
+        assert!(matches!(
+            regions.statistics().certified.unwrap().plan,
+            Some(CertificatePlanStatistics::Positive(_)),
+        ));
+        assert_eq!(collect(&mut regions), expected);
+        assert!(regions.exhausted());
+    }
+}
+
+#[test]
+fn region_positive_constraints_refute_larger_models() {
+    // The least producer closure is empty and violates `:- not a.`.
+    // {a,b} satisfies every original root, but its reduct also admits empty.
+    let original = theory(
+        2,
+        vec![
+            Node::Atom(0),
+            Node::Atom(1),
+            Node::Implies(0, 1),
+            Node::Implies(1, 0),
+            Node::False,
+            Node::Implies(0, 4),
+            Node::Implies(5, 4),
+        ],
+        vec![2, 3, 6],
+    );
+    let expected = independent(&original);
+    assert!(expected.is_empty());
+    let mut clauses = by_clauses(&original, Limits::default(), Control::default()).unwrap();
+    assert!(
+        clauses
+            .enable_class_checking(
+                CertificateLimits::default(),
+                CertificateOrder::PositiveFirst,
+            )
+            .unwrap()
+    );
+    assert_eq!(collect(&mut clauses), expected);
+    assert!(clauses.exhausted());
+    for workers in [1, 3] {
+        let mut regions = StableModels::with_region_workers(
+            &original,
+            NonZeroUsize::new(workers).unwrap(),
+            Limits::default(),
+            Control::default(),
+        )
+        .unwrap();
+        assert!(
+            regions
+                .enable_class_checking(
+                    CertificateLimits::default(),
+                    CertificateOrder::PositiveFirst,
+                )
+                .unwrap()
+        );
+        assert!(matches!(
+            regions.statistics().certified.unwrap().plan,
+            Some(CertificatePlanStatistics::Positive(_)),
+        ));
+        assert_eq!(collect(&mut regions), expected);
+        assert!(regions.exhausted());
+        assert_eq!(regions.statistics().certified.unwrap().refuted, 1);
+        assert_eq!(regions.statistics().countermodel_queries, 0);
+    }
+}
+
+#[test]
 fn positive_batches_preserve_the_unique_family() {
     for original in [cycle(false, false), cycle(true, false), cycle(true, true)] {
         for workers in [1, 4] {

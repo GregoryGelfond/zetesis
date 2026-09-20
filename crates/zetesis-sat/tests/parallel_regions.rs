@@ -299,3 +299,274 @@ fn one_worker_returns_the_scalar_walks_sequence() {
     .unwrap();
     assert_eq!(family(&mut one), family(&mut scalar));
 }
+
+/// Run a possibly blocking worker lifecycle in a child, so a regression is
+/// killed and reaped instead of stranding a thread in the test runner.
+fn bounded_child(name: &str, run: impl FnOnce()) {
+    if std::env::var("ZETESIS_REGION_CHILD").as_deref() == Ok(name) {
+        run();
+        return;
+    }
+    let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", name, "--nocapture"])
+        .env("ZETESIS_REGION_CHILD", name)
+        .spawn()
+        .unwrap();
+    let expires = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            assert!(status.success(), "worker lifecycle failed: {status}");
+            return;
+        }
+        if std::time::Instant::now() >= expires {
+            child.kill().unwrap();
+            child.wait().unwrap();
+            panic!("worker lifecycle did not finish before the deadline");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+}
+
+#[test]
+fn dropping_a_full_model_channel_joins_the_workers() {
+    bounded_child("dropping_a_full_model_channel_joins_the_workers", || {
+        let mut search = StableModels::with_region_workers(
+            &choices(10),
+            workers(2),
+            Limits::default(),
+            Control::default(),
+        )
+        .unwrap();
+        assert!(search.next().unwrap().is_ok());
+        // One returned model, 32 channel slots and two workers holding the
+        // next models: joining must release blocked sends as well as waiters.
+        let expires = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while search.statistics().candidates < 35 {
+            assert!(std::time::Instant::now() < expires, "channel never filled");
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        drop(search);
+    });
+}
+
+#[test]
+fn idle_workers_return_unused_work_permits() {
+    bounded_child("idle_workers_return_unused_work_permits", || {
+        let theory = choices(2);
+        let construction = StableModels::with_region_workers(
+            &theory,
+            workers(4),
+            Limits::default(),
+            Control::default(),
+        )
+        .unwrap()
+        .statistics()
+        .search
+        .work;
+        // Small allowances cross each point where one branch can finish
+        // while another still needs an idle worker's unused grant.
+        for remaining in 0..256 {
+            let limits = Limits {
+                search: SearchLimits {
+                    max_work: construction + remaining,
+                    ..SearchLimits::default()
+                },
+                ..Limits::default()
+            };
+            let control = Control::with_deadline(
+                std::time::Instant::now() + std::time::Duration::from_millis(500),
+            )
+            .unwrap();
+            let mut search =
+                StableModels::with_region_workers(&theory, workers(4), limits, control).unwrap();
+            for result in search.by_ref() {
+                assert!(
+                    result.is_ok() || matches!(result, Err(Incomplete::WorkLimit)),
+                    "allowance {remaining} waited instead of returning its work outcome: {result:?}"
+                );
+            }
+        }
+    });
+}
+
+fn certified_family(worker_count: usize, limits: Limits) -> (usize, zetesis_sat::Statistics, bool) {
+    let mut search = StableModels::with_region_workers(
+        &choices(5),
+        workers(worker_count),
+        limits,
+        Control::default(),
+    )
+    .unwrap();
+    assert!(
+        search
+            .enable_certified_checking(TightPlanLimits::default())
+            .unwrap()
+    );
+    let found = family(&mut search).len();
+    (found, search.statistics(), search.exhausted())
+}
+
+#[test]
+fn joined_workers_report_their_certificate_checks() {
+    let (found, statistics, exhausted) = certified_family(3, Limits::default());
+    assert!(exhausted);
+    assert_eq!(found, 32);
+    let certified = statistics.certified.unwrap();
+    assert_eq!(certified.checks, 32);
+    assert_eq!(certified.stable, 32);
+    assert!(certified.checking_work > 0);
+}
+
+#[test]
+fn parallel_certificates_charge_the_scalar_work() {
+    let (scalar_models, scalar, scalar_exhausted) = certified_family(1, Limits::default());
+    let (parallel_models, parallel, parallel_exhausted) = certified_family(3, Limits::default());
+    assert!(scalar_exhausted && parallel_exhausted);
+    assert_eq!((scalar_models, parallel_models), (32, 32));
+    assert_eq!(
+        parallel.regions.unwrap().counts.work,
+        scalar.regions.unwrap().counts.work
+    );
+    assert_eq!(
+        parallel.certified.unwrap().construction_work,
+        scalar.certified.unwrap().construction_work,
+    );
+    assert_eq!(parallel.search.work, scalar.search.work);
+}
+
+#[test]
+fn certificate_work_cannot_exceed_the_shared_ceiling() {
+    let (_, scalar, _) = certified_family(1, Limits::default());
+    let limits = Limits {
+        search: SearchLimits {
+            max_work: scalar.search.work - 1,
+            ..SearchLimits::default()
+        },
+        ..Limits::default()
+    };
+    let mut search =
+        StableModels::with_region_workers(&choices(5), workers(3), limits, Control::default())
+            .unwrap();
+    assert!(
+        search
+            .enable_certified_checking(TightPlanLimits::default())
+            .unwrap()
+    );
+    let last = search.by_ref().last();
+    assert!(matches!(last, Some(Err(Incomplete::WorkLimit))), "{last:?}");
+    assert!(
+        !search.exhausted(),
+        "full enumeration requires the missing certificate work"
+    );
+    let statistics = search.statistics();
+    let certificate = statistics.certified.unwrap();
+    assert!(
+        certificate.construction_work
+            + certificate.checking_work
+            + statistics.regions.unwrap().counts.work
+            + statistics.search.decisions
+            <= limits.search.max_work,
+        "certificate work must be bounded before execution: {statistics:?}",
+    );
+}
+
+#[test]
+fn a_certificate_retains_its_verification_work_refusal() {
+    let limits = Limits {
+        max_verification_work: 1,
+        ..Limits::default()
+    };
+    for worker_count in [1, 3] {
+        let mut search = StableModels::with_region_workers(
+            &choices(2),
+            workers(worker_count),
+            limits,
+            Control::default(),
+        )
+        .unwrap();
+        assert!(
+            search
+                .enable_certified_checking(TightPlanLimits::default())
+                .unwrap()
+        );
+        let last = search.by_ref().last();
+        assert!(
+            matches!(
+                last,
+                Some(Err(Incomplete::Certificate(
+                    zetesis_sat::CertificateError::Tight(zetesis_ferraris::TightError::Limit(
+                        zetesis_ferraris::TightResource::Work
+                    ),)
+                ))),
+            ),
+            "{last:?}"
+        );
+        assert!(!search.exhausted());
+    }
+}
+
+#[test]
+fn certificate_configuration_precedes_region_candidates() {
+    for worker_count in [1, 3] {
+        let theory = choices(2);
+        let mut before = StableModels::with_region_workers(
+            &theory,
+            workers(worker_count),
+            Limits::default(),
+            Control::default(),
+        )
+        .unwrap();
+        assert!(
+            before
+                .enable_certified_checking(TightPlanLimits::default())
+                .unwrap()
+        );
+        assert_eq!(family(&mut before).len(), 4);
+
+        let mut after = StableModels::with_region_workers(
+            &theory,
+            workers(worker_count),
+            Limits::default(),
+            Control::default(),
+        )
+        .unwrap();
+        assert!(after.next().unwrap().is_ok());
+        assert_eq!(
+            after.enable_certified_checking(TightPlanLimits::default()),
+            Err(Incomplete::LateCertificate),
+        );
+        assert!(after.statistics().certified.is_none());
+        assert_eq!(family(&mut after).len(), 3);
+    }
+}
+
+#[test]
+fn restrictions_after_certificate_setup_charge_the_shared_work() {
+    let theory = choices(3);
+    let mut search = StableModels::with_region_workers(
+        &theory,
+        workers(3),
+        Limits::default(),
+        Control::default(),
+    )
+    .unwrap();
+    assert!(
+        search
+            .enable_certified_checking(TightPlanLimits::default())
+            .unwrap()
+    );
+    let before = search.statistics().search.work;
+    let restriction = theory_over(&theory, vec![Node::Atom(2)], vec![0]);
+    search.restrict_candidates(&restriction).unwrap();
+    assert_eq!(search.statistics().search.work, before + 1);
+    assert_eq!(family(&mut search).len(), 4);
+    let final_statistics = search.statistics();
+    let certificate = final_statistics.certified.unwrap();
+    assert_eq!(
+        final_statistics.search.work,
+        final_statistics.regions.unwrap().counts.work
+            + final_statistics.search.decisions
+            + certificate.construction_work
+            + certificate.checking_work,
+    );
+}

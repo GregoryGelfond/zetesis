@@ -64,10 +64,12 @@ impl Default for SearchLimits {
     }
 }
 
-/// Exact accounting for charged search and certificate operations, including failures.
+/// Accounting for charged search and certificate operations, including failures.
+/// A panicking parallel worker conservatively consumes a reservation whose
+/// actual-work receipt could not be returned, and reports `WorkerPanicked`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SearchStatistics {
-    /// Charged primitive operations.
+    /// Charged primitive operations, including reservations lost to worker panic.
     pub work: u64,
     /// Fresh decision frames opened.
     pub decisions: u64,
