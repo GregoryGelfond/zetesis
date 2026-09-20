@@ -1,26 +1,34 @@
 //! Shared cancellation, deadlines, and typed incomplete outcomes.
 
 use std::fmt;
-use std::sync::Arc;
+use std::io;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Condvar, Mutex, PoisonError};
+use std::thread;
 use std::time::Instant;
 
 /// Shared cancellation and an optional immutable deadline. Clones observe the
-/// same cancellation flag; no background thread or timer is created.
+/// same flags. A deadline is observed the way cancellation is: a timer thread
+/// sets an expiry flag when the deadline passes, and a poll reads flags only,
+/// never the clock. The timer retires at the deadline or when the last clone
+/// drops, whichever comes first.
 #[derive(Clone, Debug, Default)]
 pub struct Control {
     cancelled: Arc<AtomicBool>,
-    deadline: Option<Instant>,
+    deadline: Option<Arc<DeadlineOwner>>,
 }
 
 impl Control {
-    /// A fresh control with the specified absolute deadline.
-    #[must_use]
-    pub fn with_deadline(deadline: Instant) -> Self {
-        Self {
-            deadline: Some(deadline),
+    /// A fresh control with the specified absolute deadline. A deadline that
+    /// has already passed is expired at once and starts no thread.
+    ///
+    /// # Errors
+    /// Returns the operating system's refusal to start the timer thread.
+    pub fn with_deadline(deadline: Instant) -> io::Result<Self> {
+        Ok(Self {
+            deadline: Some(Arc::new(DeadlineOwner::arm(deadline)?)),
             ..Self::default()
-        }
+        })
     }
 
     /// Cancel this control and every clone of it.
@@ -29,6 +37,7 @@ impl Control {
     }
 
     /// Observe cancellation and the deadline at a bounded work boundary.
+    /// Two relaxed loads; no clock is read.
     ///
     /// # Errors
     /// Returns cancellation first, otherwise an expired deadline.
@@ -38,11 +47,83 @@ impl Control {
             Err(Stop::Cancelled)
         } else if self
             .deadline
-            .is_some_and(|deadline| Instant::now() >= deadline)
+            .as_ref()
+            .is_some_and(|owner| owner.deadline.expired.load(Ordering::Relaxed))
         {
             Err(Stop::Deadline)
         } else {
             Ok(())
+        }
+    }
+}
+
+/// The flags a timer sets and the wake-up it waits on.
+#[derive(Debug)]
+struct Deadline {
+    at: Instant,
+    expired: AtomicBool,
+    /// True once every control clone has dropped; the timer then exits early.
+    retired: Mutex<bool>,
+    wake: Condvar,
+}
+
+/// Held by the control clones, not by the timer, so that dropping the last
+/// clone is observable as the owner's drop.
+#[derive(Debug)]
+struct DeadlineOwner {
+    deadline: Arc<Deadline>,
+}
+
+impl DeadlineOwner {
+    fn arm(at: Instant) -> io::Result<Self> {
+        let deadline = Arc::new(Deadline {
+            at,
+            expired: AtomicBool::new(false),
+            retired: Mutex::new(false),
+            wake: Condvar::new(),
+        });
+        if Instant::now() >= at {
+            deadline.expired.store(true, Ordering::Relaxed);
+        } else {
+            let timer = Arc::clone(&deadline);
+            thread::Builder::new()
+                .name("zetesis-deadline".into())
+                .spawn(move || timer.wait())?;
+        }
+        Ok(Self { deadline })
+    }
+}
+
+impl Drop for DeadlineOwner {
+    fn drop(&mut self) {
+        *self.deadline.lock() = true;
+        self.deadline.wake.notify_all();
+    }
+}
+
+impl Deadline {
+    fn lock(&self) -> std::sync::MutexGuard<'_, bool> {
+        self.retired.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Sleep until the deadline or retirement. Timed waits bound the sleep to
+    /// the remaining time, so a spurious wake-up costs one clock read.
+    fn wait(&self) {
+        let mut retired = self.lock();
+        loop {
+            if *retired {
+                return;
+            }
+            let now = Instant::now();
+            if now >= self.at {
+                self.expired.store(true, Ordering::Relaxed);
+                return;
+            }
+            retired = self
+                .wake
+                .wait_timeout(retired, self.at - now)
+                .unwrap_or_else(PoisonError::into_inner)
+                .0;
         }
     }
 }
@@ -94,3 +175,35 @@ impl fmt::Display for Stop {
 }
 
 impl std::error::Error for Stop {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    #[test]
+    fn dropping_the_last_clone_retires_the_timer() {
+        // A second waiter on the same deadline stands in for the timer thread,
+        // whose handle is not retained: retirement wakes every waiter.
+        let owner = DeadlineOwner::arm(Instant::now() + Duration::from_hours(1)).unwrap();
+        let deadline = Arc::clone(&owner.deadline);
+        let (retired, observer) = mpsc::channel();
+        thread::spawn(move || {
+            deadline.wait();
+            retired.send(()).unwrap();
+        });
+        assert!(observer.recv_timeout(Duration::from_millis(100)).is_err());
+        drop(owner);
+        assert!(observer.recv_timeout(Duration::from_secs(5)).is_ok());
+    }
+
+    #[test]
+    fn retirement_does_not_expire_the_deadline() {
+        let owner = DeadlineOwner::arm(Instant::now() + Duration::from_hours(1)).unwrap();
+        let deadline = Arc::clone(&owner.deadline);
+        drop(owner);
+        deadline.wait();
+        assert!(!deadline.expired.load(Ordering::Relaxed));
+    }
+}

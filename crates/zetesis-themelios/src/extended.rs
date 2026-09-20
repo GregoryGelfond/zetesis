@@ -3,7 +3,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use themelios_base::span::Location;
-use themelios_program::program::{Const, Program as SourceProgram, Statement};
+use themelios_program::program::{
+    BodyElement, Const, Head, Literal, LiteralInner, Program as SourceProgram, Rule, Statement,
+};
 use themelios_program::provenance::{Origin, TransformTag, WithProvenance};
 use themelios_program::raise::raise;
 use themelios_program::symbol::{Sign, Symbol};
@@ -18,8 +20,8 @@ use crate::diagnostic::unsupported;
 use crate::expansion::{Budget, check};
 use crate::{
     AdmissionFailure, AdmissionOptions, Admitted, ExpansionFailure, ExpansionLimits,
-    ExpansionResource, ParsedSource, ProfileFeature, SourceFailure, SourceMetadata, compile,
-    fact_expansion, metadata, profile,
+    ExpansionResource, ExpansionUsage, ParsedSource, ProfileFeature, SourceFailure, SourceMetadata,
+    compile, fact_expansion, metadata, profile,
 };
 
 /// Admit a bounded extension of S0: unannotated acyclic scalar `#const`
@@ -52,10 +54,12 @@ pub fn admit_extended(
         .map_err(SourceFailure::into_error)
 }
 
-struct Compilation {
-    program: Program,
-    template_origins: Vec<Vec<Location>>,
-    metadata: SourceMetadata,
+/// One admission's compiled program with the evidence its boundary retains.
+pub(crate) struct Compilation {
+    pub(crate) program: Program,
+    pub(crate) template_origins: Vec<Vec<Location>>,
+    pub(crate) metadata: SourceMetadata,
+    pub(crate) expansion: ExpansionUsage,
 }
 
 pub(crate) fn admit_parsed(
@@ -68,6 +72,7 @@ pub(crate) fn admit_parsed(
             source: source.into_source(),
             template_origins: compiled.template_origins,
             metadata: compiled.metadata,
+            expansion: compiled.expansion,
         }),
         Err(error) => Err(SourceFailure::new(source, error)),
     }
@@ -92,21 +97,24 @@ fn compile_parsed(
         source: source.source().id(),
         span: source.source().span(),
     };
-    let (program, template_origins) =
-        compile_owned(raised.program(), options.core_limits, limits, location)?;
-    Ok(Compilation {
-        program,
-        template_origins,
-        metadata: source_metadata.finish(),
-    })
+    compile_owned(
+        raised.program(),
+        options.core_limits,
+        limits,
+        location,
+        source_metadata.finish(),
+    )
 }
 
+/// Compile the source into the program with its template origins and the
+/// expansion charges it accepted, as one compilation with `metadata`.
 pub(crate) fn compile_owned(
     source: &SourceProgram,
     core_limits: AdmissionLimits,
     limits: ExpansionLimits,
     location: Location,
-) -> Result<(Program, Vec<Vec<Location>>), ExpansionFailure> {
+    metadata: SourceMetadata,
+) -> Result<Compilation, ExpansionFailure> {
     let mut budget = Budget::new(limits, core_limits.max_templates);
     let constants = resolve(source, &mut budget, location)?;
     let (mut templates, mut template_origins) =
@@ -127,7 +135,12 @@ pub(crate) fn compile_owned(
             .unwrap_or(location);
         AdmissionFailure::Core { error, location }
     })?;
-    Ok((program, template_origins))
+    Ok(Compilation {
+        program,
+        template_origins,
+        metadata,
+        expansion: budget.usage(),
+    })
 }
 
 fn check_definitions(
@@ -259,14 +272,20 @@ pub(crate) fn resolve(
 
 type Compiled = (Vec<zetesis_core::Template>, Vec<Vec<Location>>);
 
+/// Normalize each statement and compile it. A statement whose every term
+/// normalization would return as it is, charged and validated by
+/// [`kept_as_is`], is compiled from the original carrier: the rewrite would
+/// hand back the same statement, stamped with a transformation tag that
+/// nothing after this point reads, at the cost of copying and rebuilding it.
+/// Every other statement is rebuilt by the rewrite, alone in a program of
+/// its own so that no two statements merge.
 fn compile_extended(
     source: &SourceProgram,
     constants: &BTreeMap<String, Symbol>,
     budget: &mut Budget,
     fallback: Location,
 ) -> Result<Compiled, ExpansionFailure> {
-    let mut templates = Vec::new();
-    let mut origins = Vec::new();
+    let mut compiled = (Vec::new(), Vec::new());
     for carrier in source.statements() {
         if matches!(
             carrier.get(),
@@ -275,6 +294,11 @@ fn compile_extended(
             continue;
         }
         let location = origin(carrier, fallback);
+        let locations = parsed_origins(carrier);
+        if kept_as_is(carrier.get(), constants, budget, location)? {
+            emit(carrier, locations, budget, location, &mut compiled)?;
+            continue;
+        }
         let mut normalizer = Normalizer {
             constants,
             budget,
@@ -289,30 +313,189 @@ fn compile_extended(
             .statements()
             .next()
             .expect("a rule rewrite keeps its statement");
-        let locations = parsed_origins(carrier);
-        if let Some(facts) = fact_expansion::facts(normalized_carrier, budget, location)? {
-            budget.charge(
-                ExpansionResource::Origins,
-                (facts.len() as u128).saturating_mul(locations.len() as u128),
-                location,
-            )?;
-            for fact in facts {
-                templates.push(fact);
-                origins.push(locations.clone());
-            }
-        } else {
-            budget.charge(ExpansionResource::Templates, 1, location)?;
-            budget.charge(
-                ExpansionResource::Origins,
-                locations.len() as u128,
-                location,
-            )?;
-            let (compiled, compiled_origins) = compile::program(&rewritten, location)?;
-            templates.extend(compiled);
-            origins.extend(compiled_origins);
+        emit(
+            normalized_carrier,
+            locations,
+            budget,
+            location,
+            &mut compiled,
+        )?;
+    }
+    Ok(compiled)
+}
+
+/// Emit one normalized statement's templates, each with the statement's
+/// parsed origins: its facts, expanded, or the one template of its rule.
+fn emit(
+    statement: &WithProvenance<Statement>,
+    locations: Vec<Location>,
+    budget: &mut Budget,
+    location: Location,
+    (templates, origins): &mut Compiled,
+) -> Result<(), ExpansionFailure> {
+    if let Some(facts) = fact_expansion::facts(statement, budget, location)? {
+        budget.charge(
+            ExpansionResource::Origins,
+            (facts.len() as u128).saturating_mul(locations.len() as u128),
+            location,
+        )?;
+        for fact in facts {
+            templates.push(fact);
+            origins.push(locations.clone());
+        }
+    } else {
+        budget.charge(ExpansionResource::Templates, 1, location)?;
+        budget.charge(
+            ExpansionResource::Origins,
+            locations.len() as u128,
+            location,
+        )?;
+        templates.push(compile::statement(statement, location)?);
+        origins.push(locations);
+    }
+    Ok(())
+}
+
+/// Whether normalization would return `statement` exactly as it is. Its
+/// terms are charged and validated as the rewrite would charge and validate
+/// them, in the rewrite's order, on a tentative budget that becomes the
+/// budget only when every term is a [`Leaf`]; otherwise the budget is left
+/// as it was, and the rewrite charges the statement from the start. A
+/// failure is the one the rewrite would raise first, since it arises before
+/// any term the rewrite would rebuild. Nothing is cloned but the budget.
+fn kept_as_is(
+    statement: &Statement,
+    constants: &BTreeMap<String, Symbol>,
+    budget: &mut Budget,
+    location: Location,
+) -> Result<bool, ExpansionFailure> {
+    let Statement::Rule(rule) = statement else {
+        return Ok(false);
+    };
+    let mut tentative = budget.clone();
+    let kept = every_term(rule, &mut |term| match Leaf::of(term, constants) {
+        Some(leaf) => leaf.account(&mut tentative, location).map(|()| true),
+        None => Ok(false),
+    })?;
+    if kept {
+        *budget = tentative;
+    }
+    Ok(kept)
+}
+
+/// Apply `keep` to the terms of a rule of the shape this profile compiles,
+/// in the order the rewrite rebuilds them: the head, then each body element;
+/// an atom's arguments in order, a comparison's first term and then its
+/// steps. `Ok(false)` at the first term `keep` refuses, or at once for a
+/// head or body element of another shape, which the rewrite descends in an
+/// order this walk does not reproduce.
+fn every_term(
+    rule: &Rule,
+    keep: &mut impl FnMut(&Term) -> Result<bool, ExpansionFailure>,
+) -> Result<bool, ExpansionFailure> {
+    // A head or body element of any other shape, including one the pinned
+    // themelios tier may add, is left to the rewrite.
+    let head = match rule.head().get() {
+        Head::Literal(literal) => literal_terms(literal, keep)?,
+        Head::Falsum | Head::Verum => true,
+        _ => false,
+    };
+    if !head {
+        return Ok(false);
+    }
+    for element in rule.body().get().elements() {
+        let kept = match element.get() {
+            BodyElement::Literal(literal) => literal_terms(literal, keep)?,
+            _ => false,
+        };
+        if !kept {
+            return Ok(false);
         }
     }
-    Ok((templates, origins))
+    Ok(true)
+}
+
+fn literal_terms(
+    literal: &Literal,
+    keep: &mut impl FnMut(&Term) -> Result<bool, ExpansionFailure>,
+) -> Result<bool, ExpansionFailure> {
+    match &literal.inner {
+        LiteralInner::Atom(atom) => {
+            for term in atom.get().argument_terms() {
+                if !keep(term)? {
+                    return Ok(false);
+                }
+            }
+            Ok(true)
+        }
+        LiteralInner::Comparison(comparison) => {
+            let comparison = comparison.get();
+            if !keep(comparison.first())? {
+                return Ok(false);
+            }
+            for (_, term) in comparison.steps() {
+                if !keep(term)? {
+                    return Ok(false);
+                }
+            }
+            Ok(true)
+        }
+        LiteralInner::True | LiteralInner::False => Ok(true),
+    }
+}
+
+/// A term [`normalize_node`] returns exactly as it is, charged and validated
+/// by [`Leaf::account`]: a variable, or an argument-free scalar naming no
+/// definition. Every other term is rebuilt, or, for a pool or interval
+/// former, kept around terms that may not be.
+#[derive(Clone, Copy)]
+enum Leaf<'a> {
+    Variable,
+    Scalar(&'a Symbol),
+}
+
+impl<'a> Leaf<'a> {
+    fn of(term: &'a Term, constants: &BTreeMap<String, Symbol>) -> Option<Self> {
+        match term {
+            Term::Variable(_) => Some(Self::Variable),
+            Term::Symbolic(symbol)
+                if symbol.arguments().is_empty() && defined(symbol, constants).is_none() =>
+            {
+                Some(Self::Scalar(symbol))
+            }
+            _ => None,
+        }
+    }
+
+    /// Charge and validate as [`normalize_node`] does for this term: its unit
+    /// of term work first, then a scalar's validation and payload.
+    fn account(self, budget: &mut Budget, location: Location) -> Result<(), ExpansionFailure> {
+        budget.charge(ExpansionResource::TermWork, 1, location)?;
+        match self {
+            Self::Variable => Ok(()),
+            Self::Scalar(symbol) => scalar_leaf(symbol, budget, location),
+        }
+    }
+}
+
+/// The value an argument-free scalar names, when it names a definition.
+fn defined<'a>(symbol: &Symbol, constants: &'a BTreeMap<String, Symbol>) -> Option<&'a Symbol> {
+    constant_name(symbol).and_then(|name| constants.get(name))
+}
+
+/// Validate an argument-free scalar normalization keeps and charge its payload.
+fn scalar_leaf(
+    symbol: &Symbol,
+    budget: &mut Budget,
+    location: Location,
+) -> Result<(), ExpansionFailure> {
+    compile::validate_scalar(symbol, location)?;
+    budget.charge(
+        ExpansionResource::ScalarBytes,
+        symbol_bytes(symbol),
+        location,
+    )?;
+    Ok(())
 }
 
 pub(crate) fn parsed_origins(carrier: &WithProvenance<Statement>) -> Vec<Location> {
@@ -385,9 +568,7 @@ pub(crate) fn normalize_node(
                     .try_fold(|parts| -> Result<Symbol, ExpansionFailure> {
                         budget.charge(ExpansionResource::TermWork, 1, location)?;
                         let value = Symbol::from(parts);
-                        if let Some(replacement) =
-                            constant_name(&value).and_then(|name| constants.get(name))
-                        {
+                        if let Some(replacement) = defined(&value, constants) {
                             budget.charge(
                                 ExpansionResource::ScalarBytes,
                                 symbol_bytes(replacement),
@@ -402,7 +583,7 @@ pub(crate) fn normalize_node(
             Ok(Term::Symbolic(resolved))
         }
         Term::Symbolic(symbol) => {
-            if let Some(value) = constant_name(symbol).and_then(|name| constants.get(name)) {
+            if let Some(value) = defined(symbol, constants) {
                 budget.charge(
                     ExpansionResource::ScalarBytes,
                     symbol_bytes(value),
@@ -410,12 +591,7 @@ pub(crate) fn normalize_node(
                 )?;
                 Ok(Term::Symbolic(value.clone()))
             } else {
-                compile::validate_scalar(symbol, location)?;
-                budget.charge(
-                    ExpansionResource::ScalarBytes,
-                    symbol_bytes(symbol),
-                    location,
-                )?;
+                scalar_leaf(symbol, budget, location)?;
                 Ok(term)
             }
         }

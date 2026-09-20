@@ -283,7 +283,6 @@ fn coefficient_capacity_is_a_located_analysis_limit() {
 fn reached_chain_arithmetic_remains_an_error() {
     for source in [
         "p(X,Y):-0<X<Y<3,0=1,1/0=1.",
-        "p(X,Y):-0<=X<Y<3,Y/X>1.",
         "p(X,Y):-0<X<Y<3,2147483647+X>0.",
     ] {
         let result = admit_formula(
@@ -302,6 +301,15 @@ fn reached_chain_arithmetic_remains_an_error() {
             "{source}: {result:?}"
         );
     }
+}
+
+#[test]
+fn mixed_chain_bindings_preserve_defined_solutions() {
+    let program = input("p(X,Y):-0<=X<Y<3,Y/X>1.");
+    let expected = native(&input("p(1,2)."));
+    assert_eq!(program.warnings().len(), 1);
+    assert_eq!(native(&program), expected);
+    assert_eq!(exhaustive(&program), expected);
 }
 
 #[test]

@@ -5,7 +5,12 @@ use std::time::Duration;
 
 use crate::{Backend, Completion, Grounder, Options, PublicationFailure, Report};
 
-fn header(sink: &mut impl Write, options: &Options, elapsed: Duration) -> io::Result<()> {
+fn header(
+    sink: &mut impl Write,
+    options: &Options,
+    config: &crate::SolveConfig,
+    elapsed: Duration,
+) -> io::Result<()> {
     writeln!(
         sink,
         "Statistics: zetesis {}; GPU compiled={}",
@@ -14,15 +19,23 @@ fn header(sink: &mut impl Write, options: &Options, elapsed: Duration) -> io::Re
     )?;
     writeln!(
         sink,
-        "  requested: backend={}; oracle={}; grounder={}",
+        "  requested: backend={}; oracle={}; grounder={}; search={}",
         options.backend.label(),
         options.oracle.label(),
-        options.grounder.label()
+        options.grounder.label(),
+        options.search.label()
     )?;
     writeln!(
         sink,
         "  configured: workers={}; batch={}; displayed models={} (0=all)",
         options.workers, options.batch_size, options.models
+    )?;
+    writeln!(
+        sink,
+        "  memory allowance: {} bytes (host physical memory {}); each session byte ceiling not given is the library default scaled by the allowance over 2 GiB; the admission and output ceilings keep their defaults",
+        options.memory,
+        crate::options::host_memory()
+            .map_or_else(|| "unreported".to_owned(), |bytes| bytes.to_string())
     )?;
     writeln!(
         sink,
@@ -32,7 +45,7 @@ fn header(sink: &mut impl Write, options: &Options, elapsed: Duration) -> io::Re
             zetesis_themelios::JoinStrategy::Table => "table",
         }
     )?;
-    limits(sink, options)?;
+    limits(sink, options, config)?;
     writeln!(
         sink,
         "  driver wall time: {:.3} ms (admission, search and output; excludes source loading and statistics)",
@@ -54,7 +67,8 @@ pub(crate) fn write_progress(
     let semantic = progress
         .semantic()
         .ok_or_else(|| io::Error::other("statistics require semantic progress"))?;
-    header(sink, options, elapsed)?;
+    let config = crate::SolveConfig::from(options);
+    header(sink, options, &config, elapsed)?;
     if let Some(stop) = &progress.stop {
         writeln!(
             sink,
@@ -75,17 +89,20 @@ pub(crate) fn write_progress(
     details(
         sink,
         options,
+        &config,
         &Details {
             models: progress.publication.models,
             checked: semantic.candidate_progress(),
             optimum_proved: semantic.optimum_proved(),
             interruption: semantic.interruption(),
             discovered_gate_atoms: semantic.discovered_gate_atoms(),
+            expansion: progress.expansion,
             candidate_statistics: semantic.candidate_statistics(),
             countermodel_statistics: semantic.countermodel_statistics(),
             formula_execution: semantic.formula_execution(),
             lazy_execution: semantic.lazy_execution(),
             shared_execution: semantic.shared_execution(),
+            closure_execution: semantic.closure_execution(),
             query_execution: semantic.query_execution(),
             optimization: semantic.incumbent(),
         },
@@ -98,9 +115,10 @@ pub(crate) fn write_detailed(
     result: Result<&Report, &PublicationFailure>,
     elapsed: Duration,
 ) -> io::Result<()> {
-    header(sink, options, elapsed)?;
+    let config = crate::SolveConfig::from(options);
+    header(sink, options, &config, elapsed)?;
     match result {
-        Ok(report) => completed(sink, options, report),
+        Ok(report) => completed(sink, options, &config, report),
         Err(failure) => {
             writeln!(sink, "  status: failed; completion=unavailable")?;
             if let Some(partial) = &failure.partial_report {
@@ -112,7 +130,7 @@ pub(crate) fn write_detailed(
                     partial.completion,
                     partial.summary_published,
                 )?;
-                details(sink, options, &Details::from(partial.as_ref()))?;
+                details(sink, options, &config, &Details::from(partial.as_ref()))?;
             } else {
                 writeln!(
                     sink,
@@ -124,7 +142,23 @@ pub(crate) fn write_detailed(
     }
 }
 
-fn limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
+fn closure_limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
+    let share = if o.max_closure_bytes.is_none() {
+        format!(" (collective share of {} workers)", o.workers)
+    } else {
+        String::new()
+    };
+    writeln!(
+        sink,
+        "  independent CPU closure limits: named bytes/owner={}{share}; preparation/cache/collective reservation bytes={}; query preparation work={}; returned models and allocator overhead excluded",
+        o.closure_allowance(),
+        o.closure_collective(),
+        o.max_source_work
+    )
+}
+
+/// The ceilings as the session takes them: given, or scaled by the allowance.
+fn limits(sink: &mut impl Write, o: &Options, c: &crate::SolveConfig) -> io::Result<()> {
     if let Some(seconds) = o.time_limit {
         writeln!(
             sink,
@@ -135,7 +169,7 @@ fn limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
         writeln!(
             sink,
             "  shared CPU limits: source work/batch={}; record visits plus antecedent tests/world={}; collective catalog atoms={}; host payload bytes={}",
-            o.max_source_work, o.max_work, o.max_atoms, o.max_batch_bytes
+            o.max_source_work, o.max_work, o.max_atoms, c.max_batch_bytes
         )?;
     }
     writeln!(
@@ -146,23 +180,19 @@ fn limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
     writeln!(
         sink,
         "  candidate restriction limits: copied payload bytes={}; atom occurrences={}; allocator/index overhead excluded",
-        o.max_candidate_bytes, o.max_atoms
+        c.max_candidate_bytes, o.max_atoms
     )?;
     writeln!(
         sink,
         "  projection history limits: entries={}; nodes={}; named capacity/overlap bytes={}; work shares the search allowance",
-        o.max_projection_entries, o.max_projection_nodes, o.max_projection_bytes
+        o.max_projection_entries, o.max_projection_nodes, c.max_projection_bytes
     )?;
     writeln!(
         sink,
         "  prepared reduct limits: cold preparation/each query bytes={}; collective owner/worker/result bytes={}; theory and allocator metadata excluded",
-        o.max_reduct_bytes, o.max_completion_scratch_bytes
+        c.max_reduct_bytes, c.max_completion_scratch_bytes
     )?;
-    writeln!(
-        sink,
-        "  independent CPU closure limits: named bytes/owner={}; preparation/cache/collective reservation bytes={}; query preparation work={}; returned models and allocator overhead excluded",
-        o.max_closure_bytes, o.max_closure_batch_bytes, o.max_source_work
-    )?;
+    closure_limits(sink, o)?;
     writeln!(
         sink,
         "  requested grounding limits: atoms={}; carrier atoms={}; substitutions={}; ground rules={}; GPU batch bytes={}",
@@ -170,7 +200,7 @@ fn limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
         o.max_carrier_atoms,
         o.max_substitutions,
         o.max_ground_rules,
-        o.max_batch_bytes
+        c.max_batch_bytes
     )?;
     let formula = crate::admission::formula_limits(o);
     writeln!(
@@ -196,10 +226,11 @@ fn limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
     )?;
     writeln!(
         sink,
-        "  expansion limits: work={}; templates={}; values={}; eager support bytes={}",
+        "  expansion limits: work={}; templates={}; values={}; scalar bytes={}; eager support bytes={}",
         crate::admission::expansion_limits(o).max_term_work,
         o.max_expanded_templates,
         o.max_expansion_values,
+        o.max_expansion_bytes,
         o.max_support_bytes
     )?;
     writeln!(
@@ -209,12 +240,12 @@ fn limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
         o.max_objective_bound_work,
         o.max_objective_bindings,
         o.max_objective_keys,
-        o.max_objective_key_bytes
+        c.max_objective_key_bytes
     )?;
     writeln!(
         sink,
         "  incumbent limits: models={}; atoms={}; bytes={}",
-        o.max_optimal_models, o.max_optimal_atoms, o.max_optimal_bytes
+        o.max_optimal_models, o.max_optimal_atoms, c.max_optimal_bytes
     )?;
     writeln!(
         sink,
@@ -226,14 +257,19 @@ fn limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
     )
 }
 
-fn completed(sink: &mut impl Write, options: &Options, report: &Report) -> io::Result<()> {
+fn completed(
+    sink: &mut impl Write,
+    options: &Options,
+    config: &crate::SolveConfig,
+    report: &Report,
+) -> io::Result<()> {
     let status = match report.completion {
         Completion::Exhausted => "exhausted",
         Completion::RequestedModels => "requested models reached (partial coverage)",
         Completion::Interrupted => "interrupted (partial coverage)",
     };
     writeln!(sink, "  completion: {status}")?;
-    details(sink, options, &Details::from(report))
+    details(sink, options, config, &Details::from(report))
 }
 
 /// Borrow the shared statistics fields without inventing a successful report.
@@ -244,11 +280,13 @@ struct Details<'a> {
     optimum_proved: bool,
     interruption: Option<crate::Interruption>,
     discovered_gate_atoms: usize,
+    expansion: Option<zetesis_themelios::ExpansionUsage>,
     candidate_statistics: Option<zetesis_cpu::CandidateStatistics>,
     countermodel_statistics: Option<&'a zetesis_sat::Statistics>,
     formula_execution: Option<&'a crate::FormulaExecutionStatistics>,
     lazy_execution: Option<&'a crate::LazyExecutionStatistics>,
     shared_execution: Option<&'a crate::SharedExecutionStatistics>,
+    closure_execution: Option<&'a crate::ClosureExecutionStatistics>,
     query_execution: Option<&'a crate::QueryExecutionObservation>,
     optimization: Option<&'a crate::Optimization>,
 }
@@ -261,11 +299,13 @@ impl<'a> From<&'a Report> for Details<'a> {
             optimum_proved: report.optimum_proved,
             interruption: report.interruption,
             discovered_gate_atoms: report.discovered_gate_atoms,
+            expansion: report.expansion,
             candidate_statistics: report.candidate_statistics,
             countermodel_statistics: report.countermodel_statistics.as_ref(),
             formula_execution: report.formula_execution.as_ref(),
             lazy_execution: report.lazy_execution.as_ref(),
             shared_execution: report.shared_execution.as_ref(),
+            closure_execution: report.closure_execution.as_ref(),
             query_execution: report.query_execution.as_ref(),
             optimization: report.optimization.as_ref(),
         }
@@ -280,29 +320,44 @@ impl<'a> From<&'a crate::PartialReport> for Details<'a> {
             optimum_proved: report.optimum_proved,
             interruption: report.interruption,
             discovered_gate_atoms: report.discovered_gate_atoms,
+            expansion: report.expansion,
             candidate_statistics: report.candidate_statistics,
             countermodel_statistics: report.countermodel_statistics.as_ref(),
             formula_execution: report.formula_execution.as_ref(),
             lazy_execution: report.lazy_execution.as_ref(),
             shared_execution: report.shared_execution.as_ref(),
+            closure_execution: report.closure_execution.as_ref(),
             query_execution: report.query_execution.as_ref(),
             optimization: report.optimization.as_ref(),
         }
     }
 }
 
-fn details(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io::Result<()> {
-    if let Some(stats) = report.candidate_statistics {
+fn details(
+    sink: &mut impl Write,
+    options: &Options,
+    config: &crate::SolveConfig,
+    report: &Details<'_>,
+) -> io::Result<()> {
+    if let Some(usage) = report.expansion {
+        let limits = crate::admission::expansion_limits(options);
         writeln!(
             sink,
-            "  candidate restrictions: work={}; conjunctions={}; skipped impossible intervals={}; prepared atom occurrences={}; copied payload bytes={}; peak copied payload bytes={}; allocator/index overhead excluded",
-            stats.restriction_work,
-            stats.restriction_conjunctions,
-            stats.conflicts,
-            stats.restriction_atoms,
-            stats.restriction_bytes,
-            stats.restriction_peak_bytes
+            "  expansion used: term work={} of {}; templates={} of {}; values={} of {}; scalar bytes={} of {}; origins={} of {}",
+            usage.term_work,
+            limits.max_term_work,
+            usage.templates,
+            limits.max_templates,
+            usage.values,
+            limits.max_values,
+            usage.scalar_bytes,
+            limits.max_scalar_bytes,
+            usage.origin_locations,
+            limits.max_origin_locations
         )?;
+    }
+    if let Some(stats) = report.candidate_statistics {
+        candidates(sink, stats)?;
     }
     if let Some(observation) = report.query_execution {
         query(sink, observation)?;
@@ -327,8 +382,8 @@ fn details(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io
         writeln!(sink, "  interruption: {reason}")?;
     }
     if let Some(stats) = report.countermodel_statistics {
-        formula(sink, options, report)?;
-        countermodel(sink, options, stats)?;
+        formula(sink, options, config, report)?;
+        countermodel(sink, config, stats)?;
         writeln!(
             sink,
             "  discovered gate tuples: inapplicable (complete semantic candidates)"
@@ -336,10 +391,23 @@ fn details(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io
     } else if report.checked > 0 {
         closure(sink, options, report)?;
     } else {
-        writeln!(
-            sink,
-            "  effective execution: unavailable (stopped before execution counters)"
-        )?;
+        if report
+            .candidate_statistics
+            .is_some_and(|stats| stats.root_refuted)
+        {
+            // The root's narrowing settled the program: no seed was offered
+            // and no execution route ran; the carrier statistics above say
+            // what refuted it.
+            writeln!(
+                sink,
+                "  effective execution: none needed; the root narrowing refuted every seed"
+            )?;
+        } else {
+            writeln!(
+                sink,
+                "  effective execution: unavailable (stopped before execution counters)"
+            )?;
+        }
         writeln!(
             sink,
             "  oracle work: unavailable; discovered gate tuples: {}",
@@ -369,6 +437,49 @@ fn details(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io
     Ok(())
 }
 
+fn candidates(sink: &mut impl Write, stats: zetesis_cpu::CandidateStatistics) -> io::Result<()> {
+    writeln!(
+        sink,
+        "  candidate restrictions: work={}; conjunctions={}; skipped impossible intervals={}; prepared atom occurrences={}; copied payload bytes={}; peak copied payload bytes={}; allocator/index overhead excluded",
+        stats.restriction_work,
+        stats.restriction_conjunctions,
+        stats.conflicts,
+        stats.restriction_atoms,
+        stats.restriction_bytes,
+        stats.restriction_peak_bytes
+    )?;
+    if stats.root_refuted {
+        return writeln!(
+            sink,
+            "  carrier narrowing: refuted by a definite constraint after {} passes; no seed offered",
+            stats.narrowing_passes
+        );
+    }
+    writeln!(
+        sink,
+        "  carrier narrowing: passes={}; cut gate atoms={}; held gate atoms={}",
+        stats.narrowing_passes, stats.cut_gate_atoms, stats.held_gate_atoms
+    )?;
+    if let Some(stop) = stats.narrowing_stop {
+        writeln!(
+            sink,
+            "  carrier narrowing stop: {stop}; the completed passes' bounds were kept"
+        )?;
+    }
+    if stats.regions > 0 {
+        writeln!(
+            sink,
+            "  carrier regions: visited={}; refuted={}; leaves={}; counted={}; narrowing passes={}",
+            stats.regions,
+            stats.regions_refuted,
+            stats.regions_leaves,
+            stats.regions_counted,
+            stats.region_passes
+        )?;
+    }
+    Ok(())
+}
+
 fn query(sink: &mut impl Write, observation: &crate::QueryExecutionObservation) -> io::Result<()> {
     if observation.fault.is_some() && observation.statistics.is_some() {
         writeln!(
@@ -390,8 +501,11 @@ fn query(sink: &mut impl Write, observation: &crate::QueryExecutionObservation) 
         if let Some(preparation) = stats.preparation {
             writeln!(
                 sink,
-                "  query preparation: work={}; retained bytes={}; separate from candidate work; capacities are not RSS",
-                preparation.work, preparation.retained_bytes
+                "  query preparation: work={}; retained bytes={}; dense predicates={} of {}; separate from candidate work; capacities are not RSS",
+                preparation.work,
+                preparation.retained_bytes,
+                preparation.dense_predicates,
+                preparation.predicates
             )?;
         }
     } else {
@@ -517,7 +631,7 @@ fn lazy_buffer_usage(sink: &mut impl Write, usage: crate::LazyTransportUsage) ->
 
 fn countermodel(
     sink: &mut impl Write,
-    options: &Options,
+    config: &crate::SolveConfig,
     stats: &zetesis_sat::Statistics,
 ) -> io::Result<()> {
     if let Some(support) = stats.support {
@@ -525,6 +639,25 @@ fn countermodel(
             sink,
             "  necessary disjunctive support: status={:?}; construction work={}; encoding work={} (included in search work)",
             support.status, support.construction_work, support.encoding_work
+        )?;
+    }
+    if let Some(regions) = stats.regions {
+        let counts = regions.counts;
+        writeln!(
+            sink,
+            "  candidate regions: visited={}; refuted={}; leaves={}; propagations={}; held={}; cut={}; support cut={}; reading work={} (included in search work)",
+            counts.regions,
+            counts.refuted,
+            counts.leaves,
+            counts.propagations,
+            counts.held,
+            counts.cut,
+            if regions.producers {
+                "applied"
+            } else {
+                "not applicable"
+            },
+            counts.work,
         )?;
     }
     writeln!(
@@ -567,8 +700,16 @@ fn countermodel(
             stats.reduct.peak_workspace_bytes,
         )?;
     }
+    if stats.reduct.regions.regions > 0 || stats.reduct.regions.work > 0 {
+        let regions = stats.reduct.regions;
+        writeln!(
+            sink,
+            "  reduct query regions: visited={}; refuted={}; leaves={}; propagations={}; reading work={} (included in search work)",
+            regions.regions, regions.refuted, regions.leaves, regions.propagations, regions.work,
+        )?;
+    }
     if let Some(certified) = stats.certified {
-        certificate(sink, &certified, options.max_completion_scratch_bytes)?;
+        certificate(sink, &certified, config.max_completion_scratch_bytes)?;
     }
     Ok(())
 }
@@ -580,14 +721,14 @@ fn certificate(
 ) -> io::Result<()> {
     writeln!(
         sink,
-        "  class certificate: eligible={}; refusal={:?}; storage limit={}; construction work={}; checks={}; stable decisions before commit={}; residuals={}; failed={}; checking work={}",
+        "  class certificate: eligible={}; refusal={:?}; storage limit={}; construction work={}; checks={}; stable decisions before commit={}; refuted by support={}; failed={}; checking work={}",
         certified.plan.is_some(),
         certified.refusal,
         max_bytes,
         certified.construction_work,
         certified.checks,
         certified.stable,
-        certified.residuals,
+        certified.refuted,
         certified.failed,
         certified.checking_work
     )?;
@@ -639,7 +780,12 @@ fn certificate(
     Ok(())
 }
 
-fn formula(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io::Result<()> {
+fn formula(
+    sink: &mut impl Write,
+    options: &Options,
+    config: &crate::SolveConfig,
+    report: &Details<'_>,
+) -> io::Result<()> {
     let oracle = match report
         .countermodel_statistics
         .and_then(|s| s.certified)
@@ -669,7 +815,7 @@ fn formula(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io
             execution.completion.failed,
             execution.completion.requested_scratch_bytes,
             execution.completion.peak_scratch_bytes,
-            options.max_completion_scratch_bytes,
+            config.max_completion_scratch_bytes,
             execution.completion.overflowed
         )?;
         writeln!(
@@ -703,7 +849,7 @@ fn formula(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io
         writeln!(
             sink,
             "  formula batch limits: candidates={}; pending bytes={}",
-            options.batch_size, options.max_batch_bytes
+            options.batch_size, config.max_batch_bytes
         )?;
         if !execution.adapter.is_empty() {
             formula_gpu(sink, execution)?;
@@ -751,11 +897,16 @@ fn formula_gpu(
 }
 
 fn closure(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io::Result<()> {
-    let grounder = if options.grounder == Grounder::Eager {
-        "eager"
-    } else {
-        "lazy"
-    };
+    // The statistics say which route ran; without one, the requested policy
+    // says which would have.
+    let grounder = report.closure_execution.map_or(
+        if options.grounder == Grounder::Eager {
+            "eager"
+        } else {
+            "lazy"
+        },
+        |closure| closure.route.label(),
+    );
     let cpu = report.shared_execution.is_some()
         || matches!(options.backend, Backend::Auto | Backend::Cpu);
     if cpu {
@@ -776,6 +927,13 @@ fn closure(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io
             "  discovered gate tuples: {}; source and world work reported separately above",
             report.discovered_gate_atoms
         )
+    } else if let Some(closure) = report.closure_execution {
+        writeln!(
+            sink,
+            "  discovered gate tuples: {}",
+            report.discovered_gate_atoms
+        )?;
+        independent_closure(sink, closure)
     } else {
         writeln!(
             sink,
@@ -783,6 +941,38 @@ fn closure(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io
             report.discovered_gate_atoms
         )
     }
+}
+
+fn independent_closure(
+    sink: &mut impl Write,
+    closure: &crate::ClosureExecutionStatistics,
+) -> io::Result<()> {
+    let (rounds, units) = match closure.route {
+        crate::ClosureRoute::Eager => ("rule passes", "eager scan units"),
+        crate::ClosureRoute::Lazy(_) => ("source rounds", "join/copy units"),
+    };
+    writeln!(
+        sink,
+        "  independent closure: checks completed={}; stopped={}; {rounds}={}; work={} ({units}); derived atoms={}; stopped checks return no counters",
+        closure.completed_checks,
+        closure.stopped_checks,
+        closure.rounds,
+        closure.work,
+        closure.derived_atoms
+    )?;
+    if let crate::ClosureRoute::Lazy(joins) = closure.route {
+        writeln!(
+            sink,
+            "  closure joins: catalog work={} (within work); bindings={}; tuple probes={}; dense heads={} (recorded as bits); block steps={} (blocks joined by words); peak named closure bytes={} (admitted or reserved capacity, not RSS)",
+            joins.catalog_work,
+            joins.bindings,
+            joins.tuple_probes,
+            joins.dense_heads,
+            joins.block_steps,
+            joins.peak_closure_bytes
+        )?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

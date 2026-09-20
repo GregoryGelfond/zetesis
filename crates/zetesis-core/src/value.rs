@@ -71,11 +71,49 @@ pub enum Sign {
 }
 
 /// A predicate's name, arity and sign; all three participate in identity.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+///
+/// The name is shared: every atom a program mints for one predicate refers
+/// to the one allocation the program admitted, so comparing two such
+/// predicates is a pointer comparison and cloning one is a reference count.
+/// Two names spelled alike from different allocations still compare and
+/// hash by their bytes, so identity never depends on the sharing.
+#[derive(Clone, Debug)]
 pub struct Predicate {
-    name: String,
+    name: std::sync::Arc<str>,
     arity: usize,
     sign: Sign,
+}
+
+impl PartialEq for Predicate {
+    fn eq(&self, other: &Self) -> bool {
+        self.arity == other.arity
+            && self.sign == other.sign
+            && (std::sync::Arc::ptr_eq(&self.name, &other.name) || self.name == other.name)
+    }
+}
+impl Eq for Predicate {}
+impl PartialOrd for Predicate {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for Predicate {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let name = if std::sync::Arc::ptr_eq(&self.name, &other.name) {
+            std::cmp::Ordering::Equal
+        } else {
+            self.name.cmp(&other.name)
+        };
+        name.then_with(|| self.arity.cmp(&other.arity))
+            .then_with(|| self.sign.cmp(&other.sign))
+    }
+}
+impl std::hash::Hash for Predicate {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        (*self.name).hash(state);
+        self.arity.hash(state);
+        self.sign.hash(state);
+    }
 }
 
 impl Predicate {
@@ -104,18 +142,30 @@ impl Predicate {
         if name.is_empty() {
             return Err(ConstructionError::EmptyPredicateName);
         }
-        Ok(Self { name, arity, sign })
+        Ok(Self {
+            name: std::sync::Arc::from(name),
+            arity,
+            sign,
+        })
+    }
+    /// Whether the two predicates share one name allocation, as a program's
+    /// atoms of one predicate do after admission.
+    #[must_use]
+    pub fn shares_name(&self, other: &Self) -> bool {
+        std::sync::Arc::ptr_eq(&self.name, &other.name)
     }
     /// The exact predicate name.
     #[must_use]
     pub fn name(&self) -> &str {
         &self.name
     }
-    /// Owned name-buffer capacity, excluding this inline signature. Constant time.
-    /// Allocator bookkeeping is outside this named capacity.
+    /// The name's bytes, excluding this inline signature and the shared
+    /// allocation's reference counts. Constant time. Allocator bookkeeping
+    /// is outside it, and a name shared by many predicates is counted by
+    /// each.
     #[must_use]
-    pub fn payload_capacity_bytes(&self) -> usize {
-        self.name.capacity()
+    pub fn name_bytes(&self) -> usize {
+        self.name.len()
     }
 
     /// The number of arguments.
@@ -179,12 +229,21 @@ impl Atom {
     pub fn checked_payload_capacity_bytes(&self) -> Option<u128> {
         let fixed = (self.values.capacity() as u128)
             .checked_mul(std::mem::size_of::<Value>() as u128)?
-            .checked_add(self.predicate.payload_capacity_bytes() as u128)?;
+            .checked_add(self.predicate.name_bytes() as u128)?;
         self.values.iter().try_fold(fixed, |bytes, value| {
             bytes.checked_add(value.checked_payload_capacity_bytes()?)
         })
     }
 
+    /// Refer to the program's shared name for this atom's predicate; `shared`
+    /// must be equal to the atom's predicate.
+    pub(crate) fn share_predicate(&mut self, shared: Predicate) {
+        debug_assert!(
+            self.predicate == shared,
+            "a shared name spells the same predicate"
+        );
+        self.predicate = shared;
+    }
     pub(crate) fn from_valid_parts(predicate: Predicate, values: Vec<Value>) -> Self {
         Self { predicate, values }
     }

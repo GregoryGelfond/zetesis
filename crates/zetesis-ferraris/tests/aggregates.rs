@@ -440,7 +440,10 @@ fn cancellation_and_deadlines_precede_work_even_for_an_empty_aggregate() {
     cancelled.cancel();
     for (control, expected) in [
         (cancelled, Stop::Cancelled),
-        (Control::with_deadline(Instant::now()), Stop::Deadline),
+        (
+            Control::with_deadline(Instant::now()).unwrap(),
+            Stop::Deadline,
+        ),
     ] {
         let mut nodes = Vec::new();
         let error = append_aggregate(

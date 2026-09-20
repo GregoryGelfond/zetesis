@@ -6,6 +6,20 @@ use proptest::prelude::*;
 use zetesis_ferraris::{AdmissionLimits, Interpretation, Node, Theory};
 use zetesis_sat::{Control, Incomplete, Limits, StableModels};
 
+/// Enumerate by the clause forms, the subject of the tests below.
+fn by_clauses(
+    theory: &zetesis_ferraris::Theory,
+    limits: zetesis_sat::Limits,
+    control: zetesis_sat::Control,
+) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
+    zetesis_sat::StableModels::with_method(
+        theory,
+        zetesis_sat::SearchMethod::Clauses,
+        limits,
+        control,
+    )
+}
+
 fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
     Theory::new(atoms, nodes, roots, AdmissionLimits::default()).unwrap()
 }
@@ -94,7 +108,7 @@ fn a_late_capacity_failure_restores_auxiliary_ids_clauses_and_live_cursor() {
     let mut limits = Limits::default();
     // The actual disjunction restriction needs four clauses; history is separate.
     limits.admission.max_clauses = 3;
-    let mut search = StableModels::new(&original, limits, Control::default()).unwrap();
+    let mut search = by_clauses(&original, limits, Control::default()).unwrap();
     assert!(key(&search.next().unwrap().unwrap()).is_empty());
     let before = search.statistics();
     let guard = theory(
@@ -123,7 +137,7 @@ fn carrier_control_and_encoding_work_failures_never_claim_completion() {
         vec![2],
     );
     let control = Control::default();
-    let mut search = StableModels::new(&original, Limits::default(), control.clone()).unwrap();
+    let mut search = by_clauses(&original, Limits::default(), control.clone()).unwrap();
     assert_eq!(
         search.restrict_candidates(&choices(3)),
         Err(Incomplete::RestrictionUniverse {
@@ -141,13 +155,13 @@ fn carrier_control_and_encoding_work_failures_never_claim_completion() {
     assert!(matches!(search.next(), Some(Err(Incomplete::Cancelled))));
     assert!(!search.exhausted());
 
-    let mut measured = StableModels::new(&original, Limits::default(), Control::default()).unwrap();
+    let mut measured = by_clauses(&original, Limits::default(), Control::default()).unwrap();
     measured.restrict_candidates(&guard).unwrap();
     let exact = measured.statistics().search.work;
     for ceiling in [exact - 1, exact] {
         let mut limits = Limits::default();
         limits.search.max_work = ceiling;
-        let mut search = StableModels::new(&original, limits, Control::default()).unwrap();
+        let mut search = by_clauses(&original, limits, Control::default()).unwrap();
         let result = search.restrict_candidates(&guard);
         assert_eq!(result.is_ok(), ceiling == exact);
         assert_eq!(
@@ -159,7 +173,7 @@ fn carrier_control_and_encoding_work_failures_never_claim_completion() {
         assert!(matches!(search.next(), Some(Err(Incomplete::WorkLimit))));
     }
     let zero = choices(0);
-    let mut search = StableModels::new(&zero, Limits::default(), Control::default()).unwrap();
+    let mut search = by_clauses(&zero, Limits::default(), Control::default()).unwrap();
     search
         .restrict_candidates(&theory(0, vec![Node::False], vec![0]))
         .unwrap();

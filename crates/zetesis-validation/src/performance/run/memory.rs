@@ -20,7 +20,7 @@ pub(super) fn invoke(
     launch(helper, arguments, solver.directory, deadline, report, true)
 }
 
-pub(super) fn read(
+pub(in crate::performance) fn read(
     path: &Path,
     helper: Option<u32>,
 ) -> (Vec<u8>, Result<process::memory::Measurement, String>) {

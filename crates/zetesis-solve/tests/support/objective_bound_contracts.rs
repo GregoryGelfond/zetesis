@@ -15,6 +15,20 @@ use crate::countermodel::Input;
 use crate::execution_observation::Observer;
 use crate::{ExecutionObservation, ExecutionObserver, SolveConfig};
 
+/// Enumerate by the clause forms, the subject of the tests below.
+fn by_clauses(
+    theory: &zetesis_ferraris::Theory,
+    limits: zetesis_sat::Limits,
+    control: zetesis_sat::Control,
+) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
+    zetesis_sat::StableModels::with_method(
+        theory,
+        zetesis_sat::SearchMethod::Clauses,
+        limits,
+        control,
+    )
+}
+
 fn admitted(source: &str) -> AdmittedFormula {
     admit_formula(
         source.to_owned(),
@@ -30,6 +44,8 @@ fn input(admitted: &AdmittedFormula) -> Input<'_> {
         theory: admitted.theory(),
         atoms: admitted.atom_catalog(),
         gate_atoms: 0,
+        keyed_constraints: 0,
+        key_analysis: zetesis_themelios::KeyAnalysis::Complete,
         objectives: admitted.objectives(),
         certificate_order: zetesis_sat::CertificateOrder::TightFirst,
     }
@@ -151,7 +167,7 @@ fn bound_capacity_failure_restores_exact_search_and_disables_only_pruning() {
         },
         ..Default::default()
     };
-    let mut models = StableModels::new(admitted.theory(), limits, Control::default()).unwrap();
+    let mut models = by_clauses(admitted.theory(), limits, Control::default()).unwrap();
     let original_nodes = models.theory().nodes().to_vec();
     bounds
         .improve(
@@ -177,7 +193,7 @@ fn bound_capacity_failure_restores_exact_search_and_disables_only_pruning() {
         )]
     ));
     let actual = complete(&mut models);
-    let mut baseline = StableModels::new(admitted.theory(), limits, Control::default()).unwrap();
+    let mut baseline = by_clauses(admitted.theory(), limits, Control::default()).unwrap();
     assert_eq!(actual, complete(&mut baseline));
     assert_eq!(
         actual,

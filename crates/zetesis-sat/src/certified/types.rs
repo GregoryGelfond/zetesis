@@ -103,8 +103,11 @@ pub struct CertifiedStatistics {
     pub checks: u64,
     /// Completed certificate proofs of stability, before publication or commit.
     pub stable: u64,
-    /// Completed checks requiring exact countermodel completion.
-    pub residuals: u64,
+    /// Candidates a complete certificate refuted: an unsupported present atom
+    /// under the tight plan, or an original model different from the positive
+    /// producers' least consequences, without a reduct query. Every candidate a
+    /// selected certificate checks is decided: stable, refuted or not a model.
+    pub refuted: u64,
     /// Interrupted checks; no membership verdict was produced.
     pub failed: u64,
     /// Candidate-check work, including interrupted attempts.

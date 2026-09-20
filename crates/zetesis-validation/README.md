@@ -76,8 +76,9 @@ format. Unsupported or contradictory output is a failure, not a smaller answer
 collection. Refusal, timeout, incomplete coverage, output limits, malformed
 reports and semantic mismatch remain separate outcomes.
 
-`answers::native_json::parse` reads the native schema-1 view with typed full
-atoms, shown positions/terms, costs and terminal accounting.
+`answers::native_json::parse` reads the native view, schema 2 or the schema-1
+form of earlier executables, with typed full atoms, shown positions/terms,
+costs and terminal accounting.
 `answers::clingo_json` and `native_text` provide bounded reported-display views.
 These decoders validate a producer's claims; they do not independently prove
 stability. JSON integer consumers need lossless values, and the current JSON
@@ -143,7 +144,8 @@ The default ordinary comparison uses the maintained CPU baseline cases, not the
 whole collection. It times uninstrumented processes after qualification;
 separate statistics invocations are outside that timed population.
 The matrix instead uses native `--json --stats --models 0`, so it measures
-instrumented runs including typed output. Native full-atom JSON and clingo's
+instrumented runs including typed output. The memory allowance is the host's,
+as the command takes it, and each native sample's statistics record it. Native full-atom JSON and clingo's
 selected display output can differ in volume. These are different protocols,
 not interchangeable timing populations.
 
@@ -158,7 +160,9 @@ thermal state, dynamic libraries or the rest of the host environment.
 
 Repeated `--case <manifest-relative.lp>` selects arbitrary runnable clean corpus
 cases for the ordinary CPU campaign. Add `--memory-runs 5` for separate paired
-child RSS observations; these never enter timed samples. The CLI seals its own
+child RSS observations; these never enter timed samples, and the matrix and
+series campaigns take the same option, running their memory rounds after the
+timed rounds. The CLI seals its own
 runner executable alongside the solvers and selected transitive source closure.
 Full native help is captured when short help advertises it, under the same
 capture limits, with no fallback after a failed full-help query.
@@ -233,12 +237,64 @@ clingo. Complete native records remain available in the captures.
 before retention. Combined workloads must also fit the request's existing
 source/metadata ceilings. Each launched private source closure is sealed before
 and after execution. Derived-workload reports use matrix schema 2; unchanged
-suite reports retain schema 1. No first-answer or RSS phase is added by this
-entry point. See [workload admission](tests/workload_admission.rs) and
+suite reports retain schema 1. No first-answer phase is added by this entry
+point; memory rounds follow the plan when requested. See [workload admission](tests/workload_admission.rs) and
 [matrix acquisition](tests/matrix_campaign.rs) for checked library usage.
 The [manual's runnable client](../../docs/book/reference/validation.md#compare-a-parameterized-workload)
 shows a complete N=4 comparison using this API, with explicit executable paths
 and a new report destination.
+
+### Measure a fixed series of cells
+
+`performance::series::workloads(&Corpus, WorkloadLimits)` returns the
+twenty-two cells on which a sequence of solver changes is measured: seventeen
+generated programs, three constant-amended queens boards and two unchanged
+corpus entries, in a fixed order. `performance::families::Family` generates the
+programs: each family is one shape with one size (independent sets in choice
+and negation form, disjunction, tied optima, transitive closures, derivation
+chains, stratified negation, a producer chain, a Latin square with its first
+row fixed, a line walked with move or stay), its bytes a pure function of
+the family and the size, its complete family a closed form the contract
+states. `Workload::generated(family, size, limits)` admits one as a sealed
+workload with entry `generated/<family>-<size>.lp`; the report retains the
+family, size, byte count and digest, and materialization checks that the
+generator still produces those bytes. Generated cells reach routes the corpus
+never takes, in particular the closure route; the sizes were measured to keep
+every cell's complete native JSON output under `series::CAPTURE_BYTES`, which
+the library does not check.
+
+`zetesis-perf --suite series` runs the cells through the instrumented matrix.
+The `cpu-auto` profile requests the shipped defaults, automatic grounding and
+oracle; the observation retains the grounding mode actually taken, so an
+automatic cell cannot be read as an explicit eager or lazy one. `--time-limit`
+adds a cooperative deadline to every native profile, which changes what the
+solver polls at every charged unit and is therefore part of the profile's
+identity; `--oracle` requests a reduct procedure explicitly. Cells a change is meant to move, a refusal or a timeout, stay in the
+set: their typed decisions are the observation.
+
+`zetesis-series --report LABEL=PATH …` derives one comparison from published
+reports over the same cells and profiles: exact integer medians of the timed
+native and reference intervals, later-over-earlier ratios of medians in the
+order given, the counters the native records carry (published models,
+candidates examined, charged search work, driver and phase medians), and each
+report's native executable seal. A cell that did not pass is listed by its
+decisions, never averaged. The reports may differ in the search method
+alone, which a profile spells as `search`, or as `candidates` in a report
+written before that field, with `region_workers` beside it in one
+campaign's reports. The comparison also scores each report against
+the reference solver: a scoreboard per report and profile lists the cells
+where both passed, counts the wins, the cells whose native median lies below
+the reference's, and gives every compared cell, fastest ratio first, with
+the native intervals split into grounding, candidate proposal and
+membership, the reference's own grounding and solving times, both peak
+resident sets and the device bytes the native run accounted. Proposal sums
+the candidate setup and generation phases; membership sums certificate
+setup and checks, closure and exact reduct membership, reduct preparation,
+original validation and the device's host oracle; grounding is the
+grounding stage, absent under lazy grounding, which grounds within
+membership. `--json` writes the derived comparison for retention beside the
+manual's observations; the raw reports stay with their builds. See [series cells](tests/series_cells.rs), [family
+generation](tests/performance_families.rs) and [the view](tests/series_view.rs).
 
 ## Compose capture, contracts and publication
 

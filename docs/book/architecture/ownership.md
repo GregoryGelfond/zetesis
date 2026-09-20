@@ -48,9 +48,10 @@ payload merely to index it requires a separate justification.
 
 Formula instantiation consumes its source IR and retains only the analysis,
 provenance, activated objectives and emitted builder needed by later phases.
-The formula atom builder owns each complete atom once. Its checked AVL index
-stores dense IDs and links; complete typed comparisons decide identity without
-copying a second set of keys. Insertion fixes first-insertion order, while
+The formula atom builder owns each complete atom once. Its checked AVL
+indexes, one per predicate, store dense IDs and links; complete typed
+comparisons decide identity without copying a second set of keys, the
+predicate compared once per lookup and the arguments along the tree. Insertion fixes first-insertion order, while
 committing a pending suffix preserves those IDs and transfers its ownership.
 Consuming finalization transfers the completed atom vector into the immutable
 catalog and releases the construction index. These operations consume the
@@ -58,8 +59,11 @@ enclosing work budget; catalog membership alone does not establish truth.
 
 ## Prepared formula queries
 
-An ordinary formula enumeration constructs its `PreparedReduct` lazily, when a
-candidate first needs exact subset checking. One immutable encoding represents
+A formula enumeration under the clauses method (`--search clauses`) constructs
+its `PreparedReduct` lazily, when a candidate first needs exact subset
+checking; the regions method, the default, queries the reduct as a region tree
+over the original formulas under the candidate's mask and builds no encoding,
+as the [execution chapter](execution.md) describes. One immutable encoding represents
 the original theory's reduct for every candidate. The encoding separates the
 prospective subset's atom values from the candidate's membership and original
 implication truth. A successful `EvaluationWorkspace` operation authenticates
@@ -231,16 +235,21 @@ owner. Their live and spare capacities, headers and conservative replacement
 overlap enter the same per-candidate allowance. Cutoffs, cache keys and logical
 ID lengths are reset before reuse; stable insertion IDs belong to one candidate's
 catalog lifetime and do not become persistent truth across candidates.
-Before executing a batch it admits the shared cache, idle retained workspaces,
-and the allowance for each assigned workspace against its collective limit.
-If `C` is the cache and spare slot capacity, `P` the prepared header already
-included in `C`, `R_i` a workspace's retained capacity, and `L` the per-candidate
-allowance, the required envelope is
-`C + sum(idle R_i) + sum(assigned max(R_i, L - P))`. Every assigned workspace
-requires `L >= P`. At most `min(submitted candidates, worker count)` workspaces
-are assigned, each to a contiguous candidate range; candidates inside one range
-run sequentially. An empty batch admits only retained collective capacity and
-does not prepare a program. Returned models, input seeds, worker stacks and
+Before executing a batch it admits idle retained workspaces and the allowance
+for each assigned workspace against its collective limit. If `S` is spare slot
+capacity (zero once every reserved slot holds a workspace), `P` the prepared
+queries' retained bytes, `R_i` a workspace's retained capacity, and `L` the
+per-candidate allowance, the required envelope is
+`S + sum(idle R_i) + sum(assigned max(R_i, L - P))`. Every assigned workspace
+requires `L >= P`. The cache's own header, including the inline prepared-query
+owner, is bookkeeping outside the ceiling, like allocator metadata, so the
+envelope never exceeds `workers * L`: that product is what
+`SolveConfig::validate` checks before a session starts, and the command derives
+`L` as each worker's share of the collective ceiling when `--max-closure-bytes`
+is not given. At most `min(submitted candidates, worker count)` workspaces are
+assigned, each to a contiguous candidate range; candidates inside one range run
+sequentially. An empty batch admits only retained collective capacity and does
+not prepare a program. Returned models, input seeds, worker stacks and
 allocator overhead are separate owners.
 
 Ordinary sessions map `SolveConfig::max_source_work` to immutable preparation
@@ -260,8 +269,15 @@ are the latest attempt's admitted envelope, or zero if it admitted none.
 Text statistics, JSON and failure
 reports use this same observation. If reading the snapshot fails, the original
 typed fault and any earlier successful snapshot remain distinguishable; checked
-models are retained without a coverage claim. Shared CPU, static and device
-routes expose their own execution receipts instead.
+models are retained without a coverage claim. Shared and device routes expose
+their own execution receipts instead.
+
+`SemanticOutcome::closure_execution()` is the other receipt of the independent
+routes, lazy and eager: the per-check counters of `Statistics` and
+`StaticStatistics`, summed over completed checks, with the number of stopped
+checks whose partial work no counter reports. Its peak closure envelope is the
+largest capacity a completed check admitted or reserved, in the same terms as
+`max_closure_bytes`; it is not an allocation peak.
 
 [`StorageOwners`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/StorageOwners.lean)
 proves the natural-number bound obtained by summing independently bounded

@@ -12,11 +12,10 @@ use std::collections::BTreeSet;
 use cases::sources;
 use reference::{Models, atom_text, exhaustive, external, holds, native, values};
 use themelios_base::source::SourceId;
-use themelios_program::term::EvalError;
 use truth::Truth;
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, FormulaFailure,
-    FormulaLimits, FormulaResource, admit_formula, prepare_formula,
+    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
+    FormulaResource, FormulaWarning, admit_formula, prepare_formula,
 };
 
 const SOURCE: SourceId = SourceId::new(173);
@@ -227,26 +226,18 @@ fn nonbinding_guards_cannot_supply_missing_inputs() {
 }
 
 #[test]
-fn undefined_guard_arithmetic_refuses_unrealized_rows() {
+fn defined_false_guards_complete_the_mixed_family() {
     let source = "q:-N=#count{1},1/N<=#count{}.";
-    let error = admit_formula(
-        source.into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_err();
-    assert!(
-        matches!(
-            error,
-            FormulaFailure::Expansion(ExpansionFailure::Evaluation {
-                error: EvalError::Undefined,
-                ..
-            })
-        ),
-        "{error}"
-    );
-    assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+    let admitted = input(source);
+    // N=1 gives a defined false guard, which witnesses definedness, not truth.
+    let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
+        panic!("one zero-divisor warning: {:?}", admitted.warnings());
+    };
+    assert_eq!(location.source, SOURCE);
+    assert_eq!(admitted.source().slice(location.span).unwrap(), source);
+    let expected = Models::from([BTreeSet::new()]);
+    assert_eq!(native(&admitted), expected);
+    assert_eq!(exhaustive(&admitted), expected);
 }
 
 #[test]

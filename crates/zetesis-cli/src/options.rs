@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
-use crate::{Backend, Grounder, Oracle, SourceBatching};
+use crate::{Backend, Grounder, Oracle, SearchMethod, SourceBatching};
 
 /// Commands that do not read an answer-set program.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Subcommand)]
@@ -66,6 +66,14 @@ pub struct Options {
     /// requests are always honored or refused.
     #[arg(long, value_parser = oracle_parser(), default_value = "auto", hide_short_help = true)]
     pub oracle: Oracle,
+    /// Advanced formula search method, for proposing candidates and for the
+    /// reduct's proper-subset query alike. Regions, the default, narrow the
+    /// candidate space and the reduct's subsets by the theory's readings;
+    /// clauses is the classical search over a clause form, with its own
+    /// batched completion, `--completion-workers` and scratch ceiling. The
+    /// reduct decides membership either way.
+    #[arg(long, value_parser = search_parser(), default_value = "regions", hide_short_help = true)]
+    pub search: SearchMethod,
     /// Print grounding, solving and execution statistics on stderr.
     ///
     /// Report version, settings, completion, available counters and total driver
@@ -84,12 +92,28 @@ pub struct Options {
     /// Cooperative process deadline after input loading, in whole seconds.
     ///
     /// Zero requests an immediate stop. No deadline is imposed when omitted.
-    /// Checked work boundaries observe the deadline; blocking source I/O,
+    /// A timer thread marks the deadline and checked work boundaries observe
+    /// the mark as they observe cancellation, without reading the clock, so
+    /// an unreached deadline costs nothing measurable. Blocking source I/O,
     /// frontend operations and a running GPU kernel cannot be preempted.
     /// Library callers supply their own Control instead of this process option.
     #[arg(long, value_name = "SECONDS")]
     pub time_limit: Option<u64>,
-    /// Maximum JSON bytes per model record or terminal outcome; not an all-model buffer.
+    /// The session's memory allowance in bytes. The session's byte ceilings
+    /// are the shares of a two-gibibyte allowance; each one not given (the
+    /// projection, objective key, optimal, reduct, completion scratch,
+    /// candidate, closure, closure batch and batch bytes) is its library
+    /// default scaled by this allowance over two gibibytes, so a larger
+    /// host admits larger problems before one refuses. The admission and
+    /// output ceilings (the source, expansion, support, JSON record and
+    /// observation bytes) keep their fixed defaults. The default allowance
+    /// is half of the host's physical memory and at least two gibibytes, or
+    /// two gibibytes when the host does not report its memory. Work, count
+    /// and structural ceilings are not memory and do not scale. The
+    /// ceilings bound named storage, not resident memory.
+    #[arg(long, default_value_t = host_memory_allowance(), hide_short_help = true)]
+    pub memory: u64,
+    /// Maximum encoded JSON bytes per model record or terminal outcome; not an all-model buffer.
     #[arg(long, default_value_t = 8_388_608, hide_short_help = true)]
     pub max_json_record_bytes: usize,
     /// Cumulative candidate restriction preparation/traversal or formula search work.
@@ -104,9 +128,11 @@ pub struct Options {
     /// Maximum logical nodes in retained formula projection history.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_projection_nodes, hide_short_help = true)]
     pub max_projection_nodes: usize,
-    /// Maximum named projection-history capacity, including growth overlap.
-    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_projection_bytes, hide_short_help = true)]
-    pub max_projection_bytes: usize,
+    /// Maximum reserved projection-history capacity, including growth overlap;
+    /// capacity is counted before it is written, so this exceeds resident bytes.
+    /// Omitted, it is the library default scaled by `--memory`.
+    #[arg(long, hide_short_help = true)]
+    pub max_projection_bytes: Option<usize>,
     /// Override source-expansion and eager formula-grounding work ceilings.
     ///
     /// Omission preserves each library default: 1,048,576 source-term operations
@@ -115,7 +141,7 @@ pub struct Options {
     /// lookup, index construction, copying and commit work.
     #[arg(long, hide_short_help = true)]
     pub max_expansion_work: Option<usize>,
-    /// Maximum authored bytes for eager formula support views, indexes and queries.
+    /// Maximum reserved capacity for eager formula support views, indexes and queries.
     ///
     /// Source atoms, allocator/tree overhead and other grounding state are excluded.
     #[arg(long, default_value_t = zetesis_themelios::FormulaLimits::default().max_support_bytes, hide_short_help = true)]
@@ -126,6 +152,11 @@ pub struct Options {
     /// Maximum scalar alternatives/emitted arguments in source expansion.
     #[arg(long, default_value_t = 1_000_000, hide_short_help = true)]
     pub max_expansion_values: usize,
+    /// Cumulative canonical payload bytes source expansion and eager formula
+    /// grounding may copy: term cells, values, atoms and plan storage, each
+    /// counted once when retained. Transient binding frames are excluded.
+    #[arg(long, default_value_t = zetesis_themelios::ExpansionLimits::default().max_scalar_bytes, hide_short_help = true)]
+    pub max_expansion_bytes: usize,
     /// Override distinct source-domain values in each selected admission profile.
     /// Omission preserves the relational and formula library defaults.
     #[arg(long, hide_short_help = true)]
@@ -158,7 +189,8 @@ pub struct Options {
     /// Distinct enabled terms per displayed model.
     #[arg(long, default_value_t = 65_536, hide_short_help = true)]
     pub max_observation_terms: usize,
-    /// Retained observation payload and complete Answer record bytes.
+    /// Retained observation payload and complete Answer record bytes, counted as
+    /// canonical text rather than as capacity.
     #[arg(long, default_value_t = 8_388_608, hide_short_help = true)]
     pub max_observation_bytes: usize,
     /// Cumulative work for optional incumbent candidate bounds. Zero disables
@@ -171,9 +203,10 @@ pub struct Options {
     /// Maximum distinct objective contribution keys retained per stable model.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_objective_keys, hide_short_help = true)]
     pub max_objective_keys: usize,
-    /// Maximum encoded objective contribution bytes per stable model.
-    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_objective_key_bytes, hide_short_help = true)]
-    pub max_objective_key_bytes: usize,
+    /// Maximum canonical encoded objective contribution bytes per stable model.
+    /// Omitted, it is the library default scaled by `--memory`.
+    #[arg(long, hide_short_help = true)]
+    pub max_objective_key_bytes: Option<usize>,
     /// Maximum tied incumbent models retained while proving an optimum.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_optimal_models, hide_short_help = true)]
     pub max_optimal_models: usize,
@@ -181,33 +214,51 @@ pub struct Options {
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_optimal_atoms, hide_short_help = true)]
     pub max_optimal_atoms: usize,
     /// Maximum canonical incumbent bytes: distinct catalogs, selections and one score.
-    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_optimal_bytes, hide_short_help = true)]
-    pub max_optimal_bytes: usize,
-    /// Maximum batched formula candidates; closure batches follow its first seed.
+    /// Omitted, it is the library default scaled by `--memory`.
+    #[arg(long, hide_short_help = true)]
+    pub max_optimal_bytes: Option<usize>,
+    /// Maximum candidates per batch: the clause search's completion batches
+    /// and the leaves a device checks; closure batches follow its first seed.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.batch_size, hide_short_help = true)]
     pub batch_size: NonZeroUsize,
-    /// Closure CPU worker count. Formula completion has a separate worker setting.
-    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.workers, hide_short_help = true)]
+    /// Worker count for the closure route's pool and for the walkers of the
+    /// region tree; the default is the host's available parallelism, or one
+    /// when the host does not report it. Each closure worker is admitted at
+    /// the per-closure allowance, so workers × max-closure-bytes must not
+    /// exceed max-closure-batch-bytes. Under `--search regions` with more
+    /// than one worker, models arrive in the schedule's order, which differs
+    /// between runs; the family of answer sets is the same. Formula
+    /// completion under `--search clauses` has a separate worker setting.
+    #[arg(long, default_value_t = host_workers(), hide_short_help = true)]
     pub workers: NonZeroUsize,
-    /// Exact formula completion workers; one retains the scalar CPU cursor.
+    /// Exact formula completion workers: under `--search clauses`, and under
+    /// `--search regions` when one CPU worker walks the tree or a device
+    /// route runs; more than one CPU worker under regions decides its leaves
+    /// in its `--workers` and uses none. One retains the scalar cursor.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.completion_workers, hide_short_help = true)]
     pub completion_workers: NonZeroUsize,
-    /// Maximum named cold reduct preparation and each query's retained bytes.
-    /// Shared theory payload and allocator metadata are excluded.
-    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_reduct_bytes, hide_short_help = true)]
-    pub max_reduct_bytes: u64,
-    /// Maximum shared prepared reduct, worker query and transient/result bytes, excluding the
-    /// scalar cursor, allocator/table overhead, thread stacks and GPU storage.
+    /// Maximum reserved capacity for cold reduct preparation and for each query's
+    /// retained workspace. Shared theory payload and allocator metadata are excluded.
+    /// Omitted, it is the library default scaled by `--memory`.
+    #[arg(long, hide_short_help = true)]
+    pub max_reduct_bytes: Option<u64>,
+    /// Maximum reserved capacity, under `--search clauses`, for the shared
+    /// prepared reduct, worker queries and
+    /// transient/result slots, excluding the scalar cursor, allocator/table overhead,
+    /// thread stacks and GPU storage.
     /// Optional class preparation/checking uses the same ceiling independently.
-    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_completion_scratch_bytes, hide_short_help = true)]
-    pub max_completion_scratch_bytes: u64,
+    /// Omitted, it is the library default scaled by `--memory`.
+    #[arg(long, hide_short_help = true)]
+    pub max_completion_scratch_bytes: Option<u64>,
     /// Maximum candidate seeds; reaching a limit leaves search incomplete.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_candidates, hide_short_help = true)]
     pub max_candidates: u64,
     /// Maximum copied payload for necessary candidate restrictions, including
-    /// temporary templates. Allocator and index overhead are excluded.
-    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_candidate_bytes, hide_short_help = true)]
-    pub max_candidate_bytes: usize,
+    /// temporary templates: canonical bytes, excluding spare capacity and
+    /// allocator/index overhead.
+    /// Omitted, it is the library default scaled by `--memory`.
+    #[arg(long, hide_short_help = true)]
+    pub max_candidate_bytes: Option<usize>,
     /// Maximum gate tuples retained by the incremental candidate cursor.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_carrier_atoms, hide_short_help = true)]
     pub max_carrier_atoms: usize,
@@ -218,13 +269,18 @@ pub struct Options {
     /// check; formula search and GPU propagation have separate limits.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_work, hide_short_help = true)]
     pub max_work: u64,
-    /// Maximum named storage bytes per independent lazy CPU closure.
-    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_closure_bytes, hide_short_help = true)]
-    pub max_closure_bytes: usize,
-    /// Collective independent CPU preparation, idle cache and assigned closure
-    /// storage allowance. Also bounds immutable query preparation bytes.
-    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_closure_batch_bytes, hide_short_help = true)]
-    pub max_closure_batch_bytes: usize,
+    /// Maximum reserved named capacity per independent lazy CPU closure, including
+    /// spare capacity and replacement overlap; not resident bytes. Omitted, it is
+    /// max-closure-batch-bytes divided by the worker count; given, workers × this
+    /// value must not exceed max-closure-batch-bytes.
+    #[arg(long, hide_short_help = true)]
+    pub max_closure_bytes: Option<usize>,
+    /// Collective reserved capacity for independent CPU preparation, the idle cache
+    /// and assigned closure allowances; every worker's per-closure allowance is
+    /// admitted against it. Also bounds immutable query preparation bytes.
+    /// Omitted, it is the library default scaled by `--memory`.
+    #[arg(long, hide_short_help = true)]
+    pub max_closure_batch_bytes: Option<usize>,
     /// Device propagation work per formula candidate, independent of CPU work.
     /// A budget below mandatory setup work refuses before device submission.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.gpu_formula_work, hide_short_help = true)]
@@ -242,7 +298,7 @@ pub struct Options {
     /// Also sets the eager formula atom ceiling.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_atoms, hide_short_help = true)]
     pub max_atoms: usize,
-    /// Maximum bytes in each original file or standard input before parsing.
+    /// Maximum original bytes in each file or standard input before parsing.
     #[arg(long, default_value_t = 1_048_576, hide_short_help = true)]
     pub max_source_bytes: usize,
     /// Maximum explicit input root occurrences, including repeated filenames.
@@ -264,53 +320,151 @@ pub struct Options {
     /// Also sets the eager formula theory-root ceiling.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_ground_rules, hide_short_help = true)]
     pub max_ground_rules: usize,
-    /// Maximum accounted batch bytes, excluding allocator/driver overhead.
+    /// Maximum reserved batch capacity, excluding allocator/driver overhead.
     /// Lazy GPU reserves half for source state and half for transient transport.
     /// Shared CPU rounds use the full allowance for source/world state.
-    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_batch_bytes, hide_short_help = true)]
-    pub max_batch_bytes: u64,
+    /// Omitted, it is the library default scaled by `--memory`.
+    #[arg(long, hide_short_help = true)]
+    pub max_batch_bytes: Option<u64>,
+}
+
+/// The host's available parallelism, or one worker when it cannot be reported.
+fn host_workers() -> NonZeroUsize {
+    std::thread::available_parallelism().unwrap_or(NonZeroUsize::MIN)
+}
+
+/// The host's physical memory in bytes, read once per process the first
+/// time it is asked for, when the default allowance is taken or the
+/// statistics header prints it: the header prints the reading the allowance
+/// came from.
+pub(crate) fn host_memory() -> Option<u64> {
+    static HOST_MEMORY: std::sync::OnceLock<Option<u64>> = std::sync::OnceLock::new();
+    *HOST_MEMORY.get_or_init(read_host_memory)
+}
+
+/// The host's physical memory in bytes, from `/proc/meminfo`.
+#[cfg(target_os = "linux")]
+fn read_host_memory() -> Option<u64> {
+    let text = std::fs::read_to_string("/proc/meminfo").ok()?;
+    let kibibytes: u64 = text
+        .lines()
+        .find_map(|line| line.strip_prefix("MemTotal:"))?
+        .split_whitespace()
+        .next()?
+        .parse()
+        .ok()?;
+    kibibytes.checked_mul(1024)
+}
+
+/// The host's physical memory in bytes, from the system's `sysctl`: the
+/// crate forbids foreign calls, and the system command is the reading
+/// without one.
+#[cfg(target_os = "macos")]
+fn read_host_memory() -> Option<u64> {
+    let output = std::process::Command::new("sysctl")
+        .args(["-n", "hw.memsize"])
+        .output()
+        .ok()?;
+    std::str::from_utf8(&output.stdout)
+        .ok()?
+        .trim()
+        .parse()
+        .ok()
+}
+
+/// The host does not report its physical memory on this platform.
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+fn read_host_memory() -> Option<u64> {
+    None
+}
+
+/// The default allowance: half of the host's memory, at least the reference.
+fn host_memory_allowance() -> u64 {
+    host_memory().map_or(crate::SolveConfig::REFERENCE_MEMORY, |memory| {
+        (memory / 2).max(crate::SolveConfig::REFERENCE_MEMORY)
+    })
+}
+
+impl Options {
+    /// The library's defaults for the allowance and the workers: what each
+    /// byte ceiling not given on the command line is.
+    fn allowed(&self) -> crate::SolveConfig {
+        crate::SolveConfig::for_allowance(self.memory, self.workers)
+    }
+
+    /// The per-closure allowance: the given value, or each worker's share of
+    /// the collective ceiling.
+    #[must_use]
+    pub fn closure_allowance(&self) -> usize {
+        self.max_closure_bytes.unwrap_or_else(|| {
+            self.max_closure_batch_bytes.map_or_else(
+                || self.allowed().max_closure_bytes,
+                |collective| collective / self.workers.get(),
+            )
+        })
+    }
+
+    /// The collective closure ceiling: the given value, or the library
+    /// default scaled by the allowance.
+    #[must_use]
+    pub fn closure_collective(&self) -> usize {
+        self.max_closure_batch_bytes
+            .unwrap_or_else(|| self.allowed().max_closure_batch_bytes)
+    }
 }
 
 impl From<&Options> for crate::SolveConfig {
     fn from(options: &Options) -> Self {
+        let allowed = options.allowed();
         Self {
             backend: options.backend,
             grounder: options.grounder,
             source_batching: options.source_batching,
             oracle: options.oracle,
+            search: options.search,
             stats: options.stats,
             models: options.models,
             max_search_work: options.max_search_work,
             max_search_decisions: options.max_search_decisions,
             max_projection_entries: options.max_projection_entries,
             max_projection_nodes: options.max_projection_nodes,
-            max_projection_bytes: options.max_projection_bytes,
+            max_projection_bytes: options
+                .max_projection_bytes
+                .unwrap_or(allowed.max_projection_bytes),
             max_objective_work: options.max_objective_work,
             max_objective_bound_work: options.max_objective_bound_work,
             max_objective_bindings: options.max_objective_bindings,
             max_objective_keys: options.max_objective_keys,
-            max_objective_key_bytes: options.max_objective_key_bytes,
+            max_objective_key_bytes: options
+                .max_objective_key_bytes
+                .unwrap_or(allowed.max_objective_key_bytes),
             max_optimal_models: options.max_optimal_models,
             max_optimal_atoms: options.max_optimal_atoms,
-            max_optimal_bytes: options.max_optimal_bytes,
+            max_optimal_bytes: options
+                .max_optimal_bytes
+                .unwrap_or(allowed.max_optimal_bytes),
             batch_size: options.batch_size,
             workers: options.workers,
             completion_workers: options.completion_workers,
-            max_reduct_bytes: options.max_reduct_bytes,
-            max_completion_scratch_bytes: options.max_completion_scratch_bytes,
+            max_reduct_bytes: options.max_reduct_bytes.unwrap_or(allowed.max_reduct_bytes),
+            max_completion_scratch_bytes: options
+                .max_completion_scratch_bytes
+                .unwrap_or(allowed.max_completion_scratch_bytes),
             max_candidates: options.max_candidates,
-            max_candidate_bytes: options.max_candidate_bytes,
+            max_candidate_bytes: options
+                .max_candidate_bytes
+                .unwrap_or(allowed.max_candidate_bytes),
             max_carrier_atoms: options.max_carrier_atoms,
             max_work: options.max_work,
-            max_closure_bytes: options.max_closure_bytes,
-            max_closure_batch_bytes: options.max_closure_batch_bytes,
+            max_closure_bytes: options.closure_allowance(),
+            max_closure_batch_bytes: options.closure_collective(),
             gpu_formula_work: options.gpu_formula_work,
             gpu_formula_rounds: options.gpu_formula_rounds,
             max_source_work: options.max_source_work,
             max_atoms: options.max_atoms,
             max_substitutions: options.max_substitutions,
             max_ground_rules: options.max_ground_rules,
-            max_batch_bytes: options.max_batch_bytes,
+            max_batch_bytes: options.max_batch_bytes.unwrap_or(allowed.max_batch_bytes),
         }
     }
 }
@@ -415,6 +569,22 @@ fn source_batching_parser() -> impl TypedValueParser<Value = SourceBatching> {
             SourceBatching::Worlds,
             PossibleValue::new(SourceBatching::Worlds.label())
                 .help("Prune source prefixes with per-world membership; evaluate on Rayon."),
+        ),
+    ])
+}
+
+fn search_parser() -> impl TypedValueParser<Value = SearchMethod> {
+    policy_parser([
+        (
+            SearchMethod::Regions,
+            PossibleValue::new(SearchMethod::Regions.label()).help(
+                "Regions narrowed by the theory's readings, for candidates and for the reduct query; no clause form.",
+            ),
+        ),
+        (
+            SearchMethod::Clauses,
+            PossibleValue::new(SearchMethod::Clauses.label())
+                .help("The classical search over a clause form for candidates, and the clause query for the reduct."),
         ),
     ])
 }

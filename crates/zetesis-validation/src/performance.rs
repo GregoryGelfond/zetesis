@@ -15,7 +15,9 @@
 
 mod capture;
 mod config;
+pub mod families;
 pub mod matrix;
+pub mod series;
 mod record;
 mod run;
 mod timing;
@@ -77,6 +79,8 @@ pub struct Report {
     schedule: Schedule,
     #[serde(skip_serializing_if = "Option::is_none")]
     formula_joins: Option<crate::selected::FormulaJoins>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    search: Option<crate::selected::SearchMethod>,
     limits: Limits,
     started_unix_ns: u128,
     finished_unix_ns: Option<u128>,

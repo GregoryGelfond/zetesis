@@ -57,7 +57,19 @@ fn validate(owner: &AtomInterner) {
         (1 + left_height.max(right_height), left)
     }
     let mut seen = BTreeSet::new();
-    let (_, actual) = subtree(owner, owner.index.root, &mut seen);
+    let mut actual = Vec::new();
+    for (index, relation) in owner.subtrees.iter().enumerate() {
+        if let Some(previous) = index.checked_sub(1) {
+            assert!(owner.subtrees[previous].predicate < relation.predicate);
+        }
+        let (_, atoms) = subtree(owner, relation.root, &mut seen);
+        assert!(
+            atoms
+                .iter()
+                .all(|atom| *atom.predicate() == relation.predicate)
+        );
+        actual.extend(atoms);
+    }
     assert_eq!(seen, (0..owner.len()).collect());
     let expected: BTreeSet<_> = (0..owner.len())
         .map(|id| owner.get(id).unwrap().clone())

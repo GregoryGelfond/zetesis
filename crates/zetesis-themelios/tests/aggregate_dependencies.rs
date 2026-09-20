@@ -13,10 +13,9 @@ use std::collections::BTreeSet;
 use cases::CASES;
 use reference::{Models, atom_text, exhaustive, external, holds, native, values};
 use themelios_base::source::SourceId;
-use themelios_program::term::EvalError;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
-    FormulaFailure, FormulaLimits, FormulaResource, admit_formula, prepare_formula,
+    FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning, admit_formula, prepare_formula,
 };
 
 const SOURCE: SourceId = SourceId::new(157);
@@ -287,28 +286,19 @@ fn unrelated_objectives_keep_their_priority() {
 }
 
 #[test]
-fn proposal_arithmetic_errors_refuse_the_source() {
+fn mixed_proposals_keep_the_defined_family() {
     // The first aggregate actually equals one. Its unrealizable zero proposal
-    // must not suppress the established whole-admission arithmetic policy.
+    // remains warning evidence; the original equalities decide which rows hold.
     let source = "q(M):-N=#count{1},Y=1/N,M=#sum{Y}.";
-    let error = admit_formula(
-        source.into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_err();
-    assert!(
-        matches!(
-            error,
-            FormulaFailure::Expansion(ExpansionFailure::Evaluation {
-                error: EvalError::Undefined,
-                ..
-            })
-        ),
-        "{error}"
-    );
-    assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+    let admitted = input(source);
+    let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
+        panic!("one zero-divisor warning: {:?}", admitted.warnings());
+    };
+    assert_eq!(location.source, SOURCE);
+    assert_eq!(admitted.source().slice(location.span).unwrap(), source);
+    let expected = Models::from([BTreeSet::from(["q(1)".into()])]);
+    assert_eq!(native(&admitted), expected);
+    assert_eq!(exhaustive(&admitted), expected);
 }
 
 #[test]

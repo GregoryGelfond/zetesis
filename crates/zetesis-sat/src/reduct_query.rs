@@ -86,6 +86,7 @@ mod tests {
             let result = super::super::fresh_membership(
                 original,
                 &candidate,
+                crate::SearchMethod::Clauses,
                 Limits::default(),
                 &mut budget,
                 &mut Statistics::default(),
@@ -165,8 +166,13 @@ mod tests {
             ],
             vec![3],
         );
-        let mut models =
-            crate::StableModels::new(&choice, Limits::default(), Control::default()).unwrap();
+        let mut models = crate::StableModels::with_method(
+            &choice,
+            crate::SearchMethod::Clauses,
+            Limits::default(),
+            Control::default(),
+        )
+        .unwrap();
         let first = models.next().unwrap().unwrap();
         let empty = crate::ReductWorkspace::default().retained_bytes();
         assert!(models.reduct.workspace.retained_bytes() > empty);

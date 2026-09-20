@@ -5,8 +5,8 @@ use std::{collections::BTreeSet, num::NonZeroUsize};
 use zetesis_core::Value;
 use zetesis_cpu::Control;
 use zetesis_solve::{
-    AnswerSelection, AnswerSet, Backend, Completion, Oracle, PreparedInput, SemanticOutcome,
-    Session, SolveConfig, Subject, WorldView, WorldViewLimits,
+    AnswerSelection, AnswerSet, Backend, Completion, Oracle, PreparedInput, SearchMethod,
+    SemanticOutcome, Session, SolveConfig, Subject, WorldView, WorldViewLimits,
 };
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
@@ -87,6 +87,8 @@ impl Case {
 fn config(workers: usize, batch: usize) -> SolveConfig {
     SolveConfig {
         backend: Backend::Cpu,
+        // The batched completion and its accounting belong to the clause search.
+        search: SearchMethod::Clauses,
         oracle: Oracle::Countermodel,
         models: 0,
         workers: NonZeroUsize::new(workers).unwrap(),

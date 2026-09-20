@@ -55,6 +55,7 @@ import Zetesis.ProjectedConditionals
 import Zetesis.SingletonHeads
 import Zetesis.ConstructorPatterns
 import Zetesis.ScalarArithmetic
+import Zetesis.ArithmeticFamilies
 import Zetesis.GateProjection
 import Zetesis.PositiveArguments
 import Zetesis.AggregateConsumers
@@ -122,6 +123,11 @@ import Zetesis.SourceContributions
 import Zetesis.FiniteTables
 import Zetesis.TableBindings
 import Zetesis.DomainBindings
+import Zetesis.FormulaRegions
+import Zetesis.FormulaBounds
+import Zetesis.FormulaChains
+import Zetesis.ReductRegions
+import Zetesis.Frontier
 import Zetesis.ModelSelections
 import Zetesis.AtomCatalogs
 import Zetesis.StorageOwners
@@ -129,3 +135,5 @@ import Zetesis.ConditionalHeads
 import Zetesis.ConditionalHeadSupport
 import Zetesis.ObservationBindings
 import Zetesis.ProjectedAnswers
+import Zetesis.KeyedConstraints
+import Zetesis.RowSteps

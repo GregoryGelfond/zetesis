@@ -26,7 +26,11 @@ pub(crate) fn predicate<E>(
     before: &mut impl FnMut() -> Result<(), E>,
 ) -> Result<Ordering, E> {
     before()?;
-    let name = bytes(left.name().as_bytes(), right.name().as_bytes(), before)?;
+    let name = if left.shares_name(right) {
+        Ordering::Equal
+    } else {
+        bytes(left.name().as_bytes(), right.name().as_bytes(), before)?
+    };
     Ok(name
         .then_with(|| left.arity().cmp(&right.arity()))
         .then_with(|| left.sign().cmp(&right.sign())))
@@ -41,6 +45,15 @@ pub(crate) fn atom<E>(
     if !order.is_eq() {
         return Ok(order);
     }
+    values(left, right, before)
+}
+
+/// Compare the arguments of two atoms of one predicate, in column order.
+pub(crate) fn values<E>(
+    left: &Atom,
+    right: &Atom,
+    before: &mut impl FnMut() -> Result<(), E>,
+) -> Result<Ordering, E> {
     // Both atoms were arity-checked, so equal predicates give equal tuple widths.
     for (left, right) in left.values().iter().zip(right.values()) {
         let order = left.compare_identity_with(right, &mut *before)?;

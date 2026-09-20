@@ -10,7 +10,7 @@ mod source_oracle;
 mod priority_contracts;
 
 use serde_json::Value as Json;
-use zetesis_themelios::{ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource};
+use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
 const BOUNDARIES: &str = include_str!("fixtures/objective-language-boundaries.jsonl");
 const CASES: &str = include_str!("fixtures/objective-rich-cycles.jsonl");
@@ -164,25 +164,36 @@ fn growing_value_feedback_never_yields_a_program() {
 }
 
 #[test]
-fn recursive_assignment_errors_remain_typed() {
-    for source in [
-        "n(N):-N=#count{1:p}.p:-n(0).r(V):-n(N),V=1/N.#minimize{symbol:r(V)}.",
-        "r(V):-n(N),V=1/N.p:-n(0).n(N):-N=#count{1:p}.#minimize{1:r(V)}.",
+fn recursive_mixed_arithmetic_retains_the_complete_empty_family() {
+    for (source, priorities) in [
+        (
+            "n(N):-N=#count{1:p}.p:-n(0).r(V):-n(N),V=1/N.#minimize{symbol:r(V)}.",
+            &[][..],
+        ),
+        (
+            "r(V):-n(N),V=1/N.p:-n(0).n(N):-N=#count{1:p}.#minimize{1:r(V)}.",
+            &[0][..],
+        ),
     ] {
-        let mut limits = FormulaLimits::default();
-        limits.objective.max_condition_nodes = 0;
-        let error = source_records::admit(source, &limits).unwrap_err();
+        let input = source_records::admit(source, &FormulaLimits::default()).unwrap();
+        assert_eq!(input.warnings().len(), 1, "{source}");
+        assert_eq!(input.objectives().priorities(), priorities, "{source}");
         assert!(
-            matches!(
-                error,
-                FormulaFailure::Expansion(ExpansionFailure::Evaluation {
-                    error: themelios_program::term::EvalError::Undefined,
-                    ..
-                })
-            ),
-            "{source}: {error}"
+            input
+                .atoms()
+                .iter()
+                .any(|atom| source_records::canonical(atom) == "r(1)")
         );
-        assert!(!error.diagnostics().is_empty());
+        // n(0) holds exactly when p does not, while p requires n(0):
+        // there is no stable model, including after the undefined r row is omitted.
+        assert!(source_records::exhaustive(&input).is_empty(), "{source}");
+        let guarded = source.replace("V=1/N", "N!=0,V=1/N");
+        let guarded = source_records::admit(&guarded, &FormulaLimits::default()).unwrap();
+        assert!(guarded.warnings().is_empty());
+        assert_eq!(
+            source_records::exhaustive(&input),
+            source_records::exhaustive(&guarded)
+        );
     }
 }
 

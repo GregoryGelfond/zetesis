@@ -112,7 +112,7 @@ pub(super) fn pending(
         .ok_or(Stop::StorageLimit)?;
     let predicate = predicate(key.predicate(), live, work)?;
     live = live
-        .checked_add(predicate.payload_capacity_bytes() as u128)
+        .checked_add(predicate.name_bytes() as u128)
         .ok_or(Stop::StorageLimit)?;
     admit(
         work,

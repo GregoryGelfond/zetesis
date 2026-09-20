@@ -9,7 +9,7 @@ use crate::formula_binding::Binding;
 
 use themelios_base::span::Location;
 use zetesis_core::{AtomPattern, Term, Value};
-use zetesis_objective::{AdmissionError, ObjectiveProgram, ObjectiveTemplate, WeightPolarity};
+use zetesis_objective::{AdmissionError, ObjectiveProgram, ObjectiveTemplate};
 
 use super::scoped_body::{self, ValidatedBody};
 use crate::expansion::Budget;
@@ -18,8 +18,9 @@ use crate::formula_ir::{ObjectiveCondition, ObjectiveField, ObjectiveIr, Operati
 use crate::formula_objective_dependencies::Presence;
 use crate::formula_source_activity::model_query::condition as model_condition;
 use crate::formula_source_activity::{Activity, Context, SourceEligibility};
-use crate::formula_support::{self, CompletedQueries, Counters, Join, Support};
-use crate::{ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
+use crate::formula_support::family::{Evidence, Warnings};
+use crate::formula_support::{self, CompletedQueries, Counters, Evaluation, Join, Support};
+use crate::{ExpansionFailure, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
 
 pub(super) fn prepare(
     prepared: &Prepared,
@@ -28,6 +29,7 @@ pub(super) fn prepare(
     budget: &mut Budget,
     counters: &mut Counters,
     location: Location,
+    warnings: &mut Warnings,
 ) -> Result<(ObjectiveProgram, Vec<Vec<Location>>), FormulaFailure> {
     let support = completed.support();
     let presence = crate::formula_objective_dependencies::check_presence(
@@ -64,11 +66,36 @@ pub(super) fn prepare(
         templates: Vec::new(),
         origins: Vec::new(),
         eligibility: eligibility.as_ref(),
+        warnings,
+        evaluation: Evaluation::default(),
     };
-    for objective in &prepared.objectives {
-        let may_have_numeric_weight =
-            presence.may_have_numeric_weight(objective, limits, preparation.counters)?;
-        preparation.objective(objective, support, may_have_numeric_weight, &presence)?;
+    // The source compiler emits each original element's alternatives together.
+    // A constant-size accumulator preserves that family without merging other
+    // elements sharing the same enclosing directive's diagnostic location.
+    for fragments in prepared
+        .objectives
+        .chunk_by(|left, right| left.family == right.family)
+    {
+        let mut family = Evidence::default();
+        for objective in fragments {
+            let may_have_numeric_weight =
+                presence.may_have_numeric_weight(objective, limits, preparation.counters)?;
+            family.merge(preparation.objective(
+                objective,
+                support,
+                may_have_numeric_weight,
+                &presence,
+            )?);
+        }
+        preparation.warnings.family(
+            family,
+            limits,
+            preparation.counters,
+            fragments
+                .first()
+                .expect("a family chunk is nonempty")
+                .location,
+        )?;
     }
     let program = if preparation.templates.is_empty() {
         ObjectiveProgram::none()
@@ -86,6 +113,24 @@ struct Preparation<'a> {
     templates: Vec<ObjectiveTemplate>,
     origins: Vec<Vec<Location>>,
     eligibility: Option<&'a SourceEligibility>,
+    warnings: &'a mut Warnings,
+    evaluation: Evaluation,
+}
+
+/// The complete scalar fields of one defined, numeric objective instance.
+/// All independent fields were checked before this owner was constructed.
+struct Resolved {
+    weight: i32,
+    priority: i32,
+    tuple: Vec<Term>,
+}
+
+/// Arithmetic evidence for one condition row. An independently false scalar
+/// condition excludes any erroneous fields, but those fields cannot witness
+/// that the complete objective instance is defined.
+struct Fields {
+    selected: bool,
+    failure: Option<ExpansionFailure>,
 }
 
 impl Preparation<'_> {
@@ -95,7 +140,7 @@ impl Preparation<'_> {
         support: &Support,
         may_have_numeric_weight: bool,
         presence: &Presence<'_>,
-    ) -> Result<(), FormulaFailure> {
+    ) -> Result<Evidence, FormulaFailure> {
         if objective.priority_sources.is_empty()
             && !objective.needs_eligibility_query
             && let [Operation::Constant(Value::Number(priority))] =
@@ -103,7 +148,8 @@ impl Preparation<'_> {
             && objective.weight.term().is_some()
             && objective.tuple.iter().all(|field| field.term().is_some())
         {
-            if may_have_numeric_weight && self.has_numeric_row(objective, support)? {
+            let (numeric, family) = self.numeric_rows(objective, support)?;
+            if may_have_numeric_weight && numeric {
                 self.retain(
                     objective,
                     objective
@@ -111,13 +157,18 @@ impl Preparation<'_> {
                         .expect("simple objective fields"),
                 )?;
             }
-            return Ok(());
+            return Ok(family);
         }
         let mut bindings = Join::objective(objective, support, self.budget)?;
+        bindings.evidence();
+        let mut family = Evidence::default();
         while let Some(row) =
             bindings.next_row(self.limits, self.budget, self.counters, objective.location)?
         {
             let binding = row.values;
+            if row.passes {
+                self.validate_scopes(objective, &binding, support)?;
+            }
             if !presence.eligible(objective, &binding, self.limits, self.counters)? {
                 continue;
             }
@@ -137,6 +188,7 @@ impl Preparation<'_> {
                 None
             };
             if !row.passes {
+                let _ = self.resolve(objective, &binding, false, &mut family)?;
                 continue;
             }
             if objective.needs_eligibility_query {
@@ -155,82 +207,201 @@ impl Preparation<'_> {
                     continue;
                 }
             }
-            let priority = formula_support::expression(
-                &objective.priority,
-                &binding,
-                self.limits,
-                self.budget,
-                self.counters,
-                objective.location,
-            )?;
-            if let Value::Number(priority) = priority
+            if let Some(resolved) = self.resolve(objective, &binding, true, &mut family)?
                 && may_have_numeric_weight
-                && let Some(weight) = self.weight(objective, &binding)?
             {
                 self.capacity(objective.location)?;
-                let template = self.specialize(objective, &binding, weight, priority, body)?;
+                let template = self.specialize(objective, &binding, resolved, body)?;
                 self.retain(objective, template)?;
             }
         }
-        Ok(())
+        // A condition-only witness cannot rescue an instance whose scalar
+        // fields were all undefined. Keep only the join's zero-divisor evidence.
+        let joined = bindings.take_family();
+        if family.zero.is_none() {
+            family.zero = joined.zero;
+        }
+        Ok(family)
     }
 
-    fn has_numeric_row(
+    fn numeric_rows(
         &mut self,
         objective: &ObjectiveIr,
         support: &Support,
-    ) -> Result<bool, FormulaFailure> {
+    ) -> Result<(bool, Evidence), FormulaFailure> {
         let mut bindings = Join::objective(objective, support, self.budget)?;
+        bindings.evidence();
         let mut numeric = false;
-        while let Some(binding) =
-            bindings.next(self.limits, self.budget, self.counters, objective.location)?
+        let mut family = Evidence::default();
+        while let Some(row) =
+            bindings.next_row(self.limits, self.budget, self.counters, objective.location)?
         {
-            if self.weight(objective, &binding)?.is_some() {
-                numeric = true;
-                // Maximization inspects every eligible row: a later MIN weight
-                // must not be hidden by an earlier representable contribution.
-                if objective.polarity == WeightPolarity::AsWritten {
-                    break;
-                }
+            if row.passes {
+                self.validate_scopes(objective, &row.values, support)?;
             }
+            let value = self.field(&objective.weight, &row.values, objective.location)?;
+            if let Value::Number(weight) = value {
+                if objective.polarity.normalize(weight).is_none() {
+                    if !row.passes {
+                        continue;
+                    }
+                    return Err(crate::diagnostic::unsupported(
+                        crate::ProfileFeature::NumericOverflow,
+                        objective.location,
+                    )
+                    .into());
+                }
+                numeric |= row.passes;
+            }
+            family.defined = true;
         }
-        Ok(numeric)
+        family.zero = bindings.take_family().zero;
+        Ok((numeric, family))
     }
 
-    fn weight(
+    fn validate_scopes(
         &mut self,
         objective: &ObjectiveIr,
         binding: &Binding,
-    ) -> Result<Option<i32>, FormulaFailure> {
-        let value = self.field(&objective.weight, binding, objective.location)?;
-        let Value::Number(weight) = value else {
-            return Ok(None);
+        support: &Support,
+    ) -> Result<(), FormulaFailure> {
+        super::arithmetic::body(
+            (objective.condition.literals(), objective.location),
+            binding,
+            support,
+            self.limits,
+            self.budget,
+            self.counters,
+            self.warnings,
+        )
+    }
+
+    fn resolve(
+        &mut self,
+        objective: &ObjectiveIr,
+        binding: &Binding,
+        selected: bool,
+        family: &mut Evidence,
+    ) -> Result<Option<Resolved>, FormulaFailure> {
+        let mut fields = Fields {
+            selected,
+            failure: None,
         };
-        objective.polarity.normalize(weight).ok_or_else(|| {
-            crate::diagnostic::unsupported(
+        let priority = self.evaluate(
+            &objective.priority,
+            binding,
+            objective.location,
+            &mut fields,
+        )?;
+        let weight =
+            self.resolve_field(&objective.weight, binding, objective.location, &mut fields)?;
+        let mut tuple = reserved(objective.tuple.len(), objective.location)?;
+        for field in &objective.tuple {
+            if let Some(value) =
+                self.resolve_field(field, binding, objective.location, &mut fields)?
+            {
+                tuple.push(Term::Constant(value));
+            }
+        }
+        // Polarity normalization belongs only to numeric contributions;
+        // required authored expressions above are checked for every row.
+        if matches!(&priority, Some(Value::Number(_)))
+            && let Some(Value::Number(weight)) = &weight
+            && objective.polarity.normalize(*weight).is_none()
+        {
+            if !selected {
+                return Ok(None);
+            }
+            return Err(crate::diagnostic::unsupported(
                 crate::ProfileFeature::NumericOverflow,
                 objective.location,
             )
-        })?;
-        Ok(Some(weight))
+            .into());
+        }
+        if fields.failure.is_some() {
+            if selected && family.zero.is_none() {
+                family.zero = fields.failure;
+            }
+            return Ok(None);
+        }
+        let Some(Value::Number(weight)) = weight else {
+            family.defined = true;
+            return Ok(None);
+        };
+        family.defined = true;
+        let Some(Value::Number(priority)) = priority else {
+            return Ok(None);
+        };
+        Ok(Some(Resolved {
+            weight,
+            priority,
+            tuple,
+        }))
+    }
+
+    fn resolve_field(
+        &mut self,
+        field: &ObjectiveField,
+        binding: &Binding,
+        location: Location,
+        fields: &mut Fields,
+    ) -> Result<Option<Value>, FormulaFailure> {
+        self.counters.work(self.limits, location)?;
+        match field {
+            ObjectiveField::Term(term) => {
+                formula_support::copy(binding.resolve(term, location)?, self.budget, location)
+                    .map(Some)
+            }
+            ObjectiveField::Expression(expression) => {
+                self.evaluate(expression, binding, location, fields)
+            }
+        }
+    }
+
+    /// Classify only the evaluator's typed numeric zero-divisor cause. Continue
+    /// through the row's other fields so a skipped instance cannot hide a fatal
+    /// overflow, type error or undefined power in an independent expression.
+    fn evaluate(
+        &mut self,
+        expression: &crate::formula_ir::Expression,
+        binding: &Binding,
+        location: Location,
+        fields: &mut Fields,
+    ) -> Result<Option<Value>, FormulaFailure> {
+        let result = self.evaluation.source_expression(
+            expression,
+            |variable| binding.read(variable, location),
+            self.limits,
+            self.budget,
+            self.counters,
+            location,
+        );
+        match result {
+            Ok(value) => Ok(Some(value)),
+            Err(FormulaFailure::Expansion(error @ ExpansionFailure::Evaluation { .. }))
+                if self.evaluation.zero_divisor() || !fields.selected =>
+            {
+                if fields.failure.is_none() {
+                    fields.failure = Some(error);
+                }
+                Ok(None)
+            }
+            Err(error) => Err(error),
+        }
     }
 
     fn specialize(
         &mut self,
         objective: &ObjectiveIr,
         binding: &Binding,
-        weight: i32,
-        priority: i32,
+        resolved: Resolved,
         body: Option<ValidatedBody>,
     ) -> Result<ObjectiveTemplate, FormulaFailure> {
-        let mut tuple = reserved(objective.tuple.len(), objective.location)?;
-        for field in &objective.tuple {
-            tuple.push(Term::Constant(self.field(
-                field,
-                binding,
-                objective.location,
-            )?));
-        }
+        let Resolved {
+            weight,
+            priority,
+            tuple,
+        } = resolved;
         if objective.needs_eligibility_query {
             let mut context = Context {
                 limits: self.limits,

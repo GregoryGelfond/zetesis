@@ -326,31 +326,9 @@ fn seals(corpus: &curated::Corpus, request: &Request<'_>) -> Result<Vec<FileSeal
 }
 
 fn native_arguments(execution: NativeExecution, input: &Path) -> Vec<OsString> {
-    let values = [
-        ("--backend", execution.backend.label().into()),
-        ("--oracle", execution.oracle.label().into()),
-        ("--grounder", execution.grounder.label().into()),
-        ("--workers", execution.workers.to_string()),
-        (
-            "--completion-workers",
-            execution.completion_workers.to_string(),
-        ),
-        ("--batch-size", execution.batch_size.to_string()),
-        (
-            "--max-completion-scratch-bytes",
-            execution.max_completion_scratch_bytes.to_string(),
-        ),
-        ("--models", "0".into()),
-    ];
-    values
+    execution
+        .arguments()
         .into_iter()
-        .flat_map(|(flag, value)| [flag.into(), value.into()])
-        .chain(execution.formula_joins.into_iter().flat_map(|joins| {
-            [
-                OsString::from("--formula-joins"),
-                OsString::from(joins.label()),
-            ]
-        }))
         .chain([
             "--json".into(),
             "--stats".into(),

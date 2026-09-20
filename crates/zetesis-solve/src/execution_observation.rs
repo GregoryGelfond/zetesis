@@ -1,6 +1,6 @@
 //! Borrowed execution facts, distinct from answer-set evidence and presentation.
 
-use crate::{Grounder, Oracle, SolveError, SourceBatching};
+use crate::{Grounder, Oracle, SearchMethod, SolveError, SourceBatching};
 use std::{error::Error, num::NonZeroUsize};
 use zetesis_themelios::objective_bound::ObjectiveBoundError;
 
@@ -43,6 +43,13 @@ pub enum ExecutionObservation<'a> {
         oracle: Oracle,
         /// Requested materialization policy.
         grounder: Grounder,
+        /// How candidates are proposed and the reduct queried.
+        search: SearchMethod,
+    },
+    /// Several workers walk the region tree at once and decide its leaves.
+    ParallelRegions {
+        /// Requested worker population.
+        workers: NonZeroUsize,
     },
     /// Bounded parallel residual completion is requested.
     ExactCompletion {
@@ -82,6 +89,8 @@ pub enum ExecutionObservation<'a> {
         projection: zetesis_wgpu::GateProjection,
         /// Requested materialization policy.
         grounder: Grounder,
+        /// How candidates are proposed and the reduct queried.
+        search: SearchMethod,
         /// Candidate batch ceiling.
         batch_size: NonZeroUsize,
         /// Requested CPU completion population.
@@ -95,7 +104,13 @@ pub enum ExecutionObservation<'a> {
         nodes: usize,
         /// Original asserted root count.
         roots: usize,
+        /// Written constraints over a keyed value asked as the one atom their
+        /// key admits before grounding; zero when no constraint had the form.
+        keyed_constraints: usize,
     },
+    /// The key analysis behind the asked constraints stopped at its work
+    /// ceiling; every constraint not yet asked was grounded as written.
+    KeyAnalysisStopped(zetesis_themelios::DomainStop),
     /// A checked tight certificate enables specialized membership checking.
     TightMembership,
     /// Complete positive atomic-head classification and least consequences enable

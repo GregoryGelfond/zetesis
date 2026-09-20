@@ -34,6 +34,15 @@ pub struct AtomPattern {
     terms: Vec<Term>,
 }
 impl AtomPattern {
+    /// Refer to the program's shared name for this pattern's predicate;
+    /// `shared` must be equal to the pattern's predicate.
+    pub(crate) fn share_predicate(&mut self, shared: Predicate) {
+        debug_assert!(
+            self.predicate == shared,
+            "a shared name spells the same predicate"
+        );
+        self.predicate = shared;
+    }
     /// Construct a pattern with exactly the signature's arity.
     ///
     /// # Errors
@@ -157,6 +166,13 @@ impl Template {
     #[must_use]
     pub fn variable_count(&self) -> usize {
         self.variable_count
+    }
+    pub(crate) fn patterns_mut(&mut self) -> impl Iterator<Item = &mut AtomPattern> {
+        self.head
+            .iter_mut()
+            .chain(self.positive.iter_mut())
+            .chain(self.gate_true.iter_mut())
+            .chain(self.gate_false.iter_mut())
     }
     pub(crate) fn patterns(&self) -> impl Iterator<Item = &AtomPattern> {
         self.head

@@ -69,7 +69,8 @@ fn selected(rule: &RuleIr, support: &Support<'_>, pivot: Option<usize>) -> Vec<V
     let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
     let mut counters = Counters::default();
     let mut join = Join::rule(rule, support, &mut budget).unwrap();
-    join.delta = pivot;
+    let variant = pivot.map_or(super::Variant::Full, super::Variant::Delta);
+    join.partition(variant, &mut budget, location()).unwrap();
     let mut bindings = Vec::new();
     while let Some(binding) = join
         .next(

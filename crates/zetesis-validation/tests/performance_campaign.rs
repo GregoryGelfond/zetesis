@@ -126,6 +126,7 @@ impl Fixture {
             report: &self.report,
             schedule: Schedule::new(0, 1).unwrap(),
             formula_joins: None,
+            search: None,
             limits: performance::Limits::default(),
         }
     }

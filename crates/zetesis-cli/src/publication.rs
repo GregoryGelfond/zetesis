@@ -13,6 +13,7 @@ use crate::{Options, PreparedInput, PublicationFailure, Session};
 
 pub(crate) fn solve(
     input: PreparedInput<'_>,
+    expansion: Option<zetesis_themelios::ExpansionUsage>,
     options: &Options,
     output: &mut impl Write,
     diagnostics: &mut Diagnostics<impl Write>,
@@ -22,7 +23,7 @@ pub(crate) fn solve(
     let selection = OutputSelection::default();
     let observations = ObservationProgram::default();
     let metadata = input.metadata();
-    let display = crate::display::Display {
+    let mut display = crate::display::Display {
         selection: metadata.map_or(&selection, zetesis_themelios::SourceMetadata::output),
         observations: metadata.map_or(
             &observations,
@@ -30,6 +31,7 @@ pub(crate) fn solve(
         ),
         options,
         control,
+        atoms: zetesis_themelios::observation::json::AtomTable::new(options.max_atoms),
     };
     let mut request = Session::builder(input, options.into(), control.clone()).measurements(phases);
     if input
@@ -40,6 +42,7 @@ pub(crate) fn solve(
     }
     let mut session = request.start_observed(diagnostics)?;
     let mut progress = Progress::new();
+    progress.expansion = expansion;
     loop {
         let next = session.next_observed(diagnostics);
         progress.apply(session.progress());

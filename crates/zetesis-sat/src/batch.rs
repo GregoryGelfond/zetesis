@@ -4,10 +4,9 @@ use std::fmt;
 use std::num::NonZeroUsize;
 
 use super::{CompletionExecutor, StableModels, verification};
-use crate::encoding;
+use crate::Incomplete;
 use crate::search::{Budget, increment};
 use crate::timing::{self, Phase};
-use crate::{Incomplete, Solve};
 use zetesis_ferraris::{Interpretation, Theory, models};
 
 /// Verdict data supplied through the trusted batch-checker protocol. The caller
@@ -20,6 +19,10 @@ pub enum BatchVerdict {
     NoProperSubset,
     /// Exact native membership must finish this candidate.
     Residual,
+    /// The candidate is not an answer set and needs no query: a present atom
+    /// has no producer with a true body under the complete tight plan, and
+    /// by the support law the candidate without it models the reduct.
+    Refuted,
     /// Original satisfaction failed, contradicting this model-only producer.
     NotModel,
 }
@@ -227,7 +230,7 @@ impl StableModels {
     }
 
     fn certify_pending(&mut self, verdicts: &mut [BatchVerdict]) -> Result<(), Incomplete> {
-        let Some(certificate) = &self.certification else {
+        let Some(certificate) = self.certification.as_deref() else {
             return Ok(());
         };
         let mut search = self.statistics.search;
@@ -246,7 +249,8 @@ impl StableModels {
                 )? {
                     super::certified::Verdict::Stable => BatchVerdict::NoProperSubset,
                     super::certified::Verdict::NotModel => BatchVerdict::NotModel,
-                    super::certified::Verdict::Residual => BatchVerdict::Residual,
+                    super::certified::Verdict::Unsupported
+                    | super::certified::Verdict::NonMinimal => BatchVerdict::Refuted,
                 };
             }
             Ok(())
@@ -277,8 +281,7 @@ impl StableModels {
         while self.batch.pending.len() < limits.max_candidates.get() {
             match proposal(
                 &self.theory,
-                &self.candidate_cnf,
-                &mut self.candidate_cursor,
+                &mut self.proposer,
                 self.limits,
                 &mut budget,
                 &mut self.statistics,
@@ -286,9 +289,7 @@ impl StableModels {
                 Ok(Some(candidate)) => {
                     // The interpretation is retained even if its exact block cannot fit.
                     let started = timing::start(self.statistics.phase_timings.as_ref());
-                    let block =
-                        self.candidate_cursor
-                            .exclude(&self.candidate_cnf, &candidate, &mut budget);
+                    let block = self.proposer.exclude(&candidate, &mut budget);
                     timing::finish(
                         &mut self.statistics.phase_timings,
                         Phase::Candidates,
@@ -345,6 +346,7 @@ impl StableModels {
                 verdicts,
                 limits: self.limits,
                 prepared: None,
+                query: None,
             },
             &mut budget,
             &mut self.statistics,
@@ -384,29 +386,24 @@ impl StableModels {
 
 fn proposal(
     theory: &Theory,
-    cnf: &crate::Cnf,
-    cursor: &mut crate::search::Cursor,
+    proposer: &mut super::Proposer,
     limits: super::Limits,
     budget: &mut Budget<'_>,
     statistics: &mut super::Statistics,
 ) -> Result<Option<Interpretation>, Incomplete> {
     let started = timing::start(statistics.phase_timings.as_ref());
-    let proposal = (|| {
-        increment(&mut statistics.candidate_queries)?;
-        let assignment = match cursor.query(cnf, budget) {
-            Solve::Sat(assignment) => assignment,
-            Solve::Unsat => return Ok(None),
-            Solve::Inconclusive(error) => return Err(error),
-        };
-        if statistics.candidates >= limits.max_candidates {
-            return Err(Incomplete::CandidateLimit);
-        }
-        encoding::interpretation(theory, &assignment, budget).map(Some)
-    })();
+    let proposal = proposer.propose(theory, limits, None, budget, statistics);
     timing::finish(&mut statistics.phase_timings, Phase::Candidates, started);
-    let Some(candidate) = proposal? else {
-        return Ok(None);
+    // The batched protocol checks its proposals itself; a worker-decided
+    // model is refused here rather than checked twice.
+    let candidate = match proposal? {
+        None => return Ok(None),
+        Some(super::Proposal::Candidate(candidate)) => candidate,
+        Some(super::Proposal::Stable(_)) => return Err(Incomplete::InvalidWitness),
     };
+    // Proposals cross to an external checker, so they are validated here
+    // under their own limit and phase before that boundary, whatever the
+    // proposer's construction promises.
     let started = timing::start(statistics.phase_timings.as_ref());
     let original = models(theory, &candidate, verification(limits), budget.control);
     timing::finish(

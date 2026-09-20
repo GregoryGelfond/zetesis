@@ -254,7 +254,7 @@ fn limits_identity_and_control_remain_incomplete_stops() {
         check_static(&graph, &seed, limits, &cancelled).unwrap_err(),
         Stop::Cancelled
     );
-    let expired = Control::with_deadline(Instant::now());
+    let expired = Control::with_deadline(Instant::now()).unwrap();
     assert_eq!(
         check_static(&graph, &seed, limits, &expired).unwrap_err(),
         Stop::Deadline

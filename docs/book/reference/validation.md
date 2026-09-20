@@ -61,12 +61,17 @@ export PATH="$(dirname "$CLINGO"):$PATH"
 ```
 
 The oracle gate checks that both names select the same executable file and that
-its reported version is 5.8.2 before starting a test campaign. It then runs all
-13 independent Cargo campaigns, preserving each argument list and exit status
+its reported version is 5.8.2 before starting a test campaign. It then runs its
+15 independent Cargo campaigns, preserving each argument list and exit status
 under a fresh `target/oracle-checks/run.*` directory. One campaign failure does
 not skip the remaining campaigns; setup or receipt-write failures stop the run.
 The gate returns the first failed campaign's status after collection. Normal
 stdout/stderr remain attached to the caller for full log capture.
+
+The campaigns' test targets are listed by hand in the script. The portable
+gate's `oracle_selection` regression checks that list against the sources:
+every ignored test whose reason names clingo must be in a named target, and
+every named target must hold one.
 
 The comparison commands also accept explicit executable paths.
 
@@ -149,10 +154,12 @@ worker counts, limits and warmup schedule with each result.
 
 Repeated `--case` arguments select unchanged cases from the sealed corpus.
 `--memory-runs` adds a separate population of fresh-child resource observations
-on macOS or Linux; it does not add samples to the wall-time distribution. Its
+on macOS or Linux, to the ordinary campaign and to the matrix and series
+campaigns alike; it does not add samples to the wall-time distribution. Its
 reported child peak RSS excludes the measuring helper and is neither simultaneous
 process-tree memory nor GPU memory. These selected/resource campaigns use their
-own versioned report view.
+own versioned report view; the series view reports the median peak RSS of each
+solver beside its timing.
 
 For example, compare three different encodings with complete CPU/eager solves:
 
@@ -222,6 +229,31 @@ and retains the native model records. It checks selected displays, multiplicitie
 and costs against clingo; hidden clingo atoms are unavailable. It adds neither
 time-to-first-answer nor RSS observations. A single pair does not establish a
 performance trend.
+
+### Measure the series
+
+A sequence of solver changes is measured on one fixed cell set, so that each
+change's effect and the sequence's cumulative effect rest on the same
+observations. `performance::series::workloads` names twenty-two cells:
+seventeen generated programs from `performance::families` (one shape and one
+size each, byte-exact, with closed-form complete families as their
+contracts), three amended queens boards and two unchanged entries. The
+generated programs reach routes the corpus does not: the closure route, deep
+derivation, cyclic and stratified negation, refused admissions, a Latin
+square in the shape of Sudoku and a line walked under frame rules. `zetesis-perf --suite series` runs
+them through the instrumented matrix; `--profile cpu-auto` requests the shipped
+defaults and the observation retains the grounding mode each cell took;
+`--time-limit` adds a cooperative deadline to every native profile.
+
+`zetesis-series` derives one comparison from published reports of the same
+cells: exact medians, later-over-earlier ratios, each report's native median
+over the reference solver's median on the same cell, the retained counters and
+each report's native seal, with cells that did not pass listed by decision,
+and a scoreboard against the reference solver per report and profile, whose
+parts the validation crate's README describes. The
+[comparison guide](https://github.com/GregoryGelfond/zetesis/blob/main/scripts/README-comparison.md#the-fixed-series)
+gives the commands. Retained series comparisons live beside the other
+[recorded observations](observations/README.md).
 
 ### Performance evidence
 
@@ -674,9 +706,16 @@ scripts/check.sh oracle
 scripts/check.sh proofs
 scripts/check.sh coverage
 scripts/check.sh book
+scripts/check.sh hardware
 ```
 
-Physical Metal qualification adds the named device tests with
+`scripts/check.sh hardware` qualifies the host's physical device backend,
+Metal on macOS and Vulkan elsewhere, or the backend named by `--metal` or
+`--vulkan`: sixteen groups of 56 exact device tests, one reviewed selection
+per backend with the same groups and counts, each test reproducing the CPU's
+answer sets on the device; logs and status files are kept under
+`target/hardware`. Physical Metal qualification within coverage adds the
+named device tests with
 `scripts/check.sh coverage --metal` on a machine exposing a Metal adapter.
 The current selection contains 56 exact tests in 16 groups, including explicit
 Metal static-oracle construction and complete closure comparisons against an
@@ -716,31 +755,34 @@ status. A newer source remains unqualified until its own checks complete.
 
 | Population | Covered / instrumented lines | Coverage |
 | --- | ---: | ---: |
-| Workspace, all features, portable tests plus 56 physical Metal tests | 69,244 / 73,135 | 94.68% |
-| CPU-only solver library and CLI, separate instrumentation | 5,966 / 6,311 | 94.53% |
+| Workspace, all features, portable tests plus 56 physical Metal tests | 78,113 / 82,514 | 94.67% |
+| CPU-only solver library and CLI, separate instrumentation | 6,451 / 6,830 | 94.45% |
 
-This snapshot was qualified on 15 September 2026 UTC for version `0.1.3`, compiled
-source [`994fbb79`](https://github.com/GregoryGelfond/zetesis/tree/994fbb79f9a9e0a4398293f094fa2fbe0c3fbc17),
+This snapshot was qualified on 20 September 2026 UTC for version `0.1.3`, compiled
+source [`eca5a1a7`](https://github.com/GregoryGelfond/zetesis/tree/eca5a1a7b35cfe5219c2f7c1dcb98c37d13a89d3),
 using Rust 1.97.1, cargo-llvm-cov 0.8.7 and LLVM 22.1.6 on macOS 26.6.2 with
 Apple M4 Pro Metal. Later updates to this description and the README badge do
 not change that measured source or its compiled documentation and data inputs.
-The latest [CPU/Metal measurements](reduct-execution.md) compare the exact
-`9b8cf74c` and `d8a4a964` executables. Earlier measurements retain their own
+The [coverage receipt](observations/coverage-eca5a1a7.json) retains exact line
+counts, profile populations and report hashes. The latest
+[CPU/Metal measurements](execution-series.md) compare the exact
+`994fbb79` and `eca5a1a7` executables. Earlier measurements retain their own
 compiled sources and versions in the [comparison](performance.md).
 
 Both populations passed their independent 91% floor. The workspace contains
-2,267 profiles: 2,251 portable profiles plus 16 physical profiles from 56 tests
-in 16 groups. The 277-profile CPU-only population remains separate.
+2,361 profiles: 2,345 portable profiles plus 16 physical profiles from 56 tests
+in 16 groups. The 282-profile CPU-only population remains separate.
 Before physical profile import, the portable-only workspace report already
-passed its floor at 66,797 of 73,135 lines (91.3338%). Separate explicit-GPU
-device-failure and compiled-profile session checks also passed. Their profiles
-and all test-listing profiles are excluded from both coverage populations.
+passed its floor at 75,661 of 82,514 lines (91.6947%). A separate explicit-GPU
+device-failure check also passed; its auxiliary profile and all test-listing
+profiles are excluded from both coverage populations. Compiled-profile session
+checks belong to the 56 canonical physical tests.
 
 The portable and external-oracle gates passed for the implementation in this
 checkpoint. The Lean 4.33.1 build, axiom audit and source-record checks
-cover 131 semantic modules and 1,210 audited theorems, as recorded with their
+cover 139 semantic modules and 1,288 audited theorems, as recorded with their
 source hashes in the
-[verification record](https://github.com/GregoryGelfond/zetesis/blob/994fbb79f9a9e0a4398293f094fa2fbe0c3fbc17/proofs/verification.json).
+[verification record](https://github.com/GregoryGelfond/zetesis/blob/eca5a1a7b35cfe5219c2f7c1dcb98c37d13a89d3/proofs/verification.json).
 These counts describe the checked
 mathematical library, not verification of the Rust grounder, masks or GPU
 execution. Historical corpus and performance results retain their original
@@ -777,7 +819,8 @@ The ordinary table-join case requires positive table preparation, probe and row
 counts, actual GPU candidates, exact decided/residual accounting and no pending
 results. Its complete Metal family equals the independent CPU family. It checks
 host table grounding composed with GPU reduct checking, not a GPU table kernel.
-Vulkan and other untested devices are outside this measurement.
+Other devices are outside this measurement; the hardware gate qualifies the
+Vulkan selection on a host exposing a Vulkan adapter.
 
 Reproduce this recorded snapshot from the linked source revision with
 `scripts/check.sh coverage --metal` using the

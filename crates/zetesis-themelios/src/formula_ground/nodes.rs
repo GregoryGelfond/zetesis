@@ -1,12 +1,17 @@
 //! Exact node lookup; the node sequence alone fixes dense identity and order.
 //!
-//! `RandomState` retains randomized hashing for source-derived keys. No hash-table
-//! traversal emits nodes or selects IDs. Expected lookup is constant table work;
-//! collisions can require linear work and growth can rehash prior keys. Hashes
-//! establish bucket placement only: the complete node key decides identity.
+//! A key is a kind and two child identities the builder assigned densely, so
+//! it carries nothing an input author chooses and needs no randomized hash: a
+//! fixed multiplicative mix of the three words places it. No hash-table
+//! traversal emits nodes or selects IDs. Expected lookup is constant table
+//! work; collisions can require linear work and growth can rehash prior keys.
+//! Hashes establish bucket placement only: the complete node key decides
+//! identity.
 
 use std::collections::HashMap;
-use std::hash::BuildHasher;
+use std::hash::{BuildHasher, BuildHasherDefault};
+
+use crate::word_hash::WordHasher;
 
 use themelios_base::span::Location;
 use zetesis_ferraris::Node;
@@ -15,7 +20,7 @@ use crate::formula::ceiling;
 use crate::{FormulaFailure, FormulaResource};
 
 type Key = (u8, usize, usize);
-pub(super) type Index = HashMap<Key, usize>;
+pub(super) type Index = HashMap<Key, usize, BuildHasherDefault<WordHasher>>;
 
 pub(super) fn intern<S: BuildHasher>(
     index: &mut HashMap<Key, usize, S>,
@@ -115,7 +120,7 @@ mod tests {
     }
     #[test]
     fn a_node_ceiling_preserves_both_owners() {
-        let mut index = Index::new();
+        let mut index = Index::default();
         let mut nodes = Vec::new();
         intern(
             &mut index,
@@ -144,7 +149,7 @@ mod tests {
     }
     #[test]
     fn zero_node_admission_allocates_no_index() {
-        let mut index = Index::new();
+        let mut index = Index::default();
         let mut nodes = Vec::new();
         assert!(
             intern(
@@ -162,7 +167,7 @@ mod tests {
 
     #[test]
     fn refused_growth_preserves_index_capacity() {
-        let mut index = Index::new();
+        let mut index = Index::default();
         let mut nodes = Vec::new();
         intern(
             &mut index,

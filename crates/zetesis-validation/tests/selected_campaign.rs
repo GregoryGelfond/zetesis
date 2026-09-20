@@ -158,7 +158,7 @@ fn formula_strategy_reaches_only_native_invocations() {
 fn hidden_identity_mismatch_cannot_pass() {
     let fixture = Fixture::new(|index, record| {
         if index == 0 {
-            record["native"]["models"][1]["model"]["full_model"][0]["predicate"] = "r".into();
+            record["native"]["models"][1]["model"]["atoms"][0]["predicate"] = "r".into();
             // Suppress every display: this test must compare typed full identity.
             for model in record["native"]["models"].as_array_mut().unwrap() {
                 model["model"]["shown"]["atom_indices"] = json!([]);

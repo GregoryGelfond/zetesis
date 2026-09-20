@@ -522,7 +522,7 @@ mod physical {
                 .contains("coverage=exhausted")
         );
         let mut limited = options(&["--backend", backend.argument(), "--oracle", "countermodel"]);
-        limited.max_batch_bytes = 0;
+        limited.max_batch_bytes = Some(0);
         let report = run_with_diagnostics(
             source.into(),
             &limited,

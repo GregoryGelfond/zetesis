@@ -63,6 +63,8 @@ pub enum Incomplete {
     Verification(Stop),
     /// An internal SAT witness failed independent semantic validation.
     InvalidWitness,
+    /// A worker unwound before it could account for its remaining search.
+    WorkerPanicked,
     /// An accounting counter cannot be incremented without overflow.
     CounterOverflow,
 }
@@ -120,6 +122,7 @@ impl fmt::Display for Incomplete {
             Self::Certificate(error) => write!(f, "certified membership: {error}"),
             Self::Verification(error) => write!(f, "independent verification: {error}"),
             Self::InvalidWitness => f.write_str("SAT witness failed independent verification"),
+            Self::WorkerPanicked => f.write_str("SAT worker panicked before completing its search"),
             Self::CounterOverflow => f.write_str("SAT accounting counter overflow"),
         }
     }

@@ -10,7 +10,10 @@ use themelios_program::term::{BinaryOp, EvalError};
 use zetesis_core::{Sign, Value, ValueLimits, ValueNode};
 
 use super::{Budget, Counters, Evaluation, Expression, Operation, RETAINED_VALUE_CELLS};
-use crate::{ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits};
+use crate::{
+    ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits,
+    FormulaResource,
+};
 
 fn location() -> Location {
     Location {
@@ -138,12 +141,12 @@ fn large_evaluations_release_their_workspace() {
     let result = evaluate(
         &mut evaluation,
         (0..RETAINED_VALUE_CELLS + 2)
-            .map(|_| Operation::Constant(Value::Number(7)))
+            .map(|_| Operation::Constant(Value::Symbol("seven".into())))
             .collect(),
         &[],
     )
     .unwrap();
-    assert_eq!(result, Value::Number(7));
+    assert_eq!(result, Value::Symbol("seven".into()));
     assert!(evaluation.values.is_empty());
     assert_eq!(evaluation.values.capacity(), 0);
 }
@@ -154,14 +157,73 @@ fn root_does_not_extend_the_retained_prefix() {
     let result = evaluate(
         &mut evaluation,
         (0..=RETAINED_VALUE_CELLS)
-            .map(|_| Operation::Constant(Value::Number(7)))
+            .map(|_| Operation::Constant(Value::Symbol("seven".into())))
             .collect(),
         &[],
     )
     .unwrap();
-    assert_eq!(result, Value::Number(7));
+    assert_eq!(result, Value::Symbol("seven".into()));
     assert!(evaluation.values.is_empty());
     assert_eq!(evaluation.values.capacity(), RETAINED_VALUE_CELLS);
+}
+
+#[test]
+fn numeric_plans_hold_no_value_cells() {
+    // A plan over numbers runs in integer cells: the value storage is never
+    // touched, and the integer storage follows the same retention policy.
+    let mut evaluation = Evaluation::default();
+    let mut nodes: Vec<Operation> = (0..=RETAINED_VALUE_CELLS)
+        .map(|index| Operation::Constant(Value::Number(i32::try_from(index).unwrap())))
+        .collect();
+    nodes.push(Operation::Binary(BinaryOp::Add, 3, RETAINED_VALUE_CELLS));
+    let result = evaluate(&mut evaluation, nodes, &[]).unwrap();
+    assert_eq!(
+        result,
+        Value::Number(3 + i32::try_from(RETAINED_VALUE_CELLS).unwrap())
+    );
+    assert_eq!(evaluation.values.capacity(), 0);
+    assert!(evaluation.integers.is_empty());
+    assert_eq!(evaluation.integers.capacity(), 0);
+}
+
+#[test]
+fn a_numeric_prefix_moves_into_value_cells_at_the_first_other_value() {
+    // The number is read into an integer cell; the string ends the integer
+    // prefix, and the sum below it is evaluated from the moved value cells.
+    let mut evaluation = Evaluation::default();
+    let result = evaluate(
+        &mut evaluation,
+        vec![
+            Operation::Variable(0),
+            Operation::Constant(Value::Number(2)),
+            Operation::Variable(1),
+            Operation::Binary(BinaryOp::Add, 0, 1),
+        ],
+        &[Value::Number(5), Value::String("marker".into())],
+    )
+    .unwrap();
+    assert_eq!(result, Value::Number(7));
+    assert!(evaluation.values.is_empty());
+    assert!((1..=RETAINED_VALUE_CELLS).contains(&evaluation.values.capacity()));
+}
+
+#[test]
+fn undefined_numeric_arithmetic_clears_the_integer_prefix() {
+    let mut evaluation = Evaluation::default();
+    let result = evaluate(
+        &mut evaluation,
+        vec![
+            Operation::Constant(Value::Number(1)),
+            Operation::Constant(Value::Number(0)),
+            Operation::Binary(BinaryOp::Div, 0, 1),
+        ],
+        &[],
+    );
+    assert!(matches!(result, Err(FormulaFailure::Expansion(
+        ExpansionFailure::Evaluation { error: EvalError::Undefined, location: found }
+    )) if found == location()));
+    assert!(evaluation.integers.is_empty());
+    assert_eq!(evaluation.values.capacity(), 0);
 }
 
 #[test]
@@ -327,4 +389,53 @@ fn constructor_root_reads_its_ordered_prefix() {
     )
     .unwrap();
     assert_eq!(actual, expected);
+}
+
+#[test]
+fn a_refused_payload_charge_states_the_whole_requirement() {
+    // The node is admitted for one unit and its payload is then charged at
+    // once. A ceiling of one refuses the payload, and the refusal names what
+    // that charge required, not the ceiling plus one.
+    let value = Value::from_nodes(
+        vec![
+            ValueNode::Function {
+                name: "f".into(),
+                sign: Sign::Positive,
+                arity: 1,
+            },
+            ValueNode::String("argument".into()),
+        ],
+        ValueLimits::default(),
+    )
+    .unwrap();
+    let Value::Structured(structure) = &value else {
+        panic!("a function is a structured value")
+    };
+    let payload = structure.payload_bytes() as u128;
+    assert!(payload > 1);
+    let mut evaluation = Evaluation::default();
+    let error = evaluation
+        .expression(
+            &Expression {
+                nodes: vec![Operation::Constant(value.clone())],
+            },
+            |_| -> Result<&Value, FormulaFailure> { unreachable!("no variable") },
+            &FormulaLimits {
+                max_work: 1,
+                ..FormulaLimits::default()
+            },
+            &mut Budget::new(ExpansionLimits::default(), usize::MAX),
+            &mut Counters::default(),
+            location(),
+        )
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        FormulaFailure::Limit {
+            resource: FormulaResource::Work,
+            observed,
+            limit: 1,
+            ..
+        } if observed == 1 + payload
+    ));
 }

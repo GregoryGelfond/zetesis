@@ -1,7 +1,7 @@
 //! CLI spellings map directly to the library's execution policy values.
 
 use clap::{CommandFactory, FromArgMatches, Parser, error::ErrorKind};
-use zetesis_cli::{Backend, Grounder, Options, Oracle, SolveConfig, SourceBatching};
+use zetesis_cli::{Backend, Grounder, Options, Oracle, SearchMethod, SolveConfig, SourceBatching};
 
 fn nondefault_options() -> Options {
     // Distinct values detect crossed fields whose defaults happen to coincide.
@@ -15,6 +15,8 @@ fn nondefault_options() -> Options {
         "worlds",
         "--oracle",
         "closure",
+        "--search",
+        "regions",
         "--stats",
         "--models",
         "11",
@@ -103,6 +105,7 @@ fn nondefault_options_preserve_each_solver_field() {
     assert_eq!(config.workers.get(), 23);
     assert_eq!(config.completion_workers.get(), 24);
     assert_eq!(config.max_completion_scratch_bytes, 25);
+    assert_eq!(config.search, SearchMethod::Regions);
     assert_eq!(config.max_candidates, 26);
     assert_eq!(config.max_carrier_atoms, 27);
     assert_eq!(config.max_work, 28);
@@ -118,6 +121,109 @@ fn nondefault_options_preserve_each_solver_field() {
     assert_eq!(config.max_closure_bytes, 38);
     assert_eq!(config.max_closure_batch_bytes, 39);
     assert_eq!(config.max_reduct_bytes, 40);
+}
+
+#[test]
+fn an_omitted_closure_allowance_is_the_collective_share_per_worker() {
+    let derived = SolveConfig::from(
+        &Options::try_parse_from(["zetesis", "--workers", "8", "--memory", "2147483648"]).unwrap(),
+    );
+    assert_eq!(
+        derived.max_closure_bytes,
+        SolveConfig::DEFAULT.max_closure_batch_bytes / 8
+    );
+    assert!(derived.validate().is_ok());
+    let explicit = SolveConfig::from(
+        &Options::try_parse_from(["zetesis", "--workers", "8", "--max-closure-bytes", "5"])
+            .unwrap(),
+    );
+    assert_eq!(explicit.max_closure_bytes, 5);
+    let collective = SolveConfig::from(
+        &Options::try_parse_from([
+            "zetesis",
+            "--workers",
+            "3",
+            "--max-closure-batch-bytes",
+            "300",
+        ])
+        .unwrap(),
+    );
+    assert_eq!(collective.max_closure_bytes, 100);
+}
+
+#[test]
+fn byte_ceilings_are_the_library_defaults_scaled_by_the_memory_allowance() {
+    // At the reference allowance every byte ceiling is the library's; at
+    // twice it, every one is doubled and the others are unchanged.
+    let reference = SolveConfig::from(
+        &Options::try_parse_from(["zetesis", "--workers", "4", "--memory", "2147483648"]).unwrap(),
+    );
+    assert_eq!(
+        format!("{reference:?}"),
+        format!("{:?}", SolveConfig::DEFAULT)
+    );
+    let doubled = SolveConfig::from(
+        &Options::try_parse_from(["zetesis", "--workers", "4", "--memory", "4294967296"]).unwrap(),
+    );
+    let library = SolveConfig::DEFAULT;
+    assert_eq!(
+        doubled.max_projection_bytes,
+        2 * library.max_projection_bytes
+    );
+    assert_eq!(
+        doubled.max_objective_key_bytes,
+        2 * library.max_objective_key_bytes
+    );
+    assert_eq!(doubled.max_optimal_bytes, 2 * library.max_optimal_bytes);
+    assert_eq!(doubled.max_reduct_bytes, 2 * library.max_reduct_bytes);
+    assert_eq!(
+        doubled.max_completion_scratch_bytes,
+        2 * library.max_completion_scratch_bytes
+    );
+    assert_eq!(doubled.max_candidate_bytes, 2 * library.max_candidate_bytes);
+    assert_eq!(
+        doubled.max_closure_batch_bytes,
+        2 * library.max_closure_batch_bytes
+    );
+    assert_eq!(doubled.max_closure_bytes, 2 * library.max_closure_bytes);
+    assert_eq!(doubled.max_batch_bytes, 2 * library.max_batch_bytes);
+    let unscaled = SolveConfig {
+        max_projection_bytes: library.max_projection_bytes,
+        max_objective_key_bytes: library.max_objective_key_bytes,
+        max_optimal_bytes: library.max_optimal_bytes,
+        max_reduct_bytes: library.max_reduct_bytes,
+        max_completion_scratch_bytes: library.max_completion_scratch_bytes,
+        max_candidate_bytes: library.max_candidate_bytes,
+        max_closure_batch_bytes: library.max_closure_batch_bytes,
+        max_closure_bytes: library.max_closure_bytes,
+        max_batch_bytes: library.max_batch_bytes,
+        ..doubled
+    };
+    assert_eq!(format!("{unscaled:?}"), format!("{library:?}"));
+    // A given ceiling is taken as given, whatever the allowance.
+    let given = SolveConfig::from(
+        &Options::try_parse_from([
+            "zetesis",
+            "--memory",
+            "4294967296",
+            "--max-reduct-bytes",
+            "7",
+        ])
+        .unwrap(),
+    );
+    assert_eq!(given.max_reduct_bytes, 7);
+    // The default allowance is at least the reference.
+    let host = Options::try_parse_from(["zetesis"]).unwrap();
+    assert!(host.memory >= 2_147_483_648);
+    assert!(host.max_reduct_bytes.is_none());
+}
+
+#[test]
+fn workers_default_to_the_host_parallelism() {
+    let options = Options::try_parse_from(["zetesis"]).unwrap();
+    let host = std::thread::available_parallelism().unwrap_or(std::num::NonZeroUsize::MIN);
+    assert_eq!(options.workers, host);
+    assert_eq!(options.completion_workers.get(), 1);
 }
 
 #[test]
@@ -174,6 +280,17 @@ fn oracle_spellings_select_typed_policies() {
 }
 
 #[test]
+fn search_spellings_select_typed_policies() {
+    for (spelling, expected) in [
+        ("regions", SearchMethod::Regions),
+        ("clauses", SearchMethod::Clauses),
+    ] {
+        let options = Options::try_parse_from(["zetesis", "--search", spelling]).unwrap();
+        assert_eq!(options.search, expected);
+    }
+}
+
+#[test]
 fn policy_defaults_match_the_solver_configuration() {
     let options = Options::try_parse_from(["zetesis"]).unwrap();
     assert_eq!(options.backend, SolveConfig::DEFAULT.backend);
@@ -183,6 +300,7 @@ fn policy_defaults_match_the_solver_configuration() {
         SolveConfig::DEFAULT.source_batching
     );
     assert_eq!(options.oracle, SolveConfig::DEFAULT.oracle);
+    assert_eq!(options.search, SolveConfig::DEFAULT.search);
 }
 
 #[test]
@@ -192,6 +310,7 @@ fn policy_values_retain_case_sensitive_refusal() {
         ("--grounder", "LAZY"),
         ("--source-batching", "WORLDS"),
         ("--oracle", "COUNTERMODEL"),
+        ("--search", "CLAUSES"),
     ] {
         let error = Options::try_parse_from(["zetesis", flag, value]).unwrap_err();
         assert_eq!(error.kind(), ErrorKind::InvalidValue);
@@ -293,4 +412,15 @@ fn formula_device_limits_reject_unrepresentable_values() {
             assert_eq!(error.kind(), ErrorKind::ValueValidation);
         }
     }
+}
+
+#[test]
+fn the_expansion_byte_budget_is_an_option_with_the_library_default() {
+    let options = Options::try_parse_from(["zetesis"]).unwrap();
+    assert_eq!(
+        options.max_expansion_bytes,
+        zetesis_themelios::ExpansionLimits::default().max_scalar_bytes
+    );
+    let raised = Options::try_parse_from(["zetesis", "--max-expansion-bytes", "5"]).unwrap();
+    assert_eq!(raised.max_expansion_bytes, 5);
 }

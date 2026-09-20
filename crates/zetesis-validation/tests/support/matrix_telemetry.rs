@@ -540,3 +540,39 @@ fn positive_consequences_cannot_describe_lazy_grounding() {
         "positive consequences require the eager CPU formula route"
     );
 }
+
+#[test]
+fn automatic_grounding_records_the_mode_actually_taken() {
+    let automatic = NativeExecution {
+        grounder: Grounder::Auto,
+        ..Default::default()
+    };
+    let (document, text) = fixture();
+    let eager = observe(&document, text.as_bytes(), automatic).unwrap();
+    assert_eq!(eager.timing.grounding_mode, "eager");
+    let (document, text) = lazy_fixture();
+    let request = NativeExecution {
+        backend: Backend::Metal,
+        ..automatic
+    };
+    let lazy = observe(&document, text.as_bytes(), request).unwrap();
+    assert_eq!(lazy.timing.grounding_mode, "lazy_interleaved");
+    assert!(matches!(lazy.execution.device, DeviceWork::Lazy { .. }));
+}
+
+#[test]
+fn automatic_grounding_still_requires_typed_and_text_agreement() {
+    let automatic = NativeExecution {
+        grounder: Grounder::Auto,
+        ..Default::default()
+    };
+    let (mut document, text) = fixture();
+    document["statistics"]["stage_timings"]["grounding_mode"] = json!("lazy_interleaved");
+    assert!(observe(&document, text.as_bytes(), automatic).is_err());
+    let (document, text) = fixture();
+    let text = text.replace(
+        "effective execution: backend=cpu; oracle=closure; grounder=eager",
+        "effective execution: backend=cpu; oracle=closure; grounder=lazy",
+    );
+    assert!(observe(&document, text.as_bytes(), automatic).is_err());
+}

@@ -13,11 +13,15 @@ use zetesis_sat::Incomplete;
 mod bounded_writer;
 use bounded_writer::BoundedWriter;
 
+/// The batched completion and its pool belong to the clause search; the
+/// region walk decides its leaves in its workers.
 fn options(workers: usize, batch: usize) -> Options {
     let mut options = Options::try_parse_from([
         "zetesis",
         "--backend",
         "cpu",
+        "--search",
+        "clauses",
         "--oracle",
         "countermodel",
         "--models",
@@ -112,7 +116,8 @@ fn ordinary_cpu_pools_preserve_complete_ordered_answers_and_optimum_ties() {
                 assert!(execution.completion.effective_workers <= workers.min(batch));
                 assert!(
                     execution.completion.peak_scratch_bytes
-                        <= options(workers, batch).max_completion_scratch_bytes
+                        <= zetesis_cli::SolveConfig::from(&options(workers, batch))
+                            .max_completion_scratch_bytes
                 );
                 assert!(actual.2.contains("backend=cpu batched exact completion"));
                 assert!(!actual.2.contains("backend=hybrid"));
@@ -132,7 +137,7 @@ fn ordinary_cpu_pools_preserve_complete_ordered_answers_and_optimum_ties() {
 fn scratch_refusal_and_model_limits_report_pending_and_queued_coverage() {
     for workers in [2, 4] {
         let mut options = options(workers, 3);
-        options.max_completion_scratch_bytes = 0;
+        options.max_completion_scratch_bytes = Some(0);
         let limited = solve("{a;b}.", &options);
         assert_eq!(limited.0.completion, Completion::Interrupted);
         assert_eq!(
@@ -145,7 +150,7 @@ fn scratch_refusal_and_model_limits_report_pending_and_queued_coverage() {
         assert_eq!(execution.completion.entered, 0);
         assert_eq!(execution.completion.peak_scratch_bytes, 0);
         assert!(!limited.1.contains("UNSATISFIABLE"));
-        options.max_completion_scratch_bytes = 256 * 1024 * 1024;
+        options.max_completion_scratch_bytes = Some(256 * 1024 * 1024);
         options.models = 1;
         let limited = solve("{a;b}.", &options);
         assert_eq!(limited.0.completion, Completion::RequestedModels);
@@ -196,7 +201,7 @@ fn output_failure_preserves_verified_queued_models_after_join() {
 #[test]
 fn default_scalar_cursor_keeps_its_existing_storage_contract() {
     let mut options = options(1, 3);
-    options.max_completion_scratch_bytes = 0;
+    options.max_completion_scratch_bytes = Some(0);
     let actual = solve("{a;b}.", &options);
     assert_eq!(actual.0.completion, Completion::Exhausted);
     assert_eq!(actual.0.models, 4);

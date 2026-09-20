@@ -3,11 +3,12 @@
 use std::collections::BTreeSet;
 
 use themelios_base::source::SourceId;
+use themelios_base::span::{ByteOffset, Span};
 use themelios_program::term::EvalError;
 use zetesis_core::{Atom, Term};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, Admitted, ExpansionFailure, ExpansionLimits,
-    ExpansionResource, admit, admit_extended,
+    ExpansionResource, ExpansionUsage, ProfileFeature, admit, admit_extended,
 };
 
 fn extended(text: &str) -> Admitted {
@@ -471,4 +472,125 @@ fn valid_closed_structures_do_not_make_an_empty_fact_product_nonempty() {
         assert!(input.program().templates().is_empty());
         assert_eq!(input.source().text(), source);
     }
+}
+
+fn usage(text: &str) -> ExpansionUsage {
+    *extended(text).expansion_usage()
+}
+
+fn limit_failure(text: &str, limits: ExpansionLimits) -> (ExpansionResource, u128, u128, Span) {
+    match admit_extended(text.to_owned(), AdmissionOptions::default(), limits) {
+        Err(ExpansionFailure::Limit {
+            resource,
+            limit,
+            observed,
+            location,
+        }) => (resource, limit, observed, location.span),
+        other => panic!("{text}: expected a limit refusal, got {other:?}"),
+    }
+}
+
+#[test]
+fn plain_statements_are_charged_as_their_normalization_charges_them() {
+    // Normalization charges one unit of term work per term node and the text
+    // bytes of each argument-free scalar, of which a number has none; fact
+    // expansion then charges each fact's predicate name and its values;
+    // every statement is charged its one template and its one parsed origin.
+    // Two facts of two numbers, a fact of one number and a rule of four
+    // variables therefore cost 2 + 2 + 1 + 4 units of term work; the scalar
+    // bytes are the three one-letter names; the values are (2 + 2) + (2 + 2)
+    // + (1 + 1). Nothing is charged twice.
+    let usage = usage("e(0,1). e(1,2). r(0). r(Y) :- r(X), e(X,Y).");
+    assert_eq!(usage.term_work, 9);
+    assert_eq!(usage.scalar_bytes, 3);
+    assert_eq!(usage.values, 10);
+    assert_eq!(usage.templates, 4);
+    assert_eq!(usage.origin_locations, 4);
+}
+
+#[test]
+fn a_term_work_ceiling_trips_at_the_node_the_normalization_reaches() {
+    // The facts are normalized in their canonical order, node by node: the
+    // second node of `e(3,4,5)` is the fifth unit, one over the ceiling, and
+    // the refusal names the running total there and that statement's span.
+    let (resource, limit, observed, span) = limit_failure(
+        "e(0,1,2). e(3,4,5).",
+        ExpansionLimits {
+            max_term_work: 4,
+            ..ExpansionLimits::default()
+        },
+    );
+    assert_eq!(resource, ExpansionResource::TermWork);
+    assert_eq!((limit, observed), (4, 5));
+    assert_eq!(
+        span,
+        Span::new(ByteOffset::new(10), ByteOffset::new(19)).unwrap()
+    );
+}
+
+#[test]
+fn scalars_are_charged_head_first_and_then_in_argument_order() {
+    // Four bytes in the head exceed a ceiling of three before the body's one
+    // byte is reached; one byte in the first argument is within it and the
+    // four of the second then make five.
+    let limits = ExpansionLimits {
+        max_scalar_bytes: 3,
+        ..ExpansionLimits::default()
+    };
+    let (resource, limit, observed, _) = limit_failure("q(\"aaaa\") :- p(\"b\").", limits);
+    assert_eq!(
+        (resource, limit, observed),
+        (ExpansionResource::ScalarBytes, 3, 4)
+    );
+    let (resource, limit, observed, _) = limit_failure("p(\"b\",\"aaaa\").", limits);
+    assert_eq!(
+        (resource, limit, observed),
+        (ExpansionResource::ScalarBytes, 3, 5)
+    );
+}
+
+#[test]
+fn a_definition_after_a_kept_leaf_is_replaced_and_charged_once() {
+    // Resolving `n` costs two units of term work, one to scan its value and
+    // one to normalize it; the fact's first argument is kept for one unit,
+    // its second replaced for one; numbers carry no bytes, so the scalar
+    // bytes are the name's one. The kept argument is charged exactly once.
+    same_facts("#const n=2. p(1,n).", "p(1,2).");
+    let usage = usage("#const n=2. p(1,n).");
+    assert_eq!(usage.term_work, 4);
+    assert_eq!(usage.scalar_bytes, 1);
+    assert_eq!(usage.values, 4);
+    assert_eq!(usage.templates, 1);
+}
+
+#[test]
+fn plain_rules_compile_as_their_explicit_s0_admission_does() {
+    let text = "e(0,1). r(0). r(Y) :- r(X), e(X,Y). q :- r(1), not p.";
+    let explicit = admit(text.to_owned(), AdmissionOptions::default()).expect("S0");
+    let expanded = extended(text);
+    assert_eq!(
+        expanded.program().templates(),
+        explicit.program().templates()
+    );
+    assert_eq!(expanded.template_origins(), explicit.template_origins());
+}
+
+#[test]
+fn plain_fact_strings_with_nul_are_refused() {
+    let error = admit_extended(
+        "p(\"bad\0value\").".into(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+    )
+    .unwrap_err();
+    assert!(
+        matches!(
+            error,
+            ExpansionFailure::Admission(AdmissionFailure::Profile {
+                feature: ProfileFeature::NulString,
+                ..
+            })
+        ),
+        "{error}"
+    );
 }

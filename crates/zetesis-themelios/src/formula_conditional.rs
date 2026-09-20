@@ -7,9 +7,29 @@ use themelios_program::program::DefaultNegation;
 use zetesis_ferraris::Node;
 
 use crate::FormulaFailure;
-use crate::formula_conditional_ir::{ConditionalIr, Consequent, ConsequentOperand};
+use crate::formula_conditional_ir::{
+    Alternative, ConditionalIr, Consequent, ConsequentOperand, GuardAlternative,
+};
 use crate::formula_ground::{Builder, FALSUM, VERUM, boolean};
+use crate::formula_support::family::Evidence;
 use crate::formula_support::{Join, Support};
+
+/// Arithmetic omission removes the whole local implication. A defined false
+/// consequent, including an empty witness disjunction, remains a formula value.
+enum ConsequentInstance {
+    Defined(usize),
+    Omitted,
+}
+
+impl ConsequentInstance {
+    fn alternatives(value: usize, evidence: &Evidence) -> Self {
+        if evidence.zero.is_some() && !evidence.defined {
+            Self::Omitted
+        } else {
+            Self::Defined(value)
+        }
+    }
+}
 
 impl Builder<'_> {
     pub(super) fn conditional(
@@ -28,6 +48,9 @@ impl Builder<'_> {
             self.budget,
             location,
         )?;
+        if let Consequent::Guard(guard) = &conditional.consequent {
+            bindings.check_guard(guard);
+        }
         while let Some(binding) =
             bindings.next(self.limits, self.budget, &mut self.counters, location)?
         {
@@ -35,72 +58,21 @@ impl Builder<'_> {
             let condition = self.body(&conditional.condition, &binding, location, support)?;
             let consequent = match &conditional.consequent {
                 Consequent::Atoms(negation, alternatives) => {
-                    let mut disjunction = FALSUM;
-                    for alternative in alternatives {
-                        let mut rows = Join::new(
-                            &alternative.bindings,
-                            &binding,
-                            alternative.variables,
-                            support,
-                            self.budget,
-                            location,
-                        )?;
-                        while let Some(row) =
-                            rows.next(self.limits, self.budget, &mut self.counters, location)?
-                        {
-                            self.work(location)?;
-                            let mut value = match &alternative.operand {
-                                ConsequentOperand::Atom(atom) => self.atom(atom, &row, location)?,
-                                ConsequentOperand::Projection(projection) => {
-                                    self.project(projection, &row, support, location)?
-                                }
-                            };
-                            if *negation != DefaultNegation::None {
-                                value = self.neg(value, location)?;
-                            }
-                            if *negation == DefaultNegation::NotNot {
-                                value = self.neg(value, location)?;
-                            }
-                            disjunction = self.or(disjunction, value, location)?;
-                        }
-                    }
-                    disjunction
+                    self.atom_consequent(*negation, alternatives, &binding, support, location)?
                 }
                 Consequent::Guards(alternatives) => {
-                    let mut value = false;
-                    for alternative in alternatives {
-                        let mut rows = Join::new(
-                            &alternative.bindings,
-                            &binding,
-                            alternative.variables,
-                            support,
-                            self.budget,
-                            location,
-                        )?;
-                        while let Some(row) =
-                            rows.next(self.limits, self.budget, &mut self.counters, location)?
-                        {
-                            // Every value alternative is evaluated, including
-                            // those after a true result: errors cannot disappear.
-                            self.work(location)?;
-                            value |= alternative.guard.evaluate(
-                                &row,
-                                self.limits,
-                                self.budget,
-                                &mut self.counters,
-                                location,
-                            )?;
-                        }
-                    }
-                    boolean(value)
+                    self.guard_consequent(alternatives, &binding, support, location)?
                 }
-                Consequent::Guard(guard) => boolean(guard.evaluate(
+                Consequent::Guard(guard) => ConsequentInstance::Defined(boolean(guard.evaluate(
                     &binding,
                     self.limits,
                     self.budget,
                     &mut self.counters,
                     location,
-                )?),
+                )?)),
+            };
+            let ConsequentInstance::Defined(consequent) = consequent else {
+                continue;
             };
             let implication = self.node(Node::Implies(condition, consequent), location)?;
             result = self.and(result, implication, location)?;
@@ -108,5 +80,85 @@ impl Builder<'_> {
         // Only successful exhaustion establishes vacuity. Resource errors above
         // propagate instead of returning the conjunction of a partial prefix.
         Ok(result)
+    }
+
+    fn atom_consequent(
+        &mut self,
+        negation: DefaultNegation,
+        alternatives: &[Alternative],
+        binding: &Binding,
+        support: &Support,
+        location: Location,
+    ) -> Result<ConsequentInstance, FormulaFailure> {
+        let mut disjunction = FALSUM;
+        let mut evidence = Evidence::default();
+        for alternative in alternatives {
+            let mut rows = Join::new(
+                &alternative.bindings,
+                binding,
+                alternative.variables,
+                support,
+                self.budget,
+                location,
+            )?;
+            while let Some(row) =
+                rows.next(self.limits, self.budget, &mut self.counters, location)?
+            {
+                self.work(location)?;
+                let mut value = match &alternative.operand {
+                    ConsequentOperand::Atom(atom) => self.atom(atom, &row, location)?,
+                    ConsequentOperand::Projection(projection) => {
+                        self.project(projection, &row, support, location)?
+                    }
+                };
+                if negation != DefaultNegation::None {
+                    value = self.neg(value, location)?;
+                }
+                if negation == DefaultNegation::NotNot {
+                    value = self.neg(value, location)?;
+                }
+                disjunction = self.or(disjunction, value, location)?;
+            }
+            evidence.merge(rows.take_family());
+        }
+        Ok(ConsequentInstance::alternatives(disjunction, &evidence))
+    }
+
+    fn guard_consequent(
+        &mut self,
+        alternatives: &[GuardAlternative],
+        binding: &Binding,
+        support: &Support,
+        location: Location,
+    ) -> Result<ConsequentInstance, FormulaFailure> {
+        let mut value = false;
+        let mut evidence = Evidence::default();
+        for alternative in alternatives {
+            let mut rows = Join::new(
+                &alternative.bindings,
+                binding,
+                alternative.variables,
+                support,
+                self.budget,
+                location,
+            )?;
+            rows.check_guard(&alternative.guard);
+            while let Some(row) =
+                rows.next(self.limits, self.budget, &mut self.counters, location)?
+            {
+                // Every value alternative is evaluated, including those after
+                // a true result: errors cannot disappear.
+                self.work(location)?;
+                value |= alternative.guard.evaluate(
+                    &row,
+                    self.limits,
+                    self.budget,
+                    &mut self.counters,
+                    location,
+                )?;
+            }
+            evidence.merge(rows.take_family());
+        }
+        Ok(ConsequentInstance::alternatives(boolean(value), &evidence))
     }
 }

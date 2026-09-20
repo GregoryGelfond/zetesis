@@ -26,15 +26,23 @@ fn default_request_proves_optimum_before_returning_one_model() {
     assert_eq!(report.models, 1);
     let optimum = report.optimization.unwrap();
     assert_eq!(optimum.score.costs(), &[(0, 2)]);
-    assert_eq!(optimum.scored_models, 1);
     assert_eq!(optimum.tied_models, 1);
     assert!(
         text.starts_with("Answer: 1\nb\nOptimization: 2\n"),
         "{text}"
     );
     assert!(text.contains("OPTIMUM FOUND\nCoverage: exhausted"));
+    // One worker reaches b first and the bound then prunes a; several
+    // workers may decide both leaves before the bound reaches them.
+    let (pruned, _) = solve(
+        "1 {a;b} 1. #minimize { 5,a:a; 2,b:b }.",
+        &["--workers", "1"],
+    );
+    let pruned_optimum = pruned.optimization.unwrap();
+    assert_eq!(pruned_optimum.score.costs(), &[(0, 2)]);
+    assert_eq!(pruned_optimum.scored_models, 1);
     assert_eq!(
-        report
+        pruned
             .countermodel_statistics
             .unwrap()
             .candidate_restrictions,

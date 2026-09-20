@@ -372,7 +372,7 @@ fn source_and_runtime_limits_are_independent_inclusive_and_never_partial() {
             .kind(),
         &ErrorKind::Stopped(Stop::Cancelled)
     );
-    let deadline = Control::with_deadline(Instant::now());
+    let deadline = Control::with_deadline(Instant::now()).unwrap();
     assert_eq!(
         program
             .evaluate(&model, Limits::default(), &deadline)

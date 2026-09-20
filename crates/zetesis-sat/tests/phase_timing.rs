@@ -9,6 +9,20 @@ use zetesis_sat::{
     SearchLimits, StableModels,
 };
 
+/// Enumerate by the clause forms, the subject of the tests below.
+fn by_clauses(
+    theory: &zetesis_ferraris::Theory,
+    limits: zetesis_sat::Limits,
+    control: zetesis_sat::Control,
+) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
+    zetesis_sat::StableModels::with_method(
+        theory,
+        zetesis_sat::SearchMethod::Clauses,
+        limits,
+        control,
+    )
+}
+
 fn choice() -> Theory {
     // a OR NOT a has both {} and {a} as stable models.
     Theory::new(
@@ -84,7 +98,7 @@ fn enabling_clocks_preserves_models_and_all_deterministic_counters() {
 #[test]
 fn failed_checker_keeps_proposals_and_retry_measures_only_actual_native_residuals() {
     let theory = choice();
-    let mut search = StableModels::new(&theory, Limits::default(), Control::default()).unwrap();
+    let mut search = by_clauses(&theory, Limits::default(), Control::default()).unwrap();
     search.enable_phase_timing();
     assert!(matches!(
         search.next_batch(batch(), |_, candidates| {
@@ -182,12 +196,12 @@ fn measurement_overflow_preserves_an_explicit_incomplete_prefix() {
 #[test]
 fn failed_cold_preparation_is_recorded_before_worker_entry() {
     let theory = choice();
-    let mut probe = StableModels::new(&theory, Limits::default(), Control::default()).unwrap();
+    let mut probe = by_clauses(&theory, Limits::default(), Control::default()).unwrap();
     assert!(matches!(
         probe.next_batch(batch(), |_, _| Err::<Vec<BatchVerdict>, _>("hold")),
         Err(BatchError::Checker("hold"))
     ));
-    let mut search = StableModels::new(
+    let mut search = by_clauses(
         &theory,
         Limits {
             search: SearchLimits {

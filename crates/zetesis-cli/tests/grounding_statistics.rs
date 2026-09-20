@@ -42,11 +42,7 @@ fn json_attribution_preserves_typed_measurements() {
     assert_eq!(view["scope"], "eager_formula");
     for phase in GroundingPhase::ALL {
         let json = &view["measurements"][phase.label()];
-        let Some(measurement) = typed.get(phase) else {
-            assert_eq!(phase, GroundingPhase::DomainAnalysis);
-            assert!(json.is_null());
-            continue;
-        };
+        let measurement = typed.get(phase).unwrap();
         assert_eq!(
             json["elapsed_ns"].as_u64().map(u128::from),
             measurement.elapsed.map(|value| value.as_nanos())
@@ -58,16 +54,20 @@ fn json_attribution_preserves_typed_measurements() {
             );
         }
         assert_eq!(json["work"]["roots"].as_u64(), measurement.work.roots);
-        for name in [
-            "domain_prepare_work",
-            "domain_guard_rows",
-            "domain_guard_checks",
-            "domain_rejected_rows",
+        for (name, count) in [
+            ("domain_prepare_work", measurement.work.domain_prepare_work),
+            ("domain_guard_rows", measurement.work.domain_guard_rows),
+            ("domain_guard_checks", measurement.work.domain_guard_checks),
+            (
+                "domain_rejected_rows",
+                measurement.work.domain_rejected_rows,
+            ),
+            (
+                "domain_excluded_values",
+                measurement.work.domain_excluded_values,
+            ),
         ] {
-            assert_eq!(
-                json["work"][name], 0,
-                "ordinary CLI leaves optional domains disabled"
-            );
+            assert_eq!(json["work"][name].as_u64(), count);
         }
         assert_eq!(
             json["work"]["expression_nodes"].as_u64(),
@@ -79,6 +79,68 @@ fn json_attribution_preserves_typed_measurements() {
             .unwrap()
             .contains("Grounding attribution:")
     );
+}
+
+#[test]
+fn the_ordinary_command_requests_the_domain_analysis() {
+    // The choice head keeps this program outside the analysis's profile, so
+    // the attempt is measured and declines: its work is the applicability
+    // check alone, and no guard visits a row.
+    let mut output = Vec::new();
+    let mut diagnostics = Vec::new();
+    let report = run_detailed_with_diagnostics(
+        "1{p;q}1.".into(),
+        &options(&[]),
+        &mut output,
+        &mut diagnostics,
+        &Control::default(),
+    )
+    .unwrap();
+    let typed = report.phase_timings.unwrap().grounding;
+    let analysis = typed.get(GroundingPhase::DomainAnalysis).unwrap();
+    assert_eq!(analysis.count(GroundingOutcome::Completed), Some(1));
+    assert!(analysis.work.domain_prepare_work.unwrap() > 0);
+    let rules = typed.get(GroundingPhase::RuleInstantiation).unwrap();
+    assert_eq!(rules.work.domain_guard_rows, Some(0));
+    assert_eq!(rules.work.domain_excluded_values, Some(0));
+}
+
+#[test]
+fn the_ordinary_command_narrows_candidates_by_comparison() {
+    // X < 3 excludes 198 of the 200 candidates the domain of d/1 offers
+    // before any row is read; the two answers are the instances that remain.
+    let mut output = Vec::new();
+    let mut diagnostics = Vec::new();
+    let report = run_detailed_with_diagnostics(
+        "d(1..200). p(X) :- d(X), X < 3.".into(),
+        &options(&[]),
+        &mut output,
+        &mut diagnostics,
+        &Control::default(),
+    )
+    .unwrap();
+    let typed = report.phase_timings.unwrap().grounding;
+    let analysis = typed.get(GroundingPhase::DomainAnalysis).unwrap();
+    assert_eq!(analysis.work.domain_excluded_values, Some(198));
+    let rules = typed.get(GroundingPhase::RuleInstantiation).unwrap();
+    assert_eq!(rules.work.domain_rejected_rows, Some(198));
+    let document: Value = serde_json::from_slice(&output).unwrap();
+    let json = &document["statistics"]["grounding_attribution"]["measurements"]
+        [GroundingPhase::DomainAnalysis.label()]["work"];
+    assert_eq!(json["domain_excluded_values"], 198);
+    let models = document["models"].as_array().unwrap();
+    assert_eq!(models.len(), 1);
+    // The one record spells every atom of the document and refers to them.
+    let atoms = models[0]["model"]["atoms"].as_array().unwrap();
+    let instances: Vec<_> = models[0]["model"]["full_model"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|index| &atoms[usize::try_from(index.as_u64().unwrap()).unwrap()])
+        .filter(|atom| atom["predicate"] == "p")
+        .map(|atom| atom["arguments"][0][0]["value"].as_i64().unwrap())
+        .collect();
+    assert_eq!(instances, [1, 2]);
 }
 
 #[test]

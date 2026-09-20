@@ -117,6 +117,80 @@ refusal. The separate restriction still copies original DAG descriptors before
 adding support nodes; repeated encoding of that copy remains a preparation cost.
 See [support API](src/support.rs) and [complete small-family controls](tests/support.rs).
 
+## Narrowing regions by the theory's readings
+
+A `Region` (`zetesis_cpu::regions`) holds some atoms in every candidate, cuts
+some from every candidate and leaves the rest open; here it decides over the
+theory's atoms. Under a region every node of the DAG has
+two readings: *sure* when every candidate of the region satisfies it and
+*impossible* when none does. A held atom is sure, a cut atom impossible, and
+the connectives combine the readings as the closure route's definite and
+possible gates do; the knowledge the narrowing closes means them, a node
+known to hold being sure and one known to fail impossible.
+`Narrower::narrow_known` closes the knowledge to a fixed point: every root
+and every decided atom is known, a node learns
+from its operands and teaches its operands what its own knowledge leaves
+them, in both directions until nothing changes, which is what unit
+propagation over a clause form decides, and an atom known both to hold and
+to fail refutes the region; and, when `producers` recognizes every root as a fact, a rule with a
+positive disjunctive head, an atomic choice or a constraint, an atom none of
+whose producers can support it, each having an impossible body or another
+head held, is cut, a held such atom refutes the region, and an atom held
+with exactly one producer able to support it forces that producer's body.
+A choice supports its atom whenever its body is not impossible. Every stable model of
+the region survives the narrowing, and a refuted region holds none.
+
+The result is `Refuted`, or `Fixed` with whether any atom was decided; the
+statistics count charged node visits and producer checks, the propagation
+events, and the atoms held and cut. Every event follows a newly learned bit,
+so the events are bounded by the bits. A `Narrower` indexes the theory once
+and narrows any region of it, the root from knowledge of nothing and a child
+from its parent's knowledge. The index
+reads each maximal tree of one connective, a clause or a body, as one node
+over its operands, a *chain*, when its inner nodes have that one parent and
+are not roots; the closure keeps two counters per chain, the operands known
+to hold and known to fail, and applies the n-ary rules, a disjunction sure
+with one operand and impossible with all, forcing its one open operand when
+sure, and the duals for a conjunction (`FormulaChains`), so a decision costs
+one step per occurrence of its atom rather than a walk of every clause it
+satisfies. A node false under a frozen mask is either an operand, which
+fails, or an inner node whose operands' masks already read it. The region
+keeps the order of its decisions, so a closure carried from the region's
+parent applies only the decisions made since, and the count of parents
+still unknown that ranks the next split is kept as nodes become known. `Narrower::narrow_known` narrows from a
+`Knowledge` the caller carries from a region to its children and leaves it
+closed for them: the knowledge of a region holds in every region inside it
+(`known_mono`), so a child learns only the decisions its parent did not know. `Narrower::narrow_frozen_known` narrows a region of the
+theory's frozen reduct under a candidate, reading a node false in the
+candidate's truth as falsum and applying no support cut, which is the
+proper-subset query's narrowing; `FormulaEvaluation::truth` is that mask. `RegionLimits` bounds the work, and through it the events;
+exhausting either, or a control stop, returns the stop, and the region and
+the knowledge then hold what the closure had learned before it, sound but
+not closed, which the proposers abandon. A narrowing that does not refute also prefers the open atom with
+the most parents still unknown as the region's next split, which the
+traversal honours; without a preference it splits the highest open atom. The traversal that splits regions and
+covers the tree is `zetesis_cpu::regions::Traversal`, shared with the closure
+route; `zetesis-sat` uses it with this narrowing to propose candidates.
+
+`narrow_known_metered` and `narrow_frozen_known_metered` use the same closure with
+a caller-owned quota. They request a permit before each charged read and return
+`NarrowingAttempt { result, statistics }`, preserving the quota's typed refusal
+and the admitted work prefix. Entry control is checked even when no read is
+needed; the quota may additionally poll control at every read. The existing
+`RegionLimits` methods retain their local-ceiling API. SAT injects its search
+budget into the metered methods, so parallel workers acquire shared permits
+before candidate or frozen-reduct reads and retain their receipts after failure.
+Failed knowledge still must be abandoned. The [metering regressions](tests/region_work.rs)
+exercise every prefix of original and frozen narrowing and cancellation.
+
+`proofs/Zetesis/FormulaBounds.lean` proves the readings sound, the knowledge
+sound (`Known`, `known_sound`), and the support cut and the sole-support
+rule sound for stable models on the fragment `DisjunctiveSupport` names
+(`unsupported_cut`, `sole_support_forces`); the
+choice reading and the agreement of the Rust closure with `Known` are Rust
+obligations. See [regions API](src/regions.rs) and
+[the rule propositions](tests/regions.rs).
+
 ## Checked tight producer plans
 
 `TightPlan::compile` extracts normal and atomic-choice producers from every

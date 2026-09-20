@@ -165,7 +165,7 @@ fn missing_completion_prevents_a_success_footer() {
     assert!(matches!(*failure.cause, RunError::CompletionUnavailable));
     assert_eq!(failure.partial_report.as_ref().unwrap().completion, None);
     assert!(!failure.publication().unwrap().summary());
-    assert_eq!(bytes, br#"{"schema":1,"format":"zetesis","models":["#);
+    assert_eq!(bytes, br#"{"schema":2,"format":"zetesis","models":["#);
 }
 
 #[test]

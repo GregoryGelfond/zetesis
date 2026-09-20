@@ -425,7 +425,7 @@ fn projection_limits_do_not_replace_an_existing_result() {
 fn cancellation_precedes_zero_resource_allowances() {
     let predicate = Predicate::new("table", 0).unwrap();
     let relation = Relation::from_atoms(&predicate, &[], RelationLimits::default()).unwrap();
-    let control = Control::with_deadline(Instant::now());
+    let control = Control::with_deadline(Instant::now()).unwrap();
     control.cancel();
     let failure = Table::prepare(
         &relation,
@@ -453,7 +453,7 @@ fn expired_deadlines_preserve_the_prepared_owner() {
         .project(
             &[],
             Limits::default(),
-            &Control::with_deadline(Instant::now()),
+            &Control::with_deadline(Instant::now()).unwrap(),
         )
         .err()
         .unwrap();

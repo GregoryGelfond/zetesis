@@ -1,6 +1,6 @@
 //! Typed atom and borrowed-key adapters for the shared ordered ID index.
 
-use crate::{Atom, AtomKey, Value, identity, ordered_index};
+use crate::{Atom, AtomKey, Predicate, Value, identity, ordered_index};
 
 use super::{
     get,
@@ -13,8 +13,17 @@ pub(super) enum Query<'a> {
     Key(AtomKey<'a>),
 }
 
-impl Query<'_> {
-    /// One node-work unit admits its probe, child selection and optional
+impl<'a> Query<'a> {
+    pub(super) fn predicate(self) -> &'a Predicate {
+        match self {
+            Self::Atom(atom) => atom.predicate(),
+            Self::Key(key) => key.predicate(),
+        }
+    }
+
+    /// Search one predicate's subtree, comparing arguments only: the subtree
+    /// holds atoms of this query's predicate, found once per lookup. One
+    /// node-work unit admits its probe, child selection and optional
     /// constant-size local direction recording. Typed descriptor/text work is
     /// separately charged. These units describe operations, not instructions.
     /// The observer cannot mutate the borrowed nodes. Pure find uses no recorder;
@@ -35,8 +44,8 @@ impl Query<'_> {
                 before()?;
                 let atom = get(committed, pending, id).expect("index references admitted atom");
                 match self {
-                    Self::Atom(value) => identity::atom(value, atom, before),
-                    Self::Key(value) => value.compare_identity_with(atom, &mut *before),
+                    Self::Atom(value) => identity::values(value, atom, before),
+                    Self::Key(value) => value.compare_values_with(atom, &mut *before),
                 }
             },
             descend,

@@ -3,7 +3,7 @@
 use super::*;
 
 fn stopped() -> Value {
-    json!({"schema":1,"format":"zetesis","models":[{"retained":"opaque partial record"}],
+    json!({"schema":2,"format":"zetesis","models":[{"retained":"opaque partial record"}],
         "statistics":null,"outcome":{"status":"incomplete","completion":"exhausted",
         "coverage":"exhausted","published_models":1,"verified_models":2,"checked":3,
         "interruption":null,"publication_stop":{"phase":"encoding","code":"cancelled"},

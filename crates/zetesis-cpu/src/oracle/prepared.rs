@@ -1,12 +1,14 @@
 //! Immutable query dimensions and reference-free candidate workspaces.
 
-use std::{mem::size_of, ops::Range};
+use std::collections::BTreeMap;
+use std::mem::size_of;
 
-use zetesis_core::{Program, SeedView, Value};
+use zetesis_core::{Predicate, Program, SeedView, Value};
 
 use super::{
-    Check, Limits, Work,
-    relations::{Catalogs, storage},
+    Check, Limits, Work, argument_bounds,
+    block_steps::BlockSteps,
+    relations::{Catalogs, Layout, Layouts, PendingMarks, storage},
 };
 use crate::{Control, Stop};
 
@@ -14,10 +16,23 @@ use crate::{Control, Stop};
 /// Source program payload is already owned by `Program` and is not copied.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PreparationLimits {
-    /// Template and positive-pattern dimension inspections.
+    /// The three parts of preparation: the template and positive-pattern
+    /// dimension inspections, linear in the templates and occurrences; the
+    /// argument-bound inference, a fixed point over every head term; and
+    /// the block-step plan, which reads every term of a template once for
+    /// each of its occurrences.
     pub max_work: u64,
-    /// Named immutable preparation bytes, excluding the shared source program.
+    /// Named immutable preparation bytes, excluding the shared source
+    /// program: what preparation retains, admitted once it is built. The
+    /// inference's working value sets are transient and outside it.
     pub max_bytes: usize,
+    /// The most tuples a dense relation may index: a predicate whose bounded
+    /// arguments admit more keeps its tree. Zero keeps every tree. A dense
+    /// relation's words are charged to each candidate's closure bytes. The
+    /// same number is the widest argument bound the inference keeps, since
+    /// an argument wider than the product of widths could lie in no dense
+    /// relation under it; an argument wider is unknown to the inference.
+    pub max_dense_atoms: usize,
 }
 
 impl Default for PreparationLimits {
@@ -25,6 +40,7 @@ impl Default for PreparationLimits {
         Self {
             max_work: Limits::default().max_work,
             max_bytes: Limits::default().max_closure_bytes,
+            max_dense_atoms: 1 << 24,
         }
     }
 }
@@ -32,10 +48,16 @@ impl Default for PreparationLimits {
 /// Completed preparation receipt, separate from every candidate's work.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PreparationStatistics {
-    /// Actual charged dimension inspections.
+    /// Charged work of the three parts of preparation, as
+    /// [`PreparationLimits::max_work`] bounds it.
     pub work: u64,
     /// Named retained preparation storage, excluding the source program.
     pub retained_bytes: usize,
+    /// The program's predicates.
+    pub predicates: usize,
+    /// Predicates read as dense relations: every argument bounded and the
+    /// product of widths within `PreparationLimits::max_dense_atoms`.
+    pub dense_predicates: usize,
 }
 
 /// Prepared join dimensions for one exact immutable program instance.
@@ -43,12 +65,21 @@ pub struct PreparationStatistics {
 /// This owner shares the admitted program and holds no candidate truth. It does
 /// not enumerate a ground carrier. Its evaluator uses scalar delta rounds;
 /// within each selected source occurrence tuples keep canonical storage order.
-/// Preparation is linear in templates and positive-pattern occurrences. The
-/// dimensions bound the assignment, cursor and undo buffers actually used by
-/// [`Self::check_view`]. They are not a class certificate or semantic index.
+/// Preparation inspects the dimensions, linear in templates and
+/// positive-pattern occurrences; infers the argument bounds, a fixed point
+/// over every head term whose passes are bounded by the values admitted; and
+/// plans the block steps, at most the square of the largest template's terms
+/// for each template. The dimensions bound the assignment, cursor and undo
+/// buffers actually used by [`Self::check_view`]. They are not a class
+/// certificate or semantic index.
 pub struct PreparedQueries {
     program: Program,
     dimensions: Dimensions,
+    rules: Rules,
+    /// The dense layouts, for the predicates the argument bounds admit.
+    layouts: Layouts,
+    /// Where a template's innermost join may be taken a block at a time.
+    block_steps: BlockSteps,
     statistics: PreparationStatistics,
 }
 
@@ -57,6 +88,36 @@ pub(super) struct Dimensions {
     variables: usize,
     depth: usize,
     width: usize,
+    /// Templates with a positive body: the most an incremental round visits.
+    rules: usize,
+}
+
+/// Which templates a round must revisit when a predicate gains rows: those
+/// whose positive body names it. A template whose body names no predicate
+/// with new rows cannot bind anew, so a round visits only this selection.
+#[derive(Default)]
+pub(super) struct Rules {
+    by_predicate: BTreeMap<Predicate, Vec<usize>>,
+}
+
+impl Rules {
+    /// Template indices whose positive body names `predicate`, ascending and
+    /// without repetition.
+    pub(super) fn naming(&self, predicate: &Predicate) -> &[usize] {
+        self.by_predicate.get(predicate).map_or(&[], Vec::as_slice)
+    }
+
+    /// Retained bytes; `None` when the sum does not fit.
+    fn bytes(&self) -> Option<u128> {
+        self.by_predicate
+            .iter()
+            .try_fold(0u128, |sum, (predicate, indices)| {
+                let cells = (indices.capacity() as u128).checked_mul(size_of::<usize>() as u128)?;
+                sum.checked_add(size_of::<Predicate>() as u128)?
+                    .checked_add(predicate.name().len() as u128)?
+                    .checked_add(cells)
+            })
+    }
 }
 
 impl PreparedQueries {
@@ -73,30 +134,68 @@ impl PreparedQueries {
         control.poll()?;
         let mut work = Work::source(control, limits.max_work);
         work.limits.max_closure_bytes = limits.max_bytes;
-        Self::prepare(program, &mut work)
+        Self::prepare(program, limits.max_dense_atoms, &mut work)
     }
 
-    pub(super) fn prepare(program: &Program, work: &mut Work<'_>) -> Result<Self, Stop> {
+    pub(super) fn prepare(
+        program: &Program,
+        max_dense_atoms: usize,
+        work: &mut Work<'_>,
+    ) -> Result<Self, Stop> {
         storage::admit(work, size_of::<Self>() as u128)?;
         storage::record(work, size_of::<Self>() as u128)?;
         let before = work.statistics.work;
         let mut dimensions = Dimensions::default();
-        for template in program.templates() {
+        let mut rules = Rules::default();
+        for (index, template) in program.templates().iter().enumerate() {
             work.tick()?;
             dimensions.variables = dimensions.variables.max(template.variable_count());
             dimensions.depth = dimensions.depth.max(template.positive().len());
+            dimensions.rules += usize::from(!template.positive().is_empty());
             for pattern in template.positive() {
                 work.tick()?;
                 dimensions.width = dimensions.width.max(pattern.terms().len());
+                let naming = rules
+                    .by_predicate
+                    .entry(pattern.predicate().clone())
+                    .or_default();
+                if naming.last() != Some(&index) {
+                    naming.push(index);
+                }
             }
         }
+        let bounds = argument_bounds::infer(program, max_dense_atoms, work)?;
+        let mut layouts = Layouts::default();
+        for predicate in program.predicates() {
+            work.tick()?;
+            if let Some(layout) = bounds
+                .bounds(predicate)
+                .and_then(|bounds| Layout::new(predicate, bounds, max_dense_atoms))
+            {
+                layouts.push(layout);
+            }
+        }
+        let block_steps = BlockSteps::plan(program, &layouts, work)?;
+        let retained_bytes = rules
+            .bytes()
+            .and_then(|bytes| bytes.checked_add(block_steps.bytes()?))
+            .and_then(|bytes| bytes.checked_add(layouts.bytes()?))
+            .and_then(|bytes| bytes.checked_add(size_of::<Self>() as u128))
+            .ok_or(Stop::StorageLimit)?;
+        storage::admit(work, retained_bytes)?;
+        storage::record(work, retained_bytes)?;
         Ok(Self {
             program: program.clone(),
             dimensions,
+            rules,
             statistics: PreparationStatistics {
                 work: work.statistics.work - before,
-                retained_bytes: size_of::<Self>(),
+                retained_bytes: usize::try_from(retained_bytes).map_err(|_| Stop::StorageLimit)?,
+                predicates: program.predicates().len(),
+                dense_predicates: layouts.len(),
             },
+            layouts,
+            block_steps,
         })
     }
 
@@ -116,7 +215,8 @@ impl PreparedQueries {
     ///
     /// All candidate truth is empty initially. A completed call transfers atom
     /// payload to its returned `Check`; only empty catalog metadata, predicate
-    /// names and reference-free join/old-new ID capacity remain. Frontiers and
+    /// names, reference-free join and prepared-order capacity, and the dense
+    /// relations' words and pending marks, zeroed, remain. Frontiers and
     /// all logical ID lengths are reset before another candidate is evaluated.
     /// Assignment references live
     /// within one immutable round. A different program instance retires the old
@@ -163,6 +263,20 @@ impl PreparedQueries {
         schedule: super::Schedule,
         work: &mut Work<'_>,
     ) -> Result<Check, Stop> {
+        self.with_workspace(workspace, |workspace| {
+            self.evaluate(seed, workspace, schedule, work)
+        })
+    }
+
+    /// Run `evaluate` in `workspace`: a workspace left dirty by a failed
+    /// call, or used for another program instance, is replaced by an empty
+    /// one first; a completed call leaves it clean and reusable, a failed
+    /// one retires it.
+    fn with_workspace<T>(
+        &self,
+        workspace: &mut ClosureWorkspace,
+        evaluate: impl FnOnce(&mut ClosureWorkspace) -> Result<T, Stop>,
+    ) -> Result<T, Stop> {
         if !workspace.clean
             || workspace
                 .program
@@ -173,13 +287,37 @@ impl PreparedQueries {
         }
         workspace.clean = false;
         workspace.program = Some(self.program.clone());
-        let result = self.evaluate(seed, workspace, schedule, work);
+        let result = evaluate(workspace);
         if result.is_ok() {
             workspace.clean = true;
         } else {
             *workspace = ClosureWorkspace::default();
         }
         result
+    }
+
+    /// The closure of the prepared program under `gates`, computed in
+    /// `workspace` and charged under `limits` as one candidate check is,
+    /// with the preparation apart. The workspace is reusable after a
+    /// completed closure and retired by a stop, as [`Self::check_view`]
+    /// leaves it.
+    ///
+    /// # Errors
+    /// Returns the same typed stops as [`Self::check_view`]; no partial
+    /// closure is returned.
+    pub(super) fn closure_of(
+        &self,
+        gates: super::Gates<'_>,
+        workspace: &mut ClosureWorkspace,
+        limits: Limits,
+        control: &Control,
+    ) -> Result<super::CompletedClosure, Stop> {
+        control.poll()?;
+        let mut work = Work::source(control, limits.max_work);
+        work.limits = limits;
+        self.with_workspace(workspace, |workspace| {
+            self.closure_with(gates, workspace, super::Schedule::Delta, &mut work)
+        })
     }
 
     fn evaluate(
@@ -189,7 +327,7 @@ impl PreparedQueries {
         schedule: super::Schedule,
         work: &mut Work<'_>,
     ) -> Result<Check, Stop> {
-        let completed = self.closure_with(seed, workspace, schedule, work)?;
+        let completed = self.closure_with(super::Gates::Frozen(seed), workspace, schedule, work)?;
         let seed_mismatch =
             !super::gate_agreement(&self.program, seed, completed.atoms.atoms(), work)?;
         work.statistics.derived_atoms = completed.atoms.atoms().len();
@@ -204,21 +342,30 @@ impl PreparedQueries {
     }
     pub(super) fn closure_with(
         &self,
-        seed: SeedView<'_>,
+        gates: super::Gates<'_>,
         workspace: &mut ClosureWorkspace,
         schedule: super::Schedule,
         work: &mut Work<'_>,
     ) -> Result<super::CompletedClosure, Stop> {
+        // The immutable preparation, its dense layouts included, serves every
+        // candidate's closure, so each candidate admits it first.
+        let retained = self.statistics.retained_bytes as u128;
         let base = workspace
             .catalogs
             .owned_bytes()
             .checked_add(ClosureWorkspace::headers())
-            .and_then(|bytes| bytes.checked_add(size_of::<Self>() as u128))
+            .and_then(|bytes| bytes.checked_add(retained))
             .ok_or(Stop::StorageLimit)?;
         workspace.buffers.prepare(&self.dimensions, base, work)?;
+        let mut live = base
+            .checked_add(workspace.buffers.bytes()?)
+            .and_then(|bytes| bytes.checked_add(workspace.pending.bytes()))
+            .ok_or(Stop::StorageLimit)?;
+        workspace.pending.prepare(&self.layouts, &mut live, work)?;
         let overhead = ClosureWorkspace::headers()
             .checked_add(workspace.buffers.bytes()?)
-            .and_then(|bytes| bytes.checked_add(size_of::<Self>() as u128))
+            .and_then(|bytes| bytes.checked_add(workspace.pending.bytes()))
+            .and_then(|bytes| bytes.checked_add(retained))
             .ok_or(Stop::StorageLimit)?;
         workspace.catalogs.set_overhead(overhead, work)?;
         if self.program.templates().is_empty() {
@@ -229,11 +376,15 @@ impl PreparedQueries {
         }
         super::least_closure_with(
             &self.program,
-            seed,
+            gates,
             &mut workspace.catalogs,
             super::RoundWorkspace {
                 buffers: &mut workspace.buffers,
                 dimensions: &self.dimensions,
+                rules: &self.rules,
+                layouts: &self.layouts,
+                block_steps: &self.block_steps,
+                pending: &mut workspace.pending,
                 overhead,
             },
             schedule,
@@ -253,6 +404,7 @@ pub struct ClosureWorkspace {
     program: Option<Program>,
     catalogs: Catalogs,
     buffers: Buffers,
+    pending: PendingMarks,
     clean: bool,
 }
 
@@ -262,6 +414,7 @@ impl Default for ClosureWorkspace {
             program: None,
             catalogs: Catalogs::default(),
             buffers: Buffers::default(),
+            pending: PendingMarks::default(),
             clean: true,
         }
     }
@@ -285,27 +438,38 @@ impl ClosureWorkspace {
             .owned_bytes()
             .checked_add(Self::headers())
             .and_then(|bytes| bytes.checked_add(buffers))
+            .and_then(|bytes| bytes.checked_add(self.pending.bytes()))
             .ok_or(Stop::StorageLimit)
     }
 }
 
 #[derive(Default)]
 pub(super) struct Buffers {
-    pub(super) cursors: Vec<Option<Range<usize>>>,
+    pub(super) cursors: Vec<Option<super::window::Window>>,
+    /// The relation handle of each depth, resolved once per visit.
+    pub(super) resolutions: Vec<super::relations::Resolution>,
     pub(super) undo: Vec<Vec<usize>>,
+    /// The templates one incremental round visits, in template order.
+    pub(super) rules: Vec<usize>,
 }
 
 impl Buffers {
     pub(super) fn local(depth: usize) -> Self {
         Self {
             cursors: vec![None; depth],
+            resolutions: vec![super::relations::Resolution::Unresolved; depth],
             undo: vec![Vec::new(); depth],
+            rules: Vec::new(),
         }
     }
 
     fn bytes(&self) -> Result<u128, Stop> {
-        let headers = self.cursors.capacity() as u128 * size_of::<Option<Range<usize>>>() as u128
-            + self.undo.capacity() as u128 * size_of::<Vec<usize>>() as u128;
+        let headers = self.cursors.capacity() as u128
+            * size_of::<Option<super::window::Window>>() as u128
+            + self.resolutions.capacity() as u128
+                * size_of::<super::relations::Resolution>() as u128
+            + self.undo.capacity() as u128 * size_of::<Vec<usize>>() as u128
+            + self.rules.capacity() as u128 * size_of::<usize>() as u128;
         self.undo.iter().try_fold(headers, |bytes, row| {
             bytes
                 .checked_add(row.capacity() as u128 * size_of::<usize>() as u128)
@@ -324,9 +488,13 @@ impl Buffers {
         storage::admit(work, live)?;
         storage::record(work, live)?;
         reserve(&mut self.cursors, dimensions.depth, &mut live, work)?;
+        reserve(&mut self.resolutions, dimensions.depth, &mut live, work)?;
         reserve(&mut self.undo, dimensions.depth, &mut live, work)?;
+        reserve(&mut self.rules, dimensions.rules, &mut live, work)?;
         work.charge(dimensions.depth.saturating_sub(self.cursors.len()))?;
         self.cursors.resize_with(dimensions.depth, || None);
+        self.resolutions
+            .resize(dimensions.depth, super::relations::Resolution::Unresolved);
         work.charge(dimensions.depth.saturating_sub(self.undo.len()))?;
         self.undo.resize_with(dimensions.depth, Vec::new);
         for row in &mut self.undo {

@@ -346,7 +346,7 @@ fn cancelled_submission_retains_no_execution_work() {
 #[test]
 fn expired_deadline_remains_an_incomplete_batch() {
     let (program, seeds) = fixture(&[1, 2]);
-    let control = Control::with_deadline(Instant::now());
+    let control = Control::with_deadline(Instant::now()).unwrap();
     let failure = incomplete(pool(seeds.len()).check_shared(
         &program,
         &seeds,

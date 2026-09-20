@@ -66,9 +66,15 @@ fn guard_work_refusals_preserve_admitted_prefixes() {
     let limits = FormulaLimits::default();
     let mut budget = Budget::new(ExpansionLimits::default(), 100);
     let mut setup = Counters::default();
-    let catalog =
-        crate::formula_support::build(&prepared, &limits, &mut budget, &mut setup, rule.location)
-            .unwrap();
+    let catalog = crate::formula_support::build(
+        &prepared,
+        None,
+        &limits,
+        &mut budget,
+        &mut setup,
+        rule.location,
+    )
+    .unwrap();
     let completed = catalog
         .snapshot(&limits, &mut setup, rule.location)
         .unwrap();
@@ -80,6 +86,7 @@ fn guard_work_refusals_preserve_admitted_prefixes() {
         &prepared,
         Some(crate::DomainLimits::default()),
         &limits,
+        &mut budget,
         &mut setup,
         &Profile::new(None),
         rule.location,
@@ -150,9 +157,15 @@ fn guard_storage_admission_is_inclusive() {
     let limits = FormulaLimits::default();
     let mut budget = Budget::new(ExpansionLimits::default(), 100);
     let mut setup = Counters::default();
-    let catalog =
-        crate::formula_support::build(&prepared, &limits, &mut budget, &mut setup, rule.location)
-            .unwrap();
+    let catalog = crate::formula_support::build(
+        &prepared,
+        None,
+        &limits,
+        &mut budget,
+        &mut setup,
+        rule.location,
+    )
+    .unwrap();
     let completed = catalog
         .snapshot(&limits, &mut setup, rule.location)
         .unwrap();
@@ -164,6 +177,7 @@ fn guard_storage_admission_is_inclusive() {
         &prepared,
         Some(crate::DomainLimits::default()),
         &limits,
+        &mut budget,
         &mut setup,
         &Profile::new(None),
         rule.location,
@@ -218,11 +232,13 @@ fn analysis_refuses_an_equal_foreign_rule() {
     let index = prepared.rules.len() - 1;
     let rule = &prepared.rules[index];
     let limits = FormulaLimits::default();
+    let mut budget = Budget::new(ExpansionLimits::default(), 100);
     let mut counters = Counters::default();
     let analysis = formula_domains::analyze(
         &prepared,
         Some(crate::DomainLimits::default()),
         &limits,
+        &mut budget,
         &mut counters,
         &Profile::new(None),
         rule.location,
@@ -250,6 +266,7 @@ fn domain_guards_refuse_a_foreign_query_owner() {
         &prepared,
         Some(crate::DomainLimits::default()),
         &limits,
+        &mut budget,
         &mut counters,
         &Profile::new(None),
         rule.location,
@@ -258,6 +275,7 @@ fn domain_guards_refuse_a_foreign_query_owner() {
     .unwrap();
     let catalog = crate::formula_support::build(
         &prepared,
+        None,
         &limits,
         &mut budget,
         &mut counters,
@@ -311,11 +329,13 @@ fn dependency_projection_cannot_certify_domain_guards() {
     let mut prepared = prepared();
     prepared.analysis_basis = crate::AnalysisBasis::DependencyProjection;
     let location = prepared.rules.last().unwrap().location;
+    let mut budget = Budget::new(ExpansionLimits::default(), 100);
     let mut counters = Counters::default();
     let result = formula_domains::analyze(
         &prepared,
         Some(crate::DomainLimits::default()),
         &FormulaLimits::default(),
+        &mut budget,
         &mut counters,
         &Profile::new(None),
         location,

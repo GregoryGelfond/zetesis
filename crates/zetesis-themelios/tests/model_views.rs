@@ -3,6 +3,7 @@
 use serde_json::{Value as Json, json};
 use zetesis_core::{Atom, Model, Predicate, Sign, Value, ValueLimits, ValueNode};
 use zetesis_cpu::Control;
+use zetesis_themelios::observation::json::{self, AtomTable};
 use zetesis_themelios::observation::{
     Limits, ModelView, ObservationProgram, Symbol, SymbolSign, ViewError, ViewLimits,
 };
@@ -58,15 +59,55 @@ impl ObservationFixture {
             .unwrap()
     }
 
-    fn json(&self) -> Json {
-        serde_json::from_str(
-            &self
-                .view()
-                .json(ViewLimits::default(), &self.control)
-                .unwrap(),
-        )
-        .unwrap()
+    /// The view as the first record of a fresh document, in which every
+    /// atom is spelled.
+    fn record(&self, limits: ViewLimits) -> Result<String, ViewError> {
+        let mut table = AtomTable::new(usize::MAX);
+        self.view().record(&mut table, limits, &self.control)
     }
+
+    fn encode(&self, limits: json::Limits) -> Result<json::Encoded, json::Failure> {
+        let mut table = AtomTable::new(usize::MAX);
+        self.view().encode_record(&mut table, limits, &self.control)
+    }
+
+    fn json(&self) -> Json {
+        serde_json::from_str(&self.record(ViewLimits::default()).unwrap()).unwrap()
+    }
+}
+
+#[test]
+fn a_refused_record_after_the_first_leaves_the_first_records_atoms_indexed() {
+    // The first record's atoms are indexed on the first lookup after it. A
+    // second record refused before its first lookup withdraws nothing of the
+    // first, so a third record refers to the first's atoms by their indices
+    // and spells only its own new atom.
+    let first = ObservationFixture::plain(Model::new([atom("a", vec![]), atom("b", vec![])]));
+    let later = ObservationFixture::plain(Model::new([atom("a", vec![]), atom("c", vec![])]));
+    let mut table = AtomTable::new(16);
+    first
+        .view()
+        .record(&mut table, ViewLimits::default(), &first.control)
+        .unwrap();
+    let refused = later.view().record(
+        &mut table,
+        ViewLimits {
+            max_bytes: 1,
+            ..ViewLimits::default()
+        },
+        &later.control,
+    );
+    assert!(matches!(refused, Err(ViewError::Bytes)));
+    let third: Json = serde_json::from_str(
+        &later
+            .view()
+            .record(&mut table, ViewLimits::default(), &later.control)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(third["atoms"].as_array().unwrap().len(), 1);
+    assert_eq!(third["full_model"], json!([0, 2]));
+    assert_eq!(table.len(), 3);
 }
 
 fn json_string_sample() -> String {
@@ -127,7 +168,8 @@ fn model_view_borrows_full_identity() {
 fn full_atoms_preserve_term_identity() {
     let fixture = ObservationFixture::plain(value_model());
     let value = fixture.json();
-    let atom = &value["full_model"][0];
+    assert_eq!(value["full_model"], json!([0]));
+    let atom = &value["atoms"][0];
     assert_eq!(atom["sign"], "negative");
     assert_eq!(atom["arguments"][0][0], json!({"kind":"infimum"}));
     assert_eq!(atom["arguments"][1][0], json!({"kind":"supremum"}));
@@ -149,7 +191,7 @@ fn full_atoms_preserve_term_identity() {
 fn json_strings_preserve_control_characters() {
     let fixture = ObservationFixture::plain(value_model());
     assert_eq!(
-        fixture.json()["full_model"][0]["arguments"][4][0],
+        fixture.json()["atoms"][0]["arguments"][4][0],
         json!({"kind":"string","value":json_string_sample()})
     );
 }
@@ -206,29 +248,23 @@ fn hidden_selection_preserves_full_identity() {
 #[test]
 fn record_byte_limit_is_inclusive() {
     let fixture = string_observation();
-    let view = fixture.view();
-    let expected = view.json(ViewLimits::default(), &fixture.control).unwrap();
+    let expected = fixture.record(ViewLimits::default()).unwrap();
     for maximum in [0, expected.len() - 1] {
         assert_eq!(
-            view.json(
-                ViewLimits {
-                    max_bytes: maximum,
-                    ..Default::default()
-                },
-                &fixture.control
-            ),
+            fixture.record(ViewLimits {
+                max_bytes: maximum,
+                ..Default::default()
+            }),
             Err(ViewError::Bytes)
         );
     }
     assert_eq!(
-        view.json(
-            ViewLimits {
+        fixture
+            .record(ViewLimits {
                 max_bytes: expected.len(),
                 ..Default::default()
-            },
-            &fixture.control
-        )
-        .unwrap(),
+            })
+            .unwrap(),
         expected
     );
 }
@@ -237,13 +273,10 @@ fn record_byte_limit_is_inclusive() {
 fn encoding_work_limit_refuses() {
     let fixture = string_observation();
     assert_eq!(
-        fixture.view().json(
-            ViewLimits {
-                max_work: 0,
-                ..Default::default()
-            },
-            &fixture.control
-        ),
+        fixture.record(ViewLimits {
+            max_work: 0,
+            ..Default::default()
+        }),
         Err(ViewError::Work)
     );
 }
@@ -252,13 +285,10 @@ fn encoding_work_limit_refuses() {
 fn encoding_depth_limit_refuses() {
     let fixture = string_observation();
     assert_eq!(
-        fixture.view().json(
-            ViewLimits {
-                max_depth: 0,
-                ..Default::default()
-            },
-            &fixture.control
-        ),
+        fixture.record(ViewLimits {
+            max_depth: 0,
+            ..Default::default()
+        }),
         Err(ViewError::Depth)
     );
 }
@@ -268,8 +298,9 @@ fn cancelled_encoding_refuses() {
     let fixture = string_observation();
     let view = fixture.view();
     fixture.control.cancel();
+    let mut table = AtomTable::new(usize::MAX);
     assert_eq!(
-        view.json(ViewLimits::default(), &fixture.control),
+        view.record(&mut table, ViewLimits::default(), &fixture.control),
         Err(ViewError::Stopped(zetesis_cpu::Stop::Cancelled))
     );
 }
@@ -290,26 +321,19 @@ fn shown_terms_use_preorder_nodes() {
 #[test]
 fn shown_term_depth_limit_is_inclusive() {
     let fixture = nested_observation();
-    let view = fixture.view();
     assert_eq!(
-        view.json(
-            ViewLimits {
-                max_depth: 2,
-                ..Default::default()
-            },
-            &fixture.control
-        ),
+        fixture.record(ViewLimits {
+            max_depth: 2,
+            ..Default::default()
+        }),
         Err(ViewError::Depth)
     );
     let value: Json = serde_json::from_str(
-        &view
-            .json(
-                ViewLimits {
-                    max_depth: 3,
-                    ..Default::default()
-                },
-                &fixture.control,
-            )
+        &fixture
+            .record(ViewLimits {
+                max_depth: 3,
+                ..Default::default()
+            })
             .unwrap(),
     )
     .unwrap();
@@ -317,42 +341,33 @@ fn shown_term_depth_limit_is_inclusive() {
 }
 
 #[test]
-fn detailed_encoding_preserves_json_bytes() {
+fn detailed_encoding_preserves_record_bytes() {
     let fixture = nested_observation();
     let view = fixture.view();
     let observations = view.observation_statistics();
-    let encoded = view
-        .encode_json(ViewLimits::default(), &fixture.control)
-        .unwrap();
+    let encoded = fixture.encode(ViewLimits::default()).unwrap();
     assert_eq!(
         encoded.text(),
-        view.json(ViewLimits::default(), &fixture.control).unwrap()
+        fixture.record(ViewLimits::default()).unwrap()
     );
     assert_eq!(encoded.statistics().buffered_bytes, encoded.text().len());
     assert!(encoded.statistics().work > 0);
     assert_eq!(view.observation_statistics(), observations);
     assert_eq!(view.statistics(), observations);
-    assert_eq!(zetesis_themelios::observation::json::SCHEMA_VERSION, 1);
+    assert_eq!(json::RECORD_SCHEMA_VERSION, 2);
 }
 
 #[test]
 fn encoding_refusal_retains_discarded_accounting() {
-    use zetesis_themelios::observation::json;
     let fixture = string_observation();
-    let view = fixture.view();
-    let complete = view
-        .encode_json(json::Limits::default(), &fixture.control)
-        .unwrap();
+    let complete = fixture.encode(json::Limits::default()).unwrap();
     let mut preceding_work = 0;
     for ceiling in 0..complete.text().len() {
-        let failure = view
-            .encode_json(
-                json::Limits {
-                    max_bytes: ceiling,
-                    ..Default::default()
-                },
-                &fixture.control,
-            )
+        let failure = fixture
+            .encode(json::Limits {
+                max_bytes: ceiling,
+                ..Default::default()
+            })
             .unwrap_err();
         assert_eq!(failure.cause(), json::Error::Bytes);
         assert!(failure.statistics().buffered_bytes <= ceiling);
@@ -364,32 +379,22 @@ fn encoding_refusal_retains_discarded_accounting() {
 
 #[test]
 fn encoding_work_accounting_is_inclusive() {
-    use zetesis_themelios::observation::json;
     let fixture = nested_observation();
-    let view = fixture.view();
-    let complete = view
-        .encode_json(json::Limits::default(), &fixture.control)
-        .unwrap();
+    let complete = fixture.encode(json::Limits::default()).unwrap();
     let work = complete.statistics().work;
-    let exact = view
-        .encode_json(
-            json::Limits {
-                max_work: work,
-                ..Default::default()
-            },
-            &fixture.control,
-        )
+    let exact = fixture
+        .encode(json::Limits {
+            max_work: work,
+            ..Default::default()
+        })
         .unwrap();
     assert_eq!(exact.text(), complete.text());
     assert_eq!(exact.statistics(), complete.statistics());
-    let failure = view
-        .encode_json(
-            json::Limits {
-                max_work: work - 1,
-                ..Default::default()
-            },
-            &fixture.control,
-        )
+    let failure = fixture
+        .encode(json::Limits {
+            max_work: work - 1,
+            ..Default::default()
+        })
         .unwrap_err();
     assert_eq!(failure.cause(), json::Error::Work);
     assert!(failure.statistics().work < work);
@@ -398,12 +403,12 @@ fn encoding_work_accounting_is_inclusive() {
 
 #[test]
 fn cancelled_encoding_has_zero_accounting() {
-    use zetesis_themelios::observation::json;
     let fixture = string_observation();
     let view = fixture.view();
     fixture.control.cancel();
+    let mut table = AtomTable::new(usize::MAX);
     let failure = view
-        .encode_json(json::Limits::default(), &fixture.control)
+        .encode_record(&mut table, json::Limits::default(), &fixture.control)
         .unwrap_err();
     assert_eq!(
         failure.cause(),
@@ -414,17 +419,12 @@ fn cancelled_encoding_has_zero_accounting() {
 
 #[test]
 fn depth_refusal_retains_encoding_work() {
-    use zetesis_themelios::observation::json;
     let fixture = nested_observation();
     let failure = fixture
-        .view()
-        .encode_json(
-            json::Limits {
-                max_depth: 1,
-                ..Default::default()
-            },
-            &fixture.control,
-        )
+        .encode(json::Limits {
+            max_depth: 1,
+            ..Default::default()
+        })
         .unwrap_err();
     assert_eq!(failure.cause(), json::Error::Depth);
     assert!(failure.statistics().work > 0);

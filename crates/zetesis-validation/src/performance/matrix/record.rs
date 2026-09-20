@@ -34,6 +34,9 @@ pub enum Decision {
     ReferenceUnavailable,
     /// Prespecified scheduling policy prevented this position from launching.
     NotAttempted,
+    /// A memory round's separate child-resource record was absent, invalid or
+    /// contradicted the helper's evidence.
+    InvalidMemory,
 }
 /// Actual reported semantic checker, including certified specializations.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -140,8 +143,17 @@ pub struct Sample {
     pub(super) selected_models: Option<u64>,
     pub(super) cost: Option<Vec<i64>>,
     pub(super) observation: Option<Observation>,
+    /// The child's peak resident set, on a memory round whose record was valid.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) memory: Option<crate::process::memory::Measurement>,
 }
 impl Sample {
+    /// The child's peak resident set, present only on a memory round whose
+    /// separate record was valid.
+    #[must_use]
+    pub const fn memory(&self) -> Option<&crate::process::memory::Measurement> {
+        self.memory.as_ref()
+    }
     /// Fixed requested schedule position.
     #[must_use]
     pub const fn slot(&self) -> Slot {

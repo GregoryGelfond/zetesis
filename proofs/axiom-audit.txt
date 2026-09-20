@@ -57,6 +57,16 @@
 'Zetesis.AggregateReduct.frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AggregateReduct.direct_reduct' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AggregateReduct.evaluator_refinement' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ArithmeticFamilies.empty_admissible' depends on axioms: [propext]
+'Zetesis.ArithmeticFamilies.empty_unwarned' depends on axioms: [propext]
+'Zetesis.ArithmeticFamilies.fatal_refused' does not depend on any axioms
+'Zetesis.ArithmeticFamilies.filtered_witness' does not depend on any axioms
+'Zetesis.ArithmeticFamilies.zero_divisor_requires_defined' does not depend on any axioms
+'Zetesis.ArithmeticFamilies.entirely_undefined_refused' does not depend on any axioms
+'Zetesis.ArithmeticFamilies.admission_by_outcomes' depends on axioms: [propext]
+'Zetesis.ArithmeticFamilies.warning_by_outcomes' depends on axioms: [propext]
+'Zetesis.ArithmeticFamilies.prefix_does_not_establish_refusal' depends on axioms: [propext]
+'Zetesis.ArithmeticFamilies.flattening_can_conceal_refusal' depends on axioms: [propext]
 'Zetesis.AtomCatalogs.commit_preserves_lookup' depends on axioms: [propext]
 'Zetesis.AtomCatalogs.append_preserves_identity' depends on axioms: [propext]
 'Zetesis.AtomCatalogs.commit_preserves_interpretation' depends on axioms: [propext, Quot.sound]
@@ -127,6 +137,8 @@
 'Zetesis.Bounds.closed_upper_sound' does not depend on any axioms
 'Zetesis.Bounds.accepted_seed_agrees' does not depend on any axioms
 'Zetesis.Bounds.acceptance_survives_narrowing' does not depend on any axioms
+'Zetesis.Bounds.undecided_bounds_accepted' does not depend on any axioms
+'Zetesis.Bounds.narrowed_contains_accepted' does not depend on any axioms
 'Zetesis.Bounds.inconsistent_narrowing_refutes' does not depend on any axioms
 'Zetesis.Bounds.conflicting_atom_refutes' does not depend on any axioms
 'Zetesis.Bounds.lower_constraint_refutes' does not depend on any axioms
@@ -360,6 +372,7 @@
  Classical.choice,
  Quot.sound]
 'Zetesis.DomainBindings.complete_binding_survives' does not depend on any axioms
+'Zetesis.DomainBindings.kept_binding_survives' does not depend on any axioms
 'Zetesis.DomainBindings.guarded_continuations_exact' depends on axioms: [propext]
 'Zetesis.DomainContraction.singleton_filter_preserves' depends on axioms: [propext, Quot.sound]
 'Zetesis.DomainContraction.remainder_lower_bound' depends on axioms: [propext, Quot.sound]
@@ -522,6 +535,48 @@
 'Zetesis.FiniteValues.original_literal_identity' does not depend on any axioms
 'Zetesis.FiniteValues.frozen_literal_identity' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.FiniteValues.failed_step' depends on axioms: [propext]
+'Zetesis.FormulaBounds.read_sound' does not depend on any axioms
+'Zetesis.FormulaBounds.sure_sound' does not depend on any axioms
+'Zetesis.FormulaBounds.never_sound' does not depend on any axioms
+'Zetesis.FormulaBounds.decided_reads' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.FormulaBounds.decided_leaf_models' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.FormulaBounds.never_root_refutes' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.FormulaBounds.sure_body_forces' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.FormulaBounds.sure_body_refutes' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.FormulaBounds.known_sound' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.FormulaBounds.known_mono' does not depend on any axioms
+'Zetesis.FormulaBounds.known_forces' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.FormulaBounds.known_cuts' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.FormulaBounds.known_contradiction_refutes' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.FormulaBounds.blocked_no_support' does not depend on any axioms
+'Zetesis.FormulaBounds.unsupported_cut' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.FormulaBounds.sole_support_forces' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.FormulaBounds.choice_blocked_no_support' does not depend on any axioms
+'Zetesis.FormulaBounds.known_blocked_no_support' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.FormulaBounds.known_choice_blocked_no_support' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.FormulaBounds.unsupported_cut_with_choices' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.FormulaBounds.sole_rule_forces_with_choices' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.FormulaBounds.sole_choice_forces' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.FormulaBounds.restriction_forces' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.FormulaBounds.restriction_cuts' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.FormulaBounds.restriction_contradiction_refutes' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.FormulaBounds.restricted_stable_narrowing' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.FormulaBounds.position_in_append' does not depend on any axioms
+'Zetesis.FormulaBounds.disj_chain_sure' depends on axioms: [propext]
+'Zetesis.FormulaBounds.disj_chain_never' depends on axioms: [propext]
+'Zetesis.FormulaBounds.disj_chain_unit' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.FormulaBounds.conj_chain_sure' depends on axioms: [propext]
+'Zetesis.FormulaBounds.conj_chain_never' depends on axioms: [propext]
+'Zetesis.FormulaBounds.conj_chain_unit' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.FormulaRegions.classical_consequence_forces' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.FormulaRegions.classical_consequence_cuts' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.FormulaRegions.no_model_refutes' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.FormulaRegions.restricted_consequence_forces' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Pending.outputs_append' depends on axioms: [propext]
+'Zetesis.Pending.outputs_cons' depends on axioms: [propext]
+'Zetesis.Pending.Step.perm' depends on axioms: [propext]
+'Zetesis.Pending.Walk.perm' depends on axioms: [propext]
+'Zetesis.Pending.Walk.exhausted' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.GatePositions.atoms_exact' depends on axioms: [propext]
 'Zetesis.GatePositions.retained_position_exact' depends on axioms: [propext, Quot.sound]
 'Zetesis.GateProjection.bitwise_support_exact' depends on axioms: [propext]
@@ -601,6 +656,10 @@
 'Zetesis.JoinFrames.prepared_prefix_exact' depends on axioms: [propext, Quot.sound]
 'Zetesis.JoinFrames.retained_frames_irrelevant' depends on axioms: [propext, Quot.sound]
 'Zetesis.JoinFrames.stale_root_can_erase_current_truth' depends on axioms: [propext]
+'Zetesis.KeyedConstraints.one_value' does not depend on any axioms
+'Zetesis.KeyedConstraints.digit_carry' depends on axioms: [propext, Quot.sound]
+'Zetesis.KeyedConstraints.digit_carry_asked' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.KeyedConstraints.asked_constraints_preserve' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.LazyRounds.world_below_union' does not depend on any axioms
 'Zetesis.LazyRounds.union_scan_covers_world' does not depend on any axioms
 'Zetesis.LazyRounds.world_consequences_exact' does not depend on any axioms
@@ -933,8 +992,27 @@
 'Zetesis.QueryCompaction.assignment_branch_partition' depends on axioms: [propext]
 'Zetesis.QueryCompaction.assignment_branches_disjoint' depends on axioms: [propext]
 'Zetesis.QueryCompaction.exhausted_branches_refute' depends on axioms: [propext]
+'Zetesis.ReductRegions.query_contains' does not depend on any axioms
+'Zetesis.ReductRegions.leaf_refutes' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ReductRegions.exhausted_stable' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ReductRegions.countermodels_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ReductRegions.stable_iff_no_countermodel' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ReductRegions.reduct_masked' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ReductRegions.reduct_conj' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ReductRegions.reduct_disj' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ReductRegions.reduct_imp' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ReductRegions.reduct_atom' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ReductRegions.masked_read_eq_reduct' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ReductRegions.masked_reads_falsum' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ReductRegions.masked_known_sound' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ReductRegions.masked_known_narrows' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.RelationExtension.reconstruction_preserved' depends on axioms: [Quot.sound]
 'Zetesis.RelationExtension.acceptance_preserved' depends on axioms: [propext, Quot.sound]
+'Zetesis.RowSteps.marks_are_new_atoms' does not depend on any axioms
+'Zetesis.RowSteps.absorbed_is_union' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.RowSteps.marks_distinct' depends on axioms: [propext, Quot.sound]
+'Zetesis.RowSteps.block_heads' does not depend on any axioms
+'Zetesis.RowSteps.block_places' depends on axioms: [propext, Quot.sound]
 'Zetesis.RuleFactorization.false_reduct' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.RuleFactorization.reduct_conj' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.RuleFactorization.reduct_disj' depends on axioms: [propext, Classical.choice, Quot.sound]

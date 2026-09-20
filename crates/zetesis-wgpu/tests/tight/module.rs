@@ -74,7 +74,7 @@ fn control_failures_keep_their_typed_reason() {
 
 #[test]
 fn expired_deadlines_are_not_device_failures() {
-    let control = Control::with_deadline(std::time::Instant::now());
+    let control = Control::with_deadline(std::time::Instant::now()).unwrap();
     assert_eq!(
         TightGpuError::from(poll(&control).unwrap_err()),
         TightGpuError::Stopped(Stop::Deadline)

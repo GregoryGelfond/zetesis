@@ -25,6 +25,19 @@ pub(crate) fn validate_combination(options: &SolveConfig) -> Result<(), SolveErr
     if options.oracle == Oracle::Countermodel {
         validate_countermodel(options)?;
     }
+    // Each assigned worker is admitted at the full per-closure allowance, so
+    // the collective ceiling must hold the product before a session starts.
+    let workers = options.workers.get();
+    if workers
+        .checked_mul(options.max_closure_bytes)
+        .is_none_or(|product| product > options.max_closure_batch_bytes)
+    {
+        return Err(SolveError::ClosureReservation {
+            workers,
+            max_closure_bytes: options.max_closure_bytes,
+            max_closure_batch_bytes: options.max_closure_batch_bytes,
+        });
+    }
     Ok(())
 }
 
@@ -50,6 +63,15 @@ impl Engine {
         match &self.executor {
             Executor::Cpu(executor) => Some(&executor.observation),
             _ => None,
+        }
+    }
+    pub(crate) fn closure_statistics(&self) -> Option<crate::ClosureExecutionStatistics> {
+        match &self.executor {
+            Executor::Cpu(executor) => Some(executor.statistics.clone()),
+            Executor::StaticCpu { statistics, .. } => Some(statistics.clone()),
+            Executor::SharedCpu { .. } => None,
+            #[cfg(feature = "gpu")]
+            Executor::Gpu { .. } | Executor::LazyGpu(_) => None,
         }
     }
     pub(crate) fn shared_statistics(&self) -> Option<crate::SharedExecutionStatistics> {
@@ -152,6 +174,7 @@ enum Executor {
     StaticCpu {
         oracle: BatchOracle,
         ground: Arc<GroundProgram>,
+        statistics: crate::ClosureExecutionStatistics,
     },
     #[cfg(feature = "gpu")]
     Gpu {
@@ -165,6 +188,7 @@ enum Executor {
 struct IndependentCpu {
     oracle: BatchOracle,
     observation: crate::QueryExecutionObservation,
+    statistics: crate::ClosureExecutionStatistics,
 }
 
 impl IndependentCpu {
@@ -184,16 +208,23 @@ impl IndependentCpu {
         self.observation.capture(self.oracle.query_statistics());
         // A snapshot fault is retained separately and delivered by the session
         // after these already-checked results. No membership is discarded here.
-        Ok(result
+        result
             .map_err(SolveError::Batch)?
             .into_iter()
-            .map(|result| {
-                result.map(|check| match check.into_stable_interpretation() {
-                    Ok(accepted) => Some(accepted.into_interpretation()),
-                    Err(_) => None,
-                })
+            .map(|result| match result {
+                Ok(check) => {
+                    self.statistics.completed_lazy(&check.statistics())?;
+                    Ok(Ok(match check.into_stable_interpretation() {
+                        Ok(accepted) => Some(accepted.into_interpretation()),
+                        Err(_) => None,
+                    }))
+                }
+                Err(stop) => {
+                    self.statistics.stopped()?;
+                    Ok(Err(stop))
+                }
             })
-            .collect())
+            .collect()
     }
 }
 
@@ -266,6 +297,7 @@ impl Executor {
             .with_preparation_limits(PreparationLimits {
                 max_work: options.max_source_work,
                 max_bytes: options.max_closure_batch_bytes,
+                ..PreparationLimits::default()
             });
         if options.grounder == Grounder::Eager {
             let ground = match cached {
@@ -278,7 +310,11 @@ impl Executor {
                 batching: options.source_batching,
                 workers: options.workers,
             })?;
-            Ok(Self::StaticCpu { oracle, ground })
+            Ok(Self::StaticCpu {
+                oracle,
+                ground,
+                statistics: crate::ClosureExecutionStatistics::new(crate::ClosureRoute::Eager),
+            })
         } else {
             phases.lazy_grounding();
             observations.record(Event::LazyGrounding {
@@ -303,6 +339,9 @@ impl Executor {
                 Ok(Self::Cpu(IndependentCpu {
                     oracle,
                     observation: crate::QueryExecutionObservation::default(),
+                    statistics: crate::ClosureExecutionStatistics::new(crate::ClosureRoute::Lazy(
+                        crate::ClosureJoinStatistics::default(),
+                    )),
                 }))
             }
         }
@@ -449,7 +488,11 @@ impl Executor {
             #[cfg(feature = "gpu")]
             Self::LazyGpu(executor) => executor.check(options, program, seeds, control),
             Self::Cpu(executor) => executor.check(program, seeds, limits, control),
-            Self::StaticCpu { oracle, ground } => oracle
+            Self::StaticCpu {
+                oracle,
+                ground,
+                statistics,
+            } => oracle
                 .check_static_batch_views(
                     ground,
                     seeds.par_iter().map(SeedSelection::view),
@@ -459,8 +502,14 @@ impl Executor {
                 .map_err(SolveError::Batch)?
                 .into_iter()
                 .map(|result| match result {
-                    Ok(check) => decode(ground, check.accepted(), check.closure_words()),
-                    Err(stop) => Ok(Err(stop)),
+                    Ok(check) => {
+                        statistics.completed_eager(&check.statistics())?;
+                        decode(ground, check.accepted(), check.closure_words())
+                    }
+                    Err(stop) => {
+                        statistics.stopped()?;
+                        Ok(Err(stop))
+                    }
                 })
                 .collect(),
             #[cfg(feature = "gpu")]

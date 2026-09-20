@@ -31,7 +31,7 @@ pub struct GroundingOptions {
 /// These are distinct from the named support/query byte ceiling. Analysis uses
 /// bounded standard collections and has no allocation-failure or caller-control
 /// API; it is an uninterruptible operation inside existing eager materialization.
-pub use zetesis_domain::Limits as DomainLimits;
+pub use zetesis_domain::{Limits as DomainLimits, Stop as DomainStop};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct Execution {

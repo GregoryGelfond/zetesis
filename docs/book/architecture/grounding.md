@@ -88,21 +88,68 @@ The useful lower-level operations have logical contracts:
 | Gate | Test frozen positive/negative candidate conditions | Use the candidate, not the growing consequence set |
 | Project | Construct a head or constraint instance | Preserve the complete atom and its source instance |
 
-The formula path evaluates terms as finite expression plans. Each operation
-reads the completed prefix of earlier results. The final operation uses the same
+The formula path evaluates terms as finite expression plans. In strict mode,
+each operation reads the completed prefix of earlier results. The final operation uses the same
 checked evaluator and returns its value directly; only intermediate results
-occupy scratch storage. Work, operand-copy charges and first-error order remain
-the same. The [evaluator](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/evaluation.rs)
-clears that prefix on success, failure and unwind, retaining at most 32 empty
-cells between evaluations. A one-node expression needs no scratch cells;
-constructing or copying its returned value can still allocate. This storage
+occupy scratch storage. Storage reuse preserves strict work, operand-copy charges
+and first-error order. Source mode separately tracks missing results in a
+transient mask bounded by the admitted expression's node count. The mask is
+reserved fallibly and released after each evaluation; it does not consume the
+cumulative scalar-payload allowance. Continued independent checks retain their
+per-node work charges. The [evaluator](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/evaluation.rs)
+clears its value prefix on success, failure and unwind, retaining at most 32 empty
+integer cells and 32 empty value cells between evaluations. A one-node expression
+needs no intermediate value cells, but source mode may still allocate its mask;
+constructing or copying the returned value can also allocate. This storage
 schedule has a separate [preservation law](../lean/correspondence.md).
+
+A positive body is joined in an order chosen once per join, before a row is
+read, from what the body says: each relation's size, the variables each
+occurrence binds and the variables each comparison waits on. Extending the
+bound prefix one occurrence at a time, the
+[criterion](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/order.rs)
+takes first an occurrence whose variables are all bound, which is a test and
+never widens the join; then the smaller relation; among relations of one size
+the occurrence that decides the most waiting comparisons, so that a false
+comparison prunes before an unrelated relation multiplies the rows; and
+otherwise the earlier occurrence of the canonical body, which orders literals
+by predicate and then by variable name rather than by their position in the
+source text. Every order yields the same complete bindings, and the
+semi-naive partition reads source occurrence, not this order. In the pruning
+path, a comparison is checked at the depth whose occurrence binds its last
+variable. A defined false comparison can prune the prefix. Complete arithmetic
+evidence traversals retain false rows to establish joint definedness instead of
+using that pruning. An evaluation failure met at a depth is retained until that
+depth is undone and is classified only for
+a complete substitution no independent comparison excludes, as the
+[language reference](../reference/language.md) states. Binders, interval
+checks, tuple comparisons and guards are validated on the substitutions the
+comparisons leave. The order decides how early an exclusion is decided,
+never whether it is.
+
+Source-family evidence is finalized over completed support and the original
+source occurrence, not one support round or normalized fragment. Evaluated
+numeric division or remainder by zero omits an instance only when the same
+family also contains a jointly defined instance; a defined false instance is a
+witness. An entirely undefined family refuses admission, while an empty positive
+join is silent. Each local element has a separate family for each fixed outer
+binding. Original objective-element identities keep their pooled fragments
+together without merging distinct elements. Successful owners retain one typed
+warning per source span within the finite warning ceiling.
 
 Each formula join owns one reusable expression workspace. Prefix checks, binding
 generators and final filters borrow it in sequence; pending generators do not
-retain another workspace. Reuse changes storage ownership, not evaluation order.
-In particular, a false final filter does not hide an arithmetic error in a later
-final filter. The [caller regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/evaluation/tests/callers.rs)
+retain another workspace. Strict evaluation stops at its first fault. Source
+evaluation uses the same checked scalar operations but continues independent
+branches within the reached phase after a numeric zero divisor, so an independent overflow, type error
+or invalid exponent remains fatal. It does not evaluate a parent whose operand
+is undefined. Body and condition selection still precede head and consequent
+evaluation. An omitted body does not enter those later phases or objective
+fields; a defined false body does not enter head or consequent evaluation.
+The relational comparison exclusion above remains separate from
+rejection by a binder, interval, tuple comparison or aggregate guard; those
+rejections cannot hide required arithmetic in other fields. Closed constants
+and post-solve observations retain their strict checks. The [caller regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/evaluation/tests/callers.rs)
 check these actual consumers as well as their values and failure boundaries.
 
 Formula bindings retain source variable identities in optional slots. A pending
@@ -135,9 +182,12 @@ these lifetimes to prepared views and execution state.
 
 The final formula catalog uses the shared core
 [`AtomInterner`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/atom_interner.rs).
-It owns each atom once and indexes stable insertion positions with an AVL tree.
-Lookup performs logarithmically many checked node probes and full typed
-comparisons; compared descriptors and text prefixes are additional charged work.
+It owns each atom once and indexes stable insertion positions with one AVL
+tree per predicate, the trees kept in predicate order. Lookup finds the
+predicate's tree by a checked binary search over the program's few relations,
+comparing the predicate once, then performs logarithmically many checked node
+probes comparing arguments only; compared descriptors and text prefixes are
+additional charged work.
 Insertion plans links and rotations in reusable scratch, admits capacity and
 publication work, then publishes the new identity. It neither hashes complete
 payloads nor shifts a sorted index. Canonical traversal is separate from the
@@ -177,6 +227,23 @@ prefix defers the membership check. Membership does not discharge authored-body
 validation. Existing support, current delta and formula atoms retain distinct
 roles even though they share the identity operation.
 
+### Keyed constraints
+
+Before completion, preparation reads the program's keyed relations, the
+choice rules `1 { p(K, V) : c(V) } 1 :- b(K).` that are their relation's only
+producer, and asks every constraint that reads such a value only to compare
+it as the one atom the key admits, in the two patterns the
+[source guide](../rust/source.md#constraints-over-keyed-values) states with
+their meaning arguments. The transformation is per rule and changes no
+answer set; what it changes is the grounding: a disequality over a product
+of a demanded value with every value the key admits becomes a negated lookup
+of the demanded atom, and the product is never formed. The asked statements
+keep the written constraint's provenance and take the place of its compiled
+rules; the rest of the program is compiled once. The analysis is bounded by
+the key work ceiling and the term work remaining, charged to the term work,
+and a stop, reported on the admitted formula and by the CLI, leaves the
+constraints not yet asked as written.
+
 ### Completed possible support
 
 Formula grounding grows possible support by complete rounds. Each round uses an
@@ -204,10 +271,10 @@ Plan construction and traversal consume the cumulative formula work allowance.
 Its header, occurrence arrays, borrowed predicate postings, packed active set
 and temporary construction arrays count
 against `max_support_bytes` beside the live catalog and query views. Preparation
-uses checked signature searches and a conservative finite comparison allowance
-for the upstream graph's opaque tree lookup; this is not an exact count of that
-lookup's comparisons. Wake lookup, posting visits and packed-set reads/writes
-are also charged. Temporary graph metadata is released after preparation, and
+uses checked signature searches, and charges each dependency validation one
+logarithmic lookup in the upstream graph plus the edges it walks, so the plan
+costs O(B log N) for B body occurrences over N predicates. Wake lookup,
+posting visits and packed-set reads/writes are also charged. Temporary graph metadata is released after preparation, and
 the plan is released before completed support is returned. These
 checks qualify support scheduling, not satisfiability, unique-answer claims or
 source-to-Rust semantic refinement. Richer programs keep the existing schedule.
@@ -246,8 +313,10 @@ conditional, projected, structural and nonnormal producers retain full-round tra
 selected input still passes the same typed tuple matcher and scalar evaluator.
 An empty proposal set establishes completion only after every required variant
 and conservative producer has finished. Final formula emission visits all
-complete authored-body bindings, including those with false scalar filters;
-support membership cannot conceal a required arithmetic error.
+complete authored-body families and preserves their definedness evidence,
+including jointly defined false instances. Independent relational exclusions
+and empty joins supply no arithmetic failure. Possible support membership alone
+cannot conceal a required arithmetic error or establish an all-undefined family.
 
 The preservation argument concerns possible heads, not answer-set truth.
 Removing these flat negative non-inputs leaves the positive occurrence order,
@@ -330,24 +399,35 @@ and either origin ceiling remain located admission failures, never UNSAT.
 ### Optional final-rule domain guards
 
 Eager formula preparation can request a domain attempt through the library's
-`with_domain_analysis` method. It is default off, independently of `Indexed` or
-`Table`, and changes neither possible-support completion nor the original
-formula/reduct semantics. The source guide provides a
+`with_domain_analysis` method. The library leaves it off and the ordinary
+command requests it, independently of `Indexed` or `Table`; it changes the
+rows possible-support completion and final instantiation read, never the
+original formula/reduct semantics. The source guide provides a
 [checked on/off example](../rust/source.md#optional-domains-during-final-instantiation).
 
 The private applicability check covers the exact normalized whole source and
-its original positive flat rule occurrences. It excludes computed or generated
-terms, negative body literals, structural/local scopes and richer producers;
-a favorable dependency projection cannot qualify. The analyzer borrows that
+its original positive flat rule occurrences, body comparisons included. It
+excludes computed or generated terms in atoms, negative body literals,
+structural/local scopes and richer producers; a favorable dependency
+projection cannot qualify. The analyzer borrows that
 same immutable Program until final instantiation ends. Normalized statement
 deduplication does not merge the rule occurrences or their provenance.
 
 Every complete binding must belong to the upper domain of each mandatory
 positive argument. Intersecting those domains for one source variable remains
-necessary, including repeated occurrences. Unknown contributes no restriction.
-A global Unknown/Stopped analysis or an inapplicable program keeps complete
-fallback. These are upper bounds on source bindings, not facts about candidate
-truth or answer-set membership.
+necessary, including repeated occurrences. A comparison that reads one
+variable alone is decided on that variable's value, so every value it is
+defined and false at is removed from the candidates as well: the candidates
+that remain are exactly the values the exclusion rule leaves, decided before
+any row is read. A value the comparison cannot evaluate stays a candidate, so
+the join reaches it and refuses as the language reference requires. The candidates
+are prepared once per rule, with the analysis; a guard resolves them into a
+snapshot's dictionary, for every completion round and the final one, and
+only where the candidates are fewer than the argument's domain, since a
+relation offers no value outside it. Unknown contributes no
+restriction. A global Unknown/Stopped analysis or an inapplicable program
+keeps complete fallback. These are upper bounds on source bindings, not facts
+about candidate truth or answer-set membership.
 
 The guard builder retains borrowed source symbols for the meets, converts one
 atomic value at a time through the existing compiler, and resolves it through
@@ -359,7 +439,8 @@ before offering rows. Thus offered-row and guard-rejection counts need not
 match across strategies, even when complete bindings do.
 
 `DomainBindings.complete_binding_survives` states the necessary-meet law under
-explicit argument coverage. `guarded_continuations_exact` preserves the ordered
+explicit argument coverage, and `kept_binding_survives` the narrowed-candidate
+law for the bindings the exclusion rule keeps. `guarded_continuations_exact` preserves the ordered
 complete result list, allowing a locally matching row with no complete
 continuation to disappear. The [domain-binding guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/domain-bindings.md)
 keeps analyzer soundness, source/IR correspondence, dictionary identity and
@@ -425,22 +506,97 @@ without revisiting their rows.
 
 Scalar reduct closure uses the same per-predicate catalog. Before each round it
 prepares a complete ordered ID view for each changed extent and reuses that view
-for the round's joins. Preparation traverses O(n) row IDs and accounts its cache
-and traversal capacity. Subsequent indexed row access is constant time and
-borrows the authoritative tuple. A duplicate or refused insertion preserves an
-existing prepared extent; a successful append invalidates it.
+for the round's joins. The view is a stack of sorted runs of row
+IDs. The first preparation of a relation traverses its O(n) row IDs into one
+run. A later preparation promotes the previous run to a level, merges the top
+two levels while the newer is at least half the older, so the levels shrink
+geometrically and number O(log n), and sorts the `d` rows appended since into
+a new run. A merge of two runs costs their combined length in charged
+comparisons and copies, and each row is merged O(log n) times over a whole
+derivation, so the views cost O(n log n) charged work in all and no
+preparation copies the extent; a bound-prefix window is one binary search per
+run. The levels are the rows present before the last appending preparation and
+the run is what it added, both borrowable until the next one. Row access
+within a run is constant time and borrows the authoritative tuple. A duplicate
+or refused insertion preserves an existing prepared extent; a successful
+append invalidates it.
+
+A predicate whose every argument is bounded is held as a dense relation
+instead of a catalog. Preparation infers an upper bound on each argument's
+values over the admitted templates: a constant in a head contributes itself, a
+head variable ranges within the intersection of the bounds of the positive
+body positions binding it, gates and filters bind nothing, and the least
+fixed point is finite because every value is a constant of the program. An
+argument wider than the ceiling is unknown, and unknown absorbs. Where every
+argument of a predicate is bounded and the product of the widths fits
+`PreparationLimits::max_dense_atoms`, the relation is a bit array over the
+mixed-radix index of the arguments' ranks, the first argument most
+significant, each argument's values kept in canonical order so that position
+order is canonical atom order. Membership is a bit test, insertion a bit set,
+and the rows matching a bound prefix are one contiguous range of positions,
+so a window is a scan of that range's words rather than two binary searches;
+no atom is allocated or compared by value until the model is assembled, and
+the model is read off the bits in order without sorting. The New rows of a
+round are a second bit array cleared when the cutoff advances, over the words
+the round touched, so an unchanged relation costs a round one unit whatever
+its size; Old is present and not new. A round records a derived head of a
+dense relation as a pending bit: the key is ranked once, the position is
+tested against the relation, and an absent position is marked in a row of
+words the closure workspace keeps for the layout, beside the catalogs the
+round's joins borrow. The marks are disjoint from the relation, so their
+number is the round's count of new dense atoms and the derived-atom limit is
+judged as each is marked. After the round the marked words are joined into
+the relation and into New, and cleared, so nothing of a round or a candidate
+remains in the pending marks; every dense relation is created when the closure
+starts, so that a round never changes the catalogs. `Statistics::dense_heads`
+counts the heads recorded this way. Where a rule's innermost occurrence is
+over a dense relation, its last argument is a variable that nothing else in
+the rule mentions but the head, as the head's own last argument, every other
+argument of the two patterns is a constant or bound by then, and the two
+relations list that argument's values alike, the join does not bind the
+occurrence's rows one by one: the rows matching the bound prefix are one
+block of the relation, their heads are one block of the head's relation,
+place for place, and the block of rows is joined into the head's pending marks
+a word at a time, leaving out the positions the head holds or the round has
+marked. No gate or filter reads the variable, so every guard was judged
+before the depth was reached, and each row of the block is one binding of
+the rule; the new marks are counted against the derived-atom limit. This is
+the row operation of a transitive closure over a boolean matrix. The plan is
+fixed at preparation for every occurrence, since the occurrence a round
+visits innermost depends on the one it pivots on; a rule that fails a clause
+keeps the binding of single rows, as does a join that follows membership.
+`Statistics::block_steps` counts the blocks joined, whose rows are counted as
+bindings and not as tuple probes. The bounds are an upper domain of every
+derivable head, so a head outside them is an admitted-program invariant
+violation, not a missed row, and the closure over dense relations holds
+exactly the atoms the closure over catalogs would, step for step; the family
+tests check this atom for atom with dense relations enabled and disabled.
+Whether a predicate is laid out depends on its bounds and the ceiling alone,
+never on how many tuples it holds: a relation sparse in a wide box is dense
+all the same, at the cost of its words, and the ceiling is the one control.
+It is `PreparationLimits::max_dense_atoms`, 16,777,216 positions by default,
+and a session takes that default: nothing outside the library sets it.
+Every other predicate keeps its catalog, and the preparation receipt reports
+how many predicates were laid out.
 
 Scalar closure first visits every template against empty derived truth, including
 facts, zero-positive rules and constraints under the frozen candidate. In each
 later round, a binding is visited at its first source occurrence containing a new
 row: earlier occurrences select Old rows, that occurrence selects New rows, and
 later occurrences select Current rows. These disjoint choices preserve repeated
-predicates and source occurrences. Newness uses stable per-predicate insertion
+predicates and source occurrences. The new occurrence is joined first, so its
+few rows bind the variables and every other occurrence is entered through a
+bound-prefix window, and only templates whose body names a predicate with new
+rows are visited at all, from an index prepared once per program; a round
+therefore costs the new rows times their joins, never a scan of an unchanged
+relation or a visit to a rule that cannot bind. Newness uses stable per-predicate insertion
 IDs, never canonical ranks, which can move when a smaller tuple is appended.
-For mixed extents, one derived ID buffer partitions the canonical rows into
-ordered Old and New slices. It shares the sole tuple payload owner and is cached
-by both old cutoff and current extent. All-old and all-new extents reuse the
-complete ordered view or an empty slice.
+For mixed extents, the Old rows are the catalog's levels and the New rows its
+newest run, each run in canonical order and each sharing the sole tuple payload
+owner. The round cutoff advances after the round's joins and before its heads
+are appended, so the levels of the next preparation hold exactly the Old
+extent; the partition keeps only that cutoff and checks it against the runs.
+All-old and all-new extents reuse every run or none.
 
 A round completes every selected binding and constraint before advancing its
 frontier and publishing pending heads. Frozen gates and pure equality filters
@@ -473,8 +629,10 @@ Fewer emitted bindings alone do not establish fewer probes or less total work;
 none of these counters establishes an elapsed-time gain.
 
 `zetesis_cpu::PreparedQueries` inspects one exact admitted `Program` once to
-bound the assignment, cursor and undo buffers used by its joins. Its preparation
-work and bytes have independent finite limits and a separate receipt. A
+bound the assignment, cursor and undo buffers used by its joins, to infer its
+argument bounds and to choose its dense layouts, which every candidate's
+closure shares and admits first. Its preparation work and bytes have
+independent finite limits and a separate receipt. A
 `ClosureWorkspace` retains the actual empty catalog metadata, predicate owners
 and reference-free cursor/undo and old/new ID capacities between candidates. Assignments borrow
 only the current immutable round; no candidate truth survives completion.

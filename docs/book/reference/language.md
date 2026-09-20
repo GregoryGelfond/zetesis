@@ -34,10 +34,14 @@ Value and round limits count different populations:
 
 | Option | Population and lifetime | Default |
 | --- | --- | --- |
-| `--max-domain-values` | Distinct source values across the selected admission profile | 1,024 for formulas; 1,000,000 for relational admission |
-| `--max-assignment-values` | Candidate values in one formula assignment, range or objective-presence subset | 1,024 per operation |
-| `--max-generated-values` | Distinct generated binding values across formula grounding: support, objective preparation and final instantiation | 1,024 cumulatively |
-| `--max-support-rounds` | Complete eager possible-support rounds, including the final no-change round | 1,024 |
+| `--max-domain-values` | Distinct source values across the selected admission profile | 1,000,000 for both profiles |
+| `--max-assignment-values` | Candidate values in one formula assignment, range or objective-presence subset | 1,000,000 per operation |
+| `--max-generated-values` | Distinct generated binding values across formula grounding: support, objective preparation and final instantiation | 1,000,000 cumulatively |
+| `--max-support-rounds` | Complete eager possible-support rounds, including the final no-change round | 1,000,000 |
+
+The domain and generated populations are sets, not counters: each distinct
+value is retained once so that its payload is charged to the byte budget once,
+however many source terms or generator steps produce it.
 
 An explicit domain override applies to both profiles. The assignment and
 generated-value limits are independent: many small assignments can exceed the
@@ -47,8 +51,10 @@ unsatisfiability. Zero is a real limit for every resource.
 
 Without `--max-expansion-work`, ordinary admission preserves the independent
 library defaults: 1,048,576 source-term expansion operations and 10,000,000 eager
-formula-grounding operations. An explicit value overrides both ceilings; each
-counter applies it independently. `--stats` reports both effective limits.
+formula-grounding operations.
+`--max-expansion-bytes` separately bounds the canonical payload the grounder
+retains, 16 MiB by default, counted once per retained atom. An explicit work
+value overrides both work ceilings; each counter applies it independently. `--stats` reports both effective limits.
 Formula work includes checked atom comparisons, index construction, copying and
 commit operations. Accounting these operations changes the work needed to admit
 a source; formula admission now uses its library default instead of the earlier
@@ -133,7 +139,9 @@ can supply the required anchors.
 
 The analysis uses checked 64-bit coefficients and 128-bit intermediate bounds;
 exhausting either width gives a located analysis limit. Source integer values
-remain 32-bit, and reached undefined arithmetic remains an evaluation error.
+remain 32-bit. Evaluation failures follow the
+[arithmetic family policy](#numeric-boundaries-and-refusal-meaning); coefficient
+and bound capacity refusals do not become skippable instances.
 Expansion work and retained storage are charged before enumeration. See the
 [finite-chain contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/finite_chains.rs)
 for scoped formulas, complete answer families and resource boundaries.
@@ -205,9 +213,10 @@ Comparison consequents use the same inner alternative order. For example,
 `q :- X=(1;2) : d(X).` requires each completed `d(X)` condition to have at least
 one matching value alternative. Comparison alternatives cannot bind a missing
 source name. A range in the middle of a comparison chain chooses one value for
-both adjacent tests. All reached alternatives are evaluated, including those
-after a true result, so undefined arithmetic cannot disappear through a
-short-circuit.
+both adjacent tests. All reached alternatives are checked, including those
+after a true result. A numeric zero divisor contributes to the complete family's
+definedness check; a fatal arithmetic error cannot disappear through a true
+alternative.
 
 Nested pools distribute through constructors and checked expressions before
 scope compilation. Nested intervals use fresh data slots in that scope; their
@@ -328,10 +337,11 @@ tuple/atom bijection certificate; admitting aliases does not grant that certific
 Default-negated or Boolean operands also prevent a group from supplying that
 atom-only certificate. Any nonnumeric logical bound excludes its whole group
 from this numeric certificate, even when another bound is numeric. Other independently
-qualified numeric groups remain eligible for the specialization. A false operand
-or body does not bypass required source validation. A nonnumeric sum measure is
-valid and neutral; undefined arithmetic is a distinct error and is not replaced
-by zero.
+qualified numeric groups remain eligible for the specialization. Model-relative
+operand or body truth does not bypass required source validation. A nonnumeric sum measure is
+valid and neutral. An evaluated numeric zero divisor follows the arithmetic
+family policy; it is never replaced by a zero contribution. Other arithmetic
+failures remain errors.
 
 An extremum measure retains the complete first value of its tuple. For example:
 
@@ -422,9 +432,11 @@ Evaluating weight and priority from independent row projections would lose
 this correlation.
 
 A resolved nonnumeric weight or priority contributes neither cost nor a priority
-slot after required structure and evaluation checks. Undefined priority arithmetic
-is a located error, including when the weight is nonnumeric. For numeric weight
-and priority pairs, contributions coalesce globally by normalized weight,
+slot after required structure and evaluation checks. Weight, priority and tuple
+fields participate jointly in the arithmetic family policy, including when the
+weight is nonnumeric. Pooled alternatives from one original element share its
+family; a defined element cannot rescue a different entirely undefined element.
+For numeric weight and priority pairs, contributions coalesce globally by normalized weight,
 priority and the complete explicit tuple. Maximization negates weights before
 this coalescing; checked overflow remains an error. A numeric zero weight retains
 its numeric priority, as does a numeric contribution whose condition is false in
@@ -587,8 +599,10 @@ guards use the actual supplied-model measure for the same structural capture and
 retain every original guard. Empty extrema remain `#sup` and `#inf`. Numeric
 aggregate comparisons retain their widened arithmetic; structural capture does
 not narrow a `#count` or `#sum` measure to an ordinary scalar value. A failed query
-returns a typed error rather than partial shown output. These operations neither
-add values to the grounding domain nor create atom support.
+returns a typed error rather than partial shown output. Post-solve observations
+retain strict arithmetic errors, including division or remainder by zero; source
+admission's policy of omission with warnings does not apply to them. These
+operations neither add values to the grounding domain nor create atom support.
 
 Anonymous atom matching projects over the supplied model before applying
 default negation. zetesis applies this rule uniformly to both strong signs.
@@ -687,19 +701,75 @@ in both facts and generated bindings: `p(a..b).` contributes no fact. Endpoint
 errors remain errors, so `p(a..(1/0)).` refuses admission. An empty range also
 does not hide an unbound variable or invalid sibling argument.
 
-Reached undefined or overflowing scalar operations produce located refusals.
-The formula source API does not emulate clingo's warning-and-drop behavior for
-such operations. A syntactically false condition is not permission to skip
-required source validation.
+A rule is grounded over candidate substitutions for its relationally bound
+variables, and a comparison between terms over those variables that is
+defined and false excludes a substitution: nothing in an excluded
+substitution is reached, neither the arithmetic beside the comparison nor the
+head, a gate, a guard or an aggregate element under it. `d(0..2).
+p(X) :- d(X), X != 0, 1/X = 1.` therefore answers, with `p(1)`: the
+substitution `X = 0` is excluded by `X != 0`, so `1/0` is never evaluated.
+The verdict is taken over the complete substitution, whatever order the
+comparisons are met in, so a failure met before the relation that decides an
+exclusion is still no refusal.
 
-For body arithmetic, a complete possible-positive binding is the validation
-boundary. A false scalar filter does not hide another required body expression,
-including a scoped aggregate guard. An incomplete positive join with no complete
-extension creates no ground-row obligation. Row-dependent head atom arguments
-are a later stage: `d(0;1). p((X+1)**31):-d(X),X=0.` evaluates the head only for
-`X=0`. The same distinction applies to local choice elements. Negative gates and
-aggregate truth remain formulas and do not prune that stage. Closed-term source
-validation and aggregate-head tuple contribution checks retain their own scopes.
+The remaining substitutions are checked as a complete source family. Only an
+evaluated numeric division or remainder with a zero divisor may omit an instance:
+
+| Complete family | Result |
+| --- | --- |
+| Empty positive join | Admit silently; there is no instance to evaluate |
+| Defined instances only | Admit silently |
+| Both defined and zero-divisor instances | Admit the defined instances and issue a source-located warning |
+| Zero-divisor instances with no defined instance | Refuse with a source-located arithmetic error |
+| Any fatal arithmetic failure | Refuse, even if other instances are defined |
+
+Defined does not mean true. For example,
+`d(0;2). p(X,Y) :- d(X), 1/X=1, Y=X+1.` is admitted with a warning and only the
+two `d` facts. The `X=2` substitution is defined but fails the comparison; it
+still establishes that the family is not entirely undefined. With `d(0..3)`
+instead, the answer also contains `p(1,2)`. With only `d(0)`, admission fails.
+Adding `X != 0` explicitly excludes the bad instance and removes the warning.
+The warning reports omitted source instances and suggests guarding the divisor.
+Successful formula owners retain typed warnings, deduplicated by source span and
+bounded by `FormulaLimits::max_warnings`. The CLI renders them once on its
+diagnostic stream before solving; JSON answer output remains separate.
+
+Local choice and aggregate elements have separate families for each fixed outer
+binding. In `d(0;1). e(0,0). e(1,1).
+{p(K,X):e(K,X),1/X=1} :- d(K).`, the entirely undefined `K=0` family is refused;
+the defined `K=1` family does not rescue it. If no `e(0,X)` fact is present, that
+local family is empty and has no arithmetic error. An absent fact is not an
+undefined arithmetic value.
+
+Overflow, arithmetic on nonnumeric values and invalid exponents remain hard
+errors. They cannot be hidden by a defined instance elsewhere. Within a reached
+evaluation phase, a zero divisor does not stop checks of independent branches: an
+overflow in another branch still refuses admission. An operation depending on
+an undefined operand is not evaluated. The same rule applies to independent
+fields of one source instance; a definedness witness requires them to be jointly
+defined, not successful values drawn from different instances. Every arithmetic
+intermediate must fit the signed 32-bit carrier; values do not wrap. This differs
+deliberately from clingo 5.8.2's wrapping integer arithmetic. The zero-divisor
+policy also differs from dropping every undefined instance unconditionally:
+an entirely undefined family is treated as a modeling error.
+
+A binder, interval check, tuple comparison, aggregate guard or comparison over
+a generated value does not provide the relational exclusion described above.
+Negative gates remain formulas, so `d(0). p(1/X) :- d(X), not d(X).` is refused.
+Closed-term arithmetic is validated as written during source preparation,
+before any substitution exists: `p :- 1 = 2, 1/0 = 1.` is refused. The family
+policy does not weaken this closed-term check or post-solve observation errors.
+An incomplete positive join with no complete extension creates no obligation.
+
+Evaluation retains its body-before-head and condition-before-consequent stages.
+A body or condition omitted for zero arithmetic does not start the later head,
+consequent or objective-field phase; defined false body selection likewise does
+not evaluate a head or consequent. Independent-error checking does not cross
+that boundary. Row-dependent head atom arguments are a later stage: `d(0;1).
+p((X+1)**31):-d(X),X=0.` evaluates the head only for `X=0`. The same
+distinction applies to local choice elements. Negative gates and aggregate
+truth remain formulas and do not prune that stage. Aggregate-head tuple
+contribution checks retain their own scopes.
 The [arithmetic validation contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/arithmetic_validation.rs)
 check defined complete families, incomplete joins, required failures and explicit
 clingo differences.

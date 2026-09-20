@@ -14,6 +14,7 @@ mod candidates;
 mod batch;
 mod verified;
 pub mod lazy;
+pub mod regions;
 pub mod table;
 
 pub use batch::{BatchError, BatchOracle, QueryStatistics};

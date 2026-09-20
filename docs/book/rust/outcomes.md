@@ -55,7 +55,18 @@ named capacity and its conservative growth overlap. The same fields are availabl
 as advanced CLI options. `statistics.search.projection_history` reports entries,
 nodes, retained/peak bytes and its subtotal of cumulative search work. A history
 refusal retains any already checked answer prefix and reports incomplete coverage;
-it does not turn a completed answer into a rejected candidate.
+it does not turn a completed answer into a rejected candidate. Under
+`--search regions` the history stays empty and
+`statistics.search.candidate_regions` reports the regions visited, refuted and reached as
+leaves, the propagations, atoms held and cut, whether the support cut
+applied, and the reading work, a subtotal of cumulative search work, and
+`statistics.search.reduct_query_regions` the regions of the reduct queries; under
+`--search clauses` the former is `null` and the latter zero.
+
+Under `--workers` above one the answer sets of the formula route
+arrive in the schedule's order: the family is exact and each answer appears
+once, but no order is promised, nor the same order between runs. Consumers
+compare answer sets as sets, as the oracle comparison does.
 
 `SemanticOutcome::selection()` identifies the family requested by the session.
 `All` ranges over the original program; `Optimal` permits sound exclusion of
@@ -162,7 +173,10 @@ allowances, not a running-time guarantee or a change to answer-set semantics.
 
 `Control` is cloneable shared cancellation with an optional absolute deadline.
 Cancellation is observed at cooperative polling boundaries, not by forcibly
-terminating arbitrary work. In particular, an already-started bounded static
+terminating arbitrary work. A deadline is observed the same way: a control
+armed with one owns a timer thread that sets an expiry flag at the deadline
+and retires then or when the last clone drops, and a poll reads two flags
+and never the clock. In particular, an already-started bounded static
 compilation is not preemptible; session setup polls before it and subsequent
 work polls again. A deadline is therefore not a hard process-kill guarantee.
 
@@ -230,8 +244,10 @@ point is a typed driver protocol failure. Partial views retain absent completion
 without substituting exhaustion or a logical interruption. Mutating a detached
 compatibility report cannot change the retained semantic outcome.
 
-The CLI's `--json` output is a versioned view. Full semantic atoms, shown atom
-indices, shown terms and costs remain separate. Human output and JSON do not
+The CLI's `--json` output is a versioned view. The document spells each atom
+once, in the record that first holds it; a record refers to its full model and
+its shown atoms by index into the document's atom table, and shown terms and
+costs stay per record. Human output and JSON do not
 define different solving modes. Applications should consume typed library
 values or the JSON contract rather than parse styled answer lines.
 
@@ -254,10 +270,12 @@ The CLI exposes the same fields as `statistics.candidate_restrictions` in JSON.
 `--max-candidate-bytes` bounds copied payload; `--max-search-work` bounds cumulative
 restriction work on this route. Both advanced controls appear in `--help-all`.
 
-Formula search records its necessary disjunctive support attempt separately from
-user or objective refinements. `statistics.search.necessary_support` identifies
-application, an inapplicable head grammar, or a configured construction/encoding
-shape limit. Its construction and encoding work are included in search work,
+Under `--search clauses`, formula search records its necessary
+disjunctive support attempt separately from user or objective refinements.
+`statistics.search.necessary_support` identifies application, an inapplicable
+head grammar, or a configured construction/encoding shape limit; under
+`--search regions` it is `null`, and `statistics.search.regions` says
+whether the support cut applied. Its construction and encoding work are included in search work,
 including a rolled-back encoding. A shape refusal retains general search;
 cancellation, work exhaustion and allocation failure remain explicit stops.
 Every proposed interpretation still needs membership checking against the

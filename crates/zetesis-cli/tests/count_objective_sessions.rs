@@ -12,7 +12,9 @@ use count_objective_sources::{INCONSISTENT, SATISFIABLE};
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 
-use zetesis_cli::{Backend, Completion, Interruption, Oracle, PreparedInput, Session, SolveConfig};
+use zetesis_cli::{
+    Backend, Completion, Interruption, Oracle, PreparedInput, SearchMethod, Session, SolveConfig,
+};
 use zetesis_core::{Atom, Predicate, Value};
 use zetesis_cpu::Control;
 use zetesis_sat::Incomplete;
@@ -110,6 +112,8 @@ fn prepared_sessions_preserve_complete_model_records() {
                 for pruning in [false, true] {
                     let mut config = SolveConfig {
                         backend: Backend::Cpu,
+                        // The batched completion and its accounting belong to the clause search.
+                        search: SearchMethod::Clauses,
                         models: 0,
                         workers: NonZeroUsize::new(workers).unwrap(),
                         completion_workers: NonZeroUsize::new(workers).unwrap(),
@@ -171,6 +175,8 @@ fn prepared_sessions_preserve_complete_model_records() {
 fn bounded_config(workers: usize, batch: usize, pruning: bool) -> SolveConfig {
     let mut config = SolveConfig {
         backend: Backend::Cpu,
+        // The batched completion and its accounting belong to the clause search.
+        search: SearchMethod::Clauses,
         oracle: Oracle::Countermodel,
         models: 0,
         completion_workers: NonZeroUsize::new(workers).unwrap(),

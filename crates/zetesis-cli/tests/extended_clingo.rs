@@ -1,5 +1,5 @@
 //! Independent exhausted-model comparison for the opt-in source extension.
-//! clingo is only an optional test oracle; original strings remain whole atoms
+//! clingo is only an optional reference solver; original strings remain whole atoms
 //! through JSON and quote-aware native output parsing.
 
 use std::collections::{BTreeMap, BTreeSet};

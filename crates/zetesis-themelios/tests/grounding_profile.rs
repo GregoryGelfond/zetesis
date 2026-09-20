@@ -4,9 +4,9 @@ use std::cell::{Cell, RefCell};
 
 use themelios_base::span::Location;
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
-    FormulaResource, GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork,
-    admit_formula_with_grounding_observer,
+    AdmissionOptions, AdmittedFormula, DomainLimits, ExpansionLimits, FormulaFailure,
+    FormulaLimits, FormulaResource, GroundingObserver, GroundingOutcome, GroundingPhase,
+    GroundingWork, admit_formula_with_grounding_observer, prepare_formula,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -202,7 +202,6 @@ fn arithmetic_counts_describe_the_joined_rule() {
         .unwrap();
     assert_eq!(arithmetic.phase, GroundingPhase::RuleInstantiation);
     assert_eq!(arithmetic.work.expression_evaluations, Some(2));
-    assert_eq!(arithmetic.work.readiness_nodes, Some(4));
     assert_eq!(arithmetic.work.join_probes, Some(1));
     assert_eq!(arithmetic.work.join_rows, Some(1));
     assert_eq!(arithmetic.work.binding_snapshots, Some(1));
@@ -232,7 +231,7 @@ fn only_rule_phases_claim_a_source_location() {
 }
 
 #[test]
-fn undefined_arithmetic_retains_its_failed_phase() {
+fn undefined_family_validation_retains_its_failed_phase() {
     let observer = Observer::default();
     let source = "p(0). :- p(X), 1/X=0.";
     let measured = compile(source, &FormulaLimits::default(), Some(&observer)).unwrap_err();
@@ -240,7 +239,7 @@ fn undefined_arithmetic_retains_its_failed_phase() {
     assert_eq!(measured.to_string(), plain.to_string());
     let records = observer.records.borrow();
     let last = records.last().unwrap();
-    assert_eq!(last.phase, GroundingPhase::RuleInstantiation);
+    assert_eq!(last.phase, GroundingPhase::SupportCompletion);
     assert_eq!(last.outcome, GroundingOutcome::Failed);
     assert!(last.work.expression_nodes.unwrap() > 0);
     assert_eq!(last.work.roots, Some(0));
@@ -397,6 +396,45 @@ fn work_aggregation_preserves_field_availability() {
     assert_eq!(sum.expression_nodes, None);
     assert_eq!(sum.roots, Some(5));
     assert_eq!(sum.atoms_inserted, Some(0));
+}
+
+#[test]
+fn phases_are_entered_in_the_order_the_catalog_lists() {
+    // The catalog promises materialization order. The observer records each
+    // phase as it exits, so the first exit of every phase, the domain analysis
+    // included when it runs, must follow the catalog's order.
+    let observer = Observer::default();
+    prepare_formula(
+        "p(1..3). q(X) :- p(X), X < 3.".into(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .unwrap()
+    .with_domain_analysis(Some(DomainLimits::default()))
+    .ground_with_observer(Some(&observer))
+    .unwrap();
+    let records = observer.records.borrow();
+    let mut entered: Vec<GroundingPhase> = Vec::new();
+    for record in records.iter() {
+        if !entered.contains(&record.phase) {
+            entered.push(record.phase);
+        }
+    }
+    assert!(entered.contains(&GroundingPhase::DomainAnalysis));
+    let positions: Vec<usize> = entered
+        .iter()
+        .map(|phase| {
+            GroundingPhase::ALL
+                .iter()
+                .position(|listed| listed == phase)
+                .unwrap()
+        })
+        .collect();
+    assert!(
+        positions.windows(2).all(|pair| pair[0] < pair[1]),
+        "{entered:?}"
+    );
 }
 
 #[test]

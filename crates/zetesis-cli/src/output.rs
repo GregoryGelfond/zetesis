@@ -23,7 +23,11 @@ impl<'a, W: Write> Document<'a, W> {
             failed: false,
         };
         if json {
-            document.write_all(b"{\"schema\":1,\"format\":\"zetesis\",\"models\":[")?;
+            let head = format!(
+                "{{\"schema\":{},\"format\":\"zetesis\",\"models\":[",
+                zetesis_themelios::observation::json::RECORD_SCHEMA_VERSION
+            );
+            document.write_all(head.as_bytes())?;
         }
         Ok(document)
     }
@@ -82,10 +86,13 @@ impl<W: Write> Write for Document<'_, W> {
 }
 
 /// Preflight the bounded UTF-8 record, then write it to the supplied sink.
+/// The record spells the atoms the document has not spelled and refers to
+/// every atom by its index in `atoms`, the document's table.
 pub(crate) fn write_model_record(
     output: &mut impl Write,
     number: usize,
     view: &zetesis_themelios::observation::ModelView<'_>,
+    atoms: &mut zetesis_themelios::observation::json::AtomTable,
     options: &Options,
     control: &zetesis_cpu::Control,
 ) -> Result<(), RunError> {
@@ -99,7 +106,8 @@ pub(crate) fn write_model_record(
         .checked_sub(overhead)
         .ok_or(RunError::JsonRecord(ViewError::Bytes))?;
     let record = view
-        .json(
+        .record(
+            atoms,
             zetesis_themelios::observation::ViewLimits {
                 max_bytes: maximum,
                 ..Default::default()
@@ -295,6 +303,7 @@ fn error_kind(error: &RunError) -> &'static str {
     match error {
         RunError::Input(_) => "input",
         RunError::TimeLimitRange { .. } => "time_limit_range",
+        RunError::DeadlineTimer(_) => "deadline_timer",
         RunError::Observation(_) => "observation",
         RunError::Projection(_) => "answer_projection",
         RunError::JsonRecord(_) => "json_record",
@@ -312,6 +321,7 @@ fn error_kind(error: &RunError) -> &'static str {
         RunError::UnsupportedCombination { .. } => "unsupported_combination",
         RunError::UnsupportedOracle { .. } => "unsupported_oracle",
         RunError::UnsupportedSourceBatching => "unsupported_source_batching",
+        RunError::ClosureReservation { .. } => "closure_reservation",
         RunError::SharedCpu(_) => "shared_cpu",
         RunError::PreparedInput { .. } => "prepared_input",
         RunError::Formula(_) => "formula",
@@ -330,6 +340,7 @@ fn error_kind(error: &RunError) -> &'static str {
         #[cfg(feature = "gpu")]
         RunError::LazyGpu(_) => "lazy_gpu",
         RunError::LazyStatisticsOverflow => "lazy_statistics_overflow",
+        RunError::ClosureStatisticsOverflow => "closure_statistics_overflow",
     }
 }
 
@@ -355,6 +366,7 @@ fn reason_code(reason: Interruption) -> &'static str {
                 Incomplete::BatchCandidateLimit => "batch_candidate_limit",
                 Incomplete::PendingBatch => "pending_batch",
                 Incomplete::Allocation => "allocation",
+                Incomplete::WorkerPanicked => "worker_panicked",
                 Incomplete::Admission(_) => "admission",
                 Incomplete::WrongTheory => "wrong_theory",
                 Incomplete::RestrictionUniverse { .. } => "restriction_universe",
@@ -530,8 +542,12 @@ fn statistics(out: &mut Buffer, view: &SummaryView<'_>) -> Result<(), RunError> 
         lazy_statistics(out, view.lazy_execution)?;
         out.text(",\"shared_execution\":")?;
         shared_statistics(out, view.shared_execution)?;
+        out.text(",\"closure_execution\":")?;
+        closure_statistics(out, view.closure_execution)?;
         out.text(",\"query_execution\":")?;
         query_statistics(out, view.query_execution)?;
+        out.text(",\"expansion\":")?;
+        expansion_usage(out, view.expansion)?;
         out.text(",\"phase_timings\":")?;
         phases(out, view.timings)?;
         out.text(",\"stage_timings\":")?;
@@ -651,7 +667,9 @@ struct SummaryView<'a> {
     execution: Option<&'a crate::FormulaExecutionStatistics>,
     lazy_execution: Option<&'a crate::LazyExecutionStatistics>,
     shared_execution: Option<&'a crate::SharedExecutionStatistics>,
+    closure_execution: Option<&'a crate::ClosureExecutionStatistics>,
     query_execution: Option<&'a crate::QueryExecutionObservation>,
+    expansion: Option<zetesis_themelios::ExpansionUsage>,
     timings: Option<&'a PhaseTimings>,
 }
 impl<'a> SummaryView<'a> {
@@ -673,7 +691,9 @@ impl<'a> SummaryView<'a> {
                     execution: semantic.and_then(crate::SemanticOutcome::formula_execution),
                     lazy_execution: semantic.and_then(crate::SemanticOutcome::lazy_execution),
                     shared_execution: semantic.and_then(crate::SemanticOutcome::shared_execution),
+                    closure_execution: semantic.and_then(crate::SemanticOutcome::closure_execution),
                     query_execution: semantic.and_then(crate::SemanticOutcome::query_execution),
+                    expansion: progress.expansion,
                     timings: progress.phase_timings.as_ref(),
                 }
             }
@@ -697,7 +717,9 @@ impl<'a> SummaryView<'a> {
                     execution: partial.and_then(|p| p.formula_execution.as_ref()),
                     lazy_execution: partial.and_then(|p| p.lazy_execution.as_ref()),
                     shared_execution: partial.and_then(|p| p.shared_execution.as_ref()),
+                    closure_execution: partial.and_then(|p| p.closure_execution.as_ref()),
                     query_execution: partial.and_then(|p| p.query_execution.as_ref()),
+                    expansion: partial.and_then(|p| p.expansion),
                     timings: failure.phase_timings.as_deref(),
                 }
             }
@@ -730,6 +752,39 @@ fn search_statistics(
     out.text("}")?;
     out.text(",\"necessary_support\":")?;
     support_statistics(out, stats.support)?;
+    out.text(",\"candidate_regions\":")?;
+    region_statistics(out, stats.regions)?;
+    out.text(",\"reduct_query_regions\":{\"visited\":")?;
+    out.text(&stats.reduct.regions.regions.to_string())?;
+    out.number_field("refuted", stats.reduct.regions.refuted)?;
+    out.number_field("leaves", stats.reduct.regions.leaves)?;
+    out.number_field("propagations", stats.reduct.regions.propagations)?;
+    out.number_field("reading_work", stats.reduct.regions.work)?;
+    out.text("}}")
+}
+
+fn region_statistics(
+    out: &mut Buffer,
+    statistics: Option<zetesis_sat::RegionSearchStatistics>,
+) -> Result<(), RunError> {
+    let Some(stats) = statistics else {
+        return out.text("null");
+    };
+    let counts = stats.counts;
+    out.text("{\"visited\":")?;
+    out.text(&counts.regions.to_string())?;
+    out.number_field("refuted", counts.refuted)?;
+    out.number_field("leaves", counts.leaves)?;
+    out.number_field("propagations", counts.propagations)?;
+    out.number_field("held", counts.held)?;
+    out.number_field("cut", counts.cut)?;
+    out.text(",\"support_cut\":")?;
+    out.string(if stats.producers {
+        "applied"
+    } else {
+        "not_applicable"
+    })?;
+    out.number_field("reading_work", counts.work)?;
     out.text("}")
 }
 
@@ -747,7 +802,25 @@ fn candidate_statistics(
     out.number_field("prepared_atom_occurrences", stats.restriction_atoms)?;
     out.number_field("copied_payload_bytes", stats.restriction_bytes)?;
     out.number_field("peak_copied_payload_bytes", stats.restriction_peak_bytes)?;
-    out.text("}")
+    // The carrier narrowing and regions, under the words of the text lines.
+    out.text(",\"carrier_narrowing\":{\"passes\":")?;
+    out.text(&stats.narrowing_passes.to_string())?;
+    out.number_field("cut_gate_atoms", stats.cut_gate_atoms)?;
+    out.number_field("held_gate_atoms", stats.held_gate_atoms)?;
+    out.text(",\"refuted\":")?;
+    out.text(if stats.root_refuted { "true" } else { "false" })?;
+    out.text(",\"stopped\":")?;
+    match &stats.narrowing_stop {
+        None => out.text("null")?,
+        Some(stop) => out.string(&stop.to_string())?,
+    }
+    out.text("},\"carrier_regions\":{\"visited\":")?;
+    out.text(&stats.regions.to_string())?;
+    out.number_field("refuted", stats.regions_refuted)?;
+    out.number_field("leaves", stats.regions_leaves)?;
+    out.number_field("counted", stats.regions_counted)?;
+    out.number_field("narrowing_passes", stats.region_passes)?;
+    out.text("}}")
 }
 
 fn support_statistics(
@@ -814,6 +887,53 @@ fn execution_statistics(
     out.text("}}")
 }
 
+fn expansion_usage(
+    out: &mut Buffer,
+    usage: Option<zetesis_themelios::ExpansionUsage>,
+) -> Result<(), RunError> {
+    let Some(usage) = usage else {
+        return out.text("null");
+    };
+    out.text("{\"term_work\":")?;
+    out.text(&usage.term_work.to_string())?;
+    out.number_field("templates", usage.templates)?;
+    out.number_field("values", usage.values)?;
+    out.number_field("scalar_bytes", usage.scalar_bytes)?;
+    out.number_field("origin_locations", usage.origin_locations)?;
+    out.text("}")
+}
+
+fn closure_statistics(
+    out: &mut Buffer,
+    statistics: Option<&crate::ClosureExecutionStatistics>,
+) -> Result<(), RunError> {
+    let Some(stats) = statistics else {
+        return out.text("null");
+    };
+    out.text("{\"backend\":\"cpu\",\"grounder\":")?;
+    out.string(stats.route.label())?;
+    out.number_field("completed_checks", stats.completed_checks)?;
+    out.number_field("stopped_checks", stats.stopped_checks)?;
+    out.number_field("rounds", stats.rounds)?;
+    out.number_field("work", stats.work)?;
+    out.number_field("derived_atoms", stats.derived_atoms)?;
+    out.text(",\"joins\":")?;
+    match stats.route {
+        crate::ClosureRoute::Eager => out.text("null")?,
+        crate::ClosureRoute::Lazy(joins) => {
+            out.text("{\"catalog_work\":")?;
+            out.text(&joins.catalog_work.to_string())?;
+            out.number_field("bindings", joins.bindings)?;
+            out.number_field("tuple_probes", joins.tuple_probes)?;
+            out.number_field("dense_heads", joins.dense_heads)?;
+            out.number_field("block_steps", joins.block_steps)?;
+            out.number_field("peak_closure_bytes", joins.peak_closure_bytes)?;
+            out.text("}")?;
+        }
+    }
+    out.text("}")
+}
+
 fn query_statistics(
     out: &mut Buffer,
     observation: Option<&crate::QueryExecutionObservation>,
@@ -828,6 +948,8 @@ fn query_statistics(
             out.text("{\"work\":")?;
             out.text(&preparation.work.to_string())?;
             out.number_field("retained_bytes", preparation.retained_bytes)?;
+            out.number_field("predicates", preparation.predicates)?;
+            out.number_field("dense_predicates", preparation.dense_predicates)?;
             out.text("}")?;
         } else {
             out.text("null")?;

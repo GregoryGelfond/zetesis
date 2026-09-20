@@ -54,6 +54,7 @@ pub(crate) fn source(
                 diagnostics.metadata(Label::Oracle, format_args!("reduct closure"))?;
                 return crate::publication::solve(
                     crate::PreparedInput::admitted(&admitted),
+                    Some(*admitted.expansion_usage()),
                     options,
                     output,
                     diagnostics,
@@ -87,6 +88,7 @@ pub(crate) fn source(
                 .prepare_formula(expansion_limits(options), formula_limits(options))
                 .map_err(SourceFailure::into_error)?
                 .with_grounding_options(grounding_options(options))
+                .with_domain_analysis(Some(zetesis_themelios::DomainLimits::default()))
                 .ground_with_observer(
                     observer
                         .as_ref()
@@ -94,8 +96,12 @@ pub(crate) fn source(
                 )
         })
         .map_err(RunError::FormulaAdmission)?;
+    if !admitted.warnings().is_empty() {
+        diagnostics.diagnostic(&admitted.warning_view())?;
+    }
     crate::publication::solve(
         crate::PreparedInput::formula(&admitted),
+        None,
         options,
         output,
         diagnostics,
@@ -143,6 +149,7 @@ pub(crate) fn bundle(
                 diagnostics.metadata(Label::Oracle, format_args!("reduct closure"))?;
                 return crate::publication::solve(
                     crate::PreparedInput::bundle(&admitted),
+                    Some(*admitted.expansion_usage()),
                     options,
                     output,
                     diagnostics,
@@ -177,6 +184,7 @@ pub(crate) fn bundle(
                 formula_limits(options),
             )?
             .with_grounding_options(grounding_options(options))
+            .with_domain_analysis(Some(zetesis_themelios::DomainLimits::default()))
             .ground_with_observer(
                 observer
                     .as_ref()
@@ -184,8 +192,12 @@ pub(crate) fn bundle(
             )
         })
         .map_err(RunError::FormulaBundleAdmission)?;
+    if !admitted.warnings().is_empty() {
+        diagnostics.diagnostic(&admitted.warning_view())?;
+    }
     crate::publication::solve(
         crate::PreparedInput::formula_bundle(&admitted),
+        None,
         options,
         output,
         diagnostics,
@@ -226,6 +238,7 @@ pub(crate) fn expansion_limits(options: &Options) -> ExpansionLimits {
             .unwrap_or_else(|| ExpansionLimits::default().max_term_work),
         max_templates: options.max_expanded_templates,
         max_values: options.max_expansion_values,
+        max_scalar_bytes: options.max_expansion_bytes,
         ..Default::default()
     }
 }

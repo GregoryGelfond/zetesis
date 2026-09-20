@@ -1,5 +1,8 @@
 //! Output capacity cannot retract an already checked CPU conclusion.
 
+#[path = "spelled.rs"]
+mod spelled;
+
 use super::{Document, Progress, summary};
 use crate::{Options, PublicationOutcome, RunError};
 use clap::Parser;
@@ -7,7 +10,7 @@ use std::io::{self, Write};
 use zetesis_cpu::Control;
 use zetesis_themelios::observation::ViewError;
 
-const PREFIX: &[u8] = b"{\"schema\":1,\"format\":\"zetesis\",\"models\":[";
+const PREFIX: &[u8] = b"{\"schema\":2,\"format\":\"zetesis\",\"models\":[";
 const FIXTURE_BYTES: usize = 32_768;
 
 fn options(oracle: &str) -> Options {
@@ -141,7 +144,7 @@ fn batched_cpu_footer_admission_preserves_exact_completion() {
         .as_array()
         .unwrap()
         .iter()
-        .map(|record| record["model"]["full_model"].clone())
+        .map(|record| serde_json::Value::Array(spelled::spelled(&parsed, record)))
         .collect();
     models.sort_by_cached_key(ToString::to_string);
     assert_eq!(

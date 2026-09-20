@@ -27,11 +27,14 @@ fn wait_quanta_respect_the_remaining_timeout() {
 
 #[test]
 fn control_refusal_prevents_a_device_wait() {
-    for control in [Control::with_deadline(std::time::Instant::now()), {
-        let control = Control::default();
-        control.cancel();
-        control
-    }] {
+    for control in [
+        Control::with_deadline(std::time::Instant::now()).unwrap(),
+        {
+            let control = Control::default();
+            control.cancel();
+            control
+        },
+    ] {
         let stop = control.poll().unwrap_err();
         let error = wait_for_submission(
             Duration::from_secs(1),

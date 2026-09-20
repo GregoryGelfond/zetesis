@@ -1,5 +1,8 @@
 //! External consumers distinguish semantic membership from delivery and reuse admission.
 
+#[path = "support/spelled.rs"]
+mod spelled;
+
 use std::{
     collections::BTreeSet,
     io::{self, Write},
@@ -72,11 +75,24 @@ fn options(extra: &[&str]) -> Options {
 #[test]
 fn configuration_defaults_preserve_legacy_limits() {
     // A separate plain configuration must not silently change CLI defaults.
-    let legacy = SolveConfig::from(&Options::try_parse_from(["zetesis"]).unwrap());
+    // The command alone follows the host: its worker count is the host's
+    // parallelism, each closure's allowance is that count's share of the
+    // collective ceiling, and its byte ceilings scale with its memory
+    // allowance, here the reference allowance. Every other default is the
+    // library's.
+    let command =
+        SolveConfig::from(&Options::try_parse_from(["zetesis", "--memory", "2147483648"]).unwrap());
+    let library = SolveConfig::default();
     assert_eq!(
-        format!("{legacy:?}"),
-        format!("{:?}", SolveConfig::default())
+        command.max_closure_bytes,
+        library.max_closure_batch_bytes / command.workers.get()
     );
+    let aligned = SolveConfig {
+        workers: library.workers,
+        max_closure_bytes: library.max_closure_bytes,
+        ..command
+    };
+    assert_eq!(format!("{aligned:?}"), format!("{library:?}"));
 }
 
 #[test]
@@ -320,9 +336,7 @@ fn source_and_prepared_objective_costs_agree() {
         assert_eq!(json["models"].as_array().unwrap().len(), models.len());
         let mut raw = BTreeSet::new();
         for (record, model) in json["models"].as_array().unwrap().iter().zip(&models) {
-            let names: Vec<_> = record["model"]["full_model"]
-                .as_array()
-                .unwrap()
+            let names: Vec<_> = spelled::spelled(&json, record)
                 .iter()
                 .map(|atom| atom["predicate"].as_str().unwrap().to_string())
                 .collect();
@@ -877,6 +891,7 @@ fn observed_enumeration_preserves_all_objective_scores() {
                     atoms,
                     nodes,
                     roots,
+                    ..
                 } => {
                     assert!(self.formula.replace((atoms, nodes, roots)).is_none());
                 }

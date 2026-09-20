@@ -29,14 +29,16 @@ construction and standalone analysis APIs belong to its own manual.
 | Reusable original satisfaction with subject-bound node truth | `zetesis_ferraris::{EvaluationWorkspace, FormulaEvaluation}` |
 | Least consequences for an exact positive atomic-head formula theory | `zetesis_ferraris::{PositivePlan, PositivePlanLimits}` |
 | Repeated queries against one candidate's reduct | `zetesis_ferraris::FrozenReduct` |
+| Regions of a candidate space and the traversal that covers them | `zetesis_cpu::regions::{Region, Traversal}` |
+| Narrow a region of formula candidates, or of a reduct's subsets, by the theory's readings | `zetesis_ferraris::{Narrower, producers}` |
 | Reuse one reduct encoding across different candidates | `zetesis_sat::{PreparedReduct, ReductWorkspace}` |
-| Native formula candidate/countermodel search | `zetesis_sat` |
+| Formula candidates and the reduct query by regions or by clauses | `zetesis_sat::{StableModels, SearchMethod, check_with}` |
 | Bounded device execution | `zetesis_wgpu` |
 | Several device primitives on one selected device | `GpuContext` and each primitive's `from_context` constructor |
 | Reuse a compiled formula primitive across independent sessions | `GpuFormulaProfile`, `ExecutionResources::with_formula_profile` |
 | Device equality masks over one relation | `zetesis_wgpu::GpuRelationExecutor` |
 | Model-relative objective evaluation | `zetesis_objective` |
-| Source-domain analysis | `zetesis_domain` |
+| Source-domain analysis and keyed relations | `zetesis_domain` |
 | Reproducible comparisons and measurements | `zetesis_validation`, `zetesis_experiments` |
 | Repository proof records and qualification policy | `zetesis_maintenance::proofs::{verify, verify_with_audit}`, `zetesis_maintenance::coverage` |
 | Execute and publish current pinned proof evidence | `zetesis_maintenance::proofs::capture::capture` |
@@ -119,8 +121,10 @@ observations together. Do not build a session by independently pairing a theory
 with an atom table from another admission.
 
 `PreparedQueries` shares one exact native `Program` and retains its join
-dimensions under independent preparation limits. A `ClosureWorkspace` reuses
-empty catalog metadata and reference-free join buffers across scalar seed
+dimensions, argument bounds, dense layouts and block-step plan under
+independent preparation limits. A `ClosureWorkspace` reuses
+empty catalog metadata, reference-free join buffers and the zeroed pending
+rows of the dense layouts across scalar seed
 checks; returned closures own their atoms independently. It retains no completed
 candidate truth and retires old capacity when used with a different program
 instance. The [checked preparation example](parallel.md#reuse-preparation-across-scalar-checks)
@@ -205,8 +209,10 @@ also account for `Catalog::retained_bytes` once. Appendable catalog membership
 and dictionary lookup use checked AVL indexes containing only IDs and links;
 insertion does not shift a historical sorted ID sequence. Typed comparisons,
 transactional index updates and column/vector growth still have admitted costs.
-Canonical row access uses an explicitly prepared ordered view, invalidated by a
-successful append. Standalone immutable `Relation::from_atoms` and `from_catalog`
+Canonical row access uses an explicitly prepared view of sorted runs,
+invalidated by a successful append and restored by sorting the appended rows
+into a new run, with older runs merged only when two are within a factor of
+two, rather than by traversing the index again. Standalone immutable `Relation::from_atoms` and `from_catalog`
 instead build a sorted dictionary index for binary search; those relations do
 not offer append operations.
 

@@ -1,5 +1,5 @@
 //! Complete scalar/range source regressions, independently recorded with clingo
-//! 5.8.2. Of 118 sources, 93 currently have exact native model parity, 9 valid
+//! 5.8.2. Of 118 sources, 95 currently have exact native model parity, 7 valid
 //! sources have explicit refused boundaries, and 16 sources are unsafe. The
 //! historical integer-maximum singleton-range timeout is deliberately excluded.
 
@@ -177,8 +177,14 @@ fn scalar_and_interval_admissions_match_complete_models_with_explicit_boundaries
             limits,
         );
         // Keep historical native labels and original reference models intact.
-        // Evaluated choice heads and separate bounds promote these cases.
+        // Evaluated choice heads, separate bounds and mixed arithmetic families
+        // promote these cases without altering the independent reference record.
+        let mixed_arithmetic = matches!(
+            case.name.as_str(),
+            "undefined_assignment_drops_instance" | "undefined_head_drops_instance"
+        );
         if case.native == "admit"
+            || mixed_arithmetic
             || matches!(
                 case.name.as_str(),
                 "head_conditional_choice_arithmetic"
@@ -193,6 +199,9 @@ fn scalar_and_interval_admissions_match_complete_models_with_explicit_boundaries
         {
             assert!(case.valid);
             let input = result.unwrap_or_else(|error| panic!("{}: {error}", case.name));
+            if mixed_arithmetic {
+                assert_eq!(input.warnings().len(), 1);
+            }
             assert_eq!(
                 exhaustive(&input),
                 case.expected,
@@ -218,7 +227,7 @@ fn scalar_and_interval_admissions_match_complete_models_with_explicit_boundaries
             refused += 1;
         }
     }
-    assert_eq!((admitted, refused), (93, 25));
+    assert_eq!((admitted, refused), (95, 23));
 }
 
 static NEXT: AtomicU64 = AtomicU64::new(0);

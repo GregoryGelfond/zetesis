@@ -1,0 +1,912 @@
+{
+  "schema": 1,
+  "scope": "Read-only projection of passed timed native observations from the four retained Metal ABBA reports; no new measurement.",
+  "units": {
+    "counter_ranges": "inclusive minimum/maximum across the original timed samples",
+    "candidate_generation": "host elapsed nanoseconds; median is the sorted middle of three samples",
+    "stdout_bytes": "UTF-8 bytes of the retained complete native stdout capture",
+    "peak_accounted_bytes": "logical device accounting, not measured resident GPU memory"
+  },
+  "reports": [
+    {
+      "label": "A1-main",
+      "raw_report": "A1-main.json",
+      "raw_report_sha256": "b6ab732b375490b161c09c9ab3db412a6e7db728930c7b31b8d93ae4ec51f3c9",
+      "source_label": "main",
+      "source_commit": "896a5f73fc9d3def3b0b4dd3ce3a1904dc7555ed",
+      "binary_build_source_commit": "994fbb79f9a9e0a4398293f094fa2fbe0c3fbc17",
+      "native_sha256": "17f7ed2636fb715ccd887fad8ae0a5647cef88adb27ebcff5f217e6717fc9859",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+      "passed": true,
+      "accounted": true,
+      "cases": [
+        {
+          "entry": "standalone/send-money/send-money.lp",
+          "profile": 0,
+          "timed_samples": 3,
+          "actual_backends": [
+            "metal"
+          ],
+          "actual_adapters": [
+            "Apple M4 Pro"
+          ],
+          "actual_procedures": [
+            "countermodel"
+          ],
+          "device_kinds": [
+            "formula"
+          ],
+          "device_counter_ranges": {
+            "gpu_submitted_batches": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "gpu_batches": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "gpu_submitted_candidates": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "gpu_candidates": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "gpu_rounds": {
+              "minimum": 4,
+              "maximum": 4
+            },
+            "gpu_work": {
+              "minimum": 1483601,
+              "maximum": 1483601
+            },
+            "cpu_residuals": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "gpu_decided": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "peak_accounted_bytes": {
+              "minimum": 1966508,
+              "maximum": 1966508
+            }
+          },
+          "candidate_generation": {
+            "elapsed_ns": {
+              "minimum": 9706835,
+              "maximum": 9759666,
+              "median": 9742416
+            },
+            "calls": {
+              "minimum": 3,
+              "maximum": 3
+            }
+          },
+          "stdout_bytes": {
+            "minimum": 11789,
+            "maximum": 11789
+          }
+        },
+        {
+          "entry": "standalone/n-queens/variant-02.lp",
+          "profile": 0,
+          "timed_samples": 3,
+          "actual_backends": [
+            "metal"
+          ],
+          "actual_adapters": [
+            "Apple M4 Pro"
+          ],
+          "actual_procedures": [
+            "countermodel"
+          ],
+          "device_kinds": [
+            "formula"
+          ],
+          "device_counter_ranges": {
+            "gpu_submitted_batches": {
+              "minimum": 2,
+              "maximum": 2
+            },
+            "gpu_batches": {
+              "minimum": 2,
+              "maximum": 2
+            },
+            "gpu_submitted_candidates": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "gpu_candidates": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "gpu_rounds": {
+              "minimum": 368,
+              "maximum": 368
+            },
+            "gpu_work": {
+              "minimum": 16004412,
+              "maximum": 16004412
+            },
+            "cpu_residuals": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "gpu_decided": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "peak_accounted_bytes": {
+              "minimum": 2511856,
+              "maximum": 2511856
+            }
+          },
+          "candidate_generation": {
+            "elapsed_ns": {
+              "minimum": 71277332,
+              "maximum": 71967038,
+              "median": 71356255
+            },
+            "calls": {
+              "minimum": 185,
+              "maximum": 185
+            }
+          },
+          "stdout_bytes": {
+            "minimum": 227637,
+            "maximum": 227639
+          }
+        },
+        {
+          "entry": "scenarios/task-allocation/variant-04/05-larger-mix.lp",
+          "profile": 0,
+          "timed_samples": 3,
+          "actual_backends": [
+            "metal"
+          ],
+          "actual_adapters": [
+            "Apple M4 Pro"
+          ],
+          "actual_procedures": [
+            "countermodel"
+          ],
+          "device_kinds": [
+            "formula"
+          ],
+          "device_counter_ranges": {
+            "gpu_submitted_batches": {
+              "minimum": 19,
+              "maximum": 19
+            },
+            "gpu_batches": {
+              "minimum": 19,
+              "maximum": 19
+            },
+            "gpu_submitted_candidates": {
+              "minimum": 1208,
+              "maximum": 1208
+            },
+            "gpu_candidates": {
+              "minimum": 1208,
+              "maximum": 1208
+            },
+            "gpu_rounds": {
+              "minimum": 77281,
+              "maximum": 77282
+            },
+            "gpu_work": {
+              "minimum": 3023963006,
+              "maximum": 3024001988
+            },
+            "cpu_residuals": {
+              "minimum": 1194,
+              "maximum": 1195
+            },
+            "gpu_decided": {
+              "minimum": 13,
+              "maximum": 14
+            },
+            "peak_accounted_bytes": {
+              "minimum": 2387368,
+              "maximum": 2387368
+            }
+          },
+          "candidate_generation": {
+            "elapsed_ns": {
+              "minimum": 63673132,
+              "maximum": 64808624,
+              "median": 64775739
+            },
+            "calls": {
+              "minimum": 2417,
+              "maximum": 2417
+            }
+          },
+          "stdout_bytes": {
+            "minimum": 12557428,
+            "maximum": 12557428
+          }
+        }
+      ]
+    },
+    {
+      "label": "B1-candidate",
+      "raw_report": "B1-candidate.json",
+      "raw_report_sha256": "34869a2a8232399248c45ccf5bcd6fe4c2e33b3c86c50eeeeeb1723fbfc1c4ac",
+      "source_label": "candidate",
+      "source_commit": "eca5a1a7b35cfe5219c2f7c1dcb98c37d13a89d3",
+      "binary_build_source_commit": "eca5a1a7b35cfe5219c2f7c1dcb98c37d13a89d3",
+      "native_sha256": "f1b3adbdaa93d6a7f9adff130c1b68adee216d3eb986f16f617348b0ef4a4aeb",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+      "passed": true,
+      "accounted": true,
+      "cases": [
+        {
+          "entry": "standalone/send-money/send-money.lp",
+          "profile": 0,
+          "timed_samples": 3,
+          "actual_backends": [
+            "metal"
+          ],
+          "actual_adapters": [
+            "Apple M4 Pro"
+          ],
+          "actual_procedures": [
+            "countermodel"
+          ],
+          "device_kinds": [
+            "formula"
+          ],
+          "device_counter_ranges": {
+            "gpu_submitted_batches": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "gpu_batches": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "gpu_submitted_candidates": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "gpu_candidates": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "gpu_rounds": {
+              "minimum": 4,
+              "maximum": 4
+            },
+            "gpu_work": {
+              "minimum": 267398,
+              "maximum": 267398
+            },
+            "cpu_residuals": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "gpu_decided": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "peak_accounted_bytes": {
+              "minimum": 349972,
+              "maximum": 349972
+            }
+          },
+          "candidate_generation": {
+            "elapsed_ns": {
+              "minimum": 3054209,
+              "maximum": 3161209,
+              "median": 3064541
+            },
+            "calls": {
+              "minimum": 3,
+              "maximum": 3
+            }
+          },
+          "stdout_bytes": {
+            "minimum": 12856,
+            "maximum": 12856
+          }
+        },
+        {
+          "entry": "standalone/n-queens/variant-02.lp",
+          "profile": 0,
+          "timed_samples": 3,
+          "actual_backends": [
+            "metal"
+          ],
+          "actual_adapters": [
+            "Apple M4 Pro"
+          ],
+          "actual_procedures": [
+            "countermodel"
+          ],
+          "device_kinds": [
+            "formula"
+          ],
+          "device_counter_ranges": {
+            "gpu_submitted_batches": {
+              "minimum": 2,
+              "maximum": 2
+            },
+            "gpu_batches": {
+              "minimum": 2,
+              "maximum": 2
+            },
+            "gpu_submitted_candidates": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "gpu_candidates": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "gpu_rounds": {
+              "minimum": 368,
+              "maximum": 368
+            },
+            "gpu_work": {
+              "minimum": 16004412,
+              "maximum": 16004412
+            },
+            "cpu_residuals": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "gpu_decided": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "peak_accounted_bytes": {
+              "minimum": 2511856,
+              "maximum": 2511856
+            }
+          },
+          "candidate_generation": {
+            "elapsed_ns": {
+              "minimum": 123072751,
+              "maximum": 125208421,
+              "median": 123503120
+            },
+            "calls": {
+              "minimum": 185,
+              "maximum": 185
+            }
+          },
+          "stdout_bytes": {
+            "minimum": 35403,
+            "maximum": 35404
+          }
+        },
+        {
+          "entry": "scenarios/task-allocation/variant-04/05-larger-mix.lp",
+          "profile": 0,
+          "timed_samples": 3,
+          "actual_backends": [
+            "metal"
+          ],
+          "actual_adapters": [
+            "Apple M4 Pro"
+          ],
+          "actual_procedures": [
+            "countermodel"
+          ],
+          "device_kinds": [
+            "formula"
+          ],
+          "device_counter_ranges": {
+            "gpu_submitted_batches": {
+              "minimum": 19,
+              "maximum": 19
+            },
+            "gpu_batches": {
+              "minimum": 19,
+              "maximum": 19
+            },
+            "gpu_submitted_candidates": {
+              "minimum": 1208,
+              "maximum": 1208
+            },
+            "gpu_candidates": {
+              "minimum": 1208,
+              "maximum": 1208
+            },
+            "gpu_rounds": {
+              "minimum": 77280,
+              "maximum": 77281
+            },
+            "gpu_work": {
+              "minimum": 3029507512,
+              "maximum": 3029546566
+            },
+            "cpu_residuals": {
+              "minimum": 1195,
+              "maximum": 1195
+            },
+            "gpu_decided": {
+              "minimum": 13,
+              "maximum": 13
+            },
+            "peak_accounted_bytes": {
+              "minimum": 2391784,
+              "maximum": 2391784
+            }
+          },
+          "candidate_generation": {
+            "elapsed_ns": {
+              "minimum": 29411613,
+              "maximum": 29520457,
+              "median": 29428750
+            },
+            "calls": {
+              "minimum": 2417,
+              "maximum": 2417
+            }
+          },
+          "stdout_bytes": {
+            "minimum": 517949,
+            "maximum": 517950
+          }
+        }
+      ]
+    },
+    {
+      "label": "B2-candidate",
+      "raw_report": "B2-candidate.json",
+      "raw_report_sha256": "733e5f2039472311c0af07634a88312df78296447e8be8cedfdfdd57f861bcc2",
+      "source_label": "candidate",
+      "source_commit": "eca5a1a7b35cfe5219c2f7c1dcb98c37d13a89d3",
+      "binary_build_source_commit": "eca5a1a7b35cfe5219c2f7c1dcb98c37d13a89d3",
+      "native_sha256": "f1b3adbdaa93d6a7f9adff130c1b68adee216d3eb986f16f617348b0ef4a4aeb",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+      "passed": true,
+      "accounted": true,
+      "cases": [
+        {
+          "entry": "standalone/send-money/send-money.lp",
+          "profile": 0,
+          "timed_samples": 3,
+          "actual_backends": [
+            "metal"
+          ],
+          "actual_adapters": [
+            "Apple M4 Pro"
+          ],
+          "actual_procedures": [
+            "countermodel"
+          ],
+          "device_kinds": [
+            "formula"
+          ],
+          "device_counter_ranges": {
+            "gpu_submitted_batches": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "gpu_batches": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "gpu_submitted_candidates": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "gpu_candidates": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "gpu_rounds": {
+              "minimum": 4,
+              "maximum": 4
+            },
+            "gpu_work": {
+              "minimum": 267398,
+              "maximum": 267398
+            },
+            "cpu_residuals": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "gpu_decided": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "peak_accounted_bytes": {
+              "minimum": 349972,
+              "maximum": 349972
+            }
+          },
+          "candidate_generation": {
+            "elapsed_ns": {
+              "minimum": 3024001,
+              "maximum": 3053542,
+              "median": 3038166
+            },
+            "calls": {
+              "minimum": 3,
+              "maximum": 3
+            }
+          },
+          "stdout_bytes": {
+            "minimum": 12855,
+            "maximum": 12856
+          }
+        },
+        {
+          "entry": "standalone/n-queens/variant-02.lp",
+          "profile": 0,
+          "timed_samples": 3,
+          "actual_backends": [
+            "metal"
+          ],
+          "actual_adapters": [
+            "Apple M4 Pro"
+          ],
+          "actual_procedures": [
+            "countermodel"
+          ],
+          "device_kinds": [
+            "formula"
+          ],
+          "device_counter_ranges": {
+            "gpu_submitted_batches": {
+              "minimum": 2,
+              "maximum": 2
+            },
+            "gpu_batches": {
+              "minimum": 2,
+              "maximum": 2
+            },
+            "gpu_submitted_candidates": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "gpu_candidates": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "gpu_rounds": {
+              "minimum": 368,
+              "maximum": 368
+            },
+            "gpu_work": {
+              "minimum": 16004412,
+              "maximum": 16004412
+            },
+            "cpu_residuals": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "gpu_decided": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "peak_accounted_bytes": {
+              "minimum": 2511856,
+              "maximum": 2511856
+            }
+          },
+          "candidate_generation": {
+            "elapsed_ns": {
+              "minimum": 122770957,
+              "maximum": 124398083,
+              "median": 123767376
+            },
+            "calls": {
+              "minimum": 185,
+              "maximum": 185
+            }
+          },
+          "stdout_bytes": {
+            "minimum": 35403,
+            "maximum": 35404
+          }
+        },
+        {
+          "entry": "scenarios/task-allocation/variant-04/05-larger-mix.lp",
+          "profile": 0,
+          "timed_samples": 3,
+          "actual_backends": [
+            "metal"
+          ],
+          "actual_adapters": [
+            "Apple M4 Pro"
+          ],
+          "actual_procedures": [
+            "countermodel"
+          ],
+          "device_kinds": [
+            "formula"
+          ],
+          "device_counter_ranges": {
+            "gpu_submitted_batches": {
+              "minimum": 19,
+              "maximum": 19
+            },
+            "gpu_batches": {
+              "minimum": 19,
+              "maximum": 19
+            },
+            "gpu_submitted_candidates": {
+              "minimum": 1208,
+              "maximum": 1208
+            },
+            "gpu_candidates": {
+              "minimum": 1208,
+              "maximum": 1208
+            },
+            "gpu_rounds": {
+              "minimum": 77280,
+              "maximum": 77281
+            },
+            "gpu_work": {
+              "minimum": 3029507512,
+              "maximum": 3029546566
+            },
+            "cpu_residuals": {
+              "minimum": 1194,
+              "maximum": 1195
+            },
+            "gpu_decided": {
+              "minimum": 13,
+              "maximum": 14
+            },
+            "peak_accounted_bytes": {
+              "minimum": 2391784,
+              "maximum": 2391784
+            }
+          },
+          "candidate_generation": {
+            "elapsed_ns": {
+              "minimum": 29380507,
+              "maximum": 29624305,
+              "median": 29594761
+            },
+            "calls": {
+              "minimum": 2417,
+              "maximum": 2417
+            }
+          },
+          "stdout_bytes": {
+            "minimum": 517949,
+            "maximum": 517950
+          }
+        }
+      ]
+    },
+    {
+      "label": "A2-main",
+      "raw_report": "A2-main.json",
+      "raw_report_sha256": "c05f04cc3d868bb493bef5572cff3f41916654b9ece7befd782b4ab55affb9af",
+      "source_label": "main",
+      "source_commit": "896a5f73fc9d3def3b0b4dd3ce3a1904dc7555ed",
+      "binary_build_source_commit": "994fbb79f9a9e0a4398293f094fa2fbe0c3fbc17",
+      "native_sha256": "17f7ed2636fb715ccd887fad8ae0a5647cef88adb27ebcff5f217e6717fc9859",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+      "passed": true,
+      "accounted": true,
+      "cases": [
+        {
+          "entry": "standalone/send-money/send-money.lp",
+          "profile": 0,
+          "timed_samples": 3,
+          "actual_backends": [
+            "metal"
+          ],
+          "actual_adapters": [
+            "Apple M4 Pro"
+          ],
+          "actual_procedures": [
+            "countermodel"
+          ],
+          "device_kinds": [
+            "formula"
+          ],
+          "device_counter_ranges": {
+            "gpu_submitted_batches": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "gpu_batches": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "gpu_submitted_candidates": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "gpu_candidates": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "gpu_rounds": {
+              "minimum": 4,
+              "maximum": 4
+            },
+            "gpu_work": {
+              "minimum": 1483601,
+              "maximum": 1483601
+            },
+            "cpu_residuals": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "gpu_decided": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "peak_accounted_bytes": {
+              "minimum": 1966508,
+              "maximum": 1966508
+            }
+          },
+          "candidate_generation": {
+            "elapsed_ns": {
+              "minimum": 9867125,
+              "maximum": 9916084,
+              "median": 9911041
+            },
+            "calls": {
+              "minimum": 3,
+              "maximum": 3
+            }
+          },
+          "stdout_bytes": {
+            "minimum": 11789,
+            "maximum": 11789
+          }
+        },
+        {
+          "entry": "standalone/n-queens/variant-02.lp",
+          "profile": 0,
+          "timed_samples": 3,
+          "actual_backends": [
+            "metal"
+          ],
+          "actual_adapters": [
+            "Apple M4 Pro"
+          ],
+          "actual_procedures": [
+            "countermodel"
+          ],
+          "device_kinds": [
+            "formula"
+          ],
+          "device_counter_ranges": {
+            "gpu_submitted_batches": {
+              "minimum": 2,
+              "maximum": 2
+            },
+            "gpu_batches": {
+              "minimum": 2,
+              "maximum": 2
+            },
+            "gpu_submitted_candidates": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "gpu_candidates": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "gpu_rounds": {
+              "minimum": 368,
+              "maximum": 368
+            },
+            "gpu_work": {
+              "minimum": 16004412,
+              "maximum": 16004412
+            },
+            "cpu_residuals": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "gpu_decided": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "peak_accounted_bytes": {
+              "minimum": 2511856,
+              "maximum": 2511856
+            }
+          },
+          "candidate_generation": {
+            "elapsed_ns": {
+              "minimum": 72425417,
+              "maximum": 72793174,
+              "median": 72434705
+            },
+            "calls": {
+              "minimum": 185,
+              "maximum": 185
+            }
+          },
+          "stdout_bytes": {
+            "minimum": 227639,
+            "maximum": 227640
+          }
+        },
+        {
+          "entry": "scenarios/task-allocation/variant-04/05-larger-mix.lp",
+          "profile": 0,
+          "timed_samples": 3,
+          "actual_backends": [
+            "metal"
+          ],
+          "actual_adapters": [
+            "Apple M4 Pro"
+          ],
+          "actual_procedures": [
+            "countermodel"
+          ],
+          "device_kinds": [
+            "formula"
+          ],
+          "device_counter_ranges": {
+            "gpu_submitted_batches": {
+              "minimum": 19,
+              "maximum": 19
+            },
+            "gpu_batches": {
+              "minimum": 19,
+              "maximum": 19
+            },
+            "gpu_submitted_candidates": {
+              "minimum": 1208,
+              "maximum": 1208
+            },
+            "gpu_candidates": {
+              "minimum": 1208,
+              "maximum": 1208
+            },
+            "gpu_rounds": {
+              "minimum": 77280,
+              "maximum": 77282
+            },
+            "gpu_work": {
+              "minimum": 3023924024,
+              "maximum": 3024001988
+            },
+            "cpu_residuals": {
+              "minimum": 1194,
+              "maximum": 1195
+            },
+            "gpu_decided": {
+              "minimum": 13,
+              "maximum": 14
+            },
+            "peak_accounted_bytes": {
+              "minimum": 2387368,
+              "maximum": 2387368
+            }
+          },
+          "candidate_generation": {
+            "elapsed_ns": {
+              "minimum": 64537978,
+              "maximum": 66231629,
+              "median": 65136994
+            },
+            "calls": {
+              "minimum": 2417,
+              "maximum": 2417
+            }
+          },
+          "stdout_bytes": {
+            "minimum": 12557428,
+            "maximum": 12557428
+          }
+        }
+      ]
+    }
+  ]
+}

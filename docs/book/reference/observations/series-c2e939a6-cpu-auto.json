@@ -1,0 +1,5327 @@
+{
+  "labels": [
+    "main",
+    "before",
+    "after",
+    "clauses"
+  ],
+  "cells": [
+    {
+      "entry": "generated/independent-choice-12.lp",
+      "label": "independent-choice-12",
+      "profiles": [
+        {
+          "profile": {
+            "backend": "cpu",
+            "batch_size": 64,
+            "completion_workers": 4,
+            "grounder": "auto",
+            "max_completion_scratch_bytes": 268435456,
+            "oracle": "auto",
+            "workers": 4
+          },
+          "reports": {
+            "after": {
+              "samples": 3,
+              "minimum_ns": 8784034,
+              "median_ns": 8992998,
+              "maximum_ns": 10219137,
+              "driver_median_ns": 5661933,
+              "published_models": 377,
+              "candidates_examined": 377,
+              "search_work": 1090269,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 299764
+                },
+                "candidate_generation": {
+                  "median_ns": 627853
+                },
+                "candidate_setup": {
+                  "median_ns": 170
+                },
+                "closure_membership": {
+                  "median_ns": 3365458
+                },
+                "execution_setup": {
+                  "median_ns": 117741
+                },
+                "observation_output": {
+                  "median_ns": 907433
+                }
+              },
+              "breakdown": {
+                "proposal": 628013,
+                "membership": 3365458
+              }
+            },
+            "before": {
+              "samples": 3,
+              "minimum_ns": 8926422,
+              "median_ns": 9208884,
+              "maximum_ns": 9968805,
+              "driver_median_ns": 6053451,
+              "published_models": 377,
+              "candidates_examined": 377,
+              "search_work": 1090269,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 281079
+                },
+                "candidate_generation": {
+                  "median_ns": 703436
+                },
+                "candidate_setup": {
+                  "median_ns": 190
+                },
+                "closure_membership": {
+                  "median_ns": 3444979
+                },
+                "execution_setup": {
+                  "median_ns": 125386
+                },
+                "observation_output": {
+                  "median_ns": 748920
+                }
+              },
+              "breakdown": {
+                "proposal": 703626,
+                "membership": 3444979
+              }
+            },
+            "clauses": {
+              "samples": 3,
+              "minimum_ns": 7690655,
+              "median_ns": 7790653,
+              "maximum_ns": 8109223,
+              "driver_median_ns": 5362109,
+              "published_models": 377,
+              "candidates_examined": 377,
+              "search_work": 1090269,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 296418
+                },
+                "candidate_generation": {
+                  "median_ns": 577769
+                },
+                "candidate_setup": {
+                  "median_ns": 180
+                },
+                "closure_membership": {
+                  "median_ns": 3186342
+                },
+                "execution_setup": {
+                  "median_ns": 120777
+                },
+                "observation_output": {
+                  "median_ns": 705209
+                }
+              },
+              "breakdown": {
+                "proposal": 577949,
+                "membership": 3186342
+              }
+            },
+            "main": {
+              "samples": 3,
+              "minimum_ns": 22840173,
+              "median_ns": 23712727,
+              "maximum_ns": 24256491,
+              "driver_median_ns": 20201363,
+              "published_models": 377,
+              "candidates_examined": 377,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 298302
+                },
+                "candidate_generation": {
+                  "median_ns": 312569
+                },
+                "candidate_setup": {
+                  "median_ns": 180
+                },
+                "closure_membership": {
+                  "median_ns": 6121161
+                },
+                "execution_setup": {
+                  "median_ns": 111410
+                },
+                "observation_output": {
+                  "median_ns": 12952326
+                }
+              },
+              "breakdown": {
+                "proposal": 312749,
+                "membership": 6121161
+              }
+            }
+          },
+          "ratios": {
+            "after/before": 0.9765567684422999,
+            "before/main": 0.3883519596881455,
+            "clauses/after": 0.8663020941403523,
+            "clauses/main": 0.32854310683035315
+          },
+          "reference_ratios": {
+            "after": 1.340148675617485,
+            "before": 1.3014534233786321,
+            "clauses": 1.2833429946629595,
+            "main": 3.3467517800244337
+          }
+        }
+      ],
+      "reference": {
+        "after": {
+          "samples": 3,
+          "minimum_ns": 6085351,
+          "median_ns": 6710448,
+          "maximum_ns": 6862004,
+          "grounding_ns": 0,
+          "solving_ns": 2000000
+        },
+        "before": {
+          "samples": 3,
+          "minimum_ns": 6888854,
+          "median_ns": 7075846,
+          "maximum_ns": 7221661,
+          "grounding_ns": 0,
+          "solving_ns": 2000000
+        },
+        "clauses": {
+          "samples": 3,
+          "minimum_ns": 5818068,
+          "median_ns": 6070593,
+          "maximum_ns": 6934932,
+          "grounding_ns": 1000000,
+          "solving_ns": 1000000
+        },
+        "main": {
+          "samples": 3,
+          "minimum_ns": 6816630,
+          "median_ns": 7085296,
+          "maximum_ns": 7129590,
+          "grounding_ns": 0,
+          "solving_ns": 2000000
+        }
+      }
+    },
+    {
+      "entry": "generated/independent-choice-16.lp",
+      "label": "independent-choice-16",
+      "profiles": [
+        {
+          "profile": {
+            "backend": "cpu",
+            "batch_size": 64,
+            "completion_workers": 4,
+            "grounder": "auto",
+            "max_completion_scratch_bytes": 268435456,
+            "oracle": "auto",
+            "workers": 4
+          },
+          "reports": {
+            "after": {
+              "samples": 3,
+              "minimum_ns": 38960559,
+              "median_ns": 39457054,
+              "maximum_ns": 41073138,
+              "driver_median_ns": 37364122,
+              "published_models": 2584,
+              "candidates_examined": 2584,
+              "search_work": 10427471,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 283063
+                },
+                "candidate_generation": {
+                  "median_ns": 2920693
+                },
+                "candidate_setup": {
+                  "median_ns": 90
+                },
+                "closure_membership": {
+                  "median_ns": 24043973
+                },
+                "execution_setup": {
+                  "median_ns": 116610
+                },
+                "observation_output": {
+                  "median_ns": 6495556
+                }
+              },
+              "breakdown": {
+                "proposal": 2920783,
+                "membership": 24043973
+              }
+            },
+            "before": {
+              "samples": 3,
+              "minimum_ns": 38046728,
+              "median_ns": 39287484,
+              "maximum_ns": 40931831,
+              "driver_median_ns": 36403964,
+              "published_models": 2584,
+              "candidates_examined": 2584,
+              "search_work": 10427471,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 312509
+                },
+                "candidate_generation": {
+                  "median_ns": 3100541
+                },
+                "candidate_setup": {
+                  "median_ns": 160
+                },
+                "closure_membership": {
+                  "median_ns": 22800936
+                },
+                "execution_setup": {
+                  "median_ns": 121960
+                },
+                "observation_output": {
+                  "median_ns": 6439434
+                }
+              },
+              "breakdown": {
+                "proposal": 3100611,
+                "membership": 22800936
+              }
+            },
+            "clauses": {
+              "samples": 3,
+              "minimum_ns": 38153169,
+              "median_ns": 40891024,
+              "maximum_ns": 43509857,
+              "driver_median_ns": 37560352,
+              "published_models": 2584,
+              "candidates_examined": 2584,
+              "search_work": 10427471,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 335522
+                },
+                "candidate_generation": {
+                  "median_ns": 3250849
+                },
+                "candidate_setup": {
+                  "median_ns": 171
+                },
+                "closure_membership": {
+                  "median_ns": 22791123
+                },
+                "execution_setup": {
+                  "median_ns": 129173
+                },
+                "observation_output": {
+                  "median_ns": 7413539
+                }
+              },
+              "breakdown": {
+                "proposal": 3251020,
+                "membership": 22791123
+              }
+            },
+            "main": {
+              "samples": 3,
+              "minimum_ns": 184495692,
+              "median_ns": 195735143,
+              "maximum_ns": 198474924,
+              "driver_median_ns": 192387267,
+              "published_models": 2584,
+              "candidates_examined": 2584,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 324041
+                },
+                "candidate_generation": {
+                  "median_ns": 3227211
+                },
+                "candidate_setup": {
+                  "median_ns": 201
+                },
+                "closure_membership": {
+                  "median_ns": 61218699
+                },
+                "execution_setup": {
+                  "median_ns": 119305
+                },
+                "observation_output": {
+                  "median_ns": 121516285
+                }
+              },
+              "breakdown": {
+                "proposal": 3227431,
+                "membership": 61218699
+              }
+            }
+          },
+          "ratios": {
+            "after/before": 1.004316132842714,
+            "before/main": 0.20071757885603608,
+            "clauses/after": 1.0363425510683084,
+            "clauses/main": 0.2089099758646816
+          },
+          "reference_ratios": {
+            "after": 1.407973615187924,
+            "before": 1.4150073061768755,
+            "clauses": 1.4408094094725015,
+            "main": 6.828983891131839
+          }
+        }
+      ],
+      "reference": {
+        "after": {
+          "samples": 3,
+          "minimum_ns": 27678119,
+          "median_ns": 28024001,
+          "maximum_ns": 29661886,
+          "grounding_ns": 0,
+          "solving_ns": 23000000
+        },
+        "before": {
+          "samples": 3,
+          "minimum_ns": 27071046,
+          "median_ns": 27764863,
+          "maximum_ns": 28275404,
+          "grounding_ns": 0,
+          "solving_ns": 23000000
+        },
+        "clauses": {
+          "samples": 3,
+          "minimum_ns": 27678149,
+          "median_ns": 28380592,
+          "maximum_ns": 30778879,
+          "grounding_ns": 0,
+          "solving_ns": 23000000
+        },
+        "main": {
+          "samples": 3,
+          "minimum_ns": 28129607,
+          "median_ns": 28662411,
+          "maximum_ns": 29319018,
+          "grounding_ns": 0,
+          "solving_ns": 24000000
+        }
+      }
+    },
+    {
+      "entry": "generated/independent-negation-8.lp",
+      "label": "independent-negation-8",
+      "profiles": [
+        {
+          "profile": {
+            "backend": "cpu",
+            "batch_size": 64,
+            "completion_workers": 4,
+            "grounder": "auto",
+            "max_completion_scratch_bytes": 268435456,
+            "oracle": "auto",
+            "workers": 4
+          },
+          "reports": {
+            "after": {
+              "samples": 3,
+              "minimum_ns": 18414372,
+              "median_ns": 18565296,
+              "maximum_ns": 20740082,
+              "driver_median_ns": 15198174,
+              "published_models": 55,
+              "candidates_examined": 55,
+              "search_work": 123109,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 284015
+                },
+                "candidate_generation": {
+                  "median_ns": 13422741
+                },
+                "candidate_setup": {
+                  "median_ns": 210
+                },
+                "closure_membership": {
+                  "median_ns": 977411
+                },
+                "execution_setup": {
+                  "median_ns": 121038
+                },
+                "observation_output": {
+                  "median_ns": 115230
+                }
+              },
+              "breakdown": {
+                "proposal": 13422951,
+                "membership": 977411
+              }
+            },
+            "before": {
+              "samples": 3,
+              "minimum_ns": 18261575,
+              "median_ns": 18633925,
+              "maximum_ns": 19439904,
+              "driver_median_ns": 15809616,
+              "published_models": 55,
+              "candidates_examined": 55,
+              "search_work": 123109,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 266031
+                },
+                "candidate_generation": {
+                  "median_ns": 14210464
+                },
+                "candidate_setup": {
+                  "median_ns": 170
+                },
+                "closure_membership": {
+                  "median_ns": 967041
+                },
+                "execution_setup": {
+                  "median_ns": 116810
+                },
+                "observation_output": {
+                  "median_ns": 117137
+                }
+              },
+              "breakdown": {
+                "proposal": 14210634,
+                "membership": 967041
+              }
+            },
+            "clauses": {
+              "samples": 3,
+              "minimum_ns": 18070524,
+              "median_ns": 18262185,
+              "maximum_ns": 19264543,
+              "driver_median_ns": 15192233,
+              "published_models": 55,
+              "candidates_examined": 55,
+              "search_work": 123109,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 289024
+                },
+                "candidate_generation": {
+                  "median_ns": 13594974
+                },
+                "candidate_setup": {
+                  "median_ns": 181
+                },
+                "closure_membership": {
+                  "median_ns": 928358
+                },
+                "execution_setup": {
+                  "median_ns": 127640
+                },
+                "observation_output": {
+                  "median_ns": 125410
+                }
+              },
+              "breakdown": {
+                "proposal": 13595155,
+                "membership": 928358
+              }
+            },
+            "main": {
+              "samples": 3,
+              "minimum_ns": 112045829,
+              "median_ns": 114156514,
+              "maximum_ns": 119023322,
+              "driver_median_ns": 110943222,
+              "published_models": 55,
+              "candidates_examined": 14080,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 283423
+                },
+                "candidate_generation": {
+                  "median_ns": 8863475
+                },
+                "candidate_setup": {
+                  "median_ns": 211
+                },
+                "closure_membership": {
+                  "median_ns": 99933148
+                },
+                "execution_setup": {
+                  "median_ns": 110849
+                },
+                "observation_output": {
+                  "median_ns": 486547
+                }
+              },
+              "breakdown": {
+                "proposal": 8863686,
+                "membership": 99933148
+              }
+            }
+          },
+          "ratios": {
+            "after/before": 0.9963169863568733,
+            "before/main": 0.163231377230037,
+            "clauses/after": 0.9836732471165556,
+            "clauses/main": 0.15997497085448842
+          },
+          "reference_ratios": {
+            "after": 3.328327207444434,
+            "before": 4.0827913399076605,
+            "clauses": 3.0798248723610864,
+            "main": 20.296858442513475
+          }
+        }
+      ],
+      "reference": {
+        "after": {
+          "samples": 3,
+          "minimum_ns": 4498733,
+          "median_ns": 5577966,
+          "maximum_ns": 5981496,
+          "grounding_ns": 0,
+          "solving_ns": 0
+        },
+        "before": {
+          "samples": 3,
+          "minimum_ns": 4493333,
+          "median_ns": 4564016,
+          "maximum_ns": 5533211,
+          "grounding_ns": 0,
+          "solving_ns": 0
+        },
+        "clauses": {
+          "samples": 3,
+          "minimum_ns": 4538888,
+          "median_ns": 5929618,
+          "maximum_ns": 6686664,
+          "grounding_ns": 0,
+          "solving_ns": 0
+        },
+        "main": {
+          "samples": 3,
+          "minimum_ns": 4585929,
+          "median_ns": 5624344,
+          "maximum_ns": 5660403,
+          "grounding_ns": 1000000,
+          "solving_ns": 0
+        }
+      }
+    },
+    {
+      "entry": "generated/independent-negation-10.lp",
+      "label": "independent-negation-10",
+      "profiles": [
+        {
+          "profile": {
+            "backend": "cpu",
+            "batch_size": 64,
+            "completion_workers": 4,
+            "grounder": "auto",
+            "max_completion_scratch_bytes": 268435456,
+            "oracle": "auto",
+            "workers": 4
+          },
+          "reports": {
+            "after": {
+              "samples": 3,
+              "minimum_ns": 51447747,
+              "median_ns": 52269615,
+              "maximum_ns": 53357313,
+              "driver_median_ns": 49570511,
+              "published_models": 144,
+              "candidates_examined": 144,
+              "search_work": 425724,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 255351
+                },
+                "candidate_generation": {
+                  "median_ns": 45065769
+                },
+                "candidate_setup": {
+                  "median_ns": 80
+                },
+                "closure_membership": {
+                  "median_ns": 3022332
+                },
+                "execution_setup": {
+                  "median_ns": 102864
+                },
+                "observation_output": {
+                  "median_ns": 414920
+                }
+              },
+              "breakdown": {
+                "proposal": 45065839,
+                "membership": 3022332
+              }
+            },
+            "before": {
+              "samples": 3,
+              "minimum_ns": 49955627,
+              "median_ns": 53275600,
+              "maximum_ns": 56164962,
+              "driver_median_ns": 49652376,
+              "published_models": 144,
+              "candidates_examined": 144,
+              "search_work": 425724,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 263567
+                },
+                "candidate_generation": {
+                  "median_ns": 45096166
+                },
+                "candidate_setup": {
+                  "median_ns": 90
+                },
+                "closure_membership": {
+                  "median_ns": 2851100
+                },
+                "execution_setup": {
+                  "median_ns": 98576
+                },
+                "observation_output": {
+                  "median_ns": 662843
+                }
+              },
+              "breakdown": {
+                "proposal": 45096256,
+                "membership": 2851100
+              }
+            },
+            "clauses": {
+              "samples": 3,
+              "minimum_ns": 51474077,
+              "median_ns": 51583002,
+              "maximum_ns": 52137206,
+              "driver_median_ns": 48725450,
+              "published_models": 144,
+              "candidates_examined": 144,
+              "search_work": 425724,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 266793
+                },
+                "candidate_generation": {
+                  "median_ns": 44481908
+                },
+                "candidate_setup": {
+                  "median_ns": 80
+                },
+                "closure_membership": {
+                  "median_ns": 2856478
+                },
+                "execution_setup": {
+                  "median_ns": 102914
+                },
+                "observation_output": {
+                  "median_ns": 489268
+                }
+              },
+              "breakdown": {
+                "proposal": 44482249,
+                "membership": 2856478
+              }
+            },
+            "main": {
+              "samples": 3,
+              "minimum_ns": 1413123347,
+              "median_ns": 1430897327,
+              "maximum_ns": 1562193308,
+              "driver_median_ns": 1428184397,
+              "published_models": 144,
+              "candidates_examined": 147456,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 294695
+                },
+                "candidate_generation": {
+                  "median_ns": 122483802
+                },
+                "candidate_setup": {
+                  "median_ns": 290
+                },
+                "closure_membership": {
+                  "median_ns": 1299179319
+                },
+                "execution_setup": {
+                  "median_ns": 132951
+                },
+                "observation_output": {
+                  "median_ns": 1787509
+                }
+              },
+              "breakdown": {
+                "proposal": 122483952,
+                "membership": 1299179319
+              }
+            }
+          },
+          "ratios": {
+            "after/before": 0.981117340771385,
+            "before/main": 0.03723230101470446,
+            "clauses/after": 0.9868640126773461,
+            "clauses/main": 0.03604940831649202
+          },
+          "reference_ratios": {
+            "after": 11.124626746549467,
+            "before": 9.493125379653918,
+            "clauses": 9.227482487497202,
+            "main": 253.13662981799038
+          }
+        }
+      ],
+      "reference": {
+        "after": {
+          "samples": 3,
+          "minimum_ns": 4525163,
+          "median_ns": 4698550,
+          "maximum_ns": 5604776,
+          "grounding_ns": 1000000,
+          "solving_ns": 0
+        },
+        "before": {
+          "samples": 3,
+          "minimum_ns": 4551121,
+          "median_ns": 5612019,
+          "maximum_ns": 5679377,
+          "grounding_ns": 1000000,
+          "solving_ns": 0
+        },
+        "clauses": {
+          "samples": 3,
+          "minimum_ns": 4544349,
+          "median_ns": 5590149,
+          "maximum_ns": 5774816,
+          "grounding_ns": 1000000,
+          "solving_ns": 0
+        },
+        "main": {
+          "samples": 3,
+          "minimum_ns": 4530594,
+          "median_ns": 5652668,
+          "maximum_ns": 5665011,
+          "grounding_ns": 1000000,
+          "solving_ns": 0
+        }
+      }
+    },
+    {
+      "entry": "generated/independent-negation-aggregate-16.lp",
+      "label": "independent-negation-aggregate-16",
+      "profiles": [
+        {
+          "profile": {
+            "backend": "cpu",
+            "batch_size": 64,
+            "completion_workers": 4,
+            "grounder": "auto",
+            "max_completion_scratch_bytes": 268435456,
+            "oracle": "auto",
+            "workers": 4
+          },
+          "reports": {
+            "after": {
+              "samples": 3,
+              "minimum_ns": 20233939,
+              "median_ns": 21700571,
+              "maximum_ns": 21799197,
+              "driver_median_ns": 17470585,
+              "published_models": 2584,
+              "candidates_examined": 2584,
+              "search_work": 255085,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 978935
+                },
+                "candidate_generation": {
+                  "median_ns": 2611976
+                },
+                "candidate_setup": {
+                  "median_ns": 31830
+                },
+                "certificate_setup": {
+                  "median_ns": 10680
+                },
+                "execution_setup": {
+                  "median_ns": 9648
+                },
+                "observation_output": {
+                  "median_ns": 7507928
+                }
+              },
+              "breakdown": {
+                "grounding": 235594,
+                "proposal": 2637023,
+                "membership": 10680
+              }
+            },
+            "before": {
+              "samples": 3,
+              "minimum_ns": 24580065,
+              "median_ns": 24692096,
+              "maximum_ns": 28817515,
+              "driver_median_ns": 21002717,
+              "published_models": 2584,
+              "candidates_examined": 2584,
+              "search_work": 3137480,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 925824
+                },
+                "candidate_generation": {
+                  "median_ns": 2314147
+                },
+                "candidate_setup": {
+                  "median_ns": 29876
+                },
+                "certificate_setup": {
+                  "median_ns": 10049
+                },
+                "certified_membership": {
+                  "median_ns": 3020509
+                },
+                "execution_setup": {
+                  "median_ns": 133782
+                },
+                "observation_output": {
+                  "median_ns": 6447415
+                },
+                "original_validation": {
+                  "median_ns": 2222995
+                }
+              },
+              "breakdown": {
+                "grounding": 237467,
+                "proposal": 2344023,
+                "membership": 5242738
+              }
+            },
+            "clauses": {
+              "samples": 3,
+              "minimum_ns": 25810492,
+              "median_ns": 26015127,
+              "maximum_ns": 26427423,
+              "driver_median_ns": 22027998,
+              "published_models": 2584,
+              "candidates_examined": 2584,
+              "search_work": 3137480,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 979444
+                },
+                "candidate_generation": {
+                  "median_ns": 2382472
+                },
+                "candidate_setup": {
+                  "median_ns": 29105
+                },
+                "certificate_setup": {
+                  "median_ns": 10671
+                },
+                "certified_membership": {
+                  "median_ns": 3071051
+                },
+                "execution_setup": {
+                  "median_ns": 125246
+                },
+                "observation_output": {
+                  "median_ns": 6569562
+                },
+                "original_validation": {
+                  "median_ns": 2903315
+                }
+              },
+              "breakdown": {
+                "grounding": 236065,
+                "proposal": 2411577,
+                "membership": 5987180
+              }
+            },
+            "main": {
+              "samples": 3,
+              "minimum_ns": 313528669,
+              "median_ns": 314603664,
+              "maximum_ns": 319316591,
+              "driver_median_ns": 310235746,
+              "published_models": 2584,
+              "candidates_examined": 2584,
+              "search_work": 4956117,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 1024880
+                },
+                "candidate_generation": {
+                  "median_ns": 7828639
+                },
+                "candidate_setup": {
+                  "median_ns": 31058
+                },
+                "certificate_setup": {
+                  "median_ns": 12363
+                },
+                "certified_membership": {
+                  "median_ns": 4464166
+                },
+                "execution_setup": {
+                  "median_ns": 121228
+                },
+                "observation_output": {
+                  "median_ns": 281463790
+                },
+                "original_validation": {
+                  "median_ns": 3591289
+                }
+              },
+              "breakdown": {
+                "grounding": 279386,
+                "proposal": 7865498,
+                "membership": 8067497
+              }
+            }
+          },
+          "ratios": {
+            "after/before": 0.8788468585250924,
+            "before/main": 0.07848635863312768,
+            "clauses/after": 1.1988222337559689,
+            "clauses/main": 0.0826917483071653
+          },
+          "reference_ratios": {
+            "after": 0.6638184709206216,
+            "before": 0.7645440928160103,
+            "clauses": 0.8326758325749454,
+            "main": 10.29278186999609
+          }
+        }
+      ],
+      "reference": {
+        "after": {
+          "samples": 3,
+          "minimum_ns": 31394879,
+          "median_ns": 32690520,
+          "maximum_ns": 33400336,
+          "grounding_ns": 0,
+          "solving_ns": 28000000
+        },
+        "before": {
+          "samples": 3,
+          "minimum_ns": 31439353,
+          "median_ns": 32296497,
+          "maximum_ns": 34317033,
+          "grounding_ns": 0,
+          "solving_ns": 27000000
+        },
+        "clauses": {
+          "samples": 3,
+          "minimum_ns": 31168904,
+          "median_ns": 31242803,
+          "maximum_ns": 31579807,
+          "grounding_ns": 1000000,
+          "solving_ns": 27000000
+        },
+        "main": {
+          "samples": 3,
+          "minimum_ns": 30363405,
+          "median_ns": 30565465,
+          "maximum_ns": 33455710,
+          "grounding_ns": 0,
+          "solving_ns": 26000000
+        }
+      }
+    },
+    {
+      "entry": "generated/disjunction-12.lp",
+      "label": "disjunction-12",
+      "profiles": [
+        {
+          "profile": {
+            "backend": "cpu",
+            "batch_size": 64,
+            "completion_workers": 4,
+            "grounder": "auto",
+            "max_completion_scratch_bytes": 268435456,
+            "oracle": "auto",
+            "workers": 4
+          },
+          "reports": {
+            "after": {
+              "samples": 3,
+              "minimum_ns": 21680774,
+              "median_ns": 22012769,
+              "maximum_ns": 22396242,
+              "driver_median_ns": 18132210,
+              "published_models": 4096,
+              "candidates_examined": 4096,
+              "search_work": 2061807,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 569112
+                },
+                "candidate_generation": {
+                  "median_ns": 3832405
+                },
+                "candidate_setup": {
+                  "median_ns": 26009
+                },
+                "certificate_setup": {
+                  "median_ns": 4218
+                },
+                "execution_setup": {
+                  "median_ns": 9047
+                },
+                "observation_output": {
+                  "median_ns": 7592274
+                }
+              },
+              "breakdown": {
+                "grounding": 137208,
+                "proposal": 3860267,
+                "membership": 4218
+              }
+            },
+            "before": {
+              "samples": 3,
+              "minimum_ns": 45284619,
+              "median_ns": 45388676,
+              "maximum_ns": 45642223,
+              "driver_median_ns": 41544225,
+              "published_models": 4096,
+              "candidates_examined": 4096,
+              "search_work": 9004441,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 507667
+                },
+                "candidate_generation": {
+                  "median_ns": 3425932
+                },
+                "candidate_setup": {
+                  "median_ns": 65253
+                },
+                "certificate_setup": {
+                  "median_ns": 3827
+                },
+                "execution_setup": {
+                  "median_ns": 127450
+                },
+                "observation_output": {
+                  "median_ns": 6378657
+                },
+                "original_validation": {
+                  "median_ns": 1709596
+                },
+                "reduct_preparation": {
+                  "median_ns": 44915
+                }
+              },
+              "breakdown": {
+                "grounding": 132410,
+                "proposal": 3489231,
+                "membership": 1758158
+              }
+            },
+            "clauses": {
+              "samples": 3,
+              "minimum_ns": 44536771,
+              "median_ns": 45501408,
+              "maximum_ns": 45603541,
+              "driver_median_ns": 41458073,
+              "published_models": 4096,
+              "candidates_examined": 4096,
+              "search_work": 9004441,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 546769
+                },
+                "candidate_generation": {
+                  "median_ns": 3686641
+                },
+                "candidate_setup": {
+                  "median_ns": 90400
+                },
+                "certificate_setup": {
+                  "median_ns": 4479
+                },
+                "execution_setup": {
+                  "median_ns": 128252
+                },
+                "observation_output": {
+                  "median_ns": 5703091
+                },
+                "original_validation": {
+                  "median_ns": 2265739
+                },
+                "reduct_preparation": {
+                  "median_ns": 42280
+                }
+              },
+              "breakdown": {
+                "grounding": 135856,
+                "proposal": 3840501,
+                "membership": 2316926
+              }
+            },
+            "main": {
+              "samples": 3,
+              "minimum_ns": 205579767,
+              "median_ns": 206672084,
+              "maximum_ns": 212003457,
+              "driver_median_ns": 202580928,
+              "published_models": 4096,
+              "candidates_examined": 4096,
+              "search_work": 12273049,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 864278
+                },
+                "candidate_generation": {
+                  "median_ns": 12603121
+                },
+                "candidate_setup": {
+                  "median_ns": 182634
+                },
+                "certificate_setup": {
+                  "median_ns": 6452
+                },
+                "execution_setup": {
+                  "median_ns": 153859
+                },
+                "observation_output": {
+                  "median_ns": 119228914
+                },
+                "original_validation": {
+                  "median_ns": 2503097
+                },
+                "reduct_preparation": {
+                  "median_ns": 43582
+                }
+              },
+              "breakdown": {
+                "grounding": 158429,
+                "proposal": 12685776,
+                "membership": 2550276
+              }
+            }
+          },
+          "ratios": {
+            "after/before": 0.4849837214903559,
+            "before/main": 0.21961686901071747,
+            "clauses/after": 2.0670460858422675,
+            "clauses/main": 0.2201623321319003
+          },
+          "reference_ratios": {
+            "after": 1.0497144406276608,
+            "before": 2.0343082491342397,
+            "clauses": 2.045730600183948,
+            "main": 9.694664263891475
+          }
+        }
+      ],
+      "reference": {
+        "after": {
+          "samples": 3,
+          "minimum_ns": 19733456,
+          "median_ns": 20970245,
+          "maximum_ns": 24316588,
+          "grounding_ns": 0,
+          "solving_ns": 16000000
+        },
+        "before": {
+          "samples": 3,
+          "minimum_ns": 20918908,
+          "median_ns": 22311602,
+          "maximum_ns": 22322192,
+          "grounding_ns": 0,
+          "solving_ns": 18000000
+        },
+        "clauses": {
+          "samples": 3,
+          "minimum_ns": 19542426,
+          "median_ns": 22242131,
+          "maximum_ns": 24321578,
+          "grounding_ns": 0,
+          "solving_ns": 18000000
+        },
+        "main": {
+          "samples": 3,
+          "minimum_ns": 21223448,
+          "median_ns": 21318127,
+          "maximum_ns": 22716049,
+          "grounding_ns": 0,
+          "solving_ns": 17000000
+        }
+      }
+    },
+    {
+      "entry": "generated/ties-50.lp",
+      "label": "ties-50",
+      "profiles": [
+        {
+          "profile": {
+            "backend": "cpu",
+            "batch_size": 64,
+            "completion_workers": 4,
+            "grounder": "auto",
+            "max_completion_scratch_bytes": 268435456,
+            "oracle": "auto",
+            "workers": 4
+          },
+          "reports": {
+            "after": {
+              "samples": 3,
+              "minimum_ns": 20417795,
+              "median_ns": 21102594,
+              "maximum_ns": 23217378,
+              "driver_median_ns": 17140463,
+              "published_models": 1225,
+              "candidates_examined": 1225,
+              "search_work": 1101025,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 1031112
+                },
+                "candidate_generation": {
+                  "median_ns": 6952014
+                },
+                "candidate_setup": {
+                  "median_ns": 38172
+                },
+                "certificate_setup": {
+                  "median_ns": 38122
+                },
+                "execution_setup": {
+                  "median_ns": 9578
+                },
+                "objective_feedback": {
+                  "median_ns": 43312
+                },
+                "objective_scoring_retention": {
+                  "median_ns": 535300
+                },
+                "observation_output": {
+                  "median_ns": 6787813
+                }
+              },
+              "breakdown": {
+                "grounding": 344219,
+                "proposal": 6990978,
+                "membership": 38122
+              }
+            },
+            "before": {
+              "samples": 3,
+              "minimum_ns": 25967096,
+              "median_ns": 26345390,
+              "maximum_ns": 26660122,
+              "driver_median_ns": 22212666,
+              "published_models": 1225,
+              "candidates_examined": 1225,
+              "search_work": 4720400,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 977301
+                },
+                "candidate_generation": {
+                  "median_ns": 6986810
+                },
+                "candidate_setup": {
+                  "median_ns": 70693
+                },
+                "certificate_setup": {
+                  "median_ns": 16531
+                },
+                "certified_membership": {
+                  "median_ns": 2379680
+                },
+                "execution_setup": {
+                  "median_ns": 131818
+                },
+                "objective_feedback": {
+                  "median_ns": 89018
+                },
+                "objective_scoring_retention": {
+                  "median_ns": 426522
+                },
+                "observation_output": {
+                  "median_ns": 6995300
+                },
+                "original_validation": {
+                  "median_ns": 1843738
+                }
+              },
+              "breakdown": {
+                "grounding": 347955,
+                "proposal": 7056802,
+                "membership": 4214021
+              }
+            },
+            "clauses": {
+              "samples": 3,
+              "minimum_ns": 25614052,
+              "median_ns": 27143773,
+              "maximum_ns": 27364789,
+              "driver_median_ns": 23191589,
+              "published_models": 1225,
+              "candidates_examined": 1225,
+              "search_work": 4720400,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 1042003
+                },
+                "candidate_generation": {
+                  "median_ns": 6810170
+                },
+                "candidate_setup": {
+                  "median_ns": 65724
+                },
+                "certificate_setup": {
+                  "median_ns": 17753
+                },
+                "certified_membership": {
+                  "median_ns": 2585959
+                },
+                "execution_setup": {
+                  "median_ns": 135385
+                },
+                "objective_feedback": {
+                  "median_ns": 81593
+                },
+                "objective_scoring_retention": {
+                  "median_ns": 420956
+                },
+                "observation_output": {
+                  "median_ns": 7152541
+                },
+                "original_validation": {
+                  "median_ns": 2466278
+                }
+              },
+              "breakdown": {
+                "grounding": 344699,
+                "proposal": 6881014,
+                "membership": 5036483
+              }
+            },
+            "main": {
+              "samples": 3,
+              "minimum_ns": 173836393,
+              "median_ns": 181468329,
+              "maximum_ns": 184589699,
+              "driver_median_ns": 176997848,
+              "published_models": 1225,
+              "candidates_examined": 1225,
+              "search_work": 8053295,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 1097588
+                },
+                "candidate_generation": {
+                  "median_ns": 13538581
+                },
+                "candidate_setup": {
+                  "median_ns": 47810
+                },
+                "certificate_setup": {
+                  "median_ns": 25878
+                },
+                "certified_membership": {
+                  "median_ns": 2559434
+                },
+                "execution_setup": {
+                  "median_ns": 129074
+                },
+                "objective_feedback": {
+                  "median_ns": 83558
+                },
+                "objective_scoring_retention": {
+                  "median_ns": 551468
+                },
+                "observation_output": {
+                  "median_ns": 155490424
+                },
+                "original_validation": {
+                  "median_ns": 2462660
+                }
+              },
+              "breakdown": {
+                "grounding": 422436,
+                "proposal": 13586611,
+                "membership": 5039807
+              }
+            }
+          },
+          "ratios": {
+            "after/before": 0.8009975938864446,
+            "before/main": 0.1451789970469172,
+            "clauses/after": 1.2862766065631552,
+            "clauses/main": 0.1495785691617847
+          },
+          "reference_ratios": {
+            "after": 1.1732021094805483,
+            "before": 1.3905374024216897,
+            "clauses": 1.4429243277034858,
+            "main": 9.053482040568973
+          }
+        }
+      ],
+      "reference": {
+        "after": {
+          "samples": 3,
+          "minimum_ns": 17174025,
+          "median_ns": 17987177,
+          "maximum_ns": 18534769,
+          "grounding_ns": 1000000,
+          "solving_ns": 13000000
+        },
+        "before": {
+          "samples": 3,
+          "minimum_ns": 17426281,
+          "median_ns": 18946193,
+          "maximum_ns": 19517199,
+          "grounding_ns": 0,
+          "solving_ns": 14000000
+        },
+        "clauses": {
+          "samples": 3,
+          "minimum_ns": 18721229,
+          "median_ns": 18811640,
+          "maximum_ns": 20007553,
+          "grounding_ns": 1000000,
+          "solving_ns": 14000000
+        },
+        "main": {
+          "samples": 3,
+          "minimum_ns": 19142869,
+          "median_ns": 20044037,
+          "maximum_ns": 21440497,
+          "grounding_ns": 1000000,
+          "solving_ns": 14000000
+        }
+      }
+    },
+    {
+      "entry": "generated/transitive-path-100.lp",
+      "label": "transitive-path-100",
+      "profiles": [
+        {
+          "profile": {
+            "backend": "cpu",
+            "batch_size": 64,
+            "completion_workers": 4,
+            "grounder": "auto",
+            "max_completion_scratch_bytes": 268435456,
+            "oracle": "auto",
+            "workers": 4
+          },
+          "reports": {
+            "after": {
+              "samples": 3,
+              "minimum_ns": 13400960,
+              "median_ns": 15662699,
+              "maximum_ns": 17156402,
+              "driver_median_ns": 12673860,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "search_work": 1197772,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 1010103
+                },
+                "candidate_generation": {
+                  "median_ns": 3447
+                },
+                "candidate_setup": {
+                  "median_ns": 311
+                },
+                "closure_membership": {
+                  "median_ns": 8451357
+                },
+                "execution_setup": {
+                  "median_ns": 111199
+                },
+                "observation_output": {
+                  "median_ns": 2703072
+                }
+              },
+              "breakdown": {
+                "proposal": 3758,
+                "membership": 8451357
+              }
+            },
+            "before": {
+              "samples": 3,
+              "minimum_ns": 14491734,
+              "median_ns": 16741361,
+              "maximum_ns": 18349940,
+              "driver_median_ns": 13903767,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "search_work": 1197772,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 1409796
+                },
+                "candidate_generation": {
+                  "median_ns": 2835
+                },
+                "candidate_setup": {
+                  "median_ns": 281
+                },
+                "closure_membership": {
+                  "median_ns": 7898316
+                },
+                "execution_setup": {
+                  "median_ns": 123292
+                },
+                "observation_output": {
+                  "median_ns": 3716259
+                }
+              },
+              "breakdown": {
+                "proposal": 3164,
+                "membership": 7898316
+              }
+            },
+            "clauses": {
+              "samples": 3,
+              "minimum_ns": 15814095,
+              "median_ns": 15972463,
+              "maximum_ns": 17169508,
+              "driver_median_ns": 12232900,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "search_work": 1197772,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 1259301
+                },
+                "candidate_generation": {
+                  "median_ns": 6623
+                },
+                "candidate_setup": {
+                  "median_ns": 180
+                },
+                "closure_membership": {
+                  "median_ns": 7432739
+                },
+                "execution_setup": {
+                  "median_ns": 186862
+                },
+                "observation_output": {
+                  "median_ns": 2979181
+                }
+              },
+              "breakdown": {
+                "proposal": 7023,
+                "membership": 7432739
+              }
+            },
+            "main": {
+              "samples": 3,
+              "minimum_ns": 32087202,
+              "median_ns": 33480597,
+              "maximum_ns": 35634093,
+              "driver_median_ns": 30636129,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 989915
+                },
+                "candidate_generation": {
+                  "median_ns": 3316
+                },
+                "candidate_setup": {
+                  "median_ns": 261
+                },
+                "closure_membership": {
+                  "median_ns": 25369909
+                },
+                "execution_setup": {
+                  "median_ns": 128021
+                },
+                "observation_output": {
+                  "median_ns": 3747148
+                }
+              },
+              "breakdown": {
+                "proposal": 3577,
+                "membership": 25369909
+              }
+            }
+          },
+          "ratios": {
+            "after/before": 0.9355690376666509,
+            "before/main": 0.5000317347985163,
+            "clauses/after": 1.0197771788885173,
+            "clauses/main": 0.4770662542247977
+          },
+          "reference_ratios": {
+            "after": 1.9438622205481466,
+            "before": 1.684001994082532,
+            "clauses": 1.760340238820505,
+            "main": 3.7649609830826045
+          }
+        }
+      ],
+      "reference": {
+        "after": {
+          "samples": 3,
+          "minimum_ns": 7815179,
+          "median_ns": 8057515,
+          "maximum_ns": 9948738,
+          "grounding_ns": 4000000,
+          "solving_ns": 0
+        },
+        "before": {
+          "samples": 3,
+          "minimum_ns": 8907286,
+          "median_ns": 9941414,
+          "maximum_ns": 11118931,
+          "grounding_ns": 3000000,
+          "solving_ns": 1000000
+        },
+        "clauses": {
+          "samples": 3,
+          "minimum_ns": 7883568,
+          "median_ns": 9073509,
+          "maximum_ns": 9146507,
+          "grounding_ns": 4000000,
+          "solving_ns": 0
+        },
+        "main": {
+          "samples": 3,
+          "minimum_ns": 8882231,
+          "median_ns": 8892681,
+          "maximum_ns": 10295714,
+          "grounding_ns": 4000000,
+          "solving_ns": 0
+        }
+      }
+    },
+    {
+      "entry": "generated/transitive-path-200.lp",
+      "label": "transitive-path-200",
+      "profiles": [
+        {
+          "profile": {
+            "backend": "cpu",
+            "batch_size": 64,
+            "completion_workers": 4,
+            "grounder": "auto",
+            "max_completion_scratch_bytes": 268435456,
+            "oracle": "auto",
+            "workers": 4
+          },
+          "reports": {
+            "after": {
+              "samples": 3,
+              "minimum_ns": 46114182,
+              "median_ns": 46566093,
+              "maximum_ns": 50884447,
+              "driver_median_ns": 42406629,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "search_work": 5378096,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 1947609
+                },
+                "candidate_generation": {
+                  "median_ns": 11532
+                },
+                "candidate_setup": {
+                  "median_ns": 201
+                },
+                "closure_membership": {
+                  "median_ns": 29031638
+                },
+                "execution_setup": {
+                  "median_ns": 135445
+                },
+                "observation_output": {
+                  "median_ns": 9605511
+                }
+              },
+              "breakdown": {
+                "proposal": 11733,
+                "membership": 29031638
+              }
+            },
+            "before": {
+              "samples": 3,
+              "minimum_ns": 44383122,
+              "median_ns": 46367388,
+              "maximum_ns": 69624682,
+              "driver_median_ns": 43446928,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "search_work": 5378096,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 1892735
+                },
+                "candidate_generation": {
+                  "median_ns": 9969
+                },
+                "candidate_setup": {
+                  "median_ns": 170
+                },
+                "closure_membership": {
+                  "median_ns": 29638361
+                },
+                "execution_setup": {
+                  "median_ns": 114565
+                },
+                "observation_output": {
+                  "median_ns": 9034195
+                }
+              },
+              "breakdown": {
+                "proposal": 10180,
+                "membership": 29638361
+              }
+            },
+            "clauses": {
+              "samples": 3,
+              "minimum_ns": 46009776,
+              "median_ns": 48136270,
+              "maximum_ns": 49293880,
+              "driver_median_ns": 43894302,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "search_work": 5378096,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 1902272
+                },
+                "candidate_generation": {
+                  "median_ns": 8215
+                },
+                "candidate_setup": {
+                  "median_ns": 180
+                },
+                "closure_membership": {
+                  "median_ns": 30232079
+                },
+                "execution_setup": {
+                  "median_ns": 120497
+                },
+                "observation_output": {
+                  "median_ns": 10050269
+                }
+              },
+              "breakdown": {
+                "proposal": 8395,
+                "membership": 30232079
+              }
+            },
+            "main": {
+              "samples": 3,
+              "minimum_ns": 185893735,
+              "median_ns": 191380290,
+              "maximum_ns": 193305506,
+              "driver_median_ns": 188111643,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 1924966
+                },
+                "candidate_generation": {
+                  "median_ns": 6462
+                },
+                "candidate_setup": {
+                  "median_ns": 210
+                },
+                "closure_membership": {
+                  "median_ns": 173379833
+                },
+                "execution_setup": {
+                  "median_ns": 121659
+                },
+                "observation_output": {
+                  "median_ns": 10520597
+                }
+              },
+              "breakdown": {
+                "proposal": 6622,
+                "membership": 173379833
+              }
+            }
+          },
+          "ratios": {
+            "after/before": 1.004285447349331,
+            "before/main": 0.24227880519984582,
+            "clauses/after": 1.0337193201929138,
+            "clauses/main": 0.25152156473375603
+          },
+          "reference_ratios": {
+            "after": 2.099923765965799,
+            "before": 1.9473385140411563,
+            "clauses": 1.9106205631885307,
+            "main": 8.457948001862531
+          }
+        }
+      ],
+      "reference": {
+        "after": {
+          "samples": 3,
+          "minimum_ns": 21191021,
+          "median_ns": 22175135,
+          "maximum_ns": 25245468,
+          "grounding_ns": 12000000,
+          "solving_ns": 4000000
+        },
+        "before": {
+          "samples": 3,
+          "minimum_ns": 22324416,
+          "median_ns": 23810646,
+          "maximum_ns": 24885960,
+          "grounding_ns": 14000000,
+          "solving_ns": 4000000
+        },
+        "clauses": {
+          "samples": 3,
+          "minimum_ns": 23229020,
+          "median_ns": 25194050,
+          "maximum_ns": 26372370,
+          "grounding_ns": 15000000,
+          "solving_ns": 5000000
+        },
+        "main": {
+          "samples": 3,
+          "minimum_ns": 21645303,
+          "median_ns": 22627272,
+          "maximum_ns": 25081416,
+          "grounding_ns": 13000000,
+          "solving_ns": 4000000
+        }
+      }
+    },
+    {
+      "entry": "generated/transitive-dense-40.lp",
+      "label": "transitive-dense-40",
+      "profiles": [
+        {
+          "profile": {
+            "backend": "cpu",
+            "batch_size": 64,
+            "completion_workers": 4,
+            "grounder": "auto",
+            "max_completion_scratch_bytes": 268435456,
+            "oracle": "auto",
+            "workers": 4
+          },
+          "reports": {
+            "after": {
+              "samples": 3,
+              "minimum_ns": 28251359,
+              "median_ns": 30373837,
+              "maximum_ns": 32267042,
+              "driver_median_ns": 26265048,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "search_work": 770070,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 16976613
+                },
+                "candidate_generation": {
+                  "median_ns": 2404378
+                },
+                "candidate_setup": {
+                  "median_ns": 2574328
+                },
+                "certificate_setup": {
+                  "median_ns": 1205551
+                },
+                "execution_setup": {
+                  "median_ns": 10099
+                },
+                "observation_output": {
+                  "median_ns": 1455712
+                }
+              },
+              "breakdown": {
+                "grounding": 15877904,
+                "proposal": 4966925,
+                "membership": 1205551
+              }
+            },
+            "before": {
+              "samples": 3,
+              "minimum_ns": 32526842,
+              "median_ns": 34164626,
+              "maximum_ns": 34225401,
+              "driver_median_ns": 30061939,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "search_work": 2173586,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 16476663
+                },
+                "candidate_generation": {
+                  "median_ns": 2577004
+                },
+                "candidate_setup": {
+                  "median_ns": 6537403
+                },
+                "certificate_setup": {
+                  "median_ns": 857344
+                },
+                "certified_membership": {
+                  "median_ns": 74891
+                },
+                "execution_setup": {
+                  "median_ns": 133441
+                },
+                "observation_output": {
+                  "median_ns": 2076872
+                },
+                "original_validation": {
+                  "median_ns": 71525
+                }
+              },
+              "breakdown": {
+                "grounding": 15823172,
+                "proposal": 9129445,
+                "membership": 1003760
+              }
+            },
+            "clauses": {
+              "samples": 3,
+              "minimum_ns": 32654852,
+              "median_ns": 34463899,
+              "maximum_ns": 34771780,
+              "driver_median_ns": 30371813,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "search_work": 2173586,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 17286538
+                },
+                "candidate_generation": {
+                  "median_ns": 2548620
+                },
+                "candidate_setup": {
+                  "median_ns": 6545378
+                },
+                "certificate_setup": {
+                  "median_ns": 856934
+                },
+                "certified_membership": {
+                  "median_ns": 94559
+                },
+                "execution_setup": {
+                  "median_ns": 131227
+                },
+                "observation_output": {
+                  "median_ns": 790579
+                },
+                "original_validation": {
+                  "median_ns": 91733
+                }
+              },
+              "breakdown": {
+                "grounding": 16572884,
+                "proposal": 9321366,
+                "membership": 1041873
+              }
+            },
+            "main": {
+              "samples": 3,
+              "minimum_ns": 39937770,
+              "median_ns": 40228678,
+              "maximum_ns": 41243569,
+              "driver_median_ns": 36460880,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "search_work": 2345227,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 23241479
+                },
+                "candidate_generation": {
+                  "median_ns": 2997316
+                },
+                "candidate_setup": {
+                  "median_ns": 6896240
+                },
+                "certificate_setup": {
+                  "median_ns": 1073963
+                },
+                "certified_membership": {
+                  "median_ns": 88106
+                },
+                "execution_setup": {
+                  "median_ns": 143490
+                },
+                "observation_output": {
+                  "median_ns": 835624
+                },
+                "original_validation": {
+                  "median_ns": 89338
+                }
+              },
+              "breakdown": {
+                "grounding": 22564164,
+                "proposal": 9893556,
+                "membership": 1247500
+              }
+            }
+          },
+          "ratios": {
+            "after/before": 0.8890434509659201,
+            "before/main": 0.8492604703540096,
+            "clauses/after": 1.1346574026850806,
+            "clauses/main": 0.8566997652769002
+          },
+          "reference_ratios": {
+            "after": 4.543294580849882,
+            "before": 5.113851001721051,
+            "clauses": 5.169872294899596,
+            "main": 5.9929616512336255
+          }
+        }
+      ],
+      "reference": {
+        "after": {
+          "samples": 3,
+          "minimum_ns": 5593776,
+          "median_ns": 6685421,
+          "maximum_ns": 6710098,
+          "grounding_ns": 2000000,
+          "solving_ns": 0
+        },
+        "before": {
+          "samples": 3,
+          "minimum_ns": 6624777,
+          "median_ns": 6680802,
+          "maximum_ns": 6939711,
+          "grounding_ns": 2000000,
+          "solving_ns": 0
+        },
+        "clauses": {
+          "samples": 3,
+          "minimum_ns": 6659142,
+          "median_ns": 6666296,
+          "maximum_ns": 6696031,
+          "grounding_ns": 2000000,
+          "solving_ns": 0
+        },
+        "main": {
+          "samples": 3,
+          "minimum_ns": 6678290,
+          "median_ns": 6712654,
+          "maximum_ns": 6784269,
+          "grounding_ns": 2000000,
+          "solving_ns": 0
+        }
+      }
+    },
+    {
+      "entry": "generated/chain-1000.lp",
+      "label": "chain-1000",
+      "profiles": [
+        {
+          "profile": {
+            "backend": "cpu",
+            "batch_size": 64,
+            "completion_workers": 4,
+            "grounder": "auto",
+            "max_completion_scratch_bytes": 268435456,
+            "oracle": "auto",
+            "workers": 4
+          },
+          "reports": {
+            "after": {
+              "samples": 3,
+              "minimum_ns": 19690566,
+              "median_ns": 21829113,
+              "maximum_ns": 21839553,
+              "driver_median_ns": 16844726,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "search_work": 475452,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 9957514
+                },
+                "candidate_generation": {
+                  "median_ns": 7354
+                },
+                "candidate_setup": {
+                  "median_ns": 221
+                },
+                "closure_membership": {
+                  "median_ns": 3662919
+                },
+                "execution_setup": {
+                  "median_ns": 133121
+                },
+                "observation_output": {
+                  "median_ns": 1033897
+                }
+              },
+              "breakdown": {
+                "proposal": 7575,
+                "membership": 3662919
+              }
+            },
+            "before": {
+              "samples": 3,
+              "minimum_ns": 18761336,
+              "median_ns": 22528330,
+              "maximum_ns": 22762561,
+              "driver_median_ns": 18133153,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "search_work": 475452,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 10207535
+                },
+                "candidate_generation": {
+                  "median_ns": 11411
+                },
+                "candidate_setup": {
+                  "median_ns": 161
+                },
+                "closure_membership": {
+                  "median_ns": 3643562
+                },
+                "execution_setup": {
+                  "median_ns": 129855
+                },
+                "observation_output": {
+                  "median_ns": 1913454
+                }
+              },
+              "breakdown": {
+                "proposal": 11631,
+                "membership": 3643562
+              }
+            },
+            "clauses": {
+              "samples": 3,
+              "minimum_ns": 19999007,
+              "median_ns": 20829260,
+              "maximum_ns": 21592287,
+              "driver_median_ns": 15473423,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "search_work": 475452,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 10752822
+                },
+                "candidate_generation": {
+                  "median_ns": 5530
+                },
+                "candidate_setup": {
+                  "median_ns": 251
+                },
+                "closure_membership": {
+                  "median_ns": 3166364
+                },
+                "execution_setup": {
+                  "median_ns": 156435
+                },
+                "observation_output": {
+                  "median_ns": 1281313
+                }
+              },
+              "breakdown": {
+                "proposal": 5761,
+                "membership": 3166364
+              }
+            },
+            "main": {
+              "samples": 3,
+              "minimum_ns": 101140647,
+              "median_ns": 101926167,
+              "maximum_ns": 103632812,
+              "driver_median_ns": 97879314,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 10144159
+                },
+                "candidate_generation": {
+                  "median_ns": 5099
+                },
+                "candidate_setup": {
+                  "median_ns": 191
+                },
+                "closure_membership": {
+                  "median_ns": 85097076
+                },
+                "execution_setup": {
+                  "median_ns": 134704
+                },
+                "observation_output": {
+                  "median_ns": 1918915
+                }
+              },
+              "breakdown": {
+                "proposal": 5460,
+                "membership": 85097076
+              }
+            }
+          },
+          "ratios": {
+            "after/before": 0.9689627682122909,
+            "before/main": 0.221025970691118,
+            "clauses/after": 0.9541963523666765,
+            "clauses/main": 0.2043563553213965
+          },
+          "reference_ratios": {
+            "after": 2.8251048003755224,
+            "before": 2.932238532444442,
+            "clauses": 3.1379093098433217,
+            "main": 13.020090884750553
+          }
+        }
+      ],
+      "reference": {
+        "after": {
+          "samples": 3,
+          "minimum_ns": 6576827,
+          "median_ns": 7726833,
+          "maximum_ns": 7741681,
+          "grounding_ns": 3000000,
+          "solving_ns": 0
+        },
+        "before": {
+          "samples": 3,
+          "minimum_ns": 6840032,
+          "median_ns": 7682980,
+          "maximum_ns": 7718147,
+          "grounding_ns": 3000000,
+          "solving_ns": 0
+        },
+        "clauses": {
+          "samples": 3,
+          "minimum_ns": 6515732,
+          "median_ns": 6637942,
+          "maximum_ns": 8930570,
+          "grounding_ns": 3000000,
+          "solving_ns": 0
+        },
+        "main": {
+          "samples": 3,
+          "minimum_ns": 7808709,
+          "median_ns": 7828376,
+          "maximum_ns": 7975553,
+          "grounding_ns": 4000000,
+          "solving_ns": 0
+        }
+      }
+    },
+    {
+      "entry": "generated/chain-2000.lp",
+      "label": "chain-2000",
+      "profiles": [
+        {
+          "profile": {
+            "backend": "cpu",
+            "batch_size": 64,
+            "completion_workers": 4,
+            "grounder": "auto",
+            "max_completion_scratch_bytes": 268435456,
+            "oracle": "auto",
+            "workers": 4
+          },
+          "reports": {
+            "after": {
+              "samples": 3,
+              "minimum_ns": 34722287,
+              "median_ns": 38043672,
+              "maximum_ns": 38343817,
+              "driver_median_ns": 31295492,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "search_work": 1025311,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 20466837
+                },
+                "candidate_generation": {
+                  "median_ns": 13546
+                },
+                "candidate_setup": {
+                  "median_ns": 201
+                },
+                "closure_membership": {
+                  "median_ns": 6187263
+                },
+                "execution_setup": {
+                  "median_ns": 146035
+                },
+                "observation_output": {
+                  "median_ns": 2080319
+                }
+              },
+              "breakdown": {
+                "proposal": 13726,
+                "membership": 6187263
+              }
+            },
+            "before": {
+              "samples": 3,
+              "minimum_ns": 35625918,
+              "median_ns": 36670606,
+              "maximum_ns": 36726592,
+              "driver_median_ns": 30007727,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "search_work": 1025311,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 20113421
+                },
+                "candidate_generation": {
+                  "median_ns": 13125
+                },
+                "candidate_setup": {
+                  "median_ns": 190
+                },
+                "closure_membership": {
+                  "median_ns": 5993018
+                },
+                "execution_setup": {
+                  "median_ns": 137118
+                },
+                "observation_output": {
+                  "median_ns": 2579399
+                }
+              },
+              "breakdown": {
+                "proposal": 13335,
+                "membership": 5993018
+              }
+            },
+            "clauses": {
+              "samples": 3,
+              "minimum_ns": 34597662,
+              "median_ns": 37524975,
+              "maximum_ns": 38443735,
+              "driver_median_ns": 31072192,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "search_work": 1025311,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 21927388
+                },
+                "candidate_generation": {
+                  "median_ns": 10219
+                },
+                "candidate_setup": {
+                  "median_ns": 170
+                },
+                "closure_membership": {
+                  "median_ns": 6045496
+                },
+                "execution_setup": {
+                  "median_ns": 145464
+                },
+                "observation_output": {
+                  "median_ns": 2044261
+                }
+              },
+              "breakdown": {
+                "proposal": 10400,
+                "membership": 6045496
+              }
+            },
+            "main": {
+              "samples": 3,
+              "minimum_ns": 361241104,
+              "median_ns": 365260726,
+              "maximum_ns": 383320184,
+              "driver_median_ns": 359152920,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 21695748
+                },
+                "candidate_generation": {
+                  "median_ns": 10661
+                },
+                "candidate_setup": {
+                  "median_ns": 241
+                },
+                "closure_membership": {
+                  "median_ns": 334427856
+                },
+                "execution_setup": {
+                  "median_ns": 158188
+                },
+                "observation_output": {
+                  "median_ns": 2187370
+                }
+              },
+              "breakdown": {
+                "proposal": 10902,
+                "membership": 334427856
+              }
+            }
+          },
+          "ratios": {
+            "after/before": 1.0374432317807891,
+            "before/main": 0.10039569926277812,
+            "clauses/after": 0.9863657482905436,
+            "clauses/main": 0.10273476541247416
+          },
+          "reference_ratios": {
+            "after": 3.4952442989560297,
+            "before": 3.692805733733872,
+            "clauses": 3.3624894140877335,
+            "main": 33.21632188939985
+          }
+        }
+      ],
+      "reference": {
+        "after": {
+          "samples": 3,
+          "minimum_ns": 9937246,
+          "median_ns": 10884410,
+          "maximum_ns": 11267982,
+          "grounding_ns": 6000000,
+          "solving_ns": 0
+        },
+        "before": {
+          "samples": 3,
+          "minimum_ns": 9926075,
+          "median_ns": 9930283,
+          "maximum_ns": 12078238,
+          "grounding_ns": 6000000,
+          "solving_ns": 0
+        },
+        "clauses": {
+          "samples": 3,
+          "minimum_ns": 9963005,
+          "median_ns": 11159879,
+          "maximum_ns": 11185026,
+          "grounding_ns": 6000000,
+          "solving_ns": 0
+        },
+        "main": {
+          "samples": 3,
+          "minimum_ns": 10991434,
+          "median_ns": 10996423,
+          "maximum_ns": 12155417,
+          "grounding_ns": 6000000,
+          "solving_ns": 0
+        }
+      }
+    },
+    {
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "label": "chain-arithmetic-1000",
+      "profiles": [
+        {
+          "profile": {
+            "backend": "cpu",
+            "batch_size": 64,
+            "completion_workers": 4,
+            "grounder": "auto",
+            "max_completion_scratch_bytes": 268435456,
+            "oracle": "auto",
+            "workers": 4
+          },
+          "reports": {
+            "after": {
+              "samples": 3,
+              "minimum_ns": 9798725,
+              "median_ns": 9941544,
+              "maximum_ns": 11482626,
+              "driver_median_ns": 6476067,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "search_work": 82123,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 4367426
+                },
+                "candidate_generation": {
+                  "median_ns": 732480
+                },
+                "candidate_setup": {
+                  "median_ns": 187053
+                },
+                "certificate_setup": {
+                  "median_ns": 123062
+                },
+                "execution_setup": {
+                  "median_ns": 9167
+                },
+                "observation_output": {
+                  "median_ns": 543694
+                }
+              },
+              "breakdown": {
+                "grounding": 3694689,
+                "proposal": 918531,
+                "membership": 123062
+              }
+            },
+            "before": {
+              "samples": 3,
+              "minimum_ns": 9269338,
+              "median_ns": 9841466,
+              "maximum_ns": 10963720,
+              "driver_median_ns": 5975194,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "search_work": 193171,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 4066509
+                },
+                "candidate_generation": {
+                  "median_ns": 216206
+                },
+                "candidate_setup": {
+                  "median_ns": 370007
+                },
+                "certificate_setup": {
+                  "median_ns": 92625
+                },
+                "certified_membership": {
+                  "median_ns": 9959
+                },
+                "execution_setup": {
+                  "median_ns": 118574
+                },
+                "observation_output": {
+                  "median_ns": 1080806
+                },
+                "original_validation": {
+                  "median_ns": 9048
+                }
+              },
+              "breakdown": {
+                "grounding": 3695830,
+                "proposal": 584501,
+                "membership": 111740
+              }
+            },
+            "clauses": {
+              "samples": 3,
+              "minimum_ns": 10249575,
+              "median_ns": 10403023,
+              "maximum_ns": 10746169,
+              "driver_median_ns": 6154812,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "search_work": 193171,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 4095374
+                },
+                "candidate_generation": {
+                  "median_ns": 234261
+                },
+                "candidate_setup": {
+                  "median_ns": 362543
+                },
+                "certificate_setup": {
+                  "median_ns": 91652
+                },
+                "certified_membership": {
+                  "median_ns": 12564
+                },
+                "execution_setup": {
+                  "median_ns": 132048
+                },
+                "observation_output": {
+                  "median_ns": 817329
+                },
+                "original_validation": {
+                  "median_ns": 9858
+                }
+              },
+              "breakdown": {
+                "grounding": 3680642,
+                "proposal": 595902,
+                "membership": 117280
+              }
+            },
+            "main": {
+              "samples": 3,
+              "minimum_ns": 10010436,
+              "median_ns": 10965586,
+              "maximum_ns": 13847405,
+              "driver_median_ns": 7134920,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "search_work": 205173,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 4482864
+                },
+                "candidate_generation": {
+                  "median_ns": 192713
+                },
+                "candidate_setup": {
+                  "median_ns": 453274
+                },
+                "certificate_setup": {
+                  "median_ns": 153098
+                },
+                "certified_membership": {
+                  "median_ns": 12183
+                },
+                "execution_setup": {
+                  "median_ns": 188645
+                },
+                "observation_output": {
+                  "median_ns": 1082939
+                },
+                "original_validation": {
+                  "median_ns": 10931
+                }
+              },
+              "breakdown": {
+                "grounding": 4047414,
+                "proposal": 650595,
+                "membership": 176212
+              }
+            }
+          },
+          "ratios": {
+            "after/before": 1.0101690134376322,
+            "before/main": 0.897486554754119,
+            "clauses/after": 1.0464192483582027,
+            "clauses/main": 0.948697406595507
+          },
+          "reference_ratios": {
+            "after": 1.7689501381221613,
+            "before": 2.1846262514778436,
+            "clauses": 1.8107865407143218,
+            "main": 1.9796789101714312
+          }
+        }
+      ],
+      "reference": {
+        "after": {
+          "samples": 3,
+          "minimum_ns": 4510234,
+          "median_ns": 5620025,
+          "maximum_ns": 5752825,
+          "grounding_ns": 1000000,
+          "solving_ns": 0
+        },
+        "before": {
+          "samples": 3,
+          "minimum_ns": 4480027,
+          "median_ns": 4504874,
+          "maximum_ns": 6816068,
+          "grounding_ns": 1000000,
+          "solving_ns": 0
+        },
+        "clauses": {
+          "samples": 3,
+          "minimum_ns": 5528543,
+          "median_ns": 5745030,
+          "maximum_ns": 5781439,
+          "grounding_ns": 1000000,
+          "solving_ns": 0
+        },
+        "main": {
+          "samples": 3,
+          "minimum_ns": 4514033,
+          "median_ns": 5539073,
+          "maximum_ns": 5611571,
+          "grounding_ns": 1000000,
+          "solving_ns": 0
+        }
+      }
+    },
+    {
+      "entry": "generated/stratified-16.lp",
+      "label": "stratified-16",
+      "profiles": [
+        {
+          "profile": {
+            "backend": "cpu",
+            "batch_size": 64,
+            "completion_workers": 4,
+            "grounder": "auto",
+            "max_completion_scratch_bytes": 268435456,
+            "oracle": "auto",
+            "workers": 4
+          },
+          "reports": {
+            "after": {
+              "samples": 3,
+              "minimum_ns": 4486841,
+              "median_ns": 4535913,
+              "maximum_ns": 5668316,
+              "driver_median_ns": 1563053,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "search_work": 9133,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 563412
+                },
+                "candidate_generation": {
+                  "median_ns": 476437
+                },
+                "candidate_setup": {
+                  "median_ns": 181
+                },
+                "closure_membership": {
+                  "median_ns": 313491
+                },
+                "execution_setup": {
+                  "median_ns": 107452
+                },
+                "observation_output": {
+                  "median_ns": 31209
+                }
+              },
+              "breakdown": {
+                "proposal": 476618,
+                "membership": 313491
+              }
+            },
+            "before": {
+              "samples": 3,
+              "minimum_ns": 4458708,
+              "median_ns": 4494655,
+              "maximum_ns": 4496289,
+              "driver_median_ns": 1504985,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "search_work": 9133,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 523736
+                },
+                "candidate_generation": {
+                  "median_ns": 489922
+                },
+                "candidate_setup": {
+                  "median_ns": 251
+                },
+                "closure_membership": {
+                  "median_ns": 276190
+                },
+                "execution_setup": {
+                  "median_ns": 99057
+                },
+                "observation_output": {
+                  "median_ns": 27532
+                }
+              },
+              "breakdown": {
+                "proposal": 490103,
+                "membership": 276190
+              }
+            },
+            "clauses": {
+              "samples": 3,
+              "minimum_ns": 4531204,
+              "median_ns": 4545321,
+              "maximum_ns": 4561601,
+              "driver_median_ns": 1596987,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "search_work": 9133,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 543083
+                },
+                "candidate_generation": {
+                  "median_ns": 487908
+                },
+                "candidate_setup": {
+                  "median_ns": 160
+                },
+                "closure_membership": {
+                  "median_ns": 305035
+                },
+                "execution_setup": {
+                  "median_ns": 108234
+                },
+                "observation_output": {
+                  "median_ns": 28163
+                }
+              },
+              "breakdown": {
+                "proposal": 488089,
+                "membership": 305035
+              }
+            },
+            "main": {
+              "decisions": {
+                "blocked by timeout": 3
+              }
+            }
+          },
+          "ratios": {
+            "after/before": 1.009179347469383,
+            "clauses/after": 1.0020741138553584
+          },
+          "reference_ratios": {
+            "after": 1.0292658851720242,
+            "before": 1.0139198533527005,
+            "clauses": 0.9963852075414786
+          }
+        }
+      ],
+      "reference": {
+        "after": {
+          "samples": 3,
+          "minimum_ns": 3534126,
+          "median_ns": 4406940,
+          "maximum_ns": 4423612,
+          "grounding_ns": 0,
+          "solving_ns": 0
+        },
+        "before": {
+          "samples": 3,
+          "minimum_ns": 4399215,
+          "median_ns": 4432949,
+          "maximum_ns": 4629178,
+          "grounding_ns": 0,
+          "solving_ns": 0
+        },
+        "clauses": {
+          "samples": 3,
+          "minimum_ns": 3346392,
+          "median_ns": 4561811,
+          "maximum_ns": 4581779,
+          "grounding_ns": 0,
+          "solving_ns": 0
+        },
+        "main": {
+          "samples": 3,
+          "minimum_ns": 4457697,
+          "median_ns": 4612359,
+          "maximum_ns": 5653850,
+          "grounding_ns": 0,
+          "solving_ns": 0
+        }
+      }
+    },
+    {
+      "entry": "generated/producer-chain-700.lp",
+      "label": "producer-chain-700",
+      "profiles": [
+        {
+          "profile": {
+            "backend": "cpu",
+            "batch_size": 64,
+            "completion_workers": 4,
+            "grounder": "auto",
+            "max_completion_scratch_bytes": 268435456,
+            "oracle": "auto",
+            "workers": 4
+          },
+          "reports": {
+            "after": {
+              "samples": 3,
+              "minimum_ns": 25811484,
+              "median_ns": 27961714,
+              "maximum_ns": 28158354,
+              "driver_median_ns": 20575582,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "search_work": 81187,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 16984469
+                },
+                "candidate_generation": {
+                  "median_ns": 12483
+                },
+                "candidate_setup": {
+                  "median_ns": 181
+                },
+                "closure_membership": {
+                  "median_ns": 2694485
+                },
+                "execution_setup": {
+                  "median_ns": 130916
+                },
+                "observation_output": {
+                  "median_ns": 596513
+                }
+              },
+              "breakdown": {
+                "proposal": 12553,
+                "membership": 2694485
+              }
+            },
+            "before": {
+              "samples": 3,
+              "minimum_ns": 24729245,
+              "median_ns": 26914431,
+              "maximum_ns": 30176274,
+              "driver_median_ns": 22029711,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "search_work": 81187,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 16226231
+                },
+                "candidate_generation": {
+                  "median_ns": 6352
+                },
+                "candidate_setup": {
+                  "median_ns": 181
+                },
+                "closure_membership": {
+                  "median_ns": 3090100
+                },
+                "execution_setup": {
+                  "median_ns": 147748
+                },
+                "observation_output": {
+                  "median_ns": 459055
+                }
+              },
+              "breakdown": {
+                "proposal": 6532,
+                "membership": 3090100
+              }
+            },
+            "clauses": {
+              "samples": 3,
+              "minimum_ns": 26862684,
+              "median_ns": 30111012,
+              "maximum_ns": 32983281,
+              "driver_median_ns": 25276216,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "search_work": 81187,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 20197810
+                },
+                "candidate_generation": {
+                  "median_ns": 5642
+                },
+                "candidate_setup": {
+                  "median_ns": 151
+                },
+                "closure_membership": {
+                  "median_ns": 3623134
+                },
+                "execution_setup": {
+                  "median_ns": 147137
+                },
+                "observation_output": {
+                  "median_ns": 908732
+                }
+              },
+              "breakdown": {
+                "proposal": 5803,
+                "membership": 3623134
+              }
+            },
+            "main": {
+              "samples": 3,
+              "minimum_ns": 28018769,
+              "median_ns": 28989346,
+              "maximum_ns": 30206870,
+              "driver_median_ns": 22575786,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 17952577
+                },
+                "candidate_generation": {
+                  "median_ns": 10882
+                },
+                "candidate_setup": {
+                  "median_ns": 241
+                },
+                "closure_membership": {
+                  "median_ns": 3173648
+                },
+                "execution_setup": {
+                  "median_ns": 152107
+                },
+                "observation_output": {
+                  "median_ns": 1062912
+                }
+              },
+              "breakdown": {
+                "proposal": 11123,
+                "membership": 3173648
+              }
+            }
+          },
+          "ratios": {
+            "after/before": 1.0389115786991745,
+            "before/main": 0.9284249116899705,
+            "clauses/after": 1.0768657457836812,
+            "clauses/main": 1.0386923527008853
+          },
+          "reference_ratios": {
+            "after": 2.8520237213445796,
+            "before": 2.7696035272209985,
+            "clauses": 3.0389651677263663,
+            "main": 2.6508204561269717
+          }
+        }
+      ],
+      "reference": {
+        "after": {
+          "samples": 3,
+          "minimum_ns": 8685779,
+          "median_ns": 9804166,
+          "maximum_ns": 10852680,
+          "grounding_ns": 5000000,
+          "solving_ns": 0
+        },
+        "before": {
+          "samples": 3,
+          "minimum_ns": 9702584,
+          "median_ns": 9717792,
+          "maximum_ns": 9790219,
+          "grounding_ns": 5000000,
+          "solving_ns": 0
+        },
+        "clauses": {
+          "samples": 3,
+          "minimum_ns": 8702741,
+          "median_ns": 9908311,
+          "maximum_ns": 10889450,
+          "grounding_ns": 6000000,
+          "solving_ns": 0
+        },
+        "main": {
+          "samples": 3,
+          "minimum_ns": 10173334,
+          "median_ns": 10935990,
+          "maximum_ns": 10940319,
+          "grounding_ns": 5000000,
+          "solving_ns": 0
+        }
+      }
+    },
+    {
+      "entry": "standalone/n-queens/variant-01.lp",
+      "label": "n-queens/variant-01 8→10",
+      "profiles": [
+        {
+          "profile": {
+            "backend": "cpu",
+            "batch_size": 64,
+            "completion_workers": 4,
+            "grounder": "auto",
+            "max_completion_scratch_bytes": 268435456,
+            "oracle": "auto",
+            "workers": 4
+          },
+          "reports": {
+            "after": {
+              "samples": 3,
+              "minimum_ns": 33063332,
+              "median_ns": 33260012,
+              "maximum_ns": 33892093,
+              "driver_median_ns": 29386077,
+              "published_models": 724,
+              "candidates_examined": 724,
+              "search_work": 6375111,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 4952808
+                },
+                "candidate_generation": {
+                  "median_ns": 19476346
+                },
+                "candidate_setup": {
+                  "median_ns": 154431
+                },
+                "certificate_setup": {
+                  "median_ns": 146616
+                },
+                "execution_setup": {
+                  "median_ns": 9598
+                },
+                "observation_output": {
+                  "median_ns": 2297910
+                }
+              },
+              "breakdown": {
+                "grounding": 4321489,
+                "proposal": 19630777,
+                "membership": 146616
+              }
+            },
+            "before": {
+              "samples": 3,
+              "minimum_ns": 57550361,
+              "median_ns": 58947422,
+              "maximum_ns": 59959138,
+              "driver_median_ns": 55055652,
+              "published_models": 724,
+              "candidates_examined": 724,
+              "search_work": 11383348,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 4637324
+                },
+                "candidate_generation": {
+                  "median_ns": 35701633
+                },
+                "candidate_setup": {
+                  "median_ns": 318861
+                },
+                "certificate_setup": {
+                  "median_ns": 70332
+                },
+                "certified_membership": {
+                  "median_ns": 5332404
+                },
+                "execution_setup": {
+                  "median_ns": 114426
+                },
+                "observation_output": {
+                  "median_ns": 1283244
+                },
+                "original_validation": {
+                  "median_ns": 4586515
+                }
+              },
+              "breakdown": {
+                "grounding": 4043856,
+                "proposal": 36046062,
+                "membership": 9992007
+              }
+            },
+            "clauses": {
+              "samples": 3,
+              "minimum_ns": 59229574,
+              "median_ns": 59883034,
+              "maximum_ns": 60542286,
+              "driver_median_ns": 56037552,
+              "published_models": 724,
+              "candidates_examined": 724,
+              "search_work": 11383348,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 4592941
+                },
+                "candidate_generation": {
+                  "median_ns": 35951828
+                },
+                "candidate_setup": {
+                  "median_ns": 487699
+                },
+                "certificate_setup": {
+                  "median_ns": 79109
+                },
+                "certified_membership": {
+                  "median_ns": 5298672
+                },
+                "execution_setup": {
+                  "median_ns": 126588
+                },
+                "observation_output": {
+                  "median_ns": 1272918
+                },
+                "original_validation": {
+                  "median_ns": 5954627
+                }
+              },
+              "breakdown": {
+                "grounding": 3958395,
+                "proposal": 36449545,
+                "membership": 11413388
+              }
+            },
+            "main": {
+              "samples": 3,
+              "minimum_ns": 125641529,
+              "median_ns": 126746290,
+              "maximum_ns": 128609299,
+              "driver_median_ns": 122557419,
+              "published_models": 724,
+              "candidates_examined": 724,
+              "search_work": 17317112,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 28100944
+                },
+                "candidate_generation": {
+                  "median_ns": 49388203
+                },
+                "candidate_setup": {
+                  "median_ns": 380797
+                },
+                "certificate_setup": {
+                  "median_ns": 84469
+                },
+                "certified_membership": {
+                  "median_ns": 5767677
+                },
+                "execution_setup": {
+                  "median_ns": 157948
+                },
+                "observation_output": {
+                  "median_ns": 32156646
+                },
+                "original_validation": {
+                  "median_ns": 7112156
+                }
+              },
+              "breakdown": {
+                "grounding": 27422536,
+                "proposal": 49739705,
+                "membership": 13028710
+              }
+            }
+          },
+          "ratios": {
+            "after/before": 0.564231833582137,
+            "before/main": 0.46508203119791514,
+            "clauses/after": 1.800451364840157,
+            "clauses/main": 0.47246380150456474
+          },
+          "reference_ratios": {
+            "after": 1.0508868884972447,
+            "before": 1.8433824429391112,
+            "clauses": 1.8485800117996898,
+            "main": 4.057712249613818
+          }
+        }
+      ],
+      "reference": {
+        "after": {
+          "samples": 3,
+          "minimum_ns": 31119641,
+          "median_ns": 31649469,
+          "maximum_ns": 32394171,
+          "grounding_ns": 1000000,
+          "solving_ns": 25000000
+        },
+        "before": {
+          "samples": 3,
+          "minimum_ns": 30098849,
+          "median_ns": 31977858,
+          "maximum_ns": 32343035,
+          "grounding_ns": 2000000,
+          "solving_ns": 25000000
+        },
+        "clauses": {
+          "samples": 3,
+          "minimum_ns": 30679202,
+          "median_ns": 32394072,
+          "maximum_ns": 33473976,
+          "grounding_ns": 2000000,
+          "solving_ns": 26000000
+        },
+        "main": {
+          "samples": 3,
+          "minimum_ns": 31179652,
+          "median_ns": 31235899,
+          "maximum_ns": 33602206,
+          "grounding_ns": 2000000,
+          "solving_ns": 26000000
+        }
+      }
+    },
+    {
+      "entry": "standalone/n-queens/variant-01.lp",
+      "label": "n-queens/variant-01 8→11",
+      "profiles": [
+        {
+          "profile": {
+            "backend": "cpu",
+            "batch_size": 64,
+            "completion_workers": 4,
+            "grounder": "auto",
+            "max_completion_scratch_bytes": 268435456,
+            "oracle": "auto",
+            "workers": 4
+          },
+          "reports": {
+            "after": {
+              "samples": 3,
+              "minimum_ns": 121094761,
+              "median_ns": 121300058,
+              "maximum_ns": 121451783,
+              "driver_median_ns": 117429297,
+              "published_models": 2680,
+              "candidates_examined": 2680,
+              "search_work": 30943485,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 6406767
+                },
+                "candidate_generation": {
+                  "median_ns": 93867896
+                },
+                "candidate_setup": {
+                  "median_ns": 183455
+                },
+                "certificate_setup": {
+                  "median_ns": 182984
+                },
+                "execution_setup": {
+                  "median_ns": 9628
+                },
+                "observation_output": {
+                  "median_ns": 8339385
+                }
+              },
+              "breakdown": {
+                "grounding": 5741454,
+                "proposal": 94159996,
+                "membership": 182984
+              }
+            },
+            "before": {
+              "samples": 3,
+              "minimum_ns": 255879867,
+              "median_ns": 256191995,
+              "maximum_ns": 257962460,
+              "driver_median_ns": 252032291,
+              "published_models": 2680,
+              "candidates_examined": 2680,
+              "search_work": 57156138,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 6342405
+                },
+                "candidate_generation": {
+                  "median_ns": 190027323
+                },
+                "candidate_setup": {
+                  "median_ns": 472590
+                },
+                "certificate_setup": {
+                  "median_ns": 77616
+                },
+                "certified_membership": {
+                  "median_ns": 23728734
+                },
+                "execution_setup": {
+                  "median_ns": 129835
+                },
+                "observation_output": {
+                  "median_ns": 4998857
+                },
+                "original_validation": {
+                  "median_ns": 21206092
+                }
+              },
+              "breakdown": {
+                "grounding": 5703883,
+                "proposal": 190473834,
+                "membership": 45112074
+              }
+            },
+            "clauses": {
+              "samples": 3,
+              "minimum_ns": 262335166,
+              "median_ns": 264540369,
+              "maximum_ns": 266776952,
+              "driver_median_ns": 260467007,
+              "published_models": 2680,
+              "candidates_examined": 2680,
+              "search_work": 57156138,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 6434589
+                },
+                "candidate_generation": {
+                  "median_ns": 189761833
+                },
+                "candidate_setup": {
+                  "median_ns": 438156
+                },
+                "certificate_setup": {
+                  "median_ns": 79510
+                },
+                "certified_membership": {
+                  "median_ns": 24100755
+                },
+                "execution_setup": {
+                  "median_ns": 112872
+                },
+                "observation_output": {
+                  "median_ns": 4951379
+                },
+                "original_validation": {
+                  "median_ns": 27937981
+                }
+              },
+              "breakdown": {
+                "grounding": 5779295,
+                "proposal": 190199989,
+                "membership": 52866220
+              }
+            },
+            "main": {
+              "samples": 3,
+              "minimum_ns": 458909480,
+              "median_ns": 475021390,
+              "maximum_ns": 485527721,
+              "driver_median_ns": 471136462,
+              "published_models": 2680,
+              "candidates_examined": 2680,
+              "search_work": 85071370,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 38359637
+                },
+                "candidate_generation": {
+                  "median_ns": 238142297
+                },
+                "candidate_setup": {
+                  "median_ns": 465807
+                },
+                "certificate_setup": {
+                  "median_ns": 84950
+                },
+                "certified_membership": {
+                  "median_ns": 25380803
+                },
+                "execution_setup": {
+                  "median_ns": 142679
+                },
+                "observation_output": {
+                  "median_ns": 126733780
+                },
+                "original_validation": {
+                  "median_ns": 31215186
+                }
+              },
+              "breakdown": {
+                "grounding": 37684325,
+                "proposal": 238760752,
+                "membership": 56680939
+              }
+            }
+          },
+          "ratios": {
+            "after/before": 0.47347325586812344,
+            "before/main": 0.53932728166199,
+            "clauses/after": 2.180875865698267,
+            "clauses/main": 0.5569020144545491
+          },
+          "reference_ratios": {
+            "after": 0.6612225454997482,
+            "before": 1.4057638976709963,
+            "clauses": 1.4489131167641927,
+            "main": 2.560884580490143
+          }
+        }
+      ],
+      "reference": {
+        "after": {
+          "samples": 3,
+          "minimum_ns": 183148193,
+          "median_ns": 183448158,
+          "maximum_ns": 184758296,
+          "grounding_ns": 2000000,
+          "solving_ns": 177000000
+        },
+        "before": {
+          "samples": 3,
+          "minimum_ns": 181818900,
+          "median_ns": 182243971,
+          "maximum_ns": 187296647,
+          "grounding_ns": 2000000,
+          "solving_ns": 176000000
+        },
+        "clauses": {
+          "samples": 3,
+          "minimum_ns": 181867572,
+          "median_ns": 182578490,
+          "maximum_ns": 183350275,
+          "grounding_ns": 2000000,
+          "solving_ns": 177000000
+        },
+        "main": {
+          "samples": 3,
+          "minimum_ns": 184037528,
+          "median_ns": 185491136,
+          "maximum_ns": 196245815,
+          "grounding_ns": 2000000,
+          "solving_ns": 177000000
+        }
+      }
+    },
+    {
+      "entry": "standalone/n-queens/variant-04.lp",
+      "label": "n-queens/variant-04 8→11",
+      "profiles": [
+        {
+          "profile": {
+            "backend": "cpu",
+            "batch_size": 64,
+            "completion_workers": 4,
+            "grounder": "auto",
+            "max_completion_scratch_bytes": 268435456,
+            "oracle": "auto",
+            "workers": 4
+          },
+          "reports": {
+            "after": {
+              "samples": 3,
+              "minimum_ns": 98114159,
+              "median_ns": 98518952,
+              "maximum_ns": 99309881,
+              "driver_median_ns": 94288374,
+              "published_models": 2680,
+              "candidates_examined": 2680,
+              "search_work": 22565788,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 2377558
+                },
+                "candidate_generation": {
+                  "median_ns": 74522101
+                },
+                "candidate_setup": {
+                  "median_ns": 76684
+                },
+                "certificate_setup": {
+                  "median_ns": 104787
+                },
+                "execution_setup": {
+                  "median_ns": 9599
+                },
+                "observation_output": {
+                  "median_ns": 8655036
+                }
+              },
+              "breakdown": {
+                "grounding": 1517628,
+                "proposal": 74604927,
+                "membership": 104787
+              }
+            },
+            "before": {
+              "samples": 3,
+              "minimum_ns": 157286135,
+              "median_ns": 157992525,
+              "maximum_ns": 158389834,
+              "driver_median_ns": 154009443,
+              "published_models": 2680,
+              "candidates_examined": 2680,
+              "search_work": 35658773,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 2244887
+                },
+                "candidate_generation": {
+                  "median_ns": 111693580
+                },
+                "candidate_setup": {
+                  "median_ns": 262184
+                },
+                "certificate_setup": {
+                  "median_ns": 75653
+                },
+                "certified_membership": {
+                  "median_ns": 15407554
+                },
+                "execution_setup": {
+                  "median_ns": 120136
+                },
+                "observation_output": {
+                  "median_ns": 5050319
+                },
+                "original_validation": {
+                  "median_ns": 13350888
+                }
+              },
+              "breakdown": {
+                "grounding": 1514583,
+                "proposal": 111955764,
+                "membership": 28921914
+              }
+            },
+            "clauses": {
+              "samples": 3,
+              "minimum_ns": 161759079,
+              "median_ns": 162744406,
+              "maximum_ns": 163517160,
+              "driver_median_ns": 158960258,
+              "published_models": 2680,
+              "candidates_examined": 2680,
+              "search_work": 35658773,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 2259355
+                },
+                "candidate_generation": {
+                  "median_ns": 111742883
+                },
+                "candidate_setup": {
+                  "median_ns": 265540
+                },
+                "certificate_setup": {
+                  "median_ns": 78899
+                },
+                "certified_membership": {
+                  "median_ns": 15704354
+                },
+                "execution_setup": {
+                  "median_ns": 115307
+                },
+                "observation_output": {
+                  "median_ns": 5007131
+                },
+                "original_validation": {
+                  "median_ns": 18060767
+                }
+              },
+              "breakdown": {
+                "grounding": 1494124,
+                "proposal": 111996240,
+                "membership": 33720130
+              }
+            },
+            "main": {
+              "samples": 3,
+              "minimum_ns": 305163822,
+              "median_ns": 317751784,
+              "maximum_ns": 319373870,
+              "driver_median_ns": 314390933,
+              "published_models": 2680,
+              "candidates_examined": 2680,
+              "search_work": 55533813,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 2920591
+                },
+                "candidate_generation": {
+                  "median_ns": 145264174
+                },
+                "candidate_setup": {
+                  "median_ns": 271501
+                },
+                "certificate_setup": {
+                  "median_ns": 65323
+                },
+                "certified_membership": {
+                  "median_ns": 17185899
+                },
+                "execution_setup": {
+                  "median_ns": 120567
+                },
+                "observation_output": {
+                  "median_ns": 119643078
+                },
+                "original_validation": {
+                  "median_ns": 17267532
+                }
+              },
+              "breakdown": {
+                "grounding": 2140091,
+                "proposal": 145526628,
+                "membership": 34947575
+              }
+            }
+          },
+          "ratios": {
+            "after/before": 0.6235671719279124,
+            "before/main": 0.4972199463717252,
+            "clauses/after": 1.6519096346051265,
+            "clauses/main": 0.5121746413231782
+          },
+          "reference_ratios": {
+            "after": 0.5414694374954272,
+            "before": 0.8737819062939713,
+            "clauses": 0.9080537348150133,
+            "main": 1.7367062035338392
+          }
+        }
+      ],
+      "reference": {
+        "after": {
+          "samples": 3,
+          "minimum_ns": 180547415,
+          "median_ns": 181947392,
+          "maximum_ns": 183604293,
+          "grounding_ns": 1000000,
+          "solving_ns": 175000000
+        },
+        "before": {
+          "samples": 3,
+          "minimum_ns": 179643272,
+          "median_ns": 180814599,
+          "maximum_ns": 180999637,
+          "grounding_ns": 2000000,
+          "solving_ns": 174000000
+        },
+        "clauses": {
+          "samples": 3,
+          "minimum_ns": 178319850,
+          "median_ns": 179223321,
+          "maximum_ns": 179967813,
+          "grounding_ns": 2000000,
+          "solving_ns": 172000000
+        },
+        "main": {
+          "samples": 3,
+          "minimum_ns": 181659900,
+          "median_ns": 182962313,
+          "maximum_ns": 185846185,
+          "grounding_ns": 1000000,
+          "solving_ns": 176000000
+        }
+      }
+    },
+    {
+      "entry": "standalone/send-money/send-money.lp",
+      "label": "send-money/send-money",
+      "profiles": [
+        {
+          "profile": {
+            "backend": "cpu",
+            "batch_size": 64,
+            "completion_workers": 4,
+            "grounder": "auto",
+            "max_completion_scratch_bytes": 268435456,
+            "oracle": "auto",
+            "workers": 4
+          },
+          "reports": {
+            "after": {
+              "samples": 3,
+              "minimum_ns": 13763953,
+              "median_ns": 15232429,
+              "maximum_ns": 15490735,
+              "driver_median_ns": 9448495,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "search_work": 844145,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 4415105
+                },
+                "candidate_generation": {
+                  "median_ns": 3897120
+                },
+                "candidate_setup": {
+                  "median_ns": 195197
+                },
+                "certificate_setup": {
+                  "median_ns": 266642
+                },
+                "execution_setup": {
+                  "median_ns": 9498
+                },
+                "observation_output": {
+                  "median_ns": 45845
+                }
+              },
+              "breakdown": {
+                "grounding": 2573818,
+                "proposal": 4092588,
+                "membership": 266642
+              }
+            },
+            "before": {
+              "samples": 3,
+              "minimum_ns": 10493624,
+              "median_ns": 11292509,
+              "maximum_ns": 12937066,
+              "driver_median_ns": 7536374,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "search_work": 349198,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 4434302
+                },
+                "candidate_generation": {
+                  "median_ns": 707372
+                },
+                "candidate_setup": {
+                  "median_ns": 1021253
+                },
+                "certificate_setup": {
+                  "median_ns": 171644
+                },
+                "certified_membership": {
+                  "median_ns": 23334
+                },
+                "execution_setup": {
+                  "median_ns": 127150
+                },
+                "observation_output": {
+                  "median_ns": 19768
+                },
+                "original_validation": {
+                  "median_ns": 20248
+                }
+              },
+              "breakdown": {
+                "grounding": 2576753,
+                "proposal": 1728625,
+                "membership": 223782
+              }
+            },
+            "clauses": {
+              "samples": 3,
+              "minimum_ns": 10961264,
+              "median_ns": 11446398,
+              "maximum_ns": 12440090,
+              "driver_median_ns": 7163712,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "search_work": 349198,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 4577923
+                },
+                "candidate_generation": {
+                  "median_ns": 685892
+                },
+                "candidate_setup": {
+                  "median_ns": 1071368
+                },
+                "certificate_setup": {
+                  "median_ns": 189426
+                },
+                "certified_membership": {
+                  "median_ns": 18405
+                },
+                "execution_setup": {
+                  "median_ns": 125977
+                },
+                "observation_output": {
+                  "median_ns": 19416
+                },
+                "original_validation": {
+                  "median_ns": 25267
+                }
+              },
+              "breakdown": {
+                "grounding": 2553960,
+                "proposal": 1757260,
+                "membership": 234371
+              }
+            },
+            "main": {
+              "samples": 3,
+              "minimum_ns": 52214947,
+              "median_ns": 52666356,
+              "maximum_ns": 53756210,
+              "driver_median_ns": 49250944,
+              "published_models": 1,
+              "candidates_examined": 1,
+              "search_work": 3629789,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 29536738
+                },
+                "candidate_generation": {
+                  "median_ns": 11143060
+                },
+                "candidate_setup": {
+                  "median_ns": 5207058
+                },
+                "certificate_setup": {
+                  "median_ns": 846875
+                },
+                "certified_membership": {
+                  "median_ns": 77886
+                },
+                "execution_setup": {
+                  "median_ns": 190248
+                },
+                "observation_output": {
+                  "median_ns": 26339
+                },
+                "original_validation": {
+                  "median_ns": 128843
+                }
+              },
+              "breakdown": {
+                "grounding": 28509223,
+                "proposal": 16588568,
+                "membership": 1056039
+              }
+            }
+          },
+          "ratios": {
+            "after/before": 1.348896777500908,
+            "before/main": 0.21441599263104513,
+            "clauses/after": 0.7514492928212565,
+            "clauses/main": 0.21733795290488675
+          },
+          "reference_ratios": {
+            "after": 1.004079419179618,
+            "before": 0.7277472719568604,
+            "clauses": 0.7869978396470995,
+            "main": 3.4334254018304873
+          }
+        }
+      ],
+      "reference": {
+        "after": {
+          "samples": 3,
+          "minimum_ns": 14108312,
+          "median_ns": 15170542,
+          "maximum_ns": 16108669,
+          "grounding_ns": 9000000,
+          "solving_ns": 1000000
+        },
+        "before": {
+          "samples": 3,
+          "minimum_ns": 15171875,
+          "median_ns": 15517075,
+          "maximum_ns": 16447888,
+          "grounding_ns": 9000000,
+          "solving_ns": 1000000
+        },
+        "clauses": {
+          "samples": 3,
+          "minimum_ns": 12908162,
+          "median_ns": 14544383,
+          "maximum_ns": 15443066,
+          "grounding_ns": 9000000,
+          "solving_ns": 1000000
+        },
+        "main": {
+          "samples": 3,
+          "minimum_ns": 14090943,
+          "median_ns": 15339304,
+          "maximum_ns": 16599498,
+          "grounding_ns": 9000000,
+          "solving_ns": 1000000
+        }
+      }
+    },
+    {
+      "entry": "scenarios/task-allocation/variant-04/05-larger-mix.lp",
+      "label": "variant-04/05-larger-mix",
+      "profiles": [
+        {
+          "profile": {
+            "backend": "cpu",
+            "batch_size": 64,
+            "completion_workers": 4,
+            "grounder": "auto",
+            "max_completion_scratch_bytes": 268435456,
+            "oracle": "auto",
+            "workers": 4
+          },
+          "reports": {
+            "after": {
+              "samples": 3,
+              "minimum_ns": 43810864,
+              "median_ns": 44348035,
+              "maximum_ns": 44700890,
+              "driver_median_ns": 40379721,
+              "published_models": 1176,
+              "candidates_examined": 1177,
+              "search_work": 5732750,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 5527451
+                },
+                "candidate_generation": {
+                  "median_ns": 18603602
+                },
+                "candidate_setup": {
+                  "median_ns": 161865
+                },
+                "certificate_setup": {
+                  "median_ns": 139232
+                },
+                "execution_setup": {
+                  "median_ns": 9117
+                },
+                "objective_feedback": {
+                  "median_ns": 108144
+                },
+                "objective_scoring_retention": {
+                  "median_ns": 2107870
+                },
+                "observation_output": {
+                  "median_ns": 7629510
+                }
+              },
+              "breakdown": {
+                "grounding": 3265700,
+                "proposal": 18770145,
+                "membership": 139232
+              }
+            },
+            "before": {
+              "samples": 3,
+              "minimum_ns": 88956702,
+              "median_ns": 89950164,
+              "maximum_ns": 90944746,
+              "driver_median_ns": 86373136,
+              "published_models": 1176,
+              "candidates_examined": 1208,
+              "search_work": 23292550,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 5651274
+                },
+                "candidate_generation": {
+                  "median_ns": 43041545
+                },
+                "candidate_setup": {
+                  "median_ns": 562620
+                },
+                "certificate_setup": {
+                  "median_ns": 92183
+                },
+                "certified_membership": {
+                  "median_ns": 10952750
+                },
+                "execution_setup": {
+                  "median_ns": 119966
+                },
+                "objective_feedback": {
+                  "median_ns": 88135
+                },
+                "objective_scoring_retention": {
+                  "median_ns": 1722070
+                },
+                "observation_output": {
+                  "median_ns": 7502800
+                },
+                "original_validation": {
+                  "median_ns": 9668227
+                }
+              },
+              "breakdown": {
+                "grounding": 3269087,
+                "proposal": 43604165,
+                "membership": 20712629
+              }
+            },
+            "clauses": {
+              "samples": 3,
+              "minimum_ns": 95647885,
+              "median_ns": 95690304,
+              "maximum_ns": 96509086,
+              "driver_median_ns": 91800999,
+              "published_models": 1176,
+              "candidates_examined": 1208,
+              "search_work": 23292550,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 5862030
+                },
+                "candidate_generation": {
+                  "median_ns": 42989744
+                },
+                "candidate_setup": {
+                  "median_ns": 579031
+                },
+                "certificate_setup": {
+                  "median_ns": 97133
+                },
+                "certified_membership": {
+                  "median_ns": 14185966
+                },
+                "execution_setup": {
+                  "median_ns": 107743
+                },
+                "objective_feedback": {
+                  "median_ns": 90160
+                },
+                "objective_scoring_retention": {
+                  "median_ns": 1735759
+                },
+                "observation_output": {
+                  "median_ns": 7623218
+                },
+                "original_validation": {
+                  "median_ns": 12863041
+                }
+              },
+              "breakdown": {
+                "grounding": 3249621,
+                "proposal": 43574475,
+                "membership": 27097128
+              }
+            },
+            "main": {
+              "samples": 3,
+              "minimum_ns": 317945429,
+              "median_ns": 343332820,
+              "maximum_ns": 347545957,
+              "driver_median_ns": 339740213,
+              "published_models": 1176,
+              "candidates_examined": 1208,
+              "search_work": 44210323,
+              "phases": {
+                "admission_materialization": {
+                  "median_ns": 5880106
+                },
+                "candidate_generation": {
+                  "median_ns": 80895554
+                },
+                "candidate_setup": {
+                  "median_ns": 658731
+                },
+                "certificate_setup": {
+                  "median_ns": 103225
+                },
+                "certified_membership": {
+                  "median_ns": 12375515
+                },
+                "execution_setup": {
+                  "median_ns": 140725
+                },
+                "objective_feedback": {
+                  "median_ns": 111951
+                },
+                "objective_scoring_retention": {
+                  "median_ns": 2269169
+                },
+                "observation_output": {
+                  "median_ns": 217729988
+                },
+                "original_validation": {
+                  "median_ns": 12804743
+                }
+              },
+              "breakdown": {
+                "grounding": 4352238,
+                "proposal": 81554285,
+                "membership": 26116938
+              }
+            }
+          },
+          "ratios": {
+            "after/before": 0.49302895100891647,
+            "before/main": 0.261991160646978,
+            "clauses/after": 2.157712376658853,
+            "clauses/main": 0.27871004001306954
+          },
+          "reference_ratios": {
+            "after": 0.29337434917127103,
+            "before": 0.582477037527836,
+            "clauses": 0.6404738910767606,
+            "main": 2.201371625416481
+          }
+        }
+      ],
+      "reference": {
+        "after": {
+          "samples": 3,
+          "minimum_ns": 150910377,
+          "median_ns": 151165346,
+          "maximum_ns": 152925081,
+          "grounding_ns": 85000000,
+          "solving_ns": 60000000
+        },
+        "before": {
+          "samples": 3,
+          "minimum_ns": 151109822,
+          "median_ns": 154426970,
+          "maximum_ns": 165394066,
+          "grounding_ns": 89000000,
+          "solving_ns": 60000000
+        },
+        "clauses": {
+          "samples": 3,
+          "minimum_ns": 148092128,
+          "median_ns": 149405472,
+          "maximum_ns": 150284257,
+          "grounding_ns": 85000000,
+          "solving_ns": 58000000
+        },
+        "main": {
+          "samples": 3,
+          "minimum_ns": 149891207,
+          "median_ns": 155963135,
+          "maximum_ns": 159833706,
+          "grounding_ns": 87000000,
+          "solving_ns": 62000000
+        }
+      }
+    }
+  ],
+  "provenance": {
+    "after": {
+      "native_sha256": "46a51100c58cd8984aa494c6dead31edf21710c0ed89b9b7aa34d9f6f0b9c7fa",
+      "reference_sha256": "f56b4bbf5fab5deba66e44c9728cb1cc19816a4cf1030bf8783a7222d60e159e",
+      "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+      "started_unix_ns": 1789718131741119202,
+      "finished_unix_ns": 1789718141275507423,
+      "passed": true,
+      "accounted": true
+    },
+    "before": {
+      "native_sha256": "0c9551639c03546fef8c06c6f0b480aff2e158469a6b2ce414ded95b82ada59b",
+      "reference_sha256": "f56b4bbf5fab5deba66e44c9728cb1cc19816a4cf1030bf8783a7222d60e159e",
+      "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+      "started_unix_ns": 1789718075704055780,
+      "finished_unix_ns": 1789718086806231461,
+      "passed": true,
+      "accounted": true
+    },
+    "clauses": {
+      "native_sha256": "46a51100c58cd8984aa494c6dead31edf21710c0ed89b9b7aa34d9f6f0b9c7fa",
+      "reference_sha256": "f56b4bbf5fab5deba66e44c9728cb1cc19816a4cf1030bf8783a7222d60e159e",
+      "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+      "started_unix_ns": 1789718186132238272,
+      "finished_unix_ns": 1789718197246316391,
+      "passed": true,
+      "accounted": true
+    },
+    "main": {
+      "native_sha256": "a7e3c81305a6bbaef8757f1a83d1cc5159e6bdf7664a9e1c7534993e2075b5d2",
+      "reference_sha256": "f56b4bbf5fab5deba66e44c9728cb1cc19816a4cf1030bf8783a7222d60e159e",
+      "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+      "started_unix_ns": 1789717702547160488,
+      "finished_unix_ns": 1789717770727753276,
+      "passed": false,
+      "accounted": true
+    }
+  },
+  "methods": {
+    "after": "default",
+    "before": "default",
+    "clauses": "clauses",
+    "main": "default"
+  },
+  "scoreboards": [
+    {
+      "report": "main",
+      "profile": 0,
+      "method": "default",
+      "compared": 19,
+      "wins": 0,
+      "verdicts": [
+        {
+          "cell": "n-queens/variant-04 8→11",
+          "native_ns": 317751784,
+          "reference_ns": 182962313,
+          "ratio": 1.7367062035338392,
+          "native": {
+            "grounding": 2140091,
+            "proposal": 145526628,
+            "membership": 34947575
+          },
+          "reference_grounding_ns": 1000000,
+          "reference_solving_ns": 176000000
+        },
+        {
+          "cell": "chain-arithmetic-1000",
+          "native_ns": 10965586,
+          "reference_ns": 5539073,
+          "ratio": 1.9796789101714312,
+          "native": {
+            "grounding": 4047414,
+            "proposal": 650595,
+            "membership": 176212
+          },
+          "reference_grounding_ns": 1000000,
+          "reference_solving_ns": 0
+        },
+        {
+          "cell": "variant-04/05-larger-mix",
+          "native_ns": 343332820,
+          "reference_ns": 155963135,
+          "ratio": 2.201371625416481,
+          "native": {
+            "grounding": 4352238,
+            "proposal": 81554285,
+            "membership": 26116938
+          },
+          "reference_grounding_ns": 87000000,
+          "reference_solving_ns": 62000000
+        },
+        {
+          "cell": "n-queens/variant-01 8→11",
+          "native_ns": 475021390,
+          "reference_ns": 185491136,
+          "ratio": 2.560884580490143,
+          "native": {
+            "grounding": 37684325,
+            "proposal": 238760752,
+            "membership": 56680939
+          },
+          "reference_grounding_ns": 2000000,
+          "reference_solving_ns": 177000000
+        },
+        {
+          "cell": "producer-chain-700",
+          "native_ns": 28989346,
+          "reference_ns": 10935990,
+          "ratio": 2.6508204561269717,
+          "native": {
+            "proposal": 11123,
+            "membership": 3173648
+          },
+          "reference_grounding_ns": 5000000,
+          "reference_solving_ns": 0
+        },
+        {
+          "cell": "independent-choice-12",
+          "native_ns": 23712727,
+          "reference_ns": 7085296,
+          "ratio": 3.3467517800244337,
+          "native": {
+            "proposal": 312749,
+            "membership": 6121161
+          },
+          "reference_grounding_ns": 0,
+          "reference_solving_ns": 2000000
+        },
+        {
+          "cell": "send-money/send-money",
+          "native_ns": 52666356,
+          "reference_ns": 15339304,
+          "ratio": 3.4334254018304873,
+          "native": {
+            "grounding": 28509223,
+            "proposal": 16588568,
+            "membership": 1056039
+          },
+          "reference_grounding_ns": 9000000,
+          "reference_solving_ns": 1000000
+        },
+        {
+          "cell": "transitive-path-100",
+          "native_ns": 33480597,
+          "reference_ns": 8892681,
+          "ratio": 3.7649609830826045,
+          "native": {
+            "proposal": 3577,
+            "membership": 25369909
+          },
+          "reference_grounding_ns": 4000000,
+          "reference_solving_ns": 0
+        },
+        {
+          "cell": "n-queens/variant-01 8→10",
+          "native_ns": 126746290,
+          "reference_ns": 31235899,
+          "ratio": 4.057712249613818,
+          "native": {
+            "grounding": 27422536,
+            "proposal": 49739705,
+            "membership": 13028710
+          },
+          "reference_grounding_ns": 2000000,
+          "reference_solving_ns": 26000000
+        },
+        {
+          "cell": "transitive-dense-40",
+          "native_ns": 40228678,
+          "reference_ns": 6712654,
+          "ratio": 5.9929616512336255,
+          "native": {
+            "grounding": 22564164,
+            "proposal": 9893556,
+            "membership": 1247500
+          },
+          "reference_grounding_ns": 2000000,
+          "reference_solving_ns": 0
+        },
+        {
+          "cell": "independent-choice-16",
+          "native_ns": 195735143,
+          "reference_ns": 28662411,
+          "ratio": 6.828983891131839,
+          "native": {
+            "proposal": 3227431,
+            "membership": 61218699
+          },
+          "reference_grounding_ns": 0,
+          "reference_solving_ns": 24000000
+        },
+        {
+          "cell": "transitive-path-200",
+          "native_ns": 191380290,
+          "reference_ns": 22627272,
+          "ratio": 8.457948001862531,
+          "native": {
+            "proposal": 6622,
+            "membership": 173379833
+          },
+          "reference_grounding_ns": 13000000,
+          "reference_solving_ns": 4000000
+        },
+        {
+          "cell": "ties-50",
+          "native_ns": 181468329,
+          "reference_ns": 20044037,
+          "ratio": 9.053482040568973,
+          "native": {
+            "grounding": 422436,
+            "proposal": 13586611,
+            "membership": 5039807
+          },
+          "reference_grounding_ns": 1000000,
+          "reference_solving_ns": 14000000
+        },
+        {
+          "cell": "disjunction-12",
+          "native_ns": 206672084,
+          "reference_ns": 21318127,
+          "ratio": 9.694664263891475,
+          "native": {
+            "grounding": 158429,
+            "proposal": 12685776,
+            "membership": 2550276
+          },
+          "reference_grounding_ns": 0,
+          "reference_solving_ns": 17000000
+        },
+        {
+          "cell": "independent-negation-aggregate-16",
+          "native_ns": 314603664,
+          "reference_ns": 30565465,
+          "ratio": 10.29278186999609,
+          "native": {
+            "grounding": 279386,
+            "proposal": 7865498,
+            "membership": 8067497
+          },
+          "reference_grounding_ns": 0,
+          "reference_solving_ns": 26000000
+        },
+        {
+          "cell": "chain-1000",
+          "native_ns": 101926167,
+          "reference_ns": 7828376,
+          "ratio": 13.020090884750553,
+          "native": {
+            "proposal": 5460,
+            "membership": 85097076
+          },
+          "reference_grounding_ns": 4000000,
+          "reference_solving_ns": 0
+        },
+        {
+          "cell": "independent-negation-8",
+          "native_ns": 114156514,
+          "reference_ns": 5624344,
+          "ratio": 20.296858442513475,
+          "native": {
+            "proposal": 8863686,
+            "membership": 99933148
+          },
+          "reference_grounding_ns": 1000000,
+          "reference_solving_ns": 0
+        },
+        {
+          "cell": "chain-2000",
+          "native_ns": 365260726,
+          "reference_ns": 10996423,
+          "ratio": 33.21632188939985,
+          "native": {
+            "proposal": 10902,
+            "membership": 334427856
+          },
+          "reference_grounding_ns": 6000000,
+          "reference_solving_ns": 0
+        },
+        {
+          "cell": "independent-negation-10",
+          "native_ns": 1430897327,
+          "reference_ns": 5652668,
+          "ratio": 253.13662981799038,
+          "native": {
+            "proposal": 122483952,
+            "membership": 1299179319
+          },
+          "reference_grounding_ns": 1000000,
+          "reference_solving_ns": 0
+        }
+      ]
+    },
+    {
+      "report": "before",
+      "profile": 0,
+      "method": "default",
+      "compared": 20,
+      "wins": 4,
+      "verdicts": [
+        {
+          "cell": "variant-04/05-larger-mix",
+          "native_ns": 89950164,
+          "reference_ns": 154426970,
+          "ratio": 0.582477037527836,
+          "native": {
+            "grounding": 3269087,
+            "proposal": 43604165,
+            "membership": 20712629
+          },
+          "reference_grounding_ns": 89000000,
+          "reference_solving_ns": 60000000
+        },
+        {
+          "cell": "send-money/send-money",
+          "native_ns": 11292509,
+          "reference_ns": 15517075,
+          "ratio": 0.7277472719568604,
+          "native": {
+            "grounding": 2576753,
+            "proposal": 1728625,
+            "membership": 223782
+          },
+          "reference_grounding_ns": 9000000,
+          "reference_solving_ns": 1000000
+        },
+        {
+          "cell": "independent-negation-aggregate-16",
+          "native_ns": 24692096,
+          "reference_ns": 32296497,
+          "ratio": 0.7645440928160103,
+          "native": {
+            "grounding": 237467,
+            "proposal": 2344023,
+            "membership": 5242738
+          },
+          "reference_grounding_ns": 0,
+          "reference_solving_ns": 27000000
+        },
+        {
+          "cell": "n-queens/variant-04 8→11",
+          "native_ns": 157992525,
+          "reference_ns": 180814599,
+          "ratio": 0.8737819062939713,
+          "native": {
+            "grounding": 1514583,
+            "proposal": 111955764,
+            "membership": 28921914
+          },
+          "reference_grounding_ns": 2000000,
+          "reference_solving_ns": 174000000
+        },
+        {
+          "cell": "stratified-16",
+          "native_ns": 4494655,
+          "reference_ns": 4432949,
+          "ratio": 1.0139198533527005,
+          "native": {
+            "proposal": 490103,
+            "membership": 276190
+          },
+          "reference_grounding_ns": 0,
+          "reference_solving_ns": 0
+        },
+        {
+          "cell": "independent-choice-12",
+          "native_ns": 9208884,
+          "reference_ns": 7075846,
+          "ratio": 1.3014534233786321,
+          "native": {
+            "proposal": 703626,
+            "membership": 3444979
+          },
+          "reference_grounding_ns": 0,
+          "reference_solving_ns": 2000000
+        },
+        {
+          "cell": "ties-50",
+          "native_ns": 26345390,
+          "reference_ns": 18946193,
+          "ratio": 1.3905374024216897,
+          "native": {
+            "grounding": 347955,
+            "proposal": 7056802,
+            "membership": 4214021
+          },
+          "reference_grounding_ns": 0,
+          "reference_solving_ns": 14000000
+        },
+        {
+          "cell": "n-queens/variant-01 8→11",
+          "native_ns": 256191995,
+          "reference_ns": 182243971,
+          "ratio": 1.4057638976709963,
+          "native": {
+            "grounding": 5703883,
+            "proposal": 190473834,
+            "membership": 45112074
+          },
+          "reference_grounding_ns": 2000000,
+          "reference_solving_ns": 176000000
+        },
+        {
+          "cell": "independent-choice-16",
+          "native_ns": 39287484,
+          "reference_ns": 27764863,
+          "ratio": 1.4150073061768755,
+          "native": {
+            "proposal": 3100611,
+            "membership": 22800936
+          },
+          "reference_grounding_ns": 0,
+          "reference_solving_ns": 23000000
+        },
+        {
+          "cell": "transitive-path-100",
+          "native_ns": 16741361,
+          "reference_ns": 9941414,
+          "ratio": 1.684001994082532,
+          "native": {
+            "proposal": 3164,
+            "membership": 7898316
+          },
+          "reference_grounding_ns": 3000000,
+          "reference_solving_ns": 1000000
+        },
+        {
+          "cell": "n-queens/variant-01 8→10",
+          "native_ns": 58947422,
+          "reference_ns": 31977858,
+          "ratio": 1.8433824429391112,
+          "native": {
+            "grounding": 4043856,
+            "proposal": 36046062,
+            "membership": 9992007
+          },
+          "reference_grounding_ns": 2000000,
+          "reference_solving_ns": 25000000
+        },
+        {
+          "cell": "transitive-path-200",
+          "native_ns": 46367388,
+          "reference_ns": 23810646,
+          "ratio": 1.9473385140411563,
+          "native": {
+            "proposal": 10180,
+            "membership": 29638361
+          },
+          "reference_grounding_ns": 14000000,
+          "reference_solving_ns": 4000000
+        },
+        {
+          "cell": "disjunction-12",
+          "native_ns": 45388676,
+          "reference_ns": 22311602,
+          "ratio": 2.0343082491342397,
+          "native": {
+            "grounding": 132410,
+            "proposal": 3489231,
+            "membership": 1758158
+          },
+          "reference_grounding_ns": 0,
+          "reference_solving_ns": 18000000
+        },
+        {
+          "cell": "chain-arithmetic-1000",
+          "native_ns": 9841466,
+          "reference_ns": 4504874,
+          "ratio": 2.1846262514778436,
+          "native": {
+            "grounding": 3695830,
+            "proposal": 584501,
+            "membership": 111740
+          },
+          "reference_grounding_ns": 1000000,
+          "reference_solving_ns": 0
+        },
+        {
+          "cell": "producer-chain-700",
+          "native_ns": 26914431,
+          "reference_ns": 9717792,
+          "ratio": 2.7696035272209985,
+          "native": {
+            "proposal": 6532,
+            "membership": 3090100
+          },
+          "reference_grounding_ns": 5000000,
+          "reference_solving_ns": 0
+        },
+        {
+          "cell": "chain-1000",
+          "native_ns": 22528330,
+          "reference_ns": 7682980,
+          "ratio": 2.932238532444442,
+          "native": {
+            "proposal": 11631,
+            "membership": 3643562
+          },
+          "reference_grounding_ns": 3000000,
+          "reference_solving_ns": 0
+        },
+        {
+          "cell": "chain-2000",
+          "native_ns": 36670606,
+          "reference_ns": 9930283,
+          "ratio": 3.692805733733872,
+          "native": {
+            "proposal": 13335,
+            "membership": 5993018
+          },
+          "reference_grounding_ns": 6000000,
+          "reference_solving_ns": 0
+        },
+        {
+          "cell": "independent-negation-8",
+          "native_ns": 18633925,
+          "reference_ns": 4564016,
+          "ratio": 4.0827913399076605,
+          "native": {
+            "proposal": 14210634,
+            "membership": 967041
+          },
+          "reference_grounding_ns": 0,
+          "reference_solving_ns": 0
+        },
+        {
+          "cell": "transitive-dense-40",
+          "native_ns": 34164626,
+          "reference_ns": 6680802,
+          "ratio": 5.113851001721051,
+          "native": {
+            "grounding": 15823172,
+            "proposal": 9129445,
+            "membership": 1003760
+          },
+          "reference_grounding_ns": 2000000,
+          "reference_solving_ns": 0
+        },
+        {
+          "cell": "independent-negation-10",
+          "native_ns": 53275600,
+          "reference_ns": 5612019,
+          "ratio": 9.493125379653918,
+          "native": {
+            "proposal": 45096256,
+            "membership": 2851100
+          },
+          "reference_grounding_ns": 1000000,
+          "reference_solving_ns": 0
+        }
+      ]
+    },
+    {
+      "report": "after",
+      "profile": 0,
+      "method": "default",
+      "compared": 20,
+      "wins": 4,
+      "verdicts": [
+        {
+          "cell": "variant-04/05-larger-mix",
+          "native_ns": 44348035,
+          "reference_ns": 151165346,
+          "ratio": 0.29337434917127103,
+          "native": {
+            "grounding": 3265700,
+            "proposal": 18770145,
+            "membership": 139232
+          },
+          "reference_grounding_ns": 85000000,
+          "reference_solving_ns": 60000000
+        },
+        {
+          "cell": "n-queens/variant-04 8→11",
+          "native_ns": 98518952,
+          "reference_ns": 181947392,
+          "ratio": 0.5414694374954272,
+          "native": {
+            "grounding": 1517628,
+            "proposal": 74604927,
+            "membership": 104787
+          },
+          "reference_grounding_ns": 1000000,
+          "reference_solving_ns": 175000000
+        },
+        {
+          "cell": "n-queens/variant-01 8→11",
+          "native_ns": 121300058,
+          "reference_ns": 183448158,
+          "ratio": 0.6612225454997482,
+          "native": {
+            "grounding": 5741454,
+            "proposal": 94159996,
+            "membership": 182984
+          },
+          "reference_grounding_ns": 2000000,
+          "reference_solving_ns": 177000000
+        },
+        {
+          "cell": "independent-negation-aggregate-16",
+          "native_ns": 21700571,
+          "reference_ns": 32690520,
+          "ratio": 0.6638184709206216,
+          "native": {
+            "grounding": 235594,
+            "proposal": 2637023,
+            "membership": 10680
+          },
+          "reference_grounding_ns": 0,
+          "reference_solving_ns": 28000000
+        },
+        {
+          "cell": "send-money/send-money",
+          "native_ns": 15232429,
+          "reference_ns": 15170542,
+          "ratio": 1.004079419179618,
+          "native": {
+            "grounding": 2573818,
+            "proposal": 4092588,
+            "membership": 266642
+          },
+          "reference_grounding_ns": 9000000,
+          "reference_solving_ns": 1000000
+        },
+        {
+          "cell": "stratified-16",
+          "native_ns": 4535913,
+          "reference_ns": 4406940,
+          "ratio": 1.0292658851720242,
+          "native": {
+            "proposal": 476618,
+            "membership": 313491
+          },
+          "reference_grounding_ns": 0,
+          "reference_solving_ns": 0
+        },
+        {
+          "cell": "disjunction-12",
+          "native_ns": 22012769,
+          "reference_ns": 20970245,
+          "ratio": 1.0497144406276608,
+          "native": {
+            "grounding": 137208,
+            "proposal": 3860267,
+            "membership": 4218
+          },
+          "reference_grounding_ns": 0,
+          "reference_solving_ns": 16000000
+        },
+        {
+          "cell": "n-queens/variant-01 8→10",
+          "native_ns": 33260012,
+          "reference_ns": 31649469,
+          "ratio": 1.0508868884972447,
+          "native": {
+            "grounding": 4321489,
+            "proposal": 19630777,
+            "membership": 146616
+          },
+          "reference_grounding_ns": 1000000,
+          "reference_solving_ns": 25000000
+        },
+        {
+          "cell": "ties-50",
+          "native_ns": 21102594,
+          "reference_ns": 17987177,
+          "ratio": 1.1732021094805483,
+          "native": {
+            "grounding": 344219,
+            "proposal": 6990978,
+            "membership": 38122
+          },
+          "reference_grounding_ns": 1000000,
+          "reference_solving_ns": 13000000
+        },
+        {
+          "cell": "independent-choice-12",
+          "native_ns": 8992998,
+          "reference_ns": 6710448,
+          "ratio": 1.340148675617485,
+          "native": {
+            "proposal": 628013,
+            "membership": 3365458
+          },
+          "reference_grounding_ns": 0,
+          "reference_solving_ns": 2000000
+        },
+        {
+          "cell": "independent-choice-16",
+          "native_ns": 39457054,
+          "reference_ns": 28024001,
+          "ratio": 1.407973615187924,
+          "native": {
+            "proposal": 2920783,
+            "membership": 24043973
+          },
+          "reference_grounding_ns": 0,
+          "reference_solving_ns": 23000000
+        },
+        {
+          "cell": "chain-arithmetic-1000",
+          "native_ns": 9941544,
+          "reference_ns": 5620025,
+          "ratio": 1.7689501381221613,
+          "native": {
+            "grounding": 3694689,
+            "proposal": 918531,
+            "membership": 123062
+          },
+          "reference_grounding_ns": 1000000,
+          "reference_solving_ns": 0
+        },
+        {
+          "cell": "transitive-path-100",
+          "native_ns": 15662699,
+          "reference_ns": 8057515,
+          "ratio": 1.9438622205481466,
+          "native": {
+            "proposal": 3758,
+            "membership": 8451357
+          },
+          "reference_grounding_ns": 4000000,
+          "reference_solving_ns": 0
+        },
+        {
+          "cell": "transitive-path-200",
+          "native_ns": 46566093,
+          "reference_ns": 22175135,
+          "ratio": 2.099923765965799,
+          "native": {
+            "proposal": 11733,
+            "membership": 29031638
+          },
+          "reference_grounding_ns": 12000000,
+          "reference_solving_ns": 4000000
+        },
+        {
+          "cell": "chain-1000",
+          "native_ns": 21829113,
+          "reference_ns": 7726833,
+          "ratio": 2.8251048003755224,
+          "native": {
+            "proposal": 7575,
+            "membership": 3662919
+          },
+          "reference_grounding_ns": 3000000,
+          "reference_solving_ns": 0
+        },
+        {
+          "cell": "producer-chain-700",
+          "native_ns": 27961714,
+          "reference_ns": 9804166,
+          "ratio": 2.8520237213445796,
+          "native": {
+            "proposal": 12553,
+            "membership": 2694485
+          },
+          "reference_grounding_ns": 5000000,
+          "reference_solving_ns": 0
+        },
+        {
+          "cell": "independent-negation-8",
+          "native_ns": 18565296,
+          "reference_ns": 5577966,
+          "ratio": 3.328327207444434,
+          "native": {
+            "proposal": 13422951,
+            "membership": 977411
+          },
+          "reference_grounding_ns": 0,
+          "reference_solving_ns": 0
+        },
+        {
+          "cell": "chain-2000",
+          "native_ns": 38043672,
+          "reference_ns": 10884410,
+          "ratio": 3.4952442989560297,
+          "native": {
+            "proposal": 13726,
+            "membership": 6187263
+          },
+          "reference_grounding_ns": 6000000,
+          "reference_solving_ns": 0
+        },
+        {
+          "cell": "transitive-dense-40",
+          "native_ns": 30373837,
+          "reference_ns": 6685421,
+          "ratio": 4.543294580849882,
+          "native": {
+            "grounding": 15877904,
+            "proposal": 4966925,
+            "membership": 1205551
+          },
+          "reference_grounding_ns": 2000000,
+          "reference_solving_ns": 0
+        },
+        {
+          "cell": "independent-negation-10",
+          "native_ns": 52269615,
+          "reference_ns": 4698550,
+          "ratio": 11.124626746549467,
+          "native": {
+            "proposal": 45065839,
+            "membership": 3022332
+          },
+          "reference_grounding_ns": 1000000,
+          "reference_solving_ns": 0
+        }
+      ]
+    },
+    {
+      "report": "clauses",
+      "profile": 0,
+      "method": "clauses",
+      "compared": 20,
+      "wins": 5,
+      "verdicts": [
+        {
+          "cell": "variant-04/05-larger-mix",
+          "native_ns": 95690304,
+          "reference_ns": 149405472,
+          "ratio": 0.6404738910767606,
+          "native": {
+            "grounding": 3249621,
+            "proposal": 43574475,
+            "membership": 27097128
+          },
+          "reference_grounding_ns": 85000000,
+          "reference_solving_ns": 58000000
+        },
+        {
+          "cell": "send-money/send-money",
+          "native_ns": 11446398,
+          "reference_ns": 14544383,
+          "ratio": 0.7869978396470995,
+          "native": {
+            "grounding": 2553960,
+            "proposal": 1757260,
+            "membership": 234371
+          },
+          "reference_grounding_ns": 9000000,
+          "reference_solving_ns": 1000000
+        },
+        {
+          "cell": "independent-negation-aggregate-16",
+          "native_ns": 26015127,
+          "reference_ns": 31242803,
+          "ratio": 0.8326758325749454,
+          "native": {
+            "grounding": 236065,
+            "proposal": 2411577,
+            "membership": 5987180
+          },
+          "reference_grounding_ns": 1000000,
+          "reference_solving_ns": 27000000
+        },
+        {
+          "cell": "n-queens/variant-04 8→11",
+          "native_ns": 162744406,
+          "reference_ns": 179223321,
+          "ratio": 0.9080537348150133,
+          "native": {
+            "grounding": 1494124,
+            "proposal": 111996240,
+            "membership": 33720130
+          },
+          "reference_grounding_ns": 2000000,
+          "reference_solving_ns": 172000000
+        },
+        {
+          "cell": "stratified-16",
+          "native_ns": 4545321,
+          "reference_ns": 4561811,
+          "ratio": 0.9963852075414786,
+          "native": {
+            "proposal": 488089,
+            "membership": 305035
+          },
+          "reference_grounding_ns": 0,
+          "reference_solving_ns": 0
+        },
+        {
+          "cell": "independent-choice-12",
+          "native_ns": 7790653,
+          "reference_ns": 6070593,
+          "ratio": 1.2833429946629595,
+          "native": {
+            "proposal": 577949,
+            "membership": 3186342
+          },
+          "reference_grounding_ns": 1000000,
+          "reference_solving_ns": 1000000
+        },
+        {
+          "cell": "independent-choice-16",
+          "native_ns": 40891024,
+          "reference_ns": 28380592,
+          "ratio": 1.4408094094725015,
+          "native": {
+            "proposal": 3251020,
+            "membership": 22791123
+          },
+          "reference_grounding_ns": 0,
+          "reference_solving_ns": 23000000
+        },
+        {
+          "cell": "ties-50",
+          "native_ns": 27143773,
+          "reference_ns": 18811640,
+          "ratio": 1.4429243277034858,
+          "native": {
+            "grounding": 344699,
+            "proposal": 6881014,
+            "membership": 5036483
+          },
+          "reference_grounding_ns": 1000000,
+          "reference_solving_ns": 14000000
+        },
+        {
+          "cell": "n-queens/variant-01 8→11",
+          "native_ns": 264540369,
+          "reference_ns": 182578490,
+          "ratio": 1.4489131167641927,
+          "native": {
+            "grounding": 5779295,
+            "proposal": 190199989,
+            "membership": 52866220
+          },
+          "reference_grounding_ns": 2000000,
+          "reference_solving_ns": 177000000
+        },
+        {
+          "cell": "transitive-path-100",
+          "native_ns": 15972463,
+          "reference_ns": 9073509,
+          "ratio": 1.760340238820505,
+          "native": {
+            "proposal": 7023,
+            "membership": 7432739
+          },
+          "reference_grounding_ns": 4000000,
+          "reference_solving_ns": 0
+        },
+        {
+          "cell": "chain-arithmetic-1000",
+          "native_ns": 10403023,
+          "reference_ns": 5745030,
+          "ratio": 1.8107865407143218,
+          "native": {
+            "grounding": 3680642,
+            "proposal": 595902,
+            "membership": 117280
+          },
+          "reference_grounding_ns": 1000000,
+          "reference_solving_ns": 0
+        },
+        {
+          "cell": "n-queens/variant-01 8→10",
+          "native_ns": 59883034,
+          "reference_ns": 32394072,
+          "ratio": 1.8485800117996898,
+          "native": {
+            "grounding": 3958395,
+            "proposal": 36449545,
+            "membership": 11413388
+          },
+          "reference_grounding_ns": 2000000,
+          "reference_solving_ns": 26000000
+        },
+        {
+          "cell": "transitive-path-200",
+          "native_ns": 48136270,
+          "reference_ns": 25194050,
+          "ratio": 1.9106205631885307,
+          "native": {
+            "proposal": 8395,
+            "membership": 30232079
+          },
+          "reference_grounding_ns": 15000000,
+          "reference_solving_ns": 5000000
+        },
+        {
+          "cell": "disjunction-12",
+          "native_ns": 45501408,
+          "reference_ns": 22242131,
+          "ratio": 2.045730600183948,
+          "native": {
+            "grounding": 135856,
+            "proposal": 3840501,
+            "membership": 2316926
+          },
+          "reference_grounding_ns": 0,
+          "reference_solving_ns": 18000000
+        },
+        {
+          "cell": "producer-chain-700",
+          "native_ns": 30111012,
+          "reference_ns": 9908311,
+          "ratio": 3.0389651677263663,
+          "native": {
+            "proposal": 5803,
+            "membership": 3623134
+          },
+          "reference_grounding_ns": 6000000,
+          "reference_solving_ns": 0
+        },
+        {
+          "cell": "independent-negation-8",
+          "native_ns": 18262185,
+          "reference_ns": 5929618,
+          "ratio": 3.0798248723610864,
+          "native": {
+            "proposal": 13595155,
+            "membership": 928358
+          },
+          "reference_grounding_ns": 0,
+          "reference_solving_ns": 0
+        },
+        {
+          "cell": "chain-1000",
+          "native_ns": 20829260,
+          "reference_ns": 6637942,
+          "ratio": 3.1379093098433217,
+          "native": {
+            "proposal": 5761,
+            "membership": 3166364
+          },
+          "reference_grounding_ns": 3000000,
+          "reference_solving_ns": 0
+        },
+        {
+          "cell": "chain-2000",
+          "native_ns": 37524975,
+          "reference_ns": 11159879,
+          "ratio": 3.3624894140877335,
+          "native": {
+            "proposal": 10400,
+            "membership": 6045496
+          },
+          "reference_grounding_ns": 6000000,
+          "reference_solving_ns": 0
+        },
+        {
+          "cell": "transitive-dense-40",
+          "native_ns": 34463899,
+          "reference_ns": 6666296,
+          "ratio": 5.169872294899596,
+          "native": {
+            "grounding": 16572884,
+            "proposal": 9321366,
+            "membership": 1041873
+          },
+          "reference_grounding_ns": 2000000,
+          "reference_solving_ns": 0
+        },
+        {
+          "cell": "independent-negation-10",
+          "native_ns": 51583002,
+          "reference_ns": 5590149,
+          "ratio": 9.227482487497202,
+          "native": {
+            "proposal": 44482249,
+            "membership": 2856478
+          },
+          "reference_grounding_ns": 1000000,
+          "reference_solving_ns": 0
+        }
+      ]
+    }
+  ]
+}

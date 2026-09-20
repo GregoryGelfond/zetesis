@@ -1,4 +1,5 @@
-//! Checked schema-1 native full-model records, separate from shown values.
+//! Checked native full-model records, schema 2 and its schema-1 predecessor,
+//! separate from shown values.
 //!
 //! Success reconciles reported completion, publication, verification, costs and
 //! ties. It does not certify solving correctness or executable/source identity.
@@ -29,7 +30,9 @@ pub struct Limits {
     pub report: AnswerLimits,
     /// Full atom occurrences across all native model records.
     pub max_atoms: usize,
-    /// Combined preorder nodes, including both full and shown values.
+    /// Combined preorder nodes across full-model occurrences and shown terms.
+    /// Schema 2 charges reused atoms at every occurrence. Its spelled atom
+    /// table is independently bounded by this ceiling, including unused entries.
     pub max_value_nodes: usize,
     /// Core construction/scratch ceilings for each closed value.
     pub value: ValueLimits,
@@ -197,7 +200,15 @@ impl NativeAnswers {
     }
 }
 
-/// Decode native JSON schema 1 with exhausted coverage and a successful outcome.
+/// Whether `document` is a native JSON document the decoder reads: schema 2,
+/// or schema 1 as the executables before it wrote it, in the `zetesis` format.
+pub(crate) fn is_native_document(document: &serde_json::Value) -> bool {
+    matches!(document["schema"].as_u64(), Some(1 | 2)) && document["format"] == "zetesis"
+}
+
+/// Decode native JSON schema 2, or schema 1 as the executables before it wrote
+/// it, with exhausted coverage and a successful outcome; the older form is
+/// read so that an earlier executable can stand as a baseline.
 /// Every full and shown value is validated, even when a consumer uses only full
 /// atoms. Failed/incomplete envelopes cannot qualify through retained optimum data.
 ///

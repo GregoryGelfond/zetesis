@@ -1,7 +1,10 @@
 //! A finite support upper bound and complete iterative relational joins.
 
 mod evaluation;
+mod filters;
+pub(crate) mod family;
 mod delta;
+mod order;
 mod producers;
 mod relations;
 mod queries;
@@ -22,12 +25,12 @@ use zetesis_core::{Atom, AtomPattern, Value};
 use crate::expansion::Budget;
 use crate::formula::ceiling;
 use crate::formula_binding::Binding;
-use crate::formula_ir::{Expression, HeadIr, LiteralIr, Operation, Prepared, value_bytes};
+use crate::formula_ir::{Expression, HeadIr, LiteralIr, Prepared, value_bytes};
 use crate::grounding_observer::{Event, Work};
 use crate::{ExpansionFailure, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
 
-pub(crate) use evaluation::Evaluation;
-pub(crate) use queries::Support;
+pub(crate) use evaluation::{Evaluation, Failures};
+pub(crate) use queries::{Candidates, Support};
 #[cfg(test)]
 use relations::RelationRows;
 pub(crate) use relations::{Relations, SupportCatalog};
@@ -173,18 +176,23 @@ impl Counters {
 
 pub(crate) fn build(
     prepared: &Prepared,
+    domains: Option<&crate::formula_domains::Domains<'_>>,
     limits: &FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
     fallback: Location,
 ) -> Result<CompletedCatalog, FormulaFailure> {
     let plan = producers::ProducerPlan::prepare(prepared, limits, counters, fallback)?;
-    complete(prepared, plan, limits, budget, counters, fallback)
+    complete(prepared, plan, domains, limits, budget, counters, fallback)
 }
 
+/// Every round joins each selected rule under its domain guards, when the
+/// analysis prepared candidates: a row a guard rejects has no complete
+/// continuation the exclusion rule keeps, in this round as in the final one.
 fn complete(
     prepared: &Prepared,
     mut plan: Option<producers::ProducerPlan<'_>>,
+    domains: Option<&crate::formula_domains::Domains<'_>>,
     limits: &FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
@@ -235,12 +243,19 @@ fn complete(
                     }
                     None => delta::variants(rule, &support, rounds == 1, limits, counters)?,
                 };
+                let guards = match domains {
+                    Some(domains) => support.domain_guards(
+                        rule,
+                        domains.for_rule(index, rule)?,
+                        limits,
+                        budget,
+                        counters,
+                    )?,
+                    None => None,
+                };
                 while let Some(variant) = variants.next(limits, counters)? {
-                    let mut outer = Join::rule(rule, &support, budget)?;
-                    outer.delta = match variant {
-                        delta::Variant::Full => None,
-                        delta::Variant::Delta(pivot) => Some(pivot),
-                    };
+                    let mut outer = Join::domain_rule(rule, &support, guards.as_ref(), budget)?;
+                    outer.partition(variant, budget, rule.location)?;
                     derive_rule(
                         rule, &mut outer, &support, &mut delta, limits, budget, counters,
                     )?;
@@ -383,18 +398,6 @@ impl Derivation<'_, '_> {
         binding: &Binding,
         location: Location,
     ) -> Result<(), FormulaFailure> {
-        let bytes = pattern.predicate().name().len() as u128
-            + pattern
-                .terms()
-                .iter()
-                .map(|term| binding.resolve(term, location).map(value_bytes))
-                .sum::<Result<u128, _>>()?;
-        // Preserve the cumulative admission allowance; it is not live occupancy.
-        self.budget.charge(
-            ExpansionResource::ScalarBytes,
-            bytes.saturating_mul(3),
-            location,
-        )?;
         let key = pattern
             .key(binding.slots())
             .map_err(|error| FormulaFailure::UnsafeVariable {
@@ -412,20 +415,39 @@ impl Derivation<'_, '_> {
                 self.limits.theory.max_atoms as u128,
                 location,
             )?;
+            // A new atom's copied payload, index entry and catalog cell: the
+            // cumulative allowance counts each atom once, not each proposal.
+            let bytes = pattern.predicate().name().len() as u128
+                + pattern
+                    .terms()
+                    .iter()
+                    .map(|term| binding.resolve(term, location).map(value_bytes))
+                    .sum::<Result<u128, _>>()?;
+            self.budget.charge(
+                ExpansionResource::ScalarBytes,
+                bytes.saturating_mul(3),
+                location,
+            )?;
             self.delta.insert(key.to_atom());
         }
         Ok(())
     }
 }
 
-/// Validation evidence for one partial positive binding. A false comparison
-/// can prune only when every scalar check is defined. An arithmetic failure is
-/// retained until the positive join has a complete extension; an incomplete
-/// prefix alone does not require evaluating a ground source instance.
+/// Validation evidence for one complete positive binding. A comparison that
+/// is defined and false excludes the substitution before this certificate is
+/// issued, so a certificate says at most that every comparison was decided
+/// at its depth and passed. An arithmetic failure is retained until the
+/// positive join has a complete extension no comparison excludes; an
+/// incomplete prefix alone does not require evaluating a ground source
+/// instance.
+#[derive(Clone)]
 enum Comparisons {
+    /// Some check waits for the complete row.
     Deferred,
-    Failed(ExpansionFailure),
-    Verified(bool),
+    Failed(EvalError),
+    /// Every comparison was decided at its depth, and passed.
+    Verified,
 }
 
 // The same whole-argument index serves flat atoms and structural captures.
@@ -443,7 +465,7 @@ impl PositivePattern<'_> {
     }
 }
 
-/// Source occurrence identity survives cardinality-based join reordering.
+/// Source occurrence identity survives join reordering.
 #[derive(Clone, Copy)]
 struct PatternOccurrence<'a> {
     pattern: PositivePattern<'a>,
@@ -463,6 +485,13 @@ enum Slot {
     Excluded,
 }
 
+/// Whether pruning may select rows or every complete row must supply evidence.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Coverage {
+    Selected,
+    Complete,
+}
+
 /// The cursor owns its current assignment, undo trails and bounded expression
 /// storage. Negative gates never restrict this upper relation; the emitted
 /// formulas still retain them.
@@ -470,7 +499,19 @@ pub(crate) struct Join<'a, 'source> {
     bindings: Option<&'a crate::formula_assignment_plan::Plan>,
     literals: &'a [LiteralIr],
     generated: bool,
+    /// The certificate of the last completed row, taken by its consumer.
     comparisons: Comparisons,
+    coverage: Coverage,
+    family: family::Evidence,
+    head_bounds: &'a [crate::formula_ir::AggregateGuard],
+    checked_guard: Option<&'a crate::formula_guard::Guard>,
+    /// What each prefix of the current order decides.
+    decisions: order::Decisions,
+    /// The conjunction of the comparisons decided up to each depth.
+    verdicts: Vec<bool>,
+    /// The first evaluation failure on the current prefix and the depth that
+    /// met it; released when that depth is undone.
+    failure: Option<(usize, EvalError)>,
     evaluation: Evaluation,
     pending: Option<crate::formula_binding_cursor::Cursor<'a, 'source>>,
     pending_head: Option<crate::formula_binding_cursor::Cursor<'a, 'source>>,
@@ -547,10 +588,20 @@ impl<'a, 'source> Join<'a, 'source> {
         )?;
         join.bindings = rule.bindings.as_ref();
         join.stage_head(rule.body_variables..rule.variables);
+        if let HeadIr::Choice(choice) = &rule.head {
+            join.head_bounds = &choice.guards;
+            if choice
+                .guards
+                .iter()
+                .any(|guard| family::expression(&guard.bound))
+            {
+                join.coverage = Coverage::Complete;
+            }
+        }
         Ok(join)
     }
 
-    /// Attach necessary domains only to their exact final rule and support owner.
+    /// Attach necessary domains to their exact rule and support owner.
     pub(super) fn domain_rule(
         rule: &'a crate::formula_ir::RuleIr,
         support: &'a Support<'source>,
@@ -655,6 +706,7 @@ impl<'a, 'source> Join<'a, 'source> {
                 *slot = Slot::Excluded;
             }
         }
+        join.decide();
         Ok(join)
     }
     pub fn new(
@@ -693,7 +745,16 @@ impl<'a, 'source> Join<'a, 'source> {
                 }
             }
         }
-        patterns.sort_by_key(|pattern| support.row_count(pattern.atom().predicate()));
+        let mut bound: Vec<bool> = prefix.slots().iter().map(Option::is_some).collect();
+        bound.resize(variables, false);
+        order::arrange(
+            &mut patterns,
+            literals,
+            &mut bound,
+            |pattern| support.row_count(pattern.atom().predicate()),
+            budget,
+            location,
+        )?;
         let count = patterns.len();
         let mut values = vec![None; variables];
         let mut slots = vec![Slot::Relational; variables];
@@ -714,6 +775,8 @@ impl<'a, 'source> Join<'a, 'source> {
                 slots[index] = Slot::Excluded;
             }
         }
+        let prefix: Vec<bool> = values.iter().map(Option::is_some).collect();
+        let decisions = order::Decisions::of(literals, &patterns, &prefix);
         Ok(Self {
             bindings: None,
             literals,
@@ -724,6 +787,17 @@ impl<'a, 'source> Join<'a, 'source> {
             pending_head: None,
             head_slots: variables..variables,
             comparisons: Comparisons::Deferred,
+            coverage: if family::partial(literals) {
+                Coverage::Complete
+            } else {
+                Coverage::Selected
+            },
+            family: family::Evidence::default(),
+            head_bounds: &[],
+            checked_guard: None,
+            decisions,
+            verdicts: vec![true; count.max(1)],
+            failure: None,
             evaluation: Evaluation::default(),
             patterns,
             delta: None,
@@ -738,6 +812,57 @@ impl<'a, 'source> Join<'a, 'source> {
             empty_yielded: false,
             finished: false,
         })
+    }
+    /// Fix, for the current order and prefix, the depth at which each
+    /// comparison is decided and whether any check waits for the complete
+    /// row. Called after every arrangement and after the prefix is fixed.
+    pub(crate) fn check_guard(&mut self, guard: &'a crate::formula_guard::Guard) {
+        if guard.expressions().any(family::expression) {
+            self.coverage = Coverage::Complete;
+        }
+        self.checked_guard = Some(guard);
+    }
+    pub(crate) fn evidence(&mut self) {
+        self.coverage = Coverage::Complete;
+        self.domains = None;
+    }
+    pub(crate) fn take_family(&mut self) -> family::Evidence {
+        std::mem::take(&mut self.family)
+    }
+    fn decide(&mut self) {
+        let prefix: Vec<bool> = self.values.iter().map(Option::is_some).collect();
+        self.decisions = order::Decisions::of(self.literals, &self.patterns, &prefix);
+    }
+    /// Restrict this round's join to the rows `variant` offers each source
+    /// occurrence and order the join by those counts: the pivot occurrence
+    /// offers only the round's new rows, so it is joined first when they are
+    /// the fewest.
+    fn partition(
+        &mut self,
+        variant: delta::Variant,
+        budget: &mut Budget,
+        location: Location,
+    ) -> Result<(), FormulaFailure> {
+        self.delta = match variant {
+            delta::Variant::Full => None,
+            delta::Variant::Delta(pivot) => Some(pivot),
+        };
+        let mut bound: Vec<bool> = self.values.iter().map(Option::is_some).collect();
+        let (support, delta) = (self.support, self.delta);
+        order::arrange(
+            &mut self.patterns,
+            self.literals,
+            &mut bound,
+            |pattern| {
+                let predicate = pattern.atom().predicate();
+                let (old, total) = (support.old_rows(predicate), support.row_count(predicate));
+                delta::interval(delta, pattern.source, old, total).len()
+            },
+            budget,
+            location,
+        )?;
+        self.decide();
+        Ok(())
     }
     pub fn next(
         &mut self,
@@ -756,7 +881,7 @@ impl<'a, 'source> Join<'a, 'source> {
         counters: &mut Counters,
         location: Location,
     ) -> Result<Option<Row>, FormulaFailure> {
-        self.next_staged(None, true, limits, budget, counters, location)
+        self.next_staged(None, limits, budget, counters, location)
     }
     fn next_support(
         &mut self,
@@ -777,9 +902,7 @@ impl<'a, 'source> Join<'a, 'source> {
         counters: &mut Counters,
         location: Location,
     ) -> Result<Option<Binding<'static>>, FormulaFailure> {
-        while let Some(row) =
-            self.next_staged(projected, false, limits, budget, counters, location)?
-        {
+        while let Some(row) = self.next_staged(projected, limits, budget, counters, location)? {
             if row.passes {
                 return Ok(Some(row.values));
             }
@@ -791,35 +914,38 @@ impl<'a, 'source> Join<'a, 'source> {
     fn next_staged(
         &mut self,
         projected: Option<(&AtomPattern, &BTreeSet<Atom>)>,
-        retain_rejected: bool,
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
     ) -> Result<Option<Row>, FormulaFailure> {
         loop {
-            if let Some(pending) = &mut self.pending_head
-                && let Some(values) =
-                    pending.next(&mut self.evaluation, limits, budget, counters, location)?
-            {
-                return Ok(Some(Row {
-                    values,
-                    passes: true,
-                }));
+            if let Some(pending) = &mut self.pending_head {
+                match pending.next(&mut self.evaluation, limits, budget, counters, location) {
+                    Ok(Some(values)) => {
+                        self.family.defined = true;
+                        return Ok(Some(Row {
+                            values,
+                            passes: true,
+                        }));
+                    }
+                    Ok(None) => {}
+                    Err(FormulaFailure::Expansion(error @ ExpansionFailure::Evaluation { .. }))
+                        if self.evaluation.zero_divisor() =>
+                    {
+                        self.family.zero.get_or_insert(error);
+                        pending.reject();
+                        continue;
+                    }
+                    Err(error) => return Err(error),
+                }
             }
             self.pending_head = None;
-            let Some(row) = self.next_inner(
-                projected,
-                retain_rejected,
-                limits,
-                budget,
-                counters,
-                location,
-            )?
-            else {
+            let Some(row) = self.next_inner(projected, limits, budget, counters, location)? else {
                 return Ok(None);
             };
             if !row.passes || self.head_slots.is_empty() {
+                self.family.defined = true;
                 return Ok(Some(row));
             }
             self.pending_head = Some(crate::formula_binding_cursor::Cursor::new(
@@ -831,60 +957,86 @@ impl<'a, 'source> Join<'a, 'source> {
             ));
         }
     }
+
+    fn selected_row(
+        &mut self,
+        values: Binding<'static>,
+        selection: filters::Selection,
+    ) -> Option<Row> {
+        match selection {
+            filters::Selection::Defined(passes) => Some(Row { values, passes }),
+            filters::Selection::Excluded => None,
+            filters::Selection::Zero(error) => {
+                self.family.zero.get_or_insert(error);
+                None
+            }
+        }
+    }
+
     fn next_inner(
         &mut self,
         projected: Option<(&AtomPattern, &BTreeSet<Atom>)>,
-        retain_rejected: bool,
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
     ) -> Result<Option<Row>, FormulaFailure> {
-        if !self.generated {
-            if let Some(binding) = self.next_base(
-                projected,
-                retain_rejected,
-                limits,
-                budget,
-                counters,
-                location,
-            )? {
-                let comparisons = std::mem::replace(&mut self.comparisons, Comparisons::Deferred);
-                let passes =
-                    self.filters(&binding, comparisons, limits, budget, counters, location)?;
-                return Ok(Some(Row {
-                    values: binding,
-                    passes,
-                }));
-            }
-            return Ok(None);
-        }
         loop {
-            if let Some(pending) = &mut self.pending
-                && let Some(binding) =
-                    pending.next(&mut self.evaluation, limits, budget, counters, location)?
-            {
-                let passes = self.filters(
-                    &binding,
-                    Comparisons::Deferred,
-                    limits,
-                    budget,
-                    counters,
-                    location,
-                )?;
-                return Ok(Some(Row {
-                    values: binding,
-                    passes,
-                }));
+            if !self.generated {
+                let Some(binding) =
+                    self.next_base(projected, limits, budget, counters, location)?
+                else {
+                    return Ok(None);
+                };
+                let comparisons = std::mem::replace(&mut self.comparisons, Comparisons::Deferred);
+                let selection =
+                    self.filters(&binding, comparisons, limits, budget, counters, location)?;
+                if let Some(row) = self.selected_row(binding, selection) {
+                    return Ok(Some(row));
+                }
+                continue;
             }
-            let Some(binding) = self.next_base(
-                projected,
-                retain_rejected,
-                limits,
-                budget,
-                counters,
-                location,
-            )?
+            if let Some(pending) = &mut self.pending {
+                match pending.next(&mut self.evaluation, limits, budget, counters, location) {
+                    Ok(Some(binding)) => {
+                        let selection = self.filters(
+                            &binding,
+                            self.comparisons.clone(),
+                            limits,
+                            budget,
+                            counters,
+                            location,
+                        )?;
+                        if let Some(row) = self.selected_row(binding, selection) {
+                            return Ok(Some(row));
+                        }
+                        continue;
+                    }
+                    Ok(None) => {}
+                    Err(FormulaFailure::Expansion(error @ ExpansionFailure::Evaluation { .. })) => {
+                        let zero = self.evaluation.zero_divisor();
+                        let excluded = filters::excludes(
+                            (self.literals, &self.decisions),
+                            &mut self.evaluation,
+                            pending.binding(),
+                            limits,
+                            budget,
+                            counters,
+                            location,
+                        )?;
+                        pending.reject();
+                        if !excluded {
+                            if !zero {
+                                return Err(error.into());
+                            }
+                            self.family.zero.get_or_insert(error);
+                        }
+                        continue;
+                    }
+                    Err(error) => return Err(error),
+                }
+            }
+            let Some(binding) = self.next_base(projected, limits, budget, counters, location)?
             else {
                 return Ok(None);
             };
@@ -900,14 +1052,11 @@ impl<'a, 'source> Join<'a, 'source> {
     fn next_base(
         &mut self,
         projected: Option<(&AtomPattern, &BTreeSet<Atom>)>,
-        retain_rejected: bool,
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
     ) -> Result<Option<Binding<'static>>, FormulaFailure> {
-        // This certificate belongs to the next returned binding snapshot, even
-        // though completing that snapshot undoes the last mutable join row.
         self.comparisons = Comparisons::Deferred;
         if self.finished {
             return Ok(None);
@@ -926,15 +1075,19 @@ impl<'a, 'source> Join<'a, 'source> {
                     return Ok(None);
                 }
                 self.empty_yielded = true;
-                if !self.filter_prefix(limits, budget, counters, location)? && !retain_rejected {
+                if !self.filter_prefix(limits, budget, counters, location)? {
                     continue;
                 }
+                self.comparisons = self.certificate();
                 if let Some(binding) = self.complete(limits, budget, counters, location)? {
                     return Ok(Some(binding));
                 }
                 continue;
             }
             if self.depth == self.patterns.len() {
+                // The certificate belongs to the returned binding snapshot,
+                // even though completing that snapshot undoes the last row.
+                self.comparisons = self.certificate();
                 let complete = self.complete(limits, budget, counters, location)?;
                 self.depth -= 1;
                 self.undo();
@@ -990,16 +1143,15 @@ impl<'a, 'source> Join<'a, 'source> {
                 continue;
             };
             counters.record(Event::JoinRow);
-            if let Some(domains) = self.domains
+            if self.coverage == Coverage::Selected
+                && let Some(domains) = self.domains
                 && !domains.permits(pattern.source, atom.position(), limits, counters, location)?
             {
                 continue;
             }
             let matches =
                 self.match_row(pattern.pattern, atom, limits, budget, counters, location)?;
-            if matches
-                && (self.filter_prefix(limits, budget, counters, location)? || retain_rejected)
-            {
+            if matches && self.filter_prefix(limits, budget, counters, location)? {
                 self.depth += 1;
             } else {
                 self.undo();
@@ -1044,12 +1196,11 @@ impl<'a, 'source> Join<'a, 'source> {
         } else {
             for (column, term) in pattern.atom().terms().iter().enumerate() {
                 let value = atom.value(column).expect("checked pattern arity");
-                counters.work(limits, location)?;
-                if let Value::Structured(value) = value {
-                    for _ in 0..value.payload_bytes() {
-                        counters.work(limits, location)?;
-                    }
-                }
+                let payload = match value {
+                    Value::Structured(value) => value.payload_bytes(),
+                    _ => 0,
+                };
+                counters.charge_work(1 + payload as u128, limits, location)?;
                 match term {
                     zetesis_core::Term::Constant(constant) => matches &= constant == value,
                     zetesis_core::Term::Variable(variable) => {
@@ -1068,6 +1219,12 @@ impl<'a, 'source> Join<'a, 'source> {
         }
         Ok(matches)
     }
+    /// Evaluate the comparisons the current depth decides, once, and fold
+    /// them into the prefix's verdict. A comparison that is defined and false
+    /// excludes every substitution of the prefix, so the prefix is pruned and
+    /// nothing beneath it is reached; an evaluation failure is retained, and
+    /// becomes a refusal only if no comparison of the complete substitution
+    /// excludes it.
     fn filter_prefix(
         &mut self,
         limits: &FormulaLimits,
@@ -1075,20 +1232,66 @@ impl<'a, 'source> Join<'a, 'source> {
         counters: &mut Counters,
         location: Location,
     ) -> Result<bool, FormulaFailure> {
-        self.comparisons = partial_filters(
-            self.literals,
-            &self.values,
-            &mut self.evaluation,
-            limits,
-            budget,
-            counters,
-            location,
-        )?;
-        Ok(!matches!(self.comparisons, Comparisons::Verified(false)))
+        if self.coverage == Coverage::Complete {
+            return Ok(true);
+        }
+        let depth = self.depth;
+        let mut passes = depth == 0 || self.verdicts[depth - 1];
+        for index in self.decisions.decided_at(depth) {
+            let (left, relation, right) =
+                comparison(&self.literals[index]).expect("a decided literal is a comparison");
+            let values = self.evaluation.source_values(
+                [left, right],
+                |variable| {
+                    self.values[variable]
+                        .as_ref()
+                        .ok_or(FormulaFailure::UnsafeVariable { variable, location })
+                },
+                limits,
+                budget,
+                counters,
+                location,
+            );
+            match values {
+                Ok([left, right]) => passes &= compare(&left, relation, &right),
+                Err(FormulaFailure::Expansion(ExpansionFailure::Evaluation { error, .. })) => {
+                    // Retained, not raised: a comparison decided here or
+                    // deeper may still exclude the substitution.
+                    if self.failure.is_none() {
+                        self.failure = Some((depth, error));
+                    }
+                }
+                Err(error) => return Err(error),
+            }
+        }
+        self.verdicts[depth] = passes;
+        Ok(passes)
+    }
+    /// The certificate of the completed prefix: a retained failure, the
+    /// verdict when every comparison is decided, or deferral. A prefix
+    /// advances only when its comparisons pass, so a completed one passed
+    /// them all.
+    fn certificate(&self) -> Comparisons {
+        if let Some((_, error)) = &self.failure {
+            return Comparisons::Failed(error.clone());
+        }
+        let depth = self.patterns.len().saturating_sub(1);
+        if self.decisions.certifies(depth) {
+            Comparisons::Verified
+        } else {
+            Comparisons::Deferred
+        }
     }
     fn undo(&mut self) {
         for variable in self.changes[self.depth].drain(..) {
             self.values[variable] = None;
+        }
+        if self
+            .failure
+            .as_ref()
+            .is_some_and(|(at, _)| *at >= self.depth)
+        {
+            self.failure = None;
         }
     }
     fn skip_derived(
@@ -1159,63 +1362,6 @@ impl<'a, 'source> Join<'a, 'source> {
     }
 }
 
-fn partial_filters(
-    literals: &[LiteralIr],
-    assignment: &[Option<Value>],
-    evaluation: &mut Evaluation,
-    limits: &FormulaLimits,
-    budget: &mut Budget,
-    counters: &mut Counters,
-    location: Location,
-) -> Result<Comparisons, FormulaFailure> {
-    let mut deferred = false;
-    let mut passes = true;
-    for literal in literals {
-        if crate::formula_binding_cursor::target(literal)
-            .is_some_and(|target| target >= assignment.len())
-        {
-            continue;
-        }
-        if let Some((left, relation, right)) = comparison(literal) {
-            if !bound(left, assignment, limits, counters, location)?
-                || !bound(right, assignment, limits, counters, location)?
-            {
-                deferred = true;
-                continue;
-            }
-            let values = (|| {
-                let left = partial_value(
-                    left, assignment, evaluation, limits, budget, counters, location,
-                )?;
-                let right = partial_value(
-                    right, assignment, evaluation, limits, budget, counters, location,
-                )?;
-                Ok((left, right))
-            })();
-            match values {
-                Ok((left, right)) => passes &= compare(&left, relation, &right),
-                Err(FormulaFailure::Expansion(error @ ExpansionFailure::Evaluation { .. })) => {
-                    return Ok(Comparisons::Failed(error));
-                }
-                Err(error) => return Err(error),
-            }
-        } else if !matches!(
-            literal,
-            LiteralIr::Atom(..) | LiteralIr::PatternAtom(_) | LiteralIr::ProjectedAtom(..)
-        ) {
-            // Tuple/whole guards, range checks and generated values are validated
-            // by their complete-row operations. An ordinary comparison cannot
-            // certify that these independent checks have succeeded.
-            deferred = true;
-        }
-    }
-    Ok(if deferred {
-        Comparisons::Deferred
-    } else {
-        Comparisons::Verified(passes)
-    })
-}
-
 /// Captured arguments reuse comparison evaluation, never binding inference.
 fn comparison(literal: &LiteralIr) -> Option<(&Expression, Relation, &Expression)> {
     match literal {
@@ -1225,160 +1371,6 @@ fn comparison(literal: &LiteralIr) -> Option<(&Expression, Relation, &Expression
     }
 }
 
-fn partial_value(
-    expression: &Expression,
-    assignment: &[Option<Value>],
-    evaluation: &mut Evaluation,
-    limits: &FormulaLimits,
-    budget: &mut Budget,
-    counters: &mut Counters,
-    location: Location,
-) -> Result<Value, FormulaFailure> {
-    evaluation.expression(
-        expression,
-        |variable| {
-            assignment[variable]
-                .as_ref()
-                .ok_or(FormulaFailure::UnsafeVariable { variable, location })
-        },
-        limits,
-        budget,
-        counters,
-        location,
-    )
-}
-
-fn bound(
-    expression: &Expression,
-    assignment: &[Option<Value>],
-    limits: &FormulaLimits,
-    counters: &mut Counters,
-    location: Location,
-) -> Result<bool, FormulaFailure> {
-    for operation in &expression.nodes {
-        counters.work(limits, location)?;
-        counters.record(Event::ReadinessNode);
-        if let Operation::Variable(variable) = operation
-            && assignment[*variable].is_none()
-        {
-            return Ok(false);
-        }
-    }
-    Ok(true)
-}
-
-impl Join<'_, '_> {
-    fn filters(
-        &mut self,
-        assignment: &Binding,
-        comparisons: Comparisons,
-        limits: &FormulaLimits,
-        budget: &mut Budget,
-        counters: &mut Counters,
-        location: Location,
-    ) -> Result<bool, FormulaFailure> {
-        let (verified, mut passes) = match comparisons {
-            Comparisons::Verified(passes) => (true, passes),
-            Comparisons::Deferred => (false, true),
-            Comparisons::Failed(error) => return Err(error.into()),
-        };
-        // Falsehood does not discharge another expression's validation duty.
-        // These complete-row checks deliberately continue after a false filter.
-        for literal in self.literals {
-            if crate::formula_binding_cursor::target(literal)
-                .is_some_and(|target| target >= assignment.len())
-            {
-                continue;
-            }
-            if let Some((left, relation, right)) = comparison(literal)
-                && !verified
-            {
-                let left = self.evaluation.expression(
-                    left,
-                    |variable| assignment.read(variable, location),
-                    limits,
-                    budget,
-                    counters,
-                    location,
-                )?;
-                let right = self.evaluation.expression(
-                    right,
-                    |variable| assignment.read(variable, location),
-                    limits,
-                    budget,
-                    counters,
-                    location,
-                )?;
-                passes &= compare(&left, relation, &right);
-            } else if let LiteralIr::TupleCompare(left, relation, right) = literal {
-                let mut equal = left.len() == right.len();
-                // Unequal arities determine truth, not whether an existing
-                // component's arithmetic must be validated.
-                for index in 0..left.len().max(right.len()) {
-                    let left = left
-                        .get(index)
-                        .map(|value| {
-                            self.evaluation.expression(
-                                value,
-                                |variable| assignment.read(variable, location),
-                                limits,
-                                budget,
-                                counters,
-                                location,
-                            )
-                        })
-                        .transpose()?;
-                    let right = right
-                        .get(index)
-                        .map(|value| {
-                            self.evaluation.expression(
-                                value,
-                                |variable| assignment.read(variable, location),
-                                limits,
-                                budget,
-                                counters,
-                                location,
-                            )
-                        })
-                        .transpose()?;
-                    equal &= left == right;
-                }
-                passes &= equal == (*relation == Relation::Eq);
-            } else if let LiteralIr::Guard(guard) = literal {
-                passes &= guard.evaluate(assignment, limits, budget, counters, location)?;
-            } else if let LiteralIr::Range {
-                target,
-                lower,
-                upper,
-                binder: false,
-            } = literal
-            {
-                let lower = self.evaluation.expression(
-                    lower,
-                    |variable| assignment.read(variable, location),
-                    limits,
-                    budget,
-                    counters,
-                    location,
-                )?;
-                let upper = self.evaluation.expression(
-                    upper,
-                    |variable| assignment.read(variable, location),
-                    limits,
-                    budget,
-                    counters,
-                    location,
-                )?;
-                let (Value::Number(lower), Value::Number(upper)) = (lower, upper) else {
-                    passes = false;
-                    continue;
-                };
-                passes &= matches!(assignment.read(*target, location)?, Value::Number(value) if *value >= lower && *value <= upper);
-            }
-        }
-        Ok(passes)
-    }
-}
 pub(crate) fn expression(
     expression: &Expression,
     assignment: &Binding,
@@ -1387,7 +1379,7 @@ pub(crate) fn expression(
     counters: &mut Counters,
     location: Location,
 ) -> Result<Value, FormulaFailure> {
-    Evaluation::default().expression(
+    Evaluation::default().source_expression(
         expression,
         |variable| assignment.read(variable, location),
         limits,

@@ -13,7 +13,7 @@ mod workspace_tests;
 use watch_node::WatchNode;
 
 pub(crate) use quota::{BoundedQuota, LocalQuota, Quota};
-pub(crate) use shared_budget::SharedBudget;
+pub(crate) use shared_budget::{SharedBudget, WorkLease};
 
 #[cfg(test)]
 #[path = "../tests/support/finish_contracts.rs"]
@@ -64,10 +64,12 @@ impl Default for SearchLimits {
     }
 }
 
-/// Exact accounting for charged search and certificate operations, including failures.
+/// Accounting for charged search and certificate operations, including failures.
+/// A panicking parallel worker conservatively consumes a reservation whose
+/// actual-work receipt could not be returned, and reports `WorkerPanicked`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SearchStatistics {
-    /// Charged primitive operations.
+    /// Charged primitive operations, including reservations lost to worker panic.
     pub work: u64,
     /// Fresh decision frames opened.
     pub decisions: u64,
@@ -102,11 +104,29 @@ impl<Q: Quota> Budget<'_, Q> {
         self.statistics.work += 1;
         Ok(())
     }
-    fn decide(&mut self) -> Result<(), Incomplete> {
+    pub(crate) fn decide(&mut self) -> Result<(), Incomplete> {
         self.tick()?;
         self.quota
             .decision(self.statistics.decisions, self.limits.max_decisions)?;
         self.statistics.decisions += 1;
+        Ok(())
+    }
+    /// The work left before the ceiling, for an operation that charges its
+    /// own work and reports it afterwards through [`Self::charge`].
+    pub(crate) fn remaining_work(&self) -> u64 {
+        self.limits.max_work.saturating_sub(self.statistics.work)
+    }
+    /// Charge work an operation already performed, one poll for the lot,
+    /// reserved through the quota as ticks would be.
+    pub(crate) fn charge(&mut self, work: u64) -> Result<(), Incomplete> {
+        self.control.poll()?;
+        self.quota
+            .charge(self.statistics.work, self.limits.max_work, work)?;
+        self.statistics.work = self
+            .statistics
+            .work
+            .checked_add(work)
+            .ok_or(Incomplete::CounterOverflow)?;
         Ok(())
     }
 }
@@ -459,20 +479,16 @@ impl State {
             budget.tick()?;
             assignment.push(value.ok_or(Incomplete::InvalidWitness)?);
         }
-        // Validate the completed witness against clauses, independently of watches.
-        for clause in cnf.clauses().take(self.base_clauses) {
-            let mut satisfied = false;
-            for literal in clause.iter() {
-                budget.tick()?;
-                if assignment[literal.variable()] == literal.positive() {
-                    satisfied = true;
-                    break;
-                }
-            }
-            if !satisfied {
-                return Err(Incomplete::InvalidWitness);
-            }
-        }
+        // A complete assignment that propagation left without conflict
+        // satisfies every clause: a clause with both watches false would
+        // have propagated or conflicted. The truth-table tests state that
+        // property; a debug build re-checks it, uncharged.
+        debug_assert!(
+            cnf.clauses().take(self.base_clauses).all(|clause| clause
+                .iter()
+                .any(|literal| assignment[literal.variable()] == literal.positive())),
+            "a completed witness falsifies a base clause"
+        );
         Ok(Assignment(assignment))
     }
 }

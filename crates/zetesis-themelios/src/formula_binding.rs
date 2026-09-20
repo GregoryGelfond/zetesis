@@ -1,14 +1,13 @@
 //! Scoped assignments retain absence independently of every ASP value.
 
 use std::borrow::Cow;
-use std::mem::size_of;
 
 use themelios_base::span::Location;
 use zetesis_core::{Atom, AtomPattern, Term, Value};
 
 use crate::expansion::Budget;
 use crate::formula_support::{Counters, copy};
-use crate::{ExpansionResource, FormulaFailure, FormulaLimits};
+use crate::{FormulaFailure, FormulaLimits};
 
 /// Slots retain source variable identity across local and component scopes.
 /// Owned frames can be extended; a body-prefix view borrows its parent's slots.
@@ -29,7 +28,7 @@ impl Binding<'static> {
         location: Location,
     ) -> Result<Self, FormulaFailure> {
         let mut slots = Vec::new();
-        reserve(&mut slots, source.len(), budget, location)?;
+        reserve(&mut slots, source.len(), location)?;
         for slot in source {
             counters.work(limits, location)?;
             slots.push(
@@ -69,12 +68,11 @@ impl Binding<'static> {
     pub(crate) fn extend_scope(
         &mut self,
         end: usize,
-        budget: &mut Budget,
         location: Location,
     ) -> Result<(), FormulaFailure> {
         if end > self.len() {
             let slots = self.slots.to_mut();
-            reserve(slots, end, budget, location)?;
+            reserve(slots, end, location)?;
             slots.resize(end, None);
         }
         Ok(())
@@ -144,36 +142,25 @@ impl Binding<'_> {
     }
 }
 
-/// Charge minimum growth before allocation, then any allocator-supplied slack.
-/// Failure never publishes a partial binding. This is cumulative admitted frame
-/// capacity; borrowed prefix views neither allocate nor charge another frame.
+/// Reserve a binding frame's slots. A frame is transient: it holds one
+/// rule's variables while a binding is joined and is released with it, so
+/// its capacity is bounded by the rule's variable count times the join depth
+/// and is not charged to the cumulative scalar allowance, which counts
+/// retained payload. Failure never publishes a partial binding.
 fn reserve(
     slots: &mut Vec<Option<Value>>,
     end: usize,
-    budget: &mut Budget,
     location: Location,
 ) -> Result<(), FormulaFailure> {
-    let previous = slots.capacity();
-    if end <= previous {
+    if end <= slots.capacity() {
         return Ok(());
     }
-    budget.charge(
-        ExpansionResource::ScalarBytes,
-        (end - previous) as u128 * size_of::<Option<Value>>() as u128,
-        location,
-    )?;
     slots
         .try_reserve_exact(end - slots.len())
         .map_err(|_| FormulaFailure::SupportRelation {
             error: zetesis_core::relation::Failure::Allocation,
             location,
-        })?;
-    budget.charge(
-        ExpansionResource::ScalarBytes,
-        (slots.capacity() - end) as u128 * size_of::<Option<Value>>() as u128,
-        location,
-    )?;
-    Ok(())
+        })
 }
 
 #[cfg(test)]

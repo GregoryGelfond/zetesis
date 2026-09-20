@@ -143,7 +143,14 @@ fn search_inner(
             .extend(store.guards.iter().map(super::guard::Guard::witness_bits));
     }
     let clock = Instant::now();
-    let result = zetesis_sat::StableModels::new(source, configuration.native(), control.clone());
+    // The projection history and its guards are the clause forms': the
+    // measurement names its method rather than follow the default.
+    let result = zetesis_sat::StableModels::with_method(
+        source,
+        zetesis_sat::SearchMethod::Clauses,
+        configuration.native(),
+        control.clone(),
+    );
     elapsed.search_setup_ns += clock.elapsed().as_nanos();
     let mut search = result.map_err(Error::Native)?;
     let result = enumerate(&mut search, guards, progress, elapsed);

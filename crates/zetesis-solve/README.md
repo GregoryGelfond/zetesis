@@ -63,9 +63,11 @@ Independent relational CPU sessions retain one exact-program query preparation
 and reuse empty workspaces across submitted batches. `max_source_work` bounds
 preparation; candidate work remains separately bounded by `max_work`.
 `SemanticOutcome::query_execution()` retains the CPU producer's actual ownership
-receipt and any snapshot fault. Preparation and candidate stops remain distinct,
-and previously checked answers remain valid. Reused capacity is neither shared
-candidate truth nor a performance guarantee.
+receipt and any snapshot fault, and `SemanticOutcome::closure_execution()` sums
+the counters of every completed check on the independent lazy and eager routes.
+Preparation and candidate stops remain distinct, and previously checked answers
+remain valid. Reused capacity is neither shared candidate truth nor a
+performance guarantee.
 
 `AnswerSet` retains its original subject and optional objective score.
 `SemanticOutcome` records verified membership and search coverage independently

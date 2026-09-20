@@ -12,7 +12,7 @@ use super::test_harness::{admitted, input, run};
 use crate::formula_execution::{Failure, FormulaExecutionStatistics, MembershipExecution};
 use crate::formula_queue::BatchQueue;
 use crate::phase_timing::Recorder;
-use crate::{Backend, Oracle, SolveConfig, SolveError};
+use crate::{Backend, Oracle, SearchMethod, SolveConfig, SolveError};
 
 #[derive(Default)]
 struct Injected {
@@ -72,9 +72,12 @@ impl MembershipExecution for Injected {
     }
 }
 
+/// The batched protocol the injected checker takes part in belongs to
+/// the clause search.
 fn config() -> SolveConfig {
     SolveConfig {
         backend: Backend::Cpu,
+        search: SearchMethod::Clauses,
         oracle: Oracle::Countermodel,
         models: 0,
         batch_size: NonZeroUsize::new(2).unwrap(),

@@ -1,8 +1,10 @@
 //! Bounded native Boolean search and finite Ferraris stable-model enumeration.
 //!
-//! The SAT kernel uses iterative chronological DPLL and two watched literals.
-//! Candidate formulas and frozen reducts receive full Tseitin equivalences;
-//! only original semantic atoms enter minimality and model blocking. This
+//! Candidates are proposed either by regions of the theory's atoms narrowed
+//! by its readings, with no clause form, or by the SAT kernel's iterative
+//! chronological DPLL with two watched literals over a Tseitin encoding of
+//! the theory. Frozen reducts receive full Tseitin equivalences; only
+//! original semantic atoms enter minimality and model blocking. This
 //! crate does not parse, ground, translate source aggregates, invoke an
 //! external solver, or claim a refinement proof for its Rust implementation.
 #![forbid(unsafe_code)]
@@ -32,8 +34,8 @@ pub use error::Incomplete;
 pub use ferraris::{
     BatchError, BatchLimits, BatchStatistics, BatchVerdict, CertificateError, CertificateLimits,
     CertificateOrder, CertificatePlanStatistics, CertifiedStatistics, Check, CompletionExecutor,
-    CompletionScratch, CompletionStatistics, Limits, StableModels, Statistics, SupportStatistics,
-    SupportStatus, check,
+    CompletionScratch, CompletionStatistics, Limits, RegionCounts, RegionSearchStatistics,
+    SearchMethod, StableModels, Statistics, SupportStatistics, SupportStatus, check, check_with,
 };
 pub use projection::{ProjectionLimits, ProjectionResource, ProjectionStatistics};
 pub use search::{SearchLimits, SearchStatistics, Solve, solve, solve_with_statistics};

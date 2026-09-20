@@ -5,7 +5,7 @@ use std::path::Path;
 use serde::Serialize;
 
 use super::super::{Error, Phase};
-use crate::selected::{Grounder, NativeExecution};
+use crate::selected::NativeExecution;
 
 pub(super) const MAX_CASES: usize = 94;
 
@@ -19,6 +19,12 @@ pub enum Suite {
     Baseline,
     /// All six curated queens encodings at their default N=8.
     Queens,
+    /// The fixed cell set of [`super::super::series`]: generated families,
+    /// amended queens boards and two unchanged entries, meant for
+    /// `run_workloads` with the series' workloads. Its corpus entries are
+    /// the series' own list, the queens, SEND and task-allocation cases;
+    /// a plain run under this suite measures only those, unchanged.
+    Series,
 }
 
 /// Validated finite campaign configuration; requested profiles never imply execution.
@@ -29,15 +35,19 @@ pub struct Plan {
     pub(super) reference_workers: NonZeroUsize,
     pub(super) warmups: usize,
     pub(super) repetitions: usize,
+    /// Separate child-resource rounds per producer and case, after the
+    /// timed rounds; zero unless requested.
+    pub(super) memory_runs: usize,
 }
 impl Plan {
-    /// Construct up to eight explicit CPU/Metal eager/lazy profiles. Each worker
-    /// count is bounded by 256; every profile retains its batch/scratch ceilings.
-    /// Zero through five warmups and one through 41 timed rounds are admitted.
+    /// Construct up to eight CPU/Metal profiles. Each worker count is bounded
+    /// by 256; every profile retains its batch/scratch ceilings. Zero through
+    /// five warmups and one through 41 timed rounds are admitted. An automatic
+    /// grounding request is admitted; its observations retain the mode taken.
     ///
     /// # Errors
-    /// Refuses empty/oversized profile families, automatic grounding or counts
-    /// outside these bounds. Repeated profiles are permitted as authored controls.
+    /// Refuses empty/oversized profile families or counts outside these bounds.
+    /// Repeated profiles are permitted as authored controls.
     pub fn new(
         suite: Suite,
         profiles: Vec<NativeExecution>,
@@ -49,14 +59,12 @@ impl Plan {
         if profiles.is_empty()
             || profiles.len() > 8
             || reference_workers.get() > 256
-            || profiles.iter().any(|p| {
-                p.grounder == Grounder::Auto
-                    || p.workers.get() > 256
-                    || p.completion_workers.get() > 256
-            })
+            || profiles
+                .iter()
+                .any(|p| p.workers.get() > 256 || p.completion_workers.get() > 256)
         {
             return Err(Error::Configuration(
-                "matrix requires 1..=8 explicit profiles and workers 1..=256",
+                "matrix requires 1..=8 profiles and workers 1..=256",
             ));
         }
         Ok(Self {
@@ -65,7 +73,26 @@ impl Plan {
             reference_workers,
             warmups,
             repetitions,
+            memory_runs: 0,
         })
+    }
+    /// Request zero through 41 memory rounds per producer and case: each a
+    /// separate invocation through a fresh helper that reports the child's
+    /// peak resident set, excluded from the timed population.
+    ///
+    /// # Errors
+    /// Refuses more than 41 rounds.
+    pub fn with_memory(mut self, rounds: usize) -> Result<Self, Error> {
+        if rounds > 41 {
+            return Err(Error::Configuration("memory rounds must be 0..=41"));
+        }
+        self.memory_runs = rounds;
+        Ok(self)
+    }
+    /// Memory rounds per producer and case.
+    #[must_use]
+    pub const fn memory_runs(&self) -> usize {
+        self.memory_runs
     }
     /// Ordered requested native profiles, indexed by [`Producer::Native`].
     #[must_use]
@@ -79,6 +106,7 @@ impl Plan {
     }
     /// Complete schedule. Qualification visits the reference first. Later rounds
     /// rotate both case and producer positions, without compacting refused cells.
+    /// The memory rounds follow the timed rounds.
     ///
     /// # Errors
     /// Refuses a case count outside the sealed corpus maximum.
@@ -87,11 +115,14 @@ impl Plan {
             return Err(Error::Configuration("matrix cases must be 1..=94"));
         }
         let width = self.profiles.len() + 1;
-        let mut slots = Vec::with_capacity(cases * width * (1 + self.warmups + self.repetitions));
+        let mut slots = Vec::with_capacity(
+            cases * width * (1 + self.warmups + self.repetitions + self.memory_runs),
+        );
         for (phase, rounds) in [
             (Phase::Qualification, 1),
             (Phase::Warmup, self.warmups),
             (Phase::Timed, self.repetitions),
+            (Phase::Memory, self.memory_runs),
         ] {
             for round in 0..rounds {
                 for position in 0..cases {
@@ -170,4 +201,8 @@ pub struct Request<'a> {
     pub native_answers: crate::answers::native_json::Limits,
     /// Combined selected-symbol spelling bytes per native report.
     pub max_spelling_bytes: usize,
+    /// Absolute helper executable that runs each memory round's solver as
+    /// its child and records the child's peak resident set; required when
+    /// the plan has memory rounds, and sealed with the other executables.
+    pub helper: Option<&'a Path>,
 }

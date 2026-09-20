@@ -7,7 +7,7 @@ use std::fmt::Write as _;
 use themelios_base::source::SourceId;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
-    FormulaFailure, FormulaLimits, FormulaResource, admit_formula, prepare_formula,
+    FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning, admit_formula, prepare_formula,
 };
 
 #[path = "support/objective_dependency_records.rs"]
@@ -406,18 +406,21 @@ fn absent_relational_support_skips_value_evaluation() {
 }
 
 #[test]
-fn false_filters_do_not_hide_undefined_consumers() {
-    let error = admit_formula(
-        "{p}.q(Y):-N=#count{1:p},N>0,Y=1/N.".into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_err();
-    assert!(matches!(
-        error,
-        FormulaFailure::Expansion(ExpansionFailure::Evaluation { .. })
-    ));
+fn mixed_consumers_keep_the_defined_family() {
+    let source = "{p}.q(Y):-N=#count{1:p},N>0,Y=1/N.";
+    let admitted = input(source);
+    // N is generated, so N>0 does not exclude the zero proposal from the family.
+    let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
+        panic!("one zero-divisor warning: {:?}", admitted.warnings());
+    };
+    assert_eq!(location.source, SOURCE);
+    assert_eq!(
+        admitted.source().slice(location.span).unwrap(),
+        &source[4..]
+    );
+    let expected = Models::from([BTreeSet::new(), BTreeSet::from(["p".into(), "q(1)".into()])]);
+    assert_eq!(native(&admitted), expected);
+    assert_eq!(exhaustive(&admitted), expected);
 }
 
 #[test]

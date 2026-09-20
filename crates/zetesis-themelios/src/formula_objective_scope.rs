@@ -12,7 +12,7 @@ mod selection;
 use themelios_program::provenance::{Origin, WithProvenance};
 use themelios_program::term::Term;
 
-use super::{Compiler, LiteralIr, ObjectiveCondition, ObjectiveIr, Variables};
+use super::{Compiler, LiteralIr, ObjectiveCondition, ObjectiveFamily, ObjectiveIr, Variables};
 use crate::{ExpansionResource, FormulaFailure};
 use std::collections::BTreeSet;
 use themelios_base::span::Location;
@@ -98,6 +98,7 @@ impl Compiler<'_> {
             .chain(weak.terms())
             .collect();
         declarations.extend_from_slice(origins);
+        let family = ObjectiveFamily(objectives.len());
         for body in self.body_alternatives(weak.body().get())? {
             let alternatives = self.local_alternatives(&fields, &Condition::new([]))?;
             for (terms, _) in &alternatives {
@@ -118,6 +119,7 @@ impl Compiler<'_> {
                     terms,
                     evidence.clone(),
                     WeightPolarity::AsWritten,
+                    family,
                 )?;
                 objectives.push(objective);
             }
@@ -130,9 +132,17 @@ impl Compiler<'_> {
         element: &OptimizeElement,
         origins: Vec<Location>,
         polarity: WeightPolarity,
+        family: ObjectiveFamily,
     ) -> Result<ObjectiveIr, FormulaFailure> {
         let body = crate::formula_weak::body(element.condition(), self.budget, self.location)?;
-        self.scoped_objective(&body, element.weight(), element.terms(), origins, polarity)
+        self.scoped_objective(
+            &body,
+            element.weight(),
+            element.terms(),
+            origins,
+            polarity,
+            family,
+        )
     }
 
     pub(super) fn element_needs_scope(
@@ -160,20 +170,25 @@ impl Compiler<'_> {
         terms: impl Iterator<Item = &'source Term>,
         origins: Vec<Location>,
         polarity: WeightPolarity,
+        family: ObjectiveFamily,
     ) -> Result<ObjectiveIr, FormulaFailure> {
+        // The scope compiles under the compilation's shared names, lent to
+        // it and taken back with what it added, as the budget is lent.
         let mut compiler = Compiler {
             options: self.options,
             limits: self.limits,
             budget: self.budget,
             domain: BTreeSet::new(),
+            predicates: std::mem::take(&mut self.predicates),
             next_aggregate: self.next_aggregate,
             dependency_projection: false,
             location: self.location,
         };
-        let objective = compiler.scoped_body(source, weight, terms, origins, polarity)?;
+        let objective = compiler.scoped_body(source, weight, terms, origins, polarity, family);
+        self.predicates = compiler.predicates;
         self.next_aggregate = compiler.next_aggregate;
         self.dependency_projection |= compiler.dependency_projection;
-        Ok(objective)
+        objective
     }
 
     fn scoped_field(
@@ -200,6 +215,7 @@ impl Compiler<'_> {
         terms: impl Iterator<Item = &'source Term>,
         origins: Vec<Location>,
         polarity: WeightPolarity,
+        family: ObjectiveFamily,
     ) -> Result<ObjectiveIr, FormulaFailure> {
         let mut variables = Variables::default();
         // Fields belong to the outer scope, even when only a local aggregate
@@ -237,6 +253,7 @@ impl Compiler<'_> {
             })
             .collect();
         Ok(ObjectiveIr {
+            family,
             weight,
             priority,
             tuple,

@@ -20,11 +20,16 @@ stronger local premise used by `TableBindings.join_family_preserved`.
 The concrete consumer is
 [`formula_domains`](../../crates/zetesis-themelios/src/formula_domains.rs),
 [rule guards](../../crates/zetesis-themelios/src/formula_support/queries/domains.rs)
-and the existing final `Join`. The first release is optional and default off.
-Its applicability check requires the exact normalized whole program and original
-flat positive rule occurrences. It excludes generators, comparisons, negative
-body gates, structured terms and richer producers from this consumer. Support
-completion is unchanged. On this pure positive profile, induction over the
+and the existing final `Join`. The library option is off unless requested; the
+ordinary command requests it. Its applicability check requires the exact
+normalized whole program and original flat positive rule occurrences. It
+excludes generators, negative body gates, structured terms and richer producers
+from this consumer; a body comparison is admitted, and one that reads a single
+variable narrows that variable's candidates by `kept_binding_survives`, whose
+exclusion premise the guard discharges by evaluating the comparison at the
+candidate exactly as the join evaluates it. The candidates are prepared once
+per rule and resolved into every completion snapshot and the final one, so
+support completion reads the same narrowed rows as final instantiation. On this pure positive profile, induction over the
 completed support construction and the analyzer's conservative transfers must
 supply argument coverage; this source-to-implementation bridge remains a review
 and executable-control obligation, not a theorem established by these lemmas.

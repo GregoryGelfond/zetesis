@@ -215,7 +215,10 @@ fn empty_evaluation_observes_control_before_storage() {
     let mut workspace = EvaluationWorkspace::default();
     for (control, stop) in [
         (cancelled, Stop::Cancelled),
-        (Control::with_deadline(Instant::now()), Stop::Deadline),
+        (
+            Control::with_deadline(Instant::now()).unwrap(),
+            Stop::Deadline,
+        ),
     ] {
         let attempt = workspace.evaluate(
             &candidate,

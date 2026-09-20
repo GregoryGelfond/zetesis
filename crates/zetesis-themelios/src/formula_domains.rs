@@ -3,8 +3,9 @@
 use themelios_base::span::Location;
 use zetesis_domain::{Analysis, Status};
 
+use crate::expansion::Budget;
 use crate::formula_ir::{Prepared, RuleIr};
-use crate::formula_support::Counters;
+use crate::formula_support::{Candidates, Counters};
 use crate::grounding_observer::{Event, Profile};
 use crate::{DomainLimits, DomainObservation, FormulaFailure, FormulaLimits};
 
@@ -12,22 +13,26 @@ mod positive;
 pub(crate) use positive::PositiveSource;
 
 /// Only this module constructs the certificate joining an eligible normalized
-/// owner, its original rule occurrence array and a completed analysis.
+/// owner, its original rule occurrence array, a completed analysis and the
+/// narrowed candidates of every rule, prepared once for every completion
+/// round and the final instantiation.
 pub(crate) struct Domains<'source> {
     analysis: Analysis<'source>,
     source: PositiveSource<'source>,
+    candidates: Vec<Candidates<'source>>,
 }
 
-impl Domains<'_> {
+impl<'source> Domains<'source> {
     pub(crate) fn for_rule(
         &self,
         index: usize,
         rule: &RuleIr,
-    ) -> Result<&Analysis<'_>, FormulaFailure> {
+    ) -> Result<&Candidates<'source>, FormulaFailure> {
         if self.analysis.belongs_to(&self.source.prepared().analyzed)
             && self.source.contains(index, rule)
+            && let Some(candidates) = self.candidates.get(index)
         {
-            Ok(&self.analysis)
+            Ok(candidates)
         } else {
             Err(FormulaFailure::SupportRelation {
                 error: zetesis_core::relation::Failure::Owner,
@@ -41,6 +46,7 @@ pub(crate) fn analyze<'source>(
     prepared: &'source Prepared,
     options: Option<DomainLimits>,
     limits: &FormulaLimits,
+    budget: &mut Budget,
     counters: &mut Counters,
     profile: &Profile<'_>,
     location: Location,
@@ -65,5 +71,20 @@ pub(crate) fn analyze<'source>(
     counters.charge_work(u128::from(work), limits, location)?;
     counters.record(Event::DomainPrepareWork(work));
     profile.domain_analysis(DomainObservation::Analyzed(&analysis));
-    Ok((analysis.status() == Status::FixedPoint).then_some(Domains { analysis, source }))
+    if analysis.status() != Status::FixedPoint {
+        return Ok(None);
+    }
+    let before = counters.work;
+    let mut candidates = Vec::new();
+    for rule in &prepared.rules {
+        candidates.push(Candidates::prepare(
+            rule, &analysis, limits, budget, counters,
+        )?);
+    }
+    counters.record(Event::DomainPrepareWork(counters.work - before));
+    Ok(Some(Domains {
+        analysis,
+        source,
+        candidates,
+    }))
 }

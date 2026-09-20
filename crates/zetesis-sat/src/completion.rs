@@ -6,8 +6,9 @@ use std::time::{Duration, Instant};
 use rayon::prelude::*;
 use zetesis_ferraris::{Interpretation, Theory};
 
-use super::{BatchVerdict, Check, Limits, Statistics};
-use crate::search::{BoundedQuota, Budget, LocalQuota, Quota, SharedBudget, storage};
+use super::{BatchVerdict, Limits, Statistics};
+use crate::ferraris::Decision;
+use crate::search::{BoundedQuota, Budget, LocalQuota, Quota, SharedBudget, increment, storage};
 use crate::{PreparedReduct, ReductWorkspace};
 
 #[path = "completion_scratch.rs"]
@@ -224,6 +225,7 @@ impl CompletionExecutor {
             }
             let input = Input {
                 prepared: reduct.prepared(),
+                query: reduct.query(),
                 ..input
             };
             let requirements = input.prepared.map_or(Ok(result_slots), |owner| {
@@ -247,13 +249,17 @@ impl CompletionExecutor {
             for _ in 0..admission.0 {
                 budget.control.poll()?;
                 let mut workspace = ReductWorkspace::default();
-                let owner = input.prepared.ok_or(Incomplete::InvalidWitness)?;
-                let reservation = reserve(
-                    &mut workspace,
-                    owner,
-                    input.limits.max_reduct_bytes,
-                    budget.control,
-                );
+                // The region query has no prepared owner to reserve against;
+                // its worker workspace holds the evaluation alone.
+                let reservation = match input.prepared {
+                    Some(owner) => reserve(
+                        &mut workspace,
+                        owner,
+                        input.limits.max_reduct_bytes,
+                        budget.control,
+                    ),
+                    None => Ok(()),
+                };
                 // Every header was counted with the outer allocation. Even a
                 // failed reservation can retain newly allocated query vectors.
                 peak += workspace.retained_bytes() - std::mem::size_of::<ReductWorkspace>() as u128
@@ -318,7 +324,10 @@ pub(super) struct Input<'a> {
     pub(super) candidates: &'a [Interpretation],
     pub(super) verdicts: &'a [BatchVerdict],
     pub(super) limits: Limits,
+    /// The prepared reduct encoding, under the clause kernel.
     pub(super) prepared: Option<&'a PreparedReduct>,
+    /// The region query, under the regions method.
+    pub(super) query: Option<&'a super::ReductQuery>,
 }
 
 struct Outcome {
@@ -337,13 +346,35 @@ fn classify(
     budget.control.poll()?;
     match verdict {
         BatchVerdict::NoProperSubset => Ok(true),
+        BatchVerdict::Refuted => Ok(false),
         BatchVerdict::NotModel => Err(Incomplete::InvalidWitness),
         BatchVerdict::Residual => {
-            let prepared = input.prepared.ok_or(Incomplete::InvalidWitness)?;
-            match prepared.check_with(candidate, workspace, input.limits, budget, statistics)? {
-                Check::Stable => Ok(true),
-                Check::NonMinimal(_) => Ok(false),
-                Check::NotModel | Check::Inconclusive(_) => Err(Incomplete::InvalidWitness),
+            let verdict = match (input.prepared, input.query) {
+                (Some(prepared), _) => {
+                    prepared.check_with(candidate, workspace, input.limits, budget, statistics)?
+                }
+                (None, Some(query)) => {
+                    let (truth, _) =
+                        workspace.evaluate(candidate, input.limits, budget.control, statistics)?;
+                    if !truth.is_model() {
+                        return Err(Incomplete::InvalidWitness);
+                    }
+                    increment(&mut statistics.countermodel_queries)?;
+                    query.check(
+                        input.theory,
+                        candidate,
+                        truth.truth(),
+                        input.limits,
+                        budget,
+                        statistics,
+                    )?
+                }
+                (None, None) => return Err(Incomplete::InvalidWitness),
+            };
+            match Decision::from(verdict) {
+                Decision::Stable => Ok(true),
+                Decision::Refuted => Ok(false),
+                Decision::Invalid => Err(Incomplete::InvalidWitness),
             }
         }
     }
@@ -507,6 +538,7 @@ fn merge(
         &mut statistics.reduct.parameter_work,
         worker.reduct.parameter_work,
     )?;
+    statistics.reduct.regions.add(worker.reduct.regions)?;
     statistics.reduct.peak_workspace_bytes = statistics
         .reduct
         .peak_workspace_bytes

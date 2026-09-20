@@ -43,7 +43,8 @@ full answer sets.
 `--time-limit SECONDS` requests a cooperative deadline after input loading.
 Whole nonnegative seconds are accepted; zero requests an immediate stop and
 omission imposes no deadline. Search polls the same `Control` used by library
-consumers. A deadline during search leaves coverage incomplete. A later deadline
+consumers; a timer thread marks the deadline and each poll reads that mark
+beside the cancellation flag, so an unreached deadline does not slow the run. A deadline during search leaves coverage incomplete. A later deadline
 during publication preserves the already established search coverage. Either
 stop returns exit 3; the deadline is not a hard process timeout for source I/O,
 frontend work or a running device kernel.
@@ -93,10 +94,16 @@ stdout can discard output without a write error. The command cannot recover the
 parent's intent from those descriptors. Library callers own source loading and
 supply explicit writers; observed I/O errors retain their original causes.
 
-`--json` streams one schema-1 document without ANSI styling. Full semantic atoms,
-shown atom indices, shown terms, costs and terminal outcomes remain distinct.
-`--max-json-record-bytes` bounds each model and terminal record, with an 8 MiB
-default. Integer consumers need lossless parsing. A failed writer can leave a
+`--json` streams one schema-2 document without ANSI styling. The document
+spells each atom once: a model record's `atoms` are the typed atoms the
+document has not spelled before, in the order it spells them, and the
+document's atom table is every record's `atoms` in document order. A record's
+`full_model` and its `shown.atom_indices` are indices into that table; shown
+terms and costs stay per record, and terminal outcomes remain distinct. A
+`#show` directive decides what is shown, as in human output; a program
+without one shows the whole model. `--max-json-record-bytes` bounds each model
+and terminal record, with an 8 MiB default, and `--max-atoms` bounds the
+table. Integer consumers need lossless parsing. A failed writer can leave a
 truncated document or partial human record; successful semantic checking does
 not imply successful publication. See [JSON views](src/output.rs) and
 [output regression tests](tests/json_output.rs).
@@ -107,6 +114,33 @@ not imply successful publication. See [JSON views](src/output.rs) and
 eligible richer source through finite Ferraris countermodel checking. Syntax,
 arithmetic and resource failures are preserved. The
 [frontend guide](../zetesis-themelios/README.md) defines admitted source profiles.
+
+Advanced `--search clauses|regions` selects the formula route's search
+method, for proposing candidates and for the reduct's proper-subset query
+alike. Regions, the default, walk the region tree over the theory's atoms,
+narrowed by the theory's readings, for both: the leaves of the candidate
+tree are proposed, and the proper subsets of a candidate are searched as a
+second tree under the frozen reduct, so no clause form is built at all.
+Clauses is the classical search over a Tseitin encoding for both, exact
+exclusion of every candidate proposed and a clause query of the frozen
+reduct.
+The reduct decides membership either way, and a countermodel is validated
+independently of the method that found it; the flag changes which
+candidate is proposed next and the work charged, never whether one is
+accepted. `--stats` reports the regions visited, refuted and reached as
+leaves for the candidate tree and, under `--search regions`, for the reduct
+queries.
+
+`--workers N`, the host's available parallelism by default, is the one
+worker count: the closure route's pool, and under `--search regions` the
+workers walking the region tree, each deciding the leaves it reaches. The
+family of answer sets is the same as with one worker, each answer once, and
+with more than one worker the order in which answers appear is the
+schedule's and differs between runs. Under an objective the optimum and the retained ties keep
+their meaning; only the order among equally scored answers is unspecified.
+Consumers that need an order sort, or run one worker. A ceiling stops every
+worker; the answers verified before the stop are still printed, and the
+coverage is partial.
 
 Advanced `--formula-joins indexed|table` selects positive joins within eager
 formula grounding. Indexed matching is the default. Table matching reuses
@@ -181,8 +215,25 @@ batches/candidates and successfully decoded batches/candidates separately.
 Propagation work and sweeps count decoded results; an interrupted unreturned
 submission does not establish how much shader work completed.
 
-`--workers` controls closure workers. `--completion-workers` separately controls
-independent exact formula checks, with a scalar CPU default of one.
+`--completion-workers` controls the independent exact formula checks under
+`--search clauses`, and under `--search regions` when one CPU worker walks
+the tree or a device route runs; with more than one CPU worker under regions
+the workers decide their leaves and it is unused. The default of one is the
+scalar cursor. `--workers` is described above.
+`--memory` is the session's memory allowance in bytes, half of the host's
+physical memory by default and at least two gibibytes, or two gibibytes when
+the host does not report its memory (Linux and macOS report it). The session's
+byte ceilings, the projection, objective key, optimal, reduct, completion
+scratch, candidate, closure, closure batch and batch bytes, are the shares of
+a two-gibibyte allowance; each one not given on the command line is that
+share scaled by the allowance, and the closure ceiling is shared by the
+workers, as `SolveConfig::for_allowance` states, so a larger host admits
+larger problems before one refuses, and a given ceiling is taken as given.
+The admission and output ceilings, the source, expansion, support, JSON
+record and observation bytes, keep their fixed defaults. Work, count and
+structural ceilings are not memory and do not scale.
+The ceilings bound named storage, not resident memory; `--stats` prints the
+allowance, the host's memory and each ceiling as the session takes it.
 `--batch-size`, `--max-batch-bytes` and
 `--max-completion-scratch-bytes` bound batches and concurrent query storage.
 General checking retains one candidate-parametric reduct encoding. The scratch
@@ -205,11 +256,21 @@ whole batch incomplete. See [parallel execution](../../docs/book/rust/parallel.m
 Independent relational CPU execution prepares query dimensions once per session
 and retains empty workspace capacities across batches. `--max-source-work` bounds
 that preparation separately from candidate `--max-work`.
-`--max-closure-bytes` bounds one candidate's named storage;
+`--max-closure-bytes` bounds one candidate's reserved named capacity;
 `--max-closure-batch-bytes` admits preparation, idle retained workspaces and
-assigned candidate allowances together. Preparation refusal and individual
-candidate refusal retain different interruption kinds. See the
+assigned candidate allowances together. Every worker is admitted at the
+per-closure allowance, so `--workers` times `--max-closure-bytes` must not
+exceed `--max-closure-batch-bytes`; the command refuses a larger product
+before any work, naming all three, and when `--max-closure-bytes` is omitted
+it is each worker's share of the collective ceiling. Preparation refusal and
+individual candidate refusal retain different interruption kinds. See the
 [ownership contract](../../docs/book/architecture/ownership.md#memory-contracts).
+
+Every byte ceiling in `--help-all` says which quantity it bounds: reserved
+capacity (counted when it is admitted, so it exceeds resident memory), canonical
+or encoded payload (the bytes a record or key occupies once written, without
+capacity or allocator slack), or the original bytes of a file. None is process
+RSS.
 
 ## Statistics and resource limits
 
@@ -219,10 +280,25 @@ views of the same information. Unavailable counters remain unavailable, not zero
 
 For independent relational CPU execution, `query_execution` reports actual
 preparation builds/work, assigned and reused workspace slots, current retained
-capacity and the latest reservation envelope. These are ownership receipts, not
-completed candidate counts or RSS. Reports retain a typed snapshot fault
+capacity and the latest reservation envelope. These count what was reserved, not
+completed candidates or RSS. Reports retain a typed snapshot fault
 separately from any earlier successful snapshot and any checked answers. Other
 execution routes leave this observation absent.
+
+For the independent CPU closure routes, lazy and eager, `closure_execution`
+sums the counters every completed check returns: completed and stopped checks,
+source rounds or rule passes, charged work in the route's `--max-work` units,
+derived atoms and, for the lazy route, catalog work, bindings, tuple probes,
+the heads recorded as bits of dense relations, the blocks of rows joined by
+words and the largest admitted closure envelope. A stopped check returns no counters, so
+its partial work is absent from the sums and counted only as a stop. The text
+form is the `independent closure` and `closure joins` lines.
+
+When relational admission expanded the source, the `expansion used` line
+states each accepted charge beside the ceiling it was checked against, term
+work, templates, values, scalar bytes and origin locations, and the JSON
+`expansion` object holds the charges. The formula route admits through its
+own budgets and reports no expansion usage.
 
 Stage timings separate source preparation, eager grounding, solving and output.
 Lazy joins are interleaved with solving, so a separate lazy grounding duration

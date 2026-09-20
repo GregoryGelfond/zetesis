@@ -25,9 +25,11 @@
 
 mod analysis;
 mod compile;
+mod keys;
 mod limits;
 mod value;
 
 pub use analysis::analyze;
+pub use keys::{KeyWork, KeyedRelation, atom_signature, facts, keys};
 pub use limits::{Limits, Resource, Statistics, Stop};
 pub use value::{Analysis, Argument, Context, Domain, Status, UnknownReason, Widening};

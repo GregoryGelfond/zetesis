@@ -650,3 +650,21 @@ fn bundle_raise_failure_retains_the_loaded_catalog() {
         error.bundle().sources()[1].id()
     );
 }
+
+#[test]
+fn a_formula_admission_reports_the_charges_its_preparation_made() {
+    // Three expanded facts are charged three templates, and three values for
+    // their argument plus three for their sizes; the rule is charged one
+    // template. The receipt is the one the extended profile reports, from
+    // the one budget.
+    let admitted = admit_formula(
+        "p(1..3). q :- p(X).".into(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .unwrap();
+    let usage = admitted.expansion_usage();
+    assert_eq!(usage.templates, 4);
+    assert_eq!(usage.values, 6);
+}

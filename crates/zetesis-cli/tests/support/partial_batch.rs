@@ -16,6 +16,9 @@ fn options() -> Options {
         "cpu",
         "--oracle",
         "countermodel",
+        // The batched completion protocol is the clause method's.
+        "--search",
+        "clauses",
         "--models",
         "0",
     ])

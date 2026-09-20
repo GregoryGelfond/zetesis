@@ -10,11 +10,21 @@ use zetesis_cli::{
 };
 use zetesis_cpu::Control;
 
+/// One worker: the bytes of two runs are compared, and several walkers of
+/// the region tree deliver models in the schedule's order.
 fn options(arguments: &[&str]) -> Options {
     Options::try_parse_from(
-        ["zetesis", "--backend", "cpu", "--models", "0"]
-            .into_iter()
-            .chain(arguments.iter().copied()),
+        [
+            "zetesis",
+            "--backend",
+            "cpu",
+            "--workers",
+            "1",
+            "--models",
+            "0",
+        ]
+        .into_iter()
+        .chain(arguments.iter().copied()),
     )
     .unwrap()
 }

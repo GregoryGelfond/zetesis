@@ -1,6 +1,7 @@
 //! Ordinary finite policy admits useful enumeration without weakening explicit stops.
 
 use std::collections::BTreeSet;
+use std::num::NonZeroUsize;
 
 use zetesis_core::{Predicate, Value};
 use zetesis_cpu::Control;
@@ -12,7 +13,6 @@ use zetesis_solve::{
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 const PATH_VERTICES: u32 = 24;
-const PREVIOUS_SEARCH_ALLOWANCE: u64 = 100_000_000;
 
 fn config() -> SolveConfig {
     SolveConfig {
@@ -118,12 +118,29 @@ fn ordinary_defaults_complete_the_path_family() {
 }
 
 #[test]
-fn the_previous_work_ceiling_still_interrupts() {
+fn a_work_ceiling_below_the_family_cost_interrupts() {
+    // The exhausted enumeration's own work fixes a ceiling below it, so the
+    // ceiling bites under whichever search method is the default.
+    let exhausted = stream(
+        PATH_VERTICES,
+        SolveConfig {
+            oracle: Oracle::Countermodel,
+            ..config()
+        },
+    );
+    assert!(exhausted.remaining.is_empty());
+    let cost = exhausted
+        .outcome
+        .countermodel_statistics()
+        .unwrap()
+        .search
+        .work;
+    let ceiling = cost / 2;
     let observed = stream(
         PATH_VERTICES,
         SolveConfig {
             oracle: Oracle::Countermodel,
-            max_search_work: PREVIOUS_SEARCH_ALLOWANCE,
+            max_search_work: ceiling,
             ..config()
         },
     );
@@ -141,7 +158,7 @@ fn the_previous_work_ceiling_still_interrupts() {
         Some(Interruption::Countermodel(Incomplete::WorkLimit))
     );
     let statistics = observed.outcome.countermodel_statistics().unwrap();
-    assert!(statistics.search.work <= PREVIOUS_SEARCH_ALLOWANCE);
+    assert!(statistics.search.work <= ceiling);
     assert!(statistics.candidates >= observed.outcome.verified_models());
 }
 
@@ -168,10 +185,14 @@ fn explicit_candidate_limits_remain_incomplete() {
 #[test]
 fn explicit_decision_limits_remain_incomplete() {
     let maximum = 8;
+    // One worker: a decision ceiling shared by several walkers may stop them
+    // all before any reaches a leaf; the scalar walk reaches its first leaf
+    // within the atom count.
     let observed = stream(
         8,
         SolveConfig {
             max_search_decisions: maximum,
+            workers: NonZeroUsize::MIN,
             ..config()
         },
     );

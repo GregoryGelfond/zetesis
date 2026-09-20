@@ -52,13 +52,16 @@ pub struct FormulaLimits {
     /// have the independent `objective.max_condition_nodes` ceiling.
     pub max_objective_formula_nodes: usize,
     /// Distinct scalar values in the logical source, independent of join work.
+    /// The set behind this count retains each value once so that its payload
+    /// is charged to the byte budget once.
     pub max_domain_values: usize,
     /// Candidate values retained while evaluating one assignment, range or
     /// objective-presence subset. Applies independently to each such operation.
     pub max_assignment_values: usize,
     /// Distinct values emitted by binding generators across formula grounding,
     /// including support construction, objective preparation and final rule/local
-    /// instantiation. This cumulative population is independent of one assignment.
+    /// instantiation. This cumulative population is independent of one assignment
+    /// and, like the domain, charges each distinct value's payload once.
     pub max_generated_values: usize,
     /// Distinct owned elements in one unconditional disjunctive head.
     pub max_disjunction_elements: usize,
@@ -101,6 +104,14 @@ pub struct FormulaLimits {
     pub max_support_rounds: u64,
     /// Original source locations retained in emitted formula-root evidence.
     pub max_origin_locations: usize,
+    /// Distinct warning locations retained after successful formula admission.
+    /// Repeated evaluations at one source span retain one warning, not row counts.
+    pub max_warnings: usize,
+    /// Steps of the key analysis that asks constraints over keyed values, and
+    /// of its readings of facts, also bounded by the term work remaining; the
+    /// steps spent are charged to the term work. A stop leaves every
+    /// constraint not yet asked as written and is reported.
+    pub max_key_work: u64,
     /// Final dense atom, formula-node, and theory-root storage ceilings.
     pub theory: zetesis_ferraris::AdmissionLimits,
     /// Per-aggregate translation ceilings, additionally capped by total formula work/nodes.
@@ -120,9 +131,9 @@ impl Default for FormulaLimits {
             max_objective_presence_entries: DEFAULT_OBJECTIVE_PRESENCE_ENTRIES,
             max_objective_formula_atoms: 65_536,
             max_objective_formula_nodes: 1_048_576,
-            max_domain_values: 1_024,
-            max_assignment_values: 1_024,
-            max_generated_values: 1_024,
+            max_domain_values: 1_000_000,
+            max_assignment_values: 1_000_000,
+            max_generated_values: 1_000_000,
             max_disjunction_elements: 1_024,
             max_support_index_entries: 1_000_000,
             max_support_bytes: 134_217_728,
@@ -134,8 +145,10 @@ impl Default for FormulaLimits {
             max_analysis_edges: 1_000_000,
             max_substitutions: 1_000_000,
             max_work: 10_000_000,
-            max_support_rounds: 1_024,
+            max_support_rounds: 1_000_000,
             max_origin_locations: 1_000_000,
+            max_warnings: 10_000,
+            max_key_work: 1_000_000,
             theory: zetesis_ferraris::AdmissionLimits::default(),
             objective: zetesis_objective::AdmissionLimits::default(),
             observation: crate::observation::AdmissionLimits::default(),
@@ -208,6 +221,8 @@ pub enum FormulaResource {
     Roots,
     /// Retained parsed locations.
     Origins,
+    /// Distinct located warnings retained by successful admission.
+    Warnings,
     /// Variables in an outer rule or complete local element scope.
     Variables,
     /// Arguments of one predicate.
@@ -455,6 +470,21 @@ pub struct AdmittedFormula {
     metadata: SourceMetadata,
 }
 impl AdmittedFormula {
+    /// Warnings from omitted instances, deduplicated in source-location order.
+    /// The retained space is bounded by [`FormulaLimits::max_warnings`].
+    #[must_use]
+    pub fn warnings(&self) -> &[crate::FormulaWarning] {
+        &self.compiled.warnings
+    }
+
+    /// Render warnings against the retained original source with themelios's
+    /// human view. Rendering builds one source line index and one diagnostic at
+    /// a time; formatter failures stop rendering. An empty collection is empty.
+    #[must_use]
+    pub fn warning_view(&self) -> impl fmt::Display + '_ {
+        crate::formula_warning::source_view(self.warnings(), &self.source)
+    }
+
     /// Structural facts about [`Self::analyzed_program`]. Consult
     /// [`Self::analysis_basis`]: a dependency projection does not certify source
     /// safety or class membership. Unknown never removes runtime ceilings.
@@ -474,6 +504,30 @@ impl AdmittedFormula {
     #[must_use]
     pub fn analysis_basis(&self) -> AnalysisBasis {
         self.compiled.analysis_basis
+    }
+
+    /// Written constraints over a keyed value that were asked as the one atom
+    /// their key admits before grounding, as the source guide describes. Zero
+    /// when no constraint had the form; the answer sets are the same either way.
+    #[must_use]
+    pub fn keyed_constraints(&self) -> usize {
+        self.compiled.keyed_constraints
+    }
+
+    /// What preparation and grounding charged under the expansion limits:
+    /// the receipt the extended profile reports, from the one budget this
+    /// admission kept from its first statement to its last root.
+    #[must_use]
+    pub fn expansion_usage(&self) -> &crate::ExpansionUsage {
+        &self.compiled.expansion
+    }
+
+    /// How the key analysis behind [`Self::keyed_constraints`] ended: complete,
+    /// or stopped by its work ceiling with every constraint not yet asked
+    /// left as written.
+    #[must_use]
+    pub fn key_analysis(&self) -> crate::KeyAnalysis {
+        self.compiled.key_analysis
     }
 
     /// The admitted general formula theory.
@@ -546,6 +600,21 @@ pub struct AdmittedFormulaBundle {
     metadata: SourceMetadata,
 }
 impl AdmittedFormulaBundle {
+    /// Warnings from omitted instances, deduplicated in source-location order.
+    /// The retained space is bounded by [`FormulaLimits::max_warnings`].
+    #[must_use]
+    pub fn warnings(&self) -> &[crate::FormulaWarning] {
+        &self.compiled.warnings
+    }
+
+    /// Render warnings against the retained original include catalog with
+    /// themelios's human view. Rendering uses the catalog's source indexes and
+    /// one diagnostic at a time; formatter failures stop rendering.
+    #[must_use]
+    pub fn warning_view(&self) -> impl fmt::Display + '_ {
+        crate::formula_warning::bundle_view(self.warnings(), &self.bundle)
+    }
+
     /// Structural facts about [`Self::analyzed_program`]. Consult
     /// [`Self::analysis_basis`]: a dependency projection does not certify source
     /// safety or class membership. Unknown never removes runtime ceilings.
@@ -565,6 +634,30 @@ impl AdmittedFormulaBundle {
     #[must_use]
     pub fn analysis_basis(&self) -> AnalysisBasis {
         self.compiled.analysis_basis
+    }
+
+    /// Written constraints over a keyed value that were asked as the one atom
+    /// their key admits before grounding, as the source guide describes. Zero
+    /// when no constraint had the form; the answer sets are the same either way.
+    #[must_use]
+    pub fn keyed_constraints(&self) -> usize {
+        self.compiled.keyed_constraints
+    }
+
+    /// What preparation and grounding charged under the expansion limits:
+    /// the receipt the extended profile reports, from the one budget this
+    /// admission kept from its first statement to its last root.
+    #[must_use]
+    pub fn expansion_usage(&self) -> &crate::ExpansionUsage {
+        &self.compiled.expansion
+    }
+
+    /// How the key analysis behind [`Self::keyed_constraints`] ended: complete,
+    /// or stopped by its work ceiling with every constraint not yet asked
+    /// left as written.
+    #[must_use]
+    pub fn key_analysis(&self) -> crate::KeyAnalysis {
+        self.compiled.key_analysis
     }
 
     /// The admitted general formula theory.
@@ -666,12 +759,16 @@ pub enum AnalysisBasis {
     /// A bounded, pool-free normalization of the admitted source program.
     NormalizedProgram,
     /// A pool-free signature/polarity projection. Safety and class verdicts
-    /// describe this projection; they are not conclusions about source semantics.
+    /// describe this projection; they are not conclusions about source
+    /// semantics. The keyed rewrite reads it soundly, as its module argues:
+    /// a projected statement is never a key's producer nor an asked
+    /// constraint.
     DependencyProjection,
 }
 
 #[derive(Debug)]
 pub(crate) struct Compiled {
+    pub warnings: Vec<crate::FormulaWarning>,
     pub projection: crate::PreparedProjection,
     pub analysis_basis: AnalysisBasis,
     pub analysis: themelios_analysis::Analysis,
@@ -683,6 +780,9 @@ pub(crate) struct Compiled {
     pub objectives: zetesis_objective::ObjectiveProgram,
     pub objective_origins: Vec<Vec<Location>>,
     pub objective_declarations: Vec<Location>,
+    pub keyed_constraints: usize,
+    pub key_analysis: crate::KeyAnalysis,
+    pub expansion: crate::ExpansionUsage,
 }
 
 /// Admit the extended scalar profile, finite conditional choices and body
@@ -754,7 +854,10 @@ pub(crate) struct Compiled {
 /// guards and independently checked local scopes. Source
 /// weights normalize before global tuple deduplication; eligible maximize
 /// `i32::MIN` weights receive a located overflow refusal. Nonnumeric priorities
-/// contribute no key; undefined priority arithmetic remains a located error.
+/// contribute no key after arithmetic validation. Weight, priority and tuple
+/// fields participate jointly in the source-family policy below, including
+/// when the weight is nonnumeric. Pooled fragments of one original objective
+/// element share its family; distinct elements cannot rescue each other.
 /// Dynamic priorities read ordinary bound positions or generated values with a
 /// completed source-carrier certificate. Eligibility precision is selected per
 /// objective: qualified positive dependencies can use a tighter carrier, while
@@ -773,21 +876,37 @@ pub(crate) struct Compiled {
 ///
 /// # Errors
 /// Returns a typed located refusal on diagnostics, unsupported syntax, unsafe
-/// variables, undefined arithmetic, or any exceeded source/expansion/formula limit.
-/// Arithmetic in variable comparisons is checked on complete possible-positive
-/// joins, including rows whose scalar filters are false. An incomplete positive
-/// prefix with no complete extension creates no such validation obligation.
-/// Row-dependent head atom values are evaluated only after their rule or local
-/// element's body scalar and range selection. Negative gates and aggregate truth remain formulas
-/// and do not select this stage. Closed-term syntax and arithmetic validation still
-/// occur during source preparation.
-/// Rejected complete rule and scoped-objective rows validate their bodies through
+/// variables, fatal arithmetic, an entirely undefined source family, or any
+/// exceeded source/expansion/formula limit.
+/// A comparison over relationally bound variables that is defined and false
+/// excludes its substitution, and nothing in an excluded substitution is
+/// reached. Arithmetic is checked on every complete possible-positive
+/// substitution the comparisons leave; an incomplete positive prefix with no
+/// complete extension creates no such obligation. Row-dependent head atom
+/// values are evaluated only after their rule or local element's body scalar
+/// and range selection. Negative gates and aggregate truth remain formulas and
+/// do not select this stage. Closed-term syntax and arithmetic validation still
+/// occur during source preparation. Substitutions a binder, interval check,
+/// tuple comparison or guard rejects still validate their bodies through
 /// isolated formula scratch before being discarded; that scratch supplies no
 /// atoms, roots, producers or objective keys to the admitted program. Rule-body
 /// scratch uses the existing theory atom/node ceilings; objective-body scratch
 /// retains its independent ceilings. Cumulative source work still applies.
-/// Encountered undefined operations refuse the input rather than emulating
-/// clingo's warning-and-drop behavior. Numeric typing of a variable objective
+/// Only evaluated numeric division or remainder by zero may omit a source
+/// instance. Admission requires a jointly defined instance in that same complete
+/// original family; a defined but false instance is a witness. An empty positive
+/// join is silent. Each local choice or aggregate element has a separate family
+/// for each fixed outer binding. Successful owners retain typed warnings,
+/// deduplicated by source span and bounded by [`FormulaLimits::max_warnings`].
+/// Overflow, nonnumeric arithmetic and invalid exponents remain fatal. Source
+/// evaluation checks independent expression branches and fields after a zero
+/// divisor within each reached phase. An operation depending on an undefined
+/// operand is not evaluated.
+/// An omitted body or condition does not enter its later head, consequent or
+/// objective-field phase. Defined false body selection likewise skips head and
+/// consequent evaluation; independent-error checks do not cross that boundary.
+/// This policy does not weaken closed-term preparation or the strict arithmetic
+/// errors of post-solve observations. Numeric typing of a variable objective
 /// weight is checked later when its contribution is active in a verified model.
 pub fn admit_formula(
     text: String,

@@ -279,7 +279,7 @@ fn bounded_search_never_publishes_optimum_status() {
         match kind {
             0 => options.max_objective_work = 0,
             1 => options.max_optimal_models = 1,
-            2 => options.max_batch_bytes = 0,
+            2 => options.max_batch_bytes = Some(0),
             _ => options.max_search_work = 0,
         }
         let mut output = Vec::new();
@@ -354,6 +354,24 @@ fn every_publication_truncation_preserves_its_prefix() {
 
 #[test]
 fn cpu_batches_preserve_original_corpus_displays() {
+    every_original_case(crate::SearchMethod::Clauses, 1);
+}
+
+/// Four workers walking the region tree return the recorded answer sets,
+/// atom for atom, on every corpus case, in whatever order they arrive.
+#[test]
+fn parallel_regions_preserve_original_corpus_displays() {
+    every_original_case(crate::SearchMethod::Regions, 4);
+}
+
+/// The regions proposer returns the recorded answer sets, atom for atom, on
+/// every corpus case, through the same batched route.
+#[test]
+fn cpu_batches_preserve_original_corpus_displays_under_regions() {
+    every_original_case(crate::SearchMethod::Regions, 1);
+}
+
+fn every_original_case(search: crate::SearchMethod, workers: usize) {
     let fixture: serde_json::Value =
         serde_json::from_str(include_str!("../fixtures/kr-domains/complete-models.json")).unwrap();
     let cases = fixture["cases"].as_array().unwrap();
@@ -361,14 +379,21 @@ fn cpu_batches_preserve_original_corpus_displays() {
     let root =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../validation/corpus/kr-domains");
     for case in cases {
-        original_case(&root, case);
+        original_case(&root, case, search, workers);
     }
 }
 
-fn original_case(root: &std::path::Path, case: &serde_json::Value) {
+fn original_case(
+    root: &std::path::Path,
+    case: &serde_json::Value,
+    search: crate::SearchMethod,
+    workers: usize,
+) {
     let path = case["path"].as_str().unwrap();
     let mut options = options();
     options.batch_size = NonZeroUsize::new(64).unwrap();
+    options.search = search;
+    options.workers = NonZeroUsize::new(workers).unwrap();
     let bundle = zetesis_themelios::SourceBundle::load(
         root.join(path),
         zetesis_themelios::BundleLimits::default(),
@@ -389,18 +414,21 @@ fn original_case(root: &std::path::Path, case: &serde_json::Value) {
         Completion::Exhausted,
         "{path}"
     );
-    let execution = captured.semantic().formula_execution().unwrap();
-    require_cpu_batches(execution);
-    assert_eq!(
-        (execution.pending_candidates, execution.queued_models),
-        (0, 0),
-        "{path}"
-    );
-    assert_eq!(
-        execution.completion.entered,
-        captured.semantic().candidate_progress(),
-        "{path}"
-    );
+    // Parallel regions decide their leaves on the workers: no batch runs.
+    if workers == 1 {
+        let execution = captured.semantic().formula_execution().unwrap();
+        require_cpu_batches(execution);
+        assert_eq!(
+            (execution.pending_candidates, execution.queued_models),
+            (0, 0),
+            "{path}"
+        );
+        assert_eq!(
+            execution.completion.entered,
+            captured.semantic().candidate_progress(),
+            "{path}"
+        );
+    }
     let expected = &case["answer"];
     assert_eq!(
         u64::try_from(captured.publication().models()).unwrap(),

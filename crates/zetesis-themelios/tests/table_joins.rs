@@ -133,32 +133,16 @@ fn empty_positive_extensions_create_no_arithmetic_error() {
 }
 
 #[test]
-fn table_rows_preserve_authored_arithmetic_errors() {
+fn table_rows_exclude_what_a_false_comparison_excludes() {
+    // X<0 is defined and false on every row, so the division and the
+    // aggregate assignment are never reached under either strategy, and the
+    // two strategies ground the same theory.
     for source in [
         "d(0;1).e(0;1). :-d(X),e(X),X<0,1/X>0.",
         "d(0;1).e(0;1). :-d(X),1/X>0,e(X),X<0.",
         "a.b.d(1). :-d(X),N=#sum{2147483647:a;1:b},X<0.",
     ] {
-        let indexed_work = Observation::default();
-        let table_work = Observation::default();
-        let indexed = ground(
-            source,
-            JoinStrategy::Indexed,
-            &FormulaLimits::default(),
-            &indexed_work,
-        )
-        .unwrap_err();
-        let table = ground(
-            source,
-            JoinStrategy::Table,
-            &FormulaLimits::default(),
-            &table_work,
-        )
-        .unwrap_err();
-        assert_eq!(table.to_string(), indexed.to_string(), "{source}");
-        assert_eq!(table.diagnostics(), indexed.diagnostics(), "{source}");
-        assert!(table_work.failed.get());
-        assert!(table_work.work.get().table_probes.unwrap() > 0, "{source}");
+        equal_theory(source);
     }
 }
 

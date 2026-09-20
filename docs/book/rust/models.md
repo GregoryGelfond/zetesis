@@ -50,16 +50,20 @@ two regions only after those borrows end, preserving every dense position.
 Canonical order is an ordered position view; it never renumbers the owner.
 Committing an atom does not select it as true in any candidate interpretation.
 
-The builder uses an iterative AVL index. `find_atom_with` and `find_key_with`
-borrow the owner immutably, allocate nothing, and return a local position or
-absence after a checked search of committed and pending identities. Occupied
+The builder uses one iterative AVL index per predicate, the relations kept in
+predicate order so that their trees in turn give the canonical atom order.
+`find_atom_with` and `find_key_with` borrow the owner immutably, allocate
+nothing, and return a local position or absence after a checked binary search
+for the predicate's relation and a checked search of that relation's committed
+and pending identities. Occupied
 entries use that same probe without changing retained mutation scratch. Entry
 records each descent in two target-sized words and a checked length, local to
 lookup and path preparation. The AVL height bound makes this record sufficient
 for every representable node population. A vacant entry replays those directions
 through the exclusively borrowed tree to prepare its insertion path, without
 repeating typed comparisons. Each search visits a logarithmic path, charging the
-actual predicate and value prefixes compared. The node-work unit includes child
+predicate prefix once per relation probe and the value prefixes compared at
+each node. The node-work unit includes child
 selection and fixed local direction recording; replay admits each node visit and
 path-step write separately. These are operation units, not machine instructions.
 Canonical traversal visits the index once. Fallible reservations and work checks
@@ -113,6 +117,10 @@ For `N` catalog atoms and `M` supplied selected positions:
 Typed comparisons can inspect predicate names, tuples and structured values.
 `Model::new` consumes an atom iterator, sorts and deduplicates its values, and
 selects its resulting catalog. It remains an infallible allocation door.
+`Model::from_ordered` adopts atoms a producer already holds in canonical order,
+such as the closure's relations merged in predicate order, without sorting; a
+debug build checks the order. `ModelAtoms::of_predicate` borrows one
+predicate's atoms as the contiguous range they occupy.
 `Model::from_positions` returns a typed invalid-position or selection-reservation
 error without a partial model. Arc envelope allocations remain infallible.
 Neither constructor implicitly grounds or solves a program.

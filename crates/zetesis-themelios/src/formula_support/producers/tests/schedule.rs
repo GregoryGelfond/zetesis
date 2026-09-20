@@ -65,6 +65,7 @@ fn measure(
         complete(
             prepared,
             plan,
+            None,
             limits,
             &mut Budget::new(ExpansionLimits::default(), usize::MAX),
             &mut counters,

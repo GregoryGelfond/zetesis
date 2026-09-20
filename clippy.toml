@@ -1,0 +1,5 @@
+# `SolveConfig` is a `Copy` policy record that the session API takes by value
+# by design. It is 256 bytes, and the threshold sits just above it so that
+# the pedantic lint still guards against accidental large copies, which a
+# deliberate policy value is not.
+pass-by-value-size-limit = 320

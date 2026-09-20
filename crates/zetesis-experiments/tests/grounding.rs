@@ -12,7 +12,7 @@ use std::{
 use clap::Parser;
 use zetesis_experiments::grounding::{
     CaptureRefusal, Configuration, Error, FingerprintUnavailable, Mode, Report, SubjectFingerprint,
-    profile, write_report,
+    measure_file, write_report,
 };
 use zetesis_experiments::{CommandOptions, Experiment};
 
@@ -30,7 +30,7 @@ fn configuration() -> Configuration {
 }
 
 fn qualified_identity() -> Report {
-    let report = profile(source("identity.lp"), configuration()).unwrap();
+    let report = measure_file(source("identity.lp"), configuration()).unwrap();
     assert!(report.complete, "{:?}", report.failure);
     report
 }
@@ -39,7 +39,7 @@ fn qualified_identity() -> Report {
 fn table_joins_preserve_the_indexed_subject() {
     let mut config = configuration();
     config.grounding.joins = zetesis_themelios::JoinStrategy::Table;
-    let report = profile(source("table-joins.lp"), config).unwrap();
+    let report = measure_file(source("table-joins.lp"), config).unwrap();
     assert!(report.complete, "{:?}", report.failure);
     assert_eq!(report.reference_join_strategy, "indexed");
     for sample in &report.samples {
@@ -55,7 +55,7 @@ fn a_table_refusal_retains_the_indexed_reference() {
     // The source's equality postings fit; adding the table indices does not.
     // This must fail if the reference accidentally inherits the measured policy.
     config.formula.max_support_index_entries = 24;
-    let report = profile(source("table-joins.lp"), config).unwrap();
+    let report = measure_file(source("table-joins.lp"), config).unwrap();
     assert!(!report.complete);
     let Some(Error::Admission(error)) = &report.failure else {
         panic!("expected table index refusal: {:?}", report.failure);
@@ -83,7 +83,7 @@ fn a_table_refusal_retains_the_indexed_reference() {
 fn table_join_models_retain_whole_row_witnesses() {
     let mut config = configuration();
     config.grounding.joins = zetesis_themelios::JoinStrategy::Table;
-    let report = profile(source("table-joins.lp"), config).unwrap();
+    let report = measure_file(source("table-joins.lp"), config).unwrap();
     assert!(report.complete, "{:?}", report.failure);
     let common = [
         "domain(1)",
@@ -130,7 +130,7 @@ fn table_join_models_retain_whole_row_witnesses() {
 fn table_measurement_observes_actual_selection() {
     let mut config = configuration();
     config.grounding.joins = zetesis_themelios::JoinStrategy::Table;
-    let report = profile(source("table-joins.lp"), config).unwrap();
+    let report = measure_file(source("table-joins.lp"), config).unwrap();
     assert!(report.complete, "{:?}", report.failure);
     let detailed = report
         .samples
@@ -212,9 +212,13 @@ fn subject_encoding_ceiling_is_inclusive() {
     };
     let mut config = configuration();
     config.capture.max_subject_bytes = bytes;
-    assert!(profile(source("identity.lp"), config).unwrap().complete);
+    assert!(
+        measure_file(source("identity.lp"), config)
+            .unwrap()
+            .complete
+    );
     config.capture.max_subject_bytes = bytes - 1;
-    let refused = profile(source("identity.lp"), config).unwrap();
+    let refused = measure_file(source("identity.lp"), config).unwrap();
     assert!(!refused.complete);
     assert!(
         refused.nodes.is_some(),
@@ -232,7 +236,7 @@ fn subject_encoding_ceiling_is_inclusive() {
 
 #[test]
 fn term_observations_preserve_internal_qualification() {
-    let report = profile(source("term-observation.lp"), configuration()).unwrap();
+    let report = measure_file(source("term-observation.lp"), configuration()).unwrap();
     assert!(report.complete, "{:?}", report.failure);
     assert_eq!(
         report.subject_fingerprint,
@@ -259,7 +263,7 @@ fn chain_controls_have_the_expected_complete_model() {
         .chain((0..64).map(|n| format!("reach({n})")))
         .collect();
     for name in ["sparse-arithmetic.lp", "plain-chain.lp"] {
-        let report = profile(source(name), configuration()).unwrap();
+        let report = measure_file(source(name), configuration()).unwrap();
         assert!(report.complete, "{name}: {:?}", report.failure);
         assert_eq!(
             report
@@ -336,7 +340,7 @@ fn rounds_rotate_condition_order() {
         repetitions: 3,
         ..configuration()
     };
-    let report = profile(source("inconsistent.lp"), config).unwrap();
+    let report = measure_file(source("inconsistent.lp"), config).unwrap();
     assert!(report.complete);
     let actual: Vec<_> = report
         .samples
@@ -364,7 +368,7 @@ fn zero_models_with_exhaustion_qualify() {
     let mut config = configuration();
     config.capture.max_models = 0;
     config.capture.max_model_atoms = 0;
-    let report = profile(source("inconsistent.lp"), config).unwrap();
+    let report = measure_file(source("inconsistent.lp"), config).unwrap();
     assert!(report.complete);
     for models in report
         .samples
@@ -381,7 +385,7 @@ fn zero_models_with_exhaustion_qualify() {
 fn model_limit_retains_verified_prefix() {
     let mut config = configuration();
     config.capture.max_models = 1;
-    let report = profile(source("identity.lp"), config).unwrap();
+    let report = measure_file(source("identity.lp"), config).unwrap();
     assert!(!report.complete);
     assert!(matches!(
         report.failure,
@@ -401,7 +405,7 @@ fn model_limit_retains_verified_prefix() {
 fn model_capture_refusal_publishes_its_verified_prefix() {
     let mut config = configuration();
     config.capture.max_models = 1;
-    let report = profile(source("identity.lp"), config).unwrap();
+    let report = measure_file(source("identity.lp"), config).unwrap();
     let Some(Error::Limit {
         resource: "models",
         limit: 1,
@@ -451,9 +455,13 @@ fn model_capture_refusal_publishes_its_verified_prefix() {
 fn atom_index_limit_is_inclusive() {
     let mut config = configuration();
     config.capture.max_model_atoms = 5;
-    assert!(profile(source("identity.lp"), config).unwrap().complete);
+    assert!(
+        measure_file(source("identity.lp"), config)
+            .unwrap()
+            .complete
+    );
     config.capture.max_model_atoms = 4;
-    let report = profile(source("identity.lp"), config).unwrap();
+    let report = measure_file(source("identity.lp"), config).unwrap();
     assert!(!report.complete);
     assert!(matches!(
         report.failure,
@@ -470,9 +478,13 @@ fn phase_record_limit_is_inclusive() {
     let required = qualified_identity().samples[2].phases.len();
     let mut config = configuration();
     config.capture.max_phase_records = required;
-    assert!(profile(source("identity.lp"), config).unwrap().complete);
+    assert!(
+        measure_file(source("identity.lp"), config)
+            .unwrap()
+            .complete
+    );
     config.capture.max_phase_records = required - 1;
-    let report = profile(source("identity.lp"), config).unwrap();
+    let report = measure_file(source("identity.lp"), config).unwrap();
     assert!(!report.complete);
     assert!(matches!(
         report.failure,
@@ -489,9 +501,13 @@ fn phase_record_limit_is_inclusive() {
 fn atom_catalog_limit_is_inclusive() {
     let mut config = configuration();
     config.capture.max_atom_text_bytes = 9;
-    assert!(profile(source("identity.lp"), config).unwrap().complete);
+    assert!(
+        measure_file(source("identity.lp"), config)
+            .unwrap()
+            .complete
+    );
     config.capture.max_atom_text_bytes = 8;
-    let report = profile(source("identity.lp"), config).unwrap();
+    let report = measure_file(source("identity.lp"), config).unwrap();
     assert!(!report.complete);
     assert!(matches!(
         report.failure,
@@ -504,7 +520,7 @@ fn atom_catalog_limit_is_inclusive() {
 
 #[test]
 fn catalog_spelling_preserves_value_distinctions() {
-    let report = profile(source("values.lp"), configuration()).unwrap();
+    let report = measure_file(source("values.lp"), configuration()).unwrap();
     assert!(report.complete, "{:?}", report.failure);
     let actual: std::collections::BTreeSet<_> = report.atoms.iter().map(String::as_str).collect();
     let expected = [
@@ -530,9 +546,13 @@ fn source_path_limit_is_inclusive() {
         .sum();
     let mut config = configuration();
     config.capture.max_source_path_bytes = required;
-    assert!(profile(source("identity.lp"), config).unwrap().complete);
+    assert!(
+        measure_file(source("identity.lp"), config)
+            .unwrap()
+            .complete
+    );
     config.capture.max_source_path_bytes = required - 1;
-    let report = profile(source("identity.lp"), config).unwrap();
+    let report = measure_file(source("identity.lp"), config).unwrap();
     assert!(!report.complete);
     assert!(matches!(
         report.failure,
@@ -546,7 +566,7 @@ fn source_path_limit_is_inclusive() {
 
 #[test]
 fn objectives_refuse_enumeration_qualification() {
-    let report = profile(source("objective.lp"), configuration()).unwrap();
+    let report = measure_file(source("objective.lp"), configuration()).unwrap();
     assert!(!report.complete);
     assert!(matches!(report.failure, Some(Error::Objective)));
     assert!(report.qualification.is_none());
@@ -557,7 +577,7 @@ fn objectives_refuse_enumeration_qualification() {
 fn search_refusal_cannot_qualify() {
     let mut config = configuration();
     config.search.search.max_work = 0;
-    let report = profile(source("identity.lp"), config).unwrap();
+    let report = measure_file(source("identity.lp"), config).unwrap();
     assert!(!report.complete);
     assert!(matches!(report.failure, Some(Error::Search(_))));
     assert!(!report.qualification.unwrap().exhausted);
@@ -571,7 +591,7 @@ fn invalid_repetition_counts_refuse_before_loading() {
             ..configuration()
         };
         assert!(matches!(
-            profile(source("missing.lp"), config),
+            measure_file(source("missing.lp"), config),
             Err(Error::Configuration(_))
         ));
     }
@@ -776,7 +796,7 @@ fn published_failure(report: &Report) -> serde_json::Value {
 #[test]
 fn missing_source_retains_its_native_failure() {
     use std::error::Error as _;
-    let report = profile(source("missing.lp"), configuration()).unwrap();
+    let report = measure_file(source("missing.lp"), configuration()).unwrap();
     let Some(Error::Source(_)) = report.failure else {
         panic!("source refusal expected")
     };
@@ -798,7 +818,7 @@ fn admission_failure_preserves_the_loaded_source_catalog() {
     use std::error::Error as _;
     let mut config = configuration();
     config.formula.max_work = 0;
-    let report = profile(source("arithmetic.lp"), config).unwrap();
+    let report = measure_file(source("arithmetic.lp"), config).unwrap();
     let Some(Error::Admission(_)) = report.failure else {
         panic!("admission refusal expected")
     };
@@ -815,7 +835,7 @@ fn search_failure_cannot_erase_admitted_subject_evidence() {
     use std::error::Error as _;
     let mut config = configuration();
     config.search.search.max_work = 0;
-    let report = profile(source("identity.lp"), config).unwrap();
+    let report = measure_file(source("identity.lp"), config).unwrap();
     let Some(Error::Search(_)) = report.failure else {
         panic!("search refusal expected")
     };
@@ -831,7 +851,7 @@ fn search_failure_cannot_erase_admitted_subject_evidence() {
 fn phase_capture_failure_retains_earlier_samples() {
     let mut config = configuration();
     config.capture.max_phase_records = 0;
-    let report = profile(source("arithmetic.lp"), config).unwrap();
+    let report = measure_file(source("arithmetic.lp"), config).unwrap();
     let record = published_failure(&report);
     assert_eq!(record["failure"]["code"], "capture");
     assert_eq!(report.samples.len(), 3);

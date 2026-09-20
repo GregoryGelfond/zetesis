@@ -126,6 +126,13 @@ impl Index {
     /// All writes below are pre-admitted as one indivisible publication. A
     /// callback cannot observe a half-rotated tree or an unindexed payload.
     pub fn publish(&mut self, root: Link) {
+        self.publish_nodes();
+        self.root = root;
+    }
+
+    /// Publish the planned leaf and the changed path nodes, leaving the root
+    /// to an owner that keeps one root per subtree.
+    pub fn publish_nodes(&mut self) {
         let leaf = self.path.last().expect("planned leaf");
         self.nodes.push(leaf.node);
         for step in &self.path[..self.path.len() - 1] {
@@ -133,7 +140,6 @@ impl Index {
                 self.nodes[step.id] = step.node;
             }
         }
-        self.root = root;
     }
 }
 

@@ -351,7 +351,7 @@ fn cancellation_and_expired_deadline_are_inconclusive_even_for_empty_cnf() {
         solve(&cnf, generous_search(), &cancelled),
         Solve::Inconclusive(Incomplete::Cancelled)
     ));
-    let expired = Control::with_deadline(Instant::now());
+    let expired = Control::with_deadline(Instant::now()).unwrap();
     assert!(matches!(
         solve(&cnf, generous_search(), &expired),
         Solve::Inconclusive(Incomplete::Deadline)

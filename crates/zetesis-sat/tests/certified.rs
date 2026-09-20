@@ -12,6 +12,20 @@ use zetesis_sat::{
     Incomplete, Limits, StableModels,
 };
 
+/// Enumerate by the clause forms, the subject of the tests below.
+fn by_clauses(
+    theory: &zetesis_ferraris::Theory,
+    limits: zetesis_sat::Limits,
+    control: zetesis_sat::Control,
+) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
+    zetesis_sat::StableModels::with_method(
+        theory,
+        zetesis_sat::SearchMethod::Clauses,
+        limits,
+        control,
+    )
+}
+
 fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
     Theory::new(atoms, nodes, roots, AdmissionLimits::default()).unwrap()
 }
@@ -64,10 +78,11 @@ fn batch_limits(n: usize) -> BatchLimits {
 }
 
 #[test]
-fn scalar_and_rayon_batches_match_independent_reduct_with_support_residuals_and_refusals() {
+fn scalar_and_rayon_batches_match_independent_reduct_with_support_refutations_and_refusals() {
     let cases = [
         choices(),
-        // Unsupported carrier atoms require genuine countermodel witnesses.
+        // Unsupported carrier atoms are refuted by the support law: every
+        // present atom lacks a producer, and no countermodel query is needed.
         theory(3, vec![], vec![]),
         theory(
             2,
@@ -95,7 +110,7 @@ fn scalar_and_rayon_batches_match_independent_reduct_with_support_residuals_and_
     ];
     for (index, theory) in cases.iter().enumerate() {
         let wanted = expected(theory);
-        let mut scalar = StableModels::new(theory, Limits::default(), Control::default()).unwrap();
+        let mut scalar = by_clauses(theory, Limits::default(), Control::default()).unwrap();
         let eligible = scalar
             .enable_certified_checking(TightPlanLimits::default())
             .unwrap();
@@ -110,13 +125,13 @@ fn scalar_and_rayon_batches_match_independent_reduct_with_support_residuals_and_
             assert_eq!(certificate.stable, 8);
         }
         if index == 1 {
-            assert_eq!(stats.countermodels, 7);
-            assert_eq!(certificate.residuals, 7);
+            assert_eq!(stats.countermodel_queries, 0);
+            assert_eq!(stats.countermodels, 0);
+            assert_eq!(certificate.refuted, 7);
         }
         for workers in [1, 4] {
             for size in [1, 2, 5] {
-                let mut stream =
-                    StableModels::new(theory, Limits::default(), Control::default()).unwrap();
+                let mut stream = by_clauses(theory, Limits::default(), Control::default()).unwrap();
                 stream.enable_phase_timing();
                 assert_eq!(
                     stream
@@ -273,7 +288,7 @@ fn certificate_failure_retains_pending_candidates_without_reentering_completion(
 fn restrictions_keep_original_certificate_and_late_configuration_is_explicit() {
     let original = choices();
     let restriction = theory(3, vec![Node::Atom(0)], vec![0]);
-    let mut stream = StableModels::new(&original, Limits::default(), Control::default()).unwrap();
+    let mut stream = by_clauses(&original, Limits::default(), Control::default()).unwrap();
     stream
         .enable_certified_checking(TightPlanLimits::default())
         .unwrap();
@@ -283,7 +298,7 @@ fn restrictions_keep_original_certificate_and_late_configuration_is_explicit() {
     assert!(results.iter().all(|m| m.contains(&0)));
     assert_eq!(stream.statistics().countermodel_queries, 0);
     assert_eq!(stream.statistics().candidate_restrictions, 1);
-    let mut late = StableModels::new(&original, Limits::default(), Control::default()).unwrap();
+    let mut late = by_clauses(&original, Limits::default(), Control::default()).unwrap();
     late.next().unwrap().unwrap();
     assert_eq!(
         late.enable_certified_checking(TightPlanLimits::default()),

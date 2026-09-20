@@ -36,3 +36,10 @@ new expectations; updating them requires independent evidence and review, not
 regenerating them from a failing implementation. The test helper contains no
 fixture-update mode. A separate ignored diagnostic prints bounded watch-storage
 dimensions without measuring time or RSS.
+
+Witness completion no longer rescans the base clauses: a complete assignment
+that propagation left without conflict satisfies every clause, which a debug
+build asserts. The observer restores that scan's historical charge for each
+candidate, one unit per literal up to and including the first true one in every
+base clause, so these records stay comparable; solver statistics count only
+performed work.

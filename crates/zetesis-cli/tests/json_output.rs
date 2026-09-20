@@ -1,5 +1,8 @@
 //! Typed streaming JSON preserves the ordinary solver's semantic and output contracts.
 
+#[path = "support/spelled.rs"]
+mod spelled;
+
 use std::io::{self, Write};
 use std::process::Command;
 
@@ -54,7 +57,7 @@ fn source_projection_selects_full_representatives() {
     assert_eq!(models.len(), 2);
     let mut keys = std::collections::BTreeSet::new();
     for answer in models {
-        let full = answer["model"]["full_model"].as_array().unwrap();
+        let full = spelled::spelled(&value, answer);
         keys.insert(full.iter().any(|atom| atom["predicate"] == "p"));
         assert_eq!(answer["model"]["shown"]["atom_indices"], json!([]));
     }
@@ -133,7 +136,7 @@ fn hidden_display_preserves_full_model_identity() {
         let mut full = std::collections::BTreeSet::new();
         for model in models {
             assert_eq!(model["model"]["shown"]["atom_indices"], json!([]));
-            full.insert(model["model"]["full_model"].to_string());
+            full.insert(Json::Array(spelled::spelled(&value, model)).to_string());
         }
         assert_eq!(full, expected);
     }
@@ -155,7 +158,7 @@ fn model_numbers_follow_publication_order() {
 fn json_documents_identify_the_schema() {
     for oracle in ["closure", "countermodel"] {
         let (_, value) = hidden_choices(oracle);
-        assert_eq!(value["schema"], 1);
+        assert_eq!(value["schema"], 2);
     }
 }
 
@@ -168,15 +171,41 @@ fn statistics_are_absent_without_opt_in() {
 }
 
 #[test]
-fn support_statistics_identify_the_outer_restriction() {
+fn support_statistics_identify_the_outer_restriction_under_clauses() {
     for (source, status) in [("a | b.", "applied"), ("{a;b}.", "not_applicable")] {
-        let (report, value) = solve(source, &options(&["--stats", "--oracle", "countermodel"]));
+        let (report, value) = solve(
+            source,
+            &options(&["--stats", "--oracle", "countermodel", "--search", "clauses"]),
+        );
         let report = report.unwrap();
         let measured = report.countermodel_statistics.unwrap().support.unwrap();
         let support = &value["statistics"]["search"]["necessary_support"];
         assert_eq!(support["status"], status);
         assert_eq!(support["construction_work"], measured.construction_work);
         assert_eq!(support["encoding_work"], measured.encoding_work);
+        assert!(value["statistics"]["search"]["candidate_regions"].is_null());
+    }
+}
+
+#[test]
+fn region_statistics_identify_the_support_cut() {
+    // A choice alone declines the clauses proposer's support restriction;
+    // the support cut reads a choice as a producer of its atom and applies.
+    for (source, support_cut) in [("a | b.", "applied"), ("{a;b}.", "applied")] {
+        let (report, value) = solve(
+            source,
+            &options(&["--stats", "--oracle", "countermodel", "--search", "regions"]),
+        );
+        let report = report.unwrap();
+        let statistics = report.countermodel_statistics.unwrap();
+        assert!(statistics.support.is_none());
+        let measured = statistics.regions.unwrap();
+        let regions = &value["statistics"]["search"]["candidate_regions"];
+        assert_eq!(regions["support_cut"], support_cut);
+        assert_eq!(regions["visited"], measured.counts.regions);
+        assert_eq!(regions["leaves"], measured.counts.leaves);
+        assert_eq!(regions["reading_work"], measured.counts.work);
+        assert!(value["statistics"]["search"]["necessary_support"].is_null());
     }
 }
 
@@ -188,6 +217,8 @@ fn completion_statistics_distinguish_requested_storage() {
             "--stats",
             "--oracle",
             "countermodel",
+            "--search",
+            "clauses",
             "--completion-workers",
             "2",
         ]),
@@ -226,6 +257,38 @@ fn candidate_statistics_preserve_restriction_accounting() {
         stats["peak_copied_payload_bytes"],
         measured.restriction_peak_bytes
     );
+}
+
+#[test]
+fn candidate_statistics_carry_the_carrier_narrowing_and_regions() {
+    let (report, value) = solve(
+        "{a}. {b}. :- a,b.",
+        &options(&["--stats", "--grounder", "lazy"]),
+    );
+    let measured = report.unwrap().candidate_statistics.unwrap();
+    let stats = &value["statistics"]["candidate_restrictions"];
+    let narrowing = &stats["carrier_narrowing"];
+    assert_eq!(narrowing["passes"], measured.narrowing_passes);
+    assert_eq!(narrowing["cut_gate_atoms"], measured.cut_gate_atoms);
+    assert_eq!(narrowing["held_gate_atoms"], measured.held_gate_atoms);
+    assert_eq!(narrowing["refuted"], false);
+    assert_eq!(narrowing["stopped"], Json::Null);
+    let regions = &stats["carrier_regions"];
+    assert_eq!(regions["visited"], measured.regions);
+    assert_eq!(regions["refuted"], measured.regions_refuted);
+    assert_eq!(regions["leaves"], measured.regions_leaves);
+    assert_eq!(regions["counted"], measured.regions_counted);
+    assert_eq!(regions["narrowing_passes"], measured.region_passes);
+}
+
+#[test]
+fn candidate_statistics_say_when_the_root_narrowing_refuted_every_seed() {
+    let (report, value) = solve("{a}. p. :- p.", &options(&["--stats"]));
+    let measured = report.unwrap().candidate_statistics.unwrap();
+    assert!(measured.root_refuted);
+    let narrowing = &value["statistics"]["candidate_restrictions"]["carrier_narrowing"];
+    assert_eq!(narrowing["refuted"], true);
+    assert_eq!(narrowing["passes"], measured.narrowing_passes);
 }
 
 #[test]
@@ -334,7 +397,7 @@ fn interruption_retains_an_unproved_incumbent() {
     let models = value["models"].as_array().unwrap();
     assert_eq!(models.len(), 1);
     assert_eq!(models[0]["number"], 1);
-    let full = models[0]["model"]["full_model"].as_array().unwrap();
+    let full = spelled::spelled(&value, &models[0]);
     assert_eq!(full.len(), 1);
     // Either stable model may be found first; its retained cost must match it.
     let (name, cost) = match full[0]["predicate"].as_str() {
@@ -753,6 +816,8 @@ fn resource_stops_encode_partial_coverage() {
             &[
                 "--oracle",
                 "countermodel",
+                "--search",
+                "clauses",
                 "--completion-workers",
                 "2",
                 "--max-completion-scratch-bytes",
@@ -812,13 +877,23 @@ fn objective_refusals_publish_no_incumbent() {
 
 #[test]
 fn projection_limits_preserve_checked_partial_answers() {
+    // The projection history belongs to the clauses proposer; regions keep
+    // no exclusion index and never reach these limits.
     for (flag, code) in [
         ("--max-projection-entries", "projection_entries"),
         ("--max-projection-nodes", "projection_nodes"),
     ] {
         let (result, value) = solve(
             "{a;b}.",
-            &options(&["--oracle", "countermodel", "--stats", flag, "0"]),
+            &options(&[
+                "--oracle",
+                "countermodel",
+                "--search",
+                "clauses",
+                "--stats",
+                flag,
+                "0",
+            ]),
         );
         let report = result.unwrap();
         assert_eq!(report.completion, Completion::Interrupted);
@@ -898,7 +973,7 @@ fn stopped_requests_publish_no_models() {
     for oracle in ["closure", "countermodel", "auto"] {
         for expired in [false, true] {
             let control = if expired {
-                Control::with_deadline(std::time::Instant::now())
+                Control::with_deadline(std::time::Instant::now()).unwrap()
             } else {
                 let control = Control::default();
                 control.cancel();

@@ -47,7 +47,7 @@ impl Mode {
     pub const ALL: [Self; 3] = [Self::Unobserved, Self::Boundary, Self::Detailed];
 }
 
-/// Profile an original source file and its native include graph.
+/// Measure the grounding of an original source file and its native include graph, round by round.
 ///
 /// One unmeasured indexed-join admission with domain analysis disabled and a
 /// complete native solve establish the reference.
@@ -70,7 +70,7 @@ impl Mode {
 /// Invalid configuration or initial report allocation returns `Err`. Later
 /// loading, admission, capture, model or identity failures are retained in
 /// [`Report::failure`] with `complete == false`, without discarding the prefix.
-pub fn profile(path: impl AsRef<Path>, configuration: Configuration) -> Result<Report, Error> {
+pub fn measure_file(path: impl AsRef<Path>, configuration: Configuration) -> Result<Report, Error> {
     let configuration = configuration.validate()?;
     let mut report = Report::new(&configuration)?;
     let outcome = qualify(path.as_ref(), &mut report);
@@ -221,7 +221,7 @@ fn measure(
 /// refusal after publishing that incomplete report. Only a completed report with
 /// a successful full write returns `Ok(())`.
 pub fn run(options: &Options, output: &mut impl Write) -> Result<(), Error> {
-    let mut report = profile(&options.source, options.configuration())?;
+    let mut report = measure_file(&options.source, options.configuration())?;
     write_report(&report, output)?;
     if let Some(error) = report.failure.take() {
         return Err(error);

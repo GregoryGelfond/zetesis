@@ -97,9 +97,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let work = on.work.get();
     assert!(work.domain_prepare_work.is_some_and(|count| count > 0));
     assert!(work.domain_guard_checks.is_some_and(|count| count > 0));
-    // Indexed offers one c posting, then matches whole rows. Guards reject two
-    // a rows, four b rows and eight c rows before copying their new bindings.
-    assert_eq!(work.domain_rejected_rows, Some(14));
+    // Indexed offers one c posting, then matches whole rows. In the final
+    // instantiation the guards reject two a rows, four b rows and eight c
+    // rows before copying their new bindings; the completion round before it
+    // rejected the same a and b rows, and the sum over the phases is twenty.
+    assert_eq!(work.domain_rejected_rows, Some(20));
     assert!(work.join_probes.unwrap() < off.work.get().join_probes.unwrap());
 
     for limits in [

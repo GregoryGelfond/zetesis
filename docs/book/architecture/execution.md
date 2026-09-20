@@ -68,12 +68,125 @@ Its Boolean search representation does not redefine ASP as classical
 satisfiability: auxiliary encoding variables do not participate in answer-set
 identity or minimality.
 
+Candidates on the formula route can be proposed by regions
+(`--search regions`), the same coverage tree the closure route walks
+(`Search.lean`), over the theory's atoms. The root leaves every atom open. Under a region every node of the formula DAG
+has two readings, decided by one pass over the DAG: sure, when every
+candidate of the region satisfies it, and never, when no candidate does; a
+held atom is sure, a cut atom never, and the connectives combine the
+readings as the closure route's definite and possible gates combine a
+rule's. The narrowing closes what every candidate must make of each node
+in both directions: every root holds, a node learns from its operands, and
+a node teaches its operands what its knowledge leaves them, a conjunction
+that holds both operands, a disjunction that holds with one operand
+failing the other, and so on through the connectives, until nothing
+changes; an atom known is decided and a node known both ways refutes,
+which is what unit propagation over a clause form decides. An atom none
+of whose producers can support it, each having a failing body or another
+head held, is cut, a held one refuting the region, and an atom held with
+one producer left demands that producer's body. The `zetesis-ferraris` crate narrows a region by
+these rules to a fixed point over the theory's own DAG, without a clause
+form (`FormulaBounds.read_sound`, `never_root_refutes`, `known_sound`,
+`unsupported_cut`). A region no reading refutes is split
+on the open atom the narrowing found most constrained, cut branch first;
+a region with every atom decided is a leaf, and a leaf is a classical model, since at a full decision every
+root is sure or never (`FormulaBounds.decided_leaf_models`). The leaf
+is the candidate the reduct decides.
+The knowledge of a region holds in every region inside it
+(`FormulaBounds.known_mono`), so a split hands each child a copy of its
+parent's knowledge and the child learns only what the split decided; the
+regions still share nothing. The readings are arrays over the DAG, and the
+regions partition the space exactly, so generation has the closure route's
+shape: data-parallel work inside a region and share-nothing regions beside
+one another. A candidate-only restriction narrows the regions still to visit
+without a restart, and no exclusion index is kept, because a leaf is visited
+once. The traversal itself is one operation in `zetesis-cpu`, shared by both
+routes when one worker walks; with several workers the formula route walks
+the same tree in `zetesis-sat`'s parallel regions, each worker owning a stack
+of regions and a shared pool offering regions to idle workers. The closure
+route narrows by its two closures, the formula route by
+the readings.
+
+Under the same method the reduct's proper-subset query is a second region
+tree: its root cuts every atom outside the candidate and leaves the
+candidate's atoms open, its regions are narrowed by the knowledge of the
+frozen reduct, read as the original DAG under the candidate's truth mask,
+without the support cut, since a model of the reduct need not be supported;
+a leaf other than the candidate is a proper-subset model, the countermodel,
+and a covered tree with no such leaf is the proof of minimality
+(`ReductRegions.stable_iff_no_countermodel`). Generation and membership
+are then the same operation over the same index of the theory, and no
+clause form is built anywhere on the route.
+
+Because the regions share nothing, several workers can walk the tree at
+once (`--workers`, the host's parallelism by default), each deciding
+the leaves it reaches, over a pool of regions still to visit. The family is exact at any worker count, each
+answer arriving once, by the partition law; the order in which answers
+arrive is the schedule's, is not promised to repeat between runs, and is
+not a property of the result. Verification rests on the laws and on the
+oracle comparison of answer sets as sets, not on order or determinism.
+
+The regions method is the default, chosen by
+[measurement](../reference/observations/README.md#the-regions-default-and-one-worker-count)
+beside the classical search over a clause form on the same cells, with the
+host's workers on the tree; the classical search remains reachable for
+comparison. Read as regions the classical search is the same tree:
+a search node holds some atoms in and some out, propagation adds the atoms
+every classical model agrees on under those decisions, a conflict closes the
+node, and a complete assignment is a leaf the reduct decides
+(`FormulaRegions.classical_consequence_forces`, `no_model_refutes`). Under
+the clauses method the reduct's proper-subset query is the Boolean search
+too. Neither method decides membership by anything but the reduct, and
+neither keeps learned clauses.
+
 Both paths can restrict candidate generation by necessary conditions. A normal
 source constraint supplies a forbidden positive gate conjunction when its
 remaining antecedents are witnessed by actual unconditional facts. The binary
 seed cursor can skip a whole interval while those gate bits remain true.
 Possible support alone cannot supply that witness. Ineligible constraints stay
 with the full closure check.
+
+Before its first seed, the closure route narrows the region of seeds it
+must enumerate. The region starts with nothing decided. Each pass computes
+the region's two closures: the lower one, in which a rule fires only if its
+gates hold under every seed of the region, and the upper one, in which a
+rule fires if its gates hold under some seed. A gate atom the lower closure
+derives belongs to every answer set and is held in every seed; a gate atom
+the upper closure does not derive belongs to no answer set and is cut,
+never offered. The next pass reads those decisions, and the passes stop
+when one changes nothing. The statistics report the passes and the atoms
+held and cut; the rest are open. A constraint that fires in a
+lower closure holds under every seed of the region, so no seed is offered
+and the program has no answer set.
+
+The narrowed root is then visited region by region rather than counted. A
+region holds some of the root's open gate atoms in, cuts some out and
+leaves the rest open; it is narrowed to its fixed point by the same two
+closures, and the passes decide more of its atoms. A region a definite
+constraint refutes, or in which a held atom is not derivable, offers no seed.
+A region with no atom left open offers its one seed. Otherwise the
+region is split on its highest open atom, into the region where that
+atom is out and the region where it is in, visited in that order, which is
+the order the flat counter would offer the same seeds in; the root is always
+split. A region whose narrowing decided nothing beyond the split that formed
+it is counted as a flat interval instead, with the counter's restrictions
+inside it, so a program whose gates do not propagate pays two closures per
+counted region and no more. The statistics report the regions visited,
+refuted, reached as leaves and counted, and the narrowing passes below the root. Each
+offered seed is still checked in full against the whole gate carrier. The
+laws are `Bounds.narrowed_contains_accepted`, the iterated narrowing of the
+open cube (`Bounds.undecided` in the Lean), `Bounds.lower_constraint_refutes` and
+`Bounds.conflicting_atom_refutes` for the refutations, and the coverage
+tree of `Search.lean`, whose `split` node with `Cube.split_partition` and
+`Cube.split_disjoint` makes the regions a partition of their parent and
+whose `CoverageTree.mem_outputs_iff` makes the leaves exactly the accepted
+seeds of the root.
+The program is prepared once for the narrowing and charged as one
+preparation; each closure then runs on that preparation in one retained
+workspace and is charged as one candidate check. A resource stop inside a
+region keeps the completed passes' decisions and counts the region, a stop
+in the preparation or the root keeps the bounds of the completed passes, and
+a program without gate predicates computes no closure.
 
 For a theory whose complete asserted-head grammar is ordinary disjunction,
 every true atom in an answer set must have an original producer whose body is
@@ -88,10 +201,11 @@ and [disjunctive support laws](https://github.com/GregoryGelfond/zetesis/blob/ma
 state these necessary conditions. Source binding coverage and the executable
 certificate constructors retain separate refinement obligations.
 
-Exact projection exclusions have one owner across candidate restrictions. The
-outer cursor retains an index of previously proposed semantic interpretations;
-strengthening the candidate query rebuilds its traversal while preserving that
-index. Original and restriction clauses alone enter the watch lists. A completed
+Under the clauses method, exact projection exclusions have one owner across
+candidate restrictions: the outer cursor retains an index of previously
+proposed semantic interpretations, and strengthening the candidate query
+rebuilds its traversal while preserving that index; the regions method keeps
+no such index, since it visits a leaf once. Original and restriction clauses alone enter the watch lists. A completed
 assignment is independently checked against those clauses and looked up in the
 exclusion index before becoming another candidate. The original theory and its
 reduct remain separate from both operations. The

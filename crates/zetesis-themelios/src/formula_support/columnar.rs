@@ -158,6 +158,9 @@ fn evaluate(
         );
     }
     assert!(join.finished, "only complete cursor exhaustion is success");
+    // These controls traverse completed support. Undefined rows are omitted
+    // by every route, but exhaustion cannot erase an all-undefined family.
+    join.take_family().finish()?;
     Ok(bindings)
 }
 

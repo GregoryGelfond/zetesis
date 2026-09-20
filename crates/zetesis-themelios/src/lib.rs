@@ -38,6 +38,7 @@ mod fact_expansion;
 mod integer_range;
 mod metadata;
 mod formula;
+mod formula_warning;
 mod formula_choice_source;
 mod formula_ir;
 mod formula_project_ir;
@@ -102,7 +103,7 @@ pub use bundle_admission::{
     admit_bundle_extended,
 };
 pub use diagnostic::{AdmissionFailure, InputLimit, ProfileFeature, SyntaxFailure};
-pub use expansion::{ExpansionFailure, ExpansionLimits, ExpansionResource};
+pub use expansion::{ExpansionFailure, ExpansionLimits, ExpansionResource, ExpansionUsage};
 pub use extended::admit_extended;
 pub use formula::{
     AdmittedFormula, AdmittedFormulaBundle, AnalysisBasis, FormulaBundleFailure, FormulaFailure,
@@ -110,6 +111,7 @@ pub use formula::{
     admit_bundle_formula_with_grounding_observer, admit_formula,
     admit_formula_with_grounding_observer, prepare_bundle_formula, prepare_formula,
 };
+pub use formula_warning::FormulaWarning;
 mod formula_count_plan;
 pub use formula_count_plan::{
     CountPlan, CountPlanFailure, CountPlanFailureKind, CountPlanLimits, CountPlanResource,
@@ -117,10 +119,13 @@ pub use formula_count_plan::{
 };
 mod grounding_options;
 mod formula_domains;
+mod formula_keys;
+mod word_hash;
+pub use formula_keys::KeyAnalysis;
 pub use grounding_observer::{
     DomainObservation, GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork,
 };
-pub use grounding_options::{DomainLimits, GroundingOptions, JoinStrategy};
+pub use grounding_options::{DomainLimits, DomainStop, GroundingOptions, JoinStrategy};
 pub use metadata::{
     AtomSelection, AtomSelectionError, AtomSelectionLimits, LocatedDirective, MetadataError,
     MetadataFeature, MetadataLimits, MetadataResource, OutputSelection, PreparedProjection,
@@ -166,6 +171,7 @@ pub struct Admitted {
     source: Source,
     template_origins: Vec<Vec<Location>>,
     metadata: SourceMetadata,
+    expansion: ExpansionUsage,
 }
 
 impl Admitted {
@@ -193,6 +199,12 @@ impl Admitted {
     #[must_use]
     pub fn metadata(&self) -> &SourceMetadata {
         &self.metadata
+    }
+
+    /// Expansion charges this admission accepted, each under its ceiling.
+    #[must_use]
+    pub fn expansion_usage(&self) -> &ExpansionUsage {
+        &self.expansion
     }
 
     /// Consume the boundary value when source evidence is no longer required.
@@ -244,6 +256,7 @@ pub fn admit(text: String, options: AdmissionOptions) -> Result<Admitted, Admiss
         source: source.into_source(),
         template_origins,
         metadata: SourceMetadata::default(),
+        expansion: ExpansionUsage::default(),
     })
 }
 

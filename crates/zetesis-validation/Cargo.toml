@@ -24,7 +24,8 @@ nix = { version = "=0.31.3", default-features = false, features = ["resource"] }
 
 [dev-dependencies]
 proc-macro2 = { version = "=1.0.107", features = ["span-locations"] }
-syn = "=2.0.119"
+proptest = "1.11"
+syn = { version = "=2.0.119", features = ["full"] }
 
 [lints]
 workspace = true

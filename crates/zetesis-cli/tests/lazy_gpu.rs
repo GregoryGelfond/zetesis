@@ -88,12 +88,21 @@ mod physical {
     #[test]
     #[ignore = "requires physical Metal with automatic materialization"]
     fn metal_automatic_grounder_keeps_source_joins() {
+        qualify_automatic_grounder(Backend::Metal);
+    }
+
+    #[test]
+    #[ignore = "requires actual Vulkan with automatic materialization"]
+    fn vulkan_automatic_grounder_keeps_source_joins() {
+        qualify_automatic_grounder(Backend::Vulkan);
+    }
+
+    fn qualify_automatic_grounder(backend: Backend) {
         let source = "{a}. {b}. {c}. {d}. {e}. {f}.";
         let (_, expected, _) = solve(source, &["--backend", "cpu", "--json"]);
         for grounder in [zetesis_cli::Grounder::Auto, zetesis_cli::Grounder::Lazy] {
-            let backend = zetesis_cli::Backend::Metal;
             let mut selected = options(&["--stats", "--json"]);
-            selected.backend = backend;
+            selected.backend = backend.requested();
             selected.grounder = grounder;
             // A hidden static lowering cannot succeed under these limits.
             selected.max_ground_rules = 0;
@@ -113,8 +122,8 @@ mod physical {
             assert_eq!(report.models, 64);
             assert_eq!(actual["models"], expected["models"]);
             let stats = report.lazy_execution.unwrap();
-            assert_eq!(stats.requested_backend, backend);
-            assert_eq!(stats.backend, "Metal");
+            assert_eq!(stats.requested_backend, backend.requested());
+            assert_eq!(stats.backend, backend.name());
             assert!(stats.dispatches > 0);
             assert!(stats.completed_candidates > 0);
             assert_eq!(stats.submitted_candidates, stats.completed_candidates);
@@ -185,22 +194,35 @@ mod physical {
                 assert_eq!(stats.submitted_candidates, stats.completed_candidates);
                 assert_eq!(stats.stopped_candidates, 0);
                 assert_eq!(stats.queued_results, 0);
-                assert!(stats.dispatches > 0);
-                assert!(stats.world_instances > 0);
-                assert!(stats.transport_allocations > 0);
-                assert!(stats.peak_transport_bytes > 0);
+                // A program the root's narrowing refutes, such as a self-supported
+                // atom under a constraint requiring it, submits no seed and
+                // dispatches nothing; every submitted seed is dispatched.
+                if stats.submitted_candidates == 0 {
+                    assert_eq!(stats.dispatches, 0);
+                } else {
+                    assert!(stats.dispatches > 0);
+                    assert!(stats.world_instances > 0);
+                    assert!(stats.transport_allocations > 0);
+                    assert!(stats.peak_transport_bytes > 0);
+                    qualify_transport_usage(&stats);
+                }
                 assert_eq!(
                     stats
                         .transport_allocations
                         .checked_add(stats.transport_reuses),
                     Some(stats.dispatches)
                 );
-                qualify_transport_usage(&stats);
                 assert_eq!(stats.requested_backend, backend.requested());
                 assert_eq!(stats.backend, backend.name());
                 assert!(diagnostics.contains("effective=lazy"));
                 assert!(!diagnostics.contains("effective=eager"));
-                assert!(diagnostics.contains("effective execution: oracle=closure; backend=requested GPU policy; grounder=lazy; see backend diagnostics for actual adapter"));
+                if stats.submitted_candidates == 0 {
+                    assert!(diagnostics.contains(
+                        "effective execution: none needed; the root narrowing refuted every seed"
+                    ));
+                } else {
+                    assert!(diagnostics.contains("effective execution: oracle=closure; backend=requested GPU policy; grounder=lazy; see backend diagnostics for actual adapter"));
+                }
                 assert_eq!(
                     actual["statistics"]["lazy_execution"]["dispatches"],
                     stats.dispatches
@@ -269,12 +291,14 @@ mod physical {
             ],
         );
         assert_eq!(report.completion, Completion::RequestedModels);
+        // The region tree offers the two decided seeds one at a time, so
+        // the one requested model needs one submission.
         let stats = report.lazy_execution.unwrap();
-        assert_eq!(stats.submitted_candidates, 4);
-        assert_eq!(stats.completed_candidates, 4);
-        assert_eq!(stats.queued_results, 2);
-        assert_eq!(report.checked, 2);
-        assert_eq!(value["outcome"]["verified_models"], 2);
+        assert_eq!(stats.submitted_candidates, 1);
+        assert_eq!(stats.completed_candidates, 1);
+        assert_eq!(stats.queued_results, 0);
+        assert_eq!(report.checked, 1);
+        assert_eq!(value["outcome"]["verified_models"], 1);
         assert_eq!(value["outcome"]["published_models"], 1);
     }
 
@@ -355,10 +379,13 @@ mod physical {
         assert!(matches!(*error.cause, RunError::Output(_)));
         let partial = error.partial_report.unwrap();
         assert_eq!(partial.published_models, 0);
-        assert_eq!(partial.verified_models, 2);
+        // The region tree offers the decided seeds one at a time and the
+        // session asks for one model, so one seed was checked and verified
+        // before the writer failed; its result was taken for publication.
+        assert_eq!(partial.verified_models, 1);
         let stats = partial.lazy_execution.unwrap();
-        assert_eq!(stats.completed_candidates, 4);
-        assert_eq!(stats.queued_results, 2);
+        assert_eq!(stats.completed_candidates, 1);
+        assert_eq!(stats.queued_results, 0);
         assert!(stats.dispatches > 0);
     }
 }

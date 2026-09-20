@@ -57,7 +57,11 @@ fn repeated_candidates_reuse_empty_query_capacity() {
     let program = program();
     let control = Control::default();
     let prepared = PreparedQueries::new(&program, PreparationLimits::default(), &control).unwrap();
-    assert_eq!(prepared.statistics().work, 6); // Four templates, two positive occurrences.
+    // Four templates and two positive occurrences; two passes of the bound
+    // inference at sixteen each; three predicates offered a layout; the
+    // block-step plan, a unit and a unit a term for each occurrence, four and
+    // three.
+    assert_eq!(prepared.statistics().work, 48);
     let mut workspace = ClosureWorkspace::default();
     let first = prepared
         .check_view(
@@ -71,7 +75,7 @@ fn repeated_candidates_reuse_empty_query_capacity() {
     let undo = workspace.buffers.undo[0].as_ptr();
     let retained = workspace.retained_bytes().unwrap();
     assert!(retained > ClosureWorkspace::default().retained_bytes().unwrap());
-    let mut steady_work = None;
+    let mut steady_work = [None; 2];
     // Increasing completed candidate counts reuse actual allocations. They do
     // not establish faster wall time or shared final-result payload ownership.
     for count in [1, 2, 4, 8] {
@@ -92,11 +96,13 @@ fn repeated_candidates_reuse_empty_query_capacity() {
             assert_eq!(workspace.buffers.undo[0].as_ptr(), undo);
             assert_eq!(workspace.retained_bytes().unwrap(), retained);
             // Retained empty extents change lookup and reset work. Allocation
-            // reuse does not imply a lower catalog-work subtotal.
-            if let Some(previous) = steady_work {
+            // reuse does not imply a lower catalog-work subtotal. The two
+            // seeds' closures differ in where their dense rows sit, so each
+            // seed has its own steady work.
+            if let Some(previous) = steady_work[index % 2] {
                 assert_eq!(reused.statistics().work, previous);
             }
-            steady_work = Some(reused.statistics().work);
+            steady_work[index % 2] = Some(reused.statistics().work);
             assert_eq!(first.closure(), &expected(1));
         }
     }
@@ -148,6 +154,58 @@ fn failed_candidates_cannot_retain_truth() {
             assert_eq!(result.unwrap().closure(), &expected(1));
         }
     }
+}
+
+#[test]
+fn a_stopped_cube_closure_retires_the_workspace() {
+    // Every work ceiling below a cube closure's need stops it with the
+    // workspace retired, and the next closure on that workspace is the
+    // closure a fresh one computes.
+    let program = program();
+    let control = Control::default();
+    let prepared = PreparedQueries::new(&program, PreparationLimits::default(), &control).unwrap();
+    let cube = super::super::Cube::all_open();
+    let reference = prepared
+        .closure_of(
+            super::super::Gates::Definite(&cube),
+            &mut ClosureWorkspace::default(),
+            Limits::default(),
+            &control,
+        )
+        .unwrap();
+    let empty = ClosureWorkspace::default().retained_bytes().unwrap();
+    let mut workspace = ClosureWorkspace::default();
+    let mut stopped = 0;
+    for max_work in 0..64 {
+        let result = prepared.closure_of(
+            super::super::Gates::Definite(&cube),
+            &mut workspace,
+            Limits {
+                max_work,
+                ..Limits::default()
+            },
+            &control,
+        );
+        match result {
+            Err(stop) => {
+                stopped += 1;
+                assert_eq!(stop, Stop::WorkLimit);
+                assert_eq!(workspace.retained_bytes().unwrap(), empty);
+                assert_eq!(workspace.catalogs.len(), 0);
+                let next = prepared
+                    .closure_of(
+                        super::super::Gates::Possible(&cube),
+                        &mut workspace,
+                        Limits::default(),
+                        &control,
+                    )
+                    .unwrap();
+                assert!(next.atoms.atoms().len() >= reference.atoms.atoms().len());
+            }
+            Ok(completed) => assert_eq!(completed.atoms, reference.atoms),
+        }
+    }
+    assert!(stopped > 0, "some ceiling stops the closure");
 }
 
 #[test]
@@ -234,6 +292,7 @@ fn preparation_refuses_its_own_work_boundary() {
         PreparationLimits {
             max_work: prepared.statistics().work,
             max_bytes: prepared.statistics().retained_bytes,
+            ..PreparationLimits::default()
         },
         &control,
     )

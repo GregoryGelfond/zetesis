@@ -20,6 +20,7 @@ mod checked;
 mod support;
 mod atomic_choice;
 mod positive;
+mod regions;
 pub mod partition;
 
 pub use checked::{CheckedInterpretation, StableInterpretation, check_interpretation};
@@ -38,7 +39,12 @@ pub use evaluation::{
 pub use normal::{from_ground_program, from_ground_program_supported};
 pub use oracle::{Check, Limits, Statistics, Verdict, check, models, models_reduct};
 pub use reduct::FrozenReduct;
+pub use regions::{
+    Extraction, Knowledge, Narrower, NarrowingAttempt, NarrowingStatistics, Producers,
+    RegionLimits, producers,
+};
 pub use theory::{AdmissionError, AdmissionLimits, Interpretation, Node, Theory};
+pub use zetesis_cpu::regions::{Narrowing, Region};
 
 pub use tight::{
     TightAttempt, TightCheck, TightCheckLimits, TightError, TightPlan, TightPlanLimits,

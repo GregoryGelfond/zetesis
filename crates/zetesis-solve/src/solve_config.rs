@@ -2,7 +2,7 @@
 
 use std::num::NonZeroUsize;
 
-use crate::{Backend, Grounder, Oracle, SourceBatching};
+use crate::{Backend, Grounder, Oracle, SearchMethod, SourceBatching};
 
 /// Policy for one semantic session. Budgets retain their existing ownership:
 /// Formula search/objective work is cumulative. Independent closure work is per
@@ -18,6 +18,8 @@ pub struct SolveConfig {
     pub source_batching: SourceBatching,
     /// Exact membership policy; prepared formula inputs retain their original theory.
     pub oracle: Oracle,
+    /// How the formula route proposes candidates and queries the reduct.
+    pub search: SearchMethod,
     /// Enable optional host timing; semantic/resource counters remain independent.
     pub stats: bool,
     /// Maximum yielded models or retained optimum ties; zero requests all.
@@ -55,9 +57,16 @@ pub struct SolveConfig {
     pub max_optimal_bytes: usize,
     /// Maximum candidates per owned batch.
     pub batch_size: NonZeroUsize,
-    /// Closure worker count.
+    /// Worker count: the closure route's pool, and the walkers of the
+    /// region tree under the regions method, one being the scalar walk.
+    /// Every worker is admitted at `max_closure_bytes`, so raise the two
+    /// together, as [`Self::for_allowance`] does; the command defaults the
+    /// count to the host's parallelism.
     pub workers: NonZeroUsize,
-    /// Formula exact-completion worker count.
+    /// Formula exact-completion worker count: under the clauses search, and
+    /// under the regions search when one CPU worker walks the tree or a
+    /// device route runs; more than one CPU worker under regions decides its
+    /// leaves in `workers` and uses none.
     pub completion_workers: NonZeroUsize,
     /// Named cold reduct preparation and each query's retained capacity.
     /// The immutable reduct is prepared once per original theory. Parallel
@@ -85,6 +94,9 @@ pub struct SolveConfig {
     pub max_work: u64,
     /// Named storage for one independent lazy CPU closure construction.
     /// Input seeds and completed model retention belong to separate owners.
+    /// Every assigned worker is admitted at this allowance, so
+    /// `workers * max_closure_bytes` must not exceed `max_closure_batch_bytes`;
+    /// [`Self::validate`] refuses the product before a session starts.
     pub max_closure_bytes: usize,
     /// Collective independent CPU preparation, cached workspace and active
     /// closure allowance. Also bounds immutable query preparation bytes.
@@ -119,11 +131,16 @@ impl SolveConfig {
     /// These finite session allowances differ from standalone primitive defaults.
     /// Logical work ceilings do not impose a wall-clock deadline or remove the
     /// independently configured source, storage and materialization limits.
+    /// The byte ceilings are the shares of [`Self::REFERENCE_MEMORY`];
+    /// [`Self::for_allowance`] scales them by a session's allowance and
+    /// shares the closure ceiling by its workers, which is how the command
+    /// takes the host's memory and parallelism.
     pub const DEFAULT: Self = Self {
         backend: Backend::Auto,
         grounder: Grounder::Auto,
         source_batching: SourceBatching::Independent,
         oracle: Oracle::Auto,
+        search: SearchMethod::Regions,
         stats: false,
         models: 1,
         max_search_work: 10_000_000_000,
@@ -160,9 +177,66 @@ impl SolveConfig {
     };
 }
 
+impl SolveConfig {
+    /// The workers that walk the region tree together and decide its
+    /// leaves themselves: several, under the regions method on a CPU
+    /// backend. One worker, the clauses method or a device backend walk
+    /// the scalar tree and batch its leaves, so `None`.
+    #[must_use]
+    pub fn region_workers(&self) -> Option<NonZeroUsize> {
+        (self.search == SearchMethod::Regions
+            && self.workers.get() > 1
+            && matches!(self.backend, Backend::Auto | Backend::Cpu))
+        .then_some(self.workers)
+    }
+}
+
 impl Default for SolveConfig {
     fn default() -> Self {
         Self::DEFAULT
+    }
+}
+
+impl SolveConfig {
+    /// Two gibibytes: the memory allowance the byte ceilings of
+    /// [`Self::DEFAULT`] are the shares of.
+    pub const REFERENCE_MEMORY: u64 = 2 * 1024 * 1024 * 1024;
+
+    /// The defaults for a session allowed `memory` bytes over `workers`:
+    /// [`Self::DEFAULT`] with the nine byte ceilings that bound retained
+    /// storage scaled by `memory` over [`Self::REFERENCE_MEMORY`], each
+    /// saturating at its type's maximum, and the per-closure allowance each
+    /// worker's share of the scaled collective closure ceiling, so that the
+    /// product [`Self::validate`] checks holds. The projection, objective
+    /// key, incumbent, reduct, completion scratch, candidate, collective
+    /// closure and batch ceilings scale; work, count and structural
+    /// ceilings, and the ceilings of source admission, do not. Constant
+    /// time.
+    #[must_use]
+    pub fn for_allowance(memory: u64, workers: NonZeroUsize) -> Self {
+        let scale_u64 = |default: u64| {
+            let scaled =
+                u128::from(default) * u128::from(memory) / u128::from(Self::REFERENCE_MEMORY);
+            u64::try_from(scaled).unwrap_or(u64::MAX)
+        };
+        let scale_usize = |default: usize| {
+            usize::try_from(scale_u64(u64::try_from(default).unwrap_or(u64::MAX)))
+                .unwrap_or(usize::MAX)
+        };
+        let max_closure_batch_bytes = scale_usize(Self::DEFAULT.max_closure_batch_bytes);
+        Self {
+            workers,
+            max_projection_bytes: scale_usize(Self::DEFAULT.max_projection_bytes),
+            max_objective_key_bytes: scale_usize(Self::DEFAULT.max_objective_key_bytes),
+            max_optimal_bytes: scale_usize(Self::DEFAULT.max_optimal_bytes),
+            max_reduct_bytes: scale_u64(Self::DEFAULT.max_reduct_bytes),
+            max_completion_scratch_bytes: scale_u64(Self::DEFAULT.max_completion_scratch_bytes),
+            max_candidate_bytes: scale_usize(Self::DEFAULT.max_candidate_bytes),
+            max_closure_bytes: max_closure_batch_bytes / workers.get(),
+            max_closure_batch_bytes,
+            max_batch_bytes: scale_u64(Self::DEFAULT.max_batch_bytes),
+            ..Self::DEFAULT
+        }
     }
 }
 
@@ -173,7 +247,9 @@ impl SolveConfig {
     /// A later prepared input can impose additional representation constraints.
     ///
     /// # Errors
-    /// Refuses incompatible oracle, grounding and shared-source policies.
+    /// Refuses incompatible oracle, grounding and shared-source policies, and
+    /// a worker count whose product with `max_closure_bytes` exceeds
+    /// `max_closure_batch_bytes`, whatever route the session would take.
     pub fn validate(&self) -> Result<(), crate::SolveError> {
         crate::engine::validate_combination(self)
     }

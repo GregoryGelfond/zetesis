@@ -3,6 +3,7 @@
 #[path = "support/bounded_writer.rs"]
 mod bounded_writer;
 
+use std::fmt::Write as _;
 use std::io;
 use std::path::PathBuf;
 
@@ -60,7 +61,7 @@ fn statistics_distinguish_formula_profile_limits() {
             "{diagnostics}"
         );
         assert!(diagnostics.contains(&format!(
-            "formula profile ceilings: atoms={expected_atoms}; roots={expected_roots}; nodes=1048576; source values=1024; assignment values/operation=1024; generated binding values=1024; support rounds=1024"
+            "formula profile ceilings: atoms={expected_atoms}; roots={expected_roots}; nodes=1048576; source values=1000000; assignment values/operation=1000000; generated binding values=1000000; support rounds=1000000"
         )), "{diagnostics}");
         assert!(
             diagnostics.contains(&format!(
@@ -73,6 +74,13 @@ fn statistics_distinguish_formula_profile_limits() {
             diagnostics.contains(&format!(
                 "expansion limits: work={};",
                 zetesis_themelios::ExpansionLimits::default().max_term_work
+            )),
+            "{diagnostics}"
+        );
+        assert!(
+            diagnostics.contains(&format!(
+                "; scalar bytes={};",
+                zetesis_themelios::ExpansionLimits::default().max_scalar_bytes
             )),
             "{diagnostics}"
         );
@@ -94,13 +102,46 @@ fn statistics_explain_candidate_restriction_units() {
 }
 
 #[test]
-fn statistics_identify_necessary_disjunctive_support() {
-    let (_, _, text) = solve("a | b.", &options(&["--stats", "--oracle", "countermodel"]));
+fn statistics_identify_necessary_disjunctive_support_under_clauses() {
+    let (_, _, text) = solve(
+        "a | b.",
+        &options(&["--stats", "--oracle", "countermodel", "--search", "clauses"]),
+    );
     assert!(
         text.contains("necessary disjunctive support: status=Applied;"),
         "{text}"
     );
     assert!(text.contains("(included in search work)"), "{text}");
+    assert!(!text.contains("candidate regions:"), "{text}");
+}
+
+fn regions_statistics() -> String {
+    let (_, _, text) = solve(
+        "a | b.",
+        &options(&["--stats", "--oracle", "countermodel", "--search", "regions"]),
+    );
+    text
+}
+
+#[test]
+fn statistics_report_the_regions_the_search_visited() {
+    let text = regions_statistics();
+    assert!(
+        text.contains("oracle=countermodel; grounder=auto; search=regions"),
+        "{text}"
+    );
+    assert!(text.contains("candidate regions: visited="), "{text}");
+    assert!(text.contains("; leaves=2; propagations="), "{text}");
+}
+
+#[test]
+fn statistics_report_the_support_cut_in_place_of_the_disjunctive_certificate() {
+    let text = regions_statistics();
+    assert!(
+        text.contains("support cut=applied; reading work="),
+        "{text}"
+    );
+    assert!(!text.contains("necessary disjunctive support:"), "{text}");
 }
 
 #[test]
@@ -188,7 +229,10 @@ fn statistics_flag_is_opt_in_and_preserves_each_supported_cpu_answer_path() {
             assert!(diagnostics.contains("objective: optimal; costs(priority,value)=[(0, -3)]"));
             assert!(diagnostics.contains("candidate restrictions="));
         } else if report.countermodel_statistics.is_none() {
-            assert!(diagnostics.contains("oracle work=unavailable"));
+            assert!(
+                diagnostics.contains("independent closure: checks completed="),
+                "{diagnostics}"
+            );
         }
     }
 }
@@ -323,4 +367,140 @@ fn statistics_writer_failure_is_a_typed_error_with_the_exact_written_prefix() {
             "completed answers remain byte-identical even if later statistics cannot be written"
         );
     }
+}
+
+#[test]
+fn statistics_print_expansion_usage_beside_its_ceilings() {
+    let (report, _, text) = solve("p(1..3). q(X) :- p(X).", &options(&["--stats"]));
+    let usage = report.expansion.unwrap();
+    assert!(usage.term_work > 0);
+    assert!(text.contains(&format!(
+        "expansion used: term work={} of 1048576; templates={} of 100000; values={} of 1000000;",
+        usage.term_work, usage.templates, usage.values
+    )), "{text}");
+    // The formula route admits through its own budgets and reports no usage.
+    let (formula, _, text) = solve("a | b.", &options(&["--stats"]));
+    assert!(formula.expansion.is_none());
+    assert!(!text.contains("expansion used:"), "{text}");
+}
+
+#[test]
+fn an_inconsistent_closure_reservation_is_refused_before_any_work() {
+    // At the reference allowance the collective ceiling is the library's.
+    let mut configured = options(&["--stats", "--memory", "2147483648"]);
+    configured.workers = std::num::NonZeroUsize::new(5).unwrap();
+    configured.max_closure_bytes = Some(134_217_728);
+    let mut output = Vec::new();
+    let mut diagnostics = Vec::new();
+    let error = run_with_diagnostics(
+        "{a}.".into(),
+        &configured,
+        &mut output,
+        &mut diagnostics,
+        &Control::default(),
+    )
+    .unwrap_err();
+    let text = error.to_string();
+    assert!(text.contains("--workers 5"), "{text}");
+    assert!(text.contains("--max-closure-bytes 134217728"), "{text}");
+    assert!(
+        text.contains("--max-closure-batch-bytes 536870912"),
+        "{text}"
+    );
+    assert!(text.contains("671088640"), "{text}");
+    assert!(output.is_empty());
+}
+
+#[test]
+fn the_closure_limits_line_states_the_derived_allowance() {
+    let mut eight = options(&["--stats", "--memory", "2147483648"]);
+    eight.workers = std::num::NonZeroUsize::new(8).unwrap();
+    let (_, _, text) = solve("{a}.", &eight);
+    assert!(
+        text.contains("independent CPU closure limits: named bytes/owner=67108864 (collective share of 8 workers)"),
+        "{text}"
+    );
+    let (_, _, explicit) = solve(
+        "{a}.",
+        &options(&["--stats", "--max-closure-bytes", "4096"]),
+    );
+    assert!(explicit.contains("named bytes/owner=4096;"), "{explicit}");
+}
+
+#[test]
+fn the_counter_runs_between_the_program_closures() {
+    // Eight nodes, one bad, so the gate predicates blocked/1 and reach/1 have
+    // sixteen symbolic atoms. The first pass finds blocked(4) and reach(1)
+    // necessary and seven blocked atoms underivable; the second, reading
+    // those decisions, finds every other reachable node necessary and
+    // reach(4) underivable; the third changes nothing. One seed remains of
+    // the 65,536 the symbolic carrier offered.
+    let mut source = String::from("node(1..8). bad(3). ");
+    for node in 1..8 {
+        write!(
+            source,
+            "e({node},{}). next({node},{}). ",
+            node + 1,
+            node + 1
+        )
+        .unwrap();
+    }
+    for node in 1..7 {
+        write!(source, "e({node},{}). ", node + 2).unwrap();
+    }
+    source.push_str(
+        "blocked(Y) :- bad(X), next(X,Y). reach(1). reach(Y) :- reach(X), e(X,Y), not blocked(Y). :- not reach(8).",
+    );
+    let (report, _, diagnostics) = solve(&source, &options(&["--stats"]));
+    assert_eq!(report.models, 1);
+    assert_eq!(report.checked, 1, "{diagnostics}");
+    assert!(
+        diagnostics.contains("carrier narrowing: passes=3; cut gate atoms=8; held gate atoms=8"),
+        "{diagnostics}"
+    );
+    // The root is decided, so it is the one region and its one seed.
+    assert!(
+        diagnostics.contains(
+            "carrier regions: visited=1; refuted=0; leaves=1; counted=0; narrowing passes=0"
+        ),
+        "{diagnostics}"
+    );
+}
+
+#[test]
+fn the_regions_of_independent_pairs_are_the_answers() {
+    // Deciding out(i) decides in(i), and two adjacent in atoms are refuted
+    // by the edge constraint in the region's lower closure: the regions'
+    // leaves are the thirteen independent sets of the path, each checked once.
+    let (report, _, diagnostics) = solve(
+        "node(1..5). edge(1,2). edge(2,3). edge(3,4). edge(4,5). \
+         in(X) :- node(X), not out(X). out(X) :- node(X), not in(X). :- edge(X,Y), in(X), in(Y).",
+        &options(&["--stats"]),
+    );
+    assert_eq!(report.models, 13);
+    assert_eq!(report.checked, 13, "{diagnostics}");
+    assert!(
+        diagnostics.contains("carrier regions: visited=")
+            && diagnostics.contains("; leaves=13; counted=0;"),
+        "{diagnostics}"
+    );
+}
+
+#[test]
+fn a_root_refuted_program_states_the_constraint_once() {
+    // The root's narrowing refutes every seed: the carrier receipt says a
+    // definite constraint fired, the execution line says no route ran, and
+    // the unavailable oracle work is said once.
+    let (report, _, text) = solve("{a}. p. :- p.", &options(&["--stats"]));
+    assert_eq!(report.models, 0);
+    assert_eq!(text.matches("definite constraint").count(), 1, "{text}");
+    assert_eq!(
+        text.matches("oracle work: unavailable").count(),
+        1,
+        "{text}"
+    );
+    assert!(
+        text.contains("effective execution: none needed; the root narrowing refuted every seed\n"),
+        "{text}"
+    );
 }

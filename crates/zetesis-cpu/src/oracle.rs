@@ -1,10 +1,10 @@
 //! Synchronous scalar delta rounds and complete ordered source traversal.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use zetesis_core::{
-    Atom, AtomPattern, Filter, Model, ModelAtoms, Predicate, Program, Seed, SeedView, Template,
-    Term, Value,
+    Atom, AtomKey, AtomPattern, Filter, Model, ModelAtoms, Program, Seed, SeedView, Template, Term,
+    Value,
 };
 
 use crate::{Control, Stop};
@@ -12,9 +12,15 @@ use crate::{Control, Stop};
 mod window;
 mod relations;
 mod prepared;
+mod argument_bounds;
 pub use prepared::{ClosureWorkspace, PreparationLimits, PreparationStatistics, PreparedQueries};
-use relations::{Catalogs, Relational, RowSet};
+use relations::{
+    Block, Catalogs, Dense, Layouts, PendingMarks, Relational, Relations, Resolution, Row, RowSet,
+    Rows,
+};
 pub(crate) mod restrictions;
+mod block_steps;
+use block_steps::BlockSteps;
 pub mod source;
 pub(crate) mod worlds;
 #[cfg(test)]
@@ -38,12 +44,14 @@ pub struct Limits {
     /// Maximum distinct derived atoms, including pending round outputs.
     pub max_derived_atoms: usize,
     /// Named capacity per scalar closure: predicate/catalog cells and names,
-    /// tuple/index/column/prepared-order and old/new ID buffers, nested tuple payload, pending
-    /// tuples and operation scratch/growth overlap. Shared structural buffers
-    /// are counted per occurrence. Tree-container allocations (including vacant
-    /// slots), allocator metadata and Arc-counter overhead,
-    /// and final `Model` retention are excluded. Prepared scalar checks include
-    /// query-owner headers and assignment/cursor/undo capacities.
+    /// the tree relations' tuples, indexes, columns and prepared-order runs,
+    /// nested tuple payload, the dense relations' words and the pending marks'
+    /// marks, pending tuples and operation scratch/growth overlap. Shared
+    /// structural buffers are counted per occurrence. Tree-container
+    /// allocations (including vacant slots), allocator metadata and
+    /// Arc-counter overhead, and final `Model` retention are excluded.
+    /// Prepared scalar checks include the preparation's retained bytes and
+    /// assignment/cursor/undo capacities.
     /// Actual allocator slack can exceed the proposed reservation before refusal;
     /// only completed checks publish their observed peak statistics.
     /// This is an independent finite allowance, not a process RSS ceiling.
@@ -70,8 +78,8 @@ pub struct Statistics {
     /// Charged operations, as described by [`Limits::max_work`].
     pub work: u64,
     /// Subset of work spent constructing, extending and probing retained typed
-    /// catalogs and their old/new ID views. Source joins and final interpretation
-    /// assembly are separate.
+    /// catalogs and their prepared-order runs. Source joins and final
+    /// interpretation assembly are separate.
     pub catalog_work: u64,
     /// Largest admitted or actually reserved named scalar closure envelope,
     /// under [`Limits::max_closure_bytes`]. Refused unallocated proposals do not
@@ -86,6 +94,15 @@ pub struct Statistics {
     pub tuple_probes: u64,
     /// Distinct atoms in the final least consequence closure.
     pub derived_atoms: usize,
+    /// Derived heads recorded as a bit of a dense relation's pending marks, so
+    /// that no atom was built for them before the model was assembled. The
+    /// closure's other heads were built as atoms when first derived.
+    pub dense_heads: u64,
+    /// Blocks of body rows joined into a head's pending marks a word at a
+    /// time, each in place of binding its rows one by one. The rows of such a
+    /// block are counted in `bindings` and not in `tuple_probes`: none is
+    /// offered to the row matcher.
+    pub block_steps: u64,
 }
 
 /// Exact closure and rejection reasons after a fully covered completion round.
@@ -221,11 +238,6 @@ impl Work<'_> {
     }
 }
 
-// The closure's Atom order groups signatures, then orders each relation by the
-// tuple's Value storage order. Window lookup relies on this construction order;
-// ASP term comparison is a different order and must not be used here.
-type Relations<'a> = BTreeMap<&'a Predicate, Vec<&'a Atom>>;
-
 /// Compute the exact least positive closure selected by a sparse frozen seed.
 /// Bootstrap checks every template against empty truth, including zero-positive
 /// rules and constraints. Later rounds visit each binding at its first newly
@@ -278,18 +290,52 @@ pub fn check_view(
         pruned_prefixes: 0,
         mask_bytes: 0,
     };
-    let prepared = PreparedQueries::prepare(program, &mut work)?;
+    let prepared = PreparedQueries::prepare(
+        program,
+        PreparationLimits::default().max_dense_atoms,
+        &mut work,
+    )?;
     prepared.check_with(seed, &mut ClosureWorkspace::default(), &mut work)
 }
 
 // Construction establishes complete source coverage through bootstrap and
 // completed round history, not constraint satisfaction or seed agreement.
-struct CompletedClosure {
-    atoms: Model,
-    constraint_violated: bool,
+pub(crate) struct CompletedClosure {
+    pub(crate) atoms: Model,
+    /// A constraint fired in the completed closure: under a frozen seed, the
+    /// candidate is rejected; under the definite reading of a cube, no seed
+    /// of the cube is accepted (`Bounds.lower_constraint_refutes`).
+    pub(crate) constraint_violated: bool,
 }
 
-// Positive bodies, pure equality filters and frozen gates make old enabled
+/// A region of seeds: the gate atoms every seed of it holds and the gate
+/// atoms some seed of it may hold. `None` for `may` is the whole symbolic
+/// carrier, which is never materialized. This is the `Cube` of
+/// `Search.lean`, with `Bounds.undecided` as its origin; a `Region` of the
+/// traversal is the same cube indexed over the narrowed root's atoms. Its
+/// sides are the region's: `must` is the held set, the complement of
+/// `may` the cut set, and the rest is open.
+pub(crate) struct Cube {
+    pub(crate) must: BTreeSet<Atom>,
+    pub(crate) may: Option<BTreeSet<Atom>>,
+}
+impl Cube {
+    /// Every atom open: every seed lies in this cube.
+    pub(crate) fn all_open() -> Self {
+        Self {
+            must: BTreeSet::new(),
+            may: None,
+        }
+    }
+    fn must_hold(&self, key: &zetesis_core::AtomKey<'_>) -> bool {
+        key.get(&self.must).is_some()
+    }
+    fn may_hold(&self, key: &zetesis_core::AtomKey<'_>) -> bool {
+        self.may.as_ref().is_none_or(|may| key.get(may).is_some())
+    }
+}
+
+// Positive bodies, pure equality filters and the closure's gate reading make old enabled
 // bindings persist. Complete bootstrap plus disjoint first-new scans therefore
 // cover the same inflationary step as full rescanning. Constraints latch only
 // after a complete selected family; they never truncate another occurrence.
@@ -301,13 +347,98 @@ fn least_closure(
     seed: SeedView<'_>,
     work: &mut Work<'_>,
 ) -> Result<CompletedClosure, Stop> {
-    let prepared = PreparedQueries::prepare(program, work)?;
+    let prepared =
+        PreparedQueries::prepare(program, PreparationLimits::default().max_dense_atoms, work)?;
     prepared.closure_with(
-        seed,
+        Gates::Frozen(seed),
         &mut ClosureWorkspace::default(),
         Schedule::Delta,
         work,
     )
+}
+
+/// How a rule's gates are read while a closure is computed. The two cube
+/// readings are `MustGate` and `MayGate` of `Bounds.lean`.
+#[derive(Clone, Copy)]
+enum Gates<'a> {
+    /// The frozen seed decides every gate: a candidate's closure.
+    Frozen(SeedView<'a>),
+    /// A gate holds only if it holds under every seed of the cube, so the
+    /// closure lies inside every answer set the cube contains: its lower
+    /// closure.
+    Definite(&'a Cube),
+    /// A gate holds if it holds under some seed of the cube, so every answer
+    /// set the cube contains lies inside the closure: its upper closure.
+    Possible(&'a Cube),
+    /// Every gate passes without being read: the join is asked for its
+    /// bindings alone, as the source scan and the restriction plan ask, and
+    /// no gate key is built.
+    Unjudged,
+}
+impl Gates<'_> {
+    /// Whether a rule can fire under this reading before its gates are
+    /// bound: a definite rule needs each `not not` gate in `must` and each
+    /// `not` gate outside `may`, which an empty `must` or an unbounded `may`
+    /// rules out for the whole template.
+    fn admits(self, template: &Template) -> bool {
+        match self {
+            Self::Frozen(_) | Self::Possible(_) | Self::Unjudged => true,
+            Self::Definite(cube) => {
+                (template.gate_true().is_empty() || !cube.must.is_empty())
+                    && (template.gate_false().is_empty() || cube.may.is_some())
+            }
+        }
+    }
+    /// Whether the gate `pattern` bound to `key` holds under this reading;
+    /// `required` is true for a `not not` gate and false for a `not` gate.
+    fn holds(self, key: &zetesis_core::AtomKey<'_>, required: bool) -> bool {
+        match (self, required) {
+            (Self::Unjudged, _) => true,
+            (Self::Frozen(seed), _) => seed.contains_key(key) == required,
+            (Self::Definite(cube), true) => cube.must_hold(key),
+            (Self::Definite(cube), false) => !cube.may_hold(key),
+            (Self::Possible(cube), true) => cube.may_hold(key),
+            (Self::Possible(cube), false) => !cube.must_hold(key),
+        }
+    }
+}
+
+/// The lower closure of `cube` over `prepared`, computed in `workspace`:
+/// rules fire only under gates every seed of the cube satisfies, so the
+/// closure lies inside every answer set of the cube and its gate atoms
+/// inside every accepted seed (`Bounds.undecided_bounds_accepted` from the
+/// undecided cube). A fired constraint refutes the whole cube.
+///
+/// # Errors
+/// Returns [`Stop`] for cancellation, deadlines and the closure budgets of
+/// `limits`, charged as one candidate check would be; the workspace is then
+/// retired and no partial closure is returned.
+pub(crate) fn definite_closure(
+    prepared: &PreparedQueries,
+    workspace: &mut ClosureWorkspace,
+    cube: &Cube,
+    limits: Limits,
+    control: &Control,
+) -> Result<CompletedClosure, Stop> {
+    prepared.closure_of(Gates::Definite(cube), workspace, limits, control)
+}
+
+/// The upper closure of `cube` over `prepared`, computed in `workspace`:
+/// rules fire under gates some seed of the cube satisfies, so every answer
+/// set of the cube lies inside it and every accepted seed inside its gate
+/// atoms; a gate atom outside it belongs to no answer set of the cube. Its
+/// constraint verdict says nothing about any seed.
+///
+/// # Errors
+/// As [`definite_closure`].
+pub(crate) fn possible_closure(
+    prepared: &PreparedQueries,
+    workspace: &mut ClosureWorkspace,
+    cube: &Cube,
+    limits: Limits,
+    control: &Control,
+) -> Result<CompletedClosure, Stop> {
+    prepared.closure_of(Gates::Possible(cube), workspace, limits, control)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -331,17 +462,36 @@ impl Selection {
             Self::All | Self::FirstNew(_) => RowSet::Current,
         }
     }
+
+    /// The source occurrence visited at a join depth. An incremental round
+    /// visits its new rows first: they are the fewest, and the variables they
+    /// bind turn every other occurrence into a bound-prefix window instead of
+    /// a scan. The remaining occurrences keep their body order.
+    fn occurrence(self, depth: usize) -> usize {
+        match self {
+            Self::All => depth,
+            Self::FirstNew(pivot) => match depth {
+                0 => pivot,
+                depth if depth <= pivot => depth - 1,
+                depth => depth,
+            },
+        }
+    }
 }
 
 struct RoundWorkspace<'a> {
     buffers: &'a mut prepared::Buffers,
     dimensions: &'a prepared::Dimensions,
+    rules: &'a prepared::Rules,
+    layouts: &'a Layouts,
+    block_steps: &'a BlockSteps,
+    pending: &'a mut PendingMarks,
     overhead: u128,
 }
 
 fn least_closure_with(
     program: &Program,
-    seed: SeedView<'_>,
+    gates: Gates<'_>,
     closure: &mut Catalogs,
     workspace: RoundWorkspace<'_>,
     schedule: Schedule,
@@ -350,9 +500,14 @@ fn least_closure_with(
     let RoundWorkspace {
         buffers,
         dimensions,
+        rules,
+        layouts,
+        block_steps,
+        pending,
         overhead,
     } = workspace;
     let mut constraint_violated = false;
+    closure.create_dense_relations(layouts, work)?;
     loop {
         work.tick()?;
         let incremental = schedule == Schedule::Delta && work.statistics.rounds != 0;
@@ -375,13 +530,18 @@ fn least_closure_with(
             closure.set_overhead(overhead.checked_add(bytes).ok_or(Stop::StorageLimit)?, work)?;
             visit_round(
                 program,
-                seed,
+                gates,
                 closure,
                 incremental,
-                Frame {
+                RoundPlan {
+                    rules,
+                    layouts,
+                    block_steps,
+                },
+                RoundScratch {
                     assignment: &mut assignment,
                     buffers: &mut *buffers,
-                    selection: Selection::All,
+                    pending: &mut *pending,
                 },
                 work,
             )?
@@ -394,7 +554,7 @@ fn least_closure_with(
         constraint_violated |= triggered;
         closure.set_overhead(overhead, work)?;
         work.statistics.rounds += 1;
-        if delta.is_empty() {
+        if delta.is_empty() && pending.is_empty() {
             break;
         }
         if schedule == Schedule::Delta {
@@ -407,6 +567,7 @@ fn least_closure_with(
                 .ok_or(Stop::InvalidProgram)?;
             closure.insert(atom, pending_bytes, work)?;
         }
+        closure.absorb(pending, layouts, work)?;
     }
     Ok(CompletedClosure {
         atoms: closure.take_model(work)?,
@@ -414,57 +575,287 @@ fn least_closure_with(
     })
 }
 
+/// What a round derived for the tree relations, and whether a constraint
+/// fired. Its dense heads are the marks left in the pending marks.
 struct RoundConsequences {
     atoms: BTreeSet<Atom>,
     bytes: u128,
     constraint_violated: bool,
 }
 
+/// Record a derived head unless the closure or the round already holds it: a
+/// head of a dense relation as a pending bit, any other as a pending atom. The
+/// atoms the closure holds, the round's pending atoms and its pending bits are
+/// disjoint, so their sum is the count the derived-atom limit bounds.
+/// The atoms a round holds so far: the closure's, its pending atoms and its
+/// pending marks, which are disjoint, so their sum is what the derived-atom
+/// limit bounds.
+fn atoms_held(
+    closure: &Catalogs,
+    result: &RoundConsequences,
+    pending: &PendingMarks,
+) -> Result<usize, Stop> {
+    closure
+        .len()
+        .checked_add(result.atoms.len())
+        .and_then(|atoms| atoms.checked_add(pending.len()))
+        .ok_or(Stop::DerivedAtomLimit)
+}
+
+/// Whether `more` atoms beyond those held stay within the derived-atom limit.
+fn admits_more(held: usize, more: usize, work: &Work<'_>) -> Result<(), Stop> {
+    if held
+        .checked_add(more)
+        .is_none_or(|atoms| atoms > work.limits.max_derived_atoms)
+    {
+        return Err(Stop::DerivedAtomLimit);
+    }
+    Ok(())
+}
+
+fn record_head(
+    key: AtomKey<'_>,
+    dense_head: Option<(usize, &Dense)>,
+    closure: &Catalogs,
+    result: &mut RoundConsequences,
+    pending: &mut PendingMarks,
+    work: &mut Work<'_>,
+) -> Result<(), Stop> {
+    let held = atoms_held(closure, result, pending)?;
+    if let Some((slot, dense)) = dense_head {
+        // The bounds cover every derivable head: a key without a position
+        // violates the admitted program's invariant.
+        work.charge(key.predicate().arity())?;
+        let position = dense.position(&key).ok_or(Stop::InvalidProgram)?;
+        if !dense.contains(position) && pending.mark(slot, position) {
+            admits_more(held, 1, work)?;
+            work.statistics.dense_heads += 1;
+        }
+    } else if !closure.contains(&key, result.bytes, work)? && key.get(&result.atoms).is_none() {
+        admits_more(held, 1, work)?;
+        let (atom, bytes) = closure.pending(key, result.bytes, work)?;
+        result.atoms.insert(atom);
+        result.bytes = result.bytes.checked_add(bytes).ok_or(Stop::StorageLimit)?;
+    }
+    Ok(())
+}
+
+/// The prepared parts a round reads and never changes: the rule index of
+/// the incremental rounds, the dense layouts, which name a head's slot, and
+/// the block-step plan.
+#[derive(Clone, Copy)]
+struct RoundPlan<'a> {
+    rules: &'a prepared::Rules,
+    layouts: &'a Layouts,
+    block_steps: &'a BlockSteps,
+}
+
+/// The scratch a round writes: the assignment, the join buffers and the
+/// pending marks, which take a dense head's position.
+struct RoundScratch<'a, 'source> {
+    assignment: &'a mut [Option<&'source Value>],
+    buffers: &'a mut prepared::Buffers,
+    pending: &'a mut PendingMarks,
+}
+
+/// What a join reports to: each complete binding, and, where the consumer
+/// can take them whole, the block of rows its innermost depth would bind one
+/// by one. A plain function, an `FnMut`, is a consumer of bindings alone.
+trait Sink<'source, E> {
+    fn binding(
+        &mut self,
+        assignment: &[Option<&'source Value>],
+        work: &mut Work<'_>,
+    ) -> Result<(), E>;
+
+    /// Whether the rows of this occurrence, visited innermost, are taken by
+    /// [`Self::rows`] instead of bound singly.
+    fn steps_by_blocks(&self, _occurrence: usize) -> bool {
+        false
+    }
+
+    /// Take the block of rows matching the assignment, which binds every
+    /// variable of the rule but the occurrence's last, and report how many
+    /// rows were taken as bindings, which the join counts as it counts the
+    /// bindings it makes singly.
+    fn rows(
+        &mut self,
+        _rows: Block<'source>,
+        _assignment: &[Option<&'source Value>],
+        _work: &mut Work<'_>,
+    ) -> Result<u64, E> {
+        Ok(0)
+    }
+}
+
+impl<'source, E, F> Sink<'source, E> for F
+where
+    F: FnMut(&[Option<&'source Value>], &mut Work<'_>) -> Result<(), E>,
+{
+    fn binding(
+        &mut self,
+        assignment: &[Option<&'source Value>],
+        work: &mut Work<'_>,
+    ) -> Result<(), E> {
+        self(assignment, work)
+    }
+}
+
+/// The consumer of one template's joins in a closure round.
+struct RoundSink<'a, 'source> {
+    template: &'a Template,
+    closure: &'source Catalogs,
+    /// The head's pending-marks slot and relation, when the head is laid out.
+    dense_head: Option<(usize, &'source Dense)>,
+    /// The template's block-step plan, by positive occurrence.
+    block_steps: &'a [bool],
+    result: &'a mut RoundConsequences,
+    pending: &'a mut PendingMarks,
+}
+
+impl<'source> Sink<'source, Stop> for RoundSink<'_, 'source> {
+    fn binding(
+        &mut self,
+        assignment: &[Option<&'source Value>],
+        work: &mut Work<'_>,
+    ) -> Result<(), Stop> {
+        work.tick()?;
+        if let Some(head) = self.template.head() {
+            work.charge(head.terms().len())?;
+            let key = head.key(assignment).map_err(|_| Stop::InvalidProgram)?;
+            record_head(
+                key,
+                self.dense_head,
+                self.closure,
+                self.result,
+                self.pending,
+                work,
+            )?;
+        } else {
+            self.result.constraint_violated = true;
+        }
+        Ok(())
+    }
+
+    fn steps_by_blocks(&self, occurrence: usize) -> bool {
+        self.block_steps.get(occurrence).copied().unwrap_or(false)
+    }
+
+    // The plan admitted the occurrence, so the head is laid out, ends in the
+    // occurrence's last variable and lists its values as the occurrence does:
+    // the heads of the block are the block of the head's bound prefix, place
+    // for place, and each row of the block is one binding.
+    fn rows(
+        &mut self,
+        rows: Block<'source>,
+        assignment: &[Option<&'source Value>],
+        work: &mut Work<'_>,
+    ) -> Result<u64, Stop> {
+        let (Some(head), Some((slot, dense))) = (self.template.head(), self.dense_head) else {
+            return Err(Stop::InvalidProgram);
+        };
+        let bound = head.terms().len().saturating_sub(1);
+        work.charge(bound)?;
+        let heads = dense.layout().prefix_range(
+            head.terms()[..bound]
+                .iter()
+                .map_while(|term| resolve(term, assignment)),
+        );
+        if heads.len() != rows.len {
+            // The head's bounds cover every derivable head: a head prefix
+            // outside them derives nothing, so the block holds no row.
+            return if rows.is_empty(work)? {
+                Ok(0)
+            } else {
+                Err(Stop::InvalidProgram)
+            };
+        }
+        let held_atoms = atoms_held(self.closure, self.result, self.pending)?;
+        let joined = self
+            .pending
+            .join_row(slot, dense, heads.start, rows, work)?;
+        admits_more(held_atoms, joined.marked, work)?;
+        let count = |n: usize| u64::try_from(n).map_err(|_| Stop::InvalidProgram);
+        work.statistics.dense_heads += count(joined.marked)?;
+        work.statistics.block_steps += 1;
+        count(joined.offered)
+    }
+}
+
 // Complete the disjoint source family before publishing either its history or
 // its consequences. A constraint latch never skips another source occurrence.
+/// Visit every template in the bootstrap round, or, given the rule index of
+/// an incremental round, only the templates whose body names a predicate
+/// with new rows: no other template can bind anew.
 fn visit_round<'source>(
     program: &Program,
-    seed: SeedView<'_>,
+    gates: Gates<'_>,
     closure: &'source Catalogs,
     incremental: bool,
-    frame: Frame<'_, 'source>,
+    plan: RoundPlan<'_>,
+    scratch: RoundScratch<'_, 'source>,
     work: &mut Work<'_>,
 ) -> Result<RoundConsequences, Stop> {
-    let Frame {
+    let RoundPlan {
+        rules,
+        layouts,
+        block_steps,
+    } = plan;
+    let RoundScratch {
         assignment,
         buffers,
-        ..
-    } = frame;
+        pending,
+    } = scratch;
     let mut result = RoundConsequences {
         atoms: BTreeSet::new(),
         bytes: 0,
         constraint_violated: false,
     };
-    for template in program.templates() {
-        work.tick()?;
-        let mut emit = |assignment: &[Option<&Value>], work: &mut Work<'_>| -> Result<(), Stop> {
+    let visited = if incremental {
+        buffers.rules.clear();
+        for predicate in closure.predicates_with_new() {
             work.tick()?;
-            if let Some(head) = template.head() {
-                work.charge(head.terms().len())?;
-                let key = head.key(assignment).map_err(|_| Stop::InvalidProgram)?;
-                if !closure.contains(&key, result.bytes, work)? && key.get(&result.atoms).is_none()
-                {
-                    if closure
-                        .len()
-                        .checked_add(result.atoms.len())
-                        .ok_or(Stop::DerivedAtomLimit)?
-                        >= work.limits.max_derived_atoms
-                    {
-                        return Err(Stop::DerivedAtomLimit);
-                    }
-                    let (atom, bytes) = closure.pending(key, result.bytes, work)?;
-                    result.atoms.insert(atom);
-                    result.bytes = result.bytes.checked_add(bytes).ok_or(Stop::StorageLimit)?;
-                }
-            } else {
-                result.constraint_violated = true;
+            for &index in rules.naming(predicate) {
+                work.tick()?;
+                buffers.rules.push(index);
             }
-            Ok(())
+        }
+        work.charge(buffers.rules.len())?;
+        buffers.rules.sort_unstable();
+        buffers.rules.dedup();
+        buffers.rules.len()
+    } else {
+        program.templates().len()
+    };
+    for position in 0..visited {
+        let index = if incremental {
+            buffers.rules[position]
+        } else {
+            position
+        };
+        let template = &program.templates()[index];
+        work.tick()?;
+        if !gates.admits(template) {
+            continue;
+        }
+        // A laid-out head has its relation from the start of the closure, so
+        // both are resolved once for the template, not once per binding.
+        let dense_head = match template
+            .head()
+            .and_then(|head| layouts.slot(head.predicate()).zip(Some(head.predicate())))
+        {
+            Some((slot, predicate)) => {
+                Some((slot, closure.dense(predicate).ok_or(Stop::InvalidProgram)?))
+            }
+            None => None,
+        };
+        let mut emit = RoundSink {
+            template,
+            closure,
+            dense_head,
+            block_steps: block_steps.of(index),
+            result: &mut result,
+            pending: &mut *pending,
         };
         if incremental {
             // Repeated predicates retain distinct occurrences. Earlier Old,
@@ -474,7 +865,7 @@ fn visit_round<'source>(
                     visit_with(
                         template,
                         closure,
-                        Some(seed),
+                        gates,
                         None,
                         work,
                         &mut emit,
@@ -488,11 +879,11 @@ fn visit_round<'source>(
             }
         } else {
             // Bootstrap includes every zero-positive head and constraint under
-            // the frozen gates. The test reference repeats this complete scan.
+            // the closure's gate reading. The test reference repeats this complete scan.
             visit_with(
                 template,
                 closure,
-                Some(seed),
+                gates,
                 None,
                 work,
                 &mut emit,
@@ -507,8 +898,11 @@ fn visit_round<'source>(
     Ok(result)
 }
 
-// Establish closure ∩ gate_carrier = seed in both directions. Continue charging
-// both complete scans after a mismatch; rejection does not bypass work limits.
+// Establish closure ∩ gate_carrier = seed in both directions by one merge:
+// the closure's rows of each gate predicate, a contiguous range of the model,
+// walked against the seed's atoms, both in canonical order. Charges one unit
+// per gate predicate, per closure gate row and per seed atom left unmatched,
+// and keeps charging after a mismatch; rejection does not bypass work limits.
 // Positive-only atoms do not belong to this comparison's projected carrier.
 fn gate_agreement(
     program: &Program,
@@ -517,17 +911,28 @@ fn gate_agreement(
     work: &mut Work<'_>,
 ) -> Result<bool, Stop> {
     let mut agreement = true;
-    for atom in closure {
+    let mut seed = seed.atoms().peekable();
+    for predicate in program.gate_predicates() {
         work.tick()?;
-        if program.contains_gate_atom(atom) && !seed.contains(atom) {
-            agreement = false;
+        for atom in closure.of_predicate(predicate) {
+            work.tick()?;
+            while seed.peek().is_some_and(|pending| *pending < atom) {
+                // A seed atom the closure never derived.
+                work.tick()?;
+                seed.next();
+                agreement = false;
+            }
+            if seed.peek() == Some(&atom) {
+                seed.next();
+            } else {
+                // A derived gate atom the seed does not hold.
+                agreement = false;
+            }
         }
     }
-    for atom in seed.atoms() {
+    for _ in seed {
         work.tick()?;
-        if !closure.contains(atom) {
-            agreement = false;
-        }
+        agreement = false;
     }
     Ok(agreement)
 }
@@ -541,20 +946,20 @@ struct Frame<'frame, 'source> {
 fn visit<'source, E: From<Stop>>(
     template: &Template,
     relations: &'source impl Relational,
-    seed: Option<SeedView<'_>>,
+    gates: Gates<'_>,
     membership: Option<&mut worlds::Join<'_>>,
     work: &mut Work<'_>,
-    emit: impl FnMut(&[Option<&'source Value>], &mut Work<'_>) -> Result<(), E>,
+    mut emit: impl FnMut(&[Option<&'source Value>], &mut Work<'_>) -> Result<(), E>,
 ) -> Result<(), E> {
     let mut assignment = vec![None; template.variable_count()];
     let mut buffers = prepared::Buffers::local(template.positive().len());
     visit_with(
         template,
         relations,
-        seed,
+        gates,
         membership,
         work,
-        emit,
+        &mut emit,
         Frame {
             assignment: &mut assignment,
             buffers: &mut buffers,
@@ -566,10 +971,10 @@ fn visit<'source, E: From<Stop>>(
 fn visit_with<'source, E: From<Stop>>(
     template: &Template,
     relations: &'source impl Relational,
-    seed: Option<SeedView<'_>>,
+    gates: Gates<'_>,
     mut membership: Option<&mut worlds::Join<'_>>,
     work: &mut Work<'_>,
-    mut emit: impl FnMut(&[Option<&'source Value>], &mut Work<'_>) -> Result<(), E>,
+    emit: &mut impl Sink<'source, E>,
     frame: Frame<'_, 'source>,
 ) -> Result<(), E> {
     // Reset all query state before this source occurrence. No binding survives
@@ -582,7 +987,7 @@ fn visit_with<'source, E: From<Stop>>(
     let assignment = &mut assignment[..template.variable_count()];
     work.charge(assignment.len())?;
     assignment.fill(None);
-    if !guards(template, assignment, seed, work)? {
+    if !guards(template, assignment, gates, work)? {
         return Ok(());
     }
     let count = template.positive().len();
@@ -591,7 +996,7 @@ fn visit_with<'source, E: From<Stop>>(
             return Err(Stop::InvalidProgram.into());
         }
         work.statistics.bindings += 1;
-        return emit(assignment, work);
+        return emit.binding(assignment, work);
     }
     if let Some(membership) = membership.as_mut() {
         membership.reset(template, work)?;
@@ -599,9 +1004,11 @@ fn visit_with<'source, E: From<Stop>>(
     // None means this depth has not yet been opened for the current parent
     // assignment. A retained range advances in the original relation order.
     let cursors = &mut buffers.cursors[..count];
+    let resolutions = &mut buffers.resolutions[..count];
     let undo = &mut buffers.undo[..count];
     work.charge(count)?;
     cursors.fill(None);
+    resolutions.fill(Resolution::Unresolved);
     for row in undo.iter_mut() {
         work.tick()?;
         row.clear();
@@ -614,18 +1021,45 @@ fn visit_with<'source, E: From<Stop>>(
                 return Err(Stop::InvalidProgram.into());
             }
             work.statistics.bindings += 1;
-            emit(assignment, work)?;
+            emit.binding(assignment, work)?;
             depth -= 1;
             clear(assignment, &mut undo[depth]);
             continue;
         }
-        let pattern = &template.positive()[depth];
-        let tuples = relations.selected(pattern.predicate(), selection.rows(depth))?;
-        let cursor = &mut cursors[depth];
-        if cursor.is_none() {
-            *cursor = Some(window::matching_prefix(pattern, tuples, assignment, work)?);
+        let occurrence = selection.occurrence(depth);
+        let pattern = &template.positive()[occurrence];
+        // The relation is fixed for the depth: resolve it on first entry and
+        // index it on every later probe.
+        if resolutions[depth] == Resolution::Unresolved {
+            work.tick()?;
+            resolutions[depth] = relations
+                .resolve(pattern.predicate())
+                .map_or(Resolution::Absent, Resolution::At);
         }
-        let Some(index) = cursor.as_mut().and_then(Iterator::next) else {
+        let tuples = match resolutions[depth] {
+            Resolution::At(handle) => relations.rows_at(handle, selection.rows(occurrence))?,
+            Resolution::Absent | Resolution::Unresolved => Rows::Borrowed(&[]),
+        };
+        let cursor = &mut cursors[depth];
+        // The innermost depth, entered for this parent assignment. A
+        // membership join follows single rows, so it keeps them.
+        if depth + 1 == count
+            && cursor.is_none()
+            && membership.is_none()
+            && step_by_blocks(pattern, tuples, occurrence, assignment, emit, work)?
+        {
+            if depth == 0 {
+                return Ok(());
+            }
+            depth -= 1;
+            clear(assignment, &mut undo[depth]);
+            continue;
+        }
+        let window = match cursor {
+            Some(window) => window,
+            None => cursor.insert(window::Window::open(pattern, tuples, assignment, work)?),
+        };
+        let Some((run, index)) = window.next(pattern, tuples, assignment, work)? else {
             *cursor = None;
             if depth == 0 {
                 return Ok(());
@@ -634,14 +1068,14 @@ fn visit_with<'source, E: From<Stop>>(
             clear(assignment, &mut undo[depth]);
             continue;
         };
-        let atom = tuples.get(index).ok_or(Stop::InvalidProgram)?;
+        let row = tuples.get(run, index).ok_or(Stop::InvalidProgram)?;
         // This iteration already charged one join step and offers at most one
         // row. The cumulative probe count therefore cannot exceed charged work.
         work.statistics.tuple_probes += 1;
-        if bind(pattern, atom, assignment, &mut undo[depth], work)?
-            && guards(template, assignment, seed, work)?
+        if bind(pattern, row, assignment, &mut undo[depth], work)?
+            && guards(template, assignment, gates, work)?
             && match membership.as_mut() {
-                Some(membership) => membership.extend(depth, index, work)?,
+                Some(membership) => membership.extend(occurrence, index, work)?,
                 None => true,
             }
         {
@@ -652,14 +1086,51 @@ fn visit_with<'source, E: From<Stop>>(
     }
 }
 
+/// Give a consumer that steps by blocks the whole block of an occurrence's rows
+/// matching the assignment, in place of binding them one by one; whether it
+/// was given. The block is that of the bound leading terms, which for such an
+/// occurrence are all but its last.
+fn step_by_blocks<'source, E: From<Stop>>(
+    pattern: &AtomPattern,
+    tuples: Rows<'source>,
+    occurrence: usize,
+    assignment: &[Option<&'source Value>],
+    emit: &mut impl Sink<'source, E>,
+    work: &mut Work<'_>,
+) -> Result<bool, E> {
+    let Rows::Dense { relation, set } = tuples else {
+        return Ok(false);
+    };
+    if !emit.steps_by_blocks(occurrence) {
+        return Ok(false);
+    }
+    // A bound value outside its argument's bound matches no position: the
+    // block is empty and there is nothing to take.
+    let block = window::matching_prefix(pattern, tuples, 0, assignment, work)?;
+    if !block.is_empty() {
+        let bound = emit.rows(
+            Block {
+                relation,
+                set,
+                start: block.start,
+                len: block.len(),
+            },
+            assignment,
+            work,
+        )?;
+        work.statistics.bindings += bound;
+    }
+    Ok(true)
+}
+
 fn bind<'source>(
     pattern: &AtomPattern,
-    atom: &'source Atom,
+    row: Row<'source>,
     assignment: &mut [Option<&'source Value>],
     undo: &mut Vec<usize>,
     work: &mut Work<'_>,
 ) -> Result<bool, Stop> {
-    for (term, value) in pattern.terms().iter().zip(atom.values()) {
+    for (term, value) in pattern.terms().iter().zip(row.values()) {
         structural_work(value, work)?;
         match term {
             Term::Constant(expected) if expected != value => return Ok(false),
@@ -700,7 +1171,7 @@ fn resolve<'a>(term: &'a Term, assignment: &[Option<&'a Value>]) -> Option<&'a V
 fn guards(
     template: &Template,
     assignment: &[Option<&Value>],
-    seed: Option<SeedView<'_>>,
+    gates: Gates<'_>,
     work: &mut Work<'_>,
 ) -> Result<bool, Stop> {
     for filter in template.filters() {
@@ -715,17 +1186,17 @@ fn guards(
             }
         }
     }
-    let Some(seed) = seed else {
+    if matches!(gates, Gates::Unjudged) {
         return Ok(true);
-    };
+    }
     for (patterns, required) in [(template.gate_true(), true), (template.gate_false(), false)] {
         for pattern in patterns {
             work.tick()?;
             work.charge(pattern.terms().len())?;
             // An absent referenced slot defers this gate until a later join
-            // supplies it. A complete key borrows the exact seed lookup tuple.
+            // supplies it. A complete key borrows the exact lookup tuple.
             if let Ok(key) = pattern.key(assignment)
-                && seed.contains_key(&key) != required
+                && !gates.holds(&key, required)
             {
                 return Ok(false);
             }

@@ -6,13 +6,33 @@ use zetesis_validation::core::{Sign, Value, ValueError, ValueResource};
 fn atom(name: &str, arguments: Vec<Json>) -> Json {
     json!({"predicate":name,"sign":"positive","arguments":Json::Array(arguments)})
 }
-fn record(atoms: Vec<Json>, number: usize) -> Json {
-    let count = atoms.len();
-    json!({"number":number,"model":{"full_model":Json::Array(atoms),"shown":{"atom_indices":(0..count).collect::<Vec<_>>(),"terms":[]},"costs":null}})
+/// A record's atoms, before the document assigns their indices.
+fn record(atoms: Vec<Json>, number: usize) -> (usize, Vec<Json>) {
+    (number, atoms)
 }
-fn document(records: Vec<Json>) -> Json {
+/// The document spells each atom once, in the record that first holds it,
+/// and every record refers to its atoms by index into that table.
+fn document(records: Vec<(usize, Vec<Json>)>) -> Json {
     let count = records.len();
-    json!({"schema":1,"format":"zetesis","models":Json::Array(records),"outcome":{
+    let mut table: Vec<Json> = Vec::new();
+    let records: Vec<Json> = records
+        .into_iter()
+        .map(|(number, atoms)| {
+            let mut spelled = Vec::new();
+            let indices: Vec<usize> = atoms
+                .into_iter()
+                .map(|atom| {
+                    table.iter().position(|entry| *entry == atom).unwrap_or_else(|| {
+                        table.push(atom.clone());
+                        spelled.push(atom);
+                        table.len() - 1
+                    })
+                })
+                .collect();
+            json!({"number":number,"model":{"atoms":Json::Array(spelled),"full_model":indices.clone(),"shown":{"atom_indices":indices,"terms":[]},"costs":null}})
+        })
+        .collect();
+    json!({"schema":2,"format":"zetesis","models":Json::Array(records),"outcome":{
         "status":if count==0 {"unsatisfiable"} else {"satisfiable"},"completion":"exhausted","coverage":"exhausted",
         "published_models":count,"verified_models":count,"checked":count,"interruption":null,"optimization":null,"error":null
     },"statistics":null})
@@ -259,7 +279,7 @@ fn partial_publication_is_not_complete_enumeration() {
 #[test]
 fn unknown_schema_is_refused() {
     let mut value = one();
-    value["schema"] = 2.into();
+    value["schema"] = 3.into();
     assert!(matches!(
         parse(&value),
         Err(Error::Invalid {
@@ -267,6 +287,20 @@ fn unknown_schema_is_refused() {
             ..
         })
     ));
+}
+
+#[test]
+fn a_spelled_document_is_still_read() {
+    // Schema 1 spelled every atom in each record; the decoder reads those
+    // documents as it reads the current ones, so earlier executables can be
+    // compared.
+    let value = json!({"schema":1,"format":"zetesis","models":[
+        {"number":1,"model":{"full_model":[atom("a", vec![]), atom("b", vec![])],"shown":{"atom_indices":[1],"terms":[]},"costs":null}}
+    ],"outcome":{"status":"satisfiable","completion":"exhausted","coverage":"exhausted",
+        "published_models":1,"verified_models":1,"checked":1,"interruption":null,"optimization":null,"error":null},"statistics":null});
+    let answer = parse(&value).unwrap();
+    assert_eq!(answer.full_model_symbols(4).unwrap(), [vec!["a", "b"]]);
+    assert_eq!(answer.records()[0].shown_atom_indices(), [1]);
 }
 
 #[test]
@@ -404,6 +438,84 @@ fn node_ceiling_includes_shown_terms() {
     let limits = native_json::Limits {
         max_value_nodes: 0,
         ..native_json::Limits::default()
+    };
+    assert!(matches!(
+        native_json::parse(&serde_json::to_vec(&value).unwrap(), limits),
+        Err(Error::Limit {
+            resource: Resource::ValueNodes,
+            attempted: 1,
+            ..
+        })
+    ));
+}
+
+#[test]
+fn reused_atoms_count_value_nodes_in_every_model() {
+    let held = atom("p", vec![json!([{"kind":"number","value":1}])]);
+    let value = document(vec![record(vec![held.clone()], 1), record(vec![held], 2)]);
+    let bytes = serde_json::to_vec(&value).unwrap();
+    let limits = native_json::Limits {
+        max_value_nodes: 2,
+        ..native_json::Limits::default()
+    };
+    assert!(native_json::parse(&bytes, limits).is_ok());
+    let result = native_json::parse(
+        &bytes,
+        native_json::Limits {
+            max_value_nodes: 1,
+            ..limits
+        },
+    );
+    assert!(
+        matches!(
+            &result,
+            Err(Error::Limit {
+                resource: Resource::ValueNodes,
+                attempted: 2,
+                ..
+            })
+        ),
+        "expected two value-node occurrences to exceed a limit of one; got {result:?}"
+    );
+}
+
+#[test]
+fn reused_atom_nodes_share_the_ceiling_with_shown_terms() {
+    let held = atom("p", vec![json!([{"kind":"number","value":1}])]);
+    let mut value = document(vec![record(vec![held.clone()], 1), record(vec![held], 2)]);
+    value["models"][1]["model"]["shown"]["terms"] = json!([[{"kind":"number","value":2}]]);
+    let bytes = serde_json::to_vec(&value).unwrap();
+    let limits = native_json::Limits {
+        max_value_nodes: 3,
+        ..Default::default()
+    };
+    assert!(native_json::parse(&bytes, limits).is_ok());
+    assert!(matches!(
+        native_json::parse(
+            &bytes,
+            native_json::Limits {
+                max_value_nodes: 2,
+                ..limits
+            }
+        ),
+        Err(Error::Limit {
+            resource: Resource::ValueNodes,
+            attempted: 3,
+            ..
+        })
+    ));
+}
+
+#[test]
+fn unused_atom_table_values_remain_bounded() {
+    let mut value = one();
+    value["models"][0]["model"]["atoms"] = json!([
+        atom("a", vec![]),
+        atom("unused", vec![json!([{"kind":"number","value":1}])]),
+    ]);
+    let limits = native_json::Limits {
+        max_value_nodes: 0,
+        ..Default::default()
     };
     assert!(matches!(
         native_json::parse(&serde_json::to_vec(&value).unwrap(), limits),
@@ -653,10 +765,12 @@ fn malformed_record_fields_never_become_default_values() {
     for (path, malformed) in [
         ("/models", Json::Null),
         ("/outcome/checked", json!(-1)),
+        ("/models/0/model/atoms", json!({})),
         ("/models/0/model/full_model", json!({})),
-        ("/models/0/model/full_model/0/arguments", json!("()")),
-        ("/models/0/model/full_model/0/predicate", json!(1)),
-        ("/models/0/model/full_model/0/sign", json!("unknown")),
+        ("/models/0/model/full_model/0", json!("0")),
+        ("/models/0/model/atoms/0/arguments", json!("()")),
+        ("/models/0/model/atoms/0/predicate", json!(1)),
+        ("/models/0/model/atoms/0/sign", json!("unknown")),
         ("/models/0/model/shown/atom_indices", Json::Null),
         ("/models/0/model/shown/terms", Json::Null),
     ] {

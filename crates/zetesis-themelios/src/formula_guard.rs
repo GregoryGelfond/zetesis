@@ -15,7 +15,7 @@ use zetesis_core::Value;
 
 use crate::expansion::Budget;
 use crate::formula_ir::{Compiler, Expression, LiteralIr, Variables};
-use crate::formula_support::{Counters, compare, expression};
+use crate::formula_support::{Counters, Evaluation, Failures, compare};
 use crate::{ExpansionResource, FormulaFailure, FormulaLimits};
 
 pub(crate) enum Guard {
@@ -65,6 +65,25 @@ impl Guard {
         counters: &mut Counters,
         location: Location,
     ) -> Result<bool, FormulaFailure> {
+        self.evaluate_in(
+            assignment,
+            &mut Evaluation::default(),
+            limits,
+            budget,
+            counters,
+            location,
+        )
+    }
+
+    pub(super) fn evaluate_in(
+        &self,
+        assignment: &Binding,
+        evaluation: &mut Evaluation,
+        limits: &FormulaLimits,
+        budget: &mut Budget,
+        counters: &mut Counters,
+        location: Location,
+    ) -> Result<bool, FormulaFailure> {
         counters.work(limits, location)?;
         let (negation, comparisons) = match self {
             Self::Boolean(value) => return Ok(*value),
@@ -74,43 +93,19 @@ impl Guard {
             } => (negation, comparisons),
         };
         let mut conjunction = true;
+        let mut failures = Failures::default();
         for comparison in comparisons {
             counters.work(limits, location)?;
-            conjunction &= match comparison {
-                GuardComparison::Scalar(left, relation, right) => {
-                    let left = expression(left, assignment, limits, budget, counters, location)?;
-                    let right = expression(right, assignment, limits, budget, counters, location)?;
-                    compare(&left, *relation, &right)
-                }
-                GuardComparison::Tuple(left, relation, right) => {
-                    let mut equal = left.len() == right.len();
-                    // A length mismatch decides equality but does not make an
-                    // undefined term in an unmatched tail admissible.
-                    for index in 0..left.len().max(right.len()) {
-                        let left = left
-                            .get(index)
-                            .map(|value| {
-                                expression(value, assignment, limits, budget, counters, location)
-                            })
-                            .transpose()?;
-                        let right = right
-                            .get(index)
-                            .map(|value| {
-                                expression(value, assignment, limits, budget, counters, location)
-                            })
-                            .transpose()?;
-                        equal &= left == right;
-                    }
-                    equal == (*relation == Relation::Eq)
-                }
-                GuardComparison::Range(value, lower, upper) => {
-                    let value = expression(value, assignment, limits, budget, counters, location)?;
-                    let lower = expression(lower, assignment, limits, budget, counters, location)?;
-                    let upper = expression(upper, assignment, limits, budget, counters, location)?;
-                    matches!((value, lower, upper), (Value::Number(value), Value::Number(lower), Value::Number(upper)) if lower <= value && value <= upper)
-                }
+            let result = match comparison {
+                GuardComparison::Scalar(left, relation, right) => evaluation.source_values([left, right], |variable| assignment.read(variable, location), limits, budget, counters, location).map(|[left, right]| compare(&left, *relation, &right)),
+                GuardComparison::Tuple(left, relation, right) => evaluation.source_tuple((left, right), |variable| assignment.read(variable, location), limits, budget, counters, location).map(|equal| equal == (*relation == Relation::Eq)),
+                GuardComparison::Range(value, lower, upper) => evaluation.source_values([value, lower, upper], |variable| assignment.read(variable, location), limits, budget, counters, location).map(|values| matches!(values, [Value::Number(value), Value::Number(lower), Value::Number(upper)] if lower <= value && value <= upper)),
             };
+            if let Some(value) = failures.value(result, evaluation.zero_divisor())? {
+                conjunction &= value;
+            }
         }
+        failures.finish(evaluation)?;
         Ok(conjunction != (*negation == DefaultNegation::Not))
     }
 }

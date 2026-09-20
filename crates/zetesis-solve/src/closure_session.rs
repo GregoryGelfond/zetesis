@@ -4,7 +4,7 @@ use crate::execution_observation::ExecutionSink;
 use std::sync::Arc;
 
 use zetesis_core::{GroundProgram, Model, Program};
-use zetesis_cpu::{CandidateLimits, CandidateRestrictionLimits, Candidates, Control, Stop};
+use zetesis_cpu::{CandidateLimits, CandidateRestrictionLimits, Candidates, Control, Limits, Stop};
 
 use crate::engine::Engine;
 use crate::phase_timing::{Recorder, SolvePhase};
@@ -44,7 +44,7 @@ impl<'a> ClosureSession<'a> {
             Err(stop) => Err(stop),
         };
         let candidates = phases.measure(SolvePhase::CandidateSetup, || {
-            Candidates::restricted(
+            let mut candidates = Candidates::restricted(
                 program,
                 CandidateLimits {
                     max_candidates: config.max_candidates,
@@ -56,7 +56,16 @@ impl<'a> ClosureSession<'a> {
                     max_bytes: config.max_candidate_bytes,
                 },
                 control.clone(),
-            )
+            );
+            // The program's two closures, each charged as one candidate check,
+            // bound the counter to the gate atoms some seed could derive and
+            // not every seed must hold.
+            candidates.bounded(Limits {
+                max_work: config.max_work,
+                max_derived_atoms: config.max_atoms,
+                max_closure_bytes: config.max_closure_bytes,
+            });
+            candidates
         });
         Ok(Self {
             program,
@@ -215,6 +224,11 @@ impl<'a> ClosureSession<'a> {
                 .ok()
                 .and_then(Engine::query_observation)
                 .cloned(),
+            closure_execution: self
+                .engine
+                .as_ref()
+                .ok()
+                .and_then(Engine::closure_statistics),
             shared_execution: self
                 .engine
                 .as_ref()
@@ -269,7 +283,7 @@ mod storage_tests {
             batch_storage(usize::MAX, &cancelled),
             Err(Stop::Cancelled)
         ));
-        let expired = Control::with_deadline(std::time::Instant::now());
+        let expired = Control::with_deadline(std::time::Instant::now()).unwrap();
         assert!(matches!(
             batch_storage(usize::MAX, &expired),
             Err(Stop::Deadline)

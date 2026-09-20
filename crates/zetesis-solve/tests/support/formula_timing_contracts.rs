@@ -34,11 +34,15 @@ fn interleaved_sessions_preserve_all_phase_attempts() {
     measurements.measure(SolvePhase::CandidateGeneration, || ());
     let caller = measurements.snapshot().unwrap();
     let recorder = measurements.recorder();
+    // One worker: the parallel walk's workers keep timing their phases while
+    // a session is between calls, so an outcome taken then imports what they
+    // did; the scalar walk times nothing between calls.
     let config = SolveConfig {
         backend: Backend::Cpu,
         oracle: Oracle::Countermodel,
         models: 0,
         stats: true,
+        workers: std::num::NonZeroUsize::MIN,
         ..SolveConfig::default()
     };
     let control = Control::default();
@@ -48,6 +52,8 @@ fn interleaved_sessions_preserve_all_phase_attempts() {
         atoms: admitted.atom_catalog(),
         objectives: admitted.objectives(),
         gate_atoms: 0,
+        keyed_constraints: 0,
+        key_analysis: zetesis_themelios::KeyAnalysis::Complete,
         certificate_order: zetesis_sat::CertificateOrder::TightFirst,
     };
     let mut sessions = [(), ()].map(|()| {

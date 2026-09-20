@@ -196,6 +196,30 @@ fn assert_all_small_models(program: &Program) {
         "complete models of {:?}",
         program.templates()
     );
+    // The counter narrowed by the program's closures offers no more seeds
+    // than the plain one and accepts exactly the same models: a gate atom
+    // the narrowing cuts belongs to no answer set, and one it holds belongs
+    // to every answer set.
+    let mut bounded_models = BTreeSet::new();
+    let mut bounded_seeds = 0usize;
+    let mut candidates = Candidates::new(program, CandidateLimits::default(), Control::default());
+    candidates.bounded(Limits::default());
+    for candidate in candidates {
+        let candidate = candidate.expect("tiny carrier exhausts within budget");
+        bounded_seeds += 1;
+        if assert_seed_matches_static(program, &graph, &candidate) {
+            let (closure, _, _) = direct_closure(&graph, encode_seed(&graph, &candidate));
+            let model: Vec<_> = decode(&graph, closure).atoms().iter().cloned().collect();
+            bounded_models.insert(model);
+        }
+    }
+    assert!(bounded_seeds <= seen_seeds.len());
+    assert_eq!(
+        bounded_models,
+        expected,
+        "bounded models of {:?}",
+        program.templates()
+    );
 }
 
 fn tiny_rule(head: usize, body: u32, gate_code: u32) -> Template {

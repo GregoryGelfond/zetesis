@@ -1,10 +1,16 @@
 # Execution performance
 
-The latest [reduct execution comparison](reduct-execution.md) measures complete
-CPU and Metal solves with preserved answer families. The task-allocation Metal
-route trades 21.87% less accounted completion storage for a 10.25% increase in solve
-time, concentrated in CPU residual completion. Most other measured changes are
-small; this does not establish a general speedup or a process-memory reduction.
+The latest [CPU and Metal execution series](execution-series.md) compares
+`994fbb79` with `eca5a1a7` on Apple M4 Pro. CPU wall medians fall on 19 of 20
+commonly completed cells; process memory has tradeoffs. Metal SEND and task
+allocation improve, while queens variant 2 takes 39–44% longer, concentrated in
+host candidate generation. The retained observations include that regression,
+non-pass outcomes and exact source identities.
+
+The preceding [reduct execution comparison](reduct-execution.md) measured
+different sources: its task-allocation Metal route traded 21.87% less accounted
+completion storage for a 10.25% increase in solve time. Historical comparisons
+below keep their original populations and do not qualify later executables.
 
 The earlier prepared-grounding comparison demonstrates reused query capacity and
 less repeated scalar grounding work. Ordinary CPU timings are mixed, with little

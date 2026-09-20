@@ -82,7 +82,10 @@ fn stopped_seeds_never_enter_oracle_execution() {
         cancelled.cancel();
         for (control, reason) in [
             (cancelled, Stop::Cancelled),
-            (Control::with_deadline(Instant::now()), Stop::Deadline),
+            (
+                Control::with_deadline(Instant::now()).unwrap(),
+                Stop::Deadline,
+            ),
         ] {
             let batch = engine
                 .check(

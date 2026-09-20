@@ -188,6 +188,13 @@ impl FormulaEvaluation<'_> {
     pub fn node_truth(&self, node: usize) -> Option<bool> {
         self.values.get(node).copied()
     }
+
+    /// The truth of every node in index order: the frozen mask of the
+    /// interpretation's reduct, a node false here being falsum there.
+    #[must_use]
+    pub fn truth(&self) -> &[bool] {
+        self.values
+    }
 }
 
 /// Completed truth or a typed failure, with its exact consumed work prefix.

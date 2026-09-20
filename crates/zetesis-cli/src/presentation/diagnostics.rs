@@ -47,8 +47,8 @@ impl<W: Write> Diagnostics<W> {
         }
     }
 
-    pub(crate) fn error(&mut self, error: &impl fmt::Display) -> io::Result<()> {
-        super::source_error::write(&mut self.writer, self.color, error)
+    pub(crate) fn diagnostic(&mut self, diagnostic: &impl fmt::Display) -> io::Result<()> {
+        super::source_error::write(&mut self.writer, self.color, diagnostic)
     }
 }
 
@@ -86,10 +86,12 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
                 Label::Backend, format_args!("cpu (lazy source joins, {workers} workers)")),
             Event::CpuClosure { batching, workers, .. } => self.metadata(Label::Backend,
                 format_args!("cpu (shared {} source rounds, {workers} workers; collective source and per-world evaluation budgets)", batching.label())),
-            Event::CpuFormula { oracle, grounder } => {
+            Event::CpuFormula { oracle, grounder, search } => {
                 let oracle = if oracle == crate::Oracle::Auto { "Ferraris reduct membership" } else { "Ferraris reduct countermodel" };
-                self.metadata(Label::Backend, format_args!("cpu; oracle: {oracle}; grounder: eager (requested {})", grounder.label()))
+                self.metadata(Label::Backend, format_args!("cpu; oracle: {oracle}; search: {}; grounder: eager (requested {})", search.label(), grounder.label()))
             }
+            Event::ParallelRegions { workers } => writeln!(self,
+                "Parallel regions: {workers} workers; models arrive in the schedule's order"),
             Event::ExactCompletion { workers, max_scratch_bytes } => writeln!(self,
                 "Exact completion: requested workers={workers}; bounded logical scratch bytes={max_scratch_bytes}"),
             Event::AutomaticCpu => self.metadata(Label::Auto,
@@ -106,9 +108,13 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
                 Some((atoms, rules)) => self.metadata(Label::Backend, format_args!("gpu ({}, {}; vendor=0x{:04x}; static atoms={atoms}, rules={rules})", adapter.name, adapter.backend, adapter.vendor_id)),
             },
             #[cfg(feature = "gpu")]
-            Event::DeviceFormula { adapter, grounder, batch_size, completion_workers, .. } => self.metadata(Label::Backend,
-                format_args!("hybrid GPU propagation + exact CPU residual search ({}, {}; vendor=0x{:04x}); oracle: Ferraris reduct countermodel; grounder: eager (requested {}); batch={batch_size}; CPU completion requested workers={completion_workers}", adapter.name, adapter.backend, adapter.vendor_id, grounder.label())),
-            Event::Formula { atoms, nodes, roots } => writeln!(self, "Formula: {atoms} atoms, {nodes} nodes, {roots} roots"),
+            Event::DeviceFormula { adapter, grounder, search, batch_size, completion_workers, .. } => self.metadata(Label::Backend,
+                format_args!("hybrid GPU propagation + exact CPU residual search ({}, {}; vendor=0x{:04x}); oracle: Ferraris reduct countermodel; search: {}; grounder: eager (requested {}); batch={batch_size}; CPU completion requested workers={completion_workers}", adapter.name, adapter.backend, adapter.vendor_id, search.label(), grounder.label())),
+            Event::Formula { atoms, nodes, roots, keyed_constraints: 0 } => writeln!(self, "Formula: {atoms} atoms, {nodes} nodes, {roots} roots"),
+            Event::Formula { atoms, nodes, roots, keyed_constraints } => writeln!(self,
+                "Formula: {atoms} atoms, {nodes} nodes, {roots} roots; {keyed_constraints} constraints asked by key"),
+            Event::KeyAnalysisStopped(stop) => writeln!(self,
+                "Keyed constraints: the key analysis stopped, {stop}; every constraint not yet asked was grounded as written"),
             Event::TightMembership => writeln!(self, "Membership: checked tight support certificate; exact reduct residual completion"),
             Event::PositiveMembership => writeln!(self, "Membership: positive atomic-head theory; least consequences with original constraints"),
             Event::GeneralMembership(error) => writeln!(self, "Membership: general reduct; optional class certificate refused: {error}"),
@@ -124,3 +130,7 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
 #[cfg(test)]
 #[path = "../../tests/support/objective_writer_contracts.rs"]
 mod objective_diagnostic_tests;
+
+#[cfg(all(test, feature = "gpu"))]
+#[path = "../../tests/support/backend_writer_contracts.rs"]
+mod backend_diagnostic_tests;

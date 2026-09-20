@@ -36,6 +36,7 @@ pub struct SemanticOutcome {
     pub(crate) formula_execution: Option<crate::FormulaExecutionStatistics>,
     pub(crate) lazy_execution: Option<crate::LazyExecutionStatistics>,
     pub(crate) shared_execution: Option<crate::SharedExecutionStatistics>,
+    pub(crate) closure_execution: Option<crate::ClosureExecutionStatistics>,
     pub(crate) query_execution: Option<crate::QueryExecutionObservation>,
 }
 
@@ -62,6 +63,7 @@ impl SemanticOutcome {
             formula_execution: None,
             lazy_execution: None,
             shared_execution: None,
+            closure_execution: None,
             query_execution: None,
         }
     }
@@ -129,6 +131,12 @@ impl SemanticOutcome {
     #[must_use]
     pub const fn shared_execution(&self) -> Option<&crate::SharedExecutionStatistics> {
         self.shared_execution.as_ref()
+    }
+    /// Independent CPU closure counters summed over completed checks, lazy or
+    /// eager. Absent for the shared, device and formula routes.
+    #[must_use]
+    pub const fn closure_execution(&self) -> Option<&crate::ClosureExecutionStatistics> {
+        self.closure_execution.as_ref()
     }
     /// Prepared independent CPU ownership receipts, including a snapshot fault
     /// retained independently of already checked models. Absent for other routes.

@@ -57,6 +57,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         limits,
         native_answers: native_json::Limits::default(),
         max_spelling_bytes: limits.process.max_output_bytes,
+        helper: None,
     };
     let report = matrix::run_workloads(&request, &[selected])?;
     report.publish()?;

@@ -160,7 +160,7 @@ fn failed_flush_prevents_a_later_json_footer() {
         )
         .unwrap_err();
     assert!(error.to_string().contains("original cause"));
-    assert_eq!(sink.0, b"{\"schema\":1,\"format\":\"zetesis\",\"models\":[");
+    assert_eq!(sink.0, b"{\"schema\":2,\"format\":\"zetesis\",\"models\":[");
 }
 
 #[test]
@@ -215,6 +215,22 @@ fn failure_envelopes_never_invent_search_coverage() {
             "formula_batch_shape",
         ),
         (RunError::LazyStatisticsOverflow, "lazy_statistics_overflow"),
+        (
+            RunError::ClosureReservation {
+                workers: 5,
+                max_closure_bytes: 3,
+                max_closure_batch_bytes: 4,
+            },
+            "closure_reservation",
+        ),
+        (
+            RunError::DeadlineTimer(io::Error::other("no thread")),
+            "deadline_timer",
+        ),
+        (
+            RunError::ClosureStatisticsOverflow,
+            "closure_statistics_overflow",
+        ),
     ];
     for (error, kind) in errors {
         let original = error.to_string();

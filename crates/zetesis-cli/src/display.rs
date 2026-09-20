@@ -9,7 +9,10 @@ use record::{Contents, Record};
 use zetesis_core::Model;
 use zetesis_cpu::Control;
 use zetesis_objective::Score;
-use zetesis_themelios::{OutputSelection, observation::ObservationProgram};
+use zetesis_themelios::{
+    OutputSelection,
+    observation::{ObservationProgram, json::AtomTable},
+};
 
 use crate::{Options, PublicationStop, RunError};
 
@@ -18,10 +21,12 @@ pub(crate) struct Display<'a> {
     pub observations: &'a ObservationProgram,
     pub options: &'a Options,
     pub control: &'a Control,
+    /// The atoms the JSON document has spelled; a record refers to them by index.
+    pub atoms: AtomTable,
 }
 impl Display<'_> {
     pub fn write(
-        &self,
+        &mut self,
         output: &mut impl Write,
         number: usize,
         model: &Model,
@@ -34,7 +39,7 @@ impl Display<'_> {
     }
 
     fn write_record(
-        &self,
+        &mut self,
         output: &mut impl Write,
         number: usize,
         model: &Model,
@@ -49,6 +54,7 @@ impl Display<'_> {
                 output,
                 number,
                 &view,
+                &mut self.atoms,
                 self.options,
                 self.control,
             );

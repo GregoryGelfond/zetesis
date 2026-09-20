@@ -8,7 +8,7 @@ type Failure = (Decision, String);
 
 /// Success still requires the full native model decoder and telemetry checks.
 pub(super) fn check(document: &Value, exit: Option<Exit>) -> Result<(), Failure> {
-    if document["schema"] != 1 || document["format"] != "zetesis" {
+    if !crate::answers::native_json::is_native_document(document) {
         return Err(invalid("unsupported native envelope"));
     }
     let outcome = &document["outcome"];

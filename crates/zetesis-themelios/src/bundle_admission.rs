@@ -11,8 +11,8 @@ use themelios_program::raise::raise;
 use zetesis_core::{AdmissionLimits, Program};
 
 use crate::{
-    AdmissionFailure, AdmissionOptions, ExpansionFailure, ExpansionLimits, InputLimit,
-    SourceBundle, SourceMetadata, extended, metadata, profile,
+    AdmissionFailure, AdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionUsage,
+    InputLimit, SourceBundle, SourceMetadata, extended, metadata, profile,
 };
 
 /// Admission budgets across an already bounded, loaded source graph. File,
@@ -49,6 +49,7 @@ pub struct AdmittedBundle {
     bundle: SourceBundle,
     template_origins: Vec<Vec<Location>>,
     metadata: SourceMetadata,
+    expansion: ExpansionUsage,
 }
 
 impl AdmittedBundle {
@@ -73,6 +74,11 @@ impl AdmittedBundle {
     #[must_use]
     pub fn metadata(&self) -> &SourceMetadata {
         &self.metadata
+    }
+    /// Expansion charges this admission accepted, each under its ceiling.
+    #[must_use]
+    pub fn expansion_usage(&self) -> &ExpansionUsage {
+        &self.expansion
     }
     /// Consume the result when original source evidence is no longer required.
     #[must_use]
@@ -258,11 +264,12 @@ pub fn admit_bundle_extended(
     limits: ExpansionLimits,
 ) -> Result<AdmittedBundle, BundleAdmissionFailure> {
     match compile_bundle(&bundle, options, limits) {
-        Ok((program, template_origins, metadata)) => Ok(AdmittedBundle {
-            program,
+        Ok(compiled) => Ok(AdmittedBundle {
+            program: compiled.program,
             bundle,
-            template_origins,
-            metadata,
+            template_origins: compiled.template_origins,
+            metadata: compiled.metadata,
+            expansion: compiled.expansion,
         }),
         Err(error) => Err(BundleAdmissionFailure {
             bundle,
@@ -275,7 +282,7 @@ fn compile_bundle(
     bundle: &SourceBundle,
     options: BundleAdmissionOptions,
     limits: ExpansionLimits,
-) -> Result<(Program, Vec<Vec<Location>>, SourceMetadata), BundleAdmissionError> {
+) -> Result<extended::Compilation, BundleAdmissionError> {
     check_include_identity(bundle)?;
     let mut definitions = BTreeMap::new();
     let mut statements = Vec::new();
@@ -329,9 +336,13 @@ fn compile_bundle(
         span: entry.source().span(),
     };
     let source = SourceProgram::of_nodes(statements);
-    let (program, origins) =
-        extended::compile_owned(&source, options.core_limits, limits, location)?;
-    Ok((program, origins, source_metadata.finish()))
+    Ok(extended::compile_owned(
+        &source,
+        options.core_limits,
+        limits,
+        location,
+        source_metadata.finish(),
+    )?)
 }
 
 pub(crate) fn check_include_identity(bundle: &SourceBundle) -> Result<(), BundleAdmissionError> {

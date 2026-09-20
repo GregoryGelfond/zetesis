@@ -4,9 +4,28 @@ import Zetesis.Search
 /-!
 # Concrete must/may bounds for reduct search
 
-This module discharges the search geometry's enclosure obligations using the
-actual normalized rule semantics. Positive bodies, filters, and heads remain
-unchanged. Only frozen candidate gates are approximated.
+The objects are a cube of seeds, the region of a search, and two readings of
+a rule's gates under it: `MustGate`, the gates every seed of the cube
+satisfies, and `MayGate`, the gates some seed does. Each reading selects the
+rules that fire and gives a least consequence set, `LowerGamma` and
+`UpperGamma`, over the actual normalized rule semantics; positive bodies,
+filters and heads are read unchanged, and only the frozen candidate gates
+are approximated.
+
+The central laws are `gamma_sandwich`, that every seed's own closure lies
+between the two; `acceptance_survives_narrowing`, that an accepted seed
+lies in the cube narrowed by them, `Narrow`; `narrowed_contains_accepted`,
+that it lies in every region of the narrowing iterated from the undecided
+cube; and `lower_constraint_refutes`, that a constraint whose gates must
+hold and whose body the lower closure satisfies leaves no accepted seed in
+the cube. `lower_prefix_sound` and `closed_upper_sound` say what an
+unfinished lower run and a closed upper approximation may still claim.
+
+The module rests on `Semantics` for acceptance and on `Search` for the
+cube and its narrowing node, `coverage_narrowed`. That the Rust closures
+are the least fixed points of the two consequence operators over the exact
+admitted program, and that the counter enumerates exactly the seeds of a
+counted region, are the Rust obligations.
 -/
 namespace Zetesis
 namespace Bounds
@@ -42,6 +61,10 @@ def UpperGamma (P : Program α) (c : Cube α) : Atoms α :=
 
 def Narrow (P : Program α) (S : Atoms α) (c : Cube α) : Cube α :=
   c.narrow (Inter (LowerGamma P c) S) (Inter (UpperGamma P c) S)
+
+/-- The cube in which no atom is decided: every seed lies in it. A rule is
+definite here exactly when it has no gate, and possible whatever its gates. -/
+def undecided : Cube α := ⟨fun _ => False, fun _ => True⟩
 
 theorem gate_sandwich (r : Rule α) {c : Cube α} {z : Atoms α}
     (hz : c.Contains z) :
@@ -128,6 +151,45 @@ theorem acceptance_survives_narrowing (P : Program α) (S : Atoms α)
     exact (gamma_sandwich P hw).2
   · exact hc
   · exact hz
+
+/-- Before any gate atom is decided, the two closures already bound every
+accepted seed: the gate atoms of the lower closure, where only gate-free
+rules fire, belong to every accepted seed, and no accepted seed holds a gate
+atom outside the upper closure, where every gate passes. A seed counter may
+therefore hold the first set in every seed and never offer an atom outside
+the second; it loses no accepted seed, and each seed it returns is still
+checked in full. This is the narrowing of the undecided cube, read for the
+counter that enumerates between the two sets.
+
+Proof outline. Every seed lies in the undecided cube, so narrowing preserves
+the accepted seed (`acceptance_survives_narrowing`); the narrowed cube's two
+sides are the two claims (`Cube.contains_narrow`). -/
+theorem undecided_bounds_accepted (P : Program α) (S z : Atoms α)
+    (hz : Accept P S z) :
+    Sub (Inter (LowerGamma P undecided) S) z ∧
+      Sub z (Inter (UpperGamma P undecided) S) := by
+  have inside : (undecided : Cube α).Contains z :=
+    ⟨fun _ h => h.elim, fun _ _ => trivial⟩
+  have narrowed := acceptance_survives_narrowing P S inside hz
+  exact ⟨(Cube.contains_narrow.mp narrowed).2.1, (Cube.contains_narrow.mp narrowed).2.2⟩
+
+/-- The regions of the iterated narrowing from the undecided cube: each one
+is the previous narrowed by its own two closures. -/
+def narrowed (P : Program α) (S : Atoms α) : Nat → Cube α
+  | 0 => undecided
+  | n + 1 => Narrow P S (narrowed P S n)
+
+/-- Every accepted seed lies in every region of the iterated narrowing, so a
+seed counter may take any pass's bounds, in particular the fixed point where
+a pass changes nothing: the gate atoms of that region's lower closure are
+held in every seed and no gate atom outside its upper closure is offered.
+
+Proof outline. Induction on the pass: every seed lies in the undecided cube,
+and narrowing preserves an accepted seed (`acceptance_survives_narrowing`). -/
+theorem narrowed_contains_accepted (P : Program α) (S z : Atoms α)
+    (hz : Accept P S z) : ∀ n, (narrowed P S n).Contains z
+  | 0 => ⟨fun _ h => h.elim, fun _ _ => trivial⟩
+  | n + 1 => acceptance_survives_narrowing P S (narrowed_contains_accepted P S z hz n) hz
 
 /-- This creates the concrete ledger's narrowing node from must/may closure. -/
 def coverage_narrowed (P : Program α) (S : Atoms α) (c : Cube α)

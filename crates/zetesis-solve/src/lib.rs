@@ -78,6 +78,7 @@ mod solve_config;
 mod semantic_outcome;
 mod lazy_execution;
 mod shared_execution;
+mod closure_execution;
 mod query_observation;
 pub use query_observation::QueryExecutionObservation;
 mod closure_session;
@@ -92,6 +93,7 @@ mod phase_timing;
 mod stage_timing;
 mod grounding_timing;
 
+pub use closure_execution::{ClosureExecutionStatistics, ClosureJoinStatistics, ClosureRoute};
 pub use completion::{Completion, Interruption, SearchState};
 pub use error::{FailureParts, SolveError, SolveFailure};
 pub use execution_observation::{ExecutionObservation, ExecutionObserver};
@@ -114,6 +116,7 @@ pub use session::{
 pub use shared_execution::SharedExecutionStatistics;
 pub use solve_config::SolveConfig;
 pub use world_view::{WorldView, WorldViewError, WorldViewFailure, WorldViewLimits};
+pub use zetesis_sat::SearchMethod;
 pub use zetesis_telemetry::{GroundingMode, SolveStage, StageMeasurement, StageTimings};
 pub use zetesis_themelios::{GroundingOutcome, GroundingPhase, GroundingWork};
 

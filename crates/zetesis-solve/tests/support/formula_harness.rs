@@ -54,6 +54,8 @@ pub(super) fn input(owner: &AdmittedFormula) -> super::Input<'_> {
         theory: owner.theory(),
         atoms: owner.atom_catalog(),
         gate_atoms: 0,
+        keyed_constraints: 0,
+        key_analysis: zetesis_themelios::KeyAnalysis::Complete,
         objectives: owner.objectives(),
         certificate_order: crate::countermodel::certificate_order(
             owner.source_analysis(),

@@ -10,6 +10,20 @@ use zetesis_sat::{
     BatchError, BatchLimits, BatchVerdict, Control, Incomplete, Limits, SearchLimits, StableModels,
 };
 
+/// Enumerate by the clause forms, the subject of the tests below.
+fn by_clauses(
+    theory: &zetesis_ferraris::Theory,
+    limits: zetesis_sat::Limits,
+    control: zetesis_sat::Control,
+) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
+    zetesis_sat::StableModels::with_method(
+        theory,
+        zetesis_sat::SearchMethod::Clauses,
+        limits,
+        control,
+    )
+}
+
 fn choices() -> Theory {
     // Three independent a OR NOT a formulas: all eight interpretations are
     // stable. External certificates below are checked by exhaustive Ferraris.
@@ -125,7 +139,7 @@ fn candidate_decision_and_original_verification_limits_cannot_publish_proposals(
             Incomplete::Verification(Stop::WorkLimit),
         ),
     ] {
-        let mut search = StableModels::new(&theory, limits, Control::default()).unwrap();
+        let mut search = by_clauses(&theory, limits, Control::default()).unwrap();
         assert!(matches!(
             search.next_batch(batch(3), never_called),
             Err(BatchError::Search(actual)) if actual == expected

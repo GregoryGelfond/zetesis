@@ -14,8 +14,8 @@ use std::num::NonZeroUsize;
 
 use clap::Parser;
 use zetesis_cli::{
-    Backend, Completion, Interruption, Options, Oracle, PreparedInput, Session, SolveConfig,
-    run_with_diagnostics,
+    Backend, Completion, Interruption, Options, Oracle, PreparedInput, SearchMethod, Session,
+    SolveConfig, run_with_diagnostics,
 };
 use zetesis_core::{Atom, Predicate, Value};
 use zetesis_cpu::Control;
@@ -186,6 +186,8 @@ fn source_extensions_preserve_complete_session_records() {
                 for pruning in [false, true] {
                     let mut config = SolveConfig {
                         backend: Backend::Cpu,
+                        // The batched completion and its accounting belong to the clause search.
+                        search: SearchMethod::Clauses,
                         oracle: Oracle::Countermodel,
                         models: 0,
                         workers: NonZeroUsize::new(workers).unwrap(),
@@ -304,6 +306,8 @@ fn stopped_composition_preserves_objective_presence() {
             for batch in [3, 7] {
                 let config = SolveConfig {
                     backend: Backend::Cpu,
+                    // The batched completion and its accounting belong to the clause search.
+                    search: SearchMethod::Clauses,
                     oracle: Oracle::Countermodel,
                     models: 0,
                     completion_workers: NonZeroUsize::new(workers).unwrap(),

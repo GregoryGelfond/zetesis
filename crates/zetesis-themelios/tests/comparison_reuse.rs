@@ -21,19 +21,7 @@ fn complete_models_preserve_backtracking_generators_and_residual_filters() {
         cases.iter().map(|case| case.records.len()).sum::<usize>(),
         35
     );
-    let admitted: Vec<_> = cases
-        .into_iter()
-        .filter(|case| case.name != "earlier_false_discards_invalid")
-        .collect();
-    assert_eq!(admitted.len(), 19);
-    assert_eq!(
-        admitted
-            .iter()
-            .map(|case| case.records.len())
-            .sum::<usize>(),
-        34
-    );
-    for case in admitted {
+    for case in cases {
         let input = source_records::admit(&case.source, &FormulaLimits::default())
             .unwrap_or_else(|error| panic!("{}: {error:?}", case.name));
         assert_eq!(
@@ -46,40 +34,26 @@ fn complete_models_preserve_backtracking_generators_and_residual_filters() {
 }
 
 #[test]
-fn a_false_filter_preserves_required_undefined_arithmetic() {
+fn an_earlier_false_comparison_excludes_the_substitution() {
     let cases = source_cases::cases(FIXTURE);
-    let refused: Vec<_> = cases
+    let excluded: Vec<_> = cases
         .iter()
         .filter(|case| case.name == "earlier_false_discards_invalid")
         .collect();
-    assert_eq!(refused.len(), 1);
-    assert_eq!(refused[0].source, FALSE_FILTER_SOURCE);
-    // X=0 is a complete positive binding. Clingo's successful record remains
-    // in the unchanged fixture, but native admission validates the later 1/X.
-    let error = source_records::admit(FALSE_FILTER_SOURCE, &FormulaLimits::default())
-        .expect_err("the earlier false comparison cannot discard a required error");
-    let FormulaFailure::Expansion(ExpansionFailure::Evaluation {
-        error: EvalError::Undefined,
-        location,
-    }) = error
-    else {
-        panic!("expected located undefined arithmetic: {error:?}");
-    };
-    assert_eq!(location.source, themelios_base::source::SourceId::new(0));
-    assert_eq!(location.span.start().get(), 5);
-    assert_eq!(
-        usize::try_from(location.span.end().get()).unwrap(),
-        FALSE_FILTER_SOURCE.len()
-    );
+    assert_eq!(excluded.len(), 1);
+    assert_eq!(excluded[0].source, FALSE_FILTER_SOURCE);
+    // X != 0 excludes the substitution X = 0, so 1/X is never reached and the
+    // native family is the reference's.
+    let input = source_records::admit(FALSE_FILTER_SOURCE, &FormulaLimits::default())
+        .expect("the excluded substitution reaches no operation");
+    assert_eq!(source_records::exhaustive(&input), excluded[0].records);
 }
 
 #[test]
-fn later_success_never_certifies_deferred_undefined_arithmetic() {
+fn comparisons_cannot_admit_an_entirely_undefined_family() {
     for source in [
         "d(0).p:-d(X),1/X=0,X=0,X+0=0.",
         "d(0).p:-d(X),X=0,1/X=0,X+0=0.",
-        "d(1;2).p(X):-d(X),1/(2-X)>=0,X>0.",
-        "d(1).p(Y):-d(X),X=1,Y=0..1,1/Y=0.",
     ] {
         let error = source_records::admit(source, &FormulaLimits::default())
             .expect_err("a complete row still evaluates every inconclusive comparison");
@@ -92,6 +66,22 @@ fn later_success_never_certifies_deferred_undefined_arithmetic() {
                 })
             ),
             "{source}: {error:?}"
+        );
+    }
+}
+
+#[test]
+fn mixed_comparison_families_preserve_defined_substitutions() {
+    for (source, expected) in [
+        ("d(1;2).p(X):-d(X),1/(2-X)>=0,X>0.", "d(1;2).p(1)."),
+        ("d(1).p(Y):-d(X),X=1,Y=0..1,1/Y=0.", "d(1)."),
+    ] {
+        let input = source_records::admit(source, &FormulaLimits::default()).unwrap();
+        let expected = source_records::admit(expected, &FormulaLimits::default()).unwrap();
+        assert_eq!(input.warnings().len(), 1, "{source}");
+        assert_eq!(
+            source_records::exhaustive(&input),
+            source_records::exhaustive(&expected)
         );
     }
 }

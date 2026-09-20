@@ -79,17 +79,13 @@ fn validate(
     if !plan.theory().same_instance(candidate.theory()) {
         return Err(Incomplete::WrongTheory);
     }
-    // The transactional complete unit restriction admits only this exact
-    // interpretation. A mismatching proposal is a broken search witness, not a
-    // reason to relabel an arbitrary candidate as certified or nonminimal.
-    if plan.failed_constraint().is_some() {
-        return Err(Incomplete::InvalidWitness);
-    }
+    // Regions can propose larger supported models of positive cycles.
+    // Compare with the least consequences, then independently establish
+    // original satisfaction before distinguishing stability from nonminimality.
+    let mut is_least = true;
     for atom in 0..plan.theory().atom_count() {
         budget.tick()?;
-        if candidate.contains(atom) != plan.least_consequences().contains(atom) {
-            return Err(Incomplete::InvalidWitness);
-        }
+        is_least &= candidate.contains(atom) == plan.least_consequences().contains(atom);
     }
     let available = (max_bytes as u128)
         .checked_sub(plan.statistics().retained_bytes)
@@ -109,8 +105,13 @@ fn validate(
     budget.statistics.work += attempt.work;
     *peak = (*peak).max(plan.statistics().retained_bytes + attempt.retained_bytes);
     match attempt.result {
-        Ok(truth) if truth.is_model() => Ok(Verdict::Stable),
-        Ok(_) => Ok(Verdict::NotModel),
+        Ok(truth) if !truth.is_model() => Ok(Verdict::NotModel),
+        Ok(_) if is_least => Ok(Verdict::Stable),
+        // Every original model contains the producers' least consequences.
+        // Constraints satisfied by the candidate have tautological reducts,
+        // even if those constraints fail in the least interpretation itself.
+        // Thus a different original model has this proper-subset countermodel.
+        Ok(_) => Ok(Verdict::NonMinimal),
         Err(EvaluationError::Stopped(zetesis_cpu::Stop::WorkLimit)) => Err(Incomplete::WorkLimit),
         Err(EvaluationError::Stopped(stop)) => Err(stop.into()),
         Err(error @ EvaluationError::Storage { .. }) => {

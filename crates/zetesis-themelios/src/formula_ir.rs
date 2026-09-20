@@ -4,6 +4,10 @@
 #[path = "formula_assignment_plan_tests.rs"]
 mod assignment_plan_tests;
 
+#[cfg(test)]
+#[path = "formula_shared_names_tests.rs"]
+mod shared_names_tests;
+
 #[path = "formula_objective_scope.rs"]
 mod objective_scope;
 
@@ -44,8 +48,20 @@ pub(crate) struct Prepared {
     /// Extrema tuple carriers selected for an optional numeric-weight precision
     /// refinement after support completion.
     pub objective_extrema: BTreeSet<usize>,
+    /// Written constraints over a keyed value that were asked as the one atom
+    /// their key admits, in place, during this preparation.
+    pub keyed_constraints: usize,
+    /// How the key analysis that asked them ended.
+    pub key_analysis: crate::KeyAnalysis,
 }
+/// One original objective element, before its pooled or weak-body alternatives.
+/// Its first lowered position is unique within the prepared objective vector;
+/// all alternatives remain contiguous. Diagnostic spans do not define identity.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ObjectiveFamily(usize);
+
 pub(crate) struct ObjectiveIr {
+    pub family: ObjectiveFamily,
     pub weight: ObjectiveField,
     pub priority: Expression,
     pub tuple: Vec<ObjectiveField>,
@@ -215,7 +231,14 @@ pub(crate) enum HeadMeasure {
     Min,
     Max,
 }
+/// One original element within its enclosing local collection. Alternatives
+/// remain contiguous and share this identity. It is not comparable across
+/// collections or outer bindings, and diagnostic spans do not determine it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) struct LocalFamily(pub(crate) usize);
+
 pub(crate) struct Element {
+    pub family: LocalFamily,
     pub key: HeadElementKey,
     pub head: HeadLiteral,
     pub condition: Vec<LiteralIr>,
@@ -308,6 +331,7 @@ pub(crate) struct AggregateIr {
     pub elements: Vec<AggregateElementIr>,
 }
 pub(crate) struct AggregateElementIr {
+    pub family: LocalFamily,
     pub key: AggregateKey,
     pub condition: Vec<LiteralIr>,
     pub variables: usize,
@@ -346,18 +370,13 @@ pub(crate) fn prepare(
     fallback: Location,
 ) -> Result<Prepared, FormulaFailure> {
     let constants = extended::resolve(source, budget, fallback)?;
-    let mut rules = Vec::new();
-    let mut projection = Vec::new();
-    let mut project_selection = crate::ProjectSelection::default();
-    let mut analyzed = Vec::new();
-    let mut pool_projection_nodes = 0;
-    let mut objectives = Vec::new();
-    let mut objective_declarations = Vec::new();
+    let mut parts = Parts::default();
     let mut compiler = Compiler {
         options,
         limits,
         budget,
         domain: BTreeSet::new(),
+        predicates: BTreeSet::new(),
         next_aggregate: 0,
         dependency_projection: false,
         location: fallback,
@@ -370,63 +389,28 @@ pub(crate) fn prepare(
         ) {
             continue;
         }
-        compiler.location = extended::origin(carrier, fallback);
-        let rewritten = compiler.normalize_statement(carrier, &constants)?;
-        let statement = rewritten.statements().next().expect("rewrite keeps a rule");
-        let origins = extended::parsed_origins(carrier);
-        if compiler.project_statement(
-            statement,
-            &origins,
-            &mut pool_projection_nodes,
-            &mut projection,
-            &mut project_selection,
-        )? {
-            continue;
-        }
-        if let Some(observation) = compiler.objective_statement(
-            statement,
-            &origins,
-            &mut objectives,
-            &mut objective_declarations,
-            &mut pool_projection_nodes,
-        )? {
-            analyzed.extend(observation);
-            continue;
-        }
-        if let Some(facts) = if generated_fact(statement.get()) {
-            None
-        } else {
-            fact_expansion::facts(statement, compiler.budget, compiler.location)?
-        } {
-            compiler.budget.charge(
-                ExpansionResource::Origins,
-                (facts.len() as u128).saturating_mul(origins.len() as u128),
-                compiler.location,
-            )?;
-            for fact in facts {
-                let head = fact.head().expect("expanded facts have a head").clone();
-                analyzed.push(crate::formula_analysis::fact(
-                    &head,
-                    statement,
-                    compiler.location,
-                )?);
-                rules.push(compiler.fact_rule(head, &origins)?);
-            }
-        } else {
-            compiler.source_rules(
-                statement,
-                &origins,
-                &mut pool_projection_nodes,
-                &mut rules,
-                &mut analyzed,
-            )?;
-        }
+        compiler.compile(carrier, &constants, &mut parts, fallback)?;
     }
-    let analyzed = SourceProgram::of_nodes(analyzed);
+    let mut analyzed = SourceProgram::of_nodes(std::mem::take(&mut parts.analyzed));
+    let asked = crate::formula_keys::ask_all(&analyzed, limits, compiler.budget, fallback)?;
+    let keyed_constraints = asked.rules.len();
+    if keyed_constraints > 0 {
+        analyzed = replace_asked(
+            &mut compiler,
+            &constants,
+            &mut parts,
+            &analyzed,
+            asked.rules,
+            fallback,
+        )?;
+    }
     let analysis = crate::formula_analysis::analyze(&analyzed, limits, compiler.budget, fallback)?;
-    let objective_extrema =
-        crate::formula_objective_dependencies::check(&rules, &mut objectives, &analysis);
-    validate_objectives(&objectives, limits)?;
+    let objective_extrema = crate::formula_objective_dependencies::check(
+        &parts.rules,
+        &mut parts.objectives,
+        &analysis,
+    );
+    validate_objectives(&parts.objectives, limits)?;
     let analysis_basis = if compiler.dependency_projection {
         crate::AnalysisBasis::DependencyProjection
     } else {
@@ -436,13 +420,67 @@ pub(crate) fn prepare(
         analysis,
         analysis_basis,
         analyzed,
-        rules,
-        projection,
-        project_selection: project_selection.finish(),
-        objectives,
-        objective_declarations,
+        rules: parts.rules,
+        projection: parts.projection,
+        project_selection: parts.project_selection.finish(),
+        objectives: parts.objectives,
+        objective_declarations: parts.objective_declarations,
         objective_extrema,
+        keyed_constraints,
+        key_analysis: asked.analysis,
     })
+}
+
+/// What the statements compile to, in source order: the rules and the
+/// projection's, the analyzed statements, the objectives and their
+/// declarations, and the projection nodes charged so far.
+#[derive(Default)]
+struct Parts {
+    rules: Vec<RuleIr>,
+    projection: Vec<RuleIr>,
+    project_selection: crate::ProjectSelection,
+    analyzed: Vec<WithProvenance<Statement>>,
+    pool_projection_nodes: u128,
+    objectives: Vec<ObjectiveIr>,
+    objective_declarations: Vec<Location>,
+}
+
+/// Replace each written constraint's rules and analyzed statement by those
+/// of the constraints asked in its place, compiled as any statement is,
+/// under the written constraint's provenance and the transformation's tag.
+/// The analyzed statements of the rest are kept as they are; the program is
+/// rebuilt once. The written constraint's charges stay charged: it was
+/// compiled.
+fn replace_asked(
+    compiler: &mut Compiler<'_>,
+    constants: &BTreeMap<String, Symbol>,
+    parts: &mut Parts,
+    analyzed: &SourceProgram,
+    asked: BTreeMap<Location, (themelios_program::provenance::Provenance, Vec<Rule>)>,
+    fallback: Location,
+) -> Result<SourceProgram, FormulaFailure> {
+    parts
+        .rules
+        .retain(|rule| !asked.contains_key(&rule.location));
+    parts.analyzed = analyzed
+        .statements()
+        .filter(|carrier| match extended::parsed_origins(carrier)[..] {
+            [origin] => !asked.contains_key(&origin),
+            _ => true,
+        })
+        .cloned()
+        .collect();
+    let tag = themelios_program::provenance::Provenance::from(Origin::Transformed(
+        TransformTag::new("zetesis-keyed-constraint"),
+    ));
+    for (provenance, rules) in asked.into_values() {
+        for rule in rules {
+            let carrier =
+                WithProvenance::new(Statement::Rule(rule), provenance.clone().merge(tag.clone()));
+            compiler.compile(&carrier, constants, parts, fallback)?;
+        }
+    }
+    Ok(SourceProgram::of_nodes(std::mem::take(&mut parts.analyzed)))
 }
 
 fn validate_objectives(
@@ -608,11 +646,88 @@ pub(super) struct Compiler<'a> {
     pub(super) limits: &'a FormulaLimits,
     pub(super) budget: &'a mut Budget,
     pub(super) domain: BTreeSet<Value>,
+    /// The one shared name per predicate this compilation mints patterns for.
+    pub(super) predicates: BTreeSet<Predicate>,
     pub(super) next_aggregate: usize,
     pub(super) dependency_projection: bool,
     pub(super) location: Location,
 }
 impl Compiler<'_> {
+    /// The compilation's shared name for the predicate: every pattern of one
+    /// predicate refers to one allocation, as an admitted program's do, the
+    /// patterns of an objective scope included, since the scope compiles
+    /// under the lent set.
+    fn shared(&mut self, predicate: Predicate) -> Predicate {
+        if let Some(shared) = self.predicates.get(&predicate) {
+            return shared.clone();
+        }
+        self.predicates.insert(predicate.clone());
+        predicate
+    }
+
+    /// Compile one statement into the parts: a projection or objective
+    /// declaration, expanded facts, or its rules, after normalizing it.
+    fn compile(
+        &mut self,
+        carrier: &WithProvenance<Statement>,
+        constants: &BTreeMap<String, Symbol>,
+        parts: &mut Parts,
+        fallback: Location,
+    ) -> Result<(), FormulaFailure> {
+        self.location = extended::origin(carrier, fallback);
+        let rewritten = self.normalize_statement(carrier, constants)?;
+        let statement = rewritten.statements().next().expect("rewrite keeps a rule");
+        let origins = extended::parsed_origins(carrier);
+        if self.project_statement(
+            statement,
+            &origins,
+            &mut parts.pool_projection_nodes,
+            &mut parts.projection,
+            &mut parts.project_selection,
+        )? {
+            return Ok(());
+        }
+        if let Some(observation) = self.objective_statement(
+            statement,
+            &origins,
+            &mut parts.objectives,
+            &mut parts.objective_declarations,
+            &mut parts.pool_projection_nodes,
+        )? {
+            parts.analyzed.extend(observation);
+            return Ok(());
+        }
+        if let Some(facts) = if generated_fact(statement.get()) {
+            None
+        } else {
+            fact_expansion::facts(statement, self.budget, self.location)?
+        } {
+            self.budget.charge(
+                ExpansionResource::Origins,
+                (facts.len() as u128).saturating_mul(origins.len() as u128),
+                self.location,
+            )?;
+            for fact in facts {
+                let head = fact.head().expect("expanded facts have a head").clone();
+                parts.analyzed.push(crate::formula_analysis::fact(
+                    &head,
+                    statement,
+                    self.location,
+                )?);
+                parts.rules.push(self.fact_rule(head, &origins)?);
+            }
+        } else {
+            self.source_rules(
+                statement,
+                &origins,
+                &mut parts.pool_projection_nodes,
+                &mut parts.rules,
+                &mut parts.analyzed,
+            )?;
+        }
+        Ok(())
+    }
+
     /// Keep the rewritten owner private until every normalization step has succeeded.
     fn normalize_statement(
         &mut self,
@@ -675,6 +790,7 @@ impl Compiler<'_> {
         )?;
         declarations.extend_from_slice(origins);
         for element in optimize.elements() {
+            let family = ObjectiveFamily(objectives.len());
             let mut evidence: Vec<_> = element
                 .provenance()
                 .origins()
@@ -715,7 +831,12 @@ impl Compiler<'_> {
                     evidence.len() as u128,
                     self.location,
                 )?;
-                objectives.push(self.objective(&alternative, evidence.clone(), polarity)?);
+                objectives.push(self.objective(
+                    &alternative,
+                    evidence.clone(),
+                    polarity,
+                    family,
+                )?);
             }
         }
         Ok(())
@@ -725,9 +846,10 @@ impl Compiler<'_> {
         element: &OptimizeElement,
         origins: Vec<Location>,
         polarity: WeightPolarity,
+        family: ObjectiveFamily,
     ) -> Result<ObjectiveIr, FormulaFailure> {
         if self.element_needs_scope(element)? {
-            return self.scoped_element(element, origins, polarity);
+            return self.scoped_element(element, origins, polarity, family);
         }
         let mut variables = Variables::default();
         let mut positive = Vec::new();
@@ -797,6 +919,7 @@ impl Compiler<'_> {
         variables.safety(self.location)?;
         let count = variables.count;
         Ok(ObjectiveIr {
+            family,
             weight,
             priority,
             tuple,
@@ -991,58 +1114,51 @@ impl Compiler<'_> {
         variables: &Variables,
     ) -> Result<Vec<Element>, FormulaFailure> {
         let mut elements = Vec::new();
-        let mut source_booleans = source
-            .into_iter()
-            .flat_map(Choice::elements)
-            .filter(|element| {
-                matches!(
-                    element.get().literal().inner,
-                    themelios_program::program::LiteralInner::True
-                        | themelios_program::program::LiteralInner::False
-                )
-            });
-        for element in choice.elements() {
+        // The whole-rule pool rewrite reconstructs a set of local head
+        // alternatives, which can reorder or merge them. Compile the retained
+        // source elements instead: only outer guards were selected by that
+        // rewrite, while each local literal and condition keeps its own product.
+        for (index, element) in source.unwrap_or(choice).elements().enumerate() {
+            let family = LocalFamily(index);
             let boolean = if matches!(
                 element.get().literal().inner,
                 LiteralInner::True | LiteralInner::False
             ) {
                 self.dependency_projection = true;
-                Some(self.boolean_occurrences(element.get(), source_booleans.next())?)
+                Some(self.boolean_occurrences(source.map(|_| element))?)
             } else {
                 None
             };
-            for alternative in self.condition_alternatives(element.get().condition())? {
-                let mut local = variables.clone();
-                self.head_global_literal(element.get().literal(), &mut local)?;
-                let mut condition = self.condition(&alternative, &mut local)?;
-                let (head, body_variables) =
-                    self.element_head(element.get().literal(), &mut local, &mut condition)?;
-                let key = match &boolean {
-                    None => HeadElementKey::Atom,
-                    Some(origins) => {
-                        self.budget.charge(
-                            ExpansionResource::Origins,
-                            origins.len() as u128,
-                            self.location,
-                        )?;
-                        HeadElementKey::BooleanOccurrences(origins.clone())
-                    }
-                };
-                self.variable_limit(&local)?;
-                local.safety(self.location)?;
-                elements.push(Element {
-                    key,
-                    head,
-                    condition,
-                    body_variables,
-                    variables: local.count,
-                });
+            for literal in self.literal_alternatives(element.get().literal())? {
+                for alternative in self.condition_alternatives(element.get().condition())? {
+                    let mut local = variables.clone();
+                    self.head_global_literal(&literal, &mut local)?;
+                    let mut condition = self.condition(&alternative, &mut local)?;
+                    let (head, body_variables) =
+                        self.element_head(&literal, &mut local, &mut condition)?;
+                    let key = match &boolean {
+                        None => HeadElementKey::Atom,
+                        Some(origins) => {
+                            self.budget.charge(
+                                ExpansionResource::Origins,
+                                origins.len() as u128,
+                                self.location,
+                            )?;
+                            HeadElementKey::BooleanOccurrences(origins.clone())
+                        }
+                    };
+                    self.variable_limit(&local)?;
+                    local.safety(self.location)?;
+                    elements.push(Element {
+                        family,
+                        key,
+                        head,
+                        condition,
+                        body_variables,
+                        variables: local.count,
+                    });
+                }
             }
-        }
-        if source_booleans.next().is_some() {
-            return Err(FormulaFailure::ChoiceSource {
-                location: self.location,
-            });
         }
         Ok(elements)
     }
@@ -1138,6 +1254,7 @@ impl Compiler<'_> {
             error,
             location: self.location,
         })?;
+        let predicate = self.shared(predicate);
         AtomPattern::new(predicate, terms).map_err(|error| {
             AdmissionFailure::Construction {
                 error,

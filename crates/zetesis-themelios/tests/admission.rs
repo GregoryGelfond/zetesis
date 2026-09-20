@@ -4,7 +4,8 @@
 use themelios_base::source::SourceId;
 use zetesis_core::{Filter, Term, Value};
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, Admitted, InputLimit, ProfileFeature, admit,
+    AdmissionFailure, AdmissionOptions, Admitted, ExpansionLimits, ExpansionUsage, InputLimit,
+    ProfileFeature, admit, admit_extended,
 };
 
 fn accepted(text: &str) -> Admitted {
@@ -460,4 +461,30 @@ fn closed_function_and_tuple_facts_have_complete_distinct_values() {
         };
         assert_eq!(actual, spelling);
     }
+}
+
+#[test]
+fn extended_admission_reports_the_expansion_it_used() {
+    let limits = ExpansionLimits::default();
+    let admitted = admit_extended(
+        "p(1..3). q(X) :- p(X).".to_owned(),
+        AdmissionOptions::default(),
+        limits,
+    )
+    .unwrap();
+    let usage = admitted.expansion_usage();
+    assert!(usage.term_work > 0);
+    assert!(usage.term_work <= limits.max_term_work);
+    assert!(usage.templates >= admitted.program().templates().len());
+    assert!(usage.templates <= limits.max_templates);
+    assert!(usage.values >= 3);
+    assert!(usage.origin_locations >= admitted.program().templates().len());
+}
+
+#[test]
+fn plain_admission_performs_no_expansion() {
+    assert_eq!(
+        *accepted("p :- q.").expansion_usage(),
+        ExpansionUsage::default()
+    );
 }

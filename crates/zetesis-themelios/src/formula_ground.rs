@@ -1,6 +1,7 @@
 //! Finite substitutions and support-preserving conditional-choice formulas.
 
 mod objectives;
+mod arithmetic;
 mod scoped_body;
 pub(crate) use scoped_body::source_activity;
 mod atoms;
@@ -55,6 +56,8 @@ pub(crate) fn ground(
     use crate::GroundingPhase;
 
     let profile = Profile::new(observer);
+    let keyed_constraints = prepared.keyed_constraints;
+    let key_analysis = prepared.key_analysis;
     let Instantiation {
         projection,
         builder,
@@ -64,6 +67,7 @@ pub(crate) fn ground(
         analysis,
         analyzed,
         objective_declarations,
+        warnings,
     } = instantiate(
         prepared, limits, budget, location, &profile, count_plan, options,
     )?;
@@ -83,6 +87,7 @@ pub(crate) fn ground(
         |collector| collector.finish(&theory),
     );
     Ok(Compiled {
+        warnings,
         projection,
         analysis_basis,
         analysis,
@@ -94,6 +99,9 @@ pub(crate) fn ground(
         objectives,
         objective_origins,
         objective_declarations,
+        keyed_constraints,
+        key_analysis,
+        expansion: budget.usage(),
     })
 }
 
@@ -108,6 +116,7 @@ struct Instantiation<'a> {
     analysis: themelios_analysis::Analysis,
     analyzed: themelios_program::program::Program,
     objective_declarations: Vec<Location>,
+    warnings: Vec<crate::FormulaWarning>,
 }
 
 fn instantiate<'a>(
@@ -122,22 +131,13 @@ fn instantiate<'a>(
     use crate::GroundingPhase;
 
     let mut counters = Counters::observed(profile.work());
-    let catalog = profile.phase(GroundingPhase::SupportCompletion, None, || {
-        formula_support::build(&prepared, limits, budget, &mut counters, location)
-    })?;
-    let completed = profile.phase(GroundingPhase::SupportCompletion, None, || {
-        catalog.snapshot(limits, &mut counters, location)
-    })?;
-    let queries = profile.phase(GroundingPhase::SupportCompletion, None, || {
-        completed.queries(options.joins, limits, &counters, location)
-    })?;
-    let support = queries.support();
     let domains = if options.domains.is_some() {
         profile.phase(GroundingPhase::DomainAnalysis, None, || {
             crate::formula_domains::analyze(
                 &prepared,
                 options.domains,
                 limits,
+                budget,
                 &mut counters,
                 profile,
                 location,
@@ -147,9 +147,37 @@ fn instantiate<'a>(
         profile.domain_analysis(crate::DomainObservation::Disabled);
         None
     };
+    let catalog = profile.phase(GroundingPhase::SupportCompletion, None, || {
+        formula_support::build(
+            &prepared,
+            domains.as_ref(),
+            limits,
+            budget,
+            &mut counters,
+            location,
+        )
+    })?;
+    let completed = profile.phase(GroundingPhase::SupportCompletion, None, || {
+        catalog.snapshot(limits, &mut counters, location)
+    })?;
+    let queries = profile.phase(GroundingPhase::SupportCompletion, None, || {
+        completed.queries(options.joins, limits, &counters, location)
+    })?;
+    let support = queries.support();
+    let mut warnings = profile.phase(GroundingPhase::SupportCompletion, None, || {
+        arithmetic::prepare(&prepared, support, limits, budget, &mut counters)
+    })?;
     let (objectives, objective_origins) =
         profile.phase(GroundingPhase::ObjectiveActivation, None, || {
-            objectives::prepare(&prepared, &queries, limits, budget, &mut counters, location)
+            objectives::prepare(
+                &prepared,
+                &queries,
+                limits,
+                budget,
+                &mut counters,
+                location,
+                &mut warnings,
+            )
         })?;
     let projection =
         projection::prepare(&prepared, &queries, limits, budget, &mut counters, location)?;
@@ -168,33 +196,7 @@ fn instantiate<'a>(
         profile.phase(
             GroundingPhase::RuleInstantiation,
             Some(rule.location),
-            || {
-                if crate::formula_factor::rule(&mut builder, rule, support)? {
-                    return Ok(());
-                }
-                let guards = if let Some(domains) = &domains {
-                    support.domain_guards(
-                        rule,
-                        domains.for_rule(index, rule)?,
-                        limits,
-                        builder.budget,
-                        &mut builder.counters,
-                    )?
-                } else {
-                    None
-                };
-                let mut outer = Join::domain_rule(rule, support, guards.as_ref(), builder.budget)?;
-                while let Some(row) =
-                    outer.next_row(limits, builder.budget, &mut builder.counters, rule.location)?
-                {
-                    if row.passes {
-                        builder.rule(rule, &row.values, support)?;
-                    } else {
-                        builder.validate_body(&rule.body, &row.values, support, rule.location)?;
-                    }
-                }
-                Ok::<_, FormulaFailure>(())
-            },
+            || builder.instantiate_rule(rule, index, domains.as_ref(), support),
         )?;
     }
     drop(domains);
@@ -207,6 +209,7 @@ fn instantiate<'a>(
         analysis: prepared.analysis,
         analyzed: prepared.analyzed,
         objective_declarations: prepared.objective_declarations,
+        warnings: warnings.into_values(),
     })
 }
 
@@ -274,6 +277,40 @@ impl GroundAggregate {
     }
 }
 impl Builder<'_> {
+    fn instantiate_rule(
+        &mut self,
+        rule: &RuleIr,
+        index: usize,
+        domains: Option<&crate::formula_domains::Domains<'_>>,
+        support: &Support,
+    ) -> Result<(), FormulaFailure> {
+        if crate::formula_factor::rule(self, rule, support)? {
+            return Ok(());
+        }
+        let guards = if let Some(domains) = domains {
+            support.domain_guards(
+                rule,
+                domains.for_rule(index, rule)?,
+                self.limits,
+                self.budget,
+                &mut self.counters,
+            )?
+        } else {
+            None
+        };
+        let mut outer = Join::domain_rule(rule, support, guards.as_ref(), self.budget)?;
+        while let Some(row) =
+            outer.next_row(self.limits, self.budget, &mut self.counters, rule.location)?
+        {
+            if row.passes {
+                self.rule(rule, &row.values, support)?;
+            } else {
+                self.validate_body(&rule.body, &row.values, support, rule.location)?;
+            }
+        }
+        Ok(())
+    }
+
     fn empty<'a>(
         limits: &'a FormulaLimits,
         budget: &'a mut Budget,
@@ -287,7 +324,7 @@ impl Builder<'_> {
             catalog: atoms::Catalog::default(),
             metadata: metadata::Metadata::default(),
             nodes: Vec::new(),
-            node_indices: nodes::Index::new(),
+            node_indices: nodes::Index::default(),
             roots: Vec::new(),
             origins: Vec::new(),
             counters,
@@ -513,17 +550,6 @@ impl Builder<'_> {
         location: Location,
     ) -> Result<usize, FormulaFailure> {
         self.work(location)?;
-        let mut bytes = pattern.predicate().name().len() as u128;
-        for term in pattern.terms() {
-            bytes += value_bytes(assignment.resolve(term, location)?);
-        }
-        // Conservative symbolic allowance for lookup and retained atom/index
-        // storage. This cumulative admission charge is not live heap occupancy.
-        self.budget.charge(
-            ExpansionResource::ScalarBytes,
-            bytes.saturating_mul(3),
-            location,
-        )?;
         let key =
             pattern
                 .key(assignment.slots())
@@ -542,6 +568,17 @@ impl Builder<'_> {
             index
         } else {
             ceiling(atom_resource, required, atom_limit as u128, location)?;
+            // A new atom's copied payload, index entry and catalog cell: the
+            // cumulative allowance counts each atom once, not each proposal.
+            let mut bytes = pattern.predicate().name().len() as u128;
+            for term in pattern.terms() {
+                bytes += value_bytes(assignment.resolve(term, location)?);
+            }
+            self.budget.charge(
+                ExpansionResource::ScalarBytes,
+                bytes.saturating_mul(3),
+                location,
+            )?;
             if matches!(self.purpose, Purpose::Theory) {
                 self.budget
                     .charge(ExpansionResource::Origins, 1, location)?;

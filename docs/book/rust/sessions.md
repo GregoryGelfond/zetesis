@@ -82,6 +82,13 @@ completion result. The ordinary CLI's `--stats`, JSON `query_execution` object
 and failure reports view this same receipt. These named capacity observations
 are not process RSS or evidence of a speedup.
 
+`SemanticOutcome::closure_execution()` sums, over the independent CPU closure
+route's completed checks, the counters each check returns: rounds, charged
+work, derived atoms and the lazy route's join counters, with the largest
+admitted closure envelope. Stopped checks are counted but contribute no work,
+because a stopped check returns no counters. The shared, device and formula
+routes leave it absent and expose their own receipts.
+
 ## Formula membership plans
 
 An ordinary CPU formula session with `Oracle::Auto` attempts an applicable class
@@ -108,8 +115,10 @@ selected plan; the search statistics retain attempted construction, restrictions
 and checking work. Use `Oracle::Countermodel` to select the general comparison
 path explicitly. Explicit device execution currently retains that general path.
 
-General completion lazily constructs one `PreparedReduct` for the exact original
-theory. Subsequent candidates supply membership and authenticated original-truth
+General completion under the clauses method lazily constructs one
+`PreparedReduct` for the exact original theory; under the default regions
+method the proper-subset query is a region tree over the original formulas and
+no encoding is built. Subsequent candidates supply membership and authenticated original-truth
 parameters, rather than rebuilding the encoding. Scalar checking reuses one
 workspace; Rayon workers borrow the shared encoding with disjoint query state.
 A workspace retains a complete watch index and completed unconditional unit

@@ -64,18 +64,33 @@ pub(crate) fn write(
     source: &Source,
     errors: &[SyntaxError],
 ) -> fmt::Result {
+    write_diagnostics(
+        output,
+        name,
+        source,
+        errors.iter().map(ToDiagnostic::to_diagnostic),
+    )
+}
+
+/// Render typed diagnostics lazily against one original source and one index.
+pub(crate) fn write_diagnostics(
+    output: &mut fmt::Formatter<'_>,
+    name: &str,
+    source: &Source,
+    diagnostics: impl Iterator<Item = Diagnostic>,
+) -> fmt::Result {
     let context = Context {
         name,
         source,
         index: LineIndex::of(source),
     };
-    for error in errors {
-        write_diagnostic(output, &error.to_diagnostic(), &context)?;
+    for diagnostic in diagnostics {
+        write_diagnostic(output, &diagnostic, &context)?;
     }
     Ok(())
 }
 
-fn write_diagnostic(
+pub(crate) fn write_diagnostic(
     output: &mut fmt::Formatter<'_>,
     diagnostic: &Diagnostic,
     sources: &impl Sources,

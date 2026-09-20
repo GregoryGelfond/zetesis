@@ -27,6 +27,9 @@ pub struct PartialReport {
     pub summary_published: bool,
     /// Gate tuples discovered by the closure candidate generator.
     pub discovered_gate_atoms: usize,
+    /// Expansion charges relational admission accepted; absent for the
+    /// formula route and before admission.
+    pub expansion: Option<zetesis_themelios::ExpansionUsage>,
     /// Necessary closure-candidate restrictions, including interrupted work.
     pub candidate_statistics: Option<zetesis_cpu::CandidateStatistics>,
     /// Original candidate/reduct accounting, when that stream was initialized.
@@ -37,6 +40,8 @@ pub struct PartialReport {
     pub lazy_execution: Option<crate::LazyExecutionStatistics>,
     /// Shared CPU source/world work, including incomplete batch progress.
     pub shared_execution: Option<crate::SharedExecutionStatistics>,
+    /// Independent CPU closure counters of the checks that completed.
+    pub closure_execution: Option<crate::ClosureExecutionStatistics>,
     /// Prepared independent CPU ownership receipts and any snapshot fault.
     pub query_execution: Option<crate::QueryExecutionObservation>,
     /// Whether semantic search established an optimum, independently of delivery.
@@ -104,6 +109,7 @@ pub(crate) struct Progress {
     pub(crate) stop: Option<crate::PublicationStop>,
     pub(crate) publication: crate::Publication,
     pub(crate) phase_timings: Option<PhaseTimings>,
+    pub(crate) expansion: Option<zetesis_themelios::ExpansionUsage>,
 }
 
 impl Progress {
@@ -116,6 +122,7 @@ impl Progress {
                 summary: false,
             },
             phase_timings: None,
+            expansion: None,
         }
     }
 
@@ -152,10 +159,12 @@ impl Progress {
             formula_execution: semantic.formula_execution().cloned(),
             lazy_execution: semantic.lazy_execution().cloned(),
             shared_execution: semantic.shared_execution().cloned(),
+            closure_execution: semantic.closure_execution().cloned(),
             query_execution: semantic.query_execution().cloned(),
             optimum_proved: semantic.optimum_proved(),
             optimization: semantic.incumbent().cloned(),
             phase_timings: self.phase_timings,
+            expansion: self.expansion,
         })
     }
 
@@ -175,6 +184,7 @@ impl Progress {
                     semantic,
                     publication: self.publication,
                     phase_timings: self.phase_timings,
+                    expansion: self.expansion,
                 },
             )));
         }
@@ -205,6 +215,7 @@ impl Progress {
             summary_published: self.publication.summary,
             discovered_gate_atoms: semantic
                 .map_or(0, crate::SemanticOutcome::discovered_gate_atoms),
+            expansion: self.expansion,
             candidate_statistics: semantic.and_then(crate::SemanticOutcome::candidate_statistics),
             countermodel_statistics: semantic
                 .and_then(crate::SemanticOutcome::countermodel_statistics)
@@ -217,6 +228,9 @@ impl Progress {
                 .cloned(),
             shared_execution: semantic
                 .and_then(crate::SemanticOutcome::shared_execution)
+                .cloned(),
+            closure_execution: semantic
+                .and_then(crate::SemanticOutcome::closure_execution)
                 .cloned(),
             query_execution: semantic
                 .and_then(crate::SemanticOutcome::query_execution)

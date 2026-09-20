@@ -124,7 +124,9 @@ fn finite_meets_avoid_real_prefixes_and_probes() {
         assert_eq!(actual, expected);
         assert!(off.disabled.get());
         assert_eq!(on.status.get(), Some(Status::FixedPoint));
-        assert_eq!(on.support.get(), off.support.get());
+        // Completion reads the same narrowed rows as the final instantiation.
+        assert!(on.support.get().domain_rejected_rows.unwrap() > 0);
+        assert!(on.support.get().join_rows < off.support.get().join_rows);
         let before = *off.rules.borrow().last().unwrap();
         let after = *on.rules.borrow().last().unwrap();
         // Eight a/b values, but only four occur in the corresponding c columns.
@@ -179,8 +181,36 @@ fn eligible_domain_guards_preserve_complete_grounding() {
             .unwrap(),
         );
         assert_eq!(on.status.get(), Some(Status::FixedPoint), "{source}");
-        assert_eq!(on.support.get(), off.support.get());
+        assert!(on.support.get().join_rows <= off.support.get().join_rows);
     }
+}
+
+#[test]
+fn completion_reads_the_narrowed_rows() {
+    // The candidates are prepared once, with the analysis; the first
+    // completion round rejects the 198 rows X < 3 excludes, and the delta
+    // round offers d/1 no new row.
+    let source = "d(1..200). p(X) :- d(X), X < 3. q(X) :- p(X).";
+    let off = Observation::default();
+    let on = Observation::default();
+    equal(
+        &ground(source, JoinStrategy::Indexed, None, &off).unwrap(),
+        &ground(
+            source,
+            JoinStrategy::Indexed,
+            Some(DomainLimits::default()),
+            &on,
+        )
+        .unwrap(),
+    );
+    let (before, after) = (off.support.get(), on.support.get());
+    assert_eq!(after.domain_rejected_rows, Some(198));
+    assert_eq!(after.join_rows, before.join_rows);
+    // Without the analysis X < 3 is evaluated on both sides of every offered
+    // row; with it, on the two rows the guard admits.
+    assert_eq!(before.expression_evaluations, Some(400));
+    assert_eq!(after.expression_evaluations, Some(4));
+    assert_eq!(on.work.get().domain_excluded_values, Some(198));
 }
 
 #[test]
@@ -262,23 +292,144 @@ fn richer_source_keeps_the_complete_join() {
 }
 
 #[test]
-fn optional_analysis_never_suppresses_authored_arithmetic() {
+fn optional_analysis_changes_no_arithmetic_verdict() {
+    // 1 = 2 excludes the only substitution, so nothing in it is reached with
+    // or without the analysis; a reached operation refuses either way.
     for source in ["d(0).p:-d(X),1=2,1/X=1.", "d(0).p:-d(X),1=2,not q(1/X)."] {
-        for options in [None, Some(DomainLimits::default())] {
-            assert!(
-                matches!(
-                    ground(
-                        source,
-                        JoinStrategy::Indexed,
-                        options,
-                        &Observation::default()
-                    ),
-                    Err(FormulaFailure::Expansion(
-                        ExpansionFailure::Evaluation { .. }
-                    ))
-                ),
-                "{source}"
-            );
-        }
+        let off = Observation::default();
+        let on = Observation::default();
+        equal(
+            &ground(source, JoinStrategy::Indexed, None, &off).unwrap(),
+            &ground(
+                source,
+                JoinStrategy::Indexed,
+                Some(DomainLimits::default()),
+                &on,
+            )
+            .unwrap(),
+        );
     }
+    for options in [None, Some(DomainLimits::default())] {
+        assert!(matches!(
+            ground(
+                "d(0).p:-d(X),1/X=1.",
+                JoinStrategy::Indexed,
+                options,
+                &Observation::default()
+            ),
+            Err(FormulaFailure::Expansion(
+                ExpansionFailure::Evaluation { .. }
+            ))
+        ));
+    }
+}
+
+#[test]
+fn a_comparison_over_one_variable_narrows_its_candidates() {
+    // X < 3 is defined and false at 198 of the 200 candidates the domain of
+    // d/1 offers, so those rows are rejected before binding; the theory is
+    // the one the complete join grounds.
+    let source = "d(1..200). p(X) :- d(X), X < 3.";
+    let off = Observation::default();
+    let on = Observation::default();
+    let complete = ground(source, JoinStrategy::Indexed, None, &off).unwrap();
+    let narrowed = ground(
+        source,
+        JoinStrategy::Indexed,
+        Some(DomainLimits::default()),
+        &on,
+    )
+    .unwrap();
+    equal(&complete, &narrowed);
+    assert_eq!(
+        narrowed
+            .atoms()
+            .iter()
+            .filter(|atom| atom.predicate().name() == "p")
+            .count(),
+        2
+    );
+    assert_eq!(on.work.get().domain_excluded_values, Some(198));
+    let rules = *on.rules.borrow().last().unwrap();
+    assert_eq!(rules.domain_rejected_rows, Some(198));
+    assert_eq!(rules.binding_snapshots, Some(2));
+}
+
+#[test]
+fn domain_narrowing_preserves_undefined_family_evidence() {
+    // 1/X = 1 is undefined at X = 0 and false at X = 2, so the analysis
+    // excludes 2 alone; X != 0 then excludes 0. The same substitution is
+    // reached, and omitted with a warning, when no comparison excludes it.
+    let source = "d(0..2). p(X) :- d(X), 1/X = 1, X != 0.";
+    let on = Observation::default();
+    let narrowed = ground(
+        source,
+        JoinStrategy::Indexed,
+        Some(DomainLimits::default()),
+        &on,
+    )
+    .unwrap();
+    equal(
+        &ground(source, JoinStrategy::Indexed, None, &Observation::default()).unwrap(),
+        &narrowed,
+    );
+    assert_eq!(on.work.get().domain_excluded_values, Some(2));
+    assert!(narrowed.warnings().is_empty());
+    let mixed = ground(
+        "d(0..2). p(X) :- d(X), 1/X = 1.",
+        JoinStrategy::Indexed,
+        Some(DomainLimits::default()),
+        &Observation::default(),
+    )
+    .unwrap();
+    assert_eq!(mixed.warnings().len(), 1);
+    // Different source spans are expected; emitted atoms and formulas agree.
+    assert_eq!(mixed.atoms(), narrowed.atoms());
+    assert_eq!(mixed.theory().nodes(), narrowed.theory().nodes());
+    assert_eq!(mixed.theory().roots(), narrowed.theory().roots());
+}
+
+#[test]
+fn a_comparison_over_two_variables_narrows_no_candidate() {
+    // X < Y reads two variables; it is decided in the join, where the
+    // exclusion rule already prunes it, and no candidate of either is
+    // excluded on its own.
+    let source = "d(1..3). p(X,Y) :- d(X), d(Y), X < Y.";
+    let on = Observation::default();
+    let narrowed = ground(
+        source,
+        JoinStrategy::Indexed,
+        Some(DomainLimits::default()),
+        &on,
+    )
+    .unwrap();
+    equal(
+        &ground(source, JoinStrategy::Indexed, None, &Observation::default()).unwrap(),
+        &narrowed,
+    );
+    assert_eq!(on.work.get().domain_excluded_values, Some(0));
+    assert_eq!(on.work.get().domain_guard_rows, Some(0));
+}
+
+#[test]
+fn a_domain_that_admits_every_row_restricts_nothing() {
+    // The domain of d/1 is what d/1 offers, so a guard over it could reject
+    // no row and none is prepared.
+    let source = "d(1..8). e(1..8). p(X,Y) :- d(X), e(Y).";
+    let on = Observation::default();
+    let narrowed = ground(
+        source,
+        JoinStrategy::Indexed,
+        Some(DomainLimits::default()),
+        &on,
+    )
+    .unwrap();
+    equal(
+        &ground(source, JoinStrategy::Indexed, None, &Observation::default()).unwrap(),
+        &narrowed,
+    );
+    assert_eq!(on.status.get(), Some(Status::FixedPoint));
+    let rules = *on.rules.borrow().last().unwrap();
+    assert_eq!(rules.domain_guard_rows, Some(0));
+    assert_eq!(rules.domain_guard_checks, Some(0));
 }

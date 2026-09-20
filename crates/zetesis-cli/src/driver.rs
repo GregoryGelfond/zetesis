@@ -33,6 +33,9 @@ pub struct Report {
     pub interruption: Option<Interruption>,
     /// Gate tuples discovered by the candidate generator.
     pub discovered_gate_atoms: usize,
+    /// Expansion charges relational admission accepted, each under its
+    /// ceiling; absent for the formula route.
+    pub expansion: Option<zetesis_themelios::ExpansionUsage>,
     /// Necessary closure-candidate restrictions, including interrupted work.
     pub candidate_statistics: Option<zetesis_cpu::CandidateStatistics>,
     /// Cumulative countermodel accounting when available; absent for closure
@@ -46,6 +49,9 @@ pub struct Report {
     pub lazy_execution: Option<crate::LazyExecutionStatistics>,
     /// Shared CPU source and per-world work, including failed-batch prefixes.
     pub shared_execution: Option<crate::SharedExecutionStatistics>,
+    /// Independent CPU closure counters summed over completed checks; absent
+    /// for the shared, device and formula routes.
+    pub closure_execution: Option<crate::ClosureExecutionStatistics>,
     /// Prepared independent CPU ownership receipts and any snapshot fault.
     pub query_execution: Option<crate::QueryExecutionObservation>,
     /// Whether semantic search established an optimum, independently of delivery.
@@ -70,6 +76,8 @@ pub enum RunError {
         /// Requested whole seconds, retained without an I/O attribution.
         seconds: u64,
     },
+    /// The host refused the thread that would observe the process deadline.
+    DeadlineTimer(io::Error),
     /// A complete observation could not be evaluated or rendered.
     Observation(zetesis_themelios::observation::Error),
     /// A bounded JSON model or terminal record could not be constructed.
@@ -115,6 +123,15 @@ pub enum RunError {
     },
     /// The requested shared source policy needs relational lazy CPU execution.
     UnsupportedSourceBatching,
+    /// The workers' closure allowances together exceed the collective ceiling.
+    ClosureReservation {
+        /// Requested closure workers.
+        workers: usize,
+        /// Per-closure allowance, given or derived.
+        max_closure_bytes: usize,
+        /// Collective ceiling.
+        max_closure_batch_bytes: usize,
+    },
     /// An already prepared representation cannot honor the requested strategy.
     PreparedInput {
         /// Representation supplied by the caller.
@@ -146,6 +163,8 @@ pub enum RunError {
     LazyGpu(zetesis_cpu::lazy::Failure<zetesis_wgpu::GpuError>),
     /// Cumulative lazy execution counters could not represent another batch.
     LazyStatisticsOverflow,
+    /// Cumulative independent closure counters could not represent another check.
+    ClosureStatisticsOverflow,
     /// Concrete shared CPU evaluation violated its round protocol.
     SharedCpu(zetesis_cpu::lazy::shared::Cause),
     /// Static closure decoding refused its words or selected-position storage.
@@ -181,6 +200,7 @@ impl fmt::Display for RunError {
             Self::Projection(error) => error.fmt(f),
             Self::Input(error) => write!(f, "standard input ('-'): {error}"),
             Self::TimeLimitRange { seconds } => write!(f, "--time-limit {seconds}: time limit exceeds the platform clock range"),
+            Self::DeadlineTimer(error) => write!(f, "--time-limit: the deadline timer could not be started: {error}"),
             Self::MixedStandardInput => f.write_str(
                 "standard input ('-') must be the only input; mixed or repeated stdin roots are unsupported",
             ),
@@ -209,6 +229,15 @@ impl fmt::Display for RunError {
             Self::PreparedInput { profile, oracle, grounder } => write!(f,
                 "prepared {profile:?} cannot honor oracle {} with grounder {}", oracle.label(), grounder.label()),
             Self::UnsupportedSourceBatching => f.write_str("shared source batching requires the relational closure route with lazy/auto grounding and cpu/auto backend"),
+            Self::ClosureReservation {
+                workers,
+                max_closure_bytes,
+                max_closure_batch_bytes,
+            } => write!(
+                f,
+                "--workers {workers} at --max-closure-bytes {max_closure_bytes} need {} bytes, above --max-closure-batch-bytes {max_closure_batch_bytes}; use fewer workers, a smaller allowance, or a larger collective ceiling",
+                (*workers as u128) * (*max_closure_bytes as u128)
+            ),
             Self::SharedCpu(cause) => cause.fmt(f),
             Self::Formula(error) => error.fmt(f),
             Self::FormulaAdmission(error) => error.fmt(f),
@@ -225,6 +254,9 @@ impl fmt::Display for RunError {
             #[cfg(feature = "gpu")]
             Self::LazyGpu(error) => error.fmt(f),
             Self::LazyStatisticsOverflow => f.write_str("lazy execution statistics overflow"),
+            Self::ClosureStatisticsOverflow => {
+                f.write_str("closure execution statistics overflow")
+            }
             Self::CompletionUnavailable => f.write_str("driver report requires established search completion"),
             Self::Words(error) => error.fmt(f),
             Self::Model(error) => error.fmt(f),
@@ -285,6 +317,7 @@ impl std::error::Error for RunError {
             Self::QueryObservation(error) => Some(error.as_ref()),
             Self::CompletionPool(error) => Some(error),
             Self::Output(error) => Some(error),
+            Self::DeadlineTimer(error) => Some(error),
             Self::ExecutionObservation(error) => Some(error.as_ref()),
             Self::PublicationStopped(error) => Some(error),
             Self::Observation(error) => Some(error),
@@ -295,7 +328,9 @@ impl std::error::Error for RunError {
             | Self::UnsupportedCombination { .. }
             | Self::UnsupportedOracle { .. }
             | Self::UnsupportedSourceBatching
+            | Self::ClosureReservation { .. }
             | Self::LazyStatisticsOverflow
+            | Self::ClosureStatisticsOverflow
             | Self::CompletionUnavailable
             | Self::FormulaBatchShape { .. }
             | Self::CandidateStreamNotExhausted => None,
@@ -717,8 +752,18 @@ impl From<zetesis_solve::SolveError> for RunError {
             SolveError::CompletionPool(error) => Self::CompletionPool(error),
             SolveError::BackendUnavailable => Self::BackendUnavailable,
             SolveError::UnsupportedSourceBatching => Self::UnsupportedSourceBatching,
+            SolveError::ClosureReservation {
+                workers,
+                max_closure_bytes,
+                max_closure_batch_bytes,
+            } => Self::ClosureReservation {
+                workers,
+                max_closure_bytes,
+                max_closure_batch_bytes,
+            },
             SolveError::Static(error) => Self::Static(error),
             SolveError::LazyStatisticsOverflow => Self::LazyStatisticsOverflow,
+            SolveError::ClosureStatisticsOverflow => Self::ClosureStatisticsOverflow,
             SolveError::SharedCpu(error) => Self::SharedCpu(error),
             SolveError::Words(error) => Self::Words(error),
             SolveError::Model(error) => Self::Model(error),

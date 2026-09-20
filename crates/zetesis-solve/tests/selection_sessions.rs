@@ -12,9 +12,9 @@ use zetesis_solve::{
     PreparedInput, SearchState, SemanticOutcome, Session, SolveConfig,
 };
 
-const PERMITTED_CANDIDATES: u64 = 192;
+const PERMITTED_CANDIDATES: u64 = 24;
 const ANSWERS: usize = 24;
-const CARRIER_ATOMS: usize = 8;
+const CARRIER_ATOMS: usize = 5;
 
 type Family = BTreeSet<Vec<Atom>>;
 
@@ -188,8 +188,9 @@ fn sessions_preserve_the_complete_typed_family() {
     let expected = fixture.family();
     assert_eq!(expected.len(), ANSWERS);
     // Four complete typed values under two signed gate predicates give eight
-    // carrier atoms. Only the p(1)/-p(1) pair is forbidden, so 3 * 2^6 = 192
-    // proposals remain. Unsupported negative typed atoms still require rejection.
+    // symbolic carrier atoms, of which the three negative atoms no rule
+    // derives are never offered, leaving five. Only the p(1)/-p(1) pair is
+    // forbidden, so 3 * 2^3 = 24 proposals remain.
     assert_eq!(fixture.program.domain().len(), 4);
     assert_eq!(fixture.program.gate_predicates().len(), 2);
     for config in configurations() {

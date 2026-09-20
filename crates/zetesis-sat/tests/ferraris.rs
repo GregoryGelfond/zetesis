@@ -6,6 +6,20 @@ use proptest::prelude::*;
 use zetesis_ferraris::{AdmissionLimits, Interpretation, Node, Theory, Verdict};
 use zetesis_sat::{Check, Control, Incomplete, Limits, StableModels, check};
 
+/// Enumerate by the clause forms, the subject of the tests below.
+fn by_clauses(
+    theory: &zetesis_ferraris::Theory,
+    limits: zetesis_sat::Limits,
+    control: zetesis_sat::Control,
+) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
+    zetesis_sat::StableModels::with_method(
+        theory,
+        zetesis_sat::SearchMethod::Clauses,
+        limits,
+        control,
+    )
+}
+
 fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
     Theory::new(atoms, nodes, roots, AdmissionLimits::default()).unwrap()
 }
@@ -212,7 +226,7 @@ proptest! {
 #[test]
 fn exact_candidate_ceiling_allows_final_unsat_query_and_failure_is_fused() {
     let input = theory(1, vec![Node::Atom(0)], vec![0]);
-    let mut exact = StableModels::new(
+    let mut exact = by_clauses(
         &input,
         Limits {
             max_candidates: 1,
@@ -225,7 +239,7 @@ fn exact_candidate_ceiling_allows_final_unsat_query_and_failure_is_fused() {
     assert!(exact.next().is_none());
     assert!(exact.exhausted());
     assert_eq!(exact.statistics().candidate_queries, 2);
-    let mut refused = StableModels::new(
+    let mut refused = by_clauses(
         &input,
         Limits {
             max_candidates: 0,
@@ -241,7 +255,7 @@ fn exact_candidate_ceiling_allows_final_unsat_query_and_failure_is_fused() {
     assert!(!refused.exhausted());
     assert!(refused.next().is_none());
     let contradiction = theory(0, vec![Node::False], vec![0]);
-    let mut no_candidates = StableModels::new(
+    let mut no_candidates = by_clauses(
         &contradiction,
         Limits {
             max_candidates: 0,
@@ -270,7 +284,7 @@ fn empty_theory_exhausts_with_one_cnf_clause() {
         },
         ..Default::default()
     };
-    let mut exact = StableModels::new(&input, limits, Control::default()).unwrap();
+    let mut exact = by_clauses(&input, limits, Control::default()).unwrap();
     assert!(exact.next().unwrap().unwrap().atoms().next().is_none());
     assert!(exact.next().is_none());
     assert!(exact.exhausted());
@@ -295,7 +309,7 @@ fn verified_models_precede_the_history_limit_stop() {
         ],
         vec![3, 6],
     );
-    let mut capped = StableModels::new(
+    let mut capped = by_clauses(
         &choice,
         Limits {
             admission: zetesis_sat::AdmissionLimits {
@@ -339,7 +353,7 @@ fn verified_models_precede_the_history_limit_stop() {
 fn verified_model_precedes_the_final_exclusion_work_stop() {
     let input = theory(2, vec![], vec![]);
     let complete = Limits::default();
-    let mut reference = StableModels::new(&input, complete, Control::default()).unwrap();
+    let mut reference = by_clauses(&input, complete, Control::default()).unwrap();
     assert!(reference.next().unwrap().is_ok());
     let after_first = reference.statistics().search.work;
     let bounded = Limits {
@@ -349,7 +363,7 @@ fn verified_model_precedes_the_final_exclusion_work_stop() {
         },
         ..complete
     };
-    let mut limited = StableModels::new(&input, bounded, Control::default()).unwrap();
+    let mut limited = by_clauses(&input, bounded, Control::default()).unwrap();
     assert!(
         limited.next().unwrap().is_ok(),
         "completed proof survives a final blocking-work refusal"
@@ -418,4 +432,21 @@ fn repeated_commuted_classical_gates_fit_one_auxiliary_without_changing_reducts(
     assert!(cursor.exhausted());
     assert_eq!(actual, BTreeSet::from([vec![0], vec![1]]));
     assert_eq!(actual, compare(&input));
+}
+
+/// The standalone check decides membership by the reduct alone, so its
+/// verdict is one of four: stable, not a model, a proper-subset model of
+/// the reduct, or inconclusive. This compiles only while `Check` has those
+/// four cases and no other.
+#[test]
+fn the_check_verdict_has_four_cases() {
+    fn name(check: &Check) -> &'static str {
+        match check {
+            Check::Stable => "stable",
+            Check::NotModel => "not a model",
+            Check::NonMinimal(_) => "a proper-subset model of the reduct",
+            Check::Inconclusive(_) => "inconclusive",
+        }
+    }
+    assert_eq!(name(&Check::Stable), "stable");
 }

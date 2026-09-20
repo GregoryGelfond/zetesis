@@ -109,7 +109,14 @@ impl Execution {
             observations.record(Event::CpuFormula {
                 oracle: options.oracle,
                 grounder: options.grounder,
+                search: options.search,
             })?;
+            if let Some(workers) = options.region_workers() {
+                // The workers decide their leaves themselves; the batched
+                // protocol would check them again.
+                observations.record(Event::ParallelRegions { workers })?;
+                return Ok(Self::Cpu);
+            }
             if options.completion_workers.get() > 1 {
                 observations.record(Event::ExactCompletion {
                     workers: options.completion_workers,
@@ -161,6 +168,7 @@ impl Execution {
             adapter: oracle.info().metadata(),
             projection: oracle.projection(),
             grounder: options.grounder,
+            search: options.search,
             batch_size: options.batch_size,
             completion_workers: options.completion_workers,
         })?;

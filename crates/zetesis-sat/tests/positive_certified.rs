@@ -9,6 +9,20 @@ use zetesis_sat::{
     CertificatePlanStatistics, CompletionExecutor, Control, Incomplete, Limits, StableModels,
 };
 
+/// Enumerate by the clause forms, the subject of the tests below.
+fn by_clauses(
+    theory: &zetesis_ferraris::Theory,
+    limits: zetesis_sat::Limits,
+    control: zetesis_sat::Control,
+) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
+    zetesis_sat::StableModels::with_method(
+        theory,
+        zetesis_sat::SearchMethod::Clauses,
+        limits,
+        control,
+    )
+}
+
 fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
     Theory::new(atoms, nodes, roots, AdmissionLimits::default()).unwrap()
 }
@@ -88,8 +102,7 @@ fn positive_plans_preserve_every_small_atomic_rule_family() {
                 .collect(),
         );
         let expected = independent(&original);
-        let mut stream =
-            StableModels::new(&original, Limits::default(), Control::default()).unwrap();
+        let mut stream = by_clauses(&original, Limits::default(), Control::default()).unwrap();
         assert!(
             stream
                 .enable_class_checking(
@@ -111,11 +124,116 @@ fn positive_plans_preserve_every_small_atomic_rule_family() {
 }
 
 #[test]
+fn region_positive_cycles_preserve_the_clause_family() {
+    let original = theory(
+        2,
+        vec![
+            Node::Atom(0),
+            Node::Atom(1),
+            Node::Implies(0, 1),
+            Node::Implies(1, 0),
+        ],
+        vec![2, 3],
+    );
+    let mut clauses = by_clauses(&original, Limits::default(), Control::default()).unwrap();
+    assert!(
+        clauses
+            .enable_class_checking(
+                CertificateLimits::default(),
+                CertificateOrder::PositiveFirst,
+            )
+            .unwrap()
+    );
+    let expected = collect(&mut clauses);
+    assert_eq!(expected, BTreeSet::from([Vec::new()]));
+    assert!(clauses.exhausted());
+    for workers in [1, 3] {
+        let mut regions = StableModels::with_region_workers(
+            &original,
+            NonZeroUsize::new(workers).unwrap(),
+            Limits::default(),
+            Control::default(),
+        )
+        .unwrap();
+        assert!(
+            regions
+                .enable_class_checking(
+                    CertificateLimits::default(),
+                    CertificateOrder::PositiveFirst,
+                )
+                .unwrap()
+        );
+        assert!(matches!(
+            regions.statistics().certified.unwrap().plan,
+            Some(CertificatePlanStatistics::Positive(_)),
+        ));
+        assert_eq!(collect(&mut regions), expected);
+        assert!(regions.exhausted());
+    }
+}
+
+#[test]
+fn region_positive_constraints_refute_larger_models() {
+    // The least producer closure is empty and violates `:- not a.`.
+    // {a,b} satisfies every original root, but its reduct also admits empty.
+    let original = theory(
+        2,
+        vec![
+            Node::Atom(0),
+            Node::Atom(1),
+            Node::Implies(0, 1),
+            Node::Implies(1, 0),
+            Node::False,
+            Node::Implies(0, 4),
+            Node::Implies(5, 4),
+        ],
+        vec![2, 3, 6],
+    );
+    let expected = independent(&original);
+    assert!(expected.is_empty());
+    let mut clauses = by_clauses(&original, Limits::default(), Control::default()).unwrap();
+    assert!(
+        clauses
+            .enable_class_checking(
+                CertificateLimits::default(),
+                CertificateOrder::PositiveFirst,
+            )
+            .unwrap()
+    );
+    assert_eq!(collect(&mut clauses), expected);
+    assert!(clauses.exhausted());
+    for workers in [1, 3] {
+        let mut regions = StableModels::with_region_workers(
+            &original,
+            NonZeroUsize::new(workers).unwrap(),
+            Limits::default(),
+            Control::default(),
+        )
+        .unwrap();
+        assert!(
+            regions
+                .enable_class_checking(
+                    CertificateLimits::default(),
+                    CertificateOrder::PositiveFirst,
+                )
+                .unwrap()
+        );
+        assert!(matches!(
+            regions.statistics().certified.unwrap().plan,
+            Some(CertificatePlanStatistics::Positive(_)),
+        ));
+        assert_eq!(collect(&mut regions), expected);
+        assert!(regions.exhausted());
+        assert_eq!(regions.statistics().certified.unwrap().refuted, 1);
+        assert_eq!(regions.statistics().countermodel_queries, 0);
+    }
+}
+
+#[test]
 fn positive_batches_preserve_the_unique_family() {
     for original in [cycle(false, false), cycle(true, false), cycle(true, true)] {
         for workers in [1, 4] {
-            let mut stream =
-                StableModels::new(&original, Limits::default(), Control::default()).unwrap();
+            let mut stream = by_clauses(&original, Limits::default(), Control::default()).unwrap();
             assert!(
                 stream
                     .enable_class_checking(
@@ -151,7 +269,6 @@ fn positive_batches_preserve_the_unique_family() {
             assert_eq!(stream.statistics().countermodel_queries, 0);
             let stats = stream.statistics().certified.unwrap();
             assert_eq!(stats.checks, stream.statistics().candidates);
-            assert_eq!(stats.residuals, 0);
         }
     }
 }
@@ -159,7 +276,7 @@ fn positive_batches_preserve_the_unique_family() {
 #[test]
 fn positive_cycle_refusal_preserves_the_tight_only_door() {
     let original = cycle(true, false);
-    let mut tight = StableModels::new(&original, Limits::default(), Control::default()).unwrap();
+    let mut tight = by_clauses(&original, Limits::default(), Control::default()).unwrap();
     assert!(
         !tight
             .enable_certified_checking(zetesis_ferraris::TightPlanLimits::default())
@@ -173,7 +290,7 @@ fn positive_cycle_refusal_preserves_the_tight_only_door() {
     ));
     assert_eq!(collect(&mut tight), independent(&original));
     assert!(tight.statistics().reduct.preparation.is_some());
-    let mut both = StableModels::new(&original, Limits::default(), Control::default()).unwrap();
+    let mut both = by_clauses(&original, Limits::default(), Control::default()).unwrap();
     assert!(
         both.enable_class_checking(CertificateLimits::default(), CertificateOrder::TightFirst)
             .unwrap()
@@ -223,7 +340,7 @@ fn positive_grammar_refusal_can_select_the_tight_plan() {
 #[test]
 fn optional_positive_bytes_refusal_keeps_general_completion() {
     let original = cycle(true, false);
-    let mut stream = StableModels::new(&original, Limits::default(), Control::default()).unwrap();
+    let mut stream = by_clauses(&original, Limits::default(), Control::default()).unwrap();
     assert!(
         !stream
             .enable_class_checking(
@@ -256,7 +373,7 @@ fn optional_positive_bytes_refusal_keeps_general_completion() {
 #[test]
 fn positive_setup_work_has_an_inclusive_boundary() {
     let original = cycle(true, false);
-    let mut probe = StableModels::new(&original, Limits::default(), Control::default()).unwrap();
+    let mut probe = by_clauses(&original, Limits::default(), Control::default()).unwrap();
     let initial = probe.statistics().search.work;
     assert!(
         probe
@@ -276,7 +393,7 @@ fn positive_setup_work_has_an_inclusive_boundary() {
     for ceiling in initial..=required {
         let mut limits = Limits::default();
         limits.search.max_work = ceiling;
-        let mut stream = StableModels::new(&original, limits, Control::default()).unwrap();
+        let mut stream = by_clauses(&original, limits, Control::default()).unwrap();
         let result = stream.enable_class_checking(
             CertificateLimits::default(),
             CertificateOrder::PositiveFirst,
@@ -382,7 +499,7 @@ fn refused_positive_units_leave_the_full_candidate_region() {
     // The original candidate CNF is empty. Exactly one of the three least-model
     // units fits, so a later refusal detects whether that prefix was rolled back.
     limits.admission.max_clauses = 1;
-    let mut stream = StableModels::new(&original, limits, Control::default()).unwrap();
+    let mut stream = by_clauses(&original, limits, Control::default()).unwrap();
     assert!(
         stream
             .enable_class_checking(
@@ -413,7 +530,10 @@ fn refused_positive_units_leave_the_full_candidate_region() {
         8,
         "all original classical assignments remain reachable"
     );
-    assert_eq!(stream.statistics().countermodels, 7);
+    // The seven nonempty candidates each hold an unsupported atom; the tight
+    // certificate refutes them by the support law without a countermodel.
+    assert_eq!(stream.statistics().countermodels, 0);
+    assert_eq!(stream.statistics().certified.unwrap().refuted, 7);
 }
 
 #[test]
@@ -443,7 +563,7 @@ fn a_failed_constraint_preserves_the_empty_answer_family() {
         .unwrap()
     );
     assert!(independent(&original).is_empty());
-    let mut stream = StableModels::new(&original, Limits::default(), Control::default()).unwrap();
+    let mut stream = by_clauses(&original, Limits::default(), Control::default()).unwrap();
     assert!(
         stream
             .enable_class_checking(

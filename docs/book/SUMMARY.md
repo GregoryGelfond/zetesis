@@ -45,6 +45,7 @@
 [Language coverage obligations](reference/language-coverage.md)
 [Validating an implementation change](reference/validation.md)
 [Performance comparisons](reference/performance.md)
+[CPU and Metal execution series](reference/execution-series.md)
 [Reduct execution: CPU and Metal](reference/reduct-execution.md)
 [Prepared grounding: CPU and Metal](reference/prepared-metal.md)
 [Vocabulary](vocabulary.md)

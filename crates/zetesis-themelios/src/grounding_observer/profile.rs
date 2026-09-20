@@ -14,10 +14,11 @@ use super::GroundingObserver;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum GroundingPhase {
-    /// Complete the finite possible-support relation, including its indices.
-    SupportCompletion,
     /// Attempt optional domains over the exact normalized positive source.
     DomainAnalysis,
+    /// Complete the finite possible-support relation and its indices, then
+    /// validate arithmetic families over that complete carrier.
+    SupportCompletion,
     /// Determine active objective templates and construct their program.
     ObjectiveActivation,
     /// Initialize formula storage and the false/true nodes.
@@ -38,8 +39,8 @@ impl GroundingPhase {
     /// This supports fixed-size caller aggregation without enum discriminants
     /// or retention of the individual per-rule callbacks.
     pub const ALL: [Self; 8] = [
-        Self::SupportCompletion,
         Self::DomainAnalysis,
+        Self::SupportCompletion,
         Self::ObjectiveActivation,
         Self::FormulaInitialization,
         Self::RuleInstantiation,
@@ -52,8 +53,8 @@ impl GroundingPhase {
     #[must_use]
     pub const fn label(self) -> &'static str {
         match self {
-            Self::SupportCompletion => "support_completion",
             Self::DomainAnalysis => "domain_analysis",
+            Self::SupportCompletion => "support_completion",
             Self::ObjectiveActivation => "objective_activation",
             Self::FormulaInitialization => "formula_initialization",
             Self::RuleInstantiation => "rule_instantiation",
@@ -153,6 +154,9 @@ pub struct GroundingWork {
     /// Rows rejected before binding by a necessary-domain guard. These rows
     /// have no complete positive continuation in the admitted pure profile.
     pub domain_rejected_rows: Option<u64>,
+    /// Values a comparison over one variable alone excluded from that
+    /// variable's candidates before any row was read.
+    pub domain_excluded_values: Option<u64>,
     /// Existing support rows selected for an attempted pattern match.
     pub join_rows: Option<u64>,
     /// Base relational binding snapshots successfully copied by the join cursor.
@@ -160,8 +164,6 @@ pub struct GroundingWork {
     /// These may contain placeholders for later generated assignments. This is
     /// not the number of completed generated bindings or emitted ground rules.
     pub binding_snapshots: Option<u64>,
-    /// Expression nodes visited while checking whether comparison inputs are bound.
-    pub readiness_nodes: Option<u64>,
     /// Expression evaluations entered, including ones that subsequently fail.
     pub expression_evaluations: Option<u64>,
     /// Expression operations admitted by the work ceiling, including failed operations.
@@ -201,9 +203,9 @@ impl Default for GroundingWork {
             domain_guard_rows: Some(0),
             domain_guard_checks: Some(0),
             domain_rejected_rows: Some(0),
+            domain_excluded_values: Some(0),
             join_rows: Some(0),
             binding_snapshots: Some(0),
-            readiness_nodes: Some(0),
             expression_evaluations: Some(0),
             expression_nodes: Some(0),
             atom_lookups: Some(0),
@@ -237,9 +239,9 @@ pub(crate) enum Event {
     DomainGuardRow,
     DomainGuardCheck,
     DomainRejectedRow,
+    DomainExcludedValue,
     JoinRow,
     BindingSnapshot,
-    ReadinessNode,
     ExpressionEvaluation,
     ExpressionNode,
     AtomLookup,
@@ -295,8 +297,8 @@ impl GroundingWork {
             domain_guard_rows: sum(self.domain_guard_rows, other.domain_guard_rows),
             domain_guard_checks: sum(self.domain_guard_checks, other.domain_guard_checks),
             domain_rejected_rows: sum(self.domain_rejected_rows, other.domain_rejected_rows),
+            domain_excluded_values: sum(self.domain_excluded_values, other.domain_excluded_values),
             binding_snapshots: sum(self.binding_snapshots, other.binding_snapshots),
-            readiness_nodes: sum(self.readiness_nodes, other.readiness_nodes),
             expression_evaluations: sum(self.expression_evaluations, other.expression_evaluations),
             expression_nodes: sum(self.expression_nodes, other.expression_nodes),
             atom_lookups: sum(self.atom_lookups, other.atom_lookups),
@@ -341,9 +343,9 @@ impl GroundingWork {
             Event::DomainGuardRow => &mut self.domain_guard_rows,
             Event::DomainGuardCheck => &mut self.domain_guard_checks,
             Event::DomainRejectedRow => &mut self.domain_rejected_rows,
+            Event::DomainExcludedValue => &mut self.domain_excluded_values,
             Event::JoinRow => &mut self.join_rows,
             Event::BindingSnapshot => &mut self.binding_snapshots,
-            Event::ReadinessNode => &mut self.readiness_nodes,
             Event::ExpressionEvaluation => &mut self.expression_evaluations,
             Event::ExpressionNode => &mut self.expression_nodes,
             Event::AtomLookup => &mut self.atom_lookups,

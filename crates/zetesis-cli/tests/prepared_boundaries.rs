@@ -11,8 +11,8 @@ use std::{
 
 use clap::Parser;
 use zetesis_cli::{
-    Backend, Completion, Grounder, Interruption, Options, PreparedInput, PreparedProfile, Session,
-    SolveConfig, SolveError, SolvePhase, Subject, run_finalized,
+    Backend, Completion, Grounder, Interruption, Options, PreparedInput, PreparedProfile,
+    SearchMethod, Session, SolveConfig, SolveError, SolvePhase, Subject, run_finalized,
 };
 use zetesis_core::{Model, StaticError};
 use zetesis_cpu::Control;
@@ -173,66 +173,71 @@ fn formula_bundles_outlive_their_source_files() {
 #[test]
 fn certificate_setup_exhaustion_is_incomplete() {
     let owner = formula("a.");
-    // The public candidate stream establishes the exact encoding allowance.
-    // Spending that allowance cannot fund a subsequent certificate attempt.
-    let encoded = zetesis_sat::StableModels::new(
-        owner.theory(),
-        zetesis_sat::Limits::default(),
-        Control::default(),
-    )
-    .unwrap();
-    let encoding_work = encoded.statistics().search.work;
-    assert!(encoding_work > 0);
-    let mut session = Session::new(
-        PreparedInput::formula(&owner),
-        SolveConfig {
-            max_search_work: encoding_work,
-            stats: true,
-            ..config()
-        },
-        Control::default(),
-    )
-    .unwrap();
-    let outcome = session.outcome().unwrap();
-    assert_eq!(outcome.completion(), Some(Completion::Interrupted));
-    assert_eq!(
-        outcome.interruption(),
-        Some(Interruption::Countermodel(
-            zetesis_sat::Incomplete::WorkLimit
-        ))
-    );
-    assert_eq!(outcome.verified_models(), 0);
-    assert!(!outcome.unsatisfiable());
-    assert!(!outcome.optimum_proved());
-    let statistics = outcome.countermodel_statistics().unwrap();
-    assert_eq!(statistics.search.work, encoding_work);
-    assert_eq!(statistics.candidate_queries, 0);
-    let certificate = statistics.certified.unwrap();
-    assert_eq!(
-        certificate.refusal,
-        Some(zetesis_sat::CertificateError::Positive(
-            PositiveError::Limit {
-                resource: PositiveResource::Work,
-                observed: 1,
-                limit: 0,
-            }
-        ))
-    );
-    assert!(certificate.tight_refusal.is_none());
-    assert!(certificate.plan.is_none());
-    assert_eq!(certificate.construction_work, 0);
-    assert_eq!(certificate.checks, 0);
-    assert_eq!(
-        session
-            .phase_timings()
-            .unwrap()
-            .get(SolvePhase::CertificateSetup)
-            .unwrap()
-            .calls,
-        1
-    );
-    assert!(session.next().is_none());
-    assert!(session.next().is_none());
+    // The public candidate stream establishes the exact setup allowance of
+    // each search method. Spending that allowance cannot fund a subsequent
+    // certificate attempt.
+    for search in [SearchMethod::Regions, SearchMethod::Clauses] {
+        let encoded = zetesis_sat::StableModels::with_method(
+            owner.theory(),
+            search,
+            zetesis_sat::Limits::default(),
+            Control::default(),
+        )
+        .unwrap();
+        let encoding_work = encoded.statistics().search.work;
+        assert!(encoding_work > 0);
+        let mut session = Session::new(
+            PreparedInput::formula(&owner),
+            SolveConfig {
+                search,
+                max_search_work: encoding_work,
+                stats: true,
+                ..config()
+            },
+            Control::default(),
+        )
+        .unwrap();
+        let outcome = session.outcome().unwrap();
+        assert_eq!(outcome.completion(), Some(Completion::Interrupted));
+        assert_eq!(
+            outcome.interruption(),
+            Some(Interruption::Countermodel(
+                zetesis_sat::Incomplete::WorkLimit
+            ))
+        );
+        assert_eq!(outcome.verified_models(), 0);
+        assert!(!outcome.unsatisfiable());
+        assert!(!outcome.optimum_proved());
+        let statistics = outcome.countermodel_statistics().unwrap();
+        assert_eq!(statistics.search.work, encoding_work);
+        assert_eq!(statistics.candidate_queries, 0);
+        let certificate = statistics.certified.unwrap();
+        assert_eq!(
+            certificate.refusal,
+            Some(zetesis_sat::CertificateError::Positive(
+                PositiveError::Limit {
+                    resource: PositiveResource::Work,
+                    observed: 1,
+                    limit: 0,
+                }
+            ))
+        );
+        assert!(certificate.tight_refusal.is_none());
+        assert!(certificate.plan.is_none());
+        assert_eq!(certificate.construction_work, 0);
+        assert_eq!(certificate.checks, 0);
+        assert_eq!(
+            session
+                .phase_timings()
+                .unwrap()
+                .get(SolvePhase::CertificateSetup)
+                .unwrap()
+                .calls,
+            1
+        );
+        assert!(session.next().is_none());
+        assert!(session.next().is_none());
+    }
 }
 
 #[test]

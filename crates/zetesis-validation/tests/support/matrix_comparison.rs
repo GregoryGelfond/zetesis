@@ -27,11 +27,12 @@ fn request() -> Request<'static> {
         limits: crate::performance::Limits::default(),
         native_answers: crate::answers::native_json::Limits::default(),
         max_spelling_bytes: 1024,
+        helper: None,
     }
 }
 fn sample() -> Sample {
     let (mut document, stderr) = crate::performance::matrix::fixtures::fixture();
-    document["schema"] = json!(1);
+    document["schema"] = json!(2);
     document["format"] = json!("zetesis");
     document["models"] = json!([]);
     document["outcome"] = json!({"status":"unsatisfiable","coverage":"exhausted","completion":"exhausted","published_models":0,
@@ -67,6 +68,7 @@ fn sample() -> Sample {
         selected_models: None,
         cost: None,
         observation: None,
+        memory: None,
     }
 }
 fn contract() -> examples::Contract {
@@ -79,6 +81,178 @@ fn reference() -> answers::ReportedAnswers {
     )
     .unwrap()
 }
+
+fn memory_sample(producer: Producer, exit: process::Exit) -> Sample {
+    let mut sample = sample();
+    sample.slot.phase = Phase::Memory;
+    sample.slot.producer = producer;
+    sample.capture.as_mut().unwrap().helper_child_id = Some(2);
+    if producer == Producer::Reference {
+        sample.capture.as_mut().unwrap().stdout =
+            br#"{"Result":"UNSATISFIABLE","Models":{"More":"no","Number":0},"Call":[{}]}"#.to_vec();
+    }
+    sample.memory = Some(process::memory::Measurement {
+        schema: 1,
+        child: 3,
+        exit_code: exit.code,
+        signal: exit.signal,
+        raw_max_rss: 4096,
+        raw_unit: process::memory::Unit::Bytes,
+        peak_rss_bytes: 4096,
+    });
+    sample
+}
+
+#[test]
+fn native_memory_round_requires_a_successful_solver_exit() {
+    let mut sample = memory_sample(Producer::Native { profile: 0 }, exit(1));
+    let result = qualify(
+        &mut sample,
+        Some(&contract()),
+        Some(&reference()),
+        &request(),
+    );
+    assert!(
+        matches!(&result, Err((Decision::InvocationFailure, _))),
+        "expected solver exit 1 to fail despite helper exit 0; got {result:?}"
+    );
+}
+
+#[test]
+fn reference_memory_round_requires_a_successful_solver_exit() {
+    let mut sample = memory_sample(Producer::Reference, exit(1));
+    let result = qualify(
+        &mut sample,
+        Some(&contract()),
+        Some(&reference()),
+        &request(),
+    );
+    assert!(
+        matches!(&result, Err((Decision::InvocationFailure, _))),
+        "expected solver exit 1 to fail despite helper exit 0; got {result:?}"
+    );
+}
+
+#[test]
+fn native_memory_round_accepts_solver_success() {
+    let mut sample = memory_sample(Producer::Native { profile: 0 }, exit(0));
+    assert!(
+        qualify(
+            &mut sample,
+            Some(&contract()),
+            Some(&reference()),
+            &request()
+        )
+        .is_ok()
+    );
+}
+
+#[test]
+fn reference_memory_round_accepts_reference_exit_codes() {
+    for code in [0, 10, 20, 30] {
+        let mut sample = memory_sample(Producer::Reference, exit(code));
+        let result = qualify(
+            &mut sample,
+            Some(&contract()),
+            Some(&reference()),
+            &request(),
+        );
+        assert!(result.is_ok(), "reference exit {code}: {result:?}");
+    }
+}
+
+#[test]
+fn memory_round_refuses_a_signalled_solver() {
+    for producer in [Producer::Native { profile: 0 }, Producer::Reference] {
+        let mut sample = memory_sample(
+            producer,
+            process::Exit {
+                code: None,
+                signal: Some(15),
+            },
+        );
+        assert!(matches!(
+            qualify(
+                &mut sample,
+                Some(&contract()),
+                Some(&reference()),
+                &request()
+            ),
+            Err((Decision::InvocationFailure, _))
+        ));
+    }
+}
+
+#[test]
+fn memory_round_requires_helper_success() {
+    for producer in [Producer::Native { profile: 0 }, Producer::Reference] {
+        let mut sample = memory_sample(producer, exit(0));
+        // A helper is not clingo; even a reference-specific exit is a failure.
+        sample.capture.as_mut().unwrap().exit = Some(exit(10));
+        assert!(matches!(
+            qualify(
+                &mut sample,
+                Some(&contract()),
+                Some(&reference()),
+                &request()
+            ),
+            Err((Decision::InvocationFailure, _))
+        ));
+    }
+}
+
+#[test]
+fn memory_round_requires_a_solver_resource_record() {
+    let mut sample = memory_sample(Producer::Native { profile: 0 }, exit(0));
+    sample.memory = None;
+    assert!(matches!(
+        qualify(
+            &mut sample,
+            Some(&contract()),
+            Some(&reference()),
+            &request()
+        ),
+        Err((Decision::InvalidMemory, _))
+    ));
+}
+
+#[test]
+fn memory_round_refuses_an_invalid_solver_resource_record() {
+    let mut sample = memory_sample(Producer::Native { profile: 0 }, exit(0));
+    sample.memory.as_mut().unwrap().schema = 0;
+    assert!(matches!(
+        qualify(
+            &mut sample,
+            Some(&contract()),
+            Some(&reference()),
+            &request()
+        ),
+        Err((Decision::InvalidMemory, _))
+    ));
+}
+
+#[test]
+fn memory_round_keeps_the_solver_outcome_classification() {
+    for (document, code, decision) in [
+        (failed("unsupported_combination"), 2, Decision::Refused),
+        (interrupted(), 3, Decision::Incomplete),
+    ] {
+        let mut sample = memory_sample(Producer::Native { profile: 0 }, exit(code));
+        sample.capture.as_mut().unwrap().stdout = serde_json::to_vec(&document).unwrap();
+        assert_eq!(
+            qualify(
+                &mut sample,
+                Some(&contract()),
+                Some(&reference()),
+                &request()
+            )
+            .unwrap_err()
+            .0,
+            decision
+        );
+    }
+}
+
 #[test]
 fn complete_answers_require_the_actual_requested_route() {
     let mut sample = sample();
@@ -184,10 +358,10 @@ fn exit(code: i32) -> process::Exit {
     }
 }
 fn failed(kind: &str) -> Value {
-    json!({"schema":1,"format":"zetesis","models":[],"statistics":null,"outcome":{"status":"failed","completion":null,"coverage":"unavailable","published_models":0,"verified_models":null,"checked":null,"interruption":null,"optimization":null,"error":{"kind":kind,"secondary_output_failure":false}}})
+    json!({"schema":2,"format":"zetesis","models":[],"statistics":null,"outcome":{"status":"failed","completion":null,"coverage":"unavailable","published_models":0,"verified_models":null,"checked":null,"interruption":null,"optimization":null,"error":{"kind":kind,"secondary_output_failure":false}}})
 }
 fn interrupted() -> Value {
-    json!({"schema":1,"format":"zetesis","models":[],"statistics":null,"outcome":{"status":"incomplete","completion":"interrupted","coverage":"partial","published_models":0,"verified_models":0,"checked":1,"interruption":{"kind":"oracle","code":"work_limit","detail":"WorkLimit"},"optimization":null,"error":null}})
+    json!({"schema":2,"format":"zetesis","models":[],"statistics":null,"outcome":{"status":"incomplete","completion":"interrupted","coverage":"partial","published_models":0,"verified_models":0,"checked":1,"interruption":{"kind":"oracle","code":"work_limit","detail":"WorkLimit"},"optimization":null,"error":null}})
 }
 
 #[test]
@@ -205,7 +379,7 @@ fn successful_status_cannot_classify_an_embedded_refusal() {
 #[test]
 fn minimal_incomplete_status_is_not_interruption_evidence() {
     let value =
-        json!({"schema":1,"format":"zetesis","outcome":{"status":"incomplete","error":null}});
+        json!({"schema":2,"format":"zetesis","outcome":{"status":"incomplete","error":null}});
     assert_eq!(
         outcome::check(&value, Some(exit(3))).unwrap_err().0,
         Decision::InvalidReport
@@ -281,4 +455,38 @@ fn complete_capture_cannot_hide_a_capture_stop() {
         .0,
         Decision::CaptureLimit
     );
+}
+
+#[test]
+fn deadline_profiles_pass_their_time_limit_to_the_native_solver() {
+    let mut request = request();
+    let flags = |request: &Request<'_>, producer| {
+        let (_, arguments) = arguments(request, Path::new("/unused"), "case.lp", producer);
+        arguments
+            .iter()
+            .map(|argument| argument.to_string_lossy().into_owned())
+            .collect::<Vec<_>>()
+    };
+    let native = flags(&request, Producer::Native { profile: 0 });
+    assert!(!native.iter().any(|flag| flag == "--time-limit"));
+    request.plan = Plan::new(
+        Suite::Baseline,
+        vec![crate::selected::NativeExecution {
+            time_limit_seconds: std::num::NonZeroU64::new(3600),
+            ..Default::default()
+        }],
+        NonZeroUsize::new(1).unwrap(),
+        0,
+        1,
+    )
+    .unwrap();
+    let native = flags(&request, Producer::Native { profile: 0 });
+    let position = native
+        .iter()
+        .position(|flag| flag == "--time-limit")
+        .unwrap();
+    assert_eq!(native[position + 1], "3600");
+    assert_eq!(native.last().unwrap(), "/unused/case.lp");
+    let reference = flags(&request, Producer::Reference);
+    assert!(!reference.iter().any(|flag| flag.contains("time")));
 }

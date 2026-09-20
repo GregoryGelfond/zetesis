@@ -236,14 +236,14 @@ fn scan_inner<'a, E>(
     let mut relations = Relations::new();
     for atom in atoms {
         work.tick()?;
-        relations.entry(atom.predicate()).or_default().push(atom);
+        relations.push(atom);
     }
     for template in program.templates() {
         work.tick()?;
         visit(
             template,
             &relations,
-            None,
+            super::Gates::Unjudged,
             membership.as_deref_mut(),
             work,
             |assignment, work| {

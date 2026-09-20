@@ -17,16 +17,50 @@ use zetesis_wgpu::{
     AdapterBackend, GpuBackendPreference, GpuContext, GpuErrorKind, GpuOptions, GpuSelection,
 };
 
-fn resources() -> ExecutionResources {
+/// A physical device on the requested backend, and its adapter's own kind
+/// and name, so a test names the device it ran on.
+#[derive(Clone, Copy)]
+struct Device {
+    backend: Backend,
+    preference: GpuBackendPreference,
+    kind: AdapterBackend,
+    name: &'static str,
+}
+
+const METAL: Device = Device {
+    backend: Backend::Metal,
+    preference: GpuBackendPreference::Metal,
+    kind: AdapterBackend::Metal,
+    name: "Metal",
+};
+
+const VULKAN: Device = Device {
+    backend: Backend::Vulkan,
+    preference: GpuBackendPreference::Vulkan,
+    kind: AdapterBackend::Vulkan,
+    name: "Vulkan",
+};
+
+impl Device {
+    /// The other backend: a context a session on this one cannot take.
+    const fn foreign(self) -> Backend {
+        match self.backend {
+            Backend::Metal => Backend::Vulkan,
+            _ => Backend::Metal,
+        }
+    }
+}
+
+fn resources(device: Device) -> ExecutionResources {
     let context = GpuContext::new_selected(
         GpuOptions::default(),
         GpuSelection {
-            backend: GpuBackendPreference::Metal,
+            backend: device.preference,
             vendor_id: None,
         },
     )
     .unwrap();
-    assert_eq!(context.info().backend_kind(), AdapterBackend::Metal);
+    assert_eq!(context.info().backend_kind(), device.kind);
     assert!(context.info().is_hardware_gpu());
     eprintln!(
         "collection resources adapter={:?}",
@@ -54,20 +88,20 @@ fn choices() -> Admitted {
     .unwrap()
 }
 
-fn lazy_config(backend: Backend) -> SolveConfig {
+fn lazy_config(backend: Backend, device: Device) -> SolveConfig {
     SolveConfig {
         backend,
         oracle: Oracle::Closure,
         grounder: Grounder::Lazy,
         batch_size: NonZeroUsize::new(32).unwrap(),
         workers: NonZeroUsize::MIN,
-        ..config()
+        ..config(device)
     }
 }
 
-fn config() -> SolveConfig {
+fn config(device: Device) -> SolveConfig {
     SolveConfig {
-        backend: Backend::Metal,
+        backend: device.backend,
         oracle: Oracle::Countermodel,
         grounder: Grounder::Eager,
         models: 0,
@@ -95,12 +129,26 @@ fn record(answer: &AnswerSet) -> (Vec<String>, Vec<(i32, i64)>) {
 #[test]
 #[ignore = "requires actual Metal; unrestricted collection never substitutes CPU"]
 fn metal_world_view_preserves_nonoptimal_answers() {
+    world_view_preserves_nonoptimal_answers(METAL);
+}
+
+#[test]
+#[ignore = "requires actual Vulkan; unrestricted collection never substitutes CPU"]
+fn vulkan_world_view_preserves_nonoptimal_answers() {
+    world_view_preserves_nonoptimal_answers(VULKAN);
+}
+
+fn world_view_preserves_nonoptimal_answers(device: Device) {
     let owner = formula("1 {a;b} 1. #minimize {1@2,a:a; 2@2,b:b}. #show.");
-    let world_view = Session::builder(PreparedInput::formula(&owner), config(), Control::default())
-        .resources(&resources())
-        .selection(AnswerSelection::Optimal)
-        .collect(WorldViewLimits::default())
-        .unwrap();
+    let world_view = Session::builder(
+        PreparedInput::formula(&owner),
+        config(device),
+        Control::default(),
+    )
+    .resources(&resources(device))
+    .selection(AnswerSelection::Optimal)
+    .collect(WorldViewLimits::default())
+    .unwrap();
     let answers: BTreeSet<_> = world_view.answer_sets().iter().map(record).collect();
     assert_eq!(
         answers,
@@ -127,7 +175,11 @@ fn metal_world_view_preserves_nonoptimal_answers() {
     let execution = outcome
         .formula_execution()
         .expect("actual formula device execution");
-    assert!(execution.adapter.contains("Metal"), "{}", execution.adapter);
+    assert!(
+        execution.adapter.contains(device.name),
+        "{}",
+        execution.adapter
+    );
     assert!(execution.gpu_batches > 0);
     assert!(execution.gpu_work > 0);
     assert_eq!(execution.gpu_candidates, 2);
@@ -141,14 +193,28 @@ fn metal_world_view_preserves_nonoptimal_answers() {
 #[test]
 #[ignore = "requires actual Metal; collection refusal preserves completed and queued work"]
 fn metal_collection_limit_retains_checked_accounting() {
+    collection_limit_retains_checked_accounting(METAL);
+}
+
+#[test]
+#[ignore = "requires actual Vulkan; collection refusal preserves completed and queued work"]
+fn vulkan_collection_limit_retains_checked_accounting() {
+    collection_limit_retains_checked_accounting(VULKAN);
+}
+
+fn collection_limit_retains_checked_accounting(device: Device) {
     let owner = formula("{a;b}. #minimize {1,a:a; 2,b:b}.");
-    let failure = Session::builder(PreparedInput::formula(&owner), config(), Control::default())
-        .resources(&resources())
-        .collect(WorldViewLimits {
-            max_answer_sets: 1,
-            ..Default::default()
-        })
-        .unwrap_err();
+    let failure = Session::builder(
+        PreparedInput::formula(&owner),
+        config(device),
+        Control::default(),
+    )
+    .resources(&resources(device))
+    .collect(WorldViewLimits {
+        max_answer_sets: 1,
+        ..Default::default()
+    })
+    .unwrap_err();
     assert!(
         matches!(failure.cause(), WorldViewError::AnswerSets),
         "{failure:?}"
@@ -177,7 +243,11 @@ fn metal_collection_limit_retains_checked_accounting() {
     let execution = outcome
         .formula_execution()
         .expect("actual formula device execution");
-    assert!(execution.adapter.contains("Metal"), "{}", execution.adapter);
+    assert!(
+        execution.adapter.contains(device.name),
+        "{}",
+        execution.adapter
+    );
     assert_eq!(execution.gpu_batches, 1);
     assert!(execution.gpu_work > 0);
     assert_eq!(execution.gpu_candidates, 4);
@@ -191,16 +261,26 @@ fn metal_collection_limit_retains_checked_accounting() {
 #[test]
 #[ignore = "requires actual Metal; collection cannot replace a supplied context"]
 fn metal_collection_refuses_a_foreign_context() {
+    collection_refuses_a_foreign_context(METAL);
+}
+
+#[test]
+#[ignore = "requires actual Vulkan; collection cannot replace a supplied context"]
+fn vulkan_collection_refuses_a_foreign_context() {
+    collection_refuses_a_foreign_context(VULKAN);
+}
+
+fn collection_refuses_a_foreign_context(device: Device) {
     let owner = formula("a.");
     let failure = Session::builder(
         PreparedInput::formula(&owner),
         SolveConfig {
-            backend: Backend::Vulkan,
-            ..config()
+            backend: device.foreign(),
+            ..config(device)
         },
         Control::default(),
     )
-    .resources(&resources())
+    .resources(&resources(device))
     .collect(WorldViewLimits::default())
     .unwrap_err();
     assert!(matches!(failure.cause(), WorldViewError::Solve(error)
@@ -240,14 +320,24 @@ impl ExecutionObserver for AutomaticExecution {
 #[test]
 #[ignore = "requires actual Metal resources to verify automatic policy retains CPU"]
 fn metal_automatic_collection_retains_cpu_execution() {
+    automatic_collection_retains_cpu_execution(METAL);
+}
+
+#[test]
+#[ignore = "requires actual Vulkan resources to verify automatic policy retains CPU"]
+fn vulkan_automatic_collection_retains_cpu_execution() {
+    automatic_collection_retains_cpu_execution(VULKAN);
+}
+
+fn automatic_collection_retains_cpu_execution(device: Device) {
     let owner = choices();
     let mut observer = AutomaticExecution::default();
     let world_view = Session::builder(
         PreparedInput::admitted(&owner),
-        lazy_config(Backend::Auto),
+        lazy_config(Backend::Auto, device),
         Control::default(),
     )
-    .resources(&resources())
+    .resources(&resources(device))
     .collect_observed(WorldViewLimits::default(), &mut observer)
     .unwrap();
     assert_eq!(observer.cpu_closures, 1);

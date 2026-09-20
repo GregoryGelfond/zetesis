@@ -157,21 +157,51 @@ fn pooled_local_variables_cannot_bind_outer_fields() {
 }
 
 #[test]
-fn ignored_pooled_rows_still_validate_required_arithmetic() {
-    for fields in ["1", "symbol", "0", "1@symbol"] {
+fn mixed_pooled_rows_preserve_complete_costs_and_warnings() {
+    for (fields, costs) in [
+        ("1", Some(vec![1])),
+        ("symbol", None),
+        ("0", Some(vec![0])),
+        ("1@symbol", None),
+    ] {
         let source = format!("d(0).p(0).:~p(X;1/X):d(X).[{fields}]");
-        let mut limits = FormulaLimits::default();
-        limits.objective.max_condition_nodes = 0;
-        let error = source_records::admit(&source, &limits).unwrap_err();
-        assert!(
-            matches!(
-                error,
-                FormulaFailure::Expansion(zetesis_themelios::ExpansionFailure::Evaluation { .. })
-            ),
-            "{error}"
+        let input = source_records::admit(&source, &FormulaLimits::default()).unwrap();
+        assert_eq!(input.warnings().len(), 1, "{source}");
+        assert_eq!(
+            input.objectives().priorities(),
+            if costs.is_some() { &[0][..] } else { &[][..] },
+            "{source}"
         );
-        assert!(!error.diagnostics().is_empty());
+        let expected = std::collections::BTreeSet::from([(
+            std::collections::BTreeSet::from(["d(0)".into(), "p(0)".into()]),
+            costs,
+        )]);
+        assert_eq!(source_records::exhaustive(&input), expected, "{source}");
     }
+}
+
+#[test]
+fn retained_pooled_conditions_still_obey_their_node_limit() {
+    let source = "d(0).p(0).:~p(X;1/X):d(X).[1]";
+    let mut limits = FormulaLimits::default();
+    limits.objective.max_condition_nodes = 0;
+    let error = source_records::admit(source, &limits).unwrap_err();
+    assert!(
+        matches!(
+            error,
+            FormulaFailure::Objective {
+                error: zetesis_objective::AdmissionError::Limit {
+                    resource: zetesis_objective::AdmissionResource::ConditionNodes,
+                    actual: 1,
+                    limit: 0,
+                    ..
+                },
+                ..
+            }
+        ),
+        "{error}"
+    );
+    assert!(!error.diagnostics().is_empty());
 }
 
 #[test]

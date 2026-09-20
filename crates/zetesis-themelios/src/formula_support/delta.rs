@@ -87,6 +87,7 @@ pub(super) fn prepared_variants<'a, 'source>(
     }
 }
 
+#[derive(Clone, Copy)]
 pub(super) enum Variant {
     Full,
     Delta(usize),

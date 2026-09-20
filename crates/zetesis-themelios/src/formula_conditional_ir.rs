@@ -7,10 +7,11 @@ use themelios_program::term::Term;
 use zetesis_core::AtomPattern;
 
 use crate::formula_guard::Guard;
-use crate::formula_ir::{Compiler, LiteralIr, Projection, Variables};
+use crate::formula_ir::{Compiler, LiteralIr, LocalFamily, Projection, Variables};
 use crate::{AdmissionFailure, ExpansionResource, FormulaFailure, InputLimit};
 
 pub(crate) struct ConditionalIr {
+    pub family: LocalFamily,
     pub consequent: Consequent,
     pub condition: Vec<LiteralIr>,
     pub variables: usize,
@@ -138,10 +139,11 @@ impl Compiler<'_> {
         variables: &Variables,
         body: &mut Vec<LiteralIr>,
     ) -> Result<(), FormulaFailure> {
-        for element in source.elements() {
+        for (index, element) in source.elements().enumerate() {
             let BodyElement::Conditional(conditional) = element.get() else {
                 continue;
             };
+            let family = LocalFamily(index);
             self.budget
                 .charge(ExpansionResource::TermWork, 1, self.location)?;
             for condition in self.condition_alternatives(&conditional.condition)? {
@@ -153,6 +155,7 @@ impl Compiler<'_> {
                 // A positive consequent must not repair an unsafe condition.
                 let consequent = self.conditional_consequent(&conditional.literal, &mut local)?;
                 body.push(LiteralIr::Conditional(ConditionalIr {
+                    family,
                     consequent,
                     condition,
                     variables: local.count,

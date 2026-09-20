@@ -10,6 +10,20 @@ use zetesis_sat::{
     SearchLimits, Solve, StableModels, solve, solve_with_statistics,
 };
 
+/// Enumerate by the clause forms, the subject of the tests below.
+fn by_clauses(
+    theory: &zetesis_ferraris::Theory,
+    limits: zetesis_sat::Limits,
+    control: zetesis_sat::Control,
+) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
+    zetesis_sat::StableModels::with_method(
+        theory,
+        zetesis_sat::SearchMethod::Clauses,
+        limits,
+        control,
+    )
+}
+
 fn permutations() -> Vec<[usize; 4]> {
     let mut result = Vec::new();
     for a in 0..4 {
@@ -242,7 +256,10 @@ fn work_decision_and_control_stops_remain_inconclusive_with_exact_accounting() {
         cancelled.cancel();
         for (control, expected) in [
             (cancelled, Incomplete::Cancelled),
-            (Control::with_deadline(Instant::now()), Incomplete::Deadline),
+            (
+                Control::with_deadline(Instant::now()).unwrap(),
+                Incomplete::Deadline,
+            ),
         ] {
             let (limited, accounting) = solve_with_statistics(&cnf, exact, &control);
             assert!(matches!(limited, Solve::Inconclusive(reason) if reason == expected));
@@ -275,7 +292,7 @@ fn compacted_aliases_need_no_auxiliary_but_remaining_gate_needs_fresh_capacity()
         },
         ..Limits::default()
     };
-    let mut search = StableModels::new(&aliases, limits, Control::default()).unwrap();
+    let mut search = by_clauses(&aliases, limits, Control::default()).unwrap();
     let models: BTreeSet<Vec<_>> = search
         .by_ref()
         .map(|model| model.unwrap().atoms().collect())
@@ -293,14 +310,14 @@ fn compacted_aliases_need_no_auxiliary_but_remaining_gate_needs_fresh_capacity()
     )
     .unwrap();
     assert!(matches!(
-        StableModels::new(&gate, limits, Control::default()),
+        by_clauses(&gate, limits, Control::default()),
         Err(Incomplete::Admission(AdmissionError::Limit {
             resource: Resource::Variables,
             observed: 3,
             limit: 2
         }))
     ));
-    let mut search = StableModels::new(
+    let mut search = by_clauses(
         &gate,
         Limits {
             admission: AdmissionLimits {

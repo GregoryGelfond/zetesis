@@ -8,6 +8,20 @@ use zetesis_cpu::Stop;
 use zetesis_ferraris::{AdmissionLimits, Interpretation, Node, Theory};
 use zetesis_sat::{Check, Control, Incomplete, Limits, StableModels, check};
 
+/// Enumerate by the clause forms, the subject of the tests below.
+fn by_clauses(
+    theory: &zetesis_ferraris::Theory,
+    limits: zetesis_sat::Limits,
+    control: zetesis_sat::Control,
+) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
+    zetesis_sat::StableModels::with_method(
+        theory,
+        zetesis_sat::SearchMethod::Clauses,
+        limits,
+        control,
+    )
+}
+
 fn choices() -> Theory {
     Theory::new(
         2,
@@ -69,7 +83,7 @@ fn late_restriction_capacity_error_keeps_its_cause_and_previous_model_block() {
     let mut limits = Limits::default();
     // Refuse the four-clause restriction itself, independently of history.
     limits.admission.max_clauses = 3;
-    let mut search = StableModels::new(&original, limits, Control::default()).unwrap();
+    let mut search = by_clauses(&original, limits, Control::default()).unwrap();
     assert_eq!(search.next().unwrap().unwrap().atoms().count(), 0);
     let guard = Theory::new(
         2,
@@ -132,7 +146,7 @@ fn independent_verification_and_foreign_candidate_failures_are_not_rejections() 
         &original,
         &candidate,
         Limits::default(),
-        &Control::with_deadline(Instant::now()),
+        &Control::with_deadline(Instant::now()).unwrap(),
     ) else {
         panic!("deadline must be incomplete")
     };

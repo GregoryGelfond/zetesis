@@ -64,7 +64,8 @@ fn final_filters_use_the_join_workspace() {
         .unwrap();
     assert_eq!(result, Some(complete([Value::Number(7)])));
     assert!(join.evaluation.values.is_empty());
-    assert!(join.evaluation.values.capacity() >= 2);
+    assert!(join.evaluation.integers.is_empty());
+    assert!(join.evaluation.integers.capacity() >= 2);
 }
 
 #[test]
@@ -112,7 +113,8 @@ fn binding_generators_use_the_join_workspace() {
             Some(complete([Value::Number(value), Value::Number(value + 1)]))
         );
         assert!(join.evaluation.values.is_empty());
-        assert!(join.evaluation.values.capacity() >= 2);
+        assert!(join.evaluation.integers.is_empty());
+        assert!(join.evaluation.integers.capacity() >= 2);
     }
     assert_eq!(
         join.next(
@@ -163,7 +165,8 @@ fn range_endpoints_use_the_join_workspace() {
         Some(complete([Value::Number(2), Value::Number(3)]))
     );
     assert!(join.evaluation.values.is_empty());
-    assert!(join.evaluation.values.capacity() >= 2);
+    assert!(join.evaluation.integers.is_empty());
+    assert!(join.evaluation.integers.capacity() >= 2);
 }
 
 #[test]
@@ -200,13 +203,18 @@ fn false_filters_do_not_hide_later_arithmetic_errors() {
         location(),
     )
     .unwrap();
-    assert!(matches!(
+    assert!(
         join.next(
             &FormulaLimits::default(),
             &mut budget,
             &mut Counters::default(),
             location(),
-        ),
+        )
+        .unwrap()
+        .is_none()
+    );
+    assert!(matches!(
+        join.take_family().finish(),
         Err(FormulaFailure::Expansion(
             ExpansionFailure::Evaluation { .. }
         ))
@@ -256,7 +264,7 @@ fn stopped_filters_release_live_workspace_values() {
     ));
     assert!(join.evaluation.values.is_empty());
     // This exercises a fresh filter call, not resumption of a stopped Join.
-    assert!(
+    assert!(matches!(
         join.filters(
             &complete([Value::Number(9)]),
             Comparisons::Deferred,
@@ -265,8 +273,9 @@ fn stopped_filters_release_live_workspace_values() {
             &mut Counters::default(),
             location(),
         )
-        .unwrap()
-    );
+        .unwrap(),
+        crate::formula_support::filters::Selection::Defined(true)
+    ));
     assert!(join.evaluation.values.is_empty());
 }
 
