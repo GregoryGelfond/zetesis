@@ -33,7 +33,7 @@
 //! exceed the wall time of the walk.
 
 use std::num::NonZeroUsize;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 use std::sync::{Arc, Condvar, Mutex, PoisonError, RwLock};
 use std::thread::JoinHandle;
@@ -107,6 +107,30 @@ struct Live {
 struct LivePhase {
     calls: AtomicU64,
     nanos: AtomicU64,
+    /// Sticky measurement incompleteness, independent of semantic coverage.
+    overflowed: AtomicBool,
+}
+
+impl LivePhase {
+    /// Keep each counter monotone, saturating only after marking the
+    /// measurement incomplete. Live snapshots read independent atomics;
+    /// after workers join, the totals are exact or explicitly overflowed.
+    fn add(&self, counter: &AtomicU64, amount: u64) {
+        if amount == 0 {
+            return;
+        }
+        if counter
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
+                value.checked_add(amount)
+            })
+            .is_err()
+        {
+            self.overflowed.store(true, Ordering::Relaxed);
+            // Every writer only increases this counter. An overflow makes
+            // MAX absorbing, including concurrent successful additions.
+            counter.store(u64::MAX, Ordering::Relaxed);
+        }
+    }
 }
 
 impl Live {
@@ -120,12 +144,19 @@ impl Live {
     /// Add what a worker measured since its last report.
     fn add_timings(&self, before: &SearchPhaseTimings, after: &SearchPhaseTimings) {
         for (live, (before, after)) in self.timings.iter().zip(phases(before).zip(phases(after))) {
-            Self::add(&live.calls, after.calls.saturating_sub(before.calls));
+            // A worker can become incomplete without changing its retained
+            // numeric prefix, so propagate its flag even for a zero delta.
+            if before.overflowed || after.overflowed {
+                live.overflowed.store(true, Ordering::Relaxed);
+            }
+            let calls = after.calls.saturating_sub(before.calls);
             let elapsed = after.elapsed.saturating_sub(before.elapsed);
-            Self::add(
-                &live.nanos,
-                u64::try_from(elapsed.as_nanos()).unwrap_or(u64::MAX),
-            );
+            let nanos = u64::try_from(elapsed.as_nanos()).unwrap_or_else(|_| {
+                live.overflowed.store(true, Ordering::Relaxed);
+                u64::MAX
+            });
+            live.add(&live.calls, calls);
+            live.add(&live.nanos, nanos);
         }
     }
 
@@ -133,7 +164,7 @@ impl Live {
         let read = |live: &LivePhase| PhaseMeasurement {
             calls: Self::read(&live.calls),
             elapsed: Duration::from_nanos(Self::read(&live.nanos)),
-            overflowed: false,
+            overflowed: live.overflowed.load(Ordering::Relaxed),
         };
         let [
             candidates,
@@ -755,3 +786,7 @@ fn leaf<'a>(
 #[cfg(test)]
 #[path = "../tests/support/region_worker_failure.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "../tests/support/parallel_timing.rs"]
+mod timing_tests;

@@ -80,6 +80,76 @@ fn each_grant_conserves_used_available_and_outstanding_permits() {
 }
 
 #[test]
+fn cancelled_renewal_commits_its_consumed_grant() {
+    let shared = budget(2 * WORK_QUANTUM);
+    let control = Control::default();
+    let lease = shared.lease(&control);
+    lease.take(WORK_QUANTUM).unwrap();
+    control.cancel();
+    assert_eq!(lease.tick(), Err(Incomplete::Cancelled));
+    // Inspect before Drop: the failed renewal itself must publish the used
+    // prefix, and cannot retain a replacement or commit the old grant twice.
+    state(&shared, (WORK_QUANTUM, WORK_QUANTUM, 0));
+    drop(lease);
+    state(&shared, (WORK_QUANTUM, WORK_QUANTUM, 0));
+}
+
+#[test]
+fn final_consumed_grant_wakes_exhaustion_waiters() {
+    let shared = budget(WORK_QUANTUM);
+    let control = Control::with_deadline(Instant::now() + Duration::from_secs(5)).unwrap();
+    let lease = shared.lease(&control);
+    lease.take(WORK_QUANTUM).unwrap();
+    thread::scope(|scope| {
+        let (started, starting) = mpsc::sync_channel(1);
+        let shared = &shared;
+        let waiter = scope.spawn(move || {
+            let mut work = shared.lock();
+            started.send(()).unwrap();
+            // The handshake holds the ledger lock until this wait releases it.
+            // Use a long wait rather than the production polling interval so
+            // polling cannot hide a missing final-settlement notification.
+            let deadline = Instant::now() + Duration::from_secs(2);
+            while work.outstanding != 0 {
+                let remaining = deadline.saturating_duration_since(Instant::now());
+                let (returned, timeout) = shared.returned.wait_timeout(work, remaining).unwrap();
+                work = returned;
+                // Check the actual wait result before its predicate: the
+                // ledger may become exhausted without anyone notifying us.
+                assert!(!timeout.timed_out(), "exhaustion was not notified");
+            }
+            assert_eq!(work.grant(), Err(Incomplete::WorkLimit));
+        });
+        starting.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert_eq!(lease.tick(), Err(Incomplete::WorkLimit));
+        waiter.join().unwrap();
+    });
+    state(&shared, (WORK_QUANTUM, 0, 0));
+}
+
+#[test]
+fn bulk_consumption_preserves_its_unused_remainder() {
+    let shared = budget(WORK_QUANTUM + 7);
+    let control = Control::default();
+    let lease = shared.lease(&control);
+    lease.take(WORK_QUANTUM + 3).unwrap();
+    state(&shared, (WORK_QUANTUM, 0, 7));
+    drop(lease);
+    state(&shared, (WORK_QUANTUM + 3, 4, 0));
+}
+
+#[test]
+fn failed_bulk_consumption_commits_its_admitted_prefix() {
+    let shared = budget(WORK_QUANTUM + 3);
+    let control = Control::with_deadline(Instant::now() + Duration::from_secs(5)).unwrap();
+    let lease = shared.lease(&control);
+    assert_eq!(lease.take(WORK_QUANTUM + 4), Err(Incomplete::WorkLimit));
+    state(&shared, (WORK_QUANTUM + 3, 0, 0));
+    drop(lease);
+    state(&shared, (WORK_QUANTUM + 3, 0, 0));
+}
+
+#[test]
 fn joined_work_is_exact_at_every_small_inclusive_ceiling() {
     for ceiling in 0..=2 * WORK_QUANTUM + 1 {
         let shared = budget(ceiling);

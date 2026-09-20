@@ -860,7 +860,7 @@ fn formula(
     } else {
         writeln!(
             sink,
-            "  effective execution: backend=cpu; oracle={oracle}; grounder=eager; search workers=1; completion scratch limit=inapplicable (scalar cursor)"
+            "  effective execution: backend=cpu; oracle={oracle}; grounder=eager; native CPU search; batch-completion scratch limit=inapplicable"
         )
     }
 }

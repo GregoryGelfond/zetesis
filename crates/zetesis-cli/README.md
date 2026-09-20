@@ -218,8 +218,9 @@ submission does not establish how much shader work completed.
 `--completion-workers` controls the independent exact formula checks under
 `--search clauses`, and under `--search regions` when one CPU worker walks
 the tree or a device route runs; with more than one CPU worker under regions
-the workers decide their leaves and it is unused. The default of one is the
-scalar cursor. `--workers` is described above.
+the workers decide their leaves and it is unused. The default of one keeps
+exact completion on the calling thread when that completion route applies;
+it does not make parallel region search scalar. `--workers` is described above.
 `--memory` is the session's memory allowance in bytes, half of the host's
 physical memory by default and at least two gibibytes, or two gibibytes when
 the host does not report its memory (Linux and macOS report it). The session's

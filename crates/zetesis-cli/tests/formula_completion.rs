@@ -209,8 +209,36 @@ fn default_scalar_cursor_keeps_its_existing_storage_contract() {
     assert!(
         actual
             .2
-            .contains("completion scratch limit=inapplicable (scalar cursor)")
+            .contains("batch-completion scratch limit=inapplicable")
     );
+}
+
+#[test]
+fn native_parallel_statistics_do_not_claim_scalar_execution() {
+    for workers in [4, 14] {
+        let mut configured = options(1, 3);
+        configured.search = zetesis_cli::SearchMethod::Regions;
+        configured.workers = NonZeroUsize::new(workers).unwrap();
+        configured.max_completion_scratch_bytes = Some(0);
+        let actual = solve("{a;b}.", &configured);
+        assert_eq!(actual.0.completion, Completion::Exhausted);
+        let mut models = answers(&actual.1);
+        models.sort_unstable();
+        assert_eq!(models, ["", "a", "a b", "b"]);
+        assert!(actual.0.formula_execution.is_none());
+        assert!(
+            actual
+                .2
+                .contains(&format!("Parallel regions: {workers} workers"))
+        );
+        assert!(
+            actual
+                .2
+                .contains("native CPU search; batch-completion scratch limit=inapplicable")
+        );
+        assert!(!actual.2.contains("search workers=1"));
+        assert!(!actual.2.contains("scalar cursor"));
+    }
 }
 
 #[test]

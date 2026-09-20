@@ -233,16 +233,21 @@ checker assumptions; they do not prove this implementation refines the ledger.
 one worker is requested. `next_batch_with_completion(limits, &mut executor,
 checker)` uses it for independent exact residual checks. Proposal generation,
 the supplied checker, objective feedback and publication remain on the calling
-thread. `next_batch` uses a bounded single-worker executor. Ordinary CPU CLI
-execution retains its scalar cursor by default; `--completion-workers 2` (or
-another value above one) opts into reusable batched completion. GPU formula
-batches use this same executor for exact residual checks.
+thread. `next_batch` uses a bounded single-worker executor. With native parallel
+region search, workers decide their own leaves and the CLI pulls their answers
+individually. Otherwise CPU CLI execution uses its scalar cursor by default;
+`--completion-workers 2` (or another value above one) selects reusable batched
+completion. GPU formula batches use this same executor for exact residual checks.
 
 Each worker receives only the immutable original theory, its matching candidate,
 and limits. A query leases at most 64 work permits from the enumeration's shared
-allowance, then consumes them locally before charged operations. Settlement
-records consumed permits and returns unused ones on completion or failure.
-Waiting workers cannot declare exhaustion while a grant can still return work.
+allowance, then consumes them locally before charged operations. When a grant is
+fully consumed, renewal commits it and attempts to acquire its replacement under
+one ledger lock. It creates no new permits and preserves the charged operation
+sequence.
+Settlement records consumed permits and returns unused ones on completion or
+failure. Returning unused permits or establishing terminal exhaustion wakes
+waiting queries; an outstanding grant still prevents an exhaustion claim.
 Decisions retain individual atomic reservations. No worker gets a fresh full-run
 quota. A private statically selected quota policy keeps scalar
 queries free of shared-pointer checks while reusing the same parameter and search

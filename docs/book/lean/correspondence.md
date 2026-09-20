@@ -398,8 +398,16 @@ Parallel exact queries lease bounded work allowances from one shared owner.
 `WorkPermits` partitions the allowance into spent, available and outstanding
 permits. Granting preserves that total; settlement records consumed work and
 returns the unused part. Empty availability is not exhaustion while a grant
-remains outstanding. The Rust implementation must additionally preserve this
-invariant under word arithmetic, locking, unwinding and cancellation. A joined
+remains outstanding. After a grant is fully consumed, Rust commits its used
+permits and attempts to acquire a replacement under one ledger lock. Successful
+renewal composes `settle_conserves`, with consumed and granted amounts equal,
+then `grant_conserves` for a replacement bounded by availability. A successful
+renewal returns no unused permits and retains an outstanding replacement, so it
+cannot enable a previously blocked waiter. Settling the last outstanding grant
+with no available permits must wake waiters even though no permits were returned.
+The Rust implementation must additionally preserve conservation and these
+notification obligations under word arithmetic, locking, unwinding and
+cancellation; the Lean laws do not prove condition-variable progress. A joined
 batch records spent operations only after all leases settle; a lease is not
 evidence of candidate execution or membership.
 

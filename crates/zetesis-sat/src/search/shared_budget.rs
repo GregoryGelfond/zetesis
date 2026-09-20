@@ -1,4 +1,4 @@
-//! Scoped work permits for independent queries in one joined completion batch.
+//! Scoped work permits for joined queries and parallel region walks.
 //!
 //! Committed work + available permits + outstanding grants equals the initial
 //! allowance. A lease consumes its grant locally, then commits used permits and
@@ -170,7 +170,6 @@ impl WorkLease<'_> {
 
     pub(crate) fn tick(&self) -> Result<(), Incomplete> {
         if self.remaining.get() == 0 {
-            self.settle();
             self.refill()?;
         }
         self.remaining.set(self.remaining.get() - 1);
@@ -186,7 +185,6 @@ impl WorkLease<'_> {
     pub(crate) fn take(&self, mut amount: u64) -> Result<(), Incomplete> {
         while amount > 0 {
             if self.remaining.get() == 0 {
-                self.settle();
                 self.refill()?;
             }
             let taken = self.remaining.get().min(amount);
@@ -197,16 +195,38 @@ impl WorkLease<'_> {
     }
 
     fn refill(&self) -> Result<(), Incomplete> {
+        debug_assert_eq!(self.remaining.get(), 0);
         loop {
-            self.control.poll()?;
+            if let Err(error) = self.control.poll() {
+                // A refused renewal still commits the consumed grant before
+                // returning, without acquiring another allowance.
+                self.settle();
+                return Err(error.into());
+            }
             let mut work = self.shared.lock();
-            if let Some(grant) = work.grant()? {
-                self.granted.set(grant);
-                self.remaining.set(grant);
-                return Ok(());
+            // The old grant is wholly consumed. Settle it and acquire its
+            // replacement under one lock; no unused permits become available.
+            let consumed = self.granted.replace(0);
+            work.outstanding -= consumed;
+            work.spent += consumed;
+            match work.grant() {
+                Ok(Some(grant)) => {
+                    self.granted.set(grant);
+                    self.remaining.set(grant);
+                    return Ok(());
+                }
+                Err(error) => {
+                    // Settling the last outstanding grant establishes true
+                    // exhaustion. Peers must wake even without a permit return.
+                    drop(work);
+                    self.shared.returned.notify_all();
+                    return Err(error);
+                }
+                Ok(None) => {}
             }
             // Another query can still return unused permits. The timed wait
             // releases this sole shared lock, and the next iteration polls.
+            // This lease retains no grant and has enabled no waiting peer.
             drop(
                 self.shared
                     .returned

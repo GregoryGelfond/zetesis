@@ -119,6 +119,14 @@ failure or a completed result. The affected measurement carries unavailable or
 overflow evidence instead. Timing completeness and semantic completeness remain
 separate questions.
 
+Optional measurements are distinct from resource accounting. Work allowances,
+candidate coverage and cancellation remain active when diagnostics are disabled.
+Enabled measurements incur clock reads, recording and consumer output; their
+cost must be measured for the selected workload and worker count. Comparing CLI
+runs with and without `--stats` includes serialization and output, not only the
+recorder's cost. Parallel phase snapshots sum worker intervals and are not atomic
+snapshots of a single instant; joined totals are exact unless marked incomplete.
+
 The generated API pages for
 [`SolveMeasurements`](../../doc/zetesis_solve/struct.SolveMeasurements.html) and
 [`PhaseTimings`](../../doc/zetesis_solve/struct.PhaseTimings.html) require the
