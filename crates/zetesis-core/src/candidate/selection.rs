@@ -9,7 +9,7 @@ use super::Seed;
 use crate::{Atom, AtomId, AtomKey, GroundProgram, Program, SeedError};
 
 mod gates;
-pub use gates::{GateAtom, GateAtomError, GateAtoms};
+pub use gates::{GateAtom, GateAtomError, GateAtoms, GateIndex, GateIndexError};
 
 #[cfg(test)]
 mod tests;

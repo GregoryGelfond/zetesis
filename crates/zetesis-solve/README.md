@@ -46,11 +46,19 @@ constraint satisfaction; tight programs can use supportedness. Full normalized
 source analysis guides the order of these checks. It does not certify a ground
 theory by itself. Explicit countermodel checking retains the general reduct path.
 
-General formula execution prepares one candidate-parametric reduct encoding per
-search owner and reuses it across residual queries. Rayon workers share the
-immutable encoding and retain separate query state. Preparation, original
-satisfaction and query work remain explicitly bounded and accounted; reuse does
-not carry candidate truth into another check.
+General reduct checking under the default regions method reads the original
+formula graph under each candidate's frozen truth mask. The optional clauses
+method prepares one candidate-parametric reduct encoding per search owner and
+reuses it across residual queries; Rayon workers share that encoding and retain
+separate query state. Preparation, original satisfaction and query work remain
+explicitly bounded and accounted; reuse does not carry candidate truth into
+another check.
+
+Automatic device execution uses the same checked tight certificate as the CPU
+when available. Other theories retain general GPU propagation with exact host
+completion. Multiple region producers form bounded batches without deciding
+answer-set membership; the selected oracle supplies that decision. CPU-only
+execution can instead check membership directly on its Rayon workers.
 
 With GPU support, `ExecutionResources::with_gpu` shares a selected context and
 `with_formula_profile` additionally shares one exact compiled formula primitive.

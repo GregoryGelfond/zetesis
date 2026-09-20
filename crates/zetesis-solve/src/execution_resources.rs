@@ -53,7 +53,9 @@ impl ExecutionResources {
     ///
     /// The profile's exact context also serves other GPU primitives. This makes
     /// one shared-owner clone with no discovery, health check, compilation or
-    /// submission. Each formula session validates policy, Busy, health and
+    /// submission. General formula sessions reuse this pipeline; a tight-support
+    /// session compiles its own primitive on the profile's exact context.
+    /// Each formula session validates policy, Busy, health and
     /// granted capabilities before starting independent residency and search.
     /// CPU and automatic formula policies continue to ignore these resources.
     #[cfg(feature = "gpu")]

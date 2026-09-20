@@ -61,9 +61,12 @@ different types of value.
 
 These are capability mappings. Ordinary relational solving supports lazy source
 rounds, Rayon and GPU closure. Ordinary formula solving currently grounds eagerly
-and combines host candidate search with optional GPU propagation and exact host
-completion. Native aggregate and GPU tight-program operations are explicit
-library capabilities; ordinary dispatch does not automatically use them.
+and combines host candidate production with membership checking on the selected
+backend. Automatic device execution uses complete tight certificates when
+available; other formulas use GPU propagation and exact host completion.
+With multiple workers, joined Rayon rounds produce bounded candidate batches
+before device checking. Native aggregate reduction remains an explicit library
+capability rather than an automatic formula-dispatch operation.
 
 ## Positive inference is a composition with a fixed point
 

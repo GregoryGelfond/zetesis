@@ -216,12 +216,19 @@ world-mask policies through `--source-batching union|worlds`. Ordinary lazy GPU
 execution uses union scanning; its world-mask policy is an explicit library
 choice.
 
-Candidate coverage is a separate potential cost. `Candidates` begins with an
-empty seed without expanding the carrier, but complete enumeration must still
-cover the gate carrier. Its predicate/domain representation can contain many
-combinations, and seed enumeration is exponential in the number of gate atoms.
-A small demanded catalog during one check does not establish that other
-candidate choices are irrelevant.
+Candidate coverage is a separate potential cost. Without optional narrowing,
+`Candidates` begins with an empty seed without expanding the carrier. Ordinary
+sessions first attempt complete lower/upper closures. A completed upper bound
+supplies potentially present gate atoms directly; lower-bound atoms are held,
+and only the remainder becomes open candidate coordinates. Canonical positions
+are computed in the original carrier without enumerating its excluded tuples.
+This is justified by coverage of every answer set, not by assuming that possible
+atoms hold. If narrowing stops, the existing conservative fallback remains.
+The predicate/domain carrier can still contain many combinations, and seed
+enumeration can remain exponential in the number of open gate atoms. A small
+demanded catalog during one check does not establish that other choices are
+irrelevant. General formula grounding remains eager; this root-indexing change
+does not extend that language path to lazy execution.
 
 ## Hardware, memory, and comparisons
 

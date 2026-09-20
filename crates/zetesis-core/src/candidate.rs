@@ -6,7 +6,8 @@ use std::fmt;
 
 mod selection;
 pub use selection::{
-    GateAtom, GateAtomError, GateAtoms, SeedAtom, SeedSelection, SeedSelectionError, SeedView,
+    GateAtom, GateAtomError, GateAtoms, GateIndex, GateIndexError, SeedAtom, SeedSelection,
+    SeedSelectionError, SeedView,
 };
 
 /// A complete candidate represented only by its finite true atoms. Any atom

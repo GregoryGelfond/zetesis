@@ -55,6 +55,9 @@ impl MembershipExecution for Injected {
         let batch = models.batch_statistics();
         Some(FormulaExecutionStatistics {
             gpu_limits: None,
+            gpu_residuals: None,
+            tight_work_per_candidate: None,
+            gpu_scheduled_work: None,
             gpu_submitted_batches: 0,
             gpu_submitted_candidates: 0,
             adapter: "injected native checker; no physical device".into(),

@@ -288,3 +288,52 @@ fn formula_json_keeps_submission_limits_and_decoding_distinct() {
     let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
     assert!(value["gpu_limits"].is_null());
 }
+
+#[test]
+fn tight_json_distinguishes_scheduled_and_completed_work() {
+    let statistics = crate::FormulaExecutionStatistics {
+        tight_work_per_candidate: Some(123),
+        gpu_scheduled_work: Some(246),
+        gpu_submitted_candidates: 2,
+        ..Default::default()
+    };
+    let mut out = Buffer::new(4096);
+    super::execution_statistics(&mut out, Some(&statistics)).unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
+    assert!(value["gpu_limits"].is_null());
+    assert_eq!(value["tight_work_per_candidate"], 123);
+    assert_eq!(value["gpu_scheduled_work"], 246);
+    assert_eq!(value["gpu_work"], 0);
+    assert_eq!(value["gpu_candidates"], 0);
+}
+
+#[test]
+fn residual_json_distinguishes_decoding_from_cpu_completion() {
+    let statistics = crate::FormulaExecutionStatistics {
+        gpu_residuals: Some(crate::FormulaResidualStatistics {
+            fixed_point: 2,
+            round_limit: 3,
+            work_limit: 1,
+        }),
+        cpu_residuals: 0,
+        ..Default::default()
+    };
+    let mut out = Buffer::new(4096);
+    super::execution_statistics(&mut out, Some(&statistics)).unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
+    assert_eq!(
+        value["gpu_residuals"],
+        serde_json::json!({
+            "fixed_point": 2, "round_limit": 3, "work_limit": 1,
+        })
+    );
+    assert_eq!(value["cpu_residuals"], 0);
+    let mut out = Buffer::new(4096);
+    super::execution_statistics(
+        &mut out,
+        Some(&crate::FormulaExecutionStatistics::default()),
+    )
+    .unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
+    assert!(value["gpu_residuals"].is_null());
+}

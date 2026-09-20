@@ -230,7 +230,11 @@ impl StableModels {
     }
 
     fn certify_pending(&mut self, verdicts: &mut [BatchVerdict]) -> Result<(), Incomplete> {
-        let Some(certificate) = self.certification.as_deref() else {
+        let Some(certificate) = self
+            .certificate
+            .as_ref()
+            .and_then(super::certified::Certificate::cpu)
+        else {
             return Ok(());
         };
         let mut search = self.statistics.search;
@@ -278,6 +282,49 @@ impl StableModels {
             control: &self.control,
             statistics: self.statistics.search,
         };
+        if let super::Proposer::Proposals(proposals) = &mut self.proposer {
+            let started = timing::start(self.statistics.phase_timings.as_ref());
+            let produced = proposals.fill(
+                &self.theory,
+                limits.max_candidates.get(),
+                self.limits
+                    .max_candidates
+                    .saturating_sub(self.statistics.candidates),
+                &mut budget,
+                &mut self.batch.pending,
+            );
+            timing::finish(
+                &mut self.statistics.phase_timings,
+                Phase::Candidates,
+                started,
+            );
+            self.statistics.search = budget.statistics;
+            self.batch.exhausted = produced.exhausted;
+            self.pending_error = produced.stopped;
+            // No producer decides membership. Every completed classical leaf
+            // crosses the same independent original-satisfaction boundary as
+            // scalar proposals before the external batch checker receives it.
+            for (validated, candidate) in self.batch.pending.iter().enumerate() {
+                let result = validate_proposal(
+                    &self.theory,
+                    candidate,
+                    self.limits,
+                    &self.control,
+                    &mut self.statistics,
+                )
+                .and_then(|()| increment(&mut self.statistics.candidates));
+                if let Err(error) = result {
+                    // Only the validated prefix crossed the proposal boundary.
+                    // The stopped suffix establishes no coverage, even when
+                    // production had reached the end of its region frontier.
+                    self.batch.pending.truncate(validated);
+                    self.batch.exhausted = false;
+                    self.pending_error = Some(error);
+                    break;
+                }
+            }
+            return Ok(());
+        }
         while self.batch.pending.len() < limits.max_candidates.get() {
             match proposal(
                 &self.theory,
@@ -404,8 +451,20 @@ fn proposal(
     // Proposals cross to an external checker, so they are validated here
     // under their own limit and phase before that boundary, whatever the
     // proposer's construction promises.
+    validate_proposal(theory, &candidate, limits, budget.control, statistics)?;
+    increment(&mut statistics.candidates)?;
+    Ok(Some(candidate))
+}
+
+fn validate_proposal(
+    theory: &Theory,
+    candidate: &Interpretation,
+    limits: super::Limits,
+    control: &crate::Control,
+    statistics: &mut super::Statistics,
+) -> Result<(), Incomplete> {
     let started = timing::start(statistics.phase_timings.as_ref());
-    let original = models(theory, &candidate, verification(limits), budget.control);
+    let original = models(theory, candidate, verification(limits), control);
     timing::finish(
         &mut statistics.phase_timings,
         Phase::OriginalValidation,
@@ -414,6 +473,5 @@ fn proposal(
     if !original? {
         return Err(Incomplete::InvalidWitness);
     }
-    increment(&mut statistics.candidates)?;
-    Ok(Some(candidate))
+    Ok(())
 }

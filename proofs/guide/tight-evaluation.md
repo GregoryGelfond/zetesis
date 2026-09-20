@@ -60,6 +60,22 @@ returns residual. A failed support scan does not manufacture a countermodel.
 The final theorem assumes any returned residual answer is exact and that a
 completed result exists; it does not prove termination or successful completion.
 
+`unsupported_refutes` separately justifies rejecting a completed failed support
+scan when the producers cover the whole original theory. Every stable model of
+that grammar is supported by `TightPlans.stable_supported`; exact indexed support
+evaluation contradicts that necessity. This rejection needs no rank premise,
+but it does need complete producer coverage. The result is **not stable**, which
+must remain distinct from failing original satisfaction. A missing certificate,
+an unfinished scan or a failure to decode its result does not meet the premise.
+
+These laws let CPU and device support checks consume the same immutable class
+certificate. They do not require the same physical schedule. Splitting producer
+rows and joining support with OR preserves the mathematical result; each backend
+must still establish the original truth table, exact row representation and
+complete present-atom scan. A device result naming an unsupported atom must
+authenticate that result against this complete certificate before it can become
+a refutation instead of an exact-completion request.
+
 ## What remains outside the proof
 
 `DagSharing` totalizes unavailable references as falsum. The Boolean fold mirrors

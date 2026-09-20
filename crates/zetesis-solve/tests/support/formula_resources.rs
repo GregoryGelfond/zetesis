@@ -15,11 +15,41 @@ fn supplied_context(backend: Backend, expected_api: &str) {
             ..Default::default()
         },
         &ExecutionResources::with_gpu(&context),
+        None,
         &mut crate::execution_observation::Ignore,
     )
     .unwrap();
     let Execution::Hybrid { oracle, .. } = execution else {
         panic!("forced device setup must retain the formula oracle");
+    };
+    assert!(context.same_instance(oracle.context()));
+    let theory = zetesis_ferraris::Theory::new(
+        1,
+        vec![zetesis_ferraris::Node::Atom(0)],
+        vec![0],
+        zetesis_ferraris::AdmissionLimits::default(),
+    )
+    .unwrap();
+    let plan = std::sync::Arc::new(
+        zetesis_ferraris::TightPlan::compile(
+            &theory,
+            zetesis_ferraris::TightPlanLimits::default(),
+            &zetesis_cpu::Control::default(),
+        )
+        .unwrap(),
+    );
+    let execution = Execution::with_resources(
+        &SolveConfig {
+            backend,
+            ..Default::default()
+        },
+        &ExecutionResources::with_gpu(&context),
+        Some(plan),
+        &mut crate::execution_observation::Ignore,
+    )
+    .unwrap();
+    let Execution::Tight { oracle, .. } = execution else {
+        panic!("a supplied tight plan must select the support primitive");
     };
     assert!(context.same_instance(oracle.context()));
 }
@@ -60,6 +90,7 @@ fn supplied_profile(backend: Backend, expected_api: &str) {
             let mut execution = Execution::with_resources(
                 &options,
                 &resources,
+                None,
                 &mut crate::execution_observation::Ignore,
             )
             .unwrap();
@@ -86,6 +117,10 @@ fn supplied_profile(backend: Backend, expected_api: &str) {
             assert_eq!(statistics.gpu_candidates, 0);
             assert_eq!(statistics.gpu_work, 0);
             assert_eq!(statistics.gpu_rounds, 0);
+            assert_eq!(
+                statistics.gpu_residuals,
+                Some(super::FormulaResidualStatistics::default())
+            );
             assert_eq!(statistics.cpu_residuals, 0);
             assert_eq!(statistics.gpu_decided, 0);
             let result = super::propagate(

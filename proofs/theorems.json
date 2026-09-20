@@ -2805,14 +2805,24 @@
     "line": 124
   },
   {
+    "name": "Zetesis.GatePositions.rank_fold_eq_blocks",
+    "file": "Zetesis/GatePositions.lean",
+    "line": 43
+  },
+  {
+    "name": "Zetesis.GatePositions.blockOffset_lt_cardinality",
+    "file": "Zetesis/GatePositions.lean",
+    "line": 60
+  },
+  {
     "name": "Zetesis.GatePositions.atoms_exact",
     "file": "Zetesis/GatePositions.lean",
-    "line": 32
+    "line": 89
   },
   {
     "name": "Zetesis.GatePositions.retained_position_exact",
     "file": "Zetesis/GatePositions.lean",
-    "line": 42
+    "line": 99
   },
   {
     "name": "Zetesis.GateProjection.bitwise_support_exact",
@@ -5875,14 +5885,19 @@
     "line": 224
   },
   {
+    "name": "Zetesis.TightEvaluation.unsupported_refutes",
+    "file": "Zetesis/TightEvaluation.lean",
+    "line": 250
+  },
+  {
     "name": "Zetesis.TightEvaluation.computed_verdict_sound",
     "file": "Zetesis/TightEvaluation.lean",
-    "line": 245
+    "line": 268
   },
   {
     "name": "Zetesis.TightEvaluation.completed_computation_exact",
     "file": "Zetesis/TightEvaluation.lean",
-    "line": 261
+    "line": 284
   },
   {
     "name": "Zetesis.TightPlans.original_of_reduct",

@@ -59,8 +59,13 @@ fn interleaved_sessions_preserve_all_phase_attempts() {
     let mut sessions = [(), ()].map(|()| {
         FormulaSession::with_selection(
             input,
-            Execution::with_resources(&config, &ExecutionResources::default(), &mut observations)
-                .unwrap(),
+            Execution::with_resources(
+                &config,
+                &ExecutionResources::default(),
+                None,
+                &mut observations,
+            )
+            .unwrap(),
             &config,
             &mut observations,
             &control,

@@ -4,9 +4,14 @@ use crate::{Atom, AtomIter, CarrierError, Program};
 use std::iter::FusedIterator;
 use std::num::NonZeroUsize;
 
-/// An atom minted by this program's canonical gate-carrier iterator.
+mod index;
+pub use index::{GateIndex, GateIndexError};
+
+/// An atom minted at its position in this program's canonical gate carrier.
 /// Its private position and owned payload cannot be independently changed.
 /// Sharing the whole token in an Arc preserves both without copying atoms.
+/// Both [`Program::indexed_gate_atoms`] and [`GateIndex::locate`] establish the
+/// same position; the latter does not enumerate preceding tuples.
 #[derive(Debug)]
 pub struct GateAtom {
     pub(super) program: Program,

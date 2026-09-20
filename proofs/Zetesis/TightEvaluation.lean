@@ -240,6 +240,29 @@ theorem support_true_iff [DecidableEq α] (candidate : α → Bool) (carrier : L
   · intro supported atom _ present
     exact supported atom present
 
+/-- A failed finite support scan refutes stability when the producer grammar
+covers every original root. Unlike certified acceptance, this direction needs
+no positive rank: every stable model of the covered grammar is supported.
+
+The row representation and present-atom coverage connect the Boolean scan to
+that necessity theorem. This justifies a negative membership result, not an
+original-model rejection and not a claim that an interrupted scan completed. -/
+theorem unsupported_refutes [DecidableEq α] (candidate : α → Bool) (carrier : List α)
+    (table : List (DagSharing.Node α)) (rows : List (IndexedProducer α))
+    (rules : List (Producer α)) (theory : Theory α)
+    (linked : Represents table rows rules)
+    (covered : ∀ atom, candidate atom = true → atom ∈ carrier)
+    (roots : Covered theory rules)
+    (failed : supportTrue candidate carrier (values candidate table) rows = false) :
+    ¬ Stable (interpretation candidate) theory := by
+  intro stable
+  have required_support : Supported (interpretation candidate) rules :=
+    stable_supported (interpretation candidate) theory rules roots stable
+  have scan_succeeds : supportTrue candidate carrier (values candidate table) rows = true :=
+    (support_true_iff candidate carrier table rows rules linked covered).mpr required_support
+  have incompatible : (false : Bool) = true := failed.symm.trans scan_succeeds
+  cases incompatible
+
 /-- The finite original-root and support scans produce a sound ranked verdict.
 The original theory is the whole asserted DAG; no candidate restriction replaces it. -/
 theorem computed_verdict_sound [DecidableEq α] (candidate : α → Bool) (carrier : List α)

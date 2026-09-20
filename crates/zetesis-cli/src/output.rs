@@ -859,6 +859,20 @@ fn execution_statistics(
     } else {
         out.text("null")?;
     }
+    out.text(",\"tight_work_per_candidate\":")?;
+    out.optional_number(stats.tight_work_per_candidate)?;
+    out.text(",\"gpu_scheduled_work\":")?;
+    out.optional_number(stats.gpu_scheduled_work)?;
+    out.text(",\"gpu_residuals\":")?;
+    if let Some(residuals) = stats.gpu_residuals {
+        out.text("{\"fixed_point\":")?;
+        out.text(&residuals.fixed_point.to_string())?;
+        out.number_field("round_limit", residuals.round_limit)?;
+        out.number_field("work_limit", residuals.work_limit)?;
+        out.text("}")?;
+    } else {
+        out.text("null")?;
+    }
     out.number_field("gpu_submitted_batches", stats.gpu_submitted_batches)?;
     out.number_field("gpu_submitted_candidates", stats.gpu_submitted_candidates)?;
     out.number_field("gpu_batches", stats.gpu_batches)?;

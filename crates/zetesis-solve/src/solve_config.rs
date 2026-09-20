@@ -63,10 +63,10 @@ pub struct SolveConfig {
     /// together, as [`Self::for_allowance`] does; the command defaults the
     /// count to the host's parallelism.
     pub workers: NonZeroUsize,
-    /// Formula exact-completion worker count: under the clauses search, and
-    /// under the regions search when one CPU worker walks the tree or a
-    /// device route runs; more than one CPU worker under regions decides its
-    /// leaves in `workers` and uses none.
+    /// Worker count for unresolved formula queries: under the clauses search,
+    /// and under regions with one CPU walker or general device propagation.
+    /// Complete device certificates use scalar validation with no residual
+    /// pool. Multiple CPU region workers decide their own leaves in `workers`.
     pub completion_workers: NonZeroUsize,
     /// Named cold reduct preparation and each query's retained capacity.
     /// The immutable reduct is prepared once per original theory. Parallel
@@ -102,11 +102,13 @@ pub struct SolveConfig {
     /// closure allowance. Also bounds immutable query preparation bytes.
     /// Shared-round and GPU batch storage remain separate.
     pub max_closure_batch_bytes: usize,
-    /// Maximum device propagation work per formula candidate, independent of
-    /// CPU work. Below mandatory setup work the device refuses before submission.
+    /// Maximum device work per formula candidate, independent of CPU work.
+    /// Propagation charges setup and sweeps; tight support charges its complete
+    /// scan. Insufficient mandatory work is refused before submission.
     pub gpu_formula_work: u32,
     /// Maximum device propagation sweeps per formula candidate. Zero performs
     /// original-truth setup and leaves undecided candidates to exact CPU search.
+    /// This ceiling does not apply to the tight-support scan.
     pub gpu_formula_rounds: u32,
     /// Collective source work per shared CPU batch, or immutable query
     /// preparation work for independent CPU closure. Candidate work is separate.
@@ -180,8 +182,9 @@ impl SolveConfig {
 impl SolveConfig {
     /// The workers that walk the region tree together and decide its
     /// leaves themselves: several, under the regions method on a CPU
-    /// backend. One worker, the clauses method or a device backend walk
-    /// the scalar tree and batch its leaves, so `None`.
+    /// backend. A device backend uses separate bounded candidate producers;
+    /// those workers do not decide membership. One worker or clause search
+    /// uses the scalar proposer, so all these alternatives return `None`.
     #[must_use]
     pub fn region_workers(&self) -> Option<NonZeroUsize> {
         (self.search == SearchMethod::Regions

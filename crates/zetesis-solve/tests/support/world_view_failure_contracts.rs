@@ -110,7 +110,7 @@ fn search_refusal_transfers_the_original_checked_prefix() {
 #[test]
 fn observer_refusal_chain_retains_the_external_error() {
     for at in [Refusal::Execution, Refusal::Formula] {
-        let (failure, _) = observer_failure(at);
+        let (failure, _, _) = observer_failure(at);
         assert_eq!(
             failure.to_string(),
             "execution observer: collection observer refused"

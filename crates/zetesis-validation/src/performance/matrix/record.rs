@@ -51,6 +51,18 @@ pub enum Procedure {
     /// Certified positive consequences followed by original constraint validation.
     PositiveConsequences,
 }
+/// Decoded general-device outcomes requiring exact residual membership checks.
+/// These count device verdicts, separately from host completion attempts and
+/// commits. Historical observations can lack this receipt entirely.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub struct FormulaResidualStatistics {
+    /// A complete no-change sweep left the proper-subset query unresolved.
+    pub fixed_point: u64,
+    /// The configured full-sweep ceiling was reached.
+    pub round_limit: u64,
+    /// The next full sweep could not fit its device work allowance.
+    pub work_limit: u64,
+}
 /// Actual reported device activity; unavailable is never replaced by zero.
 #[derive(Debug, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -74,13 +86,38 @@ pub enum DeviceWork {
     Formula {
         /// Device batches.
         batches: u64,
-        /// Submitted candidates.
+        /// Candidates returned by successfully decoded batches.
         candidates: u64,
         /// Propagation work units.
         work: u64,
         /// Exact CPU residual completions.
         cpu_residuals: u64,
+        /// Decoded residual reasons, when reported. In these complete
+        /// observations their sum equals the committed CPU residual count;
+        /// absence remains unavailable rather than becoming zero.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        gpu_residuals: Option<FormulaResidualStatistics>,
         /// Peak logical accounted GPU bytes.
+        peak_accounted_bytes: u64,
+    },
+    /// Complete tight-support scans, with submitted work distinct from decoded
+    /// results. Propagation sweeps do not describe this primitive.
+    TightSupport {
+        /// Successfully decoded device batches.
+        batches: u64,
+        /// Candidates returned by decoded batches.
+        candidates: u64,
+        /// Complete support-scan work in decoded results.
+        work: u64,
+        /// Submitted batches, including any without a decoded result.
+        submitted_batches: u64,
+        /// Submitted candidates, including any without a decoded result.
+        submitted_candidates: u64,
+        /// Scheduled complete-scan work, not a claim that readback completed.
+        scheduled_work: u64,
+        /// Configured complete support-scan work ceiling per candidate.
+        work_per_candidate_limit: u64,
+        /// Peak logical accounted GPU bytes from decoded batches.
         peak_accounted_bytes: u64,
     },
     /// Existing static closure driver exposes adapter identity but no device work total.

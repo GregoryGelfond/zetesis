@@ -711,16 +711,19 @@ scripts/check.sh hardware
 
 `scripts/check.sh hardware` qualifies the host's physical device backend,
 Metal on macOS and Vulkan elsewhere, or the backend named by `--metal` or
-`--vulkan`: sixteen groups of 56 exact device tests, one reviewed selection
-per backend with the same groups and counts, each test reproducing the CPU's
-answer sets on the device; logs and status files are kept under
+`--vulkan`: sixteen groups of 59 exact device tests, one reviewed selection
+per backend with the same groups and counts, checking complete CPU/device answer
+families and explicit failure boundaries; logs and status files are kept under
 `target/hardware`. Physical Metal qualification within coverage adds the
 named device tests with
 `scripts/check.sh coverage --metal` on a machine exposing a Metal adapter.
-The current selection contains 56 exact tests in 16 groups, including explicit
+The current selection contains 59 exact tests in 16 groups, including explicit
 Metal static-oracle construction and complete closure comparisons against an
 independent ordered-set reference. The [static tests](../../../crates/zetesis-wgpu/tests/hardware.rs)
 check the static shader and readback contract; formula tests do not replace them.
+The session group includes automatic tight membership on the device, general
+device checking for non-tight theories, and tight work refusal before dispatch.
+This required selection does not update the source-bound coverage snapshot below.
 The formula CLI group also checks completed-support table joins, requiring actual
 table probes and GPU candidates plus complete CPU/Metal answer families.
 Use fresh instrumentation for the source being qualified; matching executable

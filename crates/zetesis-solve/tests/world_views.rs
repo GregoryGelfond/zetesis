@@ -780,16 +780,29 @@ enum Refusal {
     Formula,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum Observation {
+    Formula,
+    TightMembership,
+    CpuFormula,
+    Other,
+}
+
 struct RefuseObservation {
     at: Refusal,
-    calls: usize,
+    events: Vec<Observation>,
 }
 
 impl ExecutionObserver for RefuseObservation {
     type Error = io::Error;
 
     fn observe(&mut self, observation: ExecutionObservation<'_>) -> Result<(), Self::Error> {
-        self.calls += 1;
+        self.events.push(match &observation {
+            ExecutionObservation::Formula { .. } => Observation::Formula,
+            ExecutionObservation::TightMembership => Observation::TightMembership,
+            ExecutionObservation::CpuFormula { .. } => Observation::CpuFormula,
+            _ => Observation::Other,
+        });
         let refuse = matches!(
             (&self.at, observation),
             (Refusal::Execution, ExecutionObservation::CpuFormula { .. })
@@ -805,13 +818,29 @@ impl ExecutionObserver for RefuseObservation {
     }
 }
 
-fn observer_failure(at: Refusal) -> (WorldViewFailure, usize) {
+fn observer_failure(
+    at: Refusal,
+) -> (
+    WorldViewFailure,
+    Vec<Observation>,
+    zetesis_solve::PhaseTimings,
+) {
     let owner = formula("1 {a;b} 1. #minimize {1,a:a; 2,b:b}.");
-    let mut observer = RefuseObservation { at, calls: 0 };
-    let failure = Session::builder(PreparedInput::formula(&owner), config(), Control::default())
-        .resources(&ExecutionResources::default())
-        .collect_observed(WorldViewLimits::default(), &mut observer)
-        .unwrap_err();
+    let mut observer = RefuseObservation {
+        at,
+        events: Vec::new(),
+    };
+    let failure = Session::builder(
+        PreparedInput::formula(&owner),
+        SolveConfig {
+            stats: true,
+            ..config()
+        },
+        Control::default(),
+    )
+    .resources(&ExecutionResources::default())
+    .collect_observed(WorldViewLimits::default(), &mut observer)
+    .unwrap_err();
     assert!(
         failure
             .subject()
@@ -829,26 +858,62 @@ fn observer_failure(at: Refusal) -> (WorldViewFailure, usize) {
         io::ErrorKind::ConnectionAborted
     );
     assert_eq!(cause.to_string(), "collection observer refused");
-    (failure, observer.calls)
+    let timings = *solve.phase_timings.as_deref().unwrap();
+    (failure, observer.events, timings)
 }
 
 #[test]
 fn collection_preserves_preparation_observer_failure() {
-    let (failure, calls) = observer_failure(Refusal::Execution);
-    assert_eq!(calls, 1);
+    use zetesis_solve::SolvePhase;
+
+    let (failure, events, timings) = observer_failure(Refusal::Execution);
+    assert_eq!(
+        events,
+        [
+            Observation::Formula,
+            Observation::TightMembership,
+            Observation::CpuFormula,
+        ]
+    );
     assert!(failure.outcome().is_none());
+    for phase in [
+        SolvePhase::CandidateSetup,
+        SolvePhase::CertificateSetup,
+        SolvePhase::ExecutionSetup,
+    ] {
+        assert_eq!(timings.get(phase).unwrap().calls, 1, "{phase:?}");
+    }
+    for phase in [
+        SolvePhase::CandidateGeneration,
+        SolvePhase::CertifiedMembership,
+        SolvePhase::ExactReductMembership,
+    ] {
+        assert!(timings.get(phase).is_none(), "{phase:?}");
+    }
 }
 
 #[test]
 fn collection_preserves_deferred_formula_failure() {
-    let (failure, calls) = observer_failure(Refusal::Formula);
-    assert_eq!(calls, 2);
+    use zetesis_solve::SolvePhase;
+
+    let (failure, events, timings) = observer_failure(Refusal::Formula);
+    assert_eq!(events, [Observation::Formula]);
     let outcome = failure.outcome().unwrap();
     assert!(outcome.subject().unwrap().same_instance(failure.subject()));
     assert_eq!(outcome.selection(), Some(AnswerSelection::All));
     assert_eq!(outcome.verified_models(), 0);
     assert_eq!(outcome.completion(), None);
     assert!(!outcome.unsatisfiable());
+    assert!(outcome.countermodel_statistics().is_none());
+    assert!(outcome.formula_execution().is_none());
+    for phase in [
+        SolvePhase::CandidateSetup,
+        SolvePhase::CertificateSetup,
+        SolvePhase::ExecutionSetup,
+        SolvePhase::CandidateGeneration,
+    ] {
+        assert!(timings.get(phase).is_none(), "{phase:?}");
+    }
 }
 
 #[path = "support/world_view_failure_contracts.rs"]

@@ -404,8 +404,27 @@ the ceiling refused. The region counts and reading work, the candidates, the
 countermodel counts and the phase timings are the workers' live counters,
 current while they run; the certificate and reduct receipts are merged when
 the workers finish, so a snapshot taken earlier lacks them. One worker is
-the scalar regions walk. The batched protocol is not used with workers,
-since the workers decide their leaves themselves.
+the scalar regions walk. This particular operation does not use the batched
+protocol, since its workers decide their leaves themselves.
+
+`StableModels::with_region_producers` instead retains one prepared region index
+and an owned Rayon pool across bounded production rounds. It uses the same
+readings and disjoint splits, returning classical candidates for a separate
+membership executor. `next_batch_with_completion` joins each round, independently
+validates original satisfaction, then invokes its checker and finishes residuals.
+Work allowances remain cumulative across those stages. No answer-set membership
+is performed in a producer, so a device checker receives new candidates rather
+than CPU-completed answers. Scalar iterator consumption is also supported.
+
+The shared frontier and each active region own disjoint unfinished portions of
+the candidate space. An active region reserves one output slot; refutation or
+splitting releases it, and a classical leaf consumes it. Every round ends before
+device execution begins. A checker failure keeps admitted candidates retryable;
+a producer or validation stop retains the completed admitted prefix and leaves
+enumeration incomplete. Output order is schedule-dependent. The batch payload
+limit excludes frontier knowledge and worker thread stacks; it is not an RSS
+bound. This does not introduce a new candidate search algorithm or alter the
+original frozen reduct.
 
 Each region's lease settles before its worker waits for work or sends a model,
 returning unused permits to the other workers. The shared allowance includes

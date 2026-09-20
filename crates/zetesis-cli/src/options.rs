@@ -231,10 +231,10 @@ pub struct Options {
     /// completion under `--search clauses` has a separate worker setting.
     #[arg(long, default_value_t = host_workers(), hide_short_help = true)]
     pub workers: NonZeroUsize,
-    /// Exact formula completion workers: under `--search clauses`, and under
-    /// `--search regions` when one CPU worker walks the tree or a device
-    /// route runs; more than one CPU worker under regions decides its leaves
-    /// in its `--workers` and uses none. One retains the scalar cursor.
+    /// Workers for unresolved formula queries: under `--search clauses`, and
+    /// under regions with one CPU walker or general device propagation.
+    /// Complete device certificates use scalar validation with no residual
+    /// pool. Multiple CPU region workers decide their own leaves in `--workers`.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.completion_workers, hide_short_help = true)]
     pub completion_workers: NonZeroUsize,
     /// Maximum reserved capacity for cold reduct preparation and for each query's
@@ -281,12 +281,14 @@ pub struct Options {
     /// Omitted, it is the library default scaled by `--memory`.
     #[arg(long, hide_short_help = true)]
     pub max_closure_batch_bytes: Option<usize>,
-    /// Device propagation work per formula candidate, independent of CPU work.
-    /// A budget below mandatory setup work refuses before device submission.
+    /// Device work per formula candidate, independent of CPU work. Bounds
+    /// propagation setup/sweeps or the complete tight-support scan.
+    /// Insufficient mandatory work refuses before device submission.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.gpu_formula_work, hide_short_help = true)]
     pub gpu_formula_work: u32,
     /// Device propagation sweeps per formula candidate. Zero keeps original-truth
     /// setup and sends undecided candidates to exact CPU residual search.
+    /// Does not apply when complete tight support is selected.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.gpu_formula_rounds, hide_short_help = true)]
     pub gpu_formula_rounds: u32,
     /// Shared CPU source work per batch or independent CPU query preparation

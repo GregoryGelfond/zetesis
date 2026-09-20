@@ -126,6 +126,43 @@ arrive is the schedule's, is not promised to repeat between runs, and is
 not a property of the result. Verification rests on the laws and on the
 oracle comparison of answer sets as sets, not on order or determinism.
 
+Candidate production and membership need not run on the same executor.
+`StableModels::with_region_producers` uses the same original-theory readings
+and disjoint splits in bounded Rayon rounds. A worker returns a classical leaf;
+the coordinator independently checks original satisfaction before admitting it
+to the membership batch. The device then checks the selected reduct-preserving
+plan, and native completion finishes any general-reduct residuals. Producers
+never complete membership merely to ask the device to repeat it.
+
+```text
+while candidate_frontier is unfinished:
+    candidates := bounded_parallel_leaves(frontier, original_readings)
+    join_producers_and_settle_work()
+    admitted := check_original_satisfaction(candidates)
+    verdicts := execute_selected_membership_plan(admitted)
+    answers := complete_residuals_and_commit(verdicts)
+    yield answers
+```
+
+One output slot is reserved for every active producer region. Refutation or
+splitting returns the reservation; an emitted leaf consumes it. The batch is
+bounded even when workers finish together. A stopped validation retains its
+admitted prefix and reports the unfinished suffix explicitly. Every producer
+joins before membership begins, so these stages share one cumulative work
+allowance without concurrent resets. This schedule does not overlap production
+with device execution. Pending-byte limits cover candidate transport, not the
+entire region frontier, thread stacks or process memory.
+
+The original CPU `with_region_workers` operation remains useful when each
+worker should perform both operations. The two schedules share the original
+formula readings, support conditions, candidate partitions and reduct semantics.
+The [batch API](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/batch.rs)
+owns proposal validation and publication; the
+[producer](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/region_proposals.rs)
+owns the bounded parallel frontier. `Frontier` and `BatchAccounting` state the
+coverage and completion laws; concrete synchronization remains a refinement
+obligation.
+
 The regions method is the default, chosen by
 [measurement](../reference/observations/README.md#the-regions-default-and-one-worker-count)
 beside the classical search over a clause form on the same cells, with the
@@ -158,6 +195,17 @@ when one changes nothing. The statistics report the passes and the atoms
 held and cut; the rest are open. A constraint that fires in a
 lower closure holds under every seed of the region, so no seed is offered
 and the program has no answer set.
+
+A completed upper bound supplies the root's potentially present gate atoms
+directly. The root takes those atoms outside the lower bound, without scanning
+the excluded Cartesian tuples. `GateIndex` computes each retained atom's rank
+in the full original gate carrier using signature offsets and domain ranks.
+It does not assign new positions to the compact subset. The original program,
+gate universe and frozen interpretation therefore retain their identity.
+Possible support is not truth: it supplies a covering candidate domain, and
+the reduct still decides each candidate. An incomplete upper computation cannot
+justify an exclusion. Existing resource-stopped narrowing uses its conservative
+incremental fallback; full-carrier position overflow remains an explicit limit.
 
 The narrowed root is then visited region by region rather than counted. A
 region holds some of the root's open gate atoms in, cuts some out and
@@ -233,8 +281,9 @@ satisfaction and reduct membership retain their existing obligations.
 
 A sufficient class certificate can avoid a full countermodel query. For example,
 ranked support under a complete original-producer representation justifies a
-tight-program specialization. A failed certificate requests exact residual
-checking; it is not automatically a rejection. These are different procedures
+tight-program specialization. Refused certificate construction leaves general
+reduct checking available. A completed check under a complete tight certificate
+can refute an unsupported candidate by the support theorem. These are different procedures
 for the same reduct-based membership contract.
 
 The device [ranked-support checker](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/src/tight/check.wgsl)
@@ -246,8 +295,30 @@ from repeated producers. The final atom scan retains the least unsupported
 atom as its witness. This representation reduces the support buffer to
 `4 * max(worlds * ceil(atoms / 32), 1)` bytes; it does not describe total device
 memory or establish a speedup. Shared-word contention remains a measurement
-question. This checker is a reusable device primitive; its availability does
-not imply that ordinary solves select it.
+question. Ordinary formula sessions with automatic membership policy select this
+primitive on an explicit device backend when complete tight preparation succeeds.
+Preparation shares the CPU certificate constructor and cumulative search budget,
+but does not activate CPU certificate checking. The executor is selected before
+pipeline creation, so these batches do not first run the general propagator.
+Stable support results establish membership; failed original truth is rejected;
+an unsupported present atom refutes membership by complete producer coverage.
+Positive-only or unsupported theories retain general device propagation with
+exact CPU residual completion. Explicit countermodel policy also retains that
+route. There is no device implementation of `PositivePlan` in this selection.
+
+General device propagation retains decoded residual reasons separately: a
+fixed point that leaves the query unresolved, the full-sweep ceiling, or the
+device work ceiling. These counters precede exact CPU completion and batch
+commit. A later completion failure does not erase them; a submitted batch with
+no validated result supplies no decoded reason. Tight support and CPU execution
+leave this record absent. Aggregate sweep totals alone cannot identify the
+reason for each residual.
+
+With several requested workers, the region proposer produces a bounded batch
+in parallel and joins before its device checker starts. CPU production and
+device checking do not overlap. Membership, scoring and objective feedback keep
+the same original-theory and completed-batch boundaries. Failed device execution
+never triggers a hidden CPU replacement.
 
 The library also exposes `TightSupport::Grouped` through
 `GpuTightOracle::new_with_support`. Packing places each original producer in the
@@ -326,7 +397,7 @@ from device qualification and timing evidence.
 | Source loading, parsing, admission and output | Host libraries |
 | Independent relational membership | Scalar CPU or owned Rayon pool |
 | Shared lazy relational rounds | Host source stream with CPU or GPU chunk evaluation |
-| Ordinary GPU formula membership | Device propagation plus exact native CPU completion of residuals |
+| Ordinary GPU formula membership | Complete tight support when certified; otherwise device propagation plus exact native CPU completion of residuals |
 | Native aggregate reductions | Bounded reusable CPU/device primitive; availability alone does not imply use by every solve |
 
 wgpu supplies portable device access, including Metal on supported macOS

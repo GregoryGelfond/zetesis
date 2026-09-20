@@ -145,7 +145,10 @@ The [execution chapter](docs/book/architecture/execution.md) distinguishes
 semantic guarantees, scheduling and the work that remains on the host.
 The tight GPU library offers atomic-OR and grouped-word support construction;
 both have physical Metal checks. Atomic remains its default. These are reusable
-membership primitives, and ordinary solving does not automatically select them.
+membership primitives. Ordinary formula solving now selects tight GPU checking
+when an exact certificate is available, with parallel candidate production for
+multiple workers. This dispatch change requires its own physical qualification;
+the coverage snapshot above describes the earlier measured source.
 Eager formula grounding retains typed predicate catalogs and lookup postings
 across support rounds. Eligible positive producers join combinations containing
 new tuples. Where complete positive-source analysis permits it, new predicate

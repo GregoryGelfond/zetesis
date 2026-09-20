@@ -1,6 +1,7 @@
 //! Hardware-independent proposal/check/commit results awaiting scoring or output.
 
 use std::collections::VecDeque;
+use std::num::NonZeroUsize;
 
 use zetesis_cpu::Control;
 use zetesis_ferraris::{Interpretation, Theory};
@@ -21,14 +22,29 @@ pub(crate) struct BatchQueue {
 
 impl BatchQueue {
     pub(crate) fn new(options: &SolveConfig) -> Result<Self, SolveError> {
+        Self::with_completion_workers(options, options.completion_workers)
+    }
+
+    /// A complete oracle leaves no unresolved query for residual workers.
+    /// Scalar completion still admits result storage, validates original
+    /// satisfaction and commits the checked batch under the same limits.
+    #[cfg(feature = "gpu")]
+    pub(crate) fn for_complete_oracle(options: &SolveConfig) -> Result<Self, SolveError> {
+        Self::with_completion_workers(options, NonZeroUsize::MIN)
+    }
+
+    fn with_completion_workers(
+        options: &SolveConfig,
+        workers: NonZeroUsize,
+    ) -> Result<Self, SolveError> {
         Ok(Self {
             completion: CompletionExecutor::with_scratch_limit(
-                options.completion_workers,
+                workers,
                 options.max_completion_scratch_bytes,
             )
             .map_err(SolveError::CompletionPool)?,
             accounting: crate::CompletionAccounting {
-                requested_workers: options.completion_workers.get(),
+                requested_workers: workers.get(),
                 ..Default::default()
             },
             ..Self::default()
@@ -95,5 +111,50 @@ impl BatchQueue {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::num::NonZeroUsize;
+
+    use super::BatchQueue;
+    use crate::SolveConfig;
+
+    fn options() -> SolveConfig {
+        SolveConfig {
+            completion_workers: NonZeroUsize::new(4).unwrap(),
+            max_completion_scratch_bytes: 12_345,
+            ..SolveConfig::DEFAULT
+        }
+    }
+
+    #[cfg(feature = "gpu")]
+    #[test]
+    fn complete_oracle_uses_scalar_completion() {
+        let options = options();
+        let queue = BatchQueue::for_complete_oracle(&options).unwrap();
+        assert_eq!(queue.completion.workers(), 1);
+        assert_eq!(queue.accounting().requested_workers, 1);
+        assert_eq!(queue.accounting().effective_workers, 0);
+        assert_eq!(
+            queue.completion.scratch_limit(),
+            options.max_completion_scratch_bytes
+        );
+    }
+
+    #[test]
+    fn residual_queue_retains_requested_workers() {
+        let options = options();
+        let queue = BatchQueue::new(&options).unwrap();
+        assert_eq!(queue.completion.workers(), options.completion_workers.get());
+        assert_eq!(
+            queue.accounting().requested_workers,
+            options.completion_workers.get()
+        );
+        assert_eq!(
+            queue.completion.scratch_limit(),
+            options.max_completion_scratch_bytes
+        );
     }
 }

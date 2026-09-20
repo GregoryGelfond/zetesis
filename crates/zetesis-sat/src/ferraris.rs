@@ -36,6 +36,9 @@ mod regions;
 #[path = "parallel_regions.rs"]
 mod parallel_regions;
 use parallel_regions::ParallelRegions;
+#[path = "region_proposals.rs"]
+mod region_proposals;
+use region_proposals::RegionProposals;
 pub(crate) use regions::ReductQuery;
 use regions::RegionSearch;
 pub use regions::{RegionCounts, RegionSearchStatistics, SearchMethod};
@@ -329,7 +332,7 @@ pub struct StableModels {
     exhausted: bool,
     pending_error: Option<Incomplete>,
     batch: batch::State,
-    certification: Option<std::sync::Arc<certified::Certification>>,
+    certificate: Option<certified::Certificate>,
     reduct: crate::prepared_reduct::State,
 }
 impl StableModels {
@@ -386,7 +389,55 @@ impl StableModels {
             exhausted: false,
             pending_error: None,
             batch: batch::State::default(),
-            certification: None,
+            certificate: None,
+            reduct: crate::prepared_reduct::State::new(SearchMethod::Regions),
+        })
+    }
+
+    /// Produce classical candidates in bounded Rayon rounds, leaving membership
+    /// to this iterator or its injected batch checker. Unlike
+    /// [`Self::with_region_workers`], producers never decide answer-set membership.
+    /// This permits the same original region traversal to feed a device oracle.
+    ///
+    /// Each batch joins its producers before checking begins. Native search
+    /// work and decision allowances are cumulative; an external checker's costs
+    /// belong to its own contract. Candidate order is schedule-dependent, and a
+    /// failed round retains its completed proposals.
+    /// One worker uses the ordinary scalar region traversal.
+    ///
+    /// # Errors
+    /// Refuses admission, work limits, cancellation, allocation or pool creation.
+    pub fn with_region_producers(
+        theory: &Theory,
+        workers: std::num::NonZeroUsize,
+        limits: Limits,
+        control: Control,
+    ) -> Result<Self, Incomplete> {
+        if workers.get() == 1 {
+            return Self::with_method(theory, SearchMethod::Regions, limits, control);
+        }
+        let mut budget = Budget {
+            quota: crate::search::LocalQuota,
+            limits: limits.search,
+            control: &control,
+            statistics: SearchStatistics::default(),
+        };
+        let proposals = RegionProposals::new(theory, workers, &mut budget)?;
+        let statistics = Statistics {
+            search: budget.statistics,
+            ..Default::default()
+        };
+        Ok(Self {
+            theory: theory.clone(),
+            proposer: Proposer::Proposals(Box::new(proposals)),
+            limits,
+            control,
+            statistics,
+            terminal: false,
+            exhausted: false,
+            pending_error: None,
+            batch: batch::State::default(),
+            certificate: None,
             reduct: crate::prepared_reduct::State::new(SearchMethod::Regions),
         })
     }
@@ -442,7 +493,7 @@ impl StableModels {
             exhausted: false,
             pending_error: None,
             batch: batch::State::default(),
-            certification: None,
+            certificate: None,
             reduct: crate::prepared_reduct::State::new(method),
         })
     }
@@ -526,6 +577,10 @@ impl StableModels {
                 regions: Some(regions.statistics()),
                 ..self.statistics
             },
+            Proposer::Proposals(proposals) => Statistics {
+                regions: Some(proposals.statistics()),
+                ..self.statistics
+            },
             Proposer::Parallel(parallel) => {
                 let merged = parallel.merged();
                 let merged = &merged;
@@ -567,7 +622,10 @@ impl StableModels {
             Membership {
                 theory: &self.theory,
                 limits: self.limits,
-                certificate: self.certification.as_ref(),
+                certificate: self
+                    .certificate
+                    .as_ref()
+                    .and_then(certified::Certificate::cpu),
                 reduct: &mut self.reduct,
             },
             &mut self.proposer,
@@ -651,6 +709,8 @@ enum Proposer {
     Regions(Box<RegionSearch>),
     /// Several workers walk the region tree and decide the leaves themselves.
     Parallel(Box<ParallelRegions>),
+    /// Bounded parallel production, before any membership operation.
+    Proposals(Box<RegionProposals>),
 }
 
 /// What a proposer hands the enumeration.
@@ -707,6 +767,22 @@ impl Proposer {
                     .propose(certificate, timed, budget)?
                     .map(Proposal::Stable));
             }
+            Self::Proposals(proposals) => {
+                let mut output = crate::search::storage(1)?;
+                let produced = proposals.fill(
+                    theory,
+                    1,
+                    limits.max_candidates.saturating_sub(statistics.candidates),
+                    budget,
+                    &mut output,
+                );
+                // With one reserved slot no second producer can stop after
+                // the first emits. Batched calls retain that richer outcome.
+                if let Some(error) = produced.stopped {
+                    return Err(error);
+                }
+                output.pop()
+            }
         };
         Ok(proposal.map(Proposal::Candidate))
     }
@@ -720,7 +796,7 @@ impl Proposer {
     ) -> Result<(), Incomplete> {
         match self {
             Self::Clauses(clauses) => clauses.cursor.exclude(&clauses.cnf, candidate, budget),
-            Self::Regions(_) | Self::Parallel(_) => Ok(()),
+            Self::Regions(_) | Self::Parallel(_) | Self::Proposals(_) => Ok(()),
         }
     }
 
@@ -738,6 +814,7 @@ impl Proposer {
             }
             Self::Regions(regions) => regions.restrict(restriction, budget),
             Self::Parallel(parallel) => parallel.restrict(restriction, budget),
+            Self::Proposals(proposals) => proposals.restrict(restriction, budget),
         }
     }
 }

@@ -798,6 +798,8 @@ fn formula(
     if let Some(execution) = report.formula_execution {
         let backend = if execution.adapter.is_empty() {
             "cpu batched exact completion"
+        } else if execution.tight_work_per_candidate.is_some() {
+            "GPU tight support"
         } else {
             "hybrid GPU propagation + exact CPU residual search"
         };
@@ -869,7 +871,7 @@ fn formula_gpu(
 ) -> io::Result<()> {
     writeln!(
         sink,
-        "  formula GPU decoded: batches={}; candidates={}; propagation work={}; completed sweeps={}; GPU-decided committed={}; CPU residuals completed={}",
+        "  formula GPU decoded: batches={}; candidates={}; primitive work={}; completed sweeps={}; GPU-decided committed={}; CPU residuals completed={}",
         execution.gpu_batches,
         execution.gpu_candidates,
         execution.gpu_work,
@@ -879,9 +881,28 @@ fn formula_gpu(
     )?;
     writeln!(
         sink,
-        "  formula GPU submitted: batches={}; candidates={}; work/sweeps for unreturned results=unavailable",
+        "  formula GPU submitted: batches={}; candidates={}; completed work/sweeps for unreturned results=unavailable",
         execution.gpu_submitted_batches, execution.gpu_submitted_candidates
     )?;
+    if let Some(residuals) = execution.gpu_residuals {
+        writeln!(
+            sink,
+            "  formula GPU decoded residuals: fixed point={}; round limit={}; work limit={}; precede CPU completion and commit",
+            residuals.fixed_point, residuals.round_limit, residuals.work_limit,
+        )?;
+    }
+    if let Some(work) = execution.tight_work_per_candidate {
+        writeln!(
+            sink,
+            "  tight GPU limits: complete support scan work/candidate={work}; propagation sweeps=not applicable"
+        )?;
+    }
+    if let Some(work) = execution.gpu_scheduled_work {
+        writeln!(
+            sink,
+            "  tight GPU scheduled full-scan work={work}; includes submitted unreturned batches"
+        )?;
+    }
     if let Some(limits) = execution.gpu_limits {
         writeln!(
             sink,

@@ -19,7 +19,9 @@ mod telemetry;
 mod workload;
 
 pub use config::{Plan, Producer, Request, Slot, Suite};
-pub use record::{Decision, DeviceWork, Execution, Observation, Procedure, Sample};
+pub use record::{
+    Decision, DeviceWork, Execution, FormulaResidualStatistics, Observation, Procedure, Sample,
+};
 pub use workload::{ConstantAmendment, Workload, WorkloadLimits};
 
 use super::{Capture, Error, Fault};

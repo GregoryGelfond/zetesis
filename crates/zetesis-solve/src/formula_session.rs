@@ -19,7 +19,7 @@ use crate::{AnswerSelection, Interruption, SearchState, SemanticOutcome, SolveCo
 pub(crate) struct FormulaSession<'a, E> {
     input: Input<'a>,
     selection: AnswerSelection,
-    execution: E,
+    execution: Option<E>,
     models: Option<StableModels>,
     bounds: Option<Bounds>,
     incumbents: Incumbents,
@@ -33,6 +33,7 @@ pub(crate) struct FormulaSession<'a, E> {
 }
 
 impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
+    #[cfg(test)]
     pub(crate) fn with_selection(
         input: Input<'a>,
         execution: E,
@@ -42,14 +43,23 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         phases: &Recorder,
         selection: AnswerSelection,
     ) -> Self {
-        let mut session = Self {
+        let mut session = Self::uninitialized(input, selection);
+        session.execution = Some(execution);
+        if let Err(error) = session.initialize(config, observations, control, phases) {
+            session.fail(error, phases);
+        }
+        session
+    }
+
+    fn uninitialized(input: Input<'a>, selection: AnswerSelection) -> Self {
+        Self {
             input,
             selection: if input.objectives.is_present() {
                 selection
             } else {
                 AnswerSelection::All
             },
-            execution,
+            execution: None,
             models: None,
             bounds: None,
             incumbents: Incumbents::default(),
@@ -58,11 +68,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             final_outcome: None,
             pending_error: None,
             imported_timings: Cell::new(zetesis_sat::SearchPhaseTimings::default()),
-        };
-        if let Err(error) = session.initialize(config, observations, control, phases) {
-            session.fail(error, phases);
         }
-        session
     }
 
     fn initialize(
@@ -82,13 +88,20 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             observations.record(Event::KeyAnalysisStopped(stop))?;
         }
         let models = phases.measure(SolvePhase::CandidateSetup, || {
-            // Several workers decide their leaves themselves, which the
-            // device protocol cannot take: a device backend keeps the scalar
-            // walk and batches its leaves.
+            // CPU workers decide their own leaves. Device producers return
+            // unchecked leaves to the bounded batch protocol and join before
+            // membership execution starts.
             if let Some(workers) = config.region_workers() {
                 StableModels::with_region_workers(
                     self.input.theory,
                     workers,
+                    crate::countermodel::search_limits(config),
+                    control.clone(),
+                )
+            } else if config.search == crate::SearchMethod::Regions && config.workers.get() > 1 {
+                StableModels::with_region_producers(
+                    self.input.theory,
+                    config.workers,
                     crate::countermodel::search_limits(config),
                     control.clone(),
                 )
@@ -117,6 +130,14 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         // Ownership is established before any fallible certificate/diagnostic
         // operation, so its attempted work remains available on failure.
         self.models = Some(models);
+        if config.region_workers().is_none()
+            && config.search == crate::SearchMethod::Regions
+            && config.workers.get() > 1
+        {
+            observations.record(Event::ParallelProposals {
+                workers: config.workers,
+            })?;
+        }
         let models = self.models.as_mut().expect("candidate stream installed");
         if let Some(error) = crate::countermodel::prepare_certificate(
             models,
@@ -189,7 +210,11 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
                 .models
                 .as_mut()
                 .expect("unfinished session has a candidate stream");
-            let next = self.execution.next(models, config, control, phases);
+            let next = self
+                .execution
+                .as_mut()
+                .expect("unfinished session has a membership executor")
+                .next(models, config, control, phases);
             let interpretation = match next {
                 Some(Ok(model)) => model,
                 Some(Err(Failure::Search(error))) => {
@@ -339,7 +364,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             formula_execution: self
                 .models
                 .as_ref()
-                .and_then(|models| self.execution.statistics(models)),
+                .and_then(|models| self.execution.as_ref()?.statistics(models)),
         }
     }
 
@@ -357,3 +382,38 @@ mod timing_tests;
 #[cfg(test)]
 #[path = "../tests/support/formula_exhaustion_contracts.rs"]
 mod exhaustion_tests;
+
+impl<'a> FormulaSession<'a, crate::formula_execution::Execution> {
+    /// Own semantic preparation before choosing its executor. A stopped
+    /// preparation retains its receipts without constructing a device pipeline.
+    /// Executor construction keeps the ordinary session's fallible start door.
+    pub(crate) fn with_resources(
+        input: Input<'a>,
+        config: &SolveConfig,
+        resources: &crate::ExecutionResources,
+        observations: &mut impl ExecutionSink,
+        control: &Control,
+        phases: &Recorder,
+        selection: AnswerSelection,
+    ) -> Result<Self, SolveError> {
+        let mut session = Self::uninitialized(input, selection);
+        if let Err(error) = session.initialize(config, observations, control, phases) {
+            session.fail(error, phases);
+        }
+        if session.final_outcome.is_none() {
+            let plan = session
+                .models
+                .as_ref()
+                .and_then(StableModels::prepared_tight_certificate);
+            session.execution = Some(phases.measure(SolvePhase::ExecutionSetup, || {
+                crate::formula_execution::Execution::with_resources(
+                    config,
+                    resources,
+                    plan,
+                    observations,
+                )
+            })?);
+        }
+        Ok(session)
+    }
+}

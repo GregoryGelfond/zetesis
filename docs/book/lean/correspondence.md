@@ -251,6 +251,26 @@ evidence and a source argument, not a Lean proof of Rust's iterator. Canonical
 carrier ranks remain distinct from append-assigned catalog identities and ASP
 term comparison order.
 
+`GatePositions.rank_fold_eq_blocks` relates the left-to-right domain-rank fold
+to the sum of lexicographic block offsets. `blockOffset_lt_cardinality` places
+valid digits inside a carrier of size `domain_size ^ arity`, including the one
+empty tuple at arity zero. `GateIndex` adds the cardinalities of earlier gate
+signatures and one to that offset. These arithmetic laws do not establish the
+Rust binary search, signature/domain order, checked powers and additions, or
+the connection to `AtomIter`; the full-carrier tests check that connection.
+An index token keeps the original program and full gate position even when
+only supported atoms are supplied to `locate`.
+
+The closure candidate root may enumerate its completed upper bound's gate atoms
+directly, holding its lower bound and offering only the remaining upper atoms.
+`Bounds.narrowed_contains_accepted` supplies the coverage argument for every
+completed pass. The semantic gate carrier stays the original full carrier:
+atoms outside the upper bound are absent, including when read under default
+negation. Neither the upper bound nor the selected handles replaces the
+original program. A stopped upper-closure prefix cannot justify a smaller root;
+`Bounds.closed_upper_sound` requires closure. The mixed-radix law supplies the
+position calculation, not this semantic bound or executable enumeration proof.
+
 The scalar lazy closure retains one typed `Catalog` for each predicate. Every
 round borrows their existing ordered rows; new consequences remain separate
 until that round's complete template scan finishes. Catalogs are consumed once
@@ -435,6 +455,26 @@ The [execution chapter](../architecture/execution.md) explains these operations
 in the solver. The [candidate cursor contract](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/docs/candidate-cursor.md)
 and [projection-index contract](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/docs/candidate-pruning.md)
 describe their concrete ownership and failure boundaries.
+
+The batched parallel proposer separates classical candidate production from
+membership. Its workers use the original region readings and disjoint splits;
+they do not certify stable models. Read `Frontier` with a proposal family that
+contains every still-required stable interpretation. Necessary support cuts may
+exclude other classical models, so classical truth alone is not the proposal
+coverage predicate. `FormulaBounds` supplies the preservation premises for
+these cuts and decided classical leaves. `Pending.Walk.perm` accounts for leaves
+emitted so far together with those still held by the frontier.
+
+After producers join, emitted candidates enter the pending membership ledger.
+`BatchAccounting.exact_commit_preserves_soundness` justifies committing a fully
+classified prefix; `completed_results_exact` additionally requires coverage and
+an empty queued and pending remainder without delayed failure. Batch capacity
+is a scheduling boundary, not exhaustion. A producer stop retains completed
+candidates and reports the unresolved remainder as incomplete; it cannot turn
+an empty delivered batch into a complete negative result. The concrete queue
+ownership, reservation arithmetic, panic/cancellation paths, budget settlement
+before checking and transfer between rounds remain Rust obligations. The two
+abstract laws do not themselves verify that concurrent implementation.
 
 ## Representation and source laws
 
@@ -891,6 +931,27 @@ argument. Rust grouping, word addressing, atomic execution, barriers and
 readback remain unproved implementation correspondences. The packed membership
 refinement below concerns a different, 64-bit Rust representation and does not
 certify either shader schedule.
+
+CPU and device membership can consume the same immutable original-theory
+`TightPlan`; preparation does not itself classify a candidate. A completed
+original-root and ranked-support check uses
+`TightEvaluation.computed_verdict_sound`. Failed support under complete producer
+coverage uses `TightEvaluation.unsupported_refutes`: every stable interpretation
+of that grammar must support each present atom. This rejection needs no rank
+assumption and is distinct from failure to model an original root. Accordingly,
+the device adapter maps a stable verdict to `NoProperSubset`, original-root
+failure to `NotModel`, and authenticated failed support to `Refuted`. The
+primitive's failed-support variant is named `Residual` because it does not
+return a deletion witness; that name alone supplies no refutation premise.
+
+This shared semantic plan does not identify host scheduling with device work.
+Automatic device execution selects the tight checker only after successful
+certificate preparation. A theory admitted only by `PositivePlan` still uses
+the general device checker. Exact indexed producers, full candidate coverage,
+original-root truth, completed scans and decoded verdict identity must satisfy
+the respective laws; missing certificates and interrupted or malformed device
+results establish none of their conclusions. Rust certificate compilation and
+WGSL execution remain outside the proved correspondence.
 
 The static closure transport validates a nonzero submission epoch, input-world
 ordinal and completion marker before publishing any batch. The marker is written

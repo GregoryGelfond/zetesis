@@ -3,6 +3,7 @@
 //! gate-free rules derive belongs to every answer set, so the seed counter
 //! omits the first and holds the second.
 
+use std::collections::BTreeSet;
 use zetesis_core::{Atom, Predicate, Program, Seed, Template, Term, Value};
 use zetesis_cpu::{
     CandidateLimits, Candidates, Control, Limits, PreparationLimits, PreparedQueries, check,
@@ -58,6 +59,104 @@ fn narrowed(program: &Program) -> (Vec<Seed>, zetesis_cpu::CandidateStatistics) 
     candidates.bounded(Limits::default());
     let seeds = candidates.by_ref().map(Result::unwrap).collect();
     (seeds, candidates.statistics())
+}
+
+fn accepted_models(program: &Program, bounded: bool) -> BTreeSet<Vec<Atom>> {
+    let mut candidates = Candidates::new(program, CandidateLimits::default(), Control::default());
+    if bounded {
+        candidates.bounded(Limits::default());
+    }
+    candidates
+        .filter_map(|seed| {
+            let checked = check(
+                program,
+                &seed.unwrap(),
+                Limits::default(),
+                &Control::default(),
+            )
+            .unwrap();
+            checked
+                .accepted()
+                .then(|| checked.interpretation().atoms().iter().cloned().collect())
+        })
+        .collect()
+}
+
+#[test]
+fn an_omitted_negative_gate_is_false_not_a_missing_rule() {
+    // No rule produces q; excluding q from true candidates must leave not q
+    // satisfied in the unchanged rule p :- not q.
+    let program = program(vec![Template::new(
+        Some(pattern("p", vec![])),
+        vec![],
+        vec![],
+        vec![pattern("q", vec![])],
+        vec![],
+    )]);
+    let expected = BTreeSet::from([vec![atom("p", vec![])]]);
+    assert_eq!(accepted_models(&program, true), expected);
+    assert_eq!(accepted_models(&program, false), expected);
+}
+
+#[test]
+fn possible_double_negation_does_not_establish_truth() {
+    let p = pattern("p", vec![]);
+    let program = program(vec![Template::new(
+        Some(p.clone()),
+        vec![],
+        vec![p],
+        vec![],
+        vec![],
+    )]);
+    let expected = BTreeSet::from([vec![], vec![atom("p", vec![])]]);
+    assert_eq!(accepted_models(&program, true), expected);
+    assert_eq!(accepted_models(&program, false), expected);
+}
+
+#[test]
+fn positive_cycles_supply_no_possible_support_without_a_fact() {
+    // The negative reference makes p a gate. Candidate truth must not seed
+    // the ordinary positive loop p :- p; only q belongs to the answer set.
+    let p = pattern("p", vec![]);
+    let program = program(vec![
+        Template::new(Some(p.clone()), vec![p.clone()], vec![], vec![], vec![]),
+        Template::new(Some(pattern("q", vec![])), vec![], vec![], vec![p], vec![]),
+    ]);
+    let expected = BTreeSet::from([vec![atom("q", vec![])]]);
+    assert_eq!(accepted_models(&program, true), expected);
+    assert_eq!(accepted_models(&program, false), expected);
+}
+
+#[test]
+fn a_missing_positive_witness_cannot_produce_a_gate_atom() {
+    let p = pattern("p", vec![]);
+    let q = pattern("q", vec![]);
+    let program = program(vec![
+        Template::new(
+            Some(p.clone()),
+            vec![pattern("absent", vec![])],
+            vec![],
+            vec![q.clone()],
+            vec![],
+        ),
+        Template::new(Some(q), vec![], vec![], vec![p], vec![]),
+    ]);
+    let expected = BTreeSet::from([vec![atom("q", vec![])]]);
+    assert_eq!(accepted_models(&program, true), expected);
+    assert_eq!(accepted_models(&program, false), expected);
+}
+
+#[test]
+fn a_negative_constraint_still_refuses_an_unsupported_required_atom() {
+    let program = program(vec![Template::new(
+        None,
+        vec![],
+        vec![],
+        vec![pattern("a", vec![])],
+        vec![],
+    )]);
+    assert!(accepted_models(&program, true).is_empty());
+    assert!(accepted_models(&program, false).is_empty());
 }
 
 #[test]

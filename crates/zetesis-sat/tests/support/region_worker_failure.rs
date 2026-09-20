@@ -132,7 +132,10 @@ fn a_refused_certificate_refunds_its_reserved_work() {
     .unwrap();
     // Inject a lowered checking-storage allowance after valid construction:
     // the entered kernel refuses before consuming any of its reserved work.
-    let certificate = Arc::new(Certification::Tight { plan, max_bytes: 0 });
+    let certificate = Arc::new(Certification::Tight {
+        plan: Arc::new(plan),
+        max_bytes: 0,
+    });
     let limits = Limits::default();
     let mut budget = Budget {
         quota: crate::search::LocalQuota,

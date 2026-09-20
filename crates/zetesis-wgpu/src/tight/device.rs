@@ -15,10 +15,13 @@ use zetesis_ferraris::{Interpretation, TightPlan};
 /// Real-device original satisfaction and ranked producer support checking.
 ///
 /// Takes a complete opaque [`TightPlan`]; never constructs an unchecked rank or
-/// relies on an incomplete lazy registry. Candidate generation, exact residual
-/// completion, objectives and CPU fallback remain the caller's responsibilities.
+/// relies on an incomplete lazy registry. Candidate generation, objectives and
+/// any witness-producing residual completion remain the caller's responsibilities.
+/// A complete failed support scan also permits proof-based rejection by the
+/// support-necessity theorem; it publishes no concrete deletion witness.
 /// Every nonempty successful call executes the support kernel on the selected
-/// adapter. This is a separate primitive, not ordinary solver dispatch policy.
+/// adapter. Ordinary solver dispatch selects this independent primitive only
+/// after preparing its complete certificate; no CPU fallback occurs here.
 ///
 /// Work is linear in candidates times nodes, roots, producers and atoms. Each
 /// workgroup evaluates its DAG sequentially, then shares root/support scans

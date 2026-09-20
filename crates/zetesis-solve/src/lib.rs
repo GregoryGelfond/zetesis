@@ -72,6 +72,8 @@ mod engine;
 mod optimization;
 mod objective_bounds;
 mod formula_execution;
+#[cfg(feature = "gpu")]
+mod formula_tight;
 mod completion_accounting;
 mod formula_queue;
 mod solve_config;
@@ -100,6 +102,7 @@ pub use execution_observation::{ExecutionObservation, ExecutionObserver};
 pub use execution_resources::ExecutionResources;
 pub use formula_execution::{
     CompletionAccounting, FormulaDeviceLimits, FormulaExecutionStatistics,
+    FormulaResidualStatistics,
 };
 pub use grounding_timing::{GroundingMeasurement, GroundingTimings};
 pub use lazy_execution::{

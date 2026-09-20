@@ -561,6 +561,8 @@ import Zetesis
 #print axioms Zetesis.Pending.Step.perm
 #print axioms Zetesis.Pending.Walk.perm
 #print axioms Zetesis.Pending.Walk.exhausted
+#print axioms Zetesis.GatePositions.rank_fold_eq_blocks
+#print axioms Zetesis.GatePositions.blockOffset_lt_cardinality
 #print axioms Zetesis.GatePositions.atoms_exact
 #print axioms Zetesis.GatePositions.retained_position_exact
 #print axioms Zetesis.GateProjection.bitwise_support_exact
@@ -1175,6 +1177,7 @@ import Zetesis
 #print axioms Zetesis.TightEvaluation.head_support_group
 #print axioms Zetesis.TightEvaluation.head_support_true
 #print axioms Zetesis.TightEvaluation.support_true_iff
+#print axioms Zetesis.TightEvaluation.unsupported_refutes
 #print axioms Zetesis.TightEvaluation.computed_verdict_sound
 #print axioms Zetesis.TightEvaluation.completed_computation_exact
 #print axioms Zetesis.TightPlans.original_of_reduct

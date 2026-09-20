@@ -16,11 +16,68 @@ construction retains precisely that subsequence. Program instance checks keep
 unrelated carriers apart. Those Rust properties, opaque token construction,
 allocation, machine-word limits and bit packing are not proved here. The checked
 positive position representation reuses OptionalIndex's successor laws.
+
+The mixed-radix laws also relate a left-to-right digit fold to the sum of
+lexicographic block offsets, and bound that sum by the tuple cardinality.
+They do not prove that Rust's value comparison and binary search supply those
+digits, or that its checked arithmetic implements natural-number arithmetic.
 -/
 
 namespace Zetesis.GatePositions
 
 variable {Atom : Type}
+
+/-- The offset contributed by each coordinate when the last coordinate varies
+fastest. A coordinate skips one block of suffix tuples per preceding digit. -/
+def blockOffset (radix : Nat) : List Nat → Nat
+  | [] => 0
+  | digit :: tail => digit * radix ^ tail.length + blockOffset radix tail
+
+/-- Accumulating domain ranks from left to right computes the same offset as
+skipping lexicographic blocks. An existing prefix contributes one whole tuple
+cardinality per prefix position. This identity holds even for radix zero;
+validity of the supplied digits is needed only for the range theorem below.
+
+The induction peels off the leading digit, applies the tail identity to the
+updated prefix, and distributes multiplication over that update. -/
+theorem rank_fold_eq_blocks (radix : Nat) (digits : List Nat) (initial : Nat) :
+    digits.foldl (fun rank digit => rank * radix + digit) initial =
+      initial * radix ^ digits.length + blockOffset radix digits := by
+  induction digits generalizing initial with
+  | nil => simp [blockOffset]
+  | cons digit tail tail_rank =>
+    simp only [List.foldl_cons, List.length_cons, blockOffset]
+    rw [tail_rank]
+    simp only [Nat.pow_succ, Nat.add_mul, Nat.mul_assoc, Nat.mul_comm radix,
+      Nat.add_assoc]
+
+/-- Valid domain digits name a position strictly inside the complete tuple
+carrier. The empty tuple has position zero in a carrier of size one, including
+an empty domain. A nonempty tuple over that domain has no valid digits.
+
+Each valid leading digit leaves a full suffix block above the suffix offset;
+the digit bound then places that block within the complete carrier. -/
+theorem blockOffset_lt_cardinality (radix : Nat) (digits : List Nat)
+    (valid : ∀ digit ∈ digits, digit < radix) :
+    blockOffset radix digits < radix ^ digits.length := by
+  induction digits with
+  | nil => simp [blockOffset]
+  | cons digit tail tail_bound =>
+    have digit_valid : digit < radix := valid digit (List.mem_cons_self ..)
+    have tail_valid : ∀ value ∈ tail, value < radix := by
+      intro value member
+      exact valid value (List.mem_cons_of_mem digit member)
+    have suffix_inside : blockOffset radix tail < radix ^ tail.length :=
+      tail_bound tail_valid
+    calc
+      blockOffset radix (digit :: tail)
+          < digit * radix ^ tail.length + radix ^ tail.length :=
+        Nat.add_lt_add_left suffix_inside _
+      _ = (digit + 1) * radix ^ tail.length := (Nat.succ_mul ..).symm
+      _ ≤ radix * radix ^ tail.length :=
+        Nat.mul_le_mul_right _ digit_valid
+      _ = radix ^ (digit :: tail).length := by
+        simp only [List.length_cons, Nat.pow_succ, Nat.mul_comm]
 
 /-- Gate atoms paired with their original dense positions, in carrier order. -/
 def entries (keep : Atom → Bool) (carrier : List Atom) : List (Atom × Nat) :=

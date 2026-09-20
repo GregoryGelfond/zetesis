@@ -17,6 +17,7 @@ construction and standalone analysis APIs belong to its own manual.
 | All original answers, streamed or completely collected | `Session::enumerate`, `WorldView::collect`, checked `AnswerSet` |
 | Finite relational templates and atoms | `zetesis_core::{Program, Template, Atom, Seed}` |
 | Shared candidate ownership and borrowed checking | `zetesis_core::{SeedSelection, SeedView}`, `Candidates::next_selection` |
+| Locate supported atoms in the unchanged symbolic gate carrier | `zetesis_core::GateIndex` |
 | Checked borrowed atom identity | `AtomPattern::key`, `BindingView`, `AtomKey` |
 | Predicate ranges and exact typed membership | `Model::lookup`, `AtomIndex`, `AtomLookup`, `Value::compare_identity_with` |
 | Append-only atom identity during synchronous grounding | `atom_interner::AtomInterner`, `CommittedAtoms`, `AtomAppender` |
@@ -33,6 +34,7 @@ construction and standalone analysis APIs belong to its own manual.
 | Narrow a region of formula candidates, or of a reduct's subsets, by the theory's readings | `zetesis_ferraris::{Narrower, producers}` |
 | Reuse one reduct encoding across different candidates | `zetesis_sat::{PreparedReduct, ReductWorkspace}` |
 | Formula candidates and the reduct query by regions or by clauses | `zetesis_sat::{StableModels, SearchMethod, check_with}` |
+| Parallel classical proposals feeding a separate membership executor | `StableModels::with_region_producers`, `next_batch_with_completion` |
 | Bounded device execution | `zetesis_wgpu` |
 | Several device primitives on one selected device | `GpuContext` and each primitive's `from_context` constructor |
 | Reuse a compiled formula primitive across independent sessions | `GpuFormulaProfile`, `ExecutionResources::with_formula_profile` |
@@ -166,6 +168,14 @@ without another symbolic lookup. Manually supplied atom handles use the checked
 lookup path. Both routes use `SeedAtom::resolve_in`; an invalid indexed position
 is refused. Tokens retain program and position metadata, so eliminating lookup
 does not imply every intermediate representation is smaller.
+
+`GateIndex` retains one shared program owner and signature offsets. `locate`
+moves a supplied typed atom into a token at its original carrier rank without
+enumerating preceding tuples. It establishes identity and carrier membership,
+not possible support or truth. Complete lower/upper narrowing can use this
+operation to enumerate a sparse root while keeping static CPU/GPU positions
+unchanged. Index construction still refuses a full cardinality that cannot fit
+the position representation.
 
 `relation::Relation` borrows one immutable atom source with a dictionary and
 aligned equality-ID columns. `from_atoms` and `from_catalog` own that layout.

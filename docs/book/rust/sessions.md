@@ -99,21 +99,50 @@ original ground theory itself.
 
 `PositivePlan` admits positive atomic-head producers, including recursive ones,
 and arbitrary constraints. It computes their least consequences once, then
-checks original roots through the first failure. If all hold, the plan restricts
-candidate generation to that exact interpretation; a violated constraint empties
-the candidate region. A failed constraint leaves no answer
+checks original roots through the first failure. Clause search restricts candidates
+to that interpretation, or excludes them all when a constraint fails. Region search
+still checks original models and refutes any larger interpretation. A failed constraint leaves no answer
 set; it does not necessarily rule out larger classical models. `TightPlan`
 instead establishes its own acyclicity and supportedness conditions. Neither
 plan changes the definition of membership. The
 [semantic argument](../architecture/semantics.md) explains their relation to the
 frozen reduct.
 
+An explicit Metal or Vulkan formula session with `Oracle::Auto` uses the same
+accounted tight preparation, then executes `GpuTightOracle` when it succeeds.
+`StableModels::prepare_tight_certificate` exposes the shared immutable plan for
+an external executor without enabling CPU membership. Repeated calls retain the
+first construction attempt and its work; CPU checking can activate that same
+owner before enumeration. Positive-only theories continue through general device
+propagation, as does explicit `Oracle::Countermodel`. Device failures are returned
+without CPU replacement. Tight device work counts a complete original-truth and
+support scan; `gpu_formula_rounds` only limits the general propagator.
+
+`completion_workers` bounds unresolved queries. Complete tight device results
+use scalar original validation and batch commit, preserving the configured
+scratch limit without creating residual worker threads. Their completion receipt
+reports the selected scalar executor and zero effective residual workers.
+
+General device sessions with parallel region production retain separate proposal
+and residual Rayon pools. Four workers in each pool therefore retain eight Rayon
+threads, although production, device checking and completion are joined phases.
+The pools belong to the session; `ExecutionResources` does not share them across
+sessions. A scalar completion executor creates no residual pool. Worker counts
+describe these executors, not a bound on all process or driver threads.
+
+Semantic preparation precedes executor construction. A preparation interruption
+remains an owned session outcome with its work. Executor construction errors
+retain the existing fallible session-start contract; no session is returned in
+that case. Enabled phase measurements still include the preparation attempted
+before such a start failure.
+
 Class-shape or optional-capacity refusals retain general checking. Cancellation,
 exhausted shared work and allocation failure remain explicit interruptions.
 `ExecutionObservation::PositiveMembership` and `TightMembership` report the
 selected plan; the search statistics retain attempted construction, restrictions
 and checking work. Use `Oracle::Countermodel` to select the general comparison
-path explicitly. Explicit device execution currently retains that general path.
+path explicitly. Automatic device execution uses tight checking when its exact
+certificate is available; other theories retain general device checking.
 
 General completion under the clauses method lazily constructs one
 `PreparedReduct` for the exact original theory; under the default regions
@@ -327,8 +356,10 @@ its compilation without attempting device discovery.
 Resources retain device infrastructure, not programs, candidates, prepared
 formula graphs, worker pools or incumbents. Context-only resources create fresh
 primitive pipelines. `ExecutionResources::with_formula_profile(&profile)` also
-retains an exact compiled `GpuFormulaProfile`; repeated formula sessions reuse
+retains an exact compiled `GpuFormulaProfile`; repeated general formula sessions reuse
 that compilation while creating fresh subject preparation, residency and epochs.
+When tight support is selected, its distinct kernel compiles on the profile's
+exact context; the general formula pipeline is not used for support checking.
 The profile includes its exact context and gate projection. It cannot be paired
 with a different device through an independent field. The builder clones shared
 handles, so the original variables need not outlive the session.

@@ -1,8 +1,9 @@
-//! Ordinary-invocation GPU propagation with exact native residual completion.
+//! Formula membership execution with bounded proposal, check and commit batches.
 
 use crate::ExecutionObservation as Event;
 use crate::execution_observation::ExecutionSink;
 
+use std::sync::Arc;
 use zetesis_ferraris::Interpretation;
 use zetesis_sat::{Incomplete, StableModels};
 
@@ -31,6 +32,19 @@ impl From<&SolveConfig> for FormulaDeviceLimits {
     }
 }
 
+/// Decoded general-device propagation outcomes that still require exact
+/// membership. These precede CPU completion and commit: a later failure does
+/// not erase them, and an unreturned device batch contributes no decoded reason.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct FormulaResidualStatistics {
+    /// A complete no-change sweep left the proper-subset query unresolved.
+    pub fixed_point: u64,
+    /// The configured full-sweep ceiling was reached.
+    pub round_limit: u64,
+    /// The next full sweep could not fit its device work allowance.
+    pub work_limit: u64,
+}
+
 /// Actual formula GPU work and explicitly retained candidate results.
 #[derive(Clone, Debug, Default)]
 pub struct FormulaExecutionStatistics {
@@ -38,8 +52,17 @@ pub struct FormulaExecutionStatistics {
     pub adapter: String,
     /// Bounded batch completion accounting; scalar cursor execution has no record.
     pub completion: CompletionAccounting,
-    /// Effective device limits, absent when no GPU formula executor was created.
+    /// Effective general propagation limits, absent for CPU and tight support.
     pub gpu_limits: Option<FormulaDeviceLimits>,
+    /// Decoded residual reasons for the general GPU primitive. Absent for CPU
+    /// and tight-support execution; distinct from committed `cpu_residuals`.
+    pub gpu_residuals: Option<FormulaResidualStatistics>,
+    /// Complete tight-support scan work ceiling. Present only for that device
+    /// primitive; propagation sweep limits do not apply to a support scan.
+    pub tight_work_per_candidate: Option<u64>,
+    /// Scheduled full-scan work, including unreturned submitted tight batches.
+    /// Propagation has candidate-dependent work and leaves this absent.
+    pub gpu_scheduled_work: Option<u64>,
     /// Batches actually submitted, including submissions without a decoded result.
     pub gpu_submitted_batches: u64,
     /// Candidate worlds actually submitted, including unreturned results.
@@ -48,7 +71,7 @@ pub struct FormulaExecutionStatistics {
     pub gpu_batches: u64,
     /// Candidate worlds returned by successful GPU dispatches.
     pub gpu_candidates: u64,
-    /// Charged propagation work from successfully decoded results; not time or
+    /// Charged primitive work from successfully decoded results; not time or
     /// GPU instruction count. Work in an interrupted unreturned batch is unknown.
     pub gpu_work: u64,
     /// Sum of completed per-candidate propagation sweeps in decoded results.
@@ -56,7 +79,7 @@ pub struct FormulaExecutionStatistics {
     pub gpu_rounds: u64,
     /// Committed candidates completed by exact native CPU residual search.
     pub cpu_residuals: u64,
-    /// Successfully committed candidates decided by GPU propagation.
+    /// Successfully committed candidates decided by the selected GPU primitive.
     pub gpu_decided: u64,
     /// Proposed candidates whose membership has not been committed.
     pub pending_candidates: usize,
@@ -97,12 +120,20 @@ pub(crate) enum Execution {
         queue: Box<crate::formula_queue::BatchQueue>,
         statistics: Box<FormulaExecutionStatistics>,
     },
+    #[cfg(feature = "gpu")]
+    Tight {
+        oracle: Box<zetesis_wgpu::GpuTightOracle>,
+        plan: Arc<zetesis_ferraris::TightPlan>,
+        queue: Box<crate::formula_queue::BatchQueue>,
+        statistics: Box<FormulaExecutionStatistics>,
+    },
 }
 
 impl Execution {
     pub(crate) fn with_resources(
         options: &SolveConfig,
         resources: &ExecutionResources,
+        tight_plan: Option<Arc<zetesis_ferraris::TightPlan>>,
         observations: &mut impl ExecutionSink,
     ) -> Result<Self, SolveError> {
         if matches!(options.backend, Backend::Auto | Backend::Cpu) {
@@ -128,13 +159,14 @@ impl Execution {
             }
             return Ok(Self::Cpu);
         }
-        Self::gpu(options, resources, observations)
+        Self::gpu(options, resources, tight_plan, observations)
     }
 
     #[cfg(not(feature = "gpu"))]
     fn gpu(
         _: &SolveConfig,
         _: &ExecutionResources,
+        _: Option<Arc<zetesis_ferraris::TightPlan>>,
         _: &mut impl ExecutionSink,
     ) -> Result<Self, SolveError> {
         Err(SolveError::BackendUnavailable)
@@ -144,11 +176,15 @@ impl Execution {
     fn gpu(
         options: &SolveConfig,
         resources: &ExecutionResources,
+        tight_plan: Option<Arc<zetesis_ferraris::TightPlan>>,
         observations: &mut impl ExecutionSink,
     ) -> Result<Self, SolveError> {
         let context = resources
             .gpu_for(options.backend)
             .map_err(SolveError::Gpu)?;
+        if let Some(plan) = tight_plan {
+            return Self::tight(options, context, plan, observations);
+        }
         let oracle = match (resources.formula_profile(), context) {
             (Some(profile), _) => zetesis_wgpu::GpuFormulaOracle::from_profile(profile),
             (None, Some(context)) => zetesis_wgpu::GpuFormulaOracle::from_context(context),
@@ -178,6 +214,7 @@ impl Execution {
             statistics: Box::new(FormulaExecutionStatistics {
                 adapter,
                 gpu_limits: Some(options.into()),
+                gpu_residuals: Some(FormulaResidualStatistics::default()),
                 ..Default::default()
             }),
         })
@@ -187,10 +224,7 @@ impl Execution {
 impl MembershipExecution for Execution {
     fn statistics(&self, models: &StableModels) -> Option<FormulaExecutionStatistics> {
         match self {
-            Self::Cpu => {
-                let _ = models;
-                None
-            }
+            Self::Cpu => None,
             Self::Batched { queue } => Some(batch_statistics(
                 queue,
                 models,
@@ -198,6 +232,9 @@ impl MembershipExecution for Execution {
             )),
             #[cfg(feature = "gpu")]
             Self::Hybrid {
+                queue, statistics, ..
+            }
+            | Self::Tight {
                 queue, statistics, ..
             } => {
                 let batch = models.batch_statistics();
@@ -243,6 +280,17 @@ impl MembershipExecution for Execution {
             } => queue.next(models, options, control, |theory, candidates| {
                 propagate(
                     oracle, statistics, theory, candidates, options, control, phases,
+                )
+            }),
+            #[cfg(feature = "gpu")]
+            Self::Tight {
+                oracle,
+                plan,
+                queue,
+                statistics,
+            } => queue.next(models, options, control, |_, candidates| {
+                super::formula_tight::check(
+                    oracle, plan, statistics, candidates, options, control, phases,
                 )
             }),
         }
@@ -293,15 +341,34 @@ fn propagate(
             &mut statistics.gpu_rounds,
             u64::from(check.statistics().rounds),
         )?;
-        verdicts.push(match check.verdict() {
-            zetesis_wgpu::FormulaVerdict::NotModel => zetesis_sat::BatchVerdict::NotModel,
-            zetesis_wgpu::FormulaVerdict::NoProperSubset => {
-                zetesis_sat::BatchVerdict::NoProperSubset
-            }
-            zetesis_wgpu::FormulaVerdict::Residual(_) => zetesis_sat::BatchVerdict::Residual,
-        });
+        verdicts.push(decoded_verdict(
+            statistics.gpu_residuals.get_or_insert_default(),
+            check.verdict(),
+        )?);
     }
     Ok(verdicts)
+}
+
+#[cfg(feature = "gpu")]
+fn decoded_verdict(
+    residuals: &mut FormulaResidualStatistics,
+    verdict: zetesis_wgpu::FormulaVerdict,
+) -> Result<zetesis_sat::BatchVerdict, Failure> {
+    use zetesis_sat::BatchVerdict;
+    use zetesis_wgpu::{FormulaVerdict, ResidualReason};
+    Ok(match verdict {
+        FormulaVerdict::NotModel => BatchVerdict::NotModel,
+        FormulaVerdict::NoProperSubset => BatchVerdict::NoProperSubset,
+        FormulaVerdict::Residual(reason) => {
+            let count = match reason {
+                ResidualReason::FixedPoint => &mut residuals.fixed_point,
+                ResidualReason::RoundLimit => &mut residuals.round_limit,
+                ResidualReason::WorkLimit => &mut residuals.work_limit,
+            };
+            add(count, 1)?;
+            BatchVerdict::Residual
+        }
+    })
 }
 
 #[cfg(feature = "gpu")]
@@ -316,7 +383,7 @@ fn device_limits(options: &SolveConfig) -> zetesis_wgpu::FormulaLimits {
 }
 
 #[cfg(feature = "gpu")]
-fn record_submission(
+pub(super) fn record_submission(
     statistics: &mut FormulaExecutionStatistics,
     candidates: Option<usize>,
 ) -> Result<(), Failure> {
@@ -338,7 +405,7 @@ fn record_submission(
 }
 
 #[cfg(feature = "gpu")]
-fn add(counter: &mut u64, value: u64) -> Result<(), Failure> {
+pub(super) fn add(counter: &mut u64, value: u64) -> Result<(), Failure> {
     *counter = counter
         .checked_add(value)
         .ok_or(Failure::Search(Incomplete::CounterOverflow))?;
@@ -376,3 +443,7 @@ impl<E: MembershipExecution + ?Sized> MembershipExecution for &mut E {
 #[cfg(all(test, feature = "gpu"))]
 #[path = "../tests/support/formula_resources.rs"]
 mod resource_tests;
+
+#[cfg(all(test, feature = "gpu"))]
+#[path = "../tests/support/formula_residuals.rs"]
+mod residual_tests;

@@ -4,6 +4,12 @@ use serde_json::json;
 
 use crate::performance::matrix::fixtures::fixture;
 
+#[path = "matrix_tight_telemetry.rs"]
+mod tight_tests;
+
+#[path = "matrix_residual_telemetry.rs"]
+mod residual_tests;
+
 #[test]
 fn actual_cpu_route_remains_distinct_from_requested_metal() {
     let (document, text) = fixture();

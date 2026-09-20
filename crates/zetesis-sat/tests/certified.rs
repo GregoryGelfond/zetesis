@@ -78,6 +78,122 @@ fn batch_limits(n: usize) -> BatchLimits {
 }
 
 #[test]
+fn external_preparation_does_not_activate_cpu_checking() {
+    let original = choices();
+    let mut stream = by_clauses(&original, Limits::default(), Control::default()).unwrap();
+    let plan = stream
+        .prepare_tight_certificate(TightPlanLimits::default())
+        .unwrap()
+        .unwrap();
+    assert!(plan.theory().same_instance(&original));
+    let work = stream.statistics().search.work;
+    let again = stream
+        .prepare_tight_certificate(TightPlanLimits::default())
+        .unwrap()
+        .unwrap();
+    assert!(std::sync::Arc::ptr_eq(&plan, &again));
+    assert_eq!(stream.statistics().search.work, work);
+    assert_eq!(masks(stream.by_ref()), expected(&original));
+    assert!(stream.exhausted());
+    assert_eq!(stream.statistics().certified.unwrap().checks, 0);
+    assert!(stream.statistics().countermodel_queries > 0);
+}
+
+#[test]
+fn cpu_activation_reuses_external_preparation() {
+    let original = choices();
+    let mut stream = by_clauses(&original, Limits::default(), Control::default()).unwrap();
+    let plan = stream
+        .prepare_tight_certificate(TightPlanLimits::default())
+        .unwrap()
+        .unwrap();
+    let work = stream.statistics().search.work;
+    assert!(
+        stream
+            .enable_certified_checking(TightPlanLimits::default())
+            .unwrap()
+    );
+    assert!(std::sync::Arc::ptr_eq(
+        &plan,
+        &stream.prepared_tight_certificate().unwrap()
+    ));
+    assert_eq!(stream.statistics().search.work, work);
+    assert_eq!(masks(stream.by_ref()), expected(&original));
+    assert!(stream.statistics().certified.unwrap().checks > 0);
+    assert_eq!(stream.statistics().countermodel_queries, 0);
+}
+
+#[test]
+fn external_preparation_retains_optional_refusal() {
+    let original = choices();
+    let mut stream = by_clauses(&original, Limits::default(), Control::default()).unwrap();
+    assert!(
+        stream
+            .prepare_tight_certificate(TightPlanLimits {
+                max_work: 1,
+                ..Default::default()
+            })
+            .unwrap()
+            .is_none()
+    );
+    let work = stream.statistics().search.work;
+    assert!(stream.statistics().certified.unwrap().construction_work > 0);
+    assert!(
+        stream
+            .prepare_tight_certificate(TightPlanLimits::default())
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(stream.statistics().search.work, work);
+    assert_eq!(masks(stream.by_ref()), expected(&original));
+    assert!(stream.exhausted());
+}
+
+#[test]
+fn external_preparation_obeys_cumulative_work() {
+    let original = choices();
+    let initial = by_clauses(&original, Limits::default(), Control::default())
+        .unwrap()
+        .statistics()
+        .search
+        .work;
+    let mut limits = Limits::default();
+    limits.search.max_work = initial + 1;
+    let mut stream = by_clauses(&original, limits, Control::default()).unwrap();
+    assert!(matches!(
+        stream.prepare_tight_certificate(TightPlanLimits::default()),
+        Err(Incomplete::WorkLimit)
+    ));
+    assert_eq!(stream.statistics().search.work, initial + 1);
+    assert!(stream.prepared_tight_certificate().is_none());
+    assert!(!stream.exhausted());
+}
+
+#[test]
+fn cpu_activation_refuses_pending_external_candidates() {
+    let original = choices();
+    let mut stream = by_clauses(&original, Limits::default(), Control::default()).unwrap();
+    stream
+        .prepare_tight_certificate(TightPlanLimits::default())
+        .unwrap()
+        .unwrap();
+    assert!(matches!(
+        stream.next_batch(batch_limits(3), |_, _| Err::<Vec<BatchVerdict>, ()>(())),
+        Err(BatchError::Checker(()))
+    ));
+    assert_eq!(stream.batch_statistics().pending, 3);
+    let work = stream.statistics().search.work;
+    assert!(matches!(
+        stream.enable_certified_checking(TightPlanLimits::default()),
+        Err(Incomplete::LateCertificate)
+    ));
+    assert_eq!(stream.statistics().search.work, work);
+    assert_eq!(stream.statistics().certified.unwrap().checks, 0);
+    assert_eq!(stream.batch_statistics().pending, 3);
+    assert!(!stream.exhausted());
+}
+
+#[test]
 fn scalar_and_rayon_batches_match_independent_reduct_with_support_refutations_and_refusals() {
     let cases = [
         choices(),

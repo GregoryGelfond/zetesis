@@ -165,6 +165,8 @@ impl Record {
 struct Routes {
     device_closure: usize,
     device_formula: usize,
+    device_tight: usize,
+    proposal_workers: Option<NonZeroUsize>,
     cpu_closure: usize,
     cpu_formula: usize,
     observed_backend: Option<AdapterBackend>,
@@ -176,6 +178,14 @@ impl ExecutionObserver for Routes {
 
     fn observe(&mut self, observation: ExecutionObservation<'_>) -> Result<(), Self::Error> {
         let adapter = match observation {
+            ExecutionObservation::ParallelProposals { workers } => {
+                self.proposal_workers = Some(workers);
+                None
+            }
+            ExecutionObservation::DeviceTight { adapter, .. } => {
+                self.device_tight += 1;
+                Some(adapter)
+            }
             ExecutionObservation::DeviceClosure { adapter, .. } => {
                 self.device_closure += 1;
                 Some(adapter)
@@ -759,4 +769,211 @@ fn metal_formula_profiles_preserve_independent_sessions() {
 #[ignore = "requires actual Vulkan; independent formula sessions share one compilation"]
 fn vulkan_formula_profiles_preserve_independent_sessions() {
     independent_profile_sessions(Device::Vulkan);
+}
+
+const TIGHT_FAMILIES: [&str; 6] = [
+    "",
+    "{a;b}. :- a,b.",
+    "a :- not b. b :- not a.",
+    "a. b :- a. :- not b.",
+    "a. :- a.",
+    "1 {a;b} 1. #minimize {1@2,a:a;1@2,b:b}.",
+];
+
+#[test]
+fn ordinary_tight_fixtures_have_complete_certificates() {
+    for source in TIGHT_FAMILIES {
+        let owner = formula(source);
+        zetesis_ferraris::TightPlan::compile(
+            owner.theory(),
+            zetesis_ferraris::TightPlanLimits::default(),
+            &Control::default(),
+        )
+        .unwrap();
+    }
+}
+
+fn tight_families(device: Device) {
+    let context = device.context();
+    let resources = ExecutionResources::with_gpu(&context);
+    for source in TIGHT_FAMILIES {
+        let owner = formula(source);
+        let subject = Subject::Theory(owner.theory().clone());
+        let cpu = solve(
+            PreparedInput::formula(&owner),
+            &subject,
+            config(Backend::Cpu, Profile::Formula),
+            &ExecutionResources::default(),
+            AnswerSelection::Optimal,
+        );
+        assert_eq!(cpu.outcome.completion(), Some(Completion::Exhausted));
+        for workers in [1, 4] {
+            let mut options = config(device.backend(), Profile::Formula);
+            options.oracle = Oracle::Auto;
+            options.workers = NonZeroUsize::new(workers).unwrap();
+            options.completion_workers = NonZeroUsize::new(4).unwrap();
+            // Exercise a partial last batch as well as multiple full batches.
+            options.batch_size = NonZeroUsize::new(2).unwrap();
+            let gpu = solve(
+                PreparedInput::formula(&owner),
+                &subject,
+                options,
+                &resources,
+                AnswerSelection::Optimal,
+            );
+            assert_eq!(gpu.records, cpu.records, "{source}");
+            assert_eq!(gpu.outcome.completion(), Some(Completion::Exhausted));
+            assert_eq!(gpu.routes.device_tight, 1, "{source}");
+            assert_eq!(gpu.routes.device_formula + gpu.routes.cpu_formula, 0);
+            assert_eq!(gpu.routes.observed_backend, Some(device.observed()));
+            assert_eq!(
+                gpu.routes.proposal_workers,
+                (workers > 1).then(|| NonZeroUsize::new(workers).unwrap())
+            );
+            let stats = gpu.outcome.formula_execution().unwrap();
+            assert_eq!(stats.gpu_limits, None);
+            assert_eq!(stats.gpu_residuals, None);
+            assert!(stats.tight_work_per_candidate.is_some());
+            assert_eq!(stats.cpu_residuals, 0);
+            assert_eq!(stats.completion.requested_workers, 1);
+            assert_eq!(stats.completion.effective_workers, 0);
+            assert_eq!(stats.completion.residuals, 0);
+            assert_eq!(stats.gpu_rounds, 0);
+            assert_eq!(stats.gpu_scheduled_work, Some(stats.gpu_work));
+            let search = gpu.outcome.countermodel_statistics().unwrap();
+            assert_eq!(
+                search.certified.unwrap().checks,
+                0,
+                "device policy must not perform hidden CPU certificate checks"
+            );
+            assert_eq!(search.countermodel_queries, 0);
+            if !gpu.records.is_empty() {
+                assert!(stats.gpu_batches > 0);
+                assert!(stats.gpu_candidates > 0);
+                assert!(stats.gpu_work > 0);
+            }
+        }
+    }
+}
+
+#[test]
+#[ignore = "requires actual Metal; complete ordinary tight families and device route"]
+fn metal_tight_sessions_preserve_complete_families() {
+    tight_families(Device::Metal);
+}
+
+#[test]
+#[ignore = "requires actual Vulkan; complete ordinary tight families and device route"]
+fn vulkan_tight_sessions_preserve_complete_families() {
+    tight_families(Device::Vulkan);
+}
+
+fn general_formula_selection(device: Device) {
+    let resources = ExecutionResources::with_gpu(&device.context());
+    for (source, oracle) in [
+        ("{a}.", Oracle::Countermodel),
+        ("a :- b. b :- a.", Oracle::Auto),
+        ("a | b.", Oracle::Auto),
+    ] {
+        let owner = formula(source);
+        let subject = Subject::Theory(owner.theory().clone());
+        let cpu = solve(
+            PreparedInput::formula(&owner),
+            &subject,
+            config(Backend::Cpu, Profile::Formula),
+            &ExecutionResources::default(),
+            AnswerSelection::All,
+        );
+        let mut options = config(device.backend(), Profile::Formula);
+        options.oracle = oracle;
+        let gpu = solve(
+            PreparedInput::formula(&owner),
+            &subject,
+            options,
+            &resources,
+            AnswerSelection::All,
+        );
+        assert_eq!(gpu.records, cpu.records);
+        require_device(&gpu, device, Profile::Formula);
+        assert_eq!(gpu.routes.device_tight, 0);
+        assert_eq!(gpu.outcome.completion(), Some(Completion::Exhausted));
+        assert_eq!(
+            gpu.outcome
+                .formula_execution()
+                .unwrap()
+                .tight_work_per_candidate,
+            None
+        );
+    }
+}
+
+#[test]
+#[ignore = "requires actual Metal; general formulas never use a CPU certificate fallback"]
+fn metal_general_formulas_keep_device_execution() {
+    general_formula_selection(Device::Metal);
+}
+
+#[test]
+#[ignore = "requires actual Vulkan; general formulas never use a CPU certificate fallback"]
+fn vulkan_general_formulas_keep_device_execution() {
+    general_formula_selection(Device::Vulkan);
+}
+
+fn tight_refusal(device: Device) {
+    let owner = formula("{a}.");
+    let resources = ExecutionResources::with_gpu(&device.context());
+    let mut options = config(device.backend(), Profile::Formula);
+    options.oracle = Oracle::Auto;
+    options.gpu_formula_work = 0;
+    let mut routes = Routes::default();
+    let mut session = Session::builder(PreparedInput::formula(&owner), options, Control::default())
+        .resources(&resources)
+        .start_observed(&mut routes)
+        .unwrap();
+    let failure = session.next_observed(&mut routes).unwrap().unwrap_err();
+    assert!(matches!(failure.cause.as_ref(), SolveError::Gpu(_)));
+    assert!(session.next_observed(&mut routes).is_none());
+    assert_eq!(routes.device_tight, 1);
+    assert_eq!(routes.device_formula + routes.cpu_formula, 0);
+    let outcome = session.outcome().unwrap();
+    assert_ne!(outcome.completion(), Some(Completion::Exhausted));
+    let device = outcome.formula_execution().unwrap();
+    assert_eq!(device.gpu_submitted_candidates, 0);
+    assert_eq!(device.gpu_candidates, 0);
+    assert_eq!(device.gpu_scheduled_work, Some(0));
+    assert!(device.pending_candidates > 0);
+    assert_eq!(
+        outcome
+            .countermodel_statistics()
+            .unwrap()
+            .certified
+            .unwrap()
+            .checks,
+        0
+    );
+    // Admission before submission leaves the exact supplied context reusable.
+    let mut options = config(options.backend, Profile::Formula);
+    options.oracle = Oracle::Auto;
+    let complete = solve(
+        PreparedInput::formula(&owner),
+        &Subject::Theory(owner.theory().clone()),
+        options,
+        &resources,
+        AnswerSelection::All,
+    );
+    assert_eq!(complete.outcome.completion(), Some(Completion::Exhausted));
+    assert_eq!(complete.records.len(), 2);
+    assert!(complete.outcome.formula_execution().unwrap().gpu_candidates > 0);
+}
+
+#[test]
+#[ignore = "requires actual Metal; tight work refusal cannot become CPU success"]
+fn metal_tight_refusal_preserves_pending_coverage() {
+    tight_refusal(Device::Metal);
+}
+
+#[test]
+#[ignore = "requires actual Vulkan; tight work refusal cannot become CPU success"]
+fn vulkan_tight_refusal_preserves_pending_coverage() {
+    tight_refusal(Device::Vulkan);
 }

@@ -1,5 +1,5 @@
 //! Reconcile authored route views with bounded typed JSON counters.
-use super::{DeviceWork, Execution, Observation, Procedure};
+use super::{DeviceWork, Execution, FormulaResidualStatistics, Observation, Procedure};
 use crate::selected::{Backend, Grounder, NativeExecution, Oracle};
 use serde_json::Value;
 
@@ -40,6 +40,7 @@ pub(super) fn observe(
         let prefix = route
             .strip_prefix("gpu (")
             .or_else(|| route.strip_prefix("hybrid GPU propagation + exact CPU residual search ("))
+            .or_else(|| route.strip_prefix("GPU tight support ("))
             .ok_or("unsupported actual backend metadata")?;
         let (adapter, _) = prefix
             .split_once(", Metal; vendor=")
@@ -161,6 +162,18 @@ fn device(
             reason: "static closure driver does not accumulate dispatch/transfer counters",
         });
     }
+    if route.starts_with("GPU tight support (") || effective == "GPU tight support" {
+        if grounder != Grounder::Eager
+            || procedure != Procedure::TightSupport
+            || effective != "GPU tight support"
+            || !route.starts_with("GPU tight support (")
+            || !formula_stats.is_object()
+            || !lazy_stats.is_null()
+        {
+            return Err("tight Metal requires its own activity record and route".into());
+        }
+        return tight(formula_stats, adapter);
+    }
     if grounder != Grounder::Eager
         || effective != "hybrid GPU propagation + exact CPU residual search"
         || !route.starts_with("hybrid GPU propagation + exact CPU residual search (")
@@ -207,6 +220,56 @@ fn lazy(value: &Value, adapter: Option<&str>) -> Result<DeviceWork, String> {
     })
 }
 fn formula(value: &Value, adapter: Option<&str>) -> Result<DeviceWork, String> {
+    if !value["tight_work_per_candidate"].is_null() || !value["gpu_scheduled_work"].is_null() {
+        return Err("propagation route reports tight-support work".into());
+    }
+    let activity = formula_activity(value, adapter)?;
+    Ok(DeviceWork::Formula {
+        batches: activity.batches,
+        candidates: activity.candidates,
+        work: activity.work,
+        cpu_residuals: activity.residuals,
+        gpu_residuals: residual_reasons(value, activity.residuals)?,
+        peak_accounted_bytes: activity.peak_bytes,
+    })
+}
+
+fn residual_reasons(
+    value: &Value,
+    expected: u64,
+) -> Result<Option<FormulaResidualStatistics>, String> {
+    let reasons = &value["gpu_residuals"];
+    if reasons.is_null() {
+        return Ok(None);
+    }
+    let reasons = FormulaResidualStatistics {
+        fixed_point: number(reasons, "fixed_point")?,
+        round_limit: number(reasons, "round_limit")?,
+        work_limit: number(reasons, "work_limit")?,
+    };
+    // Complete observations already reconcile every decoded candidate with a
+    // committed device or CPU verdict. Completion attempts can include retries
+    // and are deliberately not the population counted by this device receipt.
+    if reasons
+        .fixed_point
+        .checked_add(reasons.round_limit)
+        .and_then(|sum| sum.checked_add(reasons.work_limit))
+        != Some(expected)
+    {
+        return Err("decoded residual reasons contradict complete formula work".into());
+    }
+    Ok(Some(reasons))
+}
+
+struct FormulaActivity {
+    batches: u64,
+    candidates: u64,
+    work: u64,
+    residuals: u64,
+    peak_bytes: u64,
+}
+
+fn formula_activity(value: &Value, adapter: Option<&str>) -> Result<FormulaActivity, String> {
     let adapter = adapter.ok_or("missing actual formula adapter")?;
     if !value["adapter"]
         .as_str()
@@ -226,12 +289,57 @@ fn formula(value: &Value, adapter: Option<&str>) -> Result<DeviceWork, String> {
         return Err("formula device accounting contradicts exhausted coverage".into());
     }
     completion(&value["completion"], candidates, residuals)?;
-    Ok(DeviceWork::Formula {
+    Ok(FormulaActivity {
         batches,
         candidates,
         work: number(value, "gpu_work")?,
-        cpu_residuals: residuals,
-        peak_accounted_bytes: number(value, "peak_accounted_bytes")?,
+        residuals,
+        peak_bytes: number(value, "peak_accounted_bytes")?,
+    })
+}
+
+fn tight(value: &Value, adapter: Option<&str>) -> Result<DeviceWork, String> {
+    let activity = formula_activity(value, adapter)?;
+    let submitted_batches = number(value, "gpu_submitted_batches")?;
+    let submitted_candidates = number(value, "gpu_submitted_candidates")?;
+    let scheduled_work = number(value, "gpu_scheduled_work")?;
+    let work_per_candidate_limit = number(value, "tight_work_per_candidate")?;
+    if !value["gpu_residuals"].is_null()
+        || value.get("gpu_limits") != Some(&Value::Null)
+        || number(value, "gpu_rounds")? != 0
+        || activity.residuals != 0
+        || number(&value["completion"], "residuals")? != 0
+        || submitted_batches < activity.batches
+        || submitted_candidates < activity.candidates
+        || (submitted_batches == 0) != (submitted_candidates == 0)
+        || submitted_batches > submitted_candidates
+        || activity.work > scheduled_work
+        || u128::from(scheduled_work)
+            > u128::from(submitted_candidates) * u128::from(work_per_candidate_limit)
+        || u128::from(activity.work)
+            > u128::from(activity.candidates) * u128::from(work_per_candidate_limit)
+    {
+        return Err("tight support counters or limits contradict the reported primitive".into());
+    }
+    // One immutable plan performs the same complete scan in every candidate.
+    // With no decoded candidate, submitted work remains a scheduling receipt;
+    // it must not be relabelled as completed work or propagation sweeps.
+    if activity.candidates > 0
+        && (activity.work % activity.candidates != 0
+            || u128::from(scheduled_work) * u128::from(activity.candidates)
+                != u128::from(activity.work) * u128::from(submitted_candidates))
+    {
+        return Err("tight support scan work disagrees across candidate counts".into());
+    }
+    Ok(DeviceWork::TightSupport {
+        batches: activity.batches,
+        candidates: activity.candidates,
+        work: activity.work,
+        submitted_batches,
+        submitted_candidates,
+        scheduled_work,
+        work_per_candidate_limit,
+        peak_accounted_bytes: activity.peak_bytes,
     })
 }
 
@@ -316,8 +424,14 @@ fn cpu(statistics: &Value) -> Result<DeviceWork, String> {
     }
     let execution = &statistics["execution"];
     if !execution.is_null() {
-        if !execution["adapter"].is_null() {
-            return Err("CPU route reports a device adapter".into());
+        if !execution["adapter"].is_null()
+            || !execution["gpu_residuals"].is_null()
+            || !execution["tight_work_per_candidate"].is_null()
+            || !execution["gpu_scheduled_work"].is_null()
+        {
+            return Err(
+                "CPU route reports device identity, residual reasons or tight-support work".into(),
+            );
         }
         for counter in [
             "gpu_batches",

@@ -13,6 +13,7 @@ use super::{StableModels, Statistics};
 use crate::search::{Budget, LocalQuota, increment};
 use crate::timing::{self, Phase};
 use crate::{AdmissionError, Control, Incomplete, Limits, SearchStatistics};
+use std::sync::Arc;
 use zetesis_ferraris::{
     Interpretation, PositiveError, PositivePlan, PositivePlanLimits, PositiveResource,
     TightCheckLimits, TightError, TightPlan, TightPlanLimits, TightResource, TightVerdict,
@@ -21,13 +22,33 @@ use zetesis_ferraris::{
 #[derive(Debug)]
 pub(super) enum Certification {
     Tight {
-        plan: TightPlan,
+        plan: Arc<TightPlan>,
         max_bytes: u64,
     },
     Positive {
         plan: PositivePlan,
         max_bytes: usize,
     },
+}
+
+/// One semantic owner, with an explicit choice of who checks its candidates.
+#[derive(Debug)]
+pub(super) struct Certificate {
+    plan: Arc<Certification>,
+    usage: Use,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Use {
+    External,
+    Cpu,
+}
+
+impl Certificate {
+    /// Only an activated CPU policy is passed into native leaf checking.
+    pub(super) fn cpu(&self) -> Option<&Arc<Certification>> {
+        (self.usage == Use::Cpu).then_some(&self.plan)
+    }
 }
 
 impl Certification {
@@ -87,6 +108,44 @@ impl From<Verdict> for crate::ferraris::Decision {
 }
 
 impl StableModels {
+    /// Prepare a complete tight certificate for an external membership executor.
+    ///
+    /// Uses the same accounted construction as CPU checking, but installs no
+    /// CPU membership policy. The immutable plan and its first preparation
+    /// attempt remain owned by this enumeration. Repeated preparation retains
+    /// that attempt, including refusal, without replenishing work. A CPU policy
+    /// selected earlier remains selected; this operation never replaces it.
+    ///
+    /// # Errors
+    /// Refuses late or closed configuration, cancellation and cumulative work
+    /// exhaustion. Optional shape and storage refusals return `None` with their
+    /// construction receipts retained in the enumeration's statistics.
+    pub fn prepare_tight_certificate(
+        &mut self,
+        limits: TightPlanLimits,
+    ) -> Result<Option<Arc<TightPlan>>, Incomplete> {
+        self.configure_certificates(
+            CertificateLimits {
+                tight: limits,
+                ..Default::default()
+            },
+            &[Kind::Tight],
+            Use::External,
+        )?;
+        Ok(self.prepared_tight_certificate())
+    }
+
+    /// Shared complete-original-theory tight certificate, if preparation chose
+    /// one. Retaining this handle neither checks a candidate nor selects an
+    /// execution backend. Its construction work belongs to this enumeration.
+    #[must_use]
+    pub fn prepared_tight_certificate(&self) -> Option<Arc<TightPlan>> {
+        match self.certificate.as_ref()?.plan.as_ref() {
+            Certification::Tight { plan, .. } => Some(Arc::clone(plan)),
+            Certification::Positive { .. } => None,
+        }
+    }
+
     /// Try only a tight normal/choice certificate for the original theory.
     /// This compatibility operation never selects the positive-cycle algorithm.
     /// Repeated configuration retains the first attempt, including refusal.
@@ -104,6 +163,7 @@ impl StableModels {
                 ..Default::default()
             },
             &[Kind::Tight],
+            Use::Cpu,
         )
     }
 
@@ -135,19 +195,31 @@ impl StableModels {
             CertificateOrder::TightFirst => [Kind::Tight, Kind::Positive],
             CertificateOrder::PositiveFirst => [Kind::Positive, Kind::Tight],
         };
-        self.configure_certificates(limits, &kinds)
+        self.configure_certificates(limits, &kinds, Use::Cpu)
     }
 
     fn configure_certificates(
         &mut self,
         limits: CertificateLimits,
         kinds: &[Kind],
+        usage: Use,
     ) -> Result<bool, Incomplete> {
         if self.terminal {
             return Err(Incomplete::ClosedEnumerator);
         }
         if self.statistics.certified.is_some() {
-            return Ok(self.certification.is_some());
+            let started =
+                self.statistics.candidate_queries != 0 || self.statistics().candidates != 0;
+            if let Some(certificate) = self.certificate.as_mut()
+                && usage == Use::Cpu
+                && certificate.usage == Use::External
+            {
+                if started {
+                    return Err(Incomplete::LateCertificate);
+                }
+                certificate.usage = Use::Cpu;
+            }
+            return Ok(self.certificate.is_some());
         }
         if self.statistics.candidate_queries != 0 || self.statistics().candidates != 0 {
             return Err(Incomplete::LateCertificate);
@@ -169,7 +241,10 @@ impl StableModels {
                         }
                     });
                     stats.refusal = None;
-                    self.certification = Some(std::sync::Arc::new(plan));
+                    self.certificate = Some(Certificate {
+                        plan: Arc::new(plan),
+                        usage,
+                    });
                     return Ok(true);
                 }
             }
@@ -200,7 +275,7 @@ impl StableModels {
         stats.construction_work += attempt.work;
         match attempt.result {
             Ok(plan) => Ok(Some(Certification::Tight {
-                plan,
+                plan: Arc::new(plan),
                 max_bytes: limits.max_bytes,
             })),
             Err(error) => {
@@ -258,7 +333,9 @@ impl StableModels {
             super::Proposer::Clauses(clauses) => {
                 positive::restrict(&plan, &mut clauses.cnf, &mut budget)
             }
-            super::Proposer::Regions(_) | super::Proposer::Parallel(_) => Ok(0),
+            super::Proposer::Regions(_)
+            | super::Proposer::Parallel(_)
+            | super::Proposer::Proposals(_) => Ok(0),
         };
         stats.restriction_work = budget.statistics.work - self.statistics.search.work;
         self.statistics.search = budget.statistics;

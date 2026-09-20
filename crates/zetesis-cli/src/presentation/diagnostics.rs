@@ -92,6 +92,8 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
             }
             Event::ParallelRegions { workers } => writeln!(self,
                 "Parallel regions: {workers} workers; models arrive in the schedule's order"),
+            Event::ParallelProposals { workers } => writeln!(self,
+                "Parallel candidate production: {workers} workers; joined before batch membership checking"),
             Event::ExactCompletion { workers, max_scratch_bytes } => writeln!(self,
                 "Exact completion: requested workers={workers}; bounded logical scratch bytes={max_scratch_bytes}"),
             Event::AutomaticCpu => self.metadata(Label::Auto,
@@ -110,12 +112,15 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
             #[cfg(feature = "gpu")]
             Event::DeviceFormula { adapter, grounder, search, batch_size, completion_workers, .. } => self.metadata(Label::Backend,
                 format_args!("hybrid GPU propagation + exact CPU residual search ({}, {}; vendor=0x{:04x}); oracle: Ferraris reduct countermodel; search: {}; grounder: eager (requested {}); batch={batch_size}; CPU completion requested workers={completion_workers}", adapter.name, adapter.backend, adapter.vendor_id, search.label(), grounder.label())),
+            #[cfg(feature = "gpu")]
+            Event::DeviceTight { adapter, grounder, search, batch_size } => self.metadata(Label::Backend,
+                format_args!("GPU tight support ({}, {}; vendor=0x{:04x}); oracle: Ferraris ranked support; search: {}; grounder: eager (requested {}); batch={batch_size}", adapter.name, adapter.backend, adapter.vendor_id, search.label(), grounder.label())),
             Event::Formula { atoms, nodes, roots, keyed_constraints: 0 } => writeln!(self, "Formula: {atoms} atoms, {nodes} nodes, {roots} roots"),
             Event::Formula { atoms, nodes, roots, keyed_constraints } => writeln!(self,
                 "Formula: {atoms} atoms, {nodes} nodes, {roots} roots; {keyed_constraints} constraints asked by key"),
             Event::KeyAnalysisStopped(stop) => writeln!(self,
                 "Keyed constraints: the key analysis stopped, {stop}; every constraint not yet asked was grounded as written"),
-            Event::TightMembership => writeln!(self, "Membership: checked tight support certificate; exact reduct residual completion"),
+            Event::TightMembership => writeln!(self, "Membership: checked tight support certificate over the original theory"),
             Event::PositiveMembership => writeln!(self, "Membership: positive atomic-head theory; least consequences with original constraints"),
             Event::GeneralMembership(error) => writeln!(self, "Membership: general reduct; optional class certificate refused: {error}"),
             Event::ObjectiveUnavailable(error) => writeln!(self, "Objective pruning unavailable: {error}; exact search continues"),

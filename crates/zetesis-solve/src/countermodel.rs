@@ -46,12 +46,21 @@ pub(crate) fn prepare_certificate(
     diagnostics: &mut impl ExecutionSink,
     phases: &Recorder,
 ) -> Result<Option<zetesis_sat::Incomplete>, SolveError> {
-    if options.oracle != crate::Oracle::Auto
-        || !matches!(options.backend, crate::Backend::Auto | crate::Backend::Cpu)
-    {
+    if options.oracle != crate::Oracle::Auto {
         return Ok(None);
     }
     let eligibility = phases.measure(SolvePhase::CertificateSetup, || {
+        if !matches!(options.backend, crate::Backend::Auto | crate::Backend::Cpu) {
+            // Device execution currently implements tight support. Preparation
+            // authenticates the complete theory and charges the same owner, but
+            // does not install CPU membership checks behind a device request.
+            return models
+                .prepare_tight_certificate(zetesis_ferraris::TightPlanLimits {
+                    max_bytes: options.max_completion_scratch_bytes,
+                    ..Default::default()
+                })
+                .map(|plan| plan.is_some());
+        }
         models.enable_class_checking(
             zetesis_sat::CertificateLimits {
                 tight: zetesis_ferraris::TightPlanLimits {

@@ -236,7 +236,7 @@ fn every_real_source_refusal_statistics_prefix_propagates_its_writer_failure() {
 }
 
 #[test]
-fn hybrid_field_rendering_is_explicitly_a_formatting_fixture_not_device_evidence() {
+fn hybrid_statistics_preserve_reported_fields() {
     // Only rendering is exercised here. The adapter spelling explicitly marks
     // these authored values as synthetic; no GPU execution/parity is claimed.
     for (pending, queued, completed) in [(0, 0, true), (3, 2, false)] {
@@ -244,6 +244,9 @@ fn hybrid_field_rendering_is_explicitly_a_formatting_fixture_not_device_evidence
         let mut report = actual("a | b.", &options, &Control::default()).unwrap();
         report.formula_execution = Some(crate::FormulaExecutionStatistics {
             completion: crate::CompletionAccounting::default(),
+            gpu_residuals: None,
+            tight_work_per_candidate: None,
+            gpu_scheduled_work: None,
             gpu_limits: Some(crate::FormulaDeviceLimits {
                 work_per_candidate: 789,
                 rounds_per_candidate: 17,
@@ -270,7 +273,7 @@ fn hybrid_field_rendering_is_explicitly_a_formatting_fixture_not_device_evidence
         let text = every_prefix(&options, &Ok(report));
         assert!(text.contains("backend=hybrid GPU propagation + exact CPU residual search"));
         assert!(text.contains("adapter=FORMAT FIXTURE: no physical execution"));
-        assert!(text.contains("batches=2; candidates=7; propagation work=123; completed sweeps=4"));
+        assert!(text.contains("batches=2; candidates=7; primitive work=123; completed sweeps=4"));
         assert!(text.contains(&format!(
             "pending candidates={pending}; queued verified models={queued}"
         )));

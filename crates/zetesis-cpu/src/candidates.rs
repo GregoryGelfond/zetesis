@@ -1,9 +1,14 @@
-//! Incremental powerset enumeration whose first seed needs no carrier tuple.
+//! Incremental seed enumeration with optional completed-support narrowing.
+//!
+//! The unbounded counter discovers canonical carrier atoms incrementally.
+//! Completed narrowing instead supplies the supported gate atoms directly,
+//! preserving their full-carrier positions without enumerating excluded tuples.
 
 use std::iter::FusedIterator;
 use std::sync::Arc;
 use zetesis_core::{
-    Atom, GateAtom, GateAtomError, GateAtoms, Program, Seed, SeedSelection, SeedSelectionError,
+    Atom, GateAtom, GateAtomError, GateAtoms, GateIndex, GateIndexError, Program, Seed,
+    SeedSelection, SeedSelectionError,
 };
 
 use crate::oracle::restrictions::{Conflict, Restrictions};
@@ -82,7 +87,9 @@ pub struct CandidateStatistics {
     pub conflicts: u64,
     /// Gate atoms the narrowing cut, outside its upper closure and never
     /// offered to the counter: no rule derives them under any gate
-    /// assumption, so no answer set holds them.
+    /// assumption, so no answer set holds them. A completed narrowed root
+    /// counts the full complement symbolically; the fallback counter counts
+    /// excluded atoms as it encounters them.
     pub cut_gate_atoms: usize,
     /// Gate atoms the narrowing held, in its lower closure and held in
     /// every seed instead of counted: every answer set holds them.
@@ -696,11 +703,12 @@ impl<'a> Candidates<'a> {
         }
         let applied = matches!(self.narrowing, NarrowingState::Applied(_));
         match (applied, cube.may) {
-            // The narrowed root's open atoms, in carrier order, are the
-            // region tree's coordinates; the carrier is read once for them.
+            // Completed may bounds contain every accepted seed; only their
+            // open atoms become region coordinates. The original program and
+            // semantic gate carrier remain unchanged (Bounds.undecided_bounds_accepted).
             (true, Some(may)) => {
                 self.root_must = cube.must;
-                self.materialize_root(&may)?;
+                self.materialize_root(may)?;
                 self.traversal = Some(Traversal::with_narrowed_root(
                     Region::all_open(self.root.len()),
                     Counting::Unchanged,
@@ -713,22 +721,28 @@ impl<'a> Candidates<'a> {
         Ok(())
     }
 
-    /// Retain the carrier's gate atoms inside `may` and outside the held set.
-    fn materialize_root(&mut self, may: &BTreeSet<Atom>) -> Result<(), Stop> {
-        for atom in self.carrier.by_ref() {
+    /// Retain completed supported gate atoms outside the held set directly.
+    /// `may` is already canonical and confined to this program's gate carrier.
+    /// The temporary symbolic index has one fallibly reserved offset per
+    /// admitted gate signature; token payloads move from `may` without copies.
+    /// Work depends on signatures and supported atoms, not Cartesian tuples.
+    /// Existing carrier-position overflow and open-atom count limits still apply.
+    fn materialize_root(&mut self, may: BTreeSet<Atom>) -> Result<(), Stop> {
+        self.control.poll()?;
+        let index = GateIndex::new(self.program).map_err(gate_index_stop)?;
+        self.statistics.cut_gate_atoms = index
+            .len()
+            .checked_sub(may.len())
+            .ok_or(Stop::InvalidProgram)?;
+        for atom in may {
             self.control.poll()?;
-            let atom = atom.map_err(|error| match error {
-                GateAtomError::Carrier(_) => Stop::Allocation,
-                GateAtomError::OrdinalOverflow => Stop::CarrierLimit,
-            })?;
-            if !may.contains(atom.atom()) {
-                self.statistics.cut_gate_atoms += 1;
-            } else if !self.root_must.contains(atom.atom()) {
+            if !self.root_must.contains(&atom) {
                 if self.root.len() >= self.limits.max_carrier_atoms {
                     return Err(Stop::CarrierLimit);
                 }
                 self.root.try_reserve(1).map_err(|_| Stop::Allocation)?;
-                self.root.push(Arc::new(atom));
+                self.root
+                    .push(Arc::new(index.locate(atom).map_err(gate_index_stop)?));
             }
         }
         Ok(())
@@ -795,6 +809,14 @@ impl<'a> Candidates<'a> {
             }
             *bit = false;
         }
+        // A counted region supplies its complete open-atom interval through
+        // hold(). Carry beyond that interval returns to the region traversal;
+        // it must never discover atoms from the independent symbolic carrier.
+        // Direct supported-root construction deliberately leaves that cursor
+        // untouched, so cursor exhaustion cannot represent this boundary.
+        if self.enumeration == Enumeration::Regions {
+            return Ok(false);
+        }
         let atom = loop {
             self.control.poll()?;
             let Some(atom) = self.carrier.next() else {
@@ -829,6 +851,14 @@ impl<'a> Candidates<'a> {
     }
 }
 
+fn gate_index_stop(error: GateIndexError) -> Stop {
+    match error {
+        GateIndexError::Allocation => Stop::Allocation,
+        GateIndexError::OutsideCarrier => Stop::InvalidProgram,
+        GateIndexError::OrdinalOverflow => Stop::CarrierLimit,
+    }
+}
+
 impl Iterator for Candidates<'_> {
     type Item = Result<Seed, Stop>;
 
@@ -845,3 +875,6 @@ mod selection_tests;
 #[cfg(test)]
 #[path = "../tests/support/narrowing_closures.rs"]
 mod narrowing_tests;
+#[cfg(test)]
+#[path = "../tests/support/supported_carrier.rs"]
+mod supported_carrier_tests;

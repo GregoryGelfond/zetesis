@@ -51,6 +51,12 @@ pub enum ExecutionObservation<'a> {
         /// Requested worker population.
         workers: NonZeroUsize,
     },
+    /// Bounded workers propose formula leaves, then join before an independent
+    /// membership executor checks the batch. This is not CPU membership.
+    ParallelProposals {
+        /// Requested candidate-production population.
+        workers: NonZeroUsize,
+    },
     /// Bounded parallel residual completion is requested.
     ExactCompletion {
         /// Requested worker population.
@@ -95,6 +101,19 @@ pub enum ExecutionObservation<'a> {
         batch_size: NonZeroUsize,
         /// Requested CPU completion population.
         completion_workers: NonZeroUsize,
+    },
+    /// A complete tight certificate selects original truth and producer support
+    /// checking on this device; no general propagator is constructed.
+    #[cfg(feature = "gpu")]
+    DeviceTight {
+        /// Observed adapter of the actual tight-support executor.
+        adapter: zetesis_wgpu::AdapterMetadata<'a>,
+        /// Requested materialization policy.
+        grounder: Grounder,
+        /// Candidate proposal method; membership uses the tight certificate.
+        search: SearchMethod,
+        /// Candidate batch ceiling.
+        batch_size: NonZeroUsize,
     },
     /// Formula search is about to be prepared over this admitted population.
     Formula {

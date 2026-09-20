@@ -21,7 +21,7 @@ use zetesis_themelios::{
 use crate::closure_session::ClosureSession;
 use crate::formula_execution::Execution;
 use crate::formula_session::FormulaSession;
-use crate::phase_timing::{Recorder, SolvePhase};
+use crate::phase_timing::Recorder;
 use crate::{
     AnswerSelection, ExecutionResources, Grounder, Interruption, Oracle, PhaseTimings,
     SemanticOutcome, SolveConfig, SolveError, SolveFailure, WorldView, WorldViewFailure,
@@ -668,20 +668,15 @@ impl<'a> Session<'a> {
                 control,
                 phases,
             )?)),
-            Prepared::Formula(input) => {
-                let execution = phases.measure(SolvePhase::ExecutionSetup, || {
-                    Execution::with_resources(&config, resources, observations)
-                })?;
-                State::Formula(Box::new(FormulaSession::with_selection(
-                    input,
-                    execution,
-                    &config,
-                    observations,
-                    control,
-                    phases,
-                    selection,
-                )))
-            }
+            Prepared::Formula(input) => State::Formula(Box::new(FormulaSession::with_resources(
+                input,
+                &config,
+                resources,
+                observations,
+                control,
+                phases,
+                selection,
+            )?)),
         };
         Ok((state, config))
     }

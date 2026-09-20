@@ -1,7 +1,7 @@
 #!/bin/sh
 # Physical qualification of one device backend: every reviewed group of exact
-# hardware tests must pass on this host, each test naming the CPU family it
-# reproduces. No coverage instrumentation; the coverage gate keeps its own
+# hardware tests must pass on this host, checking complete CPU/device families
+# and explicit failure boundaries. No coverage instrumentation; coverage has its own
 # Metal population.
 set -eu
 
@@ -77,4 +77,4 @@ done <<EOT
 $table
 EOT
 printf '%s\n' passed > "$hardware_dir/$backend-status.txt"
-printf '%s\n' "hardware qualification passed: $backend, 16 groups, 56 exact tests"
+printf '%s\n' "hardware qualification passed: $backend, 16 groups, 59 exact tests"

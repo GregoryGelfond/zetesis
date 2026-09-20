@@ -727,9 +727,17 @@ enum Rejection {
     Formula,
     Bound,
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Observation {
+    Formula,
+    GeneralMembership,
+    CpuFormula,
+    ObjectiveBound,
+    Other,
+}
 struct RejectObservation {
     rejection: Rejection,
-    calls: usize,
+    events: Vec<Observation>,
     failures: usize,
     incumbent_costs: Option<Vec<(i32, i64)>>,
 }
@@ -737,7 +745,7 @@ impl RejectObservation {
     const fn new(rejection: Rejection) -> Self {
         Self {
             rejection,
-            calls: 0,
+            events: Vec::new(),
             failures: 0,
             incumbent_costs: None,
         }
@@ -752,7 +760,13 @@ impl zetesis_cli::ExecutionObserver for RejectObservation {
         observation: zetesis_cli::ExecutionObservation<'_>,
     ) -> Result<(), Self::Error> {
         use zetesis_cli::ExecutionObservation as Event;
-        self.calls += 1;
+        self.events.push(match &observation {
+            Event::Formula { .. } => Observation::Formula,
+            Event::GeneralMembership(_) => Observation::GeneralMembership,
+            Event::CpuFormula { .. } => Observation::CpuFormula,
+            Event::ObjectiveBound { .. } => Observation::ObjectiveBound,
+            _ => Observation::Other,
+        });
         if let Event::ObjectiveBound { costs, .. } = &observation {
             self.incumbent_costs = Some(costs.to_vec());
         }
@@ -780,12 +794,17 @@ fn observer_cause(failure: &zetesis_cli::SolveFailure) {
 }
 
 #[test]
-fn execution_observer_failure_precedes_formula_search() {
+fn execution_refusal_retains_preparation_timing() {
+    use zetesis_cli::SolvePhase;
+
     let admitted = formula("a | b.");
     let mut observer = RejectObservation::new(Rejection::Execution);
     let result = Session::new_observed(
         PreparedInput::formula(&admitted),
-        config(),
+        SolveConfig {
+            stats: true,
+            ..config()
+        },
         Control::default(),
         &mut observer,
     );
@@ -793,7 +812,14 @@ fn execution_observer_failure_precedes_formula_search() {
         panic!("execution observation failed")
     };
     observer_cause(&failure);
-    assert_eq!(observer.calls, 1);
+    assert_eq!(
+        observer.events,
+        [
+            Observation::Formula,
+            Observation::GeneralMembership,
+            Observation::CpuFormula,
+        ]
+    );
     assert_eq!(observer.failures, 1);
     assert!(
         failure
@@ -802,26 +828,59 @@ fn execution_observer_failure_precedes_formula_search() {
             .same_instance(&Subject::Theory(admitted.theory().clone()))
     );
     assert!(failure.semantic().is_none());
+    // Class planning precedes executor choice. The existing fallible start
+    // contract returns no session, but retains every attempted setup interval.
+    let timing = failure.phase_timings.as_ref().unwrap();
+    for phase in [
+        SolvePhase::CandidateSetup,
+        SolvePhase::CertificateSetup,
+        SolvePhase::ExecutionSetup,
+    ] {
+        assert_eq!(timing.get(phase).unwrap().calls, 1, "{phase:?}");
+    }
+    for phase in [
+        SolvePhase::CandidateGeneration,
+        SolvePhase::CertifiedMembership,
+        SolvePhase::ExactReductMembership,
+    ] {
+        assert!(timing.get(phase).is_none(), "{phase:?}");
+    }
 }
 
 #[test]
 fn formula_setup_observer_failure_is_retained_for_first_pull() {
+    use zetesis_cli::SolvePhase;
+
     let admitted = formula("a | b.");
     let mut observer = RejectObservation::new(Rejection::Formula);
     let mut session = Session::new_observed(
         PreparedInput::formula(&admitted),
-        config(),
+        SolveConfig {
+            stats: true,
+            ..config()
+        },
         Control::default(),
         &mut observer,
     )
     .unwrap();
-    assert_eq!(observer.calls, 2);
+    assert_eq!(observer.events, [Observation::Formula]);
     assert_eq!(observer.failures, 1);
     let failure = session.next_observed(&mut observer).unwrap().unwrap_err();
     observer_cause(&failure);
     let outcome = failure.semantic().unwrap();
     assert_eq!(outcome.verified_models(), 0);
     assert_eq!(outcome.completion(), None);
+    assert!(outcome.countermodel_statistics().is_none());
+    assert!(outcome.formula_execution().is_none());
+    let timing = failure.phase_timings.as_ref().unwrap();
+    for phase in [
+        SolvePhase::CandidateSetup,
+        SolvePhase::CertificateSetup,
+        SolvePhase::ExecutionSetup,
+        SolvePhase::CandidateGeneration,
+    ] {
+        assert!(timing.get(phase).is_none(), "{phase:?}");
+    }
     assert!(
         failure
             .subject()
@@ -831,8 +890,9 @@ fn formula_setup_observer_failure_is_retained_for_first_pull() {
     assert!(session.next_observed(&mut observer).is_none());
     assert!(session.next().is_none());
     assert_eq!(
-        observer.calls, 2,
-        "failed initialization never reaches certificate setup"
+        observer.events,
+        [Observation::Formula],
+        "failed initialization never reaches class planning or executor setup"
     );
 }
 
@@ -866,10 +926,10 @@ fn bound_observer_failure_retains_the_verified_incumbent() {
     );
     assert_eq!(outcome.completion(), None);
     assert!(!outcome.optimum_proved());
-    let calls = observer.calls;
+    let events = observer.events.clone();
     assert!(session.next_observed(&mut observer).is_none());
     assert!(session.next().is_none());
-    assert_eq!(observer.calls, calls);
+    assert_eq!(observer.events, events);
     assert_eq!(session.outcome().unwrap().verified_models(), 1);
 }
 

@@ -3,7 +3,9 @@
 /// Cumulative entered completion attempts, including failed and retried slots.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct CompletionAccounting {
-    /// Requested upper bound on simultaneous exact query workspaces.
+    /// Executor's requested upper bound on simultaneous exact query workspaces.
+    /// Complete device certificates select one scalar executor regardless of
+    /// the session's configured residual worker count.
     pub requested_workers: usize,
     /// Largest query concurrency selected at preflight; zero without residuals.
     /// Retained storage must also be admitted before candidate work begins.

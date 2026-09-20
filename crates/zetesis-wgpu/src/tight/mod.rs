@@ -69,7 +69,9 @@ pub struct TightGpuCheck {
 
 impl TightGpuCheck {
     /// Exact scalar certificate verdict, including its ordered witness.
-    /// A residual still requires the caller's exact reduct completion protocol.
+    /// A residual names an unsupported present atom. A caller requiring a
+    /// concrete reduct witness must complete it; a proof-based protocol may
+    /// reject it using the complete certificate's support-necessity theorem.
     #[must_use]
     pub const fn verdict(&self) -> TightVerdict {
         self.verdict
