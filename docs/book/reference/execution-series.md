@@ -1,5 +1,9 @@
 # CPU and Metal execution series
 
+This comparison retains the `994fbb79` to `eca5a1a7` measurements. The later
+[shared-plan execution comparison](plan-execution.md) measures `eca5a1a7` to
+`2e80d065`, including the changed Metal candidate and membership paths.
+
 On Apple M4 Pro, source `eca5a1a7` has lower CPU wall medians than `994fbb79`
 on 19 of 20 workloads completed by both revisions. Process memory has tradeoffs.
 Metal SEND and task allocation also improve, while queens variant 2 takes

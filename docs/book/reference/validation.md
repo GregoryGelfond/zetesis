@@ -758,34 +758,36 @@ status. A newer source remains unqualified until its own checks complete.
 
 | Population | Covered / instrumented lines | Coverage |
 | --- | ---: | ---: |
-| Workspace, all features, portable tests plus 56 physical Metal tests | 78,113 / 82,514 | 94.67% |
-| CPU-only solver library and CLI, separate instrumentation | 6,451 / 6,830 | 94.45% |
+| Workspace, all features, portable tests plus 59 physical Metal tests | 78,825 / 83,270 | 94.66% |
+| CPU-only solver library and CLI, separate instrumentation | 6,537 / 6,936 | 94.25% |
 
 This snapshot was qualified on 20 September 2026 UTC for version `0.1.3`, compiled
-source [`eca5a1a7`](https://github.com/GregoryGelfond/zetesis/tree/eca5a1a7b35cfe5219c2f7c1dcb98c37d13a89d3),
+source [`6754a4ff`](https://github.com/GregoryGelfond/zetesis/tree/6754a4ffb435e2614907630f62d91bed746cd462),
 using Rust 1.97.1, cargo-llvm-cov 0.8.7 and LLVM 22.1.6 on macOS 26.6.2 with
 Apple M4 Pro Metal. Later updates to this description and the README badge do
 not change that measured source or its compiled documentation and data inputs.
-The [coverage receipt](observations/coverage-eca5a1a7.json) retains exact line
+The [coverage receipt](observations/coverage-6754a4ff.json) retains exact line
 counts, profile populations and report hashes. The latest
-[CPU/Metal measurements](execution-series.md) compare the exact
-`994fbb79` and `eca5a1a7` executables. Earlier measurements retain their own
+[CPU/Metal measurements](plan-execution.md) compare the exact
+`eca5a1a7` and `2e80d065` executables. The measured implementation and the
+qualified source differ only in one device test and two manual pages.
+Earlier measurements retain their own
 compiled sources and versions in the [comparison](performance.md).
 
 Both populations passed their independent 91% floor. The workspace contains
-2,361 profiles: 2,345 portable profiles plus 16 physical profiles from 56 tests
+2,362 profiles: 2,346 portable profiles plus 16 physical profiles from 59 tests
 in 16 groups. The 282-profile CPU-only population remains separate.
 Before physical profile import, the portable-only workspace report already
-passed its floor at 75,661 of 82,514 lines (91.6947%). A separate explicit-GPU
+passed its floor at 76,267 of 83,270 lines (91.5900%). A separate explicit-GPU
 device-failure check also passed; its auxiliary profile and all test-listing
 profiles are excluded from both coverage populations. Compiled-profile session
-checks belong to the 56 canonical physical tests.
+checks belong to the 59 canonical physical tests.
 
 The portable and external-oracle gates passed for the implementation in this
 checkpoint. The Lean 4.33.1 build, axiom audit and source-record checks
-cover 139 semantic modules and 1,288 audited theorems, as recorded with their
+cover 139 semantic modules and 1,291 audited theorems, as recorded with their
 source hashes in the
-[verification record](https://github.com/GregoryGelfond/zetesis/blob/eca5a1a7b35cfe5219c2f7c1dcb98c37d13a89d3/proofs/verification.json).
+[verification record](https://github.com/GregoryGelfond/zetesis/blob/6754a4ffb435e2614907630f62d91bed746cd462/proofs/verification.json).
 These counts describe the checked
 mathematical library, not verification of the Rust grounder, masks or GPU
 execution. Historical corpus and performance results retain their original
@@ -806,6 +808,12 @@ setup. Automatic execution remains on CPU, including when the caller supplies
 GPU resources. Repeated sessions preserve
 independent subjects, budgets, costs and outcomes while sharing the device;
 policy and observer refusals preserve later reuse.
+The formula-session tests distinguish tight support from general reduct checking
+using checked plan preconditions. They verify automatic tight dispatch, general
+checking for a non-tight positive cycle, and a finite tight-work refusal before
+device submission. An unseeded positive cycle grounds to the empty theory and
+therefore exercises tight checking; source recursion alone does not determine
+the ground theory's plan.
 Compiled-profile tests check exact pipeline identity across fresh formula oracles
 and ordinary library sessions, including device health and contention boundaries.
 Builder collection tests use caller-owned resources and retain incomplete results
@@ -828,7 +836,7 @@ Vulkan selection on a host exposing a Vulkan adapter.
 Reproduce this recorded snapshot from the linked source revision with
 `scripts/check.sh coverage --metal` using the
 [verification tools](#prepare-verification-tools). The linked revision selects
-56 physical tests in 16 groups. Retain the generated JSON and
+59 physical tests in 16 groups. Retain the generated JSON and
 HTML reports under `target/coverage/workspace` and `target/coverage/cli-cpu`.
 Update the badge and this table together only after qualification completes.
 Line coverage identifies executed Rust lines; it does not establish assertion

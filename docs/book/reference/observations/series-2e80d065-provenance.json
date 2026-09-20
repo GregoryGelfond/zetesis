@@ -1,0 +1,1776 @@
+{
+  "dataset": "series-eca5a1a7-2e80d065",
+  "measured_sources": {
+    "A": "eca5a1a7b35cfe5219c2f7c1dcb98c37d13a89d3",
+    "B": "2e80d065dfb286a4a457d788e6b55955f583fae0"
+  },
+  "baseline_scope": "The retained eca5a1a7b35cfe5219c2f7c1dcb98c37d13a89d3 executable represents main 935f2db73eb6e844be388a44df4ac3b96493bdef; those revisions differ only in README and manual/evidence files. Runtime crates, Cargo manifests, lockfile and pinned toolchain are unchanged. No transitive build-equivalence claim.",
+  "qualification_source": {
+    "commit": "6754a4ffb435e2614907630f62d91bed746cd462",
+    "relationship": "Relative to compiled source 2e80d065dfb286a4a457d788e6b55955f583fae0, only the session_resources_gpu test fixture and two manual files changed; the measured executable bytes were retained unchanged. This relationship does not assert acceptance of a separate hardware or coverage report.",
+    "changed_files": [
+      "crates/zetesis-solve/tests/session_resources_gpu.rs",
+      "docs/book/architecture/execution.md",
+      "docs/book/rust/sessions.md"
+    ]
+  },
+  "host": {
+    "architecture": "arm64",
+    "os": "macOS 26.6.2",
+    "os_build": "25G83",
+    "observed_metal_adapter": "Apple M4 Pro"
+  },
+  "executables": {
+    "A": {
+      "source": "eca5a1a7b35cfe5219c2f7c1dcb98c37d13a89d3",
+      "version": "0.1.3",
+      "sha256": "f1b3adbdaa93d6a7f9adff130c1b68adee216d3eb986f16f617348b0ef4a4aeb",
+      "bytes": 14515328
+    },
+    "B": {
+      "source": "2e80d065dfb286a4a457d788e6b55955f583fae0",
+      "version": "0.1.3",
+      "sha256": "14119b506867127da9b088d943ee5d56241c1af4bbb1338c727027fd7e813d00",
+      "bytes": 14614944
+    }
+  },
+  "tools": {
+    "zetesis-perf": {
+      "source": "2e80d065dfb286a4a457d788e6b55955f583fae0",
+      "sha256": "f392e6c36cdc64e1fde282be2bb7917487bb89fc66d7fed3e8c8a6c20b5ea99b",
+      "bytes": 2461424
+    },
+    "zetesis-series": {
+      "source": "2e80d065dfb286a4a457d788e6b55955f583fae0",
+      "sha256": "b0a5276a580ea907c2cde243f0e91ae51bbefb4bd7a536a883f9bb082f646088",
+      "bytes": 1356048
+    },
+    "clingo": {
+      "version": "5.8.2",
+      "sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "bytes": 341232
+    }
+  },
+  "retention": "Comparison JSON and Markdown are byte-identical outputs of the maintained zetesis-series viewer. Raw reports are identified by SHA-256 and byte count. This projection retains campaign plans, limits, workload identities, clocks and outcomes without terminal streams or machine-local paths.",
+  "interpretation": "ABBA observations of the integrated executables. CPU-auto uses 22 derived-series cells; CPU-eager and Metal-eager use the same three baseline corpus cases. Phase intervals are host measurements, not device kernel timing. Primitive work counts differ between general propagation and tight support and do not establish an instruction-count or speedup ratio.",
+  "acquisitions": [
+    {
+      "profile": "cpu-auto",
+      "started_utc": "2026-09-20T14:39:01Z",
+      "finished_utc": "2026-09-20T14:41:06Z",
+      "clock_scope": "Outer timestamps include identity checks and report publication. Per-report integer Unix nanoseconds delimit each runner campaign.",
+      "acquisition_order": [
+        "A1-main",
+        "B1-candidate",
+        "B2-candidate",
+        "A2-main"
+      ],
+      "retained_views": [
+        {
+          "path": "series-2e80d065-cpu-auto.json",
+          "bytes": 196073,
+          "sha256": "406c4ac03479b65899f9f08e56c3ff74fd8a8b0553385b2b981c9932133c98ee"
+        },
+        {
+          "path": "series-2e80d065-cpu-auto-tables.md",
+          "bytes": 25510,
+          "sha256": "61e8757ca1c6e3e40c0608f301397affdaef2498d5b914dc7218690e4781bfed"
+        }
+      ],
+      "acquisition_reports": [
+        {
+          "label": "A1-main",
+          "source": "eca5a1a7b35cfe5219c2f7c1dcb98c37d13a89d3",
+          "raw_report": "A1-main.json",
+          "bytes": 93118996,
+          "sha256": "5140340b53c4a27662b920c117ea9b8600f085e988d25a0d3a1b6108056d6efc",
+          "native_sha256": "f1b3adbdaa93d6a7f9adff130c1b68adee216d3eb986f16f617348b0ef4a4aeb",
+          "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+          "started_unix_ns": 1789915141541065000,
+          "finished_unix_ns": 1789915149181699000,
+          "exit_code": 0,
+          "passed": true,
+          "accounted": true,
+          "all_samples_passed": true,
+          "sample_count": 176,
+          "sample_counts": [
+            {
+              "phase": "memory",
+              "solver": "native",
+              "passed": 22
+            },
+            {
+              "phase": "memory",
+              "solver": "reference",
+              "passed": 22
+            },
+            {
+              "phase": "qualification",
+              "solver": "native",
+              "passed": 22
+            },
+            {
+              "phase": "qualification",
+              "solver": "reference",
+              "passed": 22
+            },
+            {
+              "phase": "timed",
+              "solver": "native",
+              "passed": 44
+            },
+            {
+              "phase": "timed",
+              "solver": "reference",
+              "passed": 44
+            }
+          ],
+          "fault_count": 0,
+          "unresolved_children": 0,
+          "all_before_after_identities_unchanged": true
+        },
+        {
+          "label": "B1-candidate",
+          "source": "2e80d065dfb286a4a457d788e6b55955f583fae0",
+          "raw_report": "B1-candidate.json",
+          "bytes": 93129982,
+          "sha256": "f51b2fc2de0181d4869bb031da902b3ed0c0d2c1f8a88e3d5eb43a7b33666217",
+          "native_sha256": "14119b506867127da9b088d943ee5d56241c1af4bbb1338c727027fd7e813d00",
+          "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+          "started_unix_ns": 1789915172704844000,
+          "finished_unix_ns": 1789915180155898000,
+          "exit_code": 0,
+          "passed": true,
+          "accounted": true,
+          "all_samples_passed": true,
+          "sample_count": 176,
+          "sample_counts": [
+            {
+              "phase": "memory",
+              "solver": "native",
+              "passed": 22
+            },
+            {
+              "phase": "memory",
+              "solver": "reference",
+              "passed": 22
+            },
+            {
+              "phase": "qualification",
+              "solver": "native",
+              "passed": 22
+            },
+            {
+              "phase": "qualification",
+              "solver": "reference",
+              "passed": 22
+            },
+            {
+              "phase": "timed",
+              "solver": "native",
+              "passed": 44
+            },
+            {
+              "phase": "timed",
+              "solver": "reference",
+              "passed": 44
+            }
+          ],
+          "fault_count": 0,
+          "unresolved_children": 0,
+          "all_before_after_identities_unchanged": true
+        },
+        {
+          "label": "B2-candidate",
+          "source": "2e80d065dfb286a4a457d788e6b55955f583fae0",
+          "raw_report": "B2-candidate.json",
+          "bytes": 93126517,
+          "sha256": "2f94568b239f25530ed70b97fd808a48a4d690b92fb6a276bf94ffdaf34f2bd9",
+          "native_sha256": "14119b506867127da9b088d943ee5d56241c1af4bbb1338c727027fd7e813d00",
+          "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+          "started_unix_ns": 1789915202140151000,
+          "finished_unix_ns": 1789915209672113000,
+          "exit_code": 0,
+          "passed": true,
+          "accounted": true,
+          "all_samples_passed": true,
+          "sample_count": 176,
+          "sample_counts": [
+            {
+              "phase": "memory",
+              "solver": "native",
+              "passed": 22
+            },
+            {
+              "phase": "memory",
+              "solver": "reference",
+              "passed": 22
+            },
+            {
+              "phase": "qualification",
+              "solver": "native",
+              "passed": 22
+            },
+            {
+              "phase": "qualification",
+              "solver": "reference",
+              "passed": 22
+            },
+            {
+              "phase": "timed",
+              "solver": "native",
+              "passed": 44
+            },
+            {
+              "phase": "timed",
+              "solver": "reference",
+              "passed": 44
+            }
+          ],
+          "fault_count": 0,
+          "unresolved_children": 0,
+          "all_before_after_identities_unchanged": true
+        },
+        {
+          "label": "A2-main",
+          "source": "eca5a1a7b35cfe5219c2f7c1dcb98c37d13a89d3",
+          "raw_report": "A2-main.json",
+          "bytes": 93115377,
+          "sha256": "e30eef45f4dfa2d217d40486baa1f16011194d726ec58e3442a3aaab00d8b072",
+          "native_sha256": "f1b3adbdaa93d6a7f9adff130c1b68adee216d3eb986f16f617348b0ef4a4aeb",
+          "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+          "started_unix_ns": 1789915235291492000,
+          "finished_unix_ns": 1789915242785751000,
+          "exit_code": 0,
+          "passed": true,
+          "accounted": true,
+          "all_samples_passed": true,
+          "sample_count": 176,
+          "sample_counts": [
+            {
+              "phase": "memory",
+              "solver": "native",
+              "passed": 22
+            },
+            {
+              "phase": "memory",
+              "solver": "reference",
+              "passed": 22
+            },
+            {
+              "phase": "qualification",
+              "solver": "native",
+              "passed": 22
+            },
+            {
+              "phase": "qualification",
+              "solver": "reference",
+              "passed": 22
+            },
+            {
+              "phase": "timed",
+              "solver": "native",
+              "passed": 44
+            },
+            {
+              "phase": "timed",
+              "solver": "reference",
+              "passed": 44
+            }
+          ],
+          "fault_count": 0,
+          "unresolved_children": 0,
+          "all_before_after_identities_unchanged": true
+        }
+      ],
+      "schema": 2,
+      "protocol": "instrumented_derived_workload_matrix_v2",
+      "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+      "plan": {
+        "suite": "series",
+        "profiles": [
+          {
+            "backend": "cpu",
+            "oracle": "auto",
+            "grounder": "auto",
+            "workers": 4,
+            "completion_workers": 4,
+            "batch_size": 64,
+            "max_completion_scratch_bytes": 268435456
+          }
+        ],
+        "reference_workers": 1,
+        "warmups": 0,
+        "repetitions": 2,
+        "memory_runs": 1
+      },
+      "limits": {
+        "answers": {
+          "max_cost_dimensions": 8388608,
+          "max_input_bytes": 8388608,
+          "max_symbols": 8388608,
+          "max_witnesses": 8388608
+        },
+        "campaign_timeout": {
+          "nanos": 0,
+          "secs": 180
+        },
+        "corpus": {
+          "cases": 94,
+          "contract_symbols": 65536,
+          "files": 108,
+          "manifest_bytes": 1048576,
+          "source_bytes": 1048576,
+          "total_source_bytes": 4194304
+        },
+        "max_executable_bytes": 268435456,
+        "max_report_bytes": 3355443200,
+        "max_total_capture_bytes": 3355443200,
+        "process": {
+          "cleanup_timeout": {
+            "nanos": 0,
+            "secs": 1
+          },
+          "max_output_bytes": 16777216,
+          "timeout": {
+            "nanos": 0,
+            "secs": 10
+          }
+        }
+      },
+      "native_normalization_limits": {
+        "atoms": 262144,
+        "cost_dimensions": 8388608,
+        "input_bytes": 16777216,
+        "spelling_bytes": 8388608,
+        "symbols": 8388608,
+        "value": {
+          "bytes": 16777216,
+          "depth": 128,
+          "nodes": 262144
+        },
+        "value_nodes": 1048576,
+        "witnesses": 8388608
+      },
+      "cases": [
+        "generated/independent-choice-12.lp",
+        "generated/independent-choice-16.lp",
+        "generated/independent-negation-8.lp",
+        "generated/independent-negation-10.lp",
+        "generated/independent-negation-aggregate-16.lp",
+        "generated/disjunction-12.lp",
+        "generated/ties-50.lp",
+        "generated/transitive-path-100.lp",
+        "generated/transitive-path-200.lp",
+        "generated/transitive-dense-40.lp",
+        "generated/chain-1000.lp",
+        "generated/chain-2000.lp",
+        "generated/chain-arithmetic-1000.lp",
+        "generated/stratified-16.lp",
+        "generated/producer-chain-700.lp",
+        "generated/latin-square-5.lp",
+        "generated/planning-14.lp",
+        "standalone/n-queens/variant-01.lp",
+        "standalone/n-queens/variant-01.lp",
+        "standalone/n-queens/variant-04.lp",
+        "standalone/send-money/send-money.lp",
+        "scenarios/task-allocation/variant-04/05-larger-mix.lp"
+      ],
+      "wall_scope": "fresh_process_spawn_capture_reap; native_json_and_stats_included; reference_json_included; comparison_hashing_excluded; no_cold_cache_claim",
+      "comparison_scope": "complete_selected_displays_with_symbol_and_model_multiplicities; final_optimum_ties_and_costs; native_full_records_retained; hidden_reference_interpretations_unavailable",
+      "peak_rss": "memory_rounds: separate_fresh_helper_RUSAGE_CHILDREN; excludes_helper; may_include_usage_propagated_by_waited_descendants; not_simultaneous_tree_RSS_or_device_memory; macOS_bytes_Linux_KiB_converted_to_bytes",
+      "workloads": [
+        {
+          "entry": "generated/independent-choice-12.lp",
+          "identity": "d6b6e065e7beb89e708d895bdb15b94f230b2ff47cb9a8a960c4640a43426ec0",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 377,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "independent-choice",
+            "size": 12,
+            "sha256": "7e2a9f79116592676b7193c14b51633d65328253c6f9a09198e59c395f72a512",
+            "bytes": 189
+          },
+          "metadata_bytes": 162,
+          "source_bytes": 189
+        },
+        {
+          "entry": "generated/independent-choice-16.lp",
+          "identity": "07afc4e616da20bcd6ec63517e8972eff11312529ee594efa03891e153f947cb",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 2584,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "independent-choice",
+            "size": 16,
+            "sha256": "6af88759b6a229f5762345a4877b0ce79e9f1d53d3977755feb6412c2118697f",
+            "bytes": 241
+          },
+          "metadata_bytes": 162,
+          "source_bytes": 241
+        },
+        {
+          "entry": "generated/independent-negation-8.lp",
+          "identity": "ece5cbc3bede1058b07eff8769aa5a37bec0228e3344a9d405b6101cae5c2cfe",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 55,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "independent-negation",
+            "size": 8,
+            "sha256": "a7482f5ea6b1dc9beafe7b2aba140f613642b88576cdc376fe49d6023f8e249a",
+            "bytes": 177
+          },
+          "metadata_bytes": 163,
+          "source_bytes": 177
+        },
+        {
+          "entry": "generated/independent-negation-10.lp",
+          "identity": "9d654e0bb044acabadfe5e15799b1a944f660883c028efefce7c46f5c9601896",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 144,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "independent-negation",
+            "size": 10,
+            "sha256": "669b3ec5ab4b718afe7169fc0ba12cd86294aa66a67a4291da83b7a6b5078be1",
+            "bytes": 201
+          },
+          "metadata_bytes": 164,
+          "source_bytes": 201
+        },
+        {
+          "entry": "generated/independent-negation-aggregate-16.lp",
+          "identity": "fe441c7f0c2af87bce873507ecd50d4ad249a3bc010c62593c892d54af4921d5",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 2584,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "independent-negation-aggregate",
+            "size": 16,
+            "sha256": "24cd645516833a22ec9f09d86228ca436c324d4c81872d4fe785d6c7f77435fb",
+            "bytes": 303
+          },
+          "metadata_bytes": 174,
+          "source_bytes": 303
+        },
+        {
+          "entry": "generated/disjunction-12.lp",
+          "identity": "51d69a8e8935b45199eae409b3fe1a6be7675effa7e6e79807667c08dbf3eac8",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 4096,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "disjunction",
+            "size": 12,
+            "sha256": "b318abf892a80af0babef7e1e79a444e50db8ff13a5febea86fbfea64bc7d6d8",
+            "bytes": 31
+          },
+          "metadata_bytes": 155,
+          "source_bytes": 31
+        },
+        {
+          "entry": "generated/ties-50.lp",
+          "identity": "efa925f3e2811b0234aa31a3961ea56c27aeb698ea7f28baba44a99a6fd57dc5",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "optimal",
+            "model_count": 1225,
+            "cost": [
+              2
+            ],
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "ties",
+            "size": 50,
+            "sha256": "304cc151305c294783f233df7c3a4eac7b4d327eae836c591cfd4fa6812a54aa",
+            "bytes": 77
+          },
+          "metadata_bytes": 148,
+          "source_bytes": 77
+        },
+        {
+          "entry": "generated/transitive-path-100.lp",
+          "identity": "050fdb1ae49ccfc930a6e13b5e3f3e5ec673b70c26d2e30a9cca21a8ba562a4c",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 1,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "transitive-path",
+            "size": 100,
+            "sha256": "8f473e89b377ead1989f0b9d0ea445bf2b85bfb4a61d2ad4a370330ae91851de",
+            "bytes": 1030
+          },
+          "metadata_bytes": 160,
+          "source_bytes": 1030
+        },
+        {
+          "entry": "generated/transitive-path-200.lp",
+          "identity": "9afe569ccef6999fdb6e9e46d78b8a3107b0769c3e77a0458b1e87ae983d7450",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 1,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "transitive-path",
+            "size": 200,
+            "sha256": "7328f662024fd78a5ea26ec81556209291f57f1c81243a0b1e92eaea018ae264",
+            "bytes": 2230
+          },
+          "metadata_bytes": 160,
+          "source_bytes": 2230
+        },
+        {
+          "entry": "generated/transitive-dense-40.lp",
+          "identity": "436cbef7e47bcde6acba3a09411249575c887875535f30e22349d10da7cd5fe5",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 1,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "transitive-dense",
+            "size": 40,
+            "sha256": "0161e9d3008b26fbd43c592607b1489cff8026223bc3f2118ec5d690cab227c1",
+            "bytes": 95
+          },
+          "metadata_bytes": 160,
+          "source_bytes": 95
+        },
+        {
+          "entry": "generated/chain-1000.lp",
+          "identity": "c241c45329a5ac9ba44e4f6ee2a6aac2b00cef2e14ebbc43f708ba5462063d63",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 1,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "chain",
+            "size": 1000,
+            "sha256": "a41ca83b995331954fbf3194489682e9e56b98757aab683e207d25f8a05cf9c5",
+            "bytes": 11811
+          },
+          "metadata_bytes": 151,
+          "source_bytes": 11811
+        },
+        {
+          "entry": "generated/chain-2000.lp",
+          "identity": "8c2ca32d1fa2f7d8df55c0d756b6171a79accc4c32eddb54da44628df55c8d17",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 1,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "chain",
+            "size": 2000,
+            "sha256": "6674d81d84d83d5afb88a5de71fab878b2845d7abcbd0dc615b57ed5c1a97a74",
+            "bytes": 25811
+          },
+          "metadata_bytes": 151,
+          "source_bytes": 25811
+        },
+        {
+          "entry": "generated/chain-arithmetic-1000.lp",
+          "identity": "e98fcc7310024239bcc4772b1bd87b0d5d70748b7cc0c28fd4c9c79fc97f1bc7",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 1,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "chain-arithmetic",
+            "size": 1000,
+            "sha256": "adb0c098d282d43bd65ddd79efe0d9fd0343fe1f34a4fcd72ce012a6826986bd",
+            "bytes": 32
+          },
+          "metadata_bytes": 162,
+          "source_bytes": 32
+        },
+        {
+          "entry": "generated/stratified-16.lp",
+          "identity": "3c473cda74a42eee7aa1a11f5a32e300471dcbb9e5ea8d73239c7ea9e1183b8d",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 1,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "stratified",
+            "size": 16,
+            "sha256": "b18548d552d62140bbed7ecf00ed4c499026a6ebb2923838d48e9f5d7a30ac2a",
+            "bytes": 572
+          },
+          "metadata_bytes": 154,
+          "source_bytes": 572
+        },
+        {
+          "entry": "generated/producer-chain-700.lp",
+          "identity": "1d1ca87aeb2261e057981dd728209c6a06b7a03d2713387ef0edad3097457fe4",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 1,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "producer-chain",
+            "size": 700,
+            "sha256": "d368f660717257f380aebdc1e3bc872f9a796f569fcd5119592c7601fc487777",
+            "bytes": 17750
+          },
+          "metadata_bytes": 159,
+          "source_bytes": 17750
+        },
+        {
+          "entry": "generated/latin-square-5.lp",
+          "identity": "397d7d722cf82317c9c05083f8219b6fff7a110866f10c5d9aac3fa74c2d683b",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 1344,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "latin-square",
+            "size": 5,
+            "sha256": "f246f5a6b7383f6d3b01b4c9dec7e4f677569ddaab7733f24c9030fd2d7a28d4",
+            "bytes": 171
+          },
+          "metadata_bytes": 155,
+          "source_bytes": 171
+        },
+        {
+          "entry": "generated/planning-14.lp",
+          "identity": "4a73fa73a211694358df6d7453c6cf8dce2695bbc459f5be2ae5b92f5f522ae6",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 3432,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "planning",
+            "size": 14,
+            "sha256": "3d2ec2ce0b3a6f061a4b149ddcef57bc5c8439044b45d1a578ad461e985a1587",
+            "bytes": 189
+          },
+          "metadata_bytes": 152,
+          "source_bytes": 189
+        },
+        {
+          "entry": "standalone/n-queens/variant-01.lp",
+          "identity": "f94434aff34774408b1a79712a754c4f6a446d2b9e3d90ef8b384905d5b7fe90",
+          "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+          "sources": [
+            {
+              "path": "standalone/n-queens/variant-01.lp",
+              "base_sha256": "c43d5ddf900ce2fd1d3328f2df337f1c1e8b85b63255473713b16a2dfd0dc1fd",
+              "derived_sha256": "41078c9e8d03516fe2ef17029e090b2128539c1cc2c5e8155ea34e7bc5eccbae",
+              "derived_bytes": 859,
+              "edits": [
+                {
+                  "start_byte": 368,
+                  "end_byte": 369,
+                  "before": "8",
+                  "after": "10"
+                }
+              ]
+            }
+          ],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 92,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": true,
+          "metadata_bytes": 261,
+          "source_bytes": 1717
+        },
+        {
+          "entry": "standalone/n-queens/variant-01.lp",
+          "identity": "4acf319008559109e20bc0f7ff609dbad20fcd4768c7218652ec276a054af306",
+          "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+          "sources": [
+            {
+              "path": "standalone/n-queens/variant-01.lp",
+              "base_sha256": "c43d5ddf900ce2fd1d3328f2df337f1c1e8b85b63255473713b16a2dfd0dc1fd",
+              "derived_sha256": "8bc47d20077f526bb292038a7f2eb4bcb265d8f17e8055c715857a36bc843dea",
+              "derived_bytes": 859,
+              "edits": [
+                {
+                  "start_byte": 368,
+                  "end_byte": 369,
+                  "before": "8",
+                  "after": "11"
+                }
+              ]
+            }
+          ],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 92,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": true,
+          "metadata_bytes": 261,
+          "source_bytes": 1717
+        },
+        {
+          "entry": "standalone/n-queens/variant-04.lp",
+          "identity": "6f8a03773a72df7cf9f80ca9549fcc4e99b7d79cb2924a326e9898f4fde762a1",
+          "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+          "sources": [
+            {
+              "path": "standalone/n-queens/variant-04.lp",
+              "base_sha256": "d599e4b8e68f0b68df20bfaefb0a9916da69c6829cd340de301b08997cfb9295",
+              "derived_sha256": "4448ed021c98f0b807259e427538f5467b4dadfd7325ddd65905ac945202351f",
+              "derived_bytes": 920,
+              "edits": [
+                {
+                  "start_byte": 389,
+                  "end_byte": 390,
+                  "before": "8",
+                  "after": "11"
+                }
+              ]
+            }
+          ],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 92,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": true,
+          "metadata_bytes": 261,
+          "source_bytes": 1839
+        },
+        {
+          "entry": "standalone/send-money/send-money.lp",
+          "identity": "37342affaf8de217743e81d0308b390c53585b484d79c2a88c1bf425a0a9c393",
+          "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+          "sources": [
+            {
+              "path": "standalone/send-money/send-money.lp",
+              "base_sha256": "de33a9970b578cf06fa42a85b55aaefaea2fd12b6d78ae051a6654875cd9e704",
+              "derived_sha256": "de33a9970b578cf06fa42a85b55aaefaea2fd12b6d78ae051a6654875cd9e704",
+              "derived_bytes": 1954,
+              "edits": []
+            }
+          ],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 1,
+            "cost": null,
+            "witnesses": [
+              [
+                "assign(d,7)",
+                "assign(e,5)",
+                "assign(m,1)",
+                "assign(n,6)",
+                "assign(o,0)",
+                "assign(r,8)",
+                "assign(s,9)",
+                "assign(y,2)"
+              ]
+            ],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "metadata_bytes": 350,
+          "source_bytes": 3908
+        },
+        {
+          "entry": "scenarios/task-allocation/variant-04/05-larger-mix.lp",
+          "identity": "4ed76972cd7d8928e8467a907d5749d629e666d5bd3bcc3774c28d20d239b30f",
+          "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+          "sources": [
+            {
+              "path": "scenarios/task-allocation/variant-04/05-larger-mix.lp",
+              "base_sha256": "a7d80af4886cff9c7a0b592f51f95afdf5943af5ebcbeadd57b4a650082393fe",
+              "derived_sha256": "a7d80af4886cff9c7a0b592f51f95afdf5943af5ebcbeadd57b4a650082393fe",
+              "derived_bytes": 898,
+              "edits": []
+            },
+            {
+              "path": "encodings/task-allocation/variant-04.lp",
+              "base_sha256": "7a16f9cb73d644ea061ee71a8aed3a5686f5dce3dc6e1015cdf83c603305e421",
+              "derived_sha256": "7a16f9cb73d644ea061ee71a8aed3a5686f5dce3dc6e1015cdf83c603305e421",
+              "derived_bytes": 3672,
+              "edits": []
+            }
+          ],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "optimal",
+            "model_count": null,
+            "cost": [
+              5
+            ],
+            "witnesses": [],
+            "required_symbols": [
+              "assigned_cost(a1,t1,1)",
+              "assigned_cost(a1,t3,2)",
+              "assigned_cost(a2,t2,1)",
+              "assigned_cost(a2,t4,1)",
+              "assigned_to(a1,t1)",
+              "assigned_to(a1,t3)",
+              "assigned_to(a2,t2)",
+              "assigned_to(a2,t4)"
+            ],
+            "notes": []
+          },
+          "amended": false,
+          "metadata_bytes": 633,
+          "source_bytes": 9140
+        }
+      ],
+      "corpus_files": [
+        {
+          "path": "manifest.json",
+          "bytes": 176545,
+          "sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958"
+        },
+        {
+          "path": "LICENSE",
+          "bytes": 1072,
+          "sha256": "663fd58c4daf8c2247da12c61b73474ee7a5f79f884c6f16d785a725fe9bfe99"
+        },
+        {
+          "path": "encodings/task-allocation/variant-04.lp",
+          "bytes": 3672,
+          "sha256": "7a16f9cb73d644ea061ee71a8aed3a5686f5dce3dc6e1015cdf83c603305e421"
+        },
+        {
+          "path": "scenarios/task-allocation/variant-04/05-larger-mix.lp",
+          "bytes": 898,
+          "sha256": "a7d80af4886cff9c7a0b592f51f95afdf5943af5ebcbeadd57b4a650082393fe"
+        },
+        {
+          "path": "standalone/n-queens/variant-01.lp",
+          "bytes": 858,
+          "sha256": "c43d5ddf900ce2fd1d3328f2df337f1c1e8b85b63255473713b16a2dfd0dc1fd"
+        },
+        {
+          "path": "standalone/n-queens/variant-04.lp",
+          "bytes": 919,
+          "sha256": "d599e4b8e68f0b68df20bfaefb0a9916da69c6829cd340de301b08997cfb9295"
+        },
+        {
+          "path": "standalone/send-money/send-money.lp",
+          "bytes": 1954,
+          "sha256": "de33a9970b578cf06fa42a85b55aaefaea2fd12b6d78ae051a6654875cd9e704"
+        }
+      ],
+      "all_reports_passed": true,
+      "all_samples_passed": true
+    },
+    {
+      "profile": "cpu-eager",
+      "started_utc": "2026-09-20T14:41:53Z",
+      "finished_utc": "2026-09-20T14:42:10Z",
+      "clock_scope": "Outer timestamps include identity checks and report publication. Per-report integer Unix nanoseconds delimit each runner campaign.",
+      "acquisition_order": [
+        "A1-main",
+        "B1-candidate",
+        "B2-candidate",
+        "A2-main"
+      ],
+      "retained_views": [
+        {
+          "path": "series-2e80d065-cpu-eager.json",
+          "bytes": 30784,
+          "sha256": "402437a07d85e603e469afda51e72911a7b99ff2b812c0e07db37050e3a25097"
+        },
+        {
+          "path": "series-2e80d065-cpu-eager-tables.md",
+          "bytes": 7368,
+          "sha256": "022728e68b0a686c4e3c7aceb2830a7519d75c8b58bf0eb6c72db7c351e3a3ca"
+        }
+      ],
+      "acquisition_reports": [
+        {
+          "label": "A1-main",
+          "source": "eca5a1a7b35cfe5219c2f7c1dcb98c37d13a89d3",
+          "raw_report": "A1-main.json",
+          "bytes": 7814586,
+          "sha256": "0e770216f67c4dc281e1ac388e756d453d1a21ded14f7394e8350697b0ed22b3",
+          "native_sha256": "f1b3adbdaa93d6a7f9adff130c1b68adee216d3eb986f16f617348b0ef4a4aeb",
+          "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+          "started_unix_ns": 1789915313553925000,
+          "finished_unix_ns": 1789915316524570000,
+          "exit_code": 0,
+          "passed": true,
+          "accounted": true,
+          "all_samples_passed": true,
+          "sample_count": 36,
+          "sample_counts": [
+            {
+              "phase": "memory",
+              "solver": "native",
+              "passed": 3
+            },
+            {
+              "phase": "memory",
+              "solver": "reference",
+              "passed": 3
+            },
+            {
+              "phase": "qualification",
+              "solver": "native",
+              "passed": 3
+            },
+            {
+              "phase": "qualification",
+              "solver": "reference",
+              "passed": 3
+            },
+            {
+              "phase": "timed",
+              "solver": "native",
+              "passed": 9
+            },
+            {
+              "phase": "timed",
+              "solver": "reference",
+              "passed": 9
+            },
+            {
+              "phase": "warmup",
+              "solver": "native",
+              "passed": 3
+            },
+            {
+              "phase": "warmup",
+              "solver": "reference",
+              "passed": 3
+            }
+          ],
+          "fault_count": 0,
+          "unresolved_children": 0,
+          "all_before_after_identities_unchanged": true
+        },
+        {
+          "label": "B1-candidate",
+          "source": "2e80d065dfb286a4a457d788e6b55955f583fae0",
+          "raw_report": "B1-candidate.json",
+          "bytes": 7813989,
+          "sha256": "54f642fdff95a8c457f29ea901b87ee6c649899c5ae3acca3a967cf34f5692de",
+          "native_sha256": "14119b506867127da9b088d943ee5d56241c1af4bbb1338c727027fd7e813d00",
+          "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+          "started_unix_ns": 1789915317846968000,
+          "finished_unix_ns": 1789915320802754000,
+          "exit_code": 0,
+          "passed": true,
+          "accounted": true,
+          "all_samples_passed": true,
+          "sample_count": 36,
+          "sample_counts": [
+            {
+              "phase": "memory",
+              "solver": "native",
+              "passed": 3
+            },
+            {
+              "phase": "memory",
+              "solver": "reference",
+              "passed": 3
+            },
+            {
+              "phase": "qualification",
+              "solver": "native",
+              "passed": 3
+            },
+            {
+              "phase": "qualification",
+              "solver": "reference",
+              "passed": 3
+            },
+            {
+              "phase": "timed",
+              "solver": "native",
+              "passed": 9
+            },
+            {
+              "phase": "timed",
+              "solver": "reference",
+              "passed": 9
+            },
+            {
+              "phase": "warmup",
+              "solver": "native",
+              "passed": 3
+            },
+            {
+              "phase": "warmup",
+              "solver": "reference",
+              "passed": 3
+            }
+          ],
+          "fault_count": 0,
+          "unresolved_children": 0,
+          "all_before_after_identities_unchanged": true
+        },
+        {
+          "label": "B2-candidate",
+          "source": "2e80d065dfb286a4a457d788e6b55955f583fae0",
+          "raw_report": "B2-candidate.json",
+          "bytes": 7813726,
+          "sha256": "554df133df1524c7f41765f3d257b29ac15fb2145f1666164337319af3325234",
+          "native_sha256": "14119b506867127da9b088d943ee5d56241c1af4bbb1338c727027fd7e813d00",
+          "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+          "started_unix_ns": 1789915322122063000,
+          "finished_unix_ns": 1789915325072900000,
+          "exit_code": 0,
+          "passed": true,
+          "accounted": true,
+          "all_samples_passed": true,
+          "sample_count": 36,
+          "sample_counts": [
+            {
+              "phase": "memory",
+              "solver": "native",
+              "passed": 3
+            },
+            {
+              "phase": "memory",
+              "solver": "reference",
+              "passed": 3
+            },
+            {
+              "phase": "qualification",
+              "solver": "native",
+              "passed": 3
+            },
+            {
+              "phase": "qualification",
+              "solver": "reference",
+              "passed": 3
+            },
+            {
+              "phase": "timed",
+              "solver": "native",
+              "passed": 9
+            },
+            {
+              "phase": "timed",
+              "solver": "reference",
+              "passed": 9
+            },
+            {
+              "phase": "warmup",
+              "solver": "native",
+              "passed": 3
+            },
+            {
+              "phase": "warmup",
+              "solver": "reference",
+              "passed": 3
+            }
+          ],
+          "fault_count": 0,
+          "unresolved_children": 0,
+          "all_before_after_identities_unchanged": true
+        },
+        {
+          "label": "A2-main",
+          "source": "eca5a1a7b35cfe5219c2f7c1dcb98c37d13a89d3",
+          "raw_report": "A2-main.json",
+          "bytes": 7814189,
+          "sha256": "84da6fe416feee5ec4e12cc4cab8d44d42d36c0c2781262a6dcc69f40cdfdb6e",
+          "native_sha256": "f1b3adbdaa93d6a7f9adff130c1b68adee216d3eb986f16f617348b0ef4a4aeb",
+          "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+          "started_unix_ns": 1789915326421372000,
+          "finished_unix_ns": 1789915329395014000,
+          "exit_code": 0,
+          "passed": true,
+          "accounted": true,
+          "all_samples_passed": true,
+          "sample_count": 36,
+          "sample_counts": [
+            {
+              "phase": "memory",
+              "solver": "native",
+              "passed": 3
+            },
+            {
+              "phase": "memory",
+              "solver": "reference",
+              "passed": 3
+            },
+            {
+              "phase": "qualification",
+              "solver": "native",
+              "passed": 3
+            },
+            {
+              "phase": "qualification",
+              "solver": "reference",
+              "passed": 3
+            },
+            {
+              "phase": "timed",
+              "solver": "native",
+              "passed": 9
+            },
+            {
+              "phase": "timed",
+              "solver": "reference",
+              "passed": 9
+            },
+            {
+              "phase": "warmup",
+              "solver": "native",
+              "passed": 3
+            },
+            {
+              "phase": "warmup",
+              "solver": "reference",
+              "passed": 3
+            }
+          ],
+          "fault_count": 0,
+          "unresolved_children": 0,
+          "all_before_after_identities_unchanged": true
+        }
+      ],
+      "schema": 1,
+      "protocol": "instrumented_explicit_profile_matrix_v1",
+      "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+      "plan": {
+        "suite": "baseline",
+        "profiles": [
+          {
+            "backend": "cpu",
+            "oracle": "auto",
+            "grounder": "eager",
+            "workers": 4,
+            "completion_workers": 4,
+            "batch_size": 64,
+            "max_completion_scratch_bytes": 268435456
+          }
+        ],
+        "reference_workers": 1,
+        "warmups": 1,
+        "repetitions": 3,
+        "memory_runs": 1
+      },
+      "limits": {
+        "answers": {
+          "max_cost_dimensions": 8388608,
+          "max_input_bytes": 8388608,
+          "max_symbols": 8388608,
+          "max_witnesses": 8388608
+        },
+        "campaign_timeout": {
+          "nanos": 0,
+          "secs": 90
+        },
+        "corpus": {
+          "cases": 94,
+          "contract_symbols": 65536,
+          "files": 108,
+          "manifest_bytes": 1048576,
+          "source_bytes": 1048576,
+          "total_source_bytes": 4194304
+        },
+        "max_executable_bytes": 268435456,
+        "max_report_bytes": 268435456,
+        "max_total_capture_bytes": 134217728,
+        "process": {
+          "cleanup_timeout": {
+            "nanos": 0,
+            "secs": 1
+          },
+          "max_output_bytes": 33554432,
+          "timeout": {
+            "nanos": 0,
+            "secs": 10
+          }
+        }
+      },
+      "native_normalization_limits": {
+        "atoms": 262144,
+        "cost_dimensions": 8388608,
+        "input_bytes": 33554432,
+        "spelling_bytes": 8388608,
+        "symbols": 8388608,
+        "value": {
+          "bytes": 16777216,
+          "depth": 128,
+          "nodes": 262144
+        },
+        "value_nodes": 1048576,
+        "witnesses": 8388608
+      },
+      "cases": [
+        "standalone/send-money/send-money.lp",
+        "standalone/n-queens/variant-02.lp",
+        "scenarios/task-allocation/variant-04/05-larger-mix.lp"
+      ],
+      "wall_scope": "fresh_process_spawn_capture_reap; native_json_and_stats_included; reference_json_included; comparison_hashing_excluded; no_cold_cache_claim",
+      "comparison_scope": "complete_selected_displays_with_symbol_and_model_multiplicities; final_optimum_ties_and_costs; native_full_records_retained; hidden_reference_interpretations_unavailable",
+      "peak_rss": "memory_rounds: separate_fresh_helper_RUSAGE_CHILDREN; excludes_helper; may_include_usage_propagated_by_waited_descendants; not_simultaneous_tree_RSS_or_device_memory; macOS_bytes_Linux_KiB_converted_to_bytes",
+      "corpus_files": [
+        {
+          "path": "manifest.json",
+          "bytes": 176545,
+          "sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958"
+        },
+        {
+          "path": "LICENSE",
+          "bytes": 1072,
+          "sha256": "663fd58c4daf8c2247da12c61b73474ee7a5f79f884c6f16d785a725fe9bfe99"
+        },
+        {
+          "path": "encodings/task-allocation/variant-04.lp",
+          "bytes": 3672,
+          "sha256": "7a16f9cb73d644ea061ee71a8aed3a5686f5dce3dc6e1015cdf83c603305e421"
+        },
+        {
+          "path": "scenarios/task-allocation/variant-04/05-larger-mix.lp",
+          "bytes": 898,
+          "sha256": "a7d80af4886cff9c7a0b592f51f95afdf5943af5ebcbeadd57b4a650082393fe"
+        },
+        {
+          "path": "standalone/n-queens/variant-02.lp",
+          "bytes": 960,
+          "sha256": "b6e636c06664e0e3b1a34b883e342f9c7b599f8625e154adb1927d41442fca02"
+        },
+        {
+          "path": "standalone/send-money/send-money.lp",
+          "bytes": 1954,
+          "sha256": "de33a9970b578cf06fa42a85b55aaefaea2fd12b6d78ae051a6654875cd9e704"
+        }
+      ],
+      "all_reports_passed": true,
+      "all_samples_passed": true
+    },
+    {
+      "profile": "metal-eager",
+      "started_utc": "2026-09-20T15:51:05Z",
+      "finished_utc": "2026-09-20T15:51:28Z",
+      "clock_scope": "Outer timestamps include identity checks and report publication. Per-report integer Unix nanoseconds delimit each runner campaign.",
+      "acquisition_order": [
+        "A1-main",
+        "B1-candidate",
+        "B2-candidate",
+        "A2-main"
+      ],
+      "retained_views": [
+        {
+          "path": "series-2e80d065-metal-eager.json",
+          "bytes": 32310,
+          "sha256": "538357c30381917f647481bf500eeda6d62325df0ab3e5ee12827556db62773c"
+        },
+        {
+          "path": "series-2e80d065-metal-eager-tables.md",
+          "bytes": 7769,
+          "sha256": "3fa6768598b1262b0afff459730a75a17740b49d88b4347474277875ba16ccd2"
+        }
+      ],
+      "acquisition_reports": [
+        {
+          "label": "A1-main",
+          "source": "eca5a1a7b35cfe5219c2f7c1dcb98c37d13a89d3",
+          "raw_report": "A1-main.json",
+          "bytes": 7841137,
+          "sha256": "8e5968661687b095c82fe272e55e77757fa8ef810368258f1bca236287a198b9",
+          "native_sha256": "f1b3adbdaa93d6a7f9adff130c1b68adee216d3eb986f16f617348b0ef4a4aeb",
+          "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+          "started_unix_ns": 1789919465521877000,
+          "finished_unix_ns": 1789919470437491000,
+          "exit_code": 0,
+          "passed": true,
+          "accounted": true,
+          "all_samples_passed": true,
+          "sample_count": 36,
+          "sample_counts": [
+            {
+              "phase": "memory",
+              "solver": "native",
+              "passed": 3
+            },
+            {
+              "phase": "memory",
+              "solver": "reference",
+              "passed": 3
+            },
+            {
+              "phase": "qualification",
+              "solver": "native",
+              "passed": 3
+            },
+            {
+              "phase": "qualification",
+              "solver": "reference",
+              "passed": 3
+            },
+            {
+              "phase": "timed",
+              "solver": "native",
+              "passed": 9
+            },
+            {
+              "phase": "timed",
+              "solver": "reference",
+              "passed": 9
+            },
+            {
+              "phase": "warmup",
+              "solver": "native",
+              "passed": 3
+            },
+            {
+              "phase": "warmup",
+              "solver": "reference",
+              "passed": 3
+            }
+          ],
+          "fault_count": 0,
+          "unresolved_children": 0,
+          "all_before_after_identities_unchanged": true
+        },
+        {
+          "label": "B1-candidate",
+          "source": "2e80d065dfb286a4a457d788e6b55955f583fae0",
+          "raw_report": "B1-candidate.json",
+          "bytes": 7852694,
+          "sha256": "feb935b90c0025d6ab06aac9f4f514cfd37a456cdd3ed3e83b569fb0248d27d6",
+          "native_sha256": "14119b506867127da9b088d943ee5d56241c1af4bbb1338c727027fd7e813d00",
+          "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+          "started_unix_ns": 1789919472401169000,
+          "finished_unix_ns": 1789919475899243000,
+          "exit_code": 0,
+          "passed": true,
+          "accounted": true,
+          "all_samples_passed": true,
+          "sample_count": 36,
+          "sample_counts": [
+            {
+              "phase": "memory",
+              "solver": "native",
+              "passed": 3
+            },
+            {
+              "phase": "memory",
+              "solver": "reference",
+              "passed": 3
+            },
+            {
+              "phase": "qualification",
+              "solver": "native",
+              "passed": 3
+            },
+            {
+              "phase": "qualification",
+              "solver": "reference",
+              "passed": 3
+            },
+            {
+              "phase": "timed",
+              "solver": "native",
+              "passed": 9
+            },
+            {
+              "phase": "timed",
+              "solver": "reference",
+              "passed": 9
+            },
+            {
+              "phase": "warmup",
+              "solver": "native",
+              "passed": 3
+            },
+            {
+              "phase": "warmup",
+              "solver": "reference",
+              "passed": 3
+            }
+          ],
+          "fault_count": 0,
+          "unresolved_children": 0,
+          "all_before_after_identities_unchanged": true
+        },
+        {
+          "label": "B2-candidate",
+          "source": "2e80d065dfb286a4a457d788e6b55955f583fae0",
+          "raw_report": "B2-candidate.json",
+          "bytes": 7853349,
+          "sha256": "85b822a32f841a41e02c14809ceaefdefd91146aed8bfc596b87335f264ae00f",
+          "native_sha256": "14119b506867127da9b088d943ee5d56241c1af4bbb1338c727027fd7e813d00",
+          "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+          "started_unix_ns": 1789919477242199000,
+          "finished_unix_ns": 1789919480680404000,
+          "exit_code": 0,
+          "passed": true,
+          "accounted": true,
+          "all_samples_passed": true,
+          "sample_count": 36,
+          "sample_counts": [
+            {
+              "phase": "memory",
+              "solver": "native",
+              "passed": 3
+            },
+            {
+              "phase": "memory",
+              "solver": "reference",
+              "passed": 3
+            },
+            {
+              "phase": "qualification",
+              "solver": "native",
+              "passed": 3
+            },
+            {
+              "phase": "qualification",
+              "solver": "reference",
+              "passed": 3
+            },
+            {
+              "phase": "timed",
+              "solver": "native",
+              "passed": 9
+            },
+            {
+              "phase": "timed",
+              "solver": "reference",
+              "passed": 9
+            },
+            {
+              "phase": "warmup",
+              "solver": "native",
+              "passed": 3
+            },
+            {
+              "phase": "warmup",
+              "solver": "reference",
+              "passed": 3
+            }
+          ],
+          "fault_count": 0,
+          "unresolved_children": 0,
+          "all_before_after_identities_unchanged": true
+        },
+        {
+          "label": "A2-main",
+          "source": "eca5a1a7b35cfe5219c2f7c1dcb98c37d13a89d3",
+          "raw_report": "A2-main.json",
+          "bytes": 7841129,
+          "sha256": "a1a587196298fe00216a15f2735fc5dfb6e0c4d247731a890b5464ba22a1ad96",
+          "native_sha256": "f1b3adbdaa93d6a7f9adff130c1b68adee216d3eb986f16f617348b0ef4a4aeb",
+          "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+          "started_unix_ns": 1789919482027692000,
+          "finished_unix_ns": 1789919486840063000,
+          "exit_code": 0,
+          "passed": true,
+          "accounted": true,
+          "all_samples_passed": true,
+          "sample_count": 36,
+          "sample_counts": [
+            {
+              "phase": "memory",
+              "solver": "native",
+              "passed": 3
+            },
+            {
+              "phase": "memory",
+              "solver": "reference",
+              "passed": 3
+            },
+            {
+              "phase": "qualification",
+              "solver": "native",
+              "passed": 3
+            },
+            {
+              "phase": "qualification",
+              "solver": "reference",
+              "passed": 3
+            },
+            {
+              "phase": "timed",
+              "solver": "native",
+              "passed": 9
+            },
+            {
+              "phase": "timed",
+              "solver": "reference",
+              "passed": 9
+            },
+            {
+              "phase": "warmup",
+              "solver": "native",
+              "passed": 3
+            },
+            {
+              "phase": "warmup",
+              "solver": "reference",
+              "passed": 3
+            }
+          ],
+          "fault_count": 0,
+          "unresolved_children": 0,
+          "all_before_after_identities_unchanged": true
+        }
+      ],
+      "schema": 1,
+      "protocol": "instrumented_explicit_profile_matrix_v1",
+      "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+      "plan": {
+        "suite": "baseline",
+        "profiles": [
+          {
+            "backend": "metal",
+            "oracle": "auto",
+            "grounder": "eager",
+            "workers": 4,
+            "completion_workers": 4,
+            "batch_size": 64,
+            "max_completion_scratch_bytes": 268435456
+          }
+        ],
+        "reference_workers": 1,
+        "warmups": 1,
+        "repetitions": 3,
+        "memory_runs": 1
+      },
+      "limits": {
+        "answers": {
+          "max_cost_dimensions": 8388608,
+          "max_input_bytes": 8388608,
+          "max_symbols": 8388608,
+          "max_witnesses": 8388608
+        },
+        "campaign_timeout": {
+          "nanos": 0,
+          "secs": 90
+        },
+        "corpus": {
+          "cases": 94,
+          "contract_symbols": 65536,
+          "files": 108,
+          "manifest_bytes": 1048576,
+          "source_bytes": 1048576,
+          "total_source_bytes": 4194304
+        },
+        "max_executable_bytes": 268435456,
+        "max_report_bytes": 268435456,
+        "max_total_capture_bytes": 134217728,
+        "process": {
+          "cleanup_timeout": {
+            "nanos": 0,
+            "secs": 1
+          },
+          "max_output_bytes": 33554432,
+          "timeout": {
+            "nanos": 0,
+            "secs": 10
+          }
+        }
+      },
+      "native_normalization_limits": {
+        "atoms": 262144,
+        "cost_dimensions": 8388608,
+        "input_bytes": 33554432,
+        "spelling_bytes": 8388608,
+        "symbols": 8388608,
+        "value": {
+          "bytes": 16777216,
+          "depth": 128,
+          "nodes": 262144
+        },
+        "value_nodes": 1048576,
+        "witnesses": 8388608
+      },
+      "cases": [
+        "standalone/send-money/send-money.lp",
+        "standalone/n-queens/variant-02.lp",
+        "scenarios/task-allocation/variant-04/05-larger-mix.lp"
+      ],
+      "wall_scope": "fresh_process_spawn_capture_reap; native_json_and_stats_included; reference_json_included; comparison_hashing_excluded; no_cold_cache_claim",
+      "comparison_scope": "complete_selected_displays_with_symbol_and_model_multiplicities; final_optimum_ties_and_costs; native_full_records_retained; hidden_reference_interpretations_unavailable",
+      "peak_rss": "memory_rounds: separate_fresh_helper_RUSAGE_CHILDREN; excludes_helper; may_include_usage_propagated_by_waited_descendants; not_simultaneous_tree_RSS_or_device_memory; macOS_bytes_Linux_KiB_converted_to_bytes",
+      "corpus_files": [
+        {
+          "path": "manifest.json",
+          "bytes": 176545,
+          "sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958"
+        },
+        {
+          "path": "LICENSE",
+          "bytes": 1072,
+          "sha256": "663fd58c4daf8c2247da12c61b73474ee7a5f79f884c6f16d785a725fe9bfe99"
+        },
+        {
+          "path": "encodings/task-allocation/variant-04.lp",
+          "bytes": 3672,
+          "sha256": "7a16f9cb73d644ea061ee71a8aed3a5686f5dce3dc6e1015cdf83c603305e421"
+        },
+        {
+          "path": "scenarios/task-allocation/variant-04/05-larger-mix.lp",
+          "bytes": 898,
+          "sha256": "a7d80af4886cff9c7a0b592f51f95afdf5943af5ebcbeadd57b4a650082393fe"
+        },
+        {
+          "path": "standalone/n-queens/variant-02.lp",
+          "bytes": 960,
+          "sha256": "b6e636c06664e0e3b1a34b883e342f9c7b599f8625e154adb1927d41442fca02"
+        },
+        {
+          "path": "standalone/send-money/send-money.lp",
+          "bytes": 1954,
+          "sha256": "de33a9970b578cf06fa42a85b55aaefaea2fd12b6d78ae051a6654875cd9e704"
+        }
+      ],
+      "all_reports_passed": true,
+      "all_samples_passed": true,
+      "retained_device_receipt": {
+        "path": "series-2e80d065-metal-device.json",
+        "bytes": 73229,
+        "sha256": "5234ba9deec9bb09e5bfd84d2c1b8804124af45663a952595ae0b260cd0fc1ff",
+        "scope": "Projection of all passed timed native observations from the four retained Metal ABBA reports, with their separately measured native peak-RSS samples; no new measurement."
+      }
+    }
+  ],
+  "summary": {
+    "campaigns": 12,
+    "samples": 992,
+    "timed_native_samples": 248,
+    "all_reports_passed": true,
+    "all_reports_accounted": true,
+    "all_samples_passed": true,
+    "faults": 0,
+    "unresolved_children": 0
+  }
+}

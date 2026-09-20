@@ -5,7 +5,19 @@ Four fixed datasets reproduce the ordinary release comparisons in the
 executable identities, observations and completion limits. None qualifies a
 later implementation.
 
-The latest [CPU and Metal execution series](../execution-series.md) compares
+The latest [shared-plan execution comparison](../plan-execution.md) compares
+`eca5a1a7` with `2e80d065` on 20 September 2026. It retains unchanged maintained
+views for [CPU automatic grounding](series-2e80d065-cpu-auto.json),
+[CPU eager grounding](series-2e80d065-cpu-eager.json) and
+[Metal eager grounding](series-2e80d065-metal-eager.json), with their rendered
+tables linked in the chapter. Its [provenance](series-2e80d065-provenance.json)
+identifies all twelve campaigns; the [device receipt](series-2e80d065-metal-device.json)
+separates actual execution routes, phase measurements, process RSS and accounted
+device storage. The independent [coverage receipt](coverage-6754a4ff.json)
+identifies the later qualification source, which changes one test and two manual
+pages without changing the measured implementation.
+
+The preceding [CPU and Metal execution series](../execution-series.md) compares
 `994fbb79` with `eca5a1a7` on 20 September 2026. Its unchanged maintained views
 are [CPU data](series-eca5a1a7-cpu-auto.json) / [tables](series-eca5a1a7-cpu-auto-tables.md)
 and [Metal data](series-eca5a1a7-metal-eager.json) / [tables](series-eca5a1a7-metal-eager-tables.md).

@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 ![Rust 1.97+](https://img.shields.io/badge/rust-1.97%2B-orange?style=flat-square)
-[![Line coverage: 94.67% (CPU + Metal)](https://img.shields.io/badge/coverage-94.67%25%20%28CPU%20%2B%20Metal%29-brightgreen?style=flat-square)](docs/book/reference/validation.md#coverage)
+[![Line coverage: 94.66% (CPU + Metal)](https://img.shields.io/badge/coverage-94.66%25%20%28CPU%20%2B%20Metal%29-brightgreen?style=flat-square)](docs/book/reference/validation.md#coverage)
 
 ζήτησις, *inquiry/search* — candidate-directed answer-set solving through the reduct.
 
@@ -135,7 +135,7 @@ initialization happen during the solve, including on the first run after
 installation. `zetesis devices` is an optional inventory; no qualification step
 is required to use the solver.
 
-Metal has 56 named physical regression checks in 16 groups on Apple M4 Pro,
+Metal has 59 named physical regression checks in 16 groups on Apple M4 Pro,
 including ordinary table-grounded solving against complete CPU answer families.
 The [coverage snapshot](docs/book/reference/validation.md#coverage) identifies
 the measured source and separate CPU-only population. Vulkan is implemented
@@ -147,8 +147,11 @@ The tight GPU library offers atomic-OR and grouped-word support construction;
 both have physical Metal checks. Atomic remains its default. These are reusable
 membership primitives. Ordinary formula solving now selects tight GPU checking
 when an exact certificate is available, with parallel candidate production for
-multiple workers. This dispatch change requires its own physical qualification;
-the coverage snapshot above describes the earlier measured source.
+multiple workers. Physical tests check that route, general checking for non-tight
+theories and resource refusal before dispatch. The
+[measured comparison](docs/book/reference/plan-execution.md) shows lower Metal
+wall times for queens and task allocation, a slower SEND run and higher process
+memory. CPU remains faster on these three measured workloads.
 Eager formula grounding retains typed predicate catalogs and lookup postings
 across support rounds. Eligible positive producers join combinations containing
 new tuples. Where complete positive-source analysis permits it, new predicate

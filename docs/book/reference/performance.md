@@ -1,6 +1,12 @@
 # Execution performance
 
-The latest [CPU and Metal execution series](execution-series.md) compares
+The latest [shared-plan execution comparison](plan-execution.md) compares
+`eca5a1a7` with `2e80d065` on Apple M4 Pro. Metal queens and task allocation
+take about 35% and 65% less wall time; SEND takes 9–14% longer. Accounted device
+storage falls, while process RSS rises. Matched CPU eager execution remains
+faster on all three cells and shows no broad before/after improvement.
+
+The preceding [CPU and Metal execution series](execution-series.md) compares
 `994fbb79` with `eca5a1a7` on Apple M4 Pro. CPU wall medians fall on 19 of 20
 commonly completed cells; process memory has tradeoffs. Metal SEND and task
 allocation improve, while queens variant 2 takes 39–44% longer, concentrated in
