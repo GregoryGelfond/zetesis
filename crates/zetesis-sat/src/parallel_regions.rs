@@ -1,9 +1,10 @@
-//! Regions walked by several workers at once, sharing nothing but a pool
-//! of regions still to visit.
+//! Regions walked by several workers at once, sharing immutable preparation,
+//! a cumulative allowance and a pool of regions still to visit.
 //!
 //! Each worker owns a stack of regions with their knowledge, a budget
-//! leased for each region from the enumeration's shared allowance, an index
-//! of the theory for the reduct query and its own evaluation workspace. It pops a region,
+//! leased for each region from the enumeration's shared allowance, and its own
+//! evaluation workspace. Candidate and reduct traversals share the authenticated
+//! original-theory index but never their mutable knowledge. A worker pops a region,
 //! narrows it from the knowledge it carries, drops it when refuted, splits
 //! it otherwise and keeps both children, offering one to the pool when the
 //! pool runs short, and at a leaf decides membership as the scalar
@@ -42,7 +43,7 @@ use zetesis_cpu::regions::{Narrowing, Region};
 use zetesis_ferraris::{Interpretation, Knowledge, Narrower, Producers, Theory};
 
 use super::certified::{self, Certification};
-use super::regions::{RegionCounts, RegionSearchStatistics, SearchMethod};
+use super::regions::{IndexedTheory, RegionCounts, RegionSearchStatistics};
 use super::timing::{self, Phase, PhaseMeasurement};
 use crate::ferraris::Decision;
 use crate::search::{Budget, SharedBudget, WorkLease};
@@ -65,9 +66,8 @@ struct Pool {
 }
 
 struct Shared {
-    theory: Theory,
     producers: Option<Producers>,
-    narrower: Narrower,
+    index: Arc<IndexedTheory>,
     certificate: Option<Arc<Certification>>,
     restrictions: RwLock<Vec<Arc<(Theory, Narrower)>>>,
     pool: Mutex<Pool>,
@@ -225,7 +225,7 @@ impl ParallelRegions {
     ) -> Result<Self, Incomplete> {
         let super::regions::Opened {
             producers,
-            narrower,
+            index,
             statistics,
         } = super::regions::open(theory, budget)?;
         let (sender, receiver) = sync_channel(workers.get() * CHANNEL_SLACK);
@@ -233,13 +233,12 @@ impl ParallelRegions {
         pending.try_reserve(1).map_err(|_| Incomplete::Allocation)?;
         pending.push((
             Region::all_open(theory.atom_count()),
-            vec![narrower.knowledge()],
+            vec![index.narrower().knowledge()],
         ));
         Ok(Self {
             shared: Arc::new(Shared {
-                theory: theory.clone(),
                 producers,
-                narrower,
+                index,
                 certificate: None,
                 restrictions: RwLock::new(Vec::new()),
                 pool: Mutex::new(Pool {
@@ -267,6 +266,10 @@ impl ParallelRegions {
         })
     }
 
+    pub(crate) fn index(&self) -> &Arc<IndexedTheory> {
+        &self.shared.index
+    }
+
     /// The region receipts: the workers' live counters, current while they
     /// run and complete when they have finished, and the set-up work. A
     /// worker's narrowing work reaches the live counter as it goes and is
@@ -290,6 +293,7 @@ impl ParallelRegions {
                     .saturating_add(Live::read(&live.work)),
             },
             producers: self.statistics.producers,
+            frontier: None,
         }
     }
 
@@ -513,7 +517,7 @@ fn worker(shared: &Shared, sender: &SyncSender<Interpretation>) -> WorkerReport 
     };
     let mut reported = SearchPhaseTimings::default();
     let mut search = SearchStatistics::default();
-    let mut membership = crate::prepared_reduct::State::new(SearchMethod::Regions);
+    let mut membership = crate::prepared_reduct::State::with_index(Arc::clone(&shared.index));
     let mut local: Vec<(Region, Vec<Knowledge>)> = Vec::new();
     while let Some((region, knowledge)) = take(shared, &mut local) {
         // A region owns its grant. Settle it before waiting for another
@@ -617,7 +621,7 @@ fn step<'a>(
     let before = report.regions;
     let started = timing::start(report.statistics.phase_timings.as_ref());
     let narrowing = super::regions::narrow(
-        (&shared.theory, &shared.narrower),
+        (shared.index.theory(), shared.index.narrower()),
         shared.producers.as_ref(),
         &restrictions,
         &mut region,
@@ -681,7 +685,7 @@ fn leaf<'a>(
     membership: &mut crate::prepared_reduct::State,
     report: &mut WorkerReport,
 ) -> Result<Option<Interpretation>, Incomplete> {
-    let candidate = super::regions::leaf_interpretation(&shared.theory, region)?;
+    let candidate = super::regions::leaf_interpretation(shared.index.theory(), region)?;
     shared
         .candidates
         .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |count| {
@@ -723,7 +727,7 @@ fn leaf<'a>(
     } else {
         membership
             .check(
-                &shared.theory,
+                shared.index.theory(),
                 &candidate,
                 shared.limits,
                 budget,

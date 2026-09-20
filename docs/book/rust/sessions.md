@@ -18,13 +18,20 @@ broader finite formula profile. These are explicit library choices. The ordinary
 source driver provides automatic profile selection; `Session` receives an
 already prepared representation and does not retry admission itself.
 
+An admitted formula session can also use a caller-supplied
+[membership executor](executors.md), while retaining the ordinary candidate,
+reduct, objective and outcome owners.
+
 ## Pulling and stopping
 
 `Session` is a fused iterator of `Result<AnswerSet, SolveFailure>`. Each
 privately constructed `AnswerSet` retains its original `Subject`, complete interpretation and optional
 fully evaluated score. Hidden atoms remain present even when `#show` would omit
 them from human output. `SessionModel` remains a compatibility alias. These are
-completed native membership results, not Lean proof objects.
+completed membership results under the selected implementation, not Lean proof
+objects. A caller-supplied `BatchExecutor` must satisfy its
+[soundness contract](executors.md#state-the-trusted-boundary); the host exactly
+completes residual checks but trusts the executor's decisive verdicts.
 
 `Session::enumerate` streams all answers of the original program, including
 nonoptimal answers. It evaluates objective scores but disables both candidate

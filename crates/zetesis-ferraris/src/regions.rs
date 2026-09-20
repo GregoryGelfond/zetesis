@@ -39,6 +39,7 @@
 //! also poll control, and retain the admitted prefix on every returned failure.
 
 use std::collections::BTreeSet;
+use std::mem::size_of;
 
 use zetesis_cpu::regions::{Narrowing, Region};
 use zetesis_cpu::{Control, Stop};
@@ -378,6 +379,37 @@ fn chains(theory: &Theory) -> (Vec<Chain>, Vec<Option<usize>>, Vec<bool>) {
 pub struct Knowledge {
     known: Known,
 }
+
+impl Knowledge {
+    /// Header and owned vector capacities in bytes, including empty worklists'
+    /// retained capacity. The shared theory, narrower and producer index are
+    /// excluded, as are allocator bookkeeping and temporary clones.
+    #[must_use]
+    pub fn retained_bytes(&self) -> u128 {
+        let known = &self.known;
+        let booleans = [
+            known.sure.capacity(),
+            known.never.capacity(),
+            known.atom_sure.capacity(),
+            known.atom_never.capacity(),
+        ];
+        let indices = [
+            known.sure_operands.capacity(),
+            known.never_operands.capacity(),
+            known.unknown.capacity(),
+            known.learned.capacity(),
+            known.heads.capacity(),
+        ];
+        size_of::<Self>() as u128
+            + booleans.into_iter().map(|n| n as u128).sum::<u128>() * size_of::<bool>() as u128
+            + indices.into_iter().map(|n| n as u128).sum::<u128>() * size_of::<usize>() as u128
+            + known.nodes.capacity() as u128 * size_of::<(usize, bool)>() as u128
+    }
+}
+
+#[cfg(test)]
+#[path = "../tests/support/knowledge_storage.rs"]
+mod knowledge_storage_tests;
 
 impl Narrower {
     /// Index the theory's DAG for narrowing.

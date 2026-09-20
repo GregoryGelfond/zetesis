@@ -107,11 +107,12 @@ fn failed_reduct_narrowing_keeps_its_query_count() {
     let statistics = search.statistics();
     assert!(!search.exhausted());
     assert_eq!(statistics.candidates, 1, "limit={limit}: {statistics:?}");
-    // Reduct indexing charges one unit per node. Additional reduct work
-    // can only come from the frozen narrowing. Traversal counts completed
-    // regions, so a failed first narrowing need not increment that count.
+    // The original index was charged by candidate preparation and is shared.
+    // Every unit of reduct-region work therefore comes from frozen narrowing.
+    // Traversal counts completed regions, so a failed first narrowing need
+    // not increment that count.
     assert!(
-        statistics.reduct.regions.work > u64::try_from(theory.nodes().len()).unwrap(),
+        statistics.reduct.regions.work > 0,
         "the failed query must have performed a frozen read: {statistics:?}",
     );
     assert_eq!(

@@ -32,45 +32,45 @@ impl MembershipExecution for NativeBatch {
         control: &Control,
         _: &crate::phase_timing::Recorder,
     ) -> Option<Result<Interpretation, Failure>> {
-        let result = self
-            .queue
-            .next(models, options, control, |theory, candidates| {
-                self.proposed.push(
-                    candidates
-                        .iter()
-                        .map(|candidate| candidate.atoms().collect())
-                        .collect(),
-                );
-                if let Some(stop) = self.stop {
-                    return Err(Failure::Search(stop));
-                }
-                if self.fail_work {
-                    let limits = zetesis_sat::Limits {
-                        search: zetesis_sat::SearchLimits {
-                            max_work: 0,
-                            ..Default::default()
-                        },
+        let result = self.queue.next(models, options, control, |batch| {
+            let theory = batch.theory();
+            let candidates = batch.candidates();
+            self.proposed.push(
+                candidates
+                    .iter()
+                    .map(|candidate| candidate.atoms().collect())
+                    .collect(),
+            );
+            if let Some(stop) = self.stop {
+                return Err(Failure::Search(stop));
+            }
+            if self.fail_work {
+                let limits = zetesis_sat::Limits {
+                    search: zetesis_sat::SearchLimits {
+                        max_work: 0,
                         ..Default::default()
-                    };
-                    if let zetesis_sat::Check::Inconclusive(error) =
-                        zetesis_sat::check(theory, &candidates[0], limits, control)
-                    {
-                        return Err(Failure::Search(error));
-                    }
-                    panic!("the selected nonempty source needs native encoding work");
+                    },
+                    ..Default::default()
+                };
+                if let zetesis_sat::Check::Inconclusive(error) =
+                    zetesis_sat::check(theory, &candidates[0], limits, control)
+                {
+                    return Err(Failure::Search(error));
                 }
-                // Declining partial propagation sends every original candidate to
-                // the real exact native reduct checker inside StableModels.
-                let mut verdicts = Vec::new();
-                verdicts
-                    .try_reserve_exact(candidates.len())
-                    .map_err(|_| Failure::Search(Incomplete::Allocation))?;
-                verdicts.resize(candidates.len(), BatchVerdict::Residual);
-                if self.omit_verdict {
-                    verdicts.pop();
-                }
-                Ok(verdicts)
-            });
+                panic!("the selected nonempty source needs native encoding work");
+            }
+            // Declining partial propagation sends every original candidate to
+            // the real exact native reduct checker inside StableModels.
+            let mut verdicts = Vec::new();
+            verdicts
+                .try_reserve_exact(candidates.len())
+                .map_err(|_| Failure::Search(Incomplete::Allocation))?;
+            verdicts.resize(candidates.len(), BatchVerdict::Residual);
+            if self.omit_verdict {
+                verdicts.pop();
+            }
+            batch.finish(verdicts).map_err(Failure::from)
+        });
         self.snapshots.push((
             models.batch_statistics(),
             models.statistics(),

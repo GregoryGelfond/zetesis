@@ -6,9 +6,22 @@ use crate::{AdapterBackend, AdapterCategory};
 fn info() -> GpuInfo {
     GpuInfo::from_report(
         wgpu::AdapterInfo::new(wgpu::DeviceType::IntegratedGpu, wgpu::Backend::Metal),
+        wgpu::Features::empty(),
         &wgpu::Limits::default(),
         true,
     )
+}
+
+#[test]
+fn advertised_features_preserve_the_backend_report() {
+    let features = wgpu::Features::TIMESTAMP_QUERY | wgpu::Features::SUBGROUP;
+    let report = GpuInfo::from_report(
+        wgpu::AdapterInfo::new(wgpu::DeviceType::IntegratedGpu, wgpu::Backend::Metal),
+        features,
+        &wgpu::Limits::default(),
+        true,
+    );
+    assert_eq!(report.features(), features);
 }
 
 #[test]

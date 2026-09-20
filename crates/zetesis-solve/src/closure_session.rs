@@ -217,6 +217,7 @@ impl<'a> ClosureSession<'a> {
             gate_atoms: self.candidates.discovered_atoms(),
             candidate_statistics: Some(self.candidates.statistics()),
             countermodel_statistics: None,
+            batch_execution: None,
             formula_execution: None,
             query_execution: self
                 .engine

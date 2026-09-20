@@ -94,6 +94,17 @@ pub(crate) enum Failure {
     Run(SolveError),
 }
 
+impl From<crate::ExecutorError> for Failure {
+    fn from(error: crate::ExecutorError) -> Self {
+        Self::Run(match error {
+            crate::ExecutorError::Shape { expected, actual } => {
+                SolveError::FormulaBatchShape { expected, actual }
+            }
+            error => SolveError::Executor(error),
+        })
+    }
+}
+
 /// A stream of original, reduct-checked semantic models, before display or scoring.
 pub(crate) trait MembershipExecution {
     /// Return `None` only after `models.exhausted()` establishes complete
@@ -107,10 +118,20 @@ pub(crate) trait MembershipExecution {
         phases: &Recorder,
     ) -> Option<Result<Interpretation, Failure>>;
     fn statistics(&self, models: &StableModels) -> Option<FormulaExecutionStatistics>;
+
+    fn batch_execution(&self, _: &StableModels) -> Option<crate::BatchExecutionStatistics> {
+        None
+    }
 }
 
 pub(crate) enum Execution {
     Cpu,
+    External {
+        executor: Box<dyn crate::batch_executor::ErasedExecutor>,
+        capabilities: crate::ExecutorCapabilities,
+        operation: crate::MembershipOperation,
+        queue: Box<crate::formula_queue::BatchQueue>,
+    },
     Batched {
         queue: Box<crate::formula_queue::BatchQueue>,
     },
@@ -130,6 +151,35 @@ pub(crate) enum Execution {
 }
 
 impl Execution {
+    pub(crate) fn external(
+        mut executor: Box<dyn crate::batch_executor::ErasedExecutor>,
+        capabilities: crate::ExecutorCapabilities,
+        plan: crate::MembershipPlan<'_>,
+        options: &SolveConfig,
+        control: &zetesis_cpu::Control,
+        observations: &mut impl ExecutionSink,
+    ) -> Result<Self, Failure> {
+        control
+            .poll()
+            .map_err(|stop| Failure::Search(stop.into()))?;
+        executor.prepare(plan, control)?;
+        control
+            .poll()
+            .map_err(|stop| Failure::Search(stop.into()))?;
+        observations
+            .record(Event::ExternalExecutor {
+                capabilities,
+                operation: plan.operation(),
+            })
+            .map_err(Failure::Run)?;
+        Ok(Self::External {
+            executor,
+            capabilities,
+            operation: plan.operation(),
+            queue: Box::new(crate::formula_queue::BatchQueue::new(options).map_err(Failure::Run)?),
+        })
+    }
+
     pub(crate) fn with_resources(
         options: &SolveConfig,
         resources: &ExecutionResources,
@@ -224,7 +274,7 @@ impl Execution {
 impl MembershipExecution for Execution {
     fn statistics(&self, models: &StableModels) -> Option<FormulaExecutionStatistics> {
         match self {
-            Self::Cpu => None,
+            Self::Cpu | Self::External { .. } => None,
             Self::Batched { queue } => Some(batch_statistics(
                 queue,
                 models,
@@ -250,6 +300,24 @@ impl MembershipExecution for Execution {
         }
     }
 
+    fn batch_execution(&self, models: &StableModels) -> Option<crate::BatchExecutionStatistics> {
+        match self {
+            Self::External {
+                capabilities,
+                operation,
+                queue,
+                ..
+            } => Some(crate::BatchExecutionStatistics {
+                capabilities: *capabilities,
+                operation: *operation,
+                batches: models.batch_statistics(),
+                completion: queue.accounting(),
+                queued_models: queue.len(),
+            }),
+            _ => None,
+        }
+    }
+
     fn next(
         &mut self,
         models: &mut StableModels,
@@ -258,29 +326,42 @@ impl MembershipExecution for Execution {
         phases: &Recorder,
     ) -> Option<Result<Interpretation, Failure>> {
         match self {
+            Self::External {
+                executor, queue, ..
+            } => queue.next(models, options, control, |batch| {
+                executor.check(batch, control)
+            }),
             Self::Cpu => {
                 let _ = options;
                 let _ = control;
                 let _ = phases;
                 models.next().map(|result| result.map_err(Failure::Search))
             }
-            Self::Batched { queue } => queue.next(models, options, control, |_, candidates| {
+            Self::Batched { queue } => queue.next(models, options, control, |batch| {
+                let candidates = batch.candidates();
                 let mut verdicts = Vec::new();
                 verdicts
                     .try_reserve_exact(candidates.len())
                     .map_err(|_| Failure::Search(Incomplete::Allocation))?;
                 verdicts.resize(candidates.len(), zetesis_sat::BatchVerdict::Residual);
-                Ok(verdicts)
+                batch.finish(verdicts).map_err(Failure::from)
             }),
             #[cfg(feature = "gpu")]
             Self::Hybrid {
                 oracle,
                 queue,
                 statistics,
-            } => queue.next(models, options, control, |theory, candidates| {
-                propagate(
-                    oracle, statistics, theory, candidates, options, control, phases,
-                )
+            } => queue.next(models, options, control, |batch| {
+                let verdicts = propagate(
+                    oracle,
+                    statistics,
+                    batch.theory(),
+                    batch.candidates(),
+                    options,
+                    control,
+                    phases,
+                )?;
+                batch.finish(verdicts).map_err(Failure::from)
             }),
             #[cfg(feature = "gpu")]
             Self::Tight {
@@ -288,10 +369,17 @@ impl MembershipExecution for Execution {
                 plan,
                 queue,
                 statistics,
-            } => queue.next(models, options, control, |_, candidates| {
-                super::formula_tight::check(
-                    oracle, plan, statistics, candidates, options, control, phases,
-                )
+            } => queue.next(models, options, control, |batch| {
+                let verdicts = super::formula_tight::check(
+                    oracle,
+                    plan,
+                    statistics,
+                    batch.candidates(),
+                    options,
+                    control,
+                    phases,
+                )?;
+                batch.finish(verdicts).map_err(Failure::from)
             }),
         }
     }
@@ -437,6 +525,9 @@ impl<E: MembershipExecution + ?Sized> MembershipExecution for &mut E {
     }
     fn statistics(&self, models: &StableModels) -> Option<FormulaExecutionStatistics> {
         (**self).statistics(models)
+    }
+    fn batch_execution(&self, models: &StableModels) -> Option<crate::BatchExecutionStatistics> {
+        (**self).batch_execution(models)
     }
 }
 

@@ -58,7 +58,15 @@ Automatic device execution uses the same checked tight certificate as the CPU
 when available. Other theories retain general GPU propagation with exact host
 completion. Multiple region producers form bounded batches without deciding
 answer-set membership; the selected oracle supplies that decision. CPU-only
-execution can instead check membership directly on its Rayon workers.
+execution can instead check membership directly on its native region workers.
+
+`SessionBuilder::executor` supplies a custom formula membership primitive through
+[`BatchExecutor`](../../docs/book/rust/executors.md). The host retains original
+satisfaction, candidate coverage, exact residual checking and publication.
+Decisive executor verdicts must be sound for the supplied plan and candidates;
+receipt identity and shape checks do not establish that soundness. The manual
+documents supported inputs, ownership, limits and failure evidence, with a
+bounded executable adapter example.
 
 With GPU support, `ExecutionResources::with_gpu` shares a selected context and
 `with_formula_profile` additionally shares one exact compiled formula primitive.

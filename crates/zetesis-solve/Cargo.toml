@@ -66,3 +66,8 @@ required-features = ["gpu"]
 [[example]]
 name = "book-measurements"
 path = "../../docs/book/examples/measurements.rs"
+
+[[example]]
+name = "book-batch-executor"
+path = "../../docs/book/examples/batch-executor.rs"
+test = true

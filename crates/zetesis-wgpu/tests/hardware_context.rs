@@ -17,6 +17,12 @@ use zetesis_wgpu::{
 fn compose(backend: physical::Backend) {
     let context = GpuContext::new_selected(GpuOptions::default(), backend.selection()).unwrap();
     backend.verify(context.info());
+    println!(
+        "optional features: advertised={:?}; enabled={:?}",
+        context.info().features(),
+        context.features()
+    );
+    assert!(context.info().features().contains(context.features()));
     let mut relation_executor = GpuRelationExecutor::from_context(&context).unwrap();
     let mut formula = GpuFormulaOracle::from_context(&context.clone()).unwrap();
     assert!(context.same_instance(relation_executor.context()));

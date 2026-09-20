@@ -227,10 +227,11 @@ impl Subject {
 /// A full stable interpretation produced by the session's membership engine.
 /// Private construction preserves its subject association after detachment.
 /// This is semantic evidence, independently of display selection or publication.
-/// It records completed native membership, not a Lean proof or enumeration
-/// coverage. Cloning shares the subject, atom catalog and selected interpretation;
-/// the optional score's cost vector is cloned. Retained interpretations keep the
-/// entire shared catalog alive, including unselected atoms.
+/// It records completed membership under the selected implementation, not a Lean
+/// proof or enumeration coverage. A caller-supplied [`crate::BatchExecutor`] must
+/// satisfy its soundness contract. Cloning shares the subject, atom catalog and
+/// selected interpretation; the optional score's cost vector is cloned. Retained
+/// interpretations keep the entire shared catalog alive, including unselected atoms.
 ///
 /// ```compile_fail
 /// use zetesis_solve::{AnswerSet, Subject};
@@ -291,11 +292,32 @@ pub struct SessionBuilder<'a> {
     control: Control,
     selection: AnswerSelection,
     resources: ExecutionResources,
+    executor: Option<Box<dyn crate::batch_executor::ErasedExecutor>>,
     measurements: Option<crate::SolveMeasurements>,
     projection: Option<crate::ProjectionLimits>,
 }
 
 impl<'a> SessionBuilder<'a> {
+    /// Supply the membership executor for an admitted formula input.
+    ///
+    /// This explicit choice requires `Backend::Auto`; a conflicting builtin
+    /// hardware request or relational/ground profile is refused at start. The
+    /// original semantic plan, candidate frontier, exact residual completion,
+    /// objectives and publication keep their existing owners. `Oracle::Auto`
+    /// can offer the shared tight certificate; `Oracle::Countermodel` requires
+    /// general capability. No refused or failed executor triggers fallback.
+    ///
+    /// Moves the implementation into one boxed session owner without preparing
+    /// it. Replacing this option drops the preceding owner. The executor owns
+    /// its infrastructure; `resources()` applies only to builtin execution.
+    /// Its own memory/work limits remain explicit implementation configuration.
+    /// See [`crate::BatchExecutor`] for the semantic trust and failure boundary.
+    #[must_use]
+    pub fn executor<E: crate::BatchExecutor + 'static>(mut self, executor: E) -> Self {
+        self.executor = Some(Box::new(crate::batch_executor::Adapter(executor)));
+        self
+    }
+
     /// Return one full answer-set representative per source `#project` key.
     /// Objective selection happens first. This changes enumeration identity,
     /// not membership, scoring or the atoms retained in each representative.
@@ -448,7 +470,10 @@ impl<'a> SessionBuilder<'a> {
             &self.control,
             phases.recorder(),
             self.input.selection(self.selection),
-            &self.resources,
+            Executors {
+                resources: &self.resources,
+                executor: self.executor,
+            },
             observations,
         );
         match result {
@@ -510,6 +535,11 @@ pub struct Session<'a> {
     projected_limit: usize,
     projection_done: bool,
 }
+
+pub(crate) struct Executors<'a> {
+    pub(crate) resources: &'a ExecutionResources,
+    pub(crate) executor: Option<Box<dyn crate::batch_executor::ErasedExecutor>>,
+}
 impl<'a> Session<'a> {
     /// Compose answer selection, execution resources and preparation
     /// observations before starting an ordinary solve. Construction performs no
@@ -527,6 +557,7 @@ impl<'a> Session<'a> {
             control,
             selection: AnswerSelection::Optimal,
             resources: ExecutionResources::default(),
+            executor: None,
             measurements: None,
             projection: None,
         }
@@ -617,9 +648,21 @@ impl<'a> Session<'a> {
         control: &Control,
         phases: &Recorder,
         selection: AnswerSelection,
-        resources: &ExecutionResources,
+        resources: Executors<'_>,
         observations: &mut impl ExecutionSink,
     ) -> Result<(State<'a>, SolveConfig), SolveError> {
+        if resources.executor.is_some() {
+            if input.profile() != PreparedProfile::Formula {
+                return Err(SolveError::Executor(crate::ExecutorError::Input(
+                    input.profile(),
+                )));
+            }
+            if config.backend != crate::Backend::Auto {
+                return Err(SolveError::Executor(crate::ExecutorError::Backend(
+                    config.backend,
+                )));
+            }
+        }
         let config = input.configure(config)?;
         let _solving = phases.stage(crate::SolveStage::Solving);
         if let Err(stop) = control.poll() {
@@ -638,6 +681,7 @@ impl<'a> Session<'a> {
                     gate_atoms: 0,
                     candidate_statistics: None,
                     countermodel_statistics: None,
+                    batch_execution: None,
                     formula_execution: None,
                     lazy_execution: None,
                     shared_execution: None,
@@ -653,7 +697,7 @@ impl<'a> Session<'a> {
                     program,
                     None,
                     &config,
-                    resources,
+                    resources.resources,
                     observations,
                     control,
                     phases,
@@ -663,7 +707,7 @@ impl<'a> Session<'a> {
                 ground.program(),
                 Some(Arc::clone(ground)),
                 &config,
-                resources,
+                resources.resources,
                 observations,
                 control,
                 phases,

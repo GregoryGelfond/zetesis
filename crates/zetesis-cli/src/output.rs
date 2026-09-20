@@ -318,6 +318,7 @@ fn error_kind(error: &RunError) -> &'static str {
         RunError::CompletionPool(_) => "completion_pool",
         RunError::CompletionUnavailable => "completion_unavailable",
         RunError::BackendUnavailable => "backend_unavailable",
+        RunError::Executor(_) => "executor",
         RunError::UnsupportedCombination { .. } => "unsupported_combination",
         RunError::UnsupportedOracle { .. } => "unsupported_oracle",
         RunError::UnsupportedSourceBatching => "unsupported_source_batching",
@@ -785,6 +786,25 @@ fn region_statistics(
         "not_applicable"
     })?;
     out.number_field("reading_work", counts.work)?;
+    out.text(",\"frontier\":")?;
+    frontier_statistics(out, stats.frontier)?;
+    out.text("}")
+}
+
+fn frontier_statistics(
+    out: &mut Buffer,
+    statistics: Option<zetesis_sat::RegionFrontierStatistics>,
+) -> Result<(), RunError> {
+    let Some(stats) = statistics else {
+        return out.text("null");
+    };
+    out.text("{\"regions\":")?;
+    out.text(&stats.regions.to_string())?;
+    out.number_field("capacity", stats.capacity)?;
+    out.number_field("retained_bytes", stats.retained_bytes)?;
+    out.number_field("peak_regions", stats.peak_regions)?;
+    out.number_field("peak_capacity", stats.peak_capacity)?;
+    out.number_field("peak_retained_bytes", stats.peak_retained_bytes)?;
     out.text("}")
 }
 
@@ -1234,3 +1254,7 @@ mod failure_tests;
 #[cfg(test)]
 #[path = "../tests/support/footer_admission.rs"]
 mod footer_admission_tests;
+
+#[cfg(test)]
+#[path = "../tests/support/frontier_output.rs"]
+mod frontier_tests;

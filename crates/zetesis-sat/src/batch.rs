@@ -19,9 +19,10 @@ pub enum BatchVerdict {
     NoProperSubset,
     /// Exact native membership must finish this candidate.
     Residual,
-    /// The candidate is not an answer set and needs no query: a present atom
-    /// has no producer with a true body under the complete tight plan, and
-    /// by the support law the candidate without it models the reduct.
+    /// The candidate is not an answer set and needs no query. This requires
+    /// sound nonminimality evidence: for example a checked proper-subset reduct
+    /// model, or a present atom lacking a true producer under a complete tight
+    /// plan, whose removal models the reduct by the support law.
     Refuted,
     /// Original satisfaction failed, contradicting this model-only producer.
     NotModel,

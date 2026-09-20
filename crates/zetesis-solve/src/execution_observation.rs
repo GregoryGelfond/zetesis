@@ -12,6 +12,14 @@ use zetesis_themelios::objective_bound::ObjectiveBoundError;
 /// its own storage policy. Its work and storage are outside solver resource limits.
 #[derive(Debug)]
 pub enum ExecutionObservation<'a> {
+    /// An explicitly supplied executor owns only bounded membership batches.
+    /// Capabilities do not identify hardware or establish successful execution.
+    ExternalExecutor {
+        /// Supported operations declared by this implementation.
+        capabilities: crate::ExecutorCapabilities,
+        /// Selected operation over the original immutable theory.
+        operation: crate::MembershipOperation,
+    },
     /// An admitted static relational representation is available.
     StaticGrounding {
         /// Requested materialization policy.

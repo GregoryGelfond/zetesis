@@ -24,6 +24,8 @@
 //! one more atom decided, so the number of regions ever pushed is bounded by
 //! twice the number of candidates of the root.
 
+use std::mem::size_of;
+
 use crate::Stop;
 
 /// A region of candidates: every atom held, cut or open, and, once
@@ -49,6 +51,15 @@ impl PartialEq for Region {
 impl Eq for Region {}
 
 impl Region {
+    /// Header and owned vector capacities in bytes, including unused capacity.
+    /// Excludes allocator bookkeeping; this is not a process-memory estimate.
+    #[must_use]
+    pub fn retained_bytes(&self) -> u128 {
+        size_of::<Self>() as u128
+            + self.decided.capacity() as u128 * size_of::<Option<bool>>() as u128
+            + self.decisions.capacity() as u128 * size_of::<usize>() as u128
+    }
+
     /// The region in which every atom is open: every candidate lies in it.
     #[must_use]
     pub fn all_open(atoms: usize) -> Self {

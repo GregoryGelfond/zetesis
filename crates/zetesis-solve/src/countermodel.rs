@@ -45,12 +45,17 @@ pub(crate) fn prepare_certificate(
     options: &SolveConfig,
     diagnostics: &mut impl ExecutionSink,
     phases: &Recorder,
+    mode: crate::batch_executor::Mode,
 ) -> Result<Option<zetesis_sat::Incomplete>, SolveError> {
-    if options.oracle != crate::Oracle::Auto {
+    if options.oracle != crate::Oracle::Auto
+        || matches!(mode, crate::batch_executor::Mode::External(capabilities) if !capabilities.tight())
+    {
         return Ok(None);
     }
     let eligibility = phases.measure(SolvePhase::CertificateSetup, || {
-        if !matches!(options.backend, crate::Backend::Auto | crate::Backend::Cpu) {
+        if matches!(mode, crate::batch_executor::Mode::External(_))
+            || !matches!(options.backend, crate::Backend::Auto | crate::Backend::Cpu)
+        {
             // Device execution currently implements tight support. Preparation
             // authenticates the complete theory and charges the same owner, but
             // does not install CPU membership checks behind a device request.

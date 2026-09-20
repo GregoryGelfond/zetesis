@@ -74,8 +74,9 @@ fn decoded_reasons_survive_exact_completion_refusal() {
     let mut queue = crate::formula_queue::BatchQueue::new(&options).unwrap();
     let mut counts = FormulaResidualStatistics::default();
     // An injected decoded result exercises host accounting, not GPU execution.
-    let next = queue.next(&mut models, &options, &control, |_, candidates| {
-        candidates
+    let next = queue.next(&mut models, &options, &control, |batch| {
+        let verdicts = batch
+            .candidates()
             .iter()
             .map(|_| {
                 decoded_verdict(
@@ -83,7 +84,8 @@ fn decoded_reasons_survive_exact_completion_refusal() {
                     FormulaVerdict::Residual(ResidualReason::RoundLimit),
                 )
             })
-            .collect()
+            .collect::<Result<_, _>>()?;
+        batch.finish(verdicts).map_err(Failure::from)
     });
     assert!(matches!(
         next,

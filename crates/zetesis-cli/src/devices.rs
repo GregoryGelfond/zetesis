@@ -62,6 +62,11 @@ fn inventory(output: &mut impl Write) -> Result<(), RunError> {
         }
         writeln!(
             output,
+            "  Advertised optional features: {:?}",
+            adapter.features()
+        )?;
+        writeln!(
+            output,
             "  Driver: {}; {}",
             adapter.driver(),
             adapter.driver_info()
@@ -70,6 +75,10 @@ fn inventory(output: &mut impl Write) -> Result<(), RunError> {
     writeln!(
         output,
         "Device and pipeline initialization are checked when the GPU is selected."
+    )?;
+    writeln!(
+        output,
+        "Current kernels require no optional features; advertised support is not enabled use."
     )?;
     Ok(())
 }

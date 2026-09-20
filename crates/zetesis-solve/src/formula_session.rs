@@ -45,7 +45,13 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
     ) -> Self {
         let mut session = Self::uninitialized(input, selection);
         session.execution = Some(execution);
-        if let Err(error) = session.initialize(config, observations, control, phases) {
+        if let Err(error) = session.initialize(
+            config,
+            observations,
+            control,
+            phases,
+            crate::batch_executor::Mode::Builtin,
+        ) {
             session.fail(error, phases);
         }
         session
@@ -77,6 +83,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         observations: &mut impl ExecutionSink,
         control: &Control,
         phases: &Recorder,
+        mode: crate::batch_executor::Mode,
     ) -> Result<(), SolveError> {
         observations.record(Event::Formula {
             atoms: self.input.theory.atom_count(),
@@ -91,7 +98,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             // CPU workers decide their own leaves. Device producers return
             // unchecked leaves to the bounded batch protocol and join before
             // membership execution starts.
-            if let Some(workers) = config.region_workers() {
+            if let Some(workers) = mode.native_workers(config) {
                 StableModels::with_region_workers(
                     self.input.theory,
                     workers,
@@ -130,7 +137,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         // Ownership is established before any fallible certificate/diagnostic
         // operation, so its attempted work remains available on failure.
         self.models = Some(models);
-        if config.region_workers().is_none()
+        if mode.native_workers(config).is_none()
             && config.search == crate::SearchMethod::Regions
             && config.workers.get() > 1
         {
@@ -145,6 +152,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             config,
             observations,
             phases,
+            mode,
         )? {
             self.complete(
                 SearchState::Interrupted(Interruption::Countermodel(error)),
@@ -357,6 +365,10 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             gate_atoms: self.input.gate_atoms,
             candidate_statistics: None,
             countermodel_statistics: statistics,
+            batch_execution: self
+                .models
+                .as_ref()
+                .and_then(|models| self.execution.as_ref()?.batch_execution(models)),
             lazy_execution: None,
             shared_execution: None,
             closure_execution: None,
@@ -390,14 +402,20 @@ impl<'a> FormulaSession<'a, crate::formula_execution::Execution> {
     pub(crate) fn with_resources(
         input: Input<'a>,
         config: &SolveConfig,
-        resources: &crate::ExecutionResources,
+        resources: crate::session::Executors<'_>,
         observations: &mut impl ExecutionSink,
         control: &Control,
         phases: &Recorder,
         selection: AnswerSelection,
     ) -> Result<Self, SolveError> {
         let mut session = Self::uninitialized(input, selection);
-        if let Err(error) = session.initialize(config, observations, control, phases) {
+        let mode = resources
+            .executor
+            .as_ref()
+            .map_or(crate::batch_executor::Mode::Builtin, |executor| {
+                crate::batch_executor::Mode::External(executor.capabilities())
+            });
+        if let Err(error) = session.initialize(config, observations, control, phases, mode) {
             session.fail(error, phases);
         }
         if session.final_outcome.is_none() {
@@ -405,14 +423,39 @@ impl<'a> FormulaSession<'a, crate::formula_execution::Execution> {
                 .models
                 .as_ref()
                 .and_then(StableModels::prepared_tight_certificate);
-            session.execution = Some(phases.measure(SolvePhase::ExecutionSetup, || {
-                crate::formula_execution::Execution::with_resources(
-                    config,
-                    resources,
-                    plan,
-                    observations,
-                )
-            })?);
+            if let (Some(executor), crate::batch_executor::Mode::External(capabilities)) =
+                (resources.executor, mode)
+            {
+                let selected = capabilities
+                    .select_plan(input.theory, plan.as_ref())
+                    .map_err(SolveError::Executor)?;
+                match phases.measure(SolvePhase::ExecutionSetup, || {
+                    crate::formula_execution::Execution::external(
+                        executor,
+                        capabilities,
+                        selected,
+                        config,
+                        control,
+                        observations,
+                    )
+                }) {
+                    Ok(execution) => session.execution = Some(execution),
+                    Err(Failure::Search(stop)) => session.complete(
+                        SearchState::Interrupted(Interruption::Countermodel(stop)),
+                        phases,
+                    ),
+                    Err(Failure::Run(error)) => return Err(error),
+                }
+            } else {
+                session.execution = Some(phases.measure(SolvePhase::ExecutionSetup, || {
+                    crate::formula_execution::Execution::with_resources(
+                        config,
+                        resources.resources,
+                        plan,
+                        observations,
+                    )
+                })?);
+            }
         }
         Ok(session)
     }

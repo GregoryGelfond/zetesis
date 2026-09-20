@@ -202,6 +202,9 @@ and reusable `ExecutionResources`. Its `collect` operation requires the complete
 original answer family. Sessions supplied the same context share the device;
 formula sessions supplied the same compiled profile also reuse that pipeline.
 Their subjects, work budgets, candidate state and outcomes remain independent.
+The [executor interface](docs/book/rust/executors.md) also lets library consumers
+supply a formula membership primitive under an explicit soundness contract,
+while the host retains candidate coverage and exact residual completion.
 
 Objective evaluation and bound preparation share checked typed atom lookup.
 Prepared indexes retain original catalog row IDs and borrow their logical values;

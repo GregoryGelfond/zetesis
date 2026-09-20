@@ -1,23 +1,27 @@
 //! The enumeration coordinator owns preparation; workers borrow its result.
 
+use std::sync::Arc;
+
 use zetesis_ferraris::{Interpretation, Theory};
 
 use super::{PreparedReduct, ReductWorkspace};
 use crate::timing::{self, Phase};
 use crate::{
     Check, Incomplete, Limits, SearchMethod, Statistics,
-    ferraris::ReductQuery,
+    ferraris::{IndexedTheory, ReductQuery},
     search::{Budget, Quota, increment},
 };
 
 /// The membership machinery of one enumeration: under the clause kernel a
 /// prepared reduct encoding, under regions the theory's index for the
-/// proper-subset query; either is built once, on the first membership check.
+/// proper-subset query. Enumeration shares its already charged candidate index;
+/// standalone membership prepares an index on first use. Mutable evaluation
+/// and query knowledge remain private to each check or worker.
 #[derive(Debug)]
 pub(crate) struct State {
     method: SearchMethod,
     prepared: Option<PreparedReduct>,
-    query: Option<(Theory, ReductQuery)>,
+    query: Option<ReductQuery>,
     pub(crate) workspace: ReductWorkspace,
 }
 
@@ -31,12 +35,20 @@ impl State {
         }
     }
 
+    /// Attach an original index whose construction the enumeration already paid.
+    pub(crate) fn with_index(index: Arc<IndexedTheory>) -> Self {
+        Self {
+            query: Some(ReductQuery::from_index(index)),
+            ..Self::new(SearchMethod::Regions)
+        }
+    }
+
     pub(crate) fn prepared(&self) -> Option<&PreparedReduct> {
         self.prepared.as_ref()
     }
 
     pub(crate) fn query(&self) -> Option<&ReductQuery> {
-        self.query.as_ref().map(|(_, query)| query)
+        self.query.as_ref()
     }
 
     pub(crate) fn ensure(
@@ -47,22 +59,23 @@ impl State {
         statistics: &mut Statistics,
     ) -> Result<(), Incomplete> {
         if self.method == SearchMethod::Regions {
-            if let Some((indexed, _)) = &self.query {
-                return if indexed.same_instance(theory) {
+            if let Some(query) = &self.query {
+                return if query.theory().same_instance(theory) {
                     Ok(())
                 } else {
                     Err(Incomplete::WrongTheory)
                 };
             }
-            let query = ReductQuery::new(theory);
-            budget.charge(query.work())?;
+            let index = IndexedTheory::new(theory);
+            let work = index.narrower().work();
+            budget.charge(work)?;
             statistics.reduct.regions.work = statistics
                 .reduct
                 .regions
                 .work
-                .checked_add(query.work())
+                .checked_add(work)
                 .ok_or(Incomplete::CounterOverflow)?;
-            self.query = Some((theory.clone(), query));
+            self.query = Some(ReductQuery::from_index(Arc::new(index)));
             return Ok(());
         }
         if let Some(prepared) = &self.prepared {
@@ -103,7 +116,7 @@ impl State {
             return Err(Incomplete::WrongTheory);
         }
         self.ensure(theory, limits, budget, statistics)?;
-        if let Some((_, query)) = &self.query {
+        if let Some(query) = &self.query {
             let (truth, _) =
                 self.workspace
                     .evaluate(candidate, limits, budget.control, statistics)?;

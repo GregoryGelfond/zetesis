@@ -77,6 +77,26 @@ impl GpuContext {
         &self.resources.info
     }
 
+    /// Optional wgpu features granted at device creation.
+    ///
+    /// These can be a strict subset of [`GpuInfo::features`]. The current
+    /// constructors request no optional features; reporting adapter support
+    /// must not be mistaken for enabling an optimized kernel. Observation
+    /// performs no submission and does not establish context health.
+    #[must_use]
+    pub fn features(&self) -> wgpu::Features {
+        self.resources.device.features()
+    }
+
+    /// Limits granted to this device, distinct from a primitive's work budgets.
+    ///
+    /// Primitive constructors and operations validate their own requirements
+    /// against these limits. Reading them performs no submission or allocation.
+    #[must_use]
+    pub fn limits(&self) -> &wgpu::Limits {
+        &self.resources.limits
+    }
+
     /// Check this device's reported identity against a caller's hard policy.
     ///
     /// Uses the same backend, exact vendor ID and physical-category predicate as
@@ -140,9 +160,6 @@ impl GpuContext {
     }
     pub(crate) fn queue(&self) -> &wgpu::Queue {
         &self.resources.queue
-    }
-    pub(crate) fn limits(&self) -> &wgpu::Limits {
-        &self.resources.limits
     }
     pub(crate) fn lease(&self) -> Result<Lease<'_>, GpuError> {
         self.resources.lifecycle.lease()

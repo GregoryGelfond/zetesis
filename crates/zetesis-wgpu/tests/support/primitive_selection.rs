@@ -6,7 +6,7 @@ use crate::{GpuError, GpuErrorKind, GpuOptions};
 fn report(name: &str, limits: &wgpu::Limits, compute: bool) -> GpuInfo {
     let mut raw = wgpu::AdapterInfo::new(wgpu::DeviceType::IntegratedGpu, wgpu::Backend::Metal);
     raw.name = name.into();
-    GpuInfo::from_report(raw, limits, compute)
+    GpuInfo::from_report(raw, wgpu::Features::empty(), limits, compute)
 }
 
 // Small synthetic profiles isolate the shared selector's callback contract.

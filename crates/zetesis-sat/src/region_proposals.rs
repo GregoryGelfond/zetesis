@@ -12,15 +12,18 @@
 //! frontier regions supply the next round; a stop never establishes coverage.
 //! Candidate order depends on scheduling, while identity and coverage do not.
 
+use std::mem::size_of;
 use std::num::NonZeroUsize;
-use std::sync::{Condvar, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use rayon::prelude::*;
 use zetesis_cpu::regions::{Narrowing, Region};
 use zetesis_ferraris::{Interpretation, Knowledge, Narrower, Producers, Theory};
 
-use super::regions::{self, RegionCounts, RegionSearchStatistics};
+use super::regions::{
+    self, IndexedTheory, RegionCounts, RegionFrontierStatistics, RegionSearchStatistics,
+};
 use crate::search::{Budget, SharedBudget, WorkLease};
 use crate::{Control, Incomplete, SearchStatistics};
 
@@ -29,13 +32,99 @@ const CONTROL_WAIT: Duration = Duration::from_millis(1);
 
 type PendingRegion = (Region, Vec<Knowledge>);
 
+/// The same LIFO frontier, with incremental ownership observations. A region's
+/// payload changes only while a worker owns it outside this frontier. Count it
+/// on insertion/removal, visiting its restriction knowledges but no other entry.
+/// Actual disjoint allocations and their headers fit comfortably in u128 on the
+/// supported 32/64-bit hosts; no search counter or resource limit is changed.
+struct Frontier {
+    entries: Vec<PendingRegion>,
+    payload_bytes: u128,
+    statistics: RegionFrontierStatistics,
+}
+
+impl Default for Frontier {
+    fn default() -> Self {
+        let mut frontier = Self {
+            entries: Vec::new(),
+            payload_bytes: 0,
+            statistics: RegionFrontierStatistics::default(),
+        };
+        frontier.record();
+        frontier
+    }
+}
+
+impl Frontier {
+    fn new(entry: PendingRegion) -> Result<Self, Incomplete> {
+        let mut frontier = Self {
+            entries: crate::search::storage(1)?,
+            ..Self::default()
+        };
+        frontier.push(entry);
+        Ok(frontier)
+    }
+
+    fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    fn try_reserve(&mut self, additional: usize) -> Result<(), std::collections::TryReserveError> {
+        let result = self.entries.try_reserve(additional);
+        self.record();
+        result
+    }
+
+    fn push(&mut self, entry: PendingRegion) {
+        self.payload_bytes += Self::payload(&entry);
+        self.entries.push(entry);
+        self.record();
+    }
+
+    fn pop(&mut self) -> Option<PendingRegion> {
+        let entry = self.entries.pop()?;
+        self.payload_bytes -= Self::payload(&entry);
+        self.record();
+        Some(entry)
+    }
+
+    /// Entry headers already occupy slots in the outer vector. Count only
+    /// their owned allocations here, including unused knowledge slots.
+    fn payload((region, knowledge): &PendingRegion) -> u128 {
+        region.retained_bytes() - size_of::<Region>() as u128
+            + knowledge.capacity() as u128 * size_of::<Knowledge>() as u128
+            + knowledge
+                .iter()
+                .map(|known| known.retained_bytes() - size_of::<Knowledge>() as u128)
+                .sum::<u128>()
+    }
+
+    fn record(&mut self) {
+        let statistics = &mut self.statistics;
+        statistics.regions = self.entries.len();
+        statistics.capacity = self.entries.capacity();
+        statistics.retained_bytes = size_of::<Vec<PendingRegion>>() as u128
+            + self.entries.capacity() as u128 * size_of::<PendingRegion>() as u128
+            + self.payload_bytes;
+        statistics.peak_regions = statistics.peak_regions.max(statistics.regions);
+        statistics.peak_capacity = statistics.peak_capacity.max(statistics.capacity);
+        statistics.peak_retained_bytes = statistics
+            .peak_retained_bytes
+            .max(statistics.retained_bytes);
+    }
+}
+
 /// A reusable candidate frontier and an owned Rayon executor. Its immutable
 /// preparation is shared across workers and every bounded production round.
 pub(crate) struct RegionProposals {
     producers: Option<Producers>,
-    narrower: Narrower,
+    index: Arc<IndexedTheory>,
     restrictions: Vec<(Theory, Narrower)>,
-    pending: Vec<PendingRegion>,
+    pending: Frontier,
     pool: rayon::ThreadPool,
     statistics: RegionSearchStatistics,
 }
@@ -64,7 +153,7 @@ impl RegionProposals {
     ) -> Result<Self, Incomplete> {
         let regions::Opened {
             producers,
-            narrower,
+            index,
             statistics,
         } = regions::open(theory, budget)?;
         let pool = rayon::ThreadPoolBuilder::new()
@@ -72,14 +161,13 @@ impl RegionProposals {
             .thread_name(|index| format!("zetesis-proposal-{index}"))
             .build()
             .map_err(|_| Incomplete::Allocation)?;
-        let mut pending = crate::search::storage(1)?;
-        pending.push((
+        let pending = Frontier::new((
             Region::all_open(theory.atom_count()),
-            vec![narrower.knowledge()],
-        ));
+            vec![index.narrower().knowledge()],
+        ))?;
         Ok(Self {
             producers,
-            narrower,
+            index,
             restrictions: Vec::new(),
             pending,
             pool,
@@ -87,8 +175,15 @@ impl RegionProposals {
         })
     }
 
+    pub(crate) fn index(&self) -> &Arc<IndexedTheory> {
+        &self.index
+    }
+
     pub(crate) const fn statistics(&self) -> RegionSearchStatistics {
-        self.statistics
+        RegionSearchStatistics {
+            frontier: Some(self.pending.statistics),
+            ..self.statistics
+        }
     }
 
     pub(crate) fn restrict(
@@ -125,11 +220,20 @@ impl RegionProposals {
     ) -> Produced {
         debug_assert!(output.is_empty());
         debug_assert!(maximum > 0 && output.capacity() >= maximum);
+        let (theory, narrower) = match self.index.subject(theory) {
+            Ok(subject) => subject,
+            Err(error) => {
+                return Produced {
+                    exhausted: false,
+                    stopped: Some(error),
+                };
+            }
+        };
         let allowance = SharedBudget::new(budget.limits, budget.statistics);
         let round = Round {
             theory,
             producers: self.producers.as_ref(),
-            narrower: &self.narrower,
+            narrower,
             restrictions: &self.restrictions,
             allowance: &allowance,
             limits: budget.limits,
@@ -174,13 +278,17 @@ impl RegionProposals {
 }
 
 struct State {
-    pending: Vec<PendingRegion>,
+    pending: Frontier,
     output: Vec<Interpretation>,
     /// Each active region reserves a possible output slot.
     active: usize,
     counts: RegionCounts,
     stopped: Option<Incomplete>,
 }
+
+#[cfg(test)]
+#[path = "../tests/support/region_frontier.rs"]
+mod tests;
 
 struct Round<'a> {
     theory: &'a Theory,

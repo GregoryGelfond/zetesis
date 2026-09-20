@@ -34,8 +34,9 @@ pub use error::Incomplete;
 pub use ferraris::{
     BatchError, BatchLimits, BatchStatistics, BatchVerdict, CertificateError, CertificateLimits,
     CertificateOrder, CertificatePlanStatistics, CertifiedStatistics, Check, CompletionExecutor,
-    CompletionScratch, CompletionStatistics, Limits, RegionCounts, RegionSearchStatistics,
-    SearchMethod, StableModels, Statistics, SupportStatistics, SupportStatus, check, check_with,
+    CompletionScratch, CompletionStatistics, Limits, RegionCounts, RegionFrontierStatistics,
+    RegionSearchStatistics, SearchMethod, StableModels, Statistics, SupportStatistics,
+    SupportStatus, check, check_with,
 };
 pub use projection::{ProjectionLimits, ProjectionResource, ProjectionStatistics};
 pub use search::{SearchLimits, SearchStatistics, Solve, solve, solve_with_statistics};

@@ -57,6 +57,32 @@ Consuming finalization transfers the completed atom vector into the immutable
 catalog and releases the construction index. These operations consume the
 enclosing work budget; catalog membership alone does not establish truth.
 
+## Shared original narrowing index
+
+Region enumeration prepares one immutable `IndexedTheory` in `zetesis-sat`:
+the exact admitted `Theory` and its `Narrower` index, constructed together.
+Scalar candidates, parallel candidate producers and native membership workers
+share that owner. Proper-subset queries use the same original DAG index under
+each candidate's frozen truth. Reuse requires `Theory::same_instance`; separately
+admitted equal formulas are different subjects. This is enumeration-owned
+preparation, with no global cache or public interchange of raw index handles.
+
+Only immutable indexing is shared. Each candidate region owns its knowledge;
+each reduct traversal starts with private knowledge under its candidate's mask.
+Evaluation workspaces, budget leases and traversal state remain separate.
+Candidate-only restrictions retain their own indexes and never enter the
+original theory or supply its support. Tight and positive certificates retain
+their existing membership procedures and do not execute a general reduct query.
+
+Index construction is charged once to candidate preparation, one work unit per
+original node. Reusing that index adds no construction charge to reduct-region
+work. A standalone membership check without candidate preparation constructs
+and charges its own index. Failed query reads retain their existing work and
+query-count receipts, and sharing does not change verification or search limits.
+The index constructor retains its existing allocation boundary; the shared
+handle uses an infallible Arc allocation, as does Theory. These logical work
+and ownership facts do not establish a process RSS bound or a measured speedup.
+
 ## Prepared formula queries
 
 A formula enumeration under the clauses method (`--search clauses`) constructs
@@ -109,6 +135,20 @@ alone establishes neither a time nor a memory improvement. The
 [parametric reduct law](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/parametric-reduct.md) states the
 semantic preservation argument and its remaining implementation obligations.
 
+## Candidate frontier observations
+
+`RegionSearchStatistics::frontier` records queued, inactive candidate regions in
+the parallel proposal executor. Its byte count includes allocated entry capacity
+and the owned decision and knowledge buffers of queued regions. An empty frontier
+can retain capacity. The count and byte peaks are maxima over frontier changes;
+they need not occur together.
+
+The observation excludes active regions, temporary split copies, shared immutable
+indexes, candidate batches, thread stacks, allocator overhead and device storage.
+It is neither peak process memory nor a memory limit. Uninstrumented traversal
+routes report absence, not zero. The statistics JSON preserves that distinction
+in `search.candidate_regions.frontier`.
+
 ## Device resource scope
 
 [`GpuContext`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/src/context.rs)
@@ -122,6 +162,15 @@ capabilities, then starts fresh residency, epoch and batch accounting.
 `GpuFormulaProfile::same_instance` compares the compiled owner; equal shader or
 adapter metadata does not establish that identity. Preparation does not create an
 answer-set claim or change the primitive's input subject.
+
+Advertised support and enabled use are distinct observations. `GpuInfo::features`
+reports the adapter's optional wgpu features; discovery creates no device.
+`GpuContext::features` reports the subset granted to the retained device, and
+`GpuContext::limits` exposes its granted limits. Current constructors request no
+optional features. These operations perform no submission and establish neither
+device health nor an optimized execution path. The device inventory reports
+advertised features using wgpu's names; a later feature-specific kernel still
+needs explicit admission, an exact baseline and physical qualification.
 
 Compilation reuse changes handle ownership only. Dispatch still uses that
 profile's exact gate implementation, validates each candidate against the

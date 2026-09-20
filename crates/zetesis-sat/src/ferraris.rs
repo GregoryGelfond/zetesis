@@ -39,9 +39,9 @@ use parallel_regions::ParallelRegions;
 #[path = "region_proposals.rs"]
 mod region_proposals;
 use region_proposals::RegionProposals;
-pub(crate) use regions::ReductQuery;
 use regions::RegionSearch;
-pub use regions::{RegionCounts, RegionSearchStatistics, SearchMethod};
+pub(crate) use regions::{IndexedTheory, ReductQuery};
+pub use regions::{RegionCounts, RegionFrontierStatistics, RegionSearchStatistics, SearchMethod};
 
 /// Whole-operation ceilings for a membership check or stable-model enumeration.
 #[derive(Clone, Copy, Debug)]
@@ -352,8 +352,9 @@ impl StableModels {
     }
 
     /// Enumerate by regions with several workers walking the tree at once,
-    /// each with its own knowledge, budget lease and reduct query, sharing a
-    /// pool of regions still to visit. The models arrive in the schedule's
+    /// each with its own knowledge, budget lease and reduct query state, sharing
+    /// the immutable original index and a pool of regions still to visit.
+    /// The models arrive in the schedule's
     /// order, which is not a property of the result and differs between
     /// runs; the family is exact. One worker is the scalar regions method.
     ///
@@ -375,6 +376,8 @@ impl StableModels {
             statistics: SearchStatistics::default(),
         };
         let parallel = ParallelRegions::new(theory, workers, limits, control.clone(), &mut budget)?;
+        let reduct =
+            crate::prepared_reduct::State::with_index(std::sync::Arc::clone(parallel.index()));
         let statistics = Statistics {
             search: budget.statistics,
             ..Default::default()
@@ -390,7 +393,7 @@ impl StableModels {
             pending_error: None,
             batch: batch::State::default(),
             certificate: None,
-            reduct: crate::prepared_reduct::State::new(SearchMethod::Regions),
+            reduct,
         })
     }
 
@@ -423,6 +426,8 @@ impl StableModels {
             statistics: SearchStatistics::default(),
         };
         let proposals = RegionProposals::new(theory, workers, &mut budget)?;
+        let reduct =
+            crate::prepared_reduct::State::with_index(std::sync::Arc::clone(proposals.index()));
         let statistics = Statistics {
             search: budget.statistics,
             ..Default::default()
@@ -438,7 +443,7 @@ impl StableModels {
             pending_error: None,
             batch: batch::State::default(),
             certificate: None,
-            reduct: crate::prepared_reduct::State::new(SearchMethod::Regions),
+            reduct,
         })
     }
 
@@ -463,7 +468,7 @@ impl StableModels {
             control: &control,
             statistics: SearchStatistics::default(),
         };
-        let (proposer, support) = match method {
+        let (proposer, support, reduct) = match method {
             SearchMethod::Clauses => {
                 let mut cnf = encoding::encode(theory, None, limits.admission, &mut budget)?;
                 let support = candidate_support::restrict(&mut cnf, theory, limits, &mut budget)?;
@@ -471,12 +476,16 @@ impl StableModels {
                 (
                     Proposer::Clauses(Box::new(ClauseProposer { cnf, cursor })),
                     Some(support),
+                    crate::prepared_reduct::State::new(method),
                 )
             }
-            SearchMethod::Regions => (
-                Proposer::Regions(Box::new(RegionSearch::new(theory, &mut budget)?)),
-                None,
-            ),
+            SearchMethod::Regions => {
+                let regions = RegionSearch::new(theory, &mut budget)?;
+                let reduct = crate::prepared_reduct::State::with_index(std::sync::Arc::clone(
+                    regions.index(),
+                ));
+                (Proposer::Regions(Box::new(regions)), None, reduct)
+            }
         };
         let statistics = Statistics {
             search: budget.statistics,
@@ -494,7 +503,7 @@ impl StableModels {
             pending_error: None,
             batch: batch::State::default(),
             certificate: None,
-            reduct: crate::prepared_reduct::State::new(method),
+            reduct,
         })
     }
     /// Enable coarse host timing from this point onward. Repeated calls retain

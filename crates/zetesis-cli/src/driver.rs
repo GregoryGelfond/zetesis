@@ -107,6 +107,8 @@ pub enum RunError {
     CompletionPool(rayon::ThreadPoolBuildError),
     /// Requested backend was not compiled into this binary.
     BackendUnavailable,
+    /// A supplied library executor refused or failed its batch operation.
+    Executor(zetesis_solve::ExecutorError),
     /// The requested materialization strategy is unavailable on that backend.
     UnsupportedCombination {
         /// Explicit execution hardware request.
@@ -197,6 +199,7 @@ impl fmt::Display for RunError {
             f.write_str("source admission: ")?;
         }
         match self {
+            Self::Executor(error) => error.fmt(f),
             Self::Projection(error) => error.fmt(f),
             Self::Input(error) => write!(f, "standard input ('-'): {error}"),
             Self::TimeLimitRange { seconds } => write!(f, "--time-limit {seconds}: time limit exceeds the platform clock range"),
@@ -319,6 +322,7 @@ impl std::error::Error for RunError {
             Self::Output(error) => Some(error),
             Self::DeadlineTimer(error) => Some(error),
             Self::ExecutionObservation(error) => Some(error.as_ref()),
+            Self::Executor(error) => Some(error),
             Self::PublicationStopped(error) => Some(error),
             Self::Observation(error) => Some(error),
             Self::JsonRecord(error) => Some(error),
@@ -746,6 +750,7 @@ impl From<zetesis_solve::SolveError> for RunError {
     fn from(error: zetesis_solve::SolveError) -> Self {
         use zetesis_solve::SolveError;
         match error {
+            SolveError::Executor(error) => Self::Executor(error),
             SolveError::Projection(error) => Self::Projection(error),
             SolveError::Batch(error) => Self::Batch(error),
             SolveError::QueryObservation(error) => Self::QueryObservation(error),

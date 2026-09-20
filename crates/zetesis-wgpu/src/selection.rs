@@ -78,6 +78,7 @@ pub struct GpuSelection {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GpuInfo {
     raw: wgpu::AdapterInfo,
+    features: wgpu::Features,
     capability_issue: Option<String>,
 }
 
@@ -85,6 +86,7 @@ impl GpuInfo {
     fn from_adapter(adapter: &wgpu::Adapter) -> Self {
         Self::from_report(
             adapter.get_info(),
+            adapter.features(),
             &adapter.limits(),
             adapter
                 .get_downlevel_capabilities()
@@ -93,12 +95,18 @@ impl GpuInfo {
         )
     }
 
-    fn from_report(raw: wgpu::AdapterInfo, limits: &wgpu::Limits, compute: bool) -> Self {
+    fn from_report(
+        raw: wgpu::AdapterInfo,
+        features: wgpu::Features,
+        limits: &wgpu::Limits,
+        compute: bool,
+    ) -> Self {
         let capability_issue = check_capabilities(compute, limits, check_adapter_limits)
             .err()
             .map(|error| error.to_string());
         Self {
             raw,
+            features,
             capability_issue,
         }
     }
@@ -107,6 +115,17 @@ impl GpuInfo {
     #[must_use]
     pub fn name(&self) -> &str {
         &self.raw.name
+    }
+
+    /// Optional wgpu features advertised by this adapter, not enabled features.
+    ///
+    /// Discovery does not create a device or prove a feature's execution. Read
+    /// [`crate::GpuContext::features`] for the features granted to a live context.
+    /// This fixed-size value preserves wgpu's capability vocabulary and performs
+    /// no allocation or device operation.
+    #[must_use]
+    pub fn features(&self) -> wgpu::Features {
+        self.features
     }
 
     /// Borrow reported metadata as typed values with explicit optional text.
@@ -509,7 +528,7 @@ mod tests {
         let mut raw = wgpu::AdapterInfo::new(kind, backend);
         raw.name = name.to_owned();
         raw.vendor = vendor;
-        GpuInfo::from_report(raw, &wgpu::Limits::default(), true)
+        GpuInfo::from_report(raw, wgpu::Features::empty(), &wgpu::Limits::default(), true)
     }
 
     fn pick(infos: &[GpuInfo], selection: GpuSelection, platform: HostPlatform) -> usize {
@@ -773,14 +792,19 @@ mod tests {
             GpuErrorKind::AdapterUnavailable
         );
         let raw = wgpu::AdapterInfo::new(wgpu::DeviceType::IntegratedGpu, wgpu::Backend::Gl);
-        let no_compute = GpuInfo::from_report(raw.clone(), &wgpu::Limits::default(), false);
+        let no_compute = GpuInfo::from_report(
+            raw.clone(),
+            wgpu::Features::empty(),
+            &wgpu::Limits::default(),
+            false,
+        );
         assert!(!no_compute.supports_static_oracle());
         assert!(no_compute.capability_issue().unwrap().contains("compute"));
         let small_limits = wgpu::Limits {
             max_compute_invocations_per_workgroup: 1,
             ..wgpu::Limits::default()
         };
-        let limited = GpuInfo::from_report(raw, &small_limits, true);
+        let limited = GpuInfo::from_report(raw, wgpu::Features::empty(), &small_limits, true);
         assert!(!limited.supports_static_oracle());
         for info in [no_compute, limited] {
             assert_eq!(

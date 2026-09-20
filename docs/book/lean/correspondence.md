@@ -456,6 +456,15 @@ in the solver. The [candidate cursor contract](https://github.com/GregoryGelfond
 and [projection-index contract](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/docs/candidate-pruning.md)
 describe their concrete ownership and failure boundaries.
 
+Region candidate preparation and frozen proper-subset queries share one
+immutable index constructed with the exact original `Theory`. Reuse checks
+instance identity. Each region or query retains private `Knowledge`, and each
+candidate supplies freshly authenticated frozen truth. Sharing preserves the
+subjects of the existing `FormulaBounds` and `ReductRegions` laws; it changes
+ownership, not the definition of a reduct. Index construction, identity checks,
+mutable-state separation and attribution of construction work remain Rust
+refinement obligations.
+
 The batched parallel proposer separates classical candidate production from
 membership. Its workers use the original region readings and disjoint splits;
 they do not certify stable models. Read `Frontier` with a proposal family that
@@ -475,6 +484,20 @@ an empty delivered batch into a complete negative result. The concrete queue
 ownership, reservation arithmetic, panic/cancellation paths, budget settlement
 before checking and transfer between rounds remain Rust obligations. The two
 abstract laws do not themselves verify that concurrent implementation.
+
+`SessionBuilder::executor` exposes that same formula batch boundary to an
+external `BatchExecutor`; it does not replace the candidate frontier or objective
+owner. The complete original-theory tight certificate, when selected, is shared
+with the executor through `MembershipPlan`. Original satisfaction is checked
+before invocation. `CandidateBatch::finish` and the host receipt consumer retain
+exact theory and candidate-slice association and check result count. Neither
+operation proves the soundness of a verdict or its association with the right
+position within that slice. The batch laws therefore still require a sound
+executor for the selected operation as an explicit premise. Exact residual
+completion uses the existing host checker; a callback interruption, refusal or
+fault cannot discharge its pending candidates. Rust ownership, callback effects,
+resource compliance and transport identities remain implementation obligations,
+with no additional theorem or device qualification claimed by this API.
 
 ## Representation and source laws
 

@@ -5,6 +5,8 @@
 //! lies in exactly one leaf or counted region visited, and the leaves come
 //! in the counter's order.
 
+use std::mem::size_of;
+
 use zetesis_cpu::Stop;
 use zetesis_cpu::regions::{Counting, Narrowing, Region, Traversal, Visit};
 
@@ -22,6 +24,19 @@ fn visits(mut traversal: Traversal) -> Vec<Visit> {
 
 fn held(region: &Region) -> Vec<usize> {
     region.held().collect()
+}
+
+#[test]
+fn region_storage_includes_decision_capacity() {
+    let mut region = Region::all_open(12);
+    let empty = Region::all_open(0).retained_bytes();
+    assert!(region.retained_bytes() >= empty + 12 * size_of::<Option<bool>>() as u128);
+    let before = region.retained_bytes();
+    assert!(region.hold(11));
+    assert!(region.retained_bytes() >= before + size_of::<usize>() as u128);
+    let decided = region.retained_bytes();
+    assert!(region.hold(11));
+    assert_eq!(region.retained_bytes(), decided);
 }
 
 #[test]

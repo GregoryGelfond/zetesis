@@ -5,7 +5,7 @@ use std::io;
 use std::num::NonZeroUsize;
 
 use zetesis_cpu::Control;
-use zetesis_ferraris::{Interpretation, Theory};
+use zetesis_ferraris::Interpretation;
 use zetesis_sat::{BatchVerdict, StableModels};
 
 use super::test_harness::{admitted, input, run};
@@ -45,8 +45,9 @@ impl MembershipExecution for Injected {
         _: &Recorder,
     ) -> Option<Result<Interpretation, Failure>> {
         let mut queue = std::mem::take(&mut self.queue);
-        let result = queue.next(models, options, control, |_: &Theory, candidates| {
-            self.check(candidates)
+        let result = queue.next(models, options, control, |batch| {
+            let verdicts = self.check(batch.candidates())?;
+            batch.finish(verdicts).map_err(Failure::from)
         });
         self.queue = queue;
         result

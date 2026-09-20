@@ -19,6 +19,8 @@
 //! removes candidates, so no restart and no exclusion index is needed
 //! (`Search.CoverageTree`, `FormulaBounds`).
 
+use std::sync::Arc;
+
 use zetesis_cpu::Stop;
 use zetesis_cpu::regions::{Counting, Narrowing, Region, Traversal, Visit};
 use zetesis_ferraris::{
@@ -72,7 +74,9 @@ pub struct RegionCounts {
     pub cut: u64,
     /// Node reads, root tests and producer checks, and for the candidate
     /// tree the indexing of the theory and each restriction and the
-    /// producer extraction; included in search work.
+    /// producer extraction; included in search work. Enumeration queries
+    /// share that already charged original index. A standalone membership
+    /// query includes its own index construction in its reduct counts.
     pub work: u64,
 }
 
@@ -118,6 +122,30 @@ impl RegionCounts {
     }
 }
 
+/// Owned storage of queued, inactive candidate regions at frontier mutations.
+///
+/// Bytes include the frontier vector header, every allocated entry slot and
+/// each queued region's and knowledge's owned vector capacities. They exclude
+/// active regions, temporary split copies, shared theory and indexes, candidate
+/// batches, measurement bookkeeping, thread stacks and allocator/driver storage.
+/// This observation is neither total search memory nor a byte admission limit.
+/// Peaks need not occur at the same mutation; an empty frontier can retain slots.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RegionFrontierStatistics {
+    /// Currently queued inactive regions.
+    pub regions: usize,
+    /// Currently allocated region entry slots, including unused slots.
+    pub capacity: usize,
+    /// Current logical retained bytes in the stated ownership scope.
+    pub retained_bytes: u128,
+    /// Maximum number of simultaneously queued regions.
+    pub peak_regions: usize,
+    /// Maximum allocated entry capacity.
+    pub peak_capacity: usize,
+    /// Maximum logical retained bytes at a frontier mutation.
+    pub peak_retained_bytes: u128,
+}
+
 /// What the region proposer did, cumulatively: the counts of its walk over
 /// the candidate tree, and whether the theory lies in the producer
 /// fragment.
@@ -128,12 +156,50 @@ pub struct RegionSearchStatistics {
     /// Whether the theory lies in the producer fragment, so the support
     /// cut applies.
     pub producers: bool,
+    /// Frontier ownership measured by parallel candidate production. Other
+    /// schedules do not currently measure it; absence does not mean zero bytes.
+    pub frontier: Option<RegionFrontierStatistics>,
+}
+
+/// One immutable original-theory index. Construction binds the index to the
+/// exact admitted instance; equal independently admitted DAGs are not its subject.
+/// Candidate and reduct traversals share this owner, never their mutable knowledge.
+#[derive(Debug)]
+pub(crate) struct IndexedTheory {
+    theory: Theory,
+    narrower: Narrower,
+}
+
+impl IndexedTheory {
+    pub(crate) fn new(theory: &Theory) -> Self {
+        Self {
+            theory: theory.clone(),
+            narrower: Narrower::new(theory),
+        }
+    }
+
+    pub(crate) fn theory(&self) -> &Theory {
+        &self.theory
+    }
+
+    pub(crate) fn narrower(&self) -> &Narrower {
+        &self.narrower
+    }
+
+    /// Authenticate before borrowing the indexed subject for any traversal.
+    pub(crate) fn subject(&self, theory: &Theory) -> Result<(&Theory, &Narrower), Incomplete> {
+        if self.theory.same_instance(theory) {
+            Ok((&self.theory, &self.narrower))
+        } else {
+            Err(Incomplete::WrongTheory)
+        }
+    }
 }
 
 #[derive(Debug)]
 pub(crate) struct RegionSearch {
     producers: Option<Producers>,
-    narrower: Narrower,
+    index: Arc<IndexedTheory>,
     /// Each region carries what is known about it under the theory and
     /// under each restriction, in order; a restriction added after a region
     /// was reached gets fresh knowledge when the region is next narrowed.
@@ -148,7 +214,7 @@ pub(crate) struct RegionSearch {
 /// the extraction and the indexing, both charged to the budget.
 pub(crate) struct Opened {
     pub(crate) producers: Option<Producers>,
-    pub(crate) narrower: Narrower,
+    pub(crate) index: Arc<IndexedTheory>,
     pub(crate) statistics: RegionSearchStatistics,
 }
 
@@ -158,18 +224,20 @@ pub(crate) fn open(theory: &Theory, budget: &mut Budget<'_>) -> Result<Opened, I
     let extraction =
         zetesis_ferraris::producers(theory, limits(budget), budget.control).map_err(stopped)?;
     budget.charge(extraction.work)?;
-    let narrower = Narrower::new(theory);
-    budget.charge(narrower.work())?;
+    let index = IndexedTheory::new(theory);
+    let indexed_work = index.narrower().work();
+    budget.charge(indexed_work)?;
     Ok(Opened {
         statistics: RegionSearchStatistics {
             counts: RegionCounts {
-                work: extraction.work + narrower.work(),
+                work: extraction.work + indexed_work,
                 ..Default::default()
             },
             producers: extraction.producers.is_some(),
+            frontier: None,
         },
         producers: extraction.producers,
-        narrower,
+        index: Arc::new(index),
     })
 }
 
@@ -191,7 +259,7 @@ impl RegionSearch {
     pub(crate) fn new(theory: &Theory, budget: &mut Budget<'_>) -> Result<Self, Incomplete> {
         let Opened {
             producers,
-            narrower,
+            index,
             statistics,
         } = open(theory, budget)?;
         Ok(Self {
@@ -200,11 +268,15 @@ impl RegionSearch {
             traversal: Traversal::with_state(
                 Region::all_open(theory.atom_count()),
                 Counting::Never,
-                vec![narrower.knowledge()],
+                vec![index.narrower().knowledge()],
             ),
-            narrower,
+            index,
             restrictions: Vec::new(),
         })
+    }
+
+    pub(crate) fn index(&self) -> &Arc<IndexedTheory> {
+        &self.index
     }
 
     pub(crate) fn statistics(&self) -> RegionSearchStatistics {
@@ -217,6 +289,7 @@ impl RegionSearch {
                 ..self.statistics.counts
             },
             producers: self.statistics.producers,
+            frontier: None,
         }
     }
 
@@ -246,15 +319,16 @@ impl RegionSearch {
     ) -> Result<Option<Interpretation>, Incomplete> {
         let Self {
             producers,
-            narrower,
+            index,
             traversal,
             restrictions,
             statistics,
         } = self;
+        let subject = index.subject(theory)?;
         let before = traversal.statistics();
         let visit = traversal.next(|region, knowledge| {
             narrow(
-                (theory, narrower),
+                subject,
                 producers.as_ref(),
                 restrictions,
                 region,
@@ -371,22 +445,19 @@ pub(crate) fn stopped(stop: Stop) -> Incomplete {
 /// with no such leaf proves it (`ReductRegions.stable_iff_no_countermodel`).
 /// The reduct is read as the original DAG under the candidate's truth mask
 /// (`FerrarisMask`), so no clause form and no second theory is built; the
-/// index of the theory is shared by every query.
+/// index of the theory is shared by candidate preparation and every query.
 #[derive(Debug)]
 pub(crate) struct ReductQuery {
-    narrower: Narrower,
+    index: Arc<IndexedTheory>,
 }
 
 impl ReductQuery {
-    pub(crate) fn new(theory: &Theory) -> Self {
-        Self {
-            narrower: Narrower::new(theory),
-        }
+    pub(crate) fn from_index(index: Arc<IndexedTheory>) -> Self {
+        Self { index }
     }
 
-    /// The indexing work, one visit per node.
-    pub(crate) fn work(&self) -> u64 {
-        self.narrower.work()
+    pub(crate) fn theory(&self) -> &Theory {
+        self.index.theory()
     }
 
     /// Search the proper subsets of the candidate, a classical model whose
@@ -403,16 +474,20 @@ impl ReductQuery {
         budget: &mut Budget<'_, Q>,
         statistics: &mut crate::Statistics,
     ) -> Result<crate::Check, Incomplete> {
+        let (theory, narrower) = self.index.subject(theory)?;
+        if !theory.same_instance(candidate.theory()) {
+            return Err(Incomplete::WrongTheory);
+        }
         let mut root = Region::all_open(theory.atom_count());
         for atom in (0..theory.atom_count()).filter(|&atom| !candidate.contains(atom)) {
             root.cut(atom);
         }
-        let mut traversal = Traversal::with_state(root, Counting::Never, self.narrower.knowledge());
+        let mut traversal = Traversal::with_state(root, Counting::Never, narrower.knowledge());
         loop {
             let before = traversal.statistics();
             let visit = traversal.next(|region, knowledge| {
                 narrow_frozen(
-                    &self.narrower,
+                    narrower,
                     theory,
                     truth,
                     region,
@@ -464,3 +539,7 @@ fn narrow_frozen<Q: Quota>(
         });
     account(attempt, counts)
 }
+
+#[cfg(test)]
+#[path = "../tests/support/shared_narrowing.rs"]
+mod shared_narrowing_tests;

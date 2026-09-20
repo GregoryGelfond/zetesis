@@ -4,11 +4,11 @@ use std::collections::VecDeque;
 use std::num::NonZeroUsize;
 
 use zetesis_cpu::Control;
-use zetesis_ferraris::{Interpretation, Theory};
-use zetesis_sat::{BatchError, BatchLimits, BatchVerdict, CompletionExecutor, StableModels};
+use zetesis_ferraris::Interpretation;
+use zetesis_sat::{BatchError, BatchLimits, CompletionExecutor, StableModels};
 
 use crate::formula_execution::Failure;
-use crate::{SolveConfig, SolveError};
+use crate::{BatchResult, CandidateBatch, SolveConfig, SolveError};
 
 #[derive(Default)]
 /// Owns only reduct-verified models awaiting objective scoring or output.
@@ -67,7 +67,7 @@ impl BatchQueue {
         models: &mut StableModels,
         options: &SolveConfig,
         control: &Control,
-        mut checker: impl FnMut(&Theory, &[Interpretation]) -> Result<Vec<BatchVerdict>, Failure>,
+        mut checker: impl for<'a> FnMut(CandidateBatch<'a>) -> Result<BatchResult<'a>, Failure>,
     ) -> Option<Result<Interpretation, Failure>> {
         loop {
             if let Err(error) = control.poll() {
@@ -90,7 +90,11 @@ impl BatchQueue {
             let result = models.next_batch_with_completion(
                 limits,
                 &mut self.completion,
-                |theory, candidates| checker(theory, candidates),
+                |theory, candidates| {
+                    checker(CandidateBatch::new(theory, candidates))?
+                        .into_verdicts(theory, candidates)
+                        .map_err(Failure::from)
+                },
             );
             if models.batch_statistics().completion_calls != prior_completion
                 && let Some(progress) = self.completion.last_statistics()

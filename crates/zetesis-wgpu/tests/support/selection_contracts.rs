@@ -14,7 +14,7 @@ fn info(backend: wgpu::Backend, category: wgpu::DeviceType) -> GpuInfo {
     raw.vendor = 0x10de;
     raw.device = 0x1234;
     raw.device_pci_bus_id = "0000:01:00.0".into();
-    GpuInfo::from_report(raw, &wgpu::Limits::default(), true)
+    GpuInfo::from_report(raw, wgpu::Features::empty(), &wgpu::Limits::default(), true)
 }
 
 #[test]

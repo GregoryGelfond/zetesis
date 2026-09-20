@@ -33,6 +33,7 @@ pub struct SemanticOutcome {
     pub(crate) gate_atoms: usize,
     pub(crate) candidate_statistics: Option<zetesis_cpu::CandidateStatistics>,
     pub(crate) countermodel_statistics: Option<zetesis_sat::Statistics>,
+    pub(crate) batch_execution: Option<crate::BatchExecutionStatistics>,
     pub(crate) formula_execution: Option<crate::FormulaExecutionStatistics>,
     pub(crate) lazy_execution: Option<crate::LazyExecutionStatistics>,
     pub(crate) shared_execution: Option<crate::SharedExecutionStatistics>,
@@ -60,6 +61,7 @@ impl SemanticOutcome {
             gate_atoms: 0,
             candidate_statistics: None,
             countermodel_statistics: None,
+            batch_execution: None,
             formula_execution: None,
             lazy_execution: None,
             shared_execution: None,
@@ -114,6 +116,13 @@ impl SemanticOutcome {
     #[must_use]
     pub const fn countermodel_statistics(&self) -> Option<&zetesis_sat::Statistics> {
         self.countermodel_statistics.as_ref()
+    }
+
+    /// Host batch receipts for an explicitly supplied executor. Absent for
+    /// builtin routes; it contains no inferred device work or hardware identity.
+    #[must_use]
+    pub const fn batch_execution(&self) -> Option<&crate::BatchExecutionStatistics> {
+        self.batch_execution.as_ref()
     }
 
     /// Bounded formula batch accounting, including effective device limits,

@@ -7,7 +7,7 @@ fn reported(backend: wgpu::Backend, category: wgpu::DeviceType, vendor: u32) -> 
     let mut raw = wgpu::AdapterInfo::new(category, backend);
     raw.name = "NVIDIA is only a reported name".into();
     raw.vendor = vendor;
-    GpuInfo::from_report(raw, &wgpu::Limits::default(), true)
+    GpuInfo::from_report(raw, wgpu::Features::empty(), &wgpu::Limits::default(), true)
 }
 
 #[test]

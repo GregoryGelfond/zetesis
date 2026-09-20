@@ -13,6 +13,7 @@ construction and standalone analysis APIs belong to its own manual.
 | Original ASP source | `zetesis_themelios::admit`, `admit_extended`, `prepare_formula`, `admit_formula`, and their bundle APIs |
 | Ordinary solve over an admitted owner | `zetesis_solve::{PreparedInput, Session, SolveConfig}` |
 | Compose selection, observations and reusable device resources | `Session::builder`, `SessionBuilder`, `ExecutionResources` |
+| Supply a formula membership executor with host-owned coverage and completion | [`SessionBuilder::executor`, `BatchExecutor`, `MembershipPlan`, `CandidateBatch`](executors.md) |
 | Share optional host instrumentation across admission and solving | `SolveMeasurements` |
 | All original answers, streamed or completely collected | `Session::enumerate`, `WorldView::collect`, checked `AnswerSet` |
 | Finite relational templates and atoms | `zetesis_core::{Program, Template, Atom, Seed}` |

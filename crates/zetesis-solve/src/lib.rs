@@ -51,6 +51,10 @@
 //! compiled formula profile, while every session owns fresh search, residency,
 //! budgets and results. No global device or pipeline cache is installed.
 //!
+//! [`SessionBuilder::executor`] accepts a [`BatchExecutor`] for formula membership.
+//! The session retains candidate coverage, exact residual completion and objectives;
+//! decisive verdicts rely on the executor's documented soundness contract.
+//!
 //! [`ExecutionObserver`] borrows typed facts during setup or a pull. Callback
 //! failures are distinct from device faults and cannot request backend fallback.
 //! [`SolveFailure`] preserves the original cause and available semantic evidence;
@@ -67,6 +71,7 @@
 
 mod execution_observation;
 mod execution_resources;
+mod batch_executor;
 mod policy;
 mod engine;
 mod optimization;
@@ -95,6 +100,10 @@ mod phase_timing;
 mod stage_timing;
 mod grounding_timing;
 
+pub use batch_executor::{
+    BatchExecutionStatistics, BatchExecutor, BatchResult, CandidateBatch, ExecutorCapabilities,
+    ExecutorError, ExecutorFailure, MembershipOperation, MembershipPlan,
+};
 pub use closure_execution::{ClosureExecutionStatistics, ClosureJoinStatistics, ClosureRoute};
 pub use completion::{Completion, Interruption, SearchState};
 pub use error::{FailureParts, SolveError, SolveFailure};
@@ -119,6 +128,7 @@ pub use session::{
 pub use shared_execution::SharedExecutionStatistics;
 pub use solve_config::SolveConfig;
 pub use world_view::{WorldView, WorldViewError, WorldViewFailure, WorldViewLimits};
+pub use zetesis_sat::BatchVerdict;
 pub use zetesis_sat::SearchMethod;
 pub use zetesis_telemetry::{GroundingMode, SolveStage, StageMeasurement, StageTimings};
 pub use zetesis_themelios::{GroundingOutcome, GroundingPhase, GroundingWork};

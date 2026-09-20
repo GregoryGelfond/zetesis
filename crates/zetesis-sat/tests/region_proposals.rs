@@ -10,7 +10,8 @@ use std::num::NonZeroUsize;
 
 use zetesis_ferraris::{Interpretation, Node, Theory};
 use zetesis_sat::{
-    BatchError, BatchLimits, BatchVerdict, Control, Incomplete, Limits, SearchLimits, StableModels,
+    BatchError, BatchLimits, BatchVerdict, CompletionExecutor, Control, Incomplete, Limits,
+    SearchLimits, SearchMethod, StableModels,
 };
 
 fn nonzero(value: usize) -> NonZeroUsize {
@@ -57,6 +58,186 @@ fn expected(theory: &Theory) -> BTreeSet<Vec<usize>> {
             .then(|| candidate.atoms().collect())
         })
         .collect()
+}
+
+#[test]
+fn shared_indexes_preserve_non_tight_answer_families() {
+    let choices = choice_theories::choices(3);
+    let mut nodes = choices.nodes().to_vec();
+    let mut roots = choices.roots().to_vec();
+    let left = nodes.len();
+    nodes.extend([
+        Node::Atom(3),
+        Node::Atom(4),
+        Node::Implies(left, left + 1),
+        Node::Implies(left + 1, left),
+    ]);
+    roots.extend([left + 2, left + 3]);
+    let theory = theories::theory(5, nodes, roots);
+    assert!(matches!(
+        zetesis_ferraris::TightPlan::compile(
+            &theory,
+            zetesis_ferraris::TightPlanLimits::default(),
+            &Control::default()
+        ),
+        Err(zetesis_ferraris::TightError::PositiveCycle { .. })
+    ));
+    let expected = expected(&theory);
+    assert_eq!(expected.len(), 8);
+    let mut scalar = StableModels::new(&theory, Limits::default(), Control::default()).unwrap();
+    let actual: BTreeSet<Vec<_>> = scalar
+        .by_ref()
+        .map(|answer| answer.unwrap().atoms().collect())
+        .collect();
+    assert_eq!(actual, expected);
+    assert!(scalar.exhausted());
+    let reference = scalar.statistics();
+    assert!(reference.countermodel_queries > 0);
+    assert!(
+        reference.countermodels > 0,
+        "present unsupported cycles must be rejected"
+    );
+    for workers in [2, 4] {
+        let mut native = StableModels::with_region_workers(
+            &theory,
+            nonzero(workers),
+            Limits::default(),
+            Control::default(),
+        )
+        .unwrap();
+        let answers: Vec<Vec<_>> = native
+            .by_ref()
+            .map(|answer| answer.unwrap().atoms().collect())
+            .collect();
+        assert!(native.exhausted());
+        assert_eq!(answers.len(), expected.len());
+        assert_eq!(answers.into_iter().collect::<BTreeSet<_>>(), expected);
+        let actual = native.statistics();
+        assert_eq!(actual.countermodel_queries, reference.countermodel_queries);
+        assert_eq!(actual.countermodels, reference.countermodels);
+        // Each query starts with private fresh knowledge. Scheduling neither
+        // rebuilds an original index nor changes its frozen-query work.
+        assert_eq!(actual.reduct.regions, reference.reduct.regions);
+        for count in [1, 64] {
+            for completion_workers in [1, 4] {
+                let mut search = StableModels::with_region_producers(
+                    &theory,
+                    nonzero(workers),
+                    Limits::default(),
+                    Control::default(),
+                )
+                .unwrap();
+                let mut completion = CompletionExecutor::new(nonzero(completion_workers)).unwrap();
+                let mut found = BTreeSet::new();
+                while !search.exhausted() {
+                    for answer in search
+                        .next_batch_with_completion(batch(count), &mut completion, residual)
+                        .unwrap()
+                    {
+                        assert!(found.insert(answer.atoms().collect::<Vec<_>>()));
+                    }
+                }
+                assert_eq!(found, expected);
+                let actual = search.statistics();
+                assert_eq!(actual.countermodel_queries, reference.countermodel_queries);
+                assert_eq!(actual.countermodels, reference.countermodels);
+                assert_eq!(actual.reduct.regions, reference.reduct.regions);
+                assert_eq!(search.batch_statistics().residuals, actual.candidates);
+            }
+        }
+    }
+}
+
+#[test]
+fn frontier_peaks_survive_complete_enumeration() {
+    let theory = choice_theories::choices(5);
+    for workers in [2, 4] {
+        let mut search = StableModels::with_region_producers(
+            &theory,
+            nonzero(workers),
+            Limits::default(),
+            Control::default(),
+        )
+        .unwrap();
+        let mut prior = search.statistics().regions.unwrap().frontier.unwrap();
+        assert_eq!(prior.regions, 1);
+        assert!(prior.retained_bytes > 0);
+        let mut actual = BTreeSet::new();
+        while !search.exhausted() {
+            for model in search.next_batch(batch(3), residual).unwrap() {
+                assert!(actual.insert(model.atoms().collect::<Vec<_>>()));
+            }
+            let observed = search.statistics().regions.unwrap().frontier.unwrap();
+            assert!(observed.regions <= observed.capacity);
+            assert!(observed.peak_regions >= observed.regions);
+            assert!(observed.peak_capacity >= observed.capacity);
+            assert!(observed.peak_retained_bytes >= observed.retained_bytes);
+            assert!(observed.peak_regions >= prior.peak_regions);
+            assert!(observed.peak_capacity >= prior.peak_capacity);
+            assert!(observed.peak_retained_bytes >= prior.peak_retained_bytes);
+            prior = observed;
+        }
+        assert_eq!(actual, expected(&theory));
+        assert_eq!(prior.regions, 0);
+        assert!(prior.capacity > 0);
+        assert!(prior.retained_bytes > 0);
+        assert!(prior.peak_retained_bytes > prior.retained_bytes);
+    }
+}
+
+#[test]
+fn stopped_frontier_retains_its_ownership_receipt() {
+    let theory = choice_theories::choices(5);
+    let setup = proposed(&theory, Limits::default())
+        .statistics()
+        .search
+        .work;
+    let mut search = proposed(
+        &theory,
+        Limits {
+            search: SearchLimits {
+                max_work: setup,
+                ..SearchLimits::default()
+            },
+            ..Limits::default()
+        },
+    );
+    let before = search.statistics().regions.unwrap().frontier.unwrap();
+    assert!(matches!(
+        search.next_batch(batch(3), residual),
+        Err(BatchError::Search(Incomplete::WorkLimit))
+    ));
+    let after = search.statistics().regions.unwrap().frontier.unwrap();
+    assert_eq!(after.regions, 1);
+    assert!(after.retained_bytes > 0);
+    assert!(after.peak_retained_bytes >= before.peak_retained_bytes);
+    assert_eq!(search.statistics().search.work, setup);
+    assert_eq!(search.statistics().stable_models, 0);
+    assert!(!search.exhausted());
+}
+
+#[test]
+fn an_unmeasured_frontier_is_absent() {
+    let theory = choice_theories::choices(1);
+    let searches = [
+        StableModels::with_method(
+            &theory,
+            SearchMethod::Regions,
+            Limits::default(),
+            Control::default(),
+        )
+        .unwrap(),
+        StableModels::with_region_producers(
+            &theory,
+            nonzero(1),
+            Limits::default(),
+            Control::default(),
+        )
+        .unwrap(),
+    ];
+    for search in searches {
+        assert_eq!(search.statistics().regions.unwrap().frontier, None);
+    }
 }
 
 #[test]
