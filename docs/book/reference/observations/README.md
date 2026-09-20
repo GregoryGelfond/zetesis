@@ -5,6 +5,16 @@ Four fixed datasets reproduce the ordinary release comparisons in the
 executable identities, observations and completion limits. None qualifies a
 later implementation.
 
+The latest [CPU and Metal execution series](../execution-series.md) compares
+`994fbb79` with `eca5a1a7` on 20 September 2026. Its unchanged maintained views
+are [CPU data](series-eca5a1a7-cpu-auto.json) / [tables](series-eca5a1a7-cpu-auto-tables.md)
+and [Metal data](series-eca5a1a7-metal-eager.json) / [tables](series-eca5a1a7-metal-eager-tables.md).
+The [provenance](series-eca5a1a7-provenance.json) retains ordered acquisitions,
+workload identities, limits, source and executable identities, and all eight raw
+report hashes. These derived series views are separate from the four fixed
+release datasets and their renderer. The independent
+[coverage receipt](coverage-eca5a1a7.json) identifies the qualified population.
+
 Descriptions of arithmetic refusals below apply to those measured revisions.
 The current [source-family policy](../language.md#numeric-boundaries-and-refusal-meaning)
 admits mixed defined/zero-divisor families with warnings while retaining

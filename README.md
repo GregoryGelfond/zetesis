@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 ![Rust 1.97+](https://img.shields.io/badge/rust-1.97%2B-orange?style=flat-square)
-[![Line coverage: 94.68% (CPU + Metal)](https://img.shields.io/badge/coverage-94.68%25%20%28CPU%20%2B%20Metal%29-brightgreen?style=flat-square)](docs/book/reference/validation.md#coverage)
+[![Line coverage: 94.67% (CPU + Metal)](https://img.shields.io/badge/coverage-94.67%25%20%28CPU%20%2B%20Metal%29-brightgreen?style=flat-square)](docs/book/reference/validation.md#coverage)
 
 ζήτησις, *inquiry/search* — candidate-directed answer-set solving through the reduct.
 
@@ -96,6 +96,11 @@ versioned machine view. `--stats` reports measured phases and work counters;
 eager grounding is timed separately, while lazy joins interleave with solving.
 A resource stop is **incomplete**, never an UNSAT proof. Parser errors include
 themelios diagnostics with source locations and excerpts.
+Source arithmetic warnings also identify their source locations. A mixed
+defined/zero-divisor family can omit undefined instances with a warning;
+all-undefined families and other arithmetic failures remain errors under the
+[source arithmetic contract](docs/book/reference/language.md#numeric-boundaries-and-refusal-meaning).
+Diagnostics go to stderr, preserving the JSON stream on stdout.
 
 `--help` shows everyday options; `--help-all` adds execution and resource controls.
 Without objectives the default requests one answer set. Use `--models 0` for
@@ -274,12 +279,12 @@ answer multisets, model counts, objective costs and optimum ties. Reproduce comp
 end-to-end solves from kernel measurements when comparing performance.
 The [validation chapter](docs/book/reference/validation.md) explains which
 claims the corpus, proof and physical execution checks can establish.
-The latest [CPU/Metal comparison](docs/book/reference/reduct-execution.md)
-preserves the checked answer families across 540 planned solve invocations.
-Most timings change little. The task-allocation Metal route uses 21.87% less
-accounted CPU completion storage and takes 10.25% longer; total process
-memory was not measured in that comparison. The remaining cost is concentrated
-in CPU completion of reduct queries. There is no general speedup claim.
+The latest [CPU/Metal comparison](docs/book/reference/execution-series.md)
+records lower CPU wall medians on 19 of 20 commonly completed workloads, with
+mixed process-memory changes. Metal SEND and task allocation improve, while
+queens variant 2 takes 39–44% longer, concentrated in host candidate generation.
+The source-bound evidence retains that regression, non-pass outcomes and
+measurement limits; it does not establish a general GPU speedup.
 The [performance comparisons](docs/book/reference/performance.md) retain earlier
 grounding, atom-catalog, Table and LTO results with their source revisions and
 measurement scopes. Independent fixtures demonstrate less grounding work;
