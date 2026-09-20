@@ -149,7 +149,12 @@ impl KeyWork {
         self.steps
     }
 
-    fn step(&mut self) -> Result<(), Stop> {
+    /// Admit one inspection while establishing a key or a consumer's proof
+    /// about its values. The same ceiling covers analysis and its consumers.
+    ///
+    /// # Errors
+    /// Returns the work stop before the inspection would exceed the ceiling.
+    pub fn step(&mut self) -> Result<(), Stop> {
         let observed = u128::from(self.steps) + 1;
         check(Resource::Work, observed, u128::from(self.limit))?;
         self.steps += 1;

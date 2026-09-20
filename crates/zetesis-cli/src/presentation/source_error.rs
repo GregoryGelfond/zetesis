@@ -81,11 +81,11 @@ struct Lines<'a, W> {
 
 impl<W: Write> Lines<'_, W> {
     fn emit(&mut self, newline: &str) -> io::Result<()> {
-        let style = if self.first {
-            Some(BOLD_RED)
-        } else if let Some(style) = header(&self.line) {
+        let style = if let Some(style) = header(&self.line) {
             self.severity = style;
             Some(style)
+        } else if self.first {
+            (!self.line.is_empty()).then_some(BOLD_RED)
         } else {
             detail(&self.line, self.severity)
         };
@@ -177,6 +177,23 @@ mod tests {
         assert!(text.contains("\u{1b}[1;34mnote["));
         assert!(text.contains("\u{1b}[1;34m  | ^ note\u{1b}[0m"));
         assert!(text.contains("\u{1b}[3;90m  | - related\u{1b}[0m"));
+    }
+
+    #[test]
+    fn leading_warnings_use_warning_colors() {
+        for prefix in ["", "\n"] {
+            let mut bytes = Vec::new();
+            write(
+                &mut bytes,
+                ColorMode::Always,
+                &format!("{prefix}warning[zero-divisor]: omitted\n  | ^ warning"),
+            )
+            .unwrap();
+            let text = String::from_utf8(bytes).unwrap();
+            assert!(text.contains("\u{1b}[1;33mwarning[zero-divisor]"));
+            assert!(text.contains("\u{1b}[1;33m  | ^ warning\u{1b}[0m"));
+            assert!(!text.contains("\u{1b}[1;31m"));
+        }
     }
 
     #[test]

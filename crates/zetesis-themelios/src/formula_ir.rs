@@ -54,7 +54,14 @@ pub(crate) struct Prepared {
     /// How the key analysis that asked them ended.
     pub key_analysis: crate::KeyAnalysis,
 }
+/// One original objective element, before its pooled or weak-body alternatives.
+/// Its first lowered position is unique within the prepared objective vector;
+/// all alternatives remain contiguous. Diagnostic spans do not define identity.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ObjectiveFamily(usize);
+
 pub(crate) struct ObjectiveIr {
+    pub family: ObjectiveFamily,
     pub weight: ObjectiveField,
     pub priority: Expression,
     pub tuple: Vec<ObjectiveField>,
@@ -224,7 +231,14 @@ pub(crate) enum HeadMeasure {
     Min,
     Max,
 }
+/// One original element within its enclosing local collection. Alternatives
+/// remain contiguous and share this identity. It is not comparable across
+/// collections or outer bindings, and diagnostic spans do not determine it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) struct LocalFamily(pub(crate) usize);
+
 pub(crate) struct Element {
+    pub family: LocalFamily,
     pub key: HeadElementKey,
     pub head: HeadLiteral,
     pub condition: Vec<LiteralIr>,
@@ -317,6 +331,7 @@ pub(crate) struct AggregateIr {
     pub elements: Vec<AggregateElementIr>,
 }
 pub(crate) struct AggregateElementIr {
+    pub family: LocalFamily,
     pub key: AggregateKey,
     pub condition: Vec<LiteralIr>,
     pub variables: usize,
@@ -775,6 +790,7 @@ impl Compiler<'_> {
         )?;
         declarations.extend_from_slice(origins);
         for element in optimize.elements() {
+            let family = ObjectiveFamily(objectives.len());
             let mut evidence: Vec<_> = element
                 .provenance()
                 .origins()
@@ -815,7 +831,12 @@ impl Compiler<'_> {
                     evidence.len() as u128,
                     self.location,
                 )?;
-                objectives.push(self.objective(&alternative, evidence.clone(), polarity)?);
+                objectives.push(self.objective(
+                    &alternative,
+                    evidence.clone(),
+                    polarity,
+                    family,
+                )?);
             }
         }
         Ok(())
@@ -825,9 +846,10 @@ impl Compiler<'_> {
         element: &OptimizeElement,
         origins: Vec<Location>,
         polarity: WeightPolarity,
+        family: ObjectiveFamily,
     ) -> Result<ObjectiveIr, FormulaFailure> {
         if self.element_needs_scope(element)? {
-            return self.scoped_element(element, origins, polarity);
+            return self.scoped_element(element, origins, polarity, family);
         }
         let mut variables = Variables::default();
         let mut positive = Vec::new();
@@ -897,6 +919,7 @@ impl Compiler<'_> {
         variables.safety(self.location)?;
         let count = variables.count;
         Ok(ObjectiveIr {
+            family,
             weight,
             priority,
             tuple,
@@ -1091,58 +1114,51 @@ impl Compiler<'_> {
         variables: &Variables,
     ) -> Result<Vec<Element>, FormulaFailure> {
         let mut elements = Vec::new();
-        let mut source_booleans = source
-            .into_iter()
-            .flat_map(Choice::elements)
-            .filter(|element| {
-                matches!(
-                    element.get().literal().inner,
-                    themelios_program::program::LiteralInner::True
-                        | themelios_program::program::LiteralInner::False
-                )
-            });
-        for element in choice.elements() {
+        // The whole-rule pool rewrite reconstructs a set of local head
+        // alternatives, which can reorder or merge them. Compile the retained
+        // source elements instead: only outer guards were selected by that
+        // rewrite, while each local literal and condition keeps its own product.
+        for (index, element) in source.unwrap_or(choice).elements().enumerate() {
+            let family = LocalFamily(index);
             let boolean = if matches!(
                 element.get().literal().inner,
                 LiteralInner::True | LiteralInner::False
             ) {
                 self.dependency_projection = true;
-                Some(self.boolean_occurrences(element.get(), source_booleans.next())?)
+                Some(self.boolean_occurrences(source.map(|_| element))?)
             } else {
                 None
             };
-            for alternative in self.condition_alternatives(element.get().condition())? {
-                let mut local = variables.clone();
-                self.head_global_literal(element.get().literal(), &mut local)?;
-                let mut condition = self.condition(&alternative, &mut local)?;
-                let (head, body_variables) =
-                    self.element_head(element.get().literal(), &mut local, &mut condition)?;
-                let key = match &boolean {
-                    None => HeadElementKey::Atom,
-                    Some(origins) => {
-                        self.budget.charge(
-                            ExpansionResource::Origins,
-                            origins.len() as u128,
-                            self.location,
-                        )?;
-                        HeadElementKey::BooleanOccurrences(origins.clone())
-                    }
-                };
-                self.variable_limit(&local)?;
-                local.safety(self.location)?;
-                elements.push(Element {
-                    key,
-                    head,
-                    condition,
-                    body_variables,
-                    variables: local.count,
-                });
+            for literal in self.literal_alternatives(element.get().literal())? {
+                for alternative in self.condition_alternatives(element.get().condition())? {
+                    let mut local = variables.clone();
+                    self.head_global_literal(&literal, &mut local)?;
+                    let mut condition = self.condition(&alternative, &mut local)?;
+                    let (head, body_variables) =
+                        self.element_head(&literal, &mut local, &mut condition)?;
+                    let key = match &boolean {
+                        None => HeadElementKey::Atom,
+                        Some(origins) => {
+                            self.budget.charge(
+                                ExpansionResource::Origins,
+                                origins.len() as u128,
+                                self.location,
+                            )?;
+                            HeadElementKey::BooleanOccurrences(origins.clone())
+                        }
+                    };
+                    self.variable_limit(&local)?;
+                    local.safety(self.location)?;
+                    elements.push(Element {
+                        family,
+                        key,
+                        head,
+                        condition,
+                        body_variables,
+                        variables: local.count,
+                    });
+                }
             }
-        }
-        if source_booleans.next().is_some() {
-            return Err(FormulaFailure::ChoiceSource {
-                location: self.location,
-            });
         }
         Ok(elements)
     }

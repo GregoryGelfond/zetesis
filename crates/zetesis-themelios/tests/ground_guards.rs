@@ -305,7 +305,6 @@ fn undefined_or_overflowing_guard_values_never_become_boolean_false() {
         "p:-not 0=1=1/0.",
         "p:-#false,not 1/0=0.",
         "p:-not 1/0=0,#false.",
-        "d(0..2).p(X):-d(X),not 1/X=1.",
         "{p:not 1/0=0}.",
         "p:-#count{1:not 1/0=0}=1.",
         "d(2147483647).p:-d(X),not X+1=0.",
@@ -322,6 +321,15 @@ fn undefined_or_overflowing_guard_values_never_become_boolean_false() {
         );
         assert!(!error.diagnostics().is_empty());
     }
+}
+
+#[test]
+fn negated_guards_omit_undefined_substitutions() {
+    let program = input("d(0..2).p(X):-d(X),not 1/X=1.").unwrap();
+    let expected = native(&input("d(0..2).p(2).").unwrap());
+    assert_eq!(program.warnings().len(), 1);
+    assert_eq!(native(&program), expected);
+    assert_eq!(exhaustive(&program), expected);
 }
 
 #[test]

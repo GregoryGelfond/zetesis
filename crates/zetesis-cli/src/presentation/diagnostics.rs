@@ -47,8 +47,8 @@ impl<W: Write> Diagnostics<W> {
         }
     }
 
-    pub(crate) fn error(&mut self, error: &impl fmt::Display) -> io::Result<()> {
-        super::source_error::write(&mut self.writer, self.color, error)
+    pub(crate) fn diagnostic(&mut self, diagnostic: &impl fmt::Display) -> io::Result<()> {
+        super::source_error::write(&mut self.writer, self.color, diagnostic)
     }
 }
 

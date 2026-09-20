@@ -50,12 +50,10 @@ fn an_earlier_false_comparison_excludes_the_substitution() {
 }
 
 #[test]
-fn later_success_never_certifies_deferred_undefined_arithmetic() {
+fn comparisons_cannot_admit_an_entirely_undefined_family() {
     for source in [
         "d(0).p:-d(X),1/X=0,X=0,X+0=0.",
         "d(0).p:-d(X),X=0,1/X=0,X+0=0.",
-        "d(1;2).p(X):-d(X),1/(2-X)>=0,X>0.",
-        "d(1).p(Y):-d(X),X=1,Y=0..1,1/Y=0.",
     ] {
         let error = source_records::admit(source, &FormulaLimits::default())
             .expect_err("a complete row still evaluates every inconclusive comparison");
@@ -68,6 +66,22 @@ fn later_success_never_certifies_deferred_undefined_arithmetic() {
                 })
             ),
             "{source}: {error:?}"
+        );
+    }
+}
+
+#[test]
+fn mixed_comparison_families_preserve_defined_substitutions() {
+    for (source, expected) in [
+        ("d(1;2).p(X):-d(X),1/(2-X)>=0,X>0.", "d(1;2).p(1)."),
+        ("d(1).p(Y):-d(X),X=1,Y=0..1,1/Y=0.", "d(1)."),
+    ] {
+        let input = source_records::admit(source, &FormulaLimits::default()).unwrap();
+        let expected = source_records::admit(expected, &FormulaLimits::default()).unwrap();
+        assert_eq!(input.warnings().len(), 1, "{source}");
+        assert_eq!(
+            source_records::exhaustive(&input),
+            source_records::exhaustive(&expected)
         );
     }
 }

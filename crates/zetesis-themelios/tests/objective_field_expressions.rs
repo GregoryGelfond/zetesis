@@ -7,6 +7,7 @@ mod source_cases;
 #[path = "support/source_oracle.rs"]
 mod source_oracle;
 
+use std::collections::BTreeSet;
 use zetesis_themelios::FormulaLimits;
 
 const CASES: &str = include_str!("fixtures/objective-field-expressions.jsonl");
@@ -91,7 +92,6 @@ fn eligible_field_arithmetic_keeps_located_failures() {
         "d(0).#minimize{1/X:d(X)}.",
         "d(0).#minimize{1,1/X:d(X)}.",
         "d(2147483647).#minimize{X+1:d(X)}.",
-        "{a}.n(N):-N=#count{1:a;2:a}.#minimize{1/(N-1):n(N)}.",
     ] {
         let error = source_records::admit(source, &FormulaLimits::default()).unwrap_err();
         assert!(
@@ -105,6 +105,28 @@ fn eligible_field_arithmetic_keeps_located_failures() {
         );
         assert!(!error.diagnostics().is_empty());
     }
+}
+
+#[test]
+fn mixed_field_carriers_preserve_complete_scored_answers() {
+    let source = "{a}.n(N):-N=#count{1:a;2:a}.#minimize{1/(N-1):n(N)}.";
+    let input = source_records::admit(source, &FormulaLimits::default()).unwrap();
+    let expected: source_records::Records = BTreeSet::from([
+        (BTreeSet::from(["n(0)".into()]), Some(vec![-1])),
+        (BTreeSet::from(["a".into(), "n(2)".into()]), Some(vec![1])),
+    ]);
+    assert_eq!(source_records::exhaustive(&input), expected);
+    assert_eq!(input.objectives().priorities(), [0]);
+    let [warning] = input.warnings() else {
+        panic!("one omitted source-carrier instance");
+    };
+    assert!(
+        input
+            .source()
+            .slice(warning.location().span)
+            .unwrap()
+            .contains("#minimize")
+    );
 }
 
 #[test]

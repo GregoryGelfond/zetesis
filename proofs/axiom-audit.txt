@@ -57,6 +57,16 @@
 'Zetesis.AggregateReduct.frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AggregateReduct.direct_reduct' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AggregateReduct.evaluator_refinement' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ArithmeticFamilies.empty_admissible' depends on axioms: [propext]
+'Zetesis.ArithmeticFamilies.empty_unwarned' depends on axioms: [propext]
+'Zetesis.ArithmeticFamilies.fatal_refused' does not depend on any axioms
+'Zetesis.ArithmeticFamilies.filtered_witness' does not depend on any axioms
+'Zetesis.ArithmeticFamilies.zero_divisor_requires_defined' does not depend on any axioms
+'Zetesis.ArithmeticFamilies.entirely_undefined_refused' does not depend on any axioms
+'Zetesis.ArithmeticFamilies.admission_by_outcomes' depends on axioms: [propext]
+'Zetesis.ArithmeticFamilies.warning_by_outcomes' depends on axioms: [propext]
+'Zetesis.ArithmeticFamilies.prefix_does_not_establish_refusal' depends on axioms: [propext]
+'Zetesis.ArithmeticFamilies.flattening_can_conceal_refusal' depends on axioms: [propext]
 'Zetesis.AtomCatalogs.commit_preserves_lookup' depends on axioms: [propext]
 'Zetesis.AtomCatalogs.append_preserves_identity' depends on axioms: [propext]
 'Zetesis.AtomCatalogs.commit_preserves_interpretation' depends on axioms: [propext, Quot.sound]

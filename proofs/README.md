@@ -21,6 +21,7 @@ conceptual overview.
 
 | Question | Starting point |
 |---|---|
+| When does a zero-divisor instance require a warning or refusal? | [ArithmeticFamilies](Zetesis/ArithmeticFamilies.lean) requires a defined witness in the same complete family, permits empty joins, preserves fatal refusals and makes outer-binding scope explicit. |
 | What is an answer set under the formula reduct? | [Ferraris](Zetesis/Ferraris.lean) defines truth, the frozen reduct and subset minimality. |
 | When does one least consequence set determine the answer? | [PositiveTheory](Zetesis/PositiveTheory.lean) admits positive atomic-head producers and constraints, including cycles. Its least producer closure is the unique answer set exactly when it satisfies every constraint. |
 | May those constraints contain arbitrary formulas? | [ConstrainedPositive](Zetesis/ConstrainedPositive.lean) proves that a satisfied constraint has a tautological frozen reduct. Arbitrary constraints filter the original answer-set family; failure at positive least consequences establishes absence of an answer set, not necessarily absence of classical models. |

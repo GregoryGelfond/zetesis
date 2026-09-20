@@ -10,7 +10,10 @@ mod stable_models;
 use std::collections::BTreeSet;
 
 use stable_models::stable;
-use zetesis_themelios::{AdmittedFormula, AnalysisBasis, FormulaLimits, KeyAnalysis};
+use zetesis_themelios::{
+    AdmittedFormula, AnalysisBasis, ExpansionFailure, FormulaFailure, FormulaLimits, KeyAnalysis,
+    observation::EvaluationError,
+};
 
 const CHOICES: &str = "letter(a;b;c). digit(0..9). carry_value(0;1). idx(1). \
     1 { assign(L,D) : digit(D) } 1 :- letter(L). \
@@ -320,4 +323,178 @@ fn a_projection_elsewhere_leaves_the_keyed_constraint_asked() {
         AnalysisBasis::DependencyProjection
     );
     assert_eq!(admitted.keyed_constraints(), 1);
+}
+
+#[test]
+fn a_keyed_column_preserves_checked_overflow() {
+    let source = "digit(0). carry_value(1073741824). \
+        1 { p(Y) : digit(Y) } 1. 1 { q(C) : carry_value(C) } 1. \
+        :- p(Y), q(C), 0 != Y + 2*C.";
+    for max_key_work in [0, FormulaLimits::default().max_key_work] {
+        let Err(failure) = source_records::admit(
+            source,
+            &FormulaLimits {
+                max_key_work,
+                ..FormulaLimits::default()
+            },
+        ) else {
+            panic!("key work {max_key_work}: admission succeeded; expected arithmetic overflow");
+        };
+        assert!(
+            matches!(
+                failure,
+                FormulaFailure::Expansion(ExpansionFailure::Evaluation {
+                    error: EvaluationError::Overflow,
+                    ..
+                })
+            ),
+            "{failure}"
+        );
+    }
+}
+
+#[test]
+fn a_keyed_column_keeps_nonnumeric_comparisons_defined() {
+    let source = "digit(0;1). carry_value(0;1). \
+        1 { p(Y) : digit(Y) } 1. 1 { q(C) : carry_value(C) } 1. \
+        :- p(Y), q(C), a != Y + 2*C.";
+    // A symbol differs from every numeric sum; no arithmetic operation is
+    // applied to the symbol in the source.
+    for max_key_work in [0, FormulaLimits::default().max_key_work] {
+        let input = source_records::admit(
+            source,
+            &FormulaLimits {
+                max_key_work,
+                ..FormulaLimits::default()
+            },
+        )
+        .unwrap();
+        assert!(stable(&input).is_empty());
+    }
+}
+
+#[test]
+fn a_keyed_comparison_keeps_its_excluded_substitutions_unreached() {
+    let source = "val(1). 1 { p(Y) : val(Y) } 1. d(0). \
+        :- d(X), p(Y), Y != 1, 1/X=1.";
+    let written = source_records::admit(
+        source,
+        &FormulaLimits {
+            max_key_work: 0,
+            ..FormulaLimits::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        source_records::exhaustive(&written),
+        BTreeSet::from([(["val(1)", "p(1)", "d(0)"].map(str::to_owned).into(), None,)]),
+    );
+    assert_eq!(stable(&admitted(source)), stable(&written));
+}
+
+fn same_evaluation_failure(source: &str, expected: &EvaluationError) {
+    for max_key_work in [0, FormulaLimits::default().max_key_work] {
+        let Err(failure) = source_records::admit(
+            source,
+            &FormulaLimits {
+                max_key_work,
+                ..FormulaLimits::default()
+            },
+        ) else {
+            panic!("key work {max_key_work}: {source}: expected {expected}");
+        };
+        assert!(
+            matches!(&failure, FormulaFailure::Expansion(ExpansionFailure::Evaluation {
+                error,
+                ..
+            }) if error == expected),
+            "{failure}"
+        );
+        assert!(failure.diagnostics().iter().all(|diagnostic| {
+            let span = diagnostic.primary().location.span;
+            let start = usize::try_from(span.start().get()).unwrap();
+            source[start..].starts_with(":-")
+        }));
+    }
+}
+
+#[test]
+fn a_keyed_value_checks_every_arithmetic_intermediate() {
+    // The mathematical final result fits, but its first addition does not.
+    same_evaluation_failure(
+        "value(0). input(2147483647). 1 { p(Y) : value(Y) } 1. \
+         :- p(Y), input(X), Y != (X+1)-1.",
+        &EvaluationError::Overflow,
+    );
+}
+
+#[test]
+fn a_keyed_value_keeps_nonnumeric_arithmetic_errors() {
+    same_evaluation_failure(
+        "value(0). input(a). 1 { p(Y) : value(Y) } 1. \
+         :- p(Y), input(X), Y != X+1.",
+        &EvaluationError::Undefined,
+    );
+}
+
+#[test]
+fn a_keyed_value_keeps_negative_exponent_errors() {
+    same_evaluation_failure(
+        "value(0). input(-1). 1 { p(Y) : value(Y) } 1. \
+         :- p(Y), input(X), Y != 2**X.",
+        &EvaluationError::Undefined,
+    );
+}
+
+#[test]
+fn a_safe_column_at_the_integer_boundary_is_asked() {
+    let source = "digit(1). carry_value(1073741823). \
+        1 { p(Y) : digit(Y) } 1. 1 { q(C) : carry_value(C) } 1. \
+        :- p(Y), q(C), 2147483647 != Y + 2*C.";
+    let written = source_records::admit(
+        source,
+        &FormulaLimits {
+            max_key_work: 0,
+            ..FormulaLimits::default()
+        },
+    )
+    .unwrap();
+    let asked = admitted(source);
+    assert_eq!(asked.keyed_constraints(), 1);
+    assert_eq!(stable(&asked), stable(&written));
+    assert_eq!(stable(&asked).len(), 1);
+}
+
+#[test]
+fn independently_safe_arithmetic_guards_allow_asking() {
+    let source = "value(0;1). input(1;2). 1 { p(Y) : value(Y) } 1. \
+        :- p(Y), input(X), Y != 1, 1/X=1.";
+    let written = source_records::admit(
+        source,
+        &FormulaLimits {
+            max_key_work: 0,
+            ..FormulaLimits::default()
+        },
+    )
+    .unwrap();
+    let asked = admitted(source);
+    assert_eq!(asked.keyed_constraints(), 1);
+    assert_eq!(stable(&asked), stable(&written));
+}
+
+#[test]
+fn an_arithmetic_bound_from_a_comparison_is_not_assumed() {
+    let source = "value(0;1). input(0;1). 1 { p(Y) : value(Y) } 1. \
+        :- p(Y), input(X), X>0, Y != 1, 1/X=1.";
+    let written = source_records::admit(
+        source,
+        &FormulaLimits {
+            max_key_work: 0,
+            ..FormulaLimits::default()
+        },
+    )
+    .unwrap();
+    let input = admitted(source);
+    assert_eq!(input.keyed_constraints(), 0);
+    assert_eq!(stable(&input), stable(&written));
 }

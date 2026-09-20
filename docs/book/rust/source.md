@@ -148,6 +148,52 @@ and membership costs may outweigh avoided probes. See
 [finite-domain ownership and proof boundaries](finite-tables.md#optional-argument-domain-guards)
 for the exact named-capacity scope and preservation premises.
 
+## Partial arithmetic families
+
+Only an evaluated numeric division or remainder by zero can omit a source
+instance. A nonempty original rule family needs at least one complete
+substitution whose reached arithmetic is jointly defined; a defined comparison
+that is false still supplies that witness. Thus `d(0;2). p(X):-d(X),1/X=1.`
+keeps just the facts and reports a warning, whereas the same rule over `d(0)`
+is refused. Empty positive joins are valid and silent. An ordinary comparison
+over relationally bound variables, such as `X!=0`, explicitly excludes that
+substitution and produces no warning for its zero divisor.
+
+Overflow, arithmetic on a nonnumeric value and an invalid exponent remain
+errors when reached. After a zero divisor, source classification continues
+through independent expression branches and independent components; a later
+fatal error takes precedence. An operation depending on an undefined value is
+not evaluated. This source-family policy uses the same checked scalar
+operations as strict evaluation; it does not change the observation evaluator's
+first-failure policy. Authored closed undefined expressions are still refused
+during preparation. The existing evaluation phases remain ordered: a rule body
+or local condition selects an instance before head or consequent generation.
+An omitted or false body does not invoke that later phase. Independent-fatal
+validation applies to the branches, components and generators of the reached
+phase.
+
+The decisive traversal reads completed support, before formula emission.
+It does not use comparison-pruned candidate domains, support delta partitions
+or already-produced-head shortcuts as family evidence. Normalized fragments of
+one original rule combine their evidence. Each nested choice, aggregate or
+conditional local family is judged separately for its fixed outer binding, so
+a valid family at another outer binding cannot rescue it. Alternatives of one
+authored local element share evidence; distinct authored elements do not. An
+undefined conditional consequent omits its whole local implication. Defined
+false consequents and empty nonarithmetic witness sets retain their logical
+meaning, including under default negation. The additional complete
+traversal spends the existing grounding work and substitution ceilings;
+exhaustion refuses admission rather than accepting partial evidence.
+
+Successful formula and bundle owners retain typed `FormulaWarning` values and
+provide `warnings()` and `warning_view()`. Zero-divisor warnings are deduplicated
+by original source span and ordered by source identity and span; they do not
+count attempted rows. `FormulaLimits::max_warnings` defaults to 10,000, and a
+new distinct warning beyond that bound produces `FormulaResource::Warnings`.
+The CLI renders retained warnings once after admission. The
+[numeric boundary](../reference/language.md#numeric-boundaries-and-refusal-meaning)
+records the deliberate differences from clingo 5.8.2 and their rationale.
+
 ## Constraints over keyed values
 
 A choice rule of the form `1 { p(K, V) : c(V) } 1 :- b(K).` holds, in every
@@ -175,6 +221,25 @@ demanded value with every value the key admits is never formed; the
 measures the send-money puzzle's columns at one hundred instances each in
 place of eighteen hundred forbidden combinations.
 
+The rewrite additionally requires checked-evaluation evidence for the whole
+written constraint. Bounds from fact-only positive predicates, or fact-only
+conditions binding a keyed value, must establish the numeric type of each
+arithmetic operand and an `i32` result at **every intermediate operation**.
+The dividend `s` must also be numeric. An unknown type or bound leaves the
+constraint as written. The proof is conservative: it uses intervals, does not
+infer bounds from comparisons, and does not prove variable-exponent powers.
+Arithmetic-free constraints need no numeric bound.
+
+Checking the whole constraint preserves its source evaluation obligations.
+For example, replacing `Y != 1` by `not p(k, 1)` must not expose `1/X` in a
+substitution the written comparison excludes. Likewise, `Y + c*C` cannot be
+removed when its multiplication or addition may overflow, even when the
+equation is valid over mathematical integers. The original source still
+governs errors, warnings and source locations when a rewrite is declined.
+The [numeric boundary](../reference/language.md#numeric-boundaries-and-refusal-meaning)
+states the deliberate differences from clingo 5.8.2; this optimization does
+not relax that boundary or infer safety from the reference solver's behavior.
+
 The written constraint is compiled once and its rules replaced in place by
 the asked constraints', so nothing is prepared twice. The key analysis and
 its readings of facts run under `FormulaLimits::max_key_work` and the term
@@ -183,7 +248,7 @@ work remaining, and their steps are charged to the term work;
 stop leaves every constraint not yet asked as written, which changes no
 answer set.
 
-The asked program is prepared again under the remaining expansion budget.
+The replacement constraints are compiled under the remaining expansion budget.
 Every asked statement carries the written constraint's source location and
 the transformation's tag, so diagnostics and `formula_origins()` still name
 the constraint as written. `keyed_constraints()` on the admitted formula

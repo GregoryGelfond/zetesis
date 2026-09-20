@@ -8,6 +8,7 @@ and theorem hypotheses are authoritative; prose is a reading aid.
 
 | Question | Reading path |
 | --- | --- |
+| When may an arithmetic-undefined substitution be omitted? | [ArithmeticFamilies](../Zetesis/ArithmeticFamilies.lean) specifies completed-family admission and warnings, distinguishes empty joins from zero divisors, and shows why prefixes and flattened outer bindings cannot justify the verdict. Concrete classification and family coverage remain implementation obligations. |
 | Can an aggregate be evaluated directly through the reduct? | [AggregateReduct](../Zetesis/AggregateReduct.lean) formalizes Ferraris Proposition 7: retain the original guard and evaluate the same guard over frozen eligibility. Whole-tuple grouping and concrete arithmetic remain separate obligations. |
 | When is parallel signed addition safe from intermediate overflow? | [AggregateRanges](../Zetesis/AggregateRanges.lean) bounds every mathematical intermediate sum by separate positive and negative carrier totals. The actual execution must preserve contribution occurrences and implement the admitted arithmetic. |
 | When do total and group capacities imply stronger local bounds? | [PartitionCapacities](../Zetesis/PartitionCapacities.lean) separates the counting argument from the caller's coverage and theory-entailment premises. |

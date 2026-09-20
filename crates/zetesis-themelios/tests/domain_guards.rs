@@ -356,10 +356,10 @@ fn a_comparison_over_one_variable_narrows_its_candidates() {
 }
 
 #[test]
-fn a_candidate_no_comparison_can_evaluate_is_kept() {
+fn domain_narrowing_preserves_undefined_family_evidence() {
     // 1/X = 1 is undefined at X = 0 and false at X = 2, so the analysis
     // excludes 2 alone; X != 0 then excludes 0. The same substitution is
-    // reached, and refuses, when no comparison excludes it.
+    // reached, and omitted with a warning, when no comparison excludes it.
     let source = "d(0..2). p(X) :- d(X), 1/X = 1, X != 0.";
     let on = Observation::default();
     let narrowed = ground(
@@ -374,17 +374,19 @@ fn a_candidate_no_comparison_can_evaluate_is_kept() {
         &narrowed,
     );
     assert_eq!(on.work.get().domain_excluded_values, Some(2));
-    assert!(matches!(
-        ground(
-            "d(0..2). p(X) :- d(X), 1/X = 1.",
-            JoinStrategy::Indexed,
-            Some(DomainLimits::default()),
-            &Observation::default()
-        ),
-        Err(FormulaFailure::Expansion(
-            ExpansionFailure::Evaluation { .. }
-        ))
-    ));
+    assert!(narrowed.warnings().is_empty());
+    let mixed = ground(
+        "d(0..2). p(X) :- d(X), 1/X = 1.",
+        JoinStrategy::Indexed,
+        Some(DomainLimits::default()),
+        &Observation::default(),
+    )
+    .unwrap();
+    assert_eq!(mixed.warnings().len(), 1);
+    // Different source spans are expected; emitted atoms and formulas agree.
+    assert_eq!(mixed.atoms(), narrowed.atoms());
+    assert_eq!(mixed.theory().nodes(), narrowed.theory().nodes());
+    assert_eq!(mixed.theory().roots(), narrowed.theory().roots());
 }
 
 #[test]

@@ -231,7 +231,7 @@ fn only_rule_phases_claim_a_source_location() {
 }
 
 #[test]
-fn undefined_arithmetic_retains_its_failed_phase() {
+fn undefined_family_validation_retains_its_failed_phase() {
     let observer = Observer::default();
     let source = "p(0). :- p(X), 1/X=0.";
     let measured = compile(source, &FormulaLimits::default(), Some(&observer)).unwrap_err();
@@ -239,7 +239,7 @@ fn undefined_arithmetic_retains_its_failed_phase() {
     assert_eq!(measured.to_string(), plain.to_string());
     let records = observer.records.borrow();
     let last = records.last().unwrap();
-    assert_eq!(last.phase, GroundingPhase::RuleInstantiation);
+    assert_eq!(last.phase, GroundingPhase::SupportCompletion);
     assert_eq!(last.outcome, GroundingOutcome::Failed);
     assert!(last.work.expression_nodes.unwrap() > 0);
     assert_eq!(last.work.roots, Some(0));

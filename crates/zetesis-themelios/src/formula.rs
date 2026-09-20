@@ -104,6 +104,9 @@ pub struct FormulaLimits {
     pub max_support_rounds: u64,
     /// Original source locations retained in emitted formula-root evidence.
     pub max_origin_locations: usize,
+    /// Distinct warning locations retained after successful formula admission.
+    /// Repeated evaluations at one source span retain one warning, not row counts.
+    pub max_warnings: usize,
     /// Steps of the key analysis that asks constraints over keyed values, and
     /// of its readings of facts, also bounded by the term work remaining; the
     /// steps spent are charged to the term work. A stop leaves every
@@ -144,6 +147,7 @@ impl Default for FormulaLimits {
             max_work: 10_000_000,
             max_support_rounds: 1_000_000,
             max_origin_locations: 1_000_000,
+            max_warnings: 10_000,
             max_key_work: 1_000_000,
             theory: zetesis_ferraris::AdmissionLimits::default(),
             objective: zetesis_objective::AdmissionLimits::default(),
@@ -217,6 +221,8 @@ pub enum FormulaResource {
     Roots,
     /// Retained parsed locations.
     Origins,
+    /// Distinct located warnings retained by successful admission.
+    Warnings,
     /// Variables in an outer rule or complete local element scope.
     Variables,
     /// Arguments of one predicate.
@@ -464,6 +470,21 @@ pub struct AdmittedFormula {
     metadata: SourceMetadata,
 }
 impl AdmittedFormula {
+    /// Warnings from omitted instances, deduplicated in source-location order.
+    /// The retained space is bounded by [`FormulaLimits::max_warnings`].
+    #[must_use]
+    pub fn warnings(&self) -> &[crate::FormulaWarning] {
+        &self.compiled.warnings
+    }
+
+    /// Render warnings against the retained original source with themelios's
+    /// human view. Rendering builds one source line index and one diagnostic at
+    /// a time; formatter failures stop rendering. An empty collection is empty.
+    #[must_use]
+    pub fn warning_view(&self) -> impl fmt::Display + '_ {
+        crate::formula_warning::source_view(self.warnings(), &self.source)
+    }
+
     /// Structural facts about [`Self::analyzed_program`]. Consult
     /// [`Self::analysis_basis`]: a dependency projection does not certify source
     /// safety or class membership. Unknown never removes runtime ceilings.
@@ -579,6 +600,21 @@ pub struct AdmittedFormulaBundle {
     metadata: SourceMetadata,
 }
 impl AdmittedFormulaBundle {
+    /// Warnings from omitted instances, deduplicated in source-location order.
+    /// The retained space is bounded by [`FormulaLimits::max_warnings`].
+    #[must_use]
+    pub fn warnings(&self) -> &[crate::FormulaWarning] {
+        &self.compiled.warnings
+    }
+
+    /// Render warnings against the retained original include catalog with
+    /// themelios's human view. Rendering uses the catalog's source indexes and
+    /// one diagnostic at a time; formatter failures stop rendering.
+    #[must_use]
+    pub fn warning_view(&self) -> impl fmt::Display + '_ {
+        crate::formula_warning::bundle_view(self.warnings(), &self.bundle)
+    }
+
     /// Structural facts about [`Self::analyzed_program`]. Consult
     /// [`Self::analysis_basis`]: a dependency projection does not certify source
     /// safety or class membership. Unknown never removes runtime ceilings.
@@ -732,6 +768,7 @@ pub enum AnalysisBasis {
 
 #[derive(Debug)]
 pub(crate) struct Compiled {
+    pub warnings: Vec<crate::FormulaWarning>,
     pub projection: crate::PreparedProjection,
     pub analysis_basis: AnalysisBasis,
     pub analysis: themelios_analysis::Analysis,
@@ -817,7 +854,10 @@ pub(crate) struct Compiled {
 /// guards and independently checked local scopes. Source
 /// weights normalize before global tuple deduplication; eligible maximize
 /// `i32::MIN` weights receive a located overflow refusal. Nonnumeric priorities
-/// contribute no key; undefined priority arithmetic remains a located error.
+/// contribute no key after arithmetic validation. Weight, priority and tuple
+/// fields participate jointly in the source-family policy below, including
+/// when the weight is nonnumeric. Pooled fragments of one original objective
+/// element share its family; distinct elements cannot rescue each other.
 /// Dynamic priorities read ordinary bound positions or generated values with a
 /// completed source-carrier certificate. Eligibility precision is selected per
 /// objective: qualified positive dependencies can use a tighter carrier, while
@@ -836,7 +876,8 @@ pub(crate) struct Compiled {
 ///
 /// # Errors
 /// Returns a typed located refusal on diagnostics, unsupported syntax, unsafe
-/// variables, undefined arithmetic, or any exceeded source/expansion/formula limit.
+/// variables, fatal arithmetic, an entirely undefined source family, or any
+/// exceeded source/expansion/formula limit.
 /// A comparison over relationally bound variables that is defined and false
 /// excludes its substitution, and nothing in an excluded substitution is
 /// reached. Arithmetic is checked on every complete possible-positive
@@ -851,8 +892,21 @@ pub(crate) struct Compiled {
 /// atoms, roots, producers or objective keys to the admitted program. Rule-body
 /// scratch uses the existing theory atom/node ceilings; objective-body scratch
 /// retains its independent ceilings. Cumulative source work still applies.
-/// A reached undefined operation refuses the input rather than emulating
-/// clingo's warning-and-drop behavior. Numeric typing of a variable objective
+/// Only evaluated numeric division or remainder by zero may omit a source
+/// instance. Admission requires a jointly defined instance in that same complete
+/// original family; a defined but false instance is a witness. An empty positive
+/// join is silent. Each local choice or aggregate element has a separate family
+/// for each fixed outer binding. Successful owners retain typed warnings,
+/// deduplicated by source span and bounded by [`FormulaLimits::max_warnings`].
+/// Overflow, nonnumeric arithmetic and invalid exponents remain fatal. Source
+/// evaluation checks independent expression branches and fields after a zero
+/// divisor within each reached phase. An operation depending on an undefined
+/// operand is not evaluated.
+/// An omitted body or condition does not enter its later head, consequent or
+/// objective-field phase. Defined false body selection likewise skips head and
+/// consequent evaluation; independent-error checks do not cross that boundary.
+/// This policy does not weaken closed-term preparation or the strict arithmetic
+/// errors of post-solve observations. Numeric typing of a variable objective
 /// weight is checked later when its contribution is active in a verified model.
 pub fn admit_formula(
     text: String,

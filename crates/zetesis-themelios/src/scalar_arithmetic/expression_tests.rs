@@ -6,7 +6,7 @@ use zetesis_core::Value;
 
 use crate::expansion::Budget;
 use crate::formula_ir::{Expression, Operation};
-use crate::formula_support::{Counters, expression};
+use crate::formula_support::{Counters, Evaluation};
 use crate::{
     ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits,
     FormulaResource,
@@ -25,9 +25,12 @@ fn evaluate(
 ) -> (Result<Value, FormulaFailure>, u64) {
     let mut budget = Budget::new(expansion, usize::MAX);
     let mut counters = Counters::default();
-    let result = expression(
+    let binding = crate::formula_binding::Binding::default();
+    // These laws concern strict scalar-plan evaluation. Source families use
+    // the separate mode that continues independent branches after zero division.
+    let result = Evaluation::default().expression(
         &Expression { nodes },
-        &crate::formula_binding::Binding::default(),
+        |variable| binding.read(variable, location()),
         &FormulaLimits {
             max_work: work,
             ..Default::default()

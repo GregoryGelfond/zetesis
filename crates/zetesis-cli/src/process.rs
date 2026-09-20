@@ -69,9 +69,9 @@ fn finish_output(
     let status = match result {
         Ok(status) => status,
         Err(error) => {
-            let _ = diagnostics.error(&error);
+            let _ = diagnostics.diagnostic(&error);
             if let Some(secondary) = error.secondary_output {
-                let _ = diagnostics.error(&format_args!("secondary output: {secondary}"));
+                let _ = diagnostics.diagnostic(&format_args!("secondary output: {secondary}"));
             }
             ExitCode::from(2)
         }
@@ -79,7 +79,7 @@ fn finish_output(
     match flushed {
         Ok(()) => status,
         Err(error) => {
-            let _ = diagnostics.error(&format_args!("output flush: {error}"));
+            let _ = diagnostics.diagnostic(&format_args!("output flush: {error}"));
             ExitCode::from(2)
         }
     }

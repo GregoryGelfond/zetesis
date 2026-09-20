@@ -177,6 +177,7 @@ fn aggregate_inputs_exclude_local_witnesses() {
         unreachable!()
     };
     aggregate.elements.push(AggregateElementIr {
+        family: crate::formula_ir::LocalFamily(0),
         key: AggregateKey::Tuple(vec![CoreTerm::Variable(2)]),
         condition: vec![LiteralIr::Atom(
             DefaultNegation::None,
@@ -254,6 +255,7 @@ fn reading_aggregate(target: usize, input: usize) -> LiteralIr {
         unreachable!()
     };
     aggregate.elements.push(AggregateElementIr {
+        family: crate::formula_ir::LocalFamily(0),
         key: AggregateKey::Tuple(vec![CoreTerm::Variable(input)]),
         condition: Vec::new(),
         variables: target.max(input) + 1,
@@ -305,6 +307,7 @@ fn cyclic_aggregate_inputs_have_a_typed_refusal() {
 
 fn conditional_read(slot: usize) -> LiteralIr {
     LiteralIr::Conditional(crate::formula_conditional_ir::ConditionalIr {
+        family: crate::formula_ir::LocalFamily(0),
         consequent: crate::formula_conditional_ir::Consequent::Atoms(
             DefaultNegation::None,
             vec![crate::formula_conditional_ir::Alternative {
@@ -409,6 +412,7 @@ fn nonbinding_element(key: AggregateKey, condition: Vec<LiteralIr>) -> LiteralIr
         function: AggregateFunction::Count,
         guards: Vec::new(),
         elements: vec![AggregateElementIr {
+            family: crate::formula_ir::LocalFamily(0),
             key,
             condition,
             variables: 2,

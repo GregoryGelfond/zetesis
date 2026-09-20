@@ -219,7 +219,6 @@ fn scope_and_nonbinding_negation_do_not_acquire_accidental_domains() {
 #[test]
 fn active_undefined_operands_remain_located_failures() {
     for source in [
-        "d(0;1).p(X):-d(D),not not (X,1/D)=(1,1).",
         "d(0).p(X):-d(D),not not X=1..1/D.",
         "d(1).p:-d(X),not not (X,1)=(1,2,1/0).",
         "p(X):-0<X,X<3,not not X=1>2<1/0.",
@@ -244,6 +243,15 @@ fn active_undefined_operands_remain_located_failures() {
                 .all(|diagnostic| diagnostic.primary().location.source == SOURCE)
         );
     }
+}
+
+#[test]
+fn mixed_tuple_bindings_omit_only_undefined_substitutions() {
+    let program = input("d(0;1).p(X):-d(D),not not (X,1/D)=(1,1).");
+    let expected = native(&input("d(0;1).p(1)."));
+    assert_eq!(program.warnings().len(), 1);
+    assert_eq!(native(&program), expected);
+    assert_eq!(exhaustive(&program), expected);
 }
 
 #[test]

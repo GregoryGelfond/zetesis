@@ -11,7 +11,7 @@ use source_records::{admit, exhaustive};
 use std::collections::BTreeSet;
 
 use proptest::prelude::*;
-use zetesis_themelios::{ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource};
+use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
 const CASES: &str = r#"{"name":"optional_count","source":"{a}.n(N):-N=#count{1:a}.#minimize{1@N:n(N)}.","priorities":[1,0],"records":[[["n(0)"],[0,1]],[["a","n(1)"],[1,0]]]}
 {"name":"shared_sum","source":"{a}.n(N):-N=#sum{2:a;3:a}.#minimize{1@N:n(N)}.","priorities":[5,3,2,0],"records":[[["n(0)"],[0,0,0,1]],[["a","n(5)"],[1,0,0,0]]]}
@@ -138,16 +138,35 @@ fn source_carriers_preserve_original_equalities() {
 }
 
 #[test]
-fn unrealizable_source_rows_retain_evaluation_errors() {
+fn mixed_source_rows_retain_warnings_and_complete_costs() {
     let source = "{a}.n(N):-N=#sum{2:a;3:a}.#minimize{1@(1/(N-2)):n(N)}.";
-    let error = admit(source, &FormulaLimits::default()).unwrap_err();
-    let FormulaFailure::Expansion(ExpansionFailure::Evaluation { location, .. }) = &error else {
-        panic!("{error}");
+    let input = admit(source, &FormulaLimits::default()).unwrap();
+    let expected: source_records::Records = BTreeSet::from([
+        (BTreeSet::from(["n(0)".into()]), Some(vec![0, 1])),
+        (
+            BTreeSet::from(["a".into(), "n(5)".into()]),
+            Some(vec![0, 1]),
+        ),
+    ]);
+    assert_eq!(exhaustive(&input), expected);
+    assert_eq!(input.objectives().priorities(), [1, 0]);
+    let [warning] = input.warnings() else {
+        panic!("one omitted source-carrier instance");
     };
-    let start = usize::try_from(location.span.start().get()).unwrap();
-    let end = usize::try_from(location.span.end().get()).unwrap();
-    assert!(source[start..end].contains("#minimize"));
-    assert!(!error.diagnostics().is_empty());
+    assert!(
+        input
+            .source()
+            .slice(warning.location().span)
+            .unwrap()
+            .contains("#minimize")
+    );
+    let guarded = admit(
+        "{a}.n(N):-N=#sum{2:a;3:a}.#minimize{1@(1/(N-2)):n(N),N!=2}.",
+        &FormulaLimits::default(),
+    )
+    .unwrap();
+    assert!(guarded.warnings().is_empty());
+    assert_eq!(exhaustive(&input), exhaustive(&guarded));
 }
 
 #[test]

@@ -282,10 +282,16 @@ fn exact_sources_have_complete_models_or_distinct_reviewed_refusals() {
     let mut unsafe_sources = 0;
     for row in rows {
         let source = row["source"].as_str().unwrap();
-        if row["native"] == "admit" {
+        // Retain the historical classification and original oracle record.
+        // A mixed family now omits its zero-divisor instance with a warning.
+        let mixed_arithmetic = row["name"] == "double_runtime_undefined";
+        if row["native"] == "admit" || mixed_arithmetic {
             assert_eq!(row["valid"], true);
             let program = input(source).unwrap_or_else(|error| panic!("{}: {error}", row["name"]));
             assert_eq!(program.source().text(), source);
+            if mixed_arithmetic {
+                assert_eq!(program.warnings().len(), 1);
+            }
             let expected = expected(&row);
             assert_eq!(exhaustive(&program), expected, "{}", row["name"]);
             assert_eq!(native(&program), expected, "{}", row["name"]);
@@ -301,7 +307,7 @@ fn exact_sources_have_complete_models_or_distinct_reviewed_refusals() {
     }
     assert_eq!(
         (admitted, models, valid_refused, unsafe_sources),
-        (120, 139, 4, 13)
+        (121, 140, 3, 13)
     );
 }
 
@@ -551,8 +557,15 @@ fn comparison_generators_match_clingo() {
             Some(witnesses.len() as u64)
         );
         assert_eq!(models, expected(&row), "{}", row["name"]);
-        if row["native"] == "admit" {
-            assert_eq!(native(&input(source).unwrap()), models, "{}", row["name"]);
+        // Keep the historical fixture and fresh oracle checks unchanged;
+        // the mixed-family policy now admits this row with one warning.
+        let mixed_arithmetic = row["name"] == "double_runtime_undefined";
+        if row["native"] == "admit" || mixed_arithmetic {
+            let program = input(source).unwrap_or_else(|error| panic!("{}: {error}", row["name"]));
+            if mixed_arithmetic {
+                assert_eq!(program.warnings().len(), 1);
+            }
+            assert_eq!(native(&program), models, "{}", row["name"]);
         } else {
             refusal(&input(source).unwrap_err(), row["native"].as_str().unwrap());
         }

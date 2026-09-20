@@ -16,7 +16,7 @@ use reference::{Models, atom_text, exhaustive, external, holds, native, values};
 use themelios_base::source::SourceId;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
-    FormulaFailure, FormulaLimits, FormulaResource, admit_formula, prepare_formula,
+    FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning, admit_formula, prepare_formula,
 };
 
 const SOURCE: SourceId = SourceId::new(137);
@@ -274,24 +274,25 @@ fn cyclic_outer_consumers_remain_refused() {
 }
 
 #[test]
-fn false_filters_cannot_hide_undefined_consumers() {
+fn mixed_consumers_keep_the_defined_family() {
     for head in ["Y{a}Y", "Y#count{1:a}Y"] {
         let source = format!("{{d}}.{head}:-N=#count{{1:d}},N>0,Y=1/N.");
-        let error = admit_formula(
-            source.clone(),
-            options(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap_err();
-        assert!(
-            matches!(
-                error,
-                FormulaFailure::Expansion(ExpansionFailure::Evaluation { .. })
-            ),
-            "{source}: {error}"
+        let admitted = input(&source);
+        // N is generated, so N>0 does not exclude the zero proposal from the family.
+        let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
+            panic!(
+                "{source}: one zero-divisor warning: {:?}",
+                admitted.warnings()
+            );
+        };
+        assert_eq!(location.source, SOURCE);
+        assert_eq!(
+            admitted.source().slice(location.span).unwrap(),
+            &source[4..]
         );
-        assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+        let expected = Models::from([BTreeSet::new(), BTreeSet::from(["d".into(), "a".into()])]);
+        assert_eq!(native(&admitted), expected, "{source}");
+        assert_eq!(exhaustive(&admitted), expected, "{source}");
     }
 }
 

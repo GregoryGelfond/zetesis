@@ -96,6 +96,9 @@ pub(crate) fn source(
                 )
         })
         .map_err(RunError::FormulaAdmission)?;
+    if !admitted.warnings().is_empty() {
+        diagnostics.diagnostic(&admitted.warning_view())?;
+    }
     crate::publication::solve(
         crate::PreparedInput::formula(&admitted),
         None,
@@ -189,6 +192,9 @@ pub(crate) fn bundle(
             )
         })
         .map_err(RunError::FormulaBundleAdmission)?;
+    if !admitted.warnings().is_empty() {
+        diagnostics.diagnostic(&admitted.warning_view())?;
+    }
     crate::publication::solve(
         crate::PreparedInput::formula_bundle(&admitted),
         None,

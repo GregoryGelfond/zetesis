@@ -13,7 +13,9 @@ use themelios_program::term::{Term, Variable};
 
 use crate::diagnostic::unsupported;
 use crate::formula::ceiling;
-use crate::formula_ir::{Compiler, HeadIr, HeadLiteral, HeadOperand, LiteralIr, Variables};
+use crate::formula_ir::{
+    Compiler, HeadIr, HeadLiteral, HeadOperand, LiteralIr, LocalFamily, Variables,
+};
 use crate::{ExpansionResource, FormulaFailure, FormulaResource, ProfileFeature};
 
 impl Compiler<'_> {
@@ -119,7 +121,7 @@ impl Compiler<'_> {
                 let mut heads = Vec::new();
                 let mut elements = Vec::new();
                 let outer = variables.clone();
-                for element in disjunction.elements() {
+                for (index, element) in disjunction.elements().enumerate() {
                     ceiling(
                         FormulaResource::DisjunctionElements,
                         heads.len() as u128 + elements.len() as u128 + 1,
@@ -139,6 +141,7 @@ impl Compiler<'_> {
                             element.get().condition(),
                             &outer,
                             &mut elements,
+                            LocalFamily(index),
                         )?;
                     }
                 }

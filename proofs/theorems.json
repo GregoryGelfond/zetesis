@@ -295,6 +295,56 @@
     "line": 224
   },
   {
+    "name": "Zetesis.ArithmeticFamilies.empty_admissible",
+    "file": "Zetesis/ArithmeticFamilies.lean",
+    "line": 48
+  },
+  {
+    "name": "Zetesis.ArithmeticFamilies.empty_unwarned",
+    "file": "Zetesis/ArithmeticFamilies.lean",
+    "line": 52
+  },
+  {
+    "name": "Zetesis.ArithmeticFamilies.fatal_refused",
+    "file": "Zetesis/ArithmeticFamilies.lean",
+    "line": 56
+  },
+  {
+    "name": "Zetesis.ArithmeticFamilies.filtered_witness",
+    "file": "Zetesis/ArithmeticFamilies.lean",
+    "line": 63
+  },
+  {
+    "name": "Zetesis.ArithmeticFamilies.zero_divisor_requires_defined",
+    "file": "Zetesis/ArithmeticFamilies.lean",
+    "line": 71
+  },
+  {
+    "name": "Zetesis.ArithmeticFamilies.entirely_undefined_refused",
+    "file": "Zetesis/ArithmeticFamilies.lean",
+    "line": 77
+  },
+  {
+    "name": "Zetesis.ArithmeticFamilies.admission_by_outcomes",
+    "file": "Zetesis/ArithmeticFamilies.lean",
+    "line": 85
+  },
+  {
+    "name": "Zetesis.ArithmeticFamilies.warning_by_outcomes",
+    "file": "Zetesis/ArithmeticFamilies.lean",
+    "line": 91
+  },
+  {
+    "name": "Zetesis.ArithmeticFamilies.prefix_does_not_establish_refusal",
+    "file": "Zetesis/ArithmeticFamilies.lean",
+    "line": 100
+  },
+  {
+    "name": "Zetesis.ArithmeticFamilies.flattening_can_conceal_refusal",
+    "file": "Zetesis/ArithmeticFamilies.lean",
+    "line": 106
+  },
+  {
     "name": "Zetesis.AtomCatalogs.commit_preserves_lookup",
     "file": "Zetesis/AtomCatalogs.lean",
     "line": 30

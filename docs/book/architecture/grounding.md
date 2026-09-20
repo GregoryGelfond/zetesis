@@ -88,14 +88,19 @@ The useful lower-level operations have logical contracts:
 | Gate | Test frozen positive/negative candidate conditions | Use the candidate, not the growing consequence set |
 | Project | Construct a head or constraint instance | Preserve the complete atom and its source instance |
 
-The formula path evaluates terms as finite expression plans. Each operation
-reads the completed prefix of earlier results. The final operation uses the same
+The formula path evaluates terms as finite expression plans. In strict mode,
+each operation reads the completed prefix of earlier results. The final operation uses the same
 checked evaluator and returns its value directly; only intermediate results
-occupy scratch storage. Work, operand-copy charges and first-error order remain
-the same. The [evaluator](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/evaluation.rs)
-clears that prefix on success, failure and unwind, retaining at most 32 empty
-cells between evaluations. A one-node expression needs no scratch cells;
-constructing or copying its returned value can still allocate. This storage
+occupy scratch storage. Storage reuse preserves strict work, operand-copy charges
+and first-error order. Source mode separately tracks missing results in a
+transient mask bounded by the admitted expression's node count. The mask is
+reserved fallibly and released after each evaluation; it does not consume the
+cumulative scalar-payload allowance. Continued independent checks retain their
+per-node work charges. The [evaluator](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/evaluation.rs)
+clears its value prefix on success, failure and unwind, retaining at most 32 empty
+integer cells and 32 empty value cells between evaluations. A one-node expression
+needs no intermediate value cells, but source mode may still allocate its mask;
+constructing or copying the returned value can also allocate. This storage
 schedule has a separate [preservation law](../lean/correspondence.md).
 
 A positive body is joined in an order chosen once per join, before a row is
@@ -110,23 +115,41 @@ comparison prunes before an unrelated relation multiplies the rows; and
 otherwise the earlier occurrence of the canonical body, which orders literals
 by predicate and then by variable name rather than by their position in the
 source text. Every order yields the same complete bindings, and the
-semi-naive partition reads source occurrence, not this order. Each
-comparison is evaluated once, at the depth whose occurrence binds its last
-variable. A comparison that is defined and false excludes every
-substitution of the prefix, so the prefix is pruned there and nothing
-beneath it is reached, in every grounding pass; an evaluation failure met
-at a depth is retained until that depth is undone and becomes a refusal
-only for a complete substitution no comparison excludes, as the
+semi-naive partition reads source occurrence, not this order. In the pruning
+path, a comparison is checked at the depth whose occurrence binds its last
+variable. A defined false comparison can prune the prefix. Complete arithmetic
+evidence traversals retain false rows to establish joint definedness instead of
+using that pruning. An evaluation failure met at a depth is retained until that
+depth is undone and is classified only for
+a complete substitution no independent comparison excludes, as the
 [language reference](../reference/language.md) states. Binders, interval
 checks, tuple comparisons and guards are validated on the substitutions the
 comparisons leave. The order decides how early an exclusion is decided,
 never whether it is.
 
+Source-family evidence is finalized over completed support and the original
+source occurrence, not one support round or normalized fragment. Evaluated
+numeric division or remainder by zero omits an instance only when the same
+family also contains a jointly defined instance; a defined false instance is a
+witness. An entirely undefined family refuses admission, while an empty positive
+join is silent. Each local element has a separate family for each fixed outer
+binding. Original objective-element identities keep their pooled fragments
+together without merging distinct elements. Successful owners retain one typed
+warning per source span within the finite warning ceiling.
+
 Each formula join owns one reusable expression workspace. Prefix checks, binding
 generators and final filters borrow it in sequence; pending generators do not
-retain another workspace. Reuse changes storage ownership, not evaluation order.
-In particular, a false final filter does not hide an arithmetic error in a later
-final filter. The [caller regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/evaluation/tests/callers.rs)
+retain another workspace. Strict evaluation stops at its first fault. Source
+evaluation uses the same checked scalar operations but continues independent
+branches within the reached phase after a numeric zero divisor, so an independent overflow, type error
+or invalid exponent remains fatal. It does not evaluate a parent whose operand
+is undefined. Body and condition selection still precede head and consequent
+evaluation. An omitted body does not enter those later phases or objective
+fields; a defined false body does not enter head or consequent evaluation.
+The relational comparison exclusion above remains separate from
+rejection by a binder, interval, tuple comparison or aggregate guard; those
+rejections cannot hide required arithmetic in other fields. Closed constants
+and post-solve observations retain their strict checks. The [caller regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/evaluation/tests/callers.rs)
 check these actual consumers as well as their values and failure boundaries.
 
 Formula bindings retain source variable identities in optional slots. A pending
@@ -290,8 +313,10 @@ conditional, projected, structural and nonnormal producers retain full-round tra
 selected input still passes the same typed tuple matcher and scalar evaluator.
 An empty proposal set establishes completion only after every required variant
 and conservative producer has finished. Final formula emission visits all
-complete authored-body bindings, including those with false scalar filters;
-support membership cannot conceal a required arithmetic error.
+complete authored-body families and preserves their definedness evidence,
+including jointly defined false instances. Independent relational exclusions
+and empty joins supply no arithmetic failure. Possible support membership alone
+cannot conceal a required arithmetic error or establish an all-undefined family.
 
 The preservation argument concerns possible heads, not answer-set truth.
 Removing these flat negative non-inputs leaves the positive occurrence order,

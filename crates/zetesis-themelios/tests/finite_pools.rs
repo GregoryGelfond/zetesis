@@ -409,20 +409,28 @@ fn independent_limits_are_inclusive_and_failure_retains_source_location() {
 }
 
 #[test]
-fn a_true_conditional_guard_does_not_hide_later_undefined_values() {
-    for source in ["d(0).q:-1=(1;1/X):d(X).", "d(0).q:-1=(1..2)/X:d(X)."] {
-        let error = limited(
-            source,
-            ExpansionLimits::default(),
-            &FormulaLimits::default(),
-        )
-        .unwrap_err();
-        assert!(
-            matches!(error, FormulaFailure::Expansion(ExpansionFailure::Evaluation { location, .. })
-            if !location.span.is_empty()),
-            "{source}: {error}"
-        );
-    }
+fn entirely_undefined_conditional_ranges_remain_errors() {
+    let source = "d(0).q:-1=(1..2)/X:d(X).";
+    let error = limited(
+        source,
+        ExpansionLimits::default(),
+        &FormulaLimits::default(),
+    )
+    .unwrap_err();
+    assert!(
+        matches!(error, FormulaFailure::Expansion(ExpansionFailure::Evaluation { location, .. })
+        if !location.span.is_empty()),
+        "{source}: {error}"
+    );
+}
+
+#[test]
+fn mixed_conditional_pools_preserve_the_defined_consequent() {
+    let program = input("d(0).q:-1=(1;1/X):d(X).");
+    let expected = native(&input("d(0).q."));
+    assert_eq!(program.warnings().len(), 1);
+    assert_eq!(native(&program), expected);
+    assert_eq!(exhaustive(&program), expected);
 }
 
 #[test]

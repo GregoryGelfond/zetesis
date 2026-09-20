@@ -59,6 +59,16 @@ import Zetesis
 #print axioms Zetesis.AggregateReduct.frozen
 #print axioms Zetesis.AggregateReduct.direct_reduct
 #print axioms Zetesis.AggregateReduct.evaluator_refinement
+#print axioms Zetesis.ArithmeticFamilies.empty_admissible
+#print axioms Zetesis.ArithmeticFamilies.empty_unwarned
+#print axioms Zetesis.ArithmeticFamilies.fatal_refused
+#print axioms Zetesis.ArithmeticFamilies.filtered_witness
+#print axioms Zetesis.ArithmeticFamilies.zero_divisor_requires_defined
+#print axioms Zetesis.ArithmeticFamilies.entirely_undefined_refused
+#print axioms Zetesis.ArithmeticFamilies.admission_by_outcomes
+#print axioms Zetesis.ArithmeticFamilies.warning_by_outcomes
+#print axioms Zetesis.ArithmeticFamilies.prefix_does_not_establish_refusal
+#print axioms Zetesis.ArithmeticFamilies.flattening_can_conceal_refusal
 #print axioms Zetesis.AtomCatalogs.commit_preserves_lookup
 #print axioms Zetesis.AtomCatalogs.append_preserves_identity
 #print axioms Zetesis.AtomCatalogs.commit_preserves_interpretation

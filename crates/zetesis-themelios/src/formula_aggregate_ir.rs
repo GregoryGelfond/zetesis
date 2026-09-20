@@ -11,7 +11,7 @@ use themelios_program::term::Term;
 use crate::diagnostic::unsupported;
 use crate::formula_ir::{
     AggregateElementIr, AggregateGuard, AggregateIr, AggregateKey, Compiler, Expression, LiteralIr,
-    Operation, Variables,
+    LocalFamily, Operation, Variables,
 };
 use crate::{AdmissionFailure, FormulaFailure, InputLimit, ProfileFeature};
 use zetesis_core::{Term as CoreTerm, Value};
@@ -223,45 +223,26 @@ impl Compiler<'_> {
                 ) {
                     return Err(unsupported(ProfileFeature::Aggregate, self.location).into());
                 }
-                for element in aggregate.elements() {
+                for (index, element) in aggregate.elements().enumerate() {
+                    let family = LocalFamily(index);
                     let fields: Vec<_> = element.get().terms().collect();
                     for (terms, source_condition) in
                         self.local_alternatives(&fields, element.get().condition())?
                     {
-                        let mut local = variables.clone();
-                        let mut condition = self.condition(&source_condition, &mut local)?;
-                        let tuple = terms
-                            .iter()
-                            .map(|term| {
-                                if matches!(term, Term::Variable(_) | Term::Symbolic(_)) {
-                                    self.aggregate_term(term, &mut local)
-                                } else {
-                                    self.generated_term(term, &mut local, &mut condition)
-                                }
-                            })
-                            .collect::<Result<Vec<_>, _>>()?;
-                        if matches!(
+                        elements.push(self.aggregate_tuple_element(
+                            &terms,
+                            &source_condition,
                             aggregate.function(),
-                            AggregateFunction::Min | AggregateFunction::Max
-                        ) && tuple.is_empty()
-                        {
-                            return Err(
-                                unsupported(ProfileFeature::Aggregate, self.location).into()
-                            );
-                        }
-                        self.bindings(&mut condition, &mut local)?;
-                        local.safety(self.location)?;
-                        elements.push(AggregateElementIr {
-                            key: AggregateKey::Tuple(tuple),
-                            condition,
-                            variables: local.count,
-                        });
+                            variables,
+                            family,
+                        )?);
                     }
                 }
                 aggregate.function()
             }
             Aggregate::Set(aggregate) => {
-                for element in aggregate.elements() {
+                for (index, element) in aggregate.elements().enumerate() {
+                    let family = LocalFamily(index);
                     let (literal, source_condition) = match element.get() {
                         SetElement::Literal(literal) => (literal, Condition::new([])),
                         SetElement::ConditionalLiteral(value) => {
@@ -289,6 +270,7 @@ impl Compiler<'_> {
                             self.bindings(&mut condition, &mut local)?;
                             local.safety(self.location)?;
                             elements.push(AggregateElementIr {
+                                family,
                                 key: AggregateKey::Atom(atom),
                                 condition,
                                 variables: local.count,
@@ -308,6 +290,39 @@ impl Compiler<'_> {
             function,
             guards,
             elements,
+        })
+    }
+
+    fn aggregate_tuple_element(
+        &mut self,
+        terms: &[Term],
+        source_condition: &Condition,
+        function: AggregateFunction,
+        variables: &Variables,
+        family: LocalFamily,
+    ) -> Result<AggregateElementIr, FormulaFailure> {
+        let mut local = variables.clone();
+        let mut condition = self.condition(source_condition, &mut local)?;
+        let tuple = terms
+            .iter()
+            .map(|term| {
+                if matches!(term, Term::Variable(_) | Term::Symbolic(_)) {
+                    self.aggregate_term(term, &mut local)
+                } else {
+                    self.generated_term(term, &mut local, &mut condition)
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        if matches!(function, AggregateFunction::Min | AggregateFunction::Max) && tuple.is_empty() {
+            return Err(unsupported(ProfileFeature::Aggregate, self.location).into());
+        }
+        self.bindings(&mut condition, &mut local)?;
+        local.safety(self.location)?;
+        Ok(AggregateElementIr {
+            family,
+            key: AggregateKey::Tuple(tuple),
+            condition,
+            variables: local.count,
         })
     }
 }

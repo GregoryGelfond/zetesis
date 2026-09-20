@@ -203,13 +203,18 @@ fn false_filters_do_not_hide_later_arithmetic_errors() {
         location(),
     )
     .unwrap();
-    assert!(matches!(
+    assert!(
         join.next(
             &FormulaLimits::default(),
             &mut budget,
             &mut Counters::default(),
             location(),
-        ),
+        )
+        .unwrap()
+        .is_none()
+    );
+    assert!(matches!(
+        join.take_family().finish(),
         Err(FormulaFailure::Expansion(
             ExpansionFailure::Evaluation { .. }
         ))
@@ -259,7 +264,7 @@ fn stopped_filters_release_live_workspace_values() {
     ));
     assert!(join.evaluation.values.is_empty());
     // This exercises a fresh filter call, not resumption of a stopped Join.
-    assert!(
+    assert!(matches!(
         join.filters(
             &complete([Value::Number(9)]),
             Comparisons::Deferred,
@@ -268,8 +273,9 @@ fn stopped_filters_release_live_workspace_values() {
             &mut Counters::default(),
             location(),
         )
-        .unwrap()
-    );
+        .unwrap(),
+        crate::formula_support::filters::Selection::Defined(true)
+    ));
     assert!(join.evaluation.values.is_empty());
 }
 

@@ -38,6 +38,7 @@ mod fact_expansion;
 mod integer_range;
 mod metadata;
 mod formula;
+mod formula_warning;
 mod formula_choice_source;
 mod formula_ir;
 mod formula_project_ir;
@@ -110,6 +111,7 @@ pub use formula::{
     admit_bundle_formula_with_grounding_observer, admit_formula,
     admit_formula_with_grounding_observer, prepare_bundle_formula, prepare_formula,
 };
+pub use formula_warning::FormulaWarning;
 mod formula_count_plan;
 pub use formula_count_plan::{
     CountPlan, CountPlanFailure, CountPlanFailureKind, CountPlanLimits, CountPlanResource,

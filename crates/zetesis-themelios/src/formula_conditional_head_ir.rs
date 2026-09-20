@@ -7,10 +7,11 @@ use themelios_program::program::{Condition, DefaultNegation, Literal, LiteralInn
 use themelios_program::term::{Term, Variable};
 
 use crate::formula::ceiling;
-use crate::formula_ir::{Compiler, HeadLiteral, LiteralIr, Variables};
+use crate::formula_ir::{Compiler, HeadLiteral, LiteralIr, LocalFamily, Variables};
 use crate::{AdmissionFailure, ExpansionResource, FormulaFailure, FormulaResource, InputLimit};
 
 pub(crate) struct ConditionalHeadIr {
+    pub family: LocalFamily,
     pub head: HeadLiteral,
     pub condition: Vec<LiteralIr>,
     /// Only this prefix belongs to the enclosing rule, before head generation.
@@ -88,6 +89,7 @@ impl Compiler<'_> {
         source: &Condition,
         outer: &Variables,
         elements: &mut Vec<ConditionalHeadIr>,
+        family: LocalFamily,
     ) -> Result<(), FormulaFailure> {
         for condition in self.condition_alternatives(source)? {
             if let LiteralInner::Atom(atom) = &literal.inner {
@@ -96,10 +98,10 @@ impl Compiler<'_> {
                         negation: literal.negation,
                         inner: LiteralInner::Atom(atom.clone().map(|_| alternative)),
                     };
-                    self.local_disjunct(&literal, &condition, outer, elements)?;
+                    self.local_disjunct(&literal, &condition, outer, elements, family)?;
                 }
             } else {
-                self.local_disjunct(literal, &condition, outer, elements)?;
+                self.local_disjunct(literal, &condition, outer, elements, family)?;
             }
         }
         Ok(())
@@ -111,6 +113,7 @@ impl Compiler<'_> {
         source: &Condition,
         outer: &Variables,
         elements: &mut Vec<ConditionalHeadIr>,
+        family: LocalFamily,
     ) -> Result<(), FormulaFailure> {
         ceiling(
             FormulaResource::DisjunctionElements,
@@ -126,6 +129,7 @@ impl Compiler<'_> {
         self.variable_limit(&local)?;
         local.safety(self.location)?;
         elements.push(ConditionalHeadIr {
+            family,
             head,
             condition,
             outer_variables: outer.count,

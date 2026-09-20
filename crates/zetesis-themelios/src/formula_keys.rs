@@ -31,6 +31,16 @@
 //! admit is exactly what the relation admits. A condition produced otherwise
 //! bounds nothing, and the constraint is left as written.
 //!
+//! Both patterns also require a checked-evaluation certificate for every
+//! term of the original constraint. Independent fact bounds must establish
+//! numeric operands and an `i32` range at every arithmetic intermediate;
+//! comparisons supply no such bounds. This includes the retained body, since
+//! replacing a comparison by a negative gate changes which substitutions
+//! are excluded. The digit-and-carry pattern additionally requires `s` to be
+//! numeric. Unproved safety leaves the constraint written, preserving its
+//! reached failures, exclusions and diagnostics. The mathematical integer
+//! equation alone does not establish these machine-arithmetic obligations.
+//!
 //! A key position must name its value in both patterns. The asked atom stands
 //! under `not`, where `p(_, t)` holds when some key has the value `t`, so
 //! `not p(_, t)` forbids only that no key has it, while the written constraint
@@ -75,6 +85,8 @@ use zetesis_domain::{KeyWork, KeyedRelation, Stop, atom_signature};
 
 use crate::expansion::Budget;
 use crate::{ExpansionResource, FormulaFailure, FormulaLimits};
+
+mod safety;
 
 /// How the key analysis of one preparation ended.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -246,13 +258,18 @@ fn ask(
     let Some((skipped, left, right)) = comparison else {
         return Ok(Outcome::Written);
     };
+    let proof = match safety::Proof::of(body, keys, program, work) {
+        Ok(Some(proof)) => proof,
+        Ok(None) => return Ok(Outcome::Written),
+        Err(failure) => return applicability_failure(failure, location),
+    };
     let demands = demands(body, skipped, keys, &occurrences);
     let asked = match one_value(left, right, &demands) {
         Some((demand, value)) => vec![(demand, value)],
-        None => match digit_and_carry(left, right, &demands, program, work) {
+        None => match digit_and_carry(left, right, &demands, program, &proof, work) {
             Ok(Some(asked)) => asked,
             Ok(None) => return Ok(Outcome::Written),
-            Err(stop) => return Ok(Outcome::Stopped(stop)),
+            Err(failure) => return applicability_failure(failure, location),
         },
     };
     let rest: Vec<&Literal> = body
@@ -288,6 +305,21 @@ fn ask(
         ));
     }
     Ok(Outcome::Asked(rules))
+}
+
+/// Exhausted key work declines rewriting; a failed allocation is a located
+/// resource refusal. Both applicability checks use the same boundary.
+fn applicability_failure(
+    failure: safety::Failure,
+    location: Location,
+) -> Result<Outcome, FormulaFailure> {
+    match failure {
+        safety::Failure::Work(stop) => Ok(Outcome::Stopped(stop)),
+        safety::Failure::Allocation => Err(FormulaFailure::SupportRelation {
+            error: zetesis_core::relation::Failure::Allocation,
+            location,
+        }),
+    }
 }
 
 /// Every keyed atom of the body whose value is a variable read only there
@@ -368,19 +400,25 @@ fn one_value<'a>(
 /// number by the facts of the conditions binding them.
 ///
 /// # Errors
-/// Returns the key work's stop while reading facts.
+/// Returns a key work stop or a failed reservation for the safety proof.
 fn digit_and_carry<'a>(
     left: &Term,
     right: &Term,
     demands: &'a [Demand<'a>],
     program: &SourceProgram,
+    proof: &safety::Proof<'_>,
     work: &mut KeyWork,
-) -> Result<Option<Vec<(&'a Demand<'a>, Term)>>, Stop> {
+) -> Result<Option<Vec<(&'a Demand<'a>, Term)>>, safety::Failure> {
     for (sum, other) in [(left, right), (right, left)] {
         let Some((digit, base, carry)) = digit_plus_carry(sum, demands) else {
             continue;
         };
         if mentions(other, digit.variable) || mentions(other, carry.variable) {
+            continue;
+        }
+        // Source comparison accepts values of different kinds; the quotient
+        // and remainder introduced here require a numeric dividend.
+        if !proof.numeric(other, work)? {
             continue;
         }
         if !admits_within(program, digit.key, 0, i64::from(base) - 1, work)?

@@ -1,6 +1,7 @@
 //! Finite substitutions and support-preserving conditional-choice formulas.
 
 mod objectives;
+mod arithmetic;
 mod scoped_body;
 pub(crate) use scoped_body::source_activity;
 mod atoms;
@@ -66,6 +67,7 @@ pub(crate) fn ground(
         analysis,
         analyzed,
         objective_declarations,
+        warnings,
     } = instantiate(
         prepared, limits, budget, location, &profile, count_plan, options,
     )?;
@@ -85,6 +87,7 @@ pub(crate) fn ground(
         |collector| collector.finish(&theory),
     );
     Ok(Compiled {
+        warnings,
         projection,
         analysis_basis,
         analysis,
@@ -113,6 +116,7 @@ struct Instantiation<'a> {
     analysis: themelios_analysis::Analysis,
     analyzed: themelios_program::program::Program,
     objective_declarations: Vec<Location>,
+    warnings: Vec<crate::FormulaWarning>,
 }
 
 fn instantiate<'a>(
@@ -160,9 +164,20 @@ fn instantiate<'a>(
         completed.queries(options.joins, limits, &counters, location)
     })?;
     let support = queries.support();
+    let mut warnings = profile.phase(GroundingPhase::SupportCompletion, None, || {
+        arithmetic::prepare(&prepared, support, limits, budget, &mut counters)
+    })?;
     let (objectives, objective_origins) =
         profile.phase(GroundingPhase::ObjectiveActivation, None, || {
-            objectives::prepare(&prepared, &queries, limits, budget, &mut counters, location)
+            objectives::prepare(
+                &prepared,
+                &queries,
+                limits,
+                budget,
+                &mut counters,
+                location,
+                &mut warnings,
+            )
         })?;
     let projection =
         projection::prepare(&prepared, &queries, limits, budget, &mut counters, location)?;
@@ -181,33 +196,7 @@ fn instantiate<'a>(
         profile.phase(
             GroundingPhase::RuleInstantiation,
             Some(rule.location),
-            || {
-                if crate::formula_factor::rule(&mut builder, rule, support)? {
-                    return Ok(());
-                }
-                let guards = if let Some(domains) = &domains {
-                    support.domain_guards(
-                        rule,
-                        domains.for_rule(index, rule)?,
-                        limits,
-                        builder.budget,
-                        &mut builder.counters,
-                    )?
-                } else {
-                    None
-                };
-                let mut outer = Join::domain_rule(rule, support, guards.as_ref(), builder.budget)?;
-                while let Some(row) =
-                    outer.next_row(limits, builder.budget, &mut builder.counters, rule.location)?
-                {
-                    if row.passes {
-                        builder.rule(rule, &row.values, support)?;
-                    } else {
-                        builder.validate_body(&rule.body, &row.values, support, rule.location)?;
-                    }
-                }
-                Ok::<_, FormulaFailure>(())
-            },
+            || builder.instantiate_rule(rule, index, domains.as_ref(), support),
         )?;
     }
     drop(domains);
@@ -220,6 +209,7 @@ fn instantiate<'a>(
         analysis: prepared.analysis,
         analyzed: prepared.analyzed,
         objective_declarations: prepared.objective_declarations,
+        warnings: warnings.into_values(),
     })
 }
 
@@ -287,6 +277,40 @@ impl GroundAggregate {
     }
 }
 impl Builder<'_> {
+    fn instantiate_rule(
+        &mut self,
+        rule: &RuleIr,
+        index: usize,
+        domains: Option<&crate::formula_domains::Domains<'_>>,
+        support: &Support,
+    ) -> Result<(), FormulaFailure> {
+        if crate::formula_factor::rule(self, rule, support)? {
+            return Ok(());
+        }
+        let guards = if let Some(domains) = domains {
+            support.domain_guards(
+                rule,
+                domains.for_rule(index, rule)?,
+                self.limits,
+                self.budget,
+                &mut self.counters,
+            )?
+        } else {
+            None
+        };
+        let mut outer = Join::domain_rule(rule, support, guards.as_ref(), self.budget)?;
+        while let Some(row) =
+            outer.next_row(self.limits, self.budget, &mut self.counters, rule.location)?
+        {
+            if row.passes {
+                self.rule(rule, &row.values, support)?;
+            } else {
+                self.validate_body(&rule.body, &row.values, support, rule.location)?;
+            }
+        }
+        Ok(())
+    }
+
     fn empty<'a>(
         limits: &'a FormulaLimits,
         budget: &'a mut Budget,

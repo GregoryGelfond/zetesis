@@ -13,6 +13,57 @@ silently stand for all of them.
 | Machine execution | Checked Rust behavior and qualified WGSL paths | Establish executable refinement, arithmetic and device semantics |
 | Observation | Semantic coverage and delivery laws | Connect actual output writes and counters to the retained semantic evidence |
 
+## Keyed constraints and checked source arithmetic
+
+`KeyedConstraints.one_value` and `asked_constraints_preserve` justify replacing
+constraints that reject the same answer sets under an established keyed-relation
+property. `digit_carry_asked` proves the digit/carry equation over mathematical
+integers with truncating division. These laws do not establish the source
+compiler's type checks, `i32` arithmetic, evaluation reachability or diagnostics.
+
+The Rust recognizer in `formula_keys` requires an independent interval proof
+for every arithmetic operation of the original constraint, including retained
+body terms. Fact-only relations or fact-only conditions of keyed values provide
+numeric bounds; source comparisons do not. Every intermediate must fit `i32`,
+and the digit/carry dividend must be numeric. An incomplete or stopped proof
+leaves the checked source constraint in place. This protects both required
+refusals and the exclusion of substitutions where no arithmetic is reached.
+The concrete interval analysis and its connection to all possible source
+bindings remain Rust obligations, covered by paired rewritten/unrewritten
+tests; they are not an executable Lean refinement.
+
+## Arithmetic families
+
+[`ArithmeticFamilies`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ArithmeticFamilies.lean)
+specifies admission from the classified outcomes of a complete substitution
+family. Empty joins are admissible and silent. A defined but false substitution
+is a valid definedness witness. Fatal evaluation failures cannot be rescued by
+other substitutions. Reordering or revisiting the same outcomes preserves both
+admission and warnings.
+
+The counterexamples state two required boundaries: an unfinished prefix cannot
+establish that a family is entirely undefined, and combining families from
+different outer bindings can conceal a local refusal. Rust must establish
+complete original-family coverage, joint expression definedness, correct
+zero-divisor classification and those local scopes. Normalized fragments must
+preserve their original family identity; sharing a diagnostic span is not
+enough. These laws do not certify the source walker, its work limits or checked
+arithmetic. An arithmetic fault and a missing positive fact are different objects.
+
+[`ScalarArithmetic`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ScalarArithmetic.lean)
+specifies checked scalar values and faults, and its `evaluate` plan stops at the
+first fault. The source evaluator shares the scalar operations but has an
+additional traversal policy: after a numeric zero divisor it checks independent
+DAG branches within the reached evaluation phase, refuses a fatal error in one
+of them, and skips operations whose
+operands are undefined. The strict first-fault plan does not prove that traversal
+or its fatal-error precedence. `ArithmeticFamilies` starts after each instance
+has been correctly classified; neither module proves the concrete classifier.
+Body-before-head and condition-before-consequent staging remain separate Rust
+obligations: omission in an earlier phase does not invoke a later phase merely
+to search for another fault.
+Closed-term preparation and post-solve observations retain strict evaluation.
+
 ## Ownership and execution correspondence
 
 An ownership refactor can preserve the semantic theorem statements. Its proof
@@ -133,7 +184,7 @@ A dense relation stores a bounded predicate's rows as bits over the
 mixed-radix index of the arguments' ranks in their bounds. A round's dense
 heads are marked as pending bits and joined into the relation after the
 round, and a block step marks a block of heads from a block of rows by words.
-[`BlockSteps`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/BlockSteps.lean)
+[`RowSteps`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/RowSteps.lean)
 states the laws of these steps over an abstract position function:
 `marks_are_new_atoms` and `absorbed_is_union`, that under a position
 injective on a carrier holding every derived head the marks are exactly the
@@ -332,6 +383,32 @@ invariant under word arithmetic, locking, unwinding and cancellation. A joined
 batch records spent operations only after all leases settle; a lease is not
 evidence of candidate execution or membership.
 
+The parallel region walk scopes each lease to one region and settles it before
+waiting for another region or sending a model. Its shared allowance includes
+coordinator certificate preparation; each worker reserves a finite checking
+bound before running its certificate and settles its actual returned work.
+The bounds follow the checkers' charged visits: nodes, roots, producers and atoms
+for a tight check, and atoms, nodes and roots for a positive check. An unwind
+consumes its reservation conservatively and yields an incomplete worker failure.
+Returning unused grants before an idle wait, releasing blocked
+sends before joining on iterator drop, and counting joined certificate checks
+are Rust lifecycle and accounting obligations, beyond permit conservation. The
+bounded subprocess regressions in `zetesis-sat/tests/parallel_regions.rs` exercise
+shutdown and idle grants; the certificate regressions compare complete scalar
+and parallel work and reject an insufficient shared allowance. An injected
+worker unwind also checks that idle peers wake and coverage remains incomplete.
+
+Original and frozen `Narrower` operations expose metered entry points returning
+an independent `NarrowingAttempt` receipt. The injected SAT budget acquires a
+local or shared permit before each charged read, so the shared ceiling bounds
+execution itself. A refused acquisition prevents that read; all earlier reads
+remain in the attempt and joined region counters even on a stop. The local
+`RegionLimits` APIs wrap the same closure. Preservation of semantic narrowing
+still depends on `FormulaBounds` and `FerrarisMask`; permit conservation does
+not prove the reading rules or knowledge ownership. Prefix tests for original
+and frozen narrowing and a shared one-permit regression exercise the Rust
+admission/receipt boundary.
+
 ## Candidate generation and query representation
 
 Candidate restrictions and storage transformations preserve different objects.
@@ -510,6 +587,16 @@ producer is an invariant refusal, not a constraint verdict. Exact evaluation
 consumes remaining work and counts its actual capacity beside the retained least
 interpretation after CSR release. The append/partition law does not prove those
 Rust ownership, work, first-error or source-completeness obligations.
+
+For membership checking, clause search restricts candidates to the least
+interpretation; region search may still propose a larger original model of a
+positive cycle. The positive checker separately authenticates original
+satisfaction and compares the candidate with the least consequences. A distinct
+original model is refuted: the least consequences are a proper-subset model of
+its frozen producer reduct, and `constraints_frozen` supplies satisfaction of
+the constraint reducts even when the least set fails the original constraints.
+The checker accepts exactly the least original model. This application still
+depends on the complete root partition and retained-owner correspondence above.
 
 The head-element laws assume a correctly identified activity family. Explicit
 aggregate elements use complete tuple keys; ordinary Boolean choices use original
@@ -750,10 +837,12 @@ arithmetic value or evidence of completed enumeration.
 
 [`EvaluationPrefix.root_preservation`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/EvaluationPrefix.lean)
 equates returning a final operation's result with appending it to the completed
-prefix and observing the last value. Both schedules preserve the first error.
+prefix and observing the last value. Both strict schedules preserve the first error.
 The Rust [expression evaluator](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/evaluation.rs)
 uses one checked operation for intermediate nodes and the root. The law assumes
-pure partial operations; source-plan validity, operand indices, checked scalar
+pure partial operations and stopping at the first fault. It does not cover the
+source mode's missing-operand mask or continued independent branches after a
+zero divisor. Source-plan validity, operand indices, checked scalar
 arithmetic, resource charges, allocation and cleanup remain implementation
 correspondences. A smaller scratch prefix does not establish a timing or
 process-memory result.
@@ -763,8 +852,8 @@ earlier workspace values. A Rust join lends its existing workspace to partial
 comparisons, binding generators and final filters. Each evaluation returns an
 owned value and clears its prefix before the next borrow. Preserving expression
 order, complete-filter error precedence, copy charges and cleanup is a concrete
-caller obligation; the reset law does not justify skipping later expressions
-after an earlier final filter rejects a binding.
+caller obligation. The reset law neither establishes source-family exclusions
+nor permits an earlier final filter to hide an independently required check.
 
 [`ProjectedConditionals`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ProjectedConditionals.lean)
 separates anonymous witness disjunctions, signed source alternatives and

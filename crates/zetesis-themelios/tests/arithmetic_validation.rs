@@ -1,7 +1,8 @@
 //! A comparison over the relationally bound variables that is defined and
 //! false excludes the substitution, and nothing in an excluded substitution is
 //! reached. Every other substitution validates its arithmetic in full: a
-//! reached undefined or overflowing operation refuses the program. Incomplete
+//! reached zero divisor is admitted only alongside a jointly defined family witness;
+//! other reached arithmetic failures refuse the program. Incomplete
 //! relational prefixes have no such duty.
 
 #[path = "support/source_records.rs"]
@@ -15,7 +16,9 @@ use zetesis_themelios::{
 };
 
 fn refused(source: &str, expected: &EvaluationError) {
-    let failure = source_records::admit(source, &FormulaLimits::default()).unwrap_err();
+    let Err(failure) = source_records::admit(source, &FormulaLimits::default()) else {
+        panic!("{source}: admission succeeded; expected {expected}");
+    };
     assert!(
         matches!(&failure, FormulaFailure::Expansion(ExpansionFailure::Evaluation { error, .. }) if error == expected),
         "{source}: {failure}"
@@ -72,11 +75,38 @@ fn excluded_substitutions_are_not_reached() {
 fn reached_operations_refuse() {
     // Nothing excludes X = 0 here, so the division is reached; X != 0 over
     // d(1..2) excludes nothing, so the overflow is reached.
-    refused("d(0..2).p(X):-d(X),1/X=1.", &EvaluationError::Undefined);
+    refused("d(0).p(X):-d(X),1/X=1.", &EvaluationError::Undefined);
     refused(
         "d(1..2).p(X):-d(X),X!=0,X+2147483647<0.",
         &EvaluationError::Overflow,
     );
+}
+
+#[test]
+fn body_generators_preserve_relational_comparison_failures() {
+    // A body generator consumes an already complete relational binding;
+    // it cannot discharge the division that binding reaches.
+    for generator in ["Y=X+1", "Y=X..X+1"] {
+        refused(
+            &format!("d(0).p(X,Y):-d(X),1/X=1,{generator}."),
+            &EvaluationError::Undefined,
+        );
+    }
+}
+
+#[test]
+fn undefined_substitutions_do_not_discard_defined_ones() {
+    let source = "d(0..3). p(X,Y) :- d(X), 1/X=1, Y=X+1.";
+    assert_eq!(
+        admitted(source),
+        family(&["d(0)", "d(1)", "d(2)", "d(3)", "p(1,2)"]),
+    );
+}
+
+#[test]
+fn a_defined_false_substitution_keeps_the_rule_admissible() {
+    let source = "d(0;2). p(X,Y) :- d(X), 1/X=1, Y=X+1.";
+    assert_eq!(admitted(source), family(&["d(0)", "d(2)"]));
 }
 
 #[test]
@@ -95,7 +125,7 @@ fn an_exclusion_at_any_depth_hides_a_failure_at_another() {
     }
     // A comparison that excludes nothing leaves the failure a refusal.
     refused(
-        "d(0..1).e(1..2).p(X,Y):-d(X),e(Y),1/X=1,X!=3.",
+        "d(0).e(1..2).p(X,Y):-d(X),e(Y),1/X=1,X!=3.",
         &EvaluationError::Undefined,
     );
     // The same for a failure met before the relation that decides the exclusion.
@@ -214,20 +244,12 @@ fn defined_and_empty_join_families_match_clingo() {
 
 #[test]
 #[ignore = "requires independent clingo 5.8.2"]
-fn reached_operations_differ_from_clingo() {
-    // clingo drops the undefined instance X = 0 with a message and keeps
-    // p(1); zetesis refuses the program, since nothing excludes the
-    // substitution that reaches the operation.
-    let source = "d(0..2).p(X):-d(X),1/X=1.";
+fn all_undefined_families_differ_from_clingo() {
+    // clingo drops the only undefined instance; the library refuses a
+    // nonempty source family lacking any jointly defined substitution.
+    let source = "d(0).p(X):-d(X),1/X=1.";
     refused(source, &EvaluationError::Undefined);
-    assert_eq!(
-        source_oracle::records(source),
-        BTreeSet::from([(
-            ["d(0)", "d(1)", "d(2)", "p(1)"].map(str::to_owned).into(),
-            None,
-        )]),
-        "{source}"
-    );
+    assert_eq!(source_oracle::records(source), family(&["d(0)"]));
 }
 
 #[test]
@@ -433,5 +455,183 @@ fn head_generation_charges_only_selected_rows() {
             ),
             "{source}"
         );
+    }
+}
+
+#[test]
+fn independent_fatal_comparisons_are_not_hidden_by_zero_divisors() {
+    for (fatal, expected) in [
+        ("2147483647+Y=0", EvaluationError::Overflow),
+        ("symbol+Y=0", EvaluationError::Undefined),
+        ("2**(-Y)=0", EvaluationError::Undefined),
+    ] {
+        for comparisons in [format!("1/X=1,{fatal}"), format!("{fatal},1/X=1")] {
+            refused(
+                &format!("d(0;1).e(1).p(X):-d(X),e(Y),{comparisons}."),
+                &expected,
+            );
+        }
+    }
+}
+
+#[test]
+fn independent_fatal_branches_are_not_hidden_inside_one_expression() {
+    for expression in ["1/X-(2147483647+Y)", "(2147483647+Y)-1/X"] {
+        refused(
+            &format!("d(0).e(1).p(X):-d(X),e(Y),{expression}=0."),
+            &EvaluationError::Overflow,
+        );
+    }
+}
+
+#[test]
+fn every_arithmetic_expression_needs_the_same_defined_substitution() {
+    // Each division separately has a defined witness; there is no binding
+    // where both divisions are defined, so the whole family is refused.
+    refused(
+        "d(0;1).p(X):-d(X),1/X>0,1/(1-X)>0.",
+        &EvaluationError::Undefined,
+    );
+}
+
+#[test]
+fn a_valid_outer_binding_does_not_rescue_an_undefined_local_family() {
+    for rule in [
+        "{p(K,X):d(K,X),1/X=1}:-k(K).",
+        "p(K):-k(K),1=#count{X:d(K,X),1/X=1}.",
+    ] {
+        refused(
+            &format!("k(0;1).d(0,0).d(1,1).{rule}"),
+            &EvaluationError::Undefined,
+        );
+    }
+}
+
+#[test]
+fn missing_local_facts_leave_an_empty_silent_family() {
+    let source = "k(0;1).d(1,1).p(K):-k(K),1=#count{X:d(K,X),1/X=1}.";
+    let result = source_records::admit(source, &FormulaLimits::default()).unwrap();
+    assert!(result.warnings().is_empty());
+    assert_eq!(
+        source_records::exhaustive(&result),
+        family(&["k(0)", "k(1)", "d(1,1)", "p(1)"])
+    );
+}
+
+#[test]
+fn each_local_element_is_a_separate_source_family() {
+    refused(
+        "d(0).e(1).{p(X):d(X),1/X=1;q(Y):e(Y),1/Y=1}.",
+        &EvaluationError::Undefined,
+    );
+}
+
+#[test]
+fn source_arithmetic_uses_complete_family_evidence() {
+    for (rule, expected) in [
+        ("p(X,Y):-d(X),Y=1/X.", family(&["d(0)", "d(1)", "p(1,1)"])),
+        ("p(1/X):-d(X).", family(&["d(0)", "d(1)", "p(1)"])),
+    ] {
+        let source = format!("d(0;1).{rule}");
+        let result = source_records::admit(&source, &FormulaLimits::default()).unwrap();
+        assert_eq!(result.warnings().len(), 1);
+        assert_eq!(source_records::exhaustive(&result), expected);
+    }
+}
+
+#[test]
+fn independent_comparison_components_preserve_fatal_errors() {
+    for comparison in [
+        "1/X=2147483647+Y",
+        "2147483647+Y=1/X",
+        "(1/X,2147483647+Y)=(0,0)",
+        "(2147483647+Y,1/X)=(0,0)",
+        "not 1/X=2147483647+Y",
+    ] {
+        refused(
+            &format!("d(0).e(1).p(X):-d(X),e(Y),{comparison}."),
+            &EvaluationError::Overflow,
+        );
+    }
+}
+
+#[test]
+fn false_tuple_shape_does_not_hide_a_separate_zero_divisor() {
+    refused(
+        "d(0).e(1).p(X):-d(X),e(Y),(X,)=(X,Y),1/X=1.",
+        &EvaluationError::Undefined,
+    );
+}
+
+#[test]
+fn explicit_outer_guards_exclude_undefined_local_families() {
+    let source = "d(0;1).e(0,0).e(1,1).p(K):-d(K),K!=0,#count{1/X:e(K,X)}>0.";
+    let result = source_records::admit(source, &FormulaLimits::default()).unwrap();
+    assert!(result.warnings().is_empty());
+    assert_eq!(
+        source_records::exhaustive(&result),
+        family(&["d(0)", "d(1)", "e(0,0)", "e(1,1)", "p(1)"])
+    );
+}
+
+#[test]
+fn local_pool_alternatives_share_their_original_family() {
+    let source = "d(0).p:-1=#count{X:d(X),1/(X;1)>0}.";
+    let result = source_records::admit(source, &FormulaLimits::default()).unwrap();
+    assert_eq!(result.warnings().len(), 1);
+    assert_eq!(source_records::exhaustive(&result), family(&["d(0)", "p"]));
+}
+
+#[test]
+fn pooled_choice_heads_share_their_original_local_family() {
+    let source = "d(0).{p(1/X;1):d(X)}.";
+    let result = source_records::admit(source, &FormulaLimits::default()).unwrap();
+    assert_eq!(result.warnings().len(), 1);
+    assert_eq!(
+        source_records::exhaustive(&result),
+        BTreeSet::from([
+            (BTreeSet::from(["d(0)".to_owned()]), None),
+            (BTreeSet::from(["d(0)".to_owned(), "p(1)".to_owned()]), None),
+        ])
+    );
+}
+
+#[test]
+fn an_independent_fatal_branch_survives_an_unavailable_generated_input() {
+    refused(
+        "d(0).e(1).p(Y):-d(X),e(Z),Y=1/X,Y-(2147483647+Z)=0.",
+        &EvaluationError::Overflow,
+    );
+}
+
+#[test]
+fn conditional_local_bindings_share_the_original_family() {
+    let source = "d(0;1).q(1).p:-q(1/X):d(X).";
+    let result = source_records::admit(source, &FormulaLimits::default()).unwrap();
+    assert_eq!(result.warnings().len(), 1);
+    assert_eq!(
+        source_records::exhaustive(&result),
+        family(&["d(0)", "d(1)", "q(1)", "p"])
+    );
+}
+
+#[test]
+fn conditional_condition_pool_alternatives_share_the_original_family() {
+    let source = "d(0).q(0).p:-q(X):d(X),1/(X;1)>0.";
+    let result = source_records::admit(source, &FormulaLimits::default()).unwrap();
+    assert_eq!(result.warnings().len(), 1);
+    assert_eq!(
+        source_records::exhaustive(&result),
+        family(&["d(0)", "q(0)", "p"])
+    );
+}
+
+#[test]
+fn separate_authored_local_elements_do_not_share_a_witness() {
+    for rule in [
+        "{p(1/X):d(X);p(1):d(X)}.",
+        "p:-1=#count{X:d(X),1/X>0;1:d(X),1>0}.",
+    ] {
+        refused(&format!("d(0).{rule}"), &EvaluationError::Undefined);
     }
 }

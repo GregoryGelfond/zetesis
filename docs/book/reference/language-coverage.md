@@ -63,6 +63,22 @@ admitted finite results from unresolved bindings, unsupported inverse forms and
 required arithmetic failures. The remaining unclassified scopes are listed
 below; their existence is not a claim of undefined input or resource exhaustion.
 
+Source arithmetic follows the
+[complete-family policy](language.md#numeric-boundaries-and-refusal-meaning):
+only evaluated numeric division or remainder by zero can omit an instance with
+a warning, and only when that same original family has a jointly defined
+instance. A defined but false instance supplies a witness; an empty positive
+join is silent. Local elements are assessed separately for each fixed outer
+binding. Fatal arithmetic failures in the reached phase, including independent
+expression branches after a zero divisor, still refuse admission. An omitted
+body or condition does not advance to a later head or consequent phase.
+Closed-term preparation and
+post-solve observations retain their strict checks. The
+[warning contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/formula_warnings.rs)
+and [objective-family contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_warnings.rs)
+exercise these boundaries; they do not prove source enumeration or the Rust
+evaluator's correspondence to Lean.
+
 Projection closure concerns the declared fixed source-activity domain and its
 selected key image. It does not claim that every optional source condition is
 jointly realizable or reproduce every simplification of another grounder.
@@ -110,6 +126,6 @@ ASPIF import/export and any libclingo interoperability require their own
 interchange contracts; they are not included in the ordinary-language count.
 The [numeric endpoint boundary](language.md#numeric-boundaries-and-refusal-meaning)
 and themelios's minimum-integer literal representation limit remain separate
-correspondence/dependency reviews. Reached undefined arithmetic, resource
-exhaustion and deliberate theory/scripting/`#heuristic`/`#edge` exclusions are
+correspondence/dependency reviews. Arithmetic refusals under the family policy,
+resource exhaustion and deliberate theory/scripting/`#heuristic`/`#edge` exclusions are
 not ordinary implementation-gap entries.

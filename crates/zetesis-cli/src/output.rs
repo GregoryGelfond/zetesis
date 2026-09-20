@@ -366,6 +366,7 @@ fn reason_code(reason: Interruption) -> &'static str {
                 Incomplete::BatchCandidateLimit => "batch_candidate_limit",
                 Incomplete::PendingBatch => "pending_batch",
                 Incomplete::Allocation => "allocation",
+                Incomplete::WorkerPanicked => "worker_panicked",
                 Incomplete::Admission(_) => "admission",
                 Incomplete::WrongTheory => "wrong_theory",
                 Incomplete::RestrictionUniverse { .. } => "restriction_universe",

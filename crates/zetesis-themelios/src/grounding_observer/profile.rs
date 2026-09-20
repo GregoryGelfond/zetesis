@@ -16,7 +16,8 @@ use super::GroundingObserver;
 pub enum GroundingPhase {
     /// Attempt optional domains over the exact normalized positive source.
     DomainAnalysis,
-    /// Complete the finite possible-support relation, including its indices.
+    /// Complete the finite possible-support relation and its indices, then
+    /// validate arithmetic families over that complete carrier.
     SupportCompletion,
     /// Determine active objective templates and construct their program.
     ObjectiveActivation,

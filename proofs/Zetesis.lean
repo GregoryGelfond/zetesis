@@ -55,6 +55,7 @@ import Zetesis.ProjectedConditionals
 import Zetesis.SingletonHeads
 import Zetesis.ConstructorPatterns
 import Zetesis.ScalarArithmetic
+import Zetesis.ArithmeticFamilies
 import Zetesis.GateProjection
 import Zetesis.PositiveArguments
 import Zetesis.AggregateConsumers

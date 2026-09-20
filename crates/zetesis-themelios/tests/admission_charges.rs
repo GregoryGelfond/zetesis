@@ -102,12 +102,71 @@ fn the_head_allowance_is_charged_once_per_new_atom_not_per_proposal() {
 
 #[test]
 fn binding_frames_are_not_charged_to_the_cumulative_budget() {
-    // Two thousand bindings against fifty: the atoms are the same, so the
-    // cumulative byte requirement is the same up to a frame's width.
+    // Two thousand bindings against fifty. The larger source adds 39 e
+    // facts, but retains the same p atoms. The allowance covers those source
+    // facts; transient frames must not accumulate with repeated bindings.
     let fewer = minimal_scalar_bytes("d(1..50). e(1..1). p(X) :- d(X), e(Y).");
     let more = minimal_scalar_bytes("d(1..50). e(1..40). p(X) :- d(X), e(Y).");
     assert!(
         more <= fewer + 40 * 16,
         "{more} bytes for two thousand bindings against {fewer}"
+    );
+}
+
+fn scalar_usage(source: &str) -> usize {
+    admit_formula(
+        source.to_owned(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .unwrap_or_else(|error| panic!("{source}: {error}"))
+    .expansion_usage()
+    .scalar_bytes
+}
+
+#[test]
+fn arithmetic_scratch_does_not_accumulate_per_substitution() {
+    // The facts, generated p atoms and two-slot body frame are identical.
+    // Only r's first argument changes the number of complete joins: 50 or
+    // 2,000. Subtract each program's nonarithmetic control to isolate the
+    // same compiled expression from repeated transient evaluation storage.
+    let usages = ["r(Y,1)", "r(1,1)"].map(|selector| {
+        let source = format!("d(1..50).e(1..40).r(1,1).p(X):-d(X),e(Y),{selector}");
+        let plain = scalar_usage(&format!("{source}."));
+        let arithmetic = scalar_usage(&format!("{source},1/X>=0."));
+        (plain, arithmetic)
+    });
+    let [
+        (fewer_plain, fewer_arithmetic),
+        (more_plain, more_arithmetic),
+    ] = usages;
+    assert_eq!(
+        fewer_arithmetic + more_plain,
+        more_arithmetic + fewer_plain,
+        "same-carrier scalar usage: fewer={usages:?} (plain, arithmetic)"
+    );
+}
+
+#[test]
+fn local_family_scratch_does_not_accumulate_per_outer_binding() {
+    // Each outer row visits the same one-element local family. Both programs
+    // retain identical fact and possible-head carriers; the local family
+    // needs only one live frame whether there are 50 or 2,000 outer rows.
+    let usages = ["r(Y,1)", "r(1,1)"].map(|selector| {
+        let prefix = "d(1..50).e(1..40).r(1,1).s(1).";
+        let body = format!("d(X),e(Y),{selector}.");
+        let plain = scalar_usage(&format!("{prefix}{{p(X):s(Z)}}:-{body}"));
+        let arithmetic = scalar_usage(&format!("{prefix}{{p(X):s(Z),1/Z=1}}:-{body}"));
+        (plain, arithmetic)
+    });
+    let [
+        (fewer_plain, fewer_arithmetic),
+        (more_plain, more_arithmetic),
+    ] = usages;
+    assert_eq!(
+        fewer_arithmetic - fewer_plain,
+        more_arithmetic - more_plain,
+        "same-carrier local scalar usage: {usages:?} (plain, arithmetic)"
     );
 }

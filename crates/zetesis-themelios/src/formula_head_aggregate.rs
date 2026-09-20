@@ -18,7 +18,7 @@ use crate::formula::ceiling;
 use crate::formula_binding::Binding;
 use crate::formula_ir::{
     ChoiceIr, Compiler, Element, HeadElementKey, HeadLiteral, HeadMeasure, HeadOperand, LiteralIr,
-    Variables, value_bytes,
+    LocalFamily, Variables, value_bytes,
 };
 use crate::formula_support::{Counters, Join, Support};
 use crate::{ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature};
@@ -37,7 +37,8 @@ impl Compiler<'_> {
             AggregateFunction::Max => HeadMeasure::Max,
         };
         let mut elements = Vec::new();
-        for element in aggregate.elements() {
+        for (index, element) in aggregate.elements().enumerate() {
+            let family = LocalFamily(index);
             let element = element.get();
             let fields: Vec<_> = element.terms().collect();
             for (terms, source_condition) in
@@ -99,6 +100,7 @@ impl Compiler<'_> {
                             | LiteralIr::Guard(_)
                     )));
                     elements.push(Element {
+                        family,
                         key: HeadElementKey::Tuple(tuple),
                         head,
                         condition,
@@ -290,6 +292,7 @@ mod tests {
 
     fn element(keyed: bool) -> Element {
         Element {
+            family: crate::formula_ir::LocalFamily(0),
             key: if keyed {
                 HeadElementKey::Tuple(vec![Term::Constant(Value::Number(1))])
             } else {
