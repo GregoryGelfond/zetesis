@@ -498,9 +498,12 @@ fn qualify(
             "capture/start/cleanup did not complete".into(),
         ));
     }
+    let exit = solver_exit(sample)?;
     let parsed = match sample.slot.producer {
         Producer::Reference => {
-            if !capture.complete(true) {
+            if !exit.is_some_and(|exit| {
+                exit.signal.is_none() && matches!(exit.code, Some(0 | 10 | 20 | 30))
+            }) {
                 return Err((
                     Decision::InvocationFailure,
                     "reference exit did not complete".into(),
@@ -512,7 +515,7 @@ fn qualify(
         Producer::Native { profile } => {
             let document: Value = serde_json::from_slice(capture.stdout())
                 .map_err(|e| (Decision::InvalidReport, e.to_string()))?;
-            outcome::check(&document, capture.exit())?;
+            outcome::check(&document, exit)?;
             let native = answers::native_json::parse(capture.stdout(), request.native_answers)
                 .map_err(|error| invalid(&error))?;
             let display = native
@@ -552,6 +555,37 @@ fn qualify(
         ));
     }
     Ok(parsed)
+}
+
+/// A memory capture belongs to the helper. Require its success separately,
+/// then use the measured solver exit for the producer's outcome contract.
+fn solver_exit(sample: &Sample) -> Result<Option<process::Exit>, (Decision, String)> {
+    let capture = sample
+        .capture
+        .as_ref()
+        .expect("a launched sample has a capture");
+    if sample.slot.phase != Phase::Memory {
+        return Ok(capture.exit());
+    }
+    if !capture.complete(false) {
+        return Err((
+            Decision::InvocationFailure,
+            "memory helper did not complete successfully".into(),
+        ));
+    }
+    let memory = sample
+        .memory
+        .filter(|memory| memory.valid())
+        .ok_or_else(|| {
+            (
+                Decision::InvalidMemory,
+                "memory round lacks a valid solver resource record".into(),
+            )
+        })?;
+    Ok(Some(process::Exit {
+        code: memory.exit_code,
+        signal: memory.signal,
+    }))
 }
 fn invalid(error: &answers::Error) -> (Decision, String) {
     (Decision::InvalidReport, error.to_string())

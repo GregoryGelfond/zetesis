@@ -30,7 +30,9 @@ pub struct Limits {
     pub report: AnswerLimits,
     /// Full atom occurrences across all native model records.
     pub max_atoms: usize,
-    /// Combined preorder nodes, including both full and shown values.
+    /// Combined preorder nodes across full-model occurrences and shown terms.
+    /// Schema 2 charges reused atoms at every occurrence. Its spelled atom
+    /// table is independently bounded by this ceiling, including unused entries.
     pub max_value_nodes: usize,
     /// Core construction/scratch ceilings for each closed value.
     pub value: ValueLimits,

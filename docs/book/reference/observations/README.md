@@ -5,6 +5,12 @@ Four fixed datasets reproduce the ordinary release comparisons in the
 executable identities, observations and completion limits. None qualifies a
 later implementation.
 
+Descriptions of arithmetic refusals below apply to those measured revisions.
+The current [source-family policy](../language.md#numeric-boundaries-and-refusal-meaning)
+admits mixed defined/zero-divisor families with warnings while retaining
+all-undefined and fatal-error refusals; the historical timings do not measure
+that policy's implementation.
+
 The [prepared-grounding CPU/Metal comparison](../prepared-metal.md) also retains
 plain timing data: [eager intervals](prepared-metal-eager-20260914.tsv),
 [lazy intervals](prepared-metal-lazy-20260914.tsv) and

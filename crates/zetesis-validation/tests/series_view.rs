@@ -315,6 +315,31 @@ fn counters_and_driver_time_come_from_the_retained_records() {
 }
 
 #[test]
+fn device_bytes_come_from_the_native_execution_record() {
+    let mut only = report(&["generated/chain-1000.lp"], &[&[2_000_000]], &[1], None);
+    let stdout = json!({
+        "outcome": {"published_models": 1},
+        "statistics": {"execution": {"peak_accounted_bytes": 8192}}
+    })
+    .to_string();
+    for sample in only["report"]["samples"].as_array_mut().unwrap() {
+        if sample["slot"]["producer"]["solver"] == "native" {
+            sample["capture"]["stdout"]["data"] = json!(stdout);
+        }
+    }
+    let comparison = compare(&[Labelled {
+        label: "only",
+        report: &only,
+    }])
+    .unwrap();
+    let encoded = serde_json::to_value(&comparison).unwrap();
+    assert_eq!(
+        encoded["cells"][0]["profiles"][0]["reports"]["only"]["device_bytes"],
+        8192
+    );
+}
+
+#[test]
 fn closure_route_work_is_read_from_its_summed_receipt() {
     let mut only = report(&["generated/chain-1000.lp"], &[&[2_000_000]], &[1], None);
     // The closure route reports no formula search; its typed receipt sums
@@ -379,6 +404,200 @@ fn reports_must_share_their_cells() {
                 label: "b",
                 report: &other
             }
+        ]),
+        Err(ViewError::Cells { .. })
+    ));
+}
+
+#[test]
+fn reports_must_share_workload_content_at_each_position() {
+    let entry = "standalone/n-queens/variant-01.lp";
+    let mut one = report(&[entry], &[&[1]], &[1], None);
+    one["report"]["workloads"] = json!([
+        {"entry": entry, "identity": "ab".repeat(32), "amended": true,
+         "sources": [{"edits": [{"before": "8", "after": "10"}]}]}
+    ]);
+    let mut other = one.clone();
+    other["report"]["workloads"][0]["identity"] = json!("cd".repeat(32));
+    other["report"]["workloads"][0]["sources"][0]["edits"][0]["after"] = json!("11");
+    assert!(matches!(
+        compare(&[
+            Labelled {
+                label: "ten",
+                report: &one
+            },
+            Labelled {
+                label: "eleven",
+                report: &other
+            }
+        ]),
+        Err(ViewError::Cells { .. })
+    ));
+}
+
+#[test]
+fn reordered_workloads_with_one_entry_are_different_cells() {
+    let entry = "standalone/n-queens/variant-01.lp";
+    let mut one = report(&[entry, entry], &[&[1], &[2]], &[1, 2], None);
+    one["report"]["workloads"] = json!([
+        {"entry": entry, "identity": "ab".repeat(32)},
+        {"entry": entry, "identity": "cd".repeat(32)}
+    ]);
+    let mut other = one.clone();
+    other["report"]["workloads"]
+        .as_array_mut()
+        .unwrap()
+        .swap(0, 1);
+    assert!(matches!(
+        compare(&[
+            Labelled {
+                label: "forward",
+                report: &one
+            },
+            Labelled {
+                label: "reverse",
+                report: &other
+            }
+        ]),
+        Err(ViewError::Cells { .. })
+    ));
+}
+
+fn derived_report() -> Value {
+    let entry = "generated/chain-1000.lp";
+    let mut value = report(&[entry], &[&[1]], &[1], None);
+    value["report"]["schema"] = json!(2);
+    value["report"]["workloads"] = json!([
+        {"entry": entry, "identity": "ab".repeat(32)}
+    ]);
+    value
+}
+
+#[test]
+fn equal_workload_identities_compare() {
+    let one = derived_report();
+    let other = one.clone();
+    assert!(
+        compare(&[
+            Labelled {
+                label: "a",
+                report: &one
+            },
+            Labelled {
+                label: "b",
+                report: &other
+            },
+        ])
+        .is_ok()
+    );
+}
+
+#[test]
+fn a_derived_report_requires_workloads() {
+    let mut one = derived_report();
+    one["report"].as_object_mut().unwrap().remove("workloads");
+    assert!(matches!(
+        compare(&[Labelled {
+            label: "a",
+            report: &one
+        }]),
+        Err(ViewError::Malformed { .. })
+    ));
+}
+
+#[test]
+fn each_workload_requires_a_content_identity() {
+    let mut one = derived_report();
+    one["report"]["workloads"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("identity");
+    assert!(matches!(
+        compare(&[Labelled {
+            label: "a",
+            report: &one
+        }]),
+        Err(ViewError::Malformed { .. })
+    ));
+}
+
+#[test]
+fn malformed_workload_identities_are_refused() {
+    for identity in [
+        json!(null),
+        json!(17),
+        json!(""),
+        json!("ab"),
+        json!("g".repeat(64)),
+    ] {
+        let mut one = derived_report();
+        one["report"]["workloads"][0]["identity"] = identity;
+        assert!(matches!(
+            compare(&[Labelled {
+                label: "a",
+                report: &one
+            }]),
+            Err(ViewError::Malformed { .. })
+        ));
+    }
+}
+
+#[test]
+fn workload_positions_must_match_the_case_population() {
+    for workloads in [
+        json!(null),
+        json!("invalid"),
+        json!([]),
+        json!([
+            {"entry": "generated/chain-2000.lp", "identity": "ab".repeat(32)}
+        ]),
+    ] {
+        let mut one = derived_report();
+        one["report"]["workloads"] = workloads;
+        assert!(matches!(
+            compare(&[Labelled {
+                label: "a",
+                report: &one
+            }]),
+            Err(ViewError::Malformed { .. })
+        ));
+    }
+}
+
+#[test]
+fn corpus_reports_must_share_the_sealed_manifest() {
+    let one = report(&["generated/chain-1000.lp"], &[&[1]], &[1], None);
+    let mut other = one.clone();
+    other["report"]["before"][2]["sha256"] = json!("aa".repeat(32));
+    assert!(matches!(
+        compare(&[
+            Labelled {
+                label: "a",
+                report: &one
+            },
+            Labelled {
+                label: "b",
+                report: &other
+            },
+        ]),
+        Err(ViewError::Cells { .. })
+    ));
+}
+
+#[test]
+fn a_corpus_path_does_not_replace_a_workload_identity() {
+    let one = derived_report();
+    let other = report(&["generated/chain-1000.lp"], &[&[1]], &[1], None);
+    assert!(matches!(
+        compare(&[
+            Labelled {
+                label: "a",
+                report: &one
+            },
+            Labelled {
+                label: "b",
+                report: &other
+            },
         ]),
         Err(ViewError::Cells { .. })
     ));
@@ -468,12 +687,16 @@ fn cells_are_labelled_by_family_or_by_amended_entry() {
         None,
     );
     one["report"]["workloads"] = json!([
-        {"entry": "generated/chain-1000.lp", "generated": {"family": "chain", "size": 1000}},
+        {"entry": "generated/chain-1000.lp", "identity": "11".repeat(32),
+         "generated": {"family": "chain", "size": 1000}},
         {"entry": "standalone/n-queens/variant-01.lp", "amended": true,
+         "identity": "22".repeat(32),
          "sources": [{"edits": [{"before": "8", "after": "10"}]}]},
         {"entry": "standalone/n-queens/variant-01.lp", "amended": true,
+         "identity": "33".repeat(32),
          "sources": [{"edits": [{"before": "8", "after": "11"}]}]},
-        {"entry": "standalone/send-money/send-money.lp", "amended": false, "sources": []}
+        {"entry": "standalone/send-money/send-money.lp", "identity": "44".repeat(32),
+         "amended": false, "sources": []}
     ]);
     let comparison = compare(&[Labelled {
         label: "a",

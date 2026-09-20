@@ -450,6 +450,84 @@ fn node_ceiling_includes_shown_terms() {
 }
 
 #[test]
+fn reused_atoms_count_value_nodes_in_every_model() {
+    let held = atom("p", vec![json!([{"kind":"number","value":1}])]);
+    let value = document(vec![record(vec![held.clone()], 1), record(vec![held], 2)]);
+    let bytes = serde_json::to_vec(&value).unwrap();
+    let limits = native_json::Limits {
+        max_value_nodes: 2,
+        ..native_json::Limits::default()
+    };
+    assert!(native_json::parse(&bytes, limits).is_ok());
+    let result = native_json::parse(
+        &bytes,
+        native_json::Limits {
+            max_value_nodes: 1,
+            ..limits
+        },
+    );
+    assert!(
+        matches!(
+            &result,
+            Err(Error::Limit {
+                resource: Resource::ValueNodes,
+                attempted: 2,
+                ..
+            })
+        ),
+        "expected two value-node occurrences to exceed a limit of one; got {result:?}"
+    );
+}
+
+#[test]
+fn reused_atom_nodes_share_the_ceiling_with_shown_terms() {
+    let held = atom("p", vec![json!([{"kind":"number","value":1}])]);
+    let mut value = document(vec![record(vec![held.clone()], 1), record(vec![held], 2)]);
+    value["models"][1]["model"]["shown"]["terms"] = json!([[{"kind":"number","value":2}]]);
+    let bytes = serde_json::to_vec(&value).unwrap();
+    let limits = native_json::Limits {
+        max_value_nodes: 3,
+        ..Default::default()
+    };
+    assert!(native_json::parse(&bytes, limits).is_ok());
+    assert!(matches!(
+        native_json::parse(
+            &bytes,
+            native_json::Limits {
+                max_value_nodes: 2,
+                ..limits
+            }
+        ),
+        Err(Error::Limit {
+            resource: Resource::ValueNodes,
+            attempted: 3,
+            ..
+        })
+    ));
+}
+
+#[test]
+fn unused_atom_table_values_remain_bounded() {
+    let mut value = one();
+    value["models"][0]["model"]["atoms"] = json!([
+        atom("a", vec![]),
+        atom("unused", vec![json!([{"kind":"number","value":1}])]),
+    ]);
+    let limits = native_json::Limits {
+        max_value_nodes: 0,
+        ..Default::default()
+    };
+    assert!(matches!(
+        native_json::parse(&serde_json::to_vec(&value).unwrap(), limits),
+        Err(Error::Limit {
+            resource: Resource::ValueNodes,
+            attempted: 1,
+            ..
+        })
+    ));
+}
+
+#[test]
 fn value_depth_limit_is_the_core_construction_limit() {
     let value = document(vec![record(
         vec![atom(

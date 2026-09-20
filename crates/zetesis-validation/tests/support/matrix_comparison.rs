@@ -81,6 +81,178 @@ fn reference() -> answers::ReportedAnswers {
     )
     .unwrap()
 }
+
+fn memory_sample(producer: Producer, exit: process::Exit) -> Sample {
+    let mut sample = sample();
+    sample.slot.phase = Phase::Memory;
+    sample.slot.producer = producer;
+    sample.capture.as_mut().unwrap().helper_child_id = Some(2);
+    if producer == Producer::Reference {
+        sample.capture.as_mut().unwrap().stdout =
+            br#"{"Result":"UNSATISFIABLE","Models":{"More":"no","Number":0},"Call":[{}]}"#.to_vec();
+    }
+    sample.memory = Some(process::memory::Measurement {
+        schema: 1,
+        child: 3,
+        exit_code: exit.code,
+        signal: exit.signal,
+        raw_max_rss: 4096,
+        raw_unit: process::memory::Unit::Bytes,
+        peak_rss_bytes: 4096,
+    });
+    sample
+}
+
+#[test]
+fn native_memory_round_requires_a_successful_solver_exit() {
+    let mut sample = memory_sample(Producer::Native { profile: 0 }, exit(1));
+    let result = qualify(
+        &mut sample,
+        Some(&contract()),
+        Some(&reference()),
+        &request(),
+    );
+    assert!(
+        matches!(&result, Err((Decision::InvocationFailure, _))),
+        "expected solver exit 1 to fail despite helper exit 0; got {result:?}"
+    );
+}
+
+#[test]
+fn reference_memory_round_requires_a_successful_solver_exit() {
+    let mut sample = memory_sample(Producer::Reference, exit(1));
+    let result = qualify(
+        &mut sample,
+        Some(&contract()),
+        Some(&reference()),
+        &request(),
+    );
+    assert!(
+        matches!(&result, Err((Decision::InvocationFailure, _))),
+        "expected solver exit 1 to fail despite helper exit 0; got {result:?}"
+    );
+}
+
+#[test]
+fn native_memory_round_accepts_solver_success() {
+    let mut sample = memory_sample(Producer::Native { profile: 0 }, exit(0));
+    assert!(
+        qualify(
+            &mut sample,
+            Some(&contract()),
+            Some(&reference()),
+            &request()
+        )
+        .is_ok()
+    );
+}
+
+#[test]
+fn reference_memory_round_accepts_reference_exit_codes() {
+    for code in [0, 10, 20, 30] {
+        let mut sample = memory_sample(Producer::Reference, exit(code));
+        let result = qualify(
+            &mut sample,
+            Some(&contract()),
+            Some(&reference()),
+            &request(),
+        );
+        assert!(result.is_ok(), "reference exit {code}: {result:?}");
+    }
+}
+
+#[test]
+fn memory_round_refuses_a_signalled_solver() {
+    for producer in [Producer::Native { profile: 0 }, Producer::Reference] {
+        let mut sample = memory_sample(
+            producer,
+            process::Exit {
+                code: None,
+                signal: Some(15),
+            },
+        );
+        assert!(matches!(
+            qualify(
+                &mut sample,
+                Some(&contract()),
+                Some(&reference()),
+                &request()
+            ),
+            Err((Decision::InvocationFailure, _))
+        ));
+    }
+}
+
+#[test]
+fn memory_round_requires_helper_success() {
+    for producer in [Producer::Native { profile: 0 }, Producer::Reference] {
+        let mut sample = memory_sample(producer, exit(0));
+        // A helper is not clingo; even a reference-specific exit is a failure.
+        sample.capture.as_mut().unwrap().exit = Some(exit(10));
+        assert!(matches!(
+            qualify(
+                &mut sample,
+                Some(&contract()),
+                Some(&reference()),
+                &request()
+            ),
+            Err((Decision::InvocationFailure, _))
+        ));
+    }
+}
+
+#[test]
+fn memory_round_requires_a_solver_resource_record() {
+    let mut sample = memory_sample(Producer::Native { profile: 0 }, exit(0));
+    sample.memory = None;
+    assert!(matches!(
+        qualify(
+            &mut sample,
+            Some(&contract()),
+            Some(&reference()),
+            &request()
+        ),
+        Err((Decision::InvalidMemory, _))
+    ));
+}
+
+#[test]
+fn memory_round_refuses_an_invalid_solver_resource_record() {
+    let mut sample = memory_sample(Producer::Native { profile: 0 }, exit(0));
+    sample.memory.as_mut().unwrap().schema = 0;
+    assert!(matches!(
+        qualify(
+            &mut sample,
+            Some(&contract()),
+            Some(&reference()),
+            &request()
+        ),
+        Err((Decision::InvalidMemory, _))
+    ));
+}
+
+#[test]
+fn memory_round_keeps_the_solver_outcome_classification() {
+    for (document, code, decision) in [
+        (failed("unsupported_combination"), 2, Decision::Refused),
+        (interrupted(), 3, Decision::Incomplete),
+    ] {
+        let mut sample = memory_sample(Producer::Native { profile: 0 }, exit(code));
+        sample.capture.as_mut().unwrap().stdout = serde_json::to_vec(&document).unwrap();
+        assert_eq!(
+            qualify(
+                &mut sample,
+                Some(&contract()),
+                Some(&reference()),
+                &request()
+            )
+            .unwrap_err()
+            .0,
+            decision
+        );
+    }
+}
+
 #[test]
 fn complete_answers_require_the_actual_requested_route() {
     let mut sample = sample();

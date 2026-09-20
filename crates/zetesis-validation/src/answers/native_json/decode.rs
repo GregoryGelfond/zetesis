@@ -53,7 +53,7 @@ pub(super) fn parse(text: &str, limits: Limits) -> Result<NativeAnswers, Error> 
         .map_err(|_| Error::Allocation)?;
     let mut count = Counts::default();
     // The document's atom table: the atoms every record spelled, in order.
-    let mut table: Vec<Atom> = Vec::new();
+    let mut table = AtomTable::default();
     for (index, raw) in raw.iter().enumerate() {
         if values::index(&raw["number"], "native record number")? != index + 1 {
             return Err(invalid(
@@ -121,6 +121,20 @@ struct Counts {
     shown: usize,
 }
 
+/// A spelled atom and the value-node count charged whenever a model uses it.
+struct TableAtom {
+    atom: Atom,
+    value_nodes: usize,
+}
+
+/// Table decoding has its own cumulative ceiling, including unused entries.
+/// Model occurrences are charged separately before their atoms are retained.
+#[derive(Default)]
+struct AtomTable {
+    atoms: Vec<TableAtom>,
+    value_nodes: usize,
+}
+
 /// Decode one record against the document's table: its spelled atoms extend
 /// the table, its full model and shown positions are indices into it. The
 /// returned record holds its atoms in full and its shown atoms as positions
@@ -129,14 +143,20 @@ fn record(
     raw: &Json,
     limits: Limits,
     count: &mut Counts,
-    table: &mut Vec<Atom>,
+    table: &mut AtomTable,
 ) -> Result<ModelRecord, Error> {
     let spelled = values::array(&raw["atoms"], "native spelled atoms")?;
     table
+        .atoms
         .try_reserve(spelled.len())
         .map_err(|_| Error::Allocation)?;
     for atom in spelled {
-        table.push(decode_atom(atom, limits, count)?);
+        let before = table.value_nodes;
+        let atom = decode_atom(atom, limits, &mut table.value_nodes)?;
+        table.atoms.push(TableAtom {
+            atom,
+            value_nodes: table.value_nodes - before,
+        });
     }
     let raw_atoms = values::array(&raw["full_model"], "native full model")?;
     count.atoms = count
@@ -151,14 +171,19 @@ fn record(
     let mut positions = std::collections::BTreeMap::new();
     for (position, index) in raw_atoms.iter().enumerate() {
         let index = values::index(index, "native atom index")?;
-        let Some(atom) = table.get(index) else {
+        let Some(entry) = table.atoms.get(index) else {
             return Err(invalid(
                 Issue::Contradiction,
                 "native atom index is outside the document's table",
             ));
         };
+        count.nodes = count
+            .nodes
+            .checked_add(entry.value_nodes)
+            .ok_or_else(|| invalid(Issue::CountOverflow, "native value node count"))?;
+        check(Resource::ValueNodes, limits.max_value_nodes, count.nodes)?;
         positions.insert(index, position);
-        atoms.push(atom.clone());
+        atoms.push(entry.atom.clone());
     }
     if atoms.iter().collect::<BTreeSet<_>>().len() != atoms.len() {
         return Err(invalid(
@@ -222,7 +247,7 @@ fn spelled_record(raw: &Json, limits: Limits, count: &mut Counts) -> Result<Mode
         .try_reserve_exact(raw_atoms.len())
         .map_err(|_| Error::Allocation)?;
     for atom in raw_atoms {
-        atoms.push(decode_atom(atom, limits, count)?);
+        atoms.push(decode_atom(atom, limits, &mut count.nodes)?);
     }
     if atoms.iter().collect::<BTreeSet<_>>().len() != atoms.len() {
         return Err(invalid(
@@ -301,7 +326,7 @@ fn terms_and_costs(
 }
 
 /// One spelled atom: predicate, sign and typed arguments.
-fn decode_atom(atom: &Json, limits: Limits, count: &mut Counts) -> Result<Atom, Error> {
+fn decode_atom(atom: &Json, limits: Limits, nodes: &mut usize) -> Result<Atom, Error> {
     let raw_arguments = values::array(&atom["arguments"], "native atom arguments")?;
     let predicate = Predicate::with_sign(
         values::string(&atom["predicate"], "native predicate")?,
@@ -314,7 +339,7 @@ fn decode_atom(atom: &Json, limits: Limits, count: &mut Counts) -> Result<Atom, 
         .try_reserve_exact(raw_arguments.len())
         .map_err(|_| Error::Allocation)?;
     for argument in raw_arguments {
-        arguments.push(values::value(argument, limits, &mut count.nodes)?);
+        arguments.push(values::value(argument, limits, nodes)?);
     }
     Atom::new(predicate, arguments).map_err(Error::Atom)
 }

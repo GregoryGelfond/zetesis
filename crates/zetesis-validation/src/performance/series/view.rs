@@ -326,7 +326,10 @@ pub struct Comparison {
 
 /// Compare published reports over the same cells and profiles. The formula
 /// search method is the one profile field the reports may differ in, under
-/// any of its spellings ([`Comparison::methods`]).
+/// any of its spellings ([`Comparison::methods`]). Cells must have the same
+/// ordered entry paths, sealed corpus manifest and explicit workload content
+/// identities. A derived report must retain one workload identity per cell;
+/// a corpus report without workloads compares only with other corpus reports.
 ///
 /// # Errors
 /// Refuses an empty list, repeated labels, reports whose cells or profiles
@@ -335,6 +338,8 @@ pub struct Comparison {
 pub fn compare(reports: &[Labelled<'_>]) -> Result<Comparison, ViewError> {
     let first = reports.first().ok_or(ViewError::Empty)?;
     let entries = cases(first)?;
+    let workloads = workload_identities(first, &entries)?;
+    let manifest = provenance(first)?.manifest_sha256;
     let requested = profiles(first)?;
     let mut labels = Vec::with_capacity(reports.len());
     let mut provenance = BTreeMap::new();
@@ -345,7 +350,11 @@ pub fn compare(reports: &[Labelled<'_>]) -> Result<Comparison, ViewError> {
                 label: labelled.label.into(),
             });
         }
-        if cases(labelled)? != entries {
+        let recorded = self::provenance(labelled)?;
+        if cases(labelled)? != entries
+            || workload_identities(labelled, &entries)? != workloads
+            || recorded.manifest_sha256 != manifest
+        {
             return Err(ViewError::Cells {
                 label: labelled.label.into(),
             });
@@ -356,7 +365,7 @@ pub fn compare(reports: &[Labelled<'_>]) -> Result<Comparison, ViewError> {
             });
         }
         labels.push(labelled.label.to_owned());
-        provenance.insert(labelled.label.to_owned(), self::provenance(labelled)?);
+        provenance.insert(labelled.label.to_owned(), recorded);
         methods.insert(labelled.label.to_owned(), method(labelled)?);
     }
     let workloads = first.report["report"]["workloads"].as_array();
@@ -851,6 +860,47 @@ fn cases(labelled: &Labelled<'_>) -> Result<Vec<String>, ViewError> {
         })
 }
 
+/// Content identities distinguish amendments that deliberately share an
+/// entry path. Schema 2 always carries them; older corpus reports do not.
+fn workload_identities<'a>(
+    labelled: &Labelled<'a>,
+    entries: &[String],
+) -> Result<Option<Vec<&'a str>>, ViewError> {
+    let malformed = |field| ViewError::Malformed {
+        label: labelled.label.into(),
+        field,
+    };
+    let Some(raw) = labelled.report["report"].get("workloads") else {
+        return if labelled.report["report"]["schema"] == 2 {
+            Err(malformed("report.workloads"))
+        } else {
+            Ok(None)
+        };
+    };
+    let workloads = raw
+        .as_array()
+        .ok_or_else(|| malformed("report.workloads"))?;
+    if workloads.len() != entries.len() {
+        return Err(malformed("one workload per report.cases entry"));
+    }
+    workloads
+        .iter()
+        .zip(entries)
+        .map(|(workload, entry)| {
+            if workload["entry"].as_str() != Some(entry.as_str()) {
+                return Err(malformed("workload.entry matching report.cases"));
+            }
+            workload["identity"]
+                .as_str()
+                .filter(|identity| {
+                    identity.len() == 64 && identity.bytes().all(|byte| byte.is_ascii_hexdigit())
+                })
+                .ok_or_else(|| malformed("workload.identity SHA-256"))
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map(Some)
+}
+
 /// The fields that spell a profile's search method, left out of the profile
 /// comparison: `search`, the method's name; `candidates`, its name in
 /// reports written before `search`; and `region_workers`, the workers one
@@ -1060,7 +1110,7 @@ fn native(labelled: &Labelled<'_>, case: usize, profile: usize) -> Result<Native
         breakdown: breakdown(&records),
         peak_rss_bytes,
         device_bytes: stdout.as_ref().and_then(|document| {
-            document["statistics"]["formula_execution"]["peak_accounted_bytes"].as_u64()
+            document["statistics"]["execution"]["peak_accounted_bytes"].as_u64()
         }),
         published_models: stdout
             .as_ref()
