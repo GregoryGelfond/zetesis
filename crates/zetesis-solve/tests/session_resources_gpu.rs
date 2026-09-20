@@ -771,8 +771,12 @@ fn vulkan_formula_profiles_preserve_independent_sessions() {
     independent_profile_sessions(Device::Vulkan);
 }
 
-const TIGHT_FAMILIES: [&str; 6] = [
+const UNSEEDED_CYCLE: &str = "a :- b. b :- a.";
+const SEEDED_CYCLE: &str = "a. b :- a. a :- b.";
+
+const TIGHT_FAMILIES: [&str; 7] = [
     "",
+    UNSEEDED_CYCLE,
     "{a;b}. :- a,b.",
     "a :- not b. b :- not a.",
     "a. b :- a. :- not b.",
@@ -791,6 +795,53 @@ fn ordinary_tight_fixtures_have_complete_certificates() {
         )
         .unwrap();
     }
+}
+
+#[test]
+fn unseeded_cycle_has_one_empty_answer_set() {
+    let owner = formula(UNSEEDED_CYCLE);
+    assert_eq!(owner.theory().atom_count(), 0);
+    zetesis_ferraris::TightPlan::compile(
+        owner.theory(),
+        zetesis_ferraris::TightPlanLimits::default(),
+        &Control::default(),
+    )
+    .unwrap();
+    let subject = Subject::Theory(owner.theory().clone());
+    let capture = solve(
+        PreparedInput::formula(&owner),
+        &subject,
+        config(Backend::Cpu, Profile::Formula),
+        &ExecutionResources::default(),
+        AnswerSelection::All,
+    );
+    require_complete(
+        &capture,
+        &[Record {
+            atoms: Vec::new(),
+            costs: None,
+        }],
+    );
+}
+
+#[test]
+fn seeded_cycle_preserves_positive_nontight_class() {
+    let owner = formula(SEEDED_CYCLE);
+    assert_eq!(owner.theory().atom_count(), 2);
+    zetesis_ferraris::PositivePlan::compile(
+        owner.theory(),
+        zetesis_ferraris::PositivePlanLimits::default(),
+        &Control::default(),
+    )
+    .unwrap();
+    assert!(matches!(
+        zetesis_ferraris::TightPlan::compile(
+            owner.theory(),
+            zetesis_ferraris::TightPlanLimits::default(),
+            &Control::default(),
+        ),
+        Err(zetesis_ferraris::TightError::PositiveCycle { .. })
+    ));
 }
 
 fn tight_families(device: Device) {
@@ -872,10 +923,24 @@ fn general_formula_selection(device: Device) {
     let resources = ExecutionResources::with_gpu(&device.context());
     for (source, oracle) in [
         ("{a}.", Oracle::Countermodel),
-        ("a :- b. b :- a.", Oracle::Auto),
+        (SEEDED_CYCLE, Oracle::Auto),
         ("a | b.", Oracle::Auto),
     ] {
         let owner = formula(source);
+        if oracle == Oracle::Auto {
+            assert!(
+                matches!(
+                    zetesis_ferraris::TightPlan::compile(
+                        owner.theory(),
+                        zetesis_ferraris::TightPlanLimits::default(),
+                        &Control::default(),
+                    ),
+                    Err(zetesis_ferraris::TightError::PositiveCycle { .. }
+                        | zetesis_ferraris::TightError::UnsupportedRoot { .. })
+                ),
+                "general-device fixture must retain its non-tight theory: {source}"
+            );
+        }
         let subject = Subject::Theory(owner.theory().clone());
         let cpu = solve(
             PreparedInput::formula(&owner),
@@ -893,9 +958,16 @@ fn general_formula_selection(device: Device) {
             &resources,
             AnswerSelection::All,
         );
-        assert_eq!(gpu.records, cpu.records);
+        assert_eq!(
+            gpu.records, cpu.records,
+            "source={source}, oracle={oracle:?}"
+        );
+        assert_eq!(
+            (gpu.routes.device_formula, gpu.routes.device_tight),
+            (1, 0),
+            "source={source}, oracle={oracle:?}"
+        );
         require_device(&gpu, device, Profile::Formula);
-        assert_eq!(gpu.routes.device_tight, 0);
         assert_eq!(gpu.outcome.completion(), Some(Completion::Exhausted));
         assert_eq!(
             gpu.outcome

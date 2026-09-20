@@ -113,8 +113,10 @@ accounted tight preparation, then executes `GpuTightOracle` when it succeeds.
 `StableModels::prepare_tight_certificate` exposes the shared immutable plan for
 an external executor without enabling CPU membership. Repeated calls retain the
 first construction attempt and its work; CPU checking can activate that same
-owner before enumeration. Positive-only theories continue through general device
-propagation, as does explicit `Oracle::Countermodel`. Device failures are returned
+owner before enumeration. Theories without a complete tight certificate continue
+through general device propagation, as does explicit `Oracle::Countermodel`.
+A positive program may itself qualify for tight checking; positivity alone does
+not select the general route. Device failures are returned
 without CPU replacement. Tight device work counts a complete original-truth and
 support scan; `gpu_formula_rounds` only limits the general propagator.
 

@@ -302,9 +302,11 @@ but does not activate CPU certificate checking. The executor is selected before
 pipeline creation, so these batches do not first run the general propagator.
 Stable support results establish membership; failed original truth is rejected;
 an unsupported present atom refutes membership by complete producer coverage.
-Positive-only or unsupported theories retain general device propagation with
-exact CPU residual completion. Explicit countermodel policy also retains that
-route. There is no device implementation of `PositivePlan` in this selection.
+Theories without a complete tight certificate retain general device propagation
+with exact CPU residual completion. Positive programs can also be tight; their
+checked certificate determines eligibility. Explicit countermodel policy retains
+the general route. There is no device implementation of `PositivePlan` in this
+selection.
 
 General device propagation retains decoded residual reasons separately: a
 fixed point that leaves the query unresolved, the full-sweep ceiling, or the
