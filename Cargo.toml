@@ -30,11 +30,11 @@ zetesis-wgpu = { path = "crates/zetesis-wgpu" }
 zetesis-ferraris = { path = "crates/zetesis-ferraris" }
 zetesis-sat = { path = "crates/zetesis-sat" }
 zetesis-objective = { path = "crates/zetesis-objective" }
-# Matches morphe's reviewed source tier; never builds against estate worktrees.
-themelios-base = { git = "https://github.com/GregoryGelfond/themelios.git", rev = "41d13fb289382b00fc94a8617f4bedb6e56b6ad2", package = "themelios-base" }
-themelios-syntax = { git = "https://github.com/GregoryGelfond/themelios.git", rev = "41d13fb289382b00fc94a8617f4bedb6e56b6ad2", package = "themelios-syntax" }
-themelios-program = { git = "https://github.com/GregoryGelfond/themelios.git", rev = "41d13fb289382b00fc94a8617f4bedb6e56b6ad2", package = "themelios-program" }
-themelios-analysis = { git = "https://github.com/GregoryGelfond/themelios.git", rev = "41d13fb289382b00fc94a8617f4bedb6e56b6ad2", package = "themelios-analysis", default-features = false }
+# Reviewed estate frontend; never builds against estate worktrees.
+themelios-base = { git = "https://github.com/GregoryGelfond/themelios.git", rev = "3846953993fdcbafa5b454f0550ed188ad7b4f4e", package = "themelios-base" }
+themelios-syntax = { git = "https://github.com/GregoryGelfond/themelios.git", rev = "3846953993fdcbafa5b454f0550ed188ad7b4f4e", package = "themelios-syntax" }
+themelios-program = { git = "https://github.com/GregoryGelfond/themelios.git", rev = "3846953993fdcbafa5b454f0550ed188ad7b4f4e", package = "themelios-program" }
+themelios-analysis = { git = "https://github.com/GregoryGelfond/themelios.git", rev = "3846953993fdcbafa5b454f0550ed188ad7b4f4e", package = "themelios-analysis", default-features = false }
 rayon = "1.12"
 wgpu = "30.0.1"
 bytemuck = "1.25"

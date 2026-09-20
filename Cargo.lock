@@ -1402,7 +1402,7 @@ checksum = "f18aa187839b2bdb1ad2fa35ead8c4c2976b64e4363c386d45ac0f7ee85c9233"
 [[package]]
 name = "themelios-analysis"
 version = "0.1.0"
-source = "git+https://github.com/GregoryGelfond/themelios.git?rev=41d13fb289382b00fc94a8617f4bedb6e56b6ad2#41d13fb289382b00fc94a8617f4bedb6e56b6ad2"
+source = "git+https://github.com/GregoryGelfond/themelios.git?rev=3846953993fdcbafa5b454f0550ed188ad7b4f4e#3846953993fdcbafa5b454f0550ed188ad7b4f4e"
 dependencies = [
  "themelios-program",
 ]
@@ -1410,12 +1410,12 @@ dependencies = [
 [[package]]
 name = "themelios-base"
 version = "0.1.0"
-source = "git+https://github.com/GregoryGelfond/themelios.git?rev=41d13fb289382b00fc94a8617f4bedb6e56b6ad2#41d13fb289382b00fc94a8617f4bedb6e56b6ad2"
+source = "git+https://github.com/GregoryGelfond/themelios.git?rev=3846953993fdcbafa5b454f0550ed188ad7b4f4e#3846953993fdcbafa5b454f0550ed188ad7b4f4e"
 
 [[package]]
 name = "themelios-program"
 version = "0.1.0"
-source = "git+https://github.com/GregoryGelfond/themelios.git?rev=41d13fb289382b00fc94a8617f4bedb6e56b6ad2#41d13fb289382b00fc94a8617f4bedb6e56b6ad2"
+source = "git+https://github.com/GregoryGelfond/themelios.git?rev=3846953993fdcbafa5b454f0550ed188ad7b4f4e#3846953993fdcbafa5b454f0550ed188ad7b4f4e"
 dependencies = [
  "themelios-base",
  "themelios-syntax",
@@ -1424,7 +1424,7 @@ dependencies = [
 [[package]]
 name = "themelios-syntax"
 version = "0.1.0"
-source = "git+https://github.com/GregoryGelfond/themelios.git?rev=41d13fb289382b00fc94a8617f4bedb6e56b6ad2#41d13fb289382b00fc94a8617f4bedb6e56b6ad2"
+source = "git+https://github.com/GregoryGelfond/themelios.git?rev=3846953993fdcbafa5b454f0550ed188ad7b4f4e#3846953993fdcbafa5b454f0550ed188ad7b4f4e"
 dependencies = [
  "rowan",
  "themelios-base",
