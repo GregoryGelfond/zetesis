@@ -227,8 +227,11 @@ impl Catalog {
             work.include(size_of::<Vec<usize>>())?;
             let promoted = std::mem::take(&mut self.tail);
             self.levels.push(promoted);
-            self.compact(work)?;
         }
+        // A refused compaction may already have promoted the tail or merged
+        // some levels. Resume that phase even when the tail is now empty;
+        // only fully compacted levels may accompany a newly published tail.
+        self.compact(work)?;
         let appended = self.prepared..self.atoms.len();
         let mut run = work.reserve::<usize>(appended.len())?;
         run.extend(appended);
