@@ -7,14 +7,14 @@
 use std::iter::FusedIterator;
 use std::sync::Arc;
 use zetesis_core::{
-    Atom, GateAtom, GateAtomError, GateAtoms, GateIndex, GateIndexError, Program, Seed,
+    Atom, GateAtom, GateAtomError, GateAtoms, GateIndex, GateIndexError, Model, Program, Seed,
     SeedSelection, SeedSelectionError,
 };
 
 use crate::oracle::restrictions::{Conflict, Restrictions};
 use crate::oracle::{
-    ClosureWorkspace, Cube, Limits, PreparationLimits, PreparedQueries, definite_closure,
-    possible_closure,
+    Bounds, ClosureWorkspace, Cube, Limits, PreparationLimits, PreparedQueries, RegionBounds,
+    definite_closure, possible_closure,
 };
 use crate::regions::{Counting, Narrowing, Region, Traversal, Visit};
 use crate::{Control, Stop};
@@ -189,34 +189,45 @@ impl Closures {
         })
     }
 
-    /// One narrowing pass over `cube`: its lower closure, then its upper one.
-    fn narrow(&mut self, cube: &mut Cube) -> Result<Pass, Stop> {
+    /// Read both closures from the same immutable pre-pass bounds. Only a
+    /// completed lower constraint refutes without computing the upper closure.
+    fn enclose(&mut self, bounds: Bounds<'_>) -> Result<Enclosure, Stop> {
         let lower = definite_closure(
             &self.prepared,
             &mut self.workspace,
-            cube,
+            bounds,
             self.limits,
             &self.control,
         )?;
         if lower.constraint_violated {
-            return Ok(Pass::Refuted);
+            return Ok(Enclosure::Refuted);
         }
         let upper = possible_closure(
             &self.prepared,
             &mut self.workspace,
-            cube,
+            bounds,
             self.limits,
             &self.control,
         )?;
+        Ok(Enclosure::Complete {
+            lower: lower.atoms,
+            upper: upper.atoms,
+        })
+    }
+
+    /// The owned root pass also supports an unbounded symbolic upper side.
+    fn narrow(&mut self, cube: &mut Cube) -> Result<Pass, Stop> {
+        let Enclosure::Complete { lower, upper } = self.enclose((&*cube).into())? else {
+            return Ok(Pass::Refuted);
+        };
         let program = self.prepared.program();
         let before = (cube.must.len(), cube.may.as_ref().map(BTreeSet::len));
-        for atom in lower.atoms.atoms() {
+        for atom in lower.atoms() {
             if program.contains_gate_atom(atom) {
                 cube.must.insert(atom.clone());
             }
         }
         let derivable: BTreeSet<Atom> = upper
-            .atoms
             .atoms()
             .iter()
             .filter(|atom| program.contains_gate_atom(atom))
@@ -244,6 +255,46 @@ impl Closures {
             Pass::Changed
         })
     }
+
+    /// Narrow a descendant using its existing root owners and decisions.
+    /// Both completed closures and the full conflict check precede mutation.
+    /// Bound lookups and this transfer, like the owned root's set operations,
+    /// remain outside the closure work/byte account. No temporary bound payload
+    /// or index is allocated; the region retains its existing history contract.
+    fn narrow_region(
+        &mut self,
+        held: &BTreeSet<Atom>,
+        root: &[Arc<GateAtom>],
+        region: &mut Region,
+    ) -> Result<Pass, Stop> {
+        let bounds = RegionBounds::new(held, root, region);
+        let Enclosure::Complete { lower, upper } = self.enclose(Bounds::Region(&bounds))? else {
+            return Ok(Pass::Refuted);
+        };
+        if bounds.conflicts(self.prepared.program(), &lower, &upper) {
+            return Ok(Pass::Refuted);
+        }
+        let mut changed = false;
+        for (at, gate) in root.iter().enumerate() {
+            if region.is_open(at) {
+                if lower.contains(gate.atom()) {
+                    region.hold(at);
+                    changed = true;
+                } else if !upper.contains(gate.atom()) {
+                    region.cut(at);
+                    changed = true;
+                }
+            }
+        }
+        Ok(if changed { Pass::Changed } else { Pass::Fixed })
+    }
+}
+
+/// Completed lower/upper consequences, or a definite constraint refutation.
+/// A stopped closure yields neither case and cannot commit a narrowed bound.
+enum Enclosure {
+    Refuted,
+    Complete { lower: Model, upper: Model },
 }
 
 /// How the seeds are offered once the bounds are applied.
@@ -256,6 +307,7 @@ enum Enumeration {
 }
 
 /// The outcome of one narrowing pass, two closures.
+#[derive(Debug, PartialEq, Eq)]
 enum Pass {
     /// A bound moved; another pass may move it further.
     Changed,
@@ -381,6 +433,10 @@ impl<'a> Candidates<'a> {
     /// preparation or closure stopped by a resource ceiling keeps the bounds
     /// of the completed passes and is retained in the statistics;
     /// cancellation or a deadline stops the pull that met it.
+    /// Descendants borrow those completed root owners and their indexed
+    /// decisions for both pre-pass gate readings. Bound comparison/transfer is
+    /// outside the per-closure work and named byte account, as root set
+    /// operations are; no descendant bound payload is materialized.
     pub fn bounded(&mut self, limits: Limits) {
         debug_assert!(!self.started, "the bound precedes the first pull");
         self.narrowing = NarrowingState::Pending(limits);
@@ -534,16 +590,15 @@ impl<'a> Candidates<'a> {
     /// the completed passes' decisions and reports no change, so the region
     /// is counted with them; cancellation or a deadline stops the pull.
     fn narrow_region(&mut self, region: &mut Region) -> Result<Narrowing, Stop> {
-        let mut cube = self.cube_of(region);
         let mut changed = false;
         loop {
             let NarrowingState::Applied(closures) = &mut self.narrowing else {
                 return Ok(Narrowing::Fixed { changed: false });
             };
-            match closures.narrow(&mut cube) {
+            match closures.narrow_region(&self.root_must, &self.root, region) {
                 Ok(Pass::Changed) => {
                     self.statistics.region_passes += 1;
-                    changed |= self.decide(region, &cube);
+                    changed = true;
                 }
                 Ok(Pass::Fixed) => {
                     self.statistics.region_passes += 1;
@@ -557,49 +612,6 @@ impl<'a> Candidates<'a> {
                 }
             }
         }
-    }
-
-    /// The region as a cube over the root's atoms: its held atoms with the
-    /// root's, and every atom not cut out.
-    fn cube_of(&self, region: &Region) -> Cube {
-        let mut must = self.root_must.clone();
-        let mut may = self.root_must.clone();
-        for (index, gate) in self.root.iter().enumerate() {
-            let atom = gate.atom();
-            match region.decision(index) {
-                Some(true) => {
-                    must.insert(atom.clone());
-                    may.insert(atom.clone());
-                }
-                Some(false) => {}
-                None => {
-                    may.insert(atom.clone());
-                }
-            }
-        }
-        Cube {
-            must,
-            may: Some(may),
-        }
-    }
-
-    /// Read a narrowed cube's decisions into the region; whether one was new.
-    fn decide(&self, region: &mut Region, cube: &Cube) -> bool {
-        let mut changed = false;
-        for (index, gate) in self.root.iter().enumerate() {
-            if !region.is_open(index) {
-                continue;
-            }
-            let atom = gate.atom();
-            if cube.must.contains(atom) {
-                region.hold(index);
-                changed = true;
-            } else if cube.may.as_ref().is_some_and(|may| !may.contains(atom)) {
-                region.cut(index);
-                changed = true;
-            }
-        }
-        changed
     }
 
     /// The selection of the held atoms and the counter's selected ones.
@@ -878,3 +890,6 @@ mod narrowing_tests;
 #[cfg(test)]
 #[path = "../tests/support/supported_carrier.rs"]
 mod supported_carrier_tests;
+#[cfg(test)]
+#[path = "../tests/support/region_bound_closures.rs"]
+mod region_bound_tests;

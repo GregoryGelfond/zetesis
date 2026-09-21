@@ -1008,6 +1008,10 @@
 'Zetesis.ReductRegions.masked_reads_falsum' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ReductRegions.masked_known_sound' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ReductRegions.masked_known_narrows' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.RegionBounds.lookup_selection_exact' depends on axioms: [propext, Quot.sound]
+'Zetesis.RegionBounds.materialization_exact' depends on axioms: [propext, Quot.sound]
+'Zetesis.RegionBounds.gate_readings_exact' depends on axioms: [propext, Quot.sound]
+'Zetesis.RegionBounds.narrowing_exact' depends on axioms: [propext, Quot.sound]
 'Zetesis.RelationExtension.reconstruction_preserved' depends on axioms: [Quot.sound]
 'Zetesis.RelationExtension.acceptance_preserved' depends on axioms: [propext, Quot.sound]
 'Zetesis.RowSteps.marks_are_new_atoms' does not depend on any axioms

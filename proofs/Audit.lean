@@ -970,6 +970,10 @@ import Zetesis
 #print axioms Zetesis.ReductRegions.masked_reads_falsum
 #print axioms Zetesis.ReductRegions.masked_known_sound
 #print axioms Zetesis.ReductRegions.masked_known_narrows
+#print axioms Zetesis.RegionBounds.lookup_selection_exact
+#print axioms Zetesis.RegionBounds.materialization_exact
+#print axioms Zetesis.RegionBounds.gate_readings_exact
+#print axioms Zetesis.RegionBounds.narrowing_exact
 #print axioms Zetesis.RelationExtension.reconstruction_preserved
 #print axioms Zetesis.RelationExtension.acceptance_preserved
 #print axioms Zetesis.RowSteps.marks_are_new_atoms

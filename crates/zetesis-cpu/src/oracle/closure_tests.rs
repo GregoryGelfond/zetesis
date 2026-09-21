@@ -385,7 +385,7 @@ fn a_join_that_judges_no_gates_charges_no_gate_work() {
         (bindings, work.statistics.work)
     };
     let undecided = super::Cube::all_open();
-    let (judged, judged_work) = charged(super::Gates::Possible(&undecided));
+    let (judged, judged_work) = charged(super::Gates::Possible((&undecided).into()));
     let (unjudged, unjudged_work) = charged(super::Gates::Unjudged);
     assert_eq!((judged, unjudged), (4, 4));
     assert!(

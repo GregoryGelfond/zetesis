@@ -118,6 +118,7 @@ import Zetesis.DeltaRounds
 import Zetesis.WorkPermits
 import Zetesis.AtomKeys
 import Zetesis.SeedSelections
+import Zetesis.RegionBounds
 import Zetesis.GatePositions
 import Zetesis.SourceContributions
 import Zetesis.FiniteTables

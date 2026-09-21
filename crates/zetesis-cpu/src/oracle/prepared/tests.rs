@@ -167,7 +167,7 @@ fn a_stopped_cube_closure_retires_the_workspace() {
     let cube = super::super::Cube::all_open();
     let reference = prepared
         .closure_of(
-            super::super::Gates::Definite(&cube),
+            super::super::Gates::Definite((&cube).into()),
             &mut ClosureWorkspace::default(),
             Limits::default(),
             &control,
@@ -178,7 +178,7 @@ fn a_stopped_cube_closure_retires_the_workspace() {
     let mut stopped = 0;
     for max_work in 0..64 {
         let result = prepared.closure_of(
-            super::super::Gates::Definite(&cube),
+            super::super::Gates::Definite((&cube).into()),
             &mut workspace,
             Limits {
                 max_work,
@@ -194,7 +194,7 @@ fn a_stopped_cube_closure_retires_the_workspace() {
                 assert_eq!(workspace.catalogs.len(), 0);
                 let next = prepared
                     .closure_of(
-                        super::super::Gates::Possible(&cube),
+                        super::super::Gates::Possible((&cube).into()),
                         &mut workspace,
                         Limits::default(),
                         &control,

@@ -279,6 +279,31 @@ original program. A stopped upper-closure prefix cannot justify a smaller root;
 `Bounds.closed_upper_sound` requires closure. The mixed-radix law supplies the
 position calculation, not this semantic bound or executable enumeration proof.
 
+[`RegionBounds.materialization_exact`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/RegionBounds.lean)
+relates a descendant's borrowed root-coordinate bounds to the owned cube formed
+from its held and uncut atom selections. It assumes exact partial key lookup
+and that each materialized list is a permutation of its selected denotations;
+`SeedSelections.materialization_exact` supplies ordering and coalescing equality.
+`gate_readings_exact` and `narrowing_exact` then identify both must/may readings
+and the complete narrowing operation. The existing `Bounds` preservation and
+conflict laws apply to that same cube, not to a new acceptance test.
+
+Rust retains distinct canonical root coordinates disjoint from fixed-held atoms.
+The theorem needs no disjointness assumption to establish union/set equality;
+exact lookup already requires unambiguous coordinate identity. Matching region
+length, signed and typed atom comparison, binary-search direction, original
+program ownership and complete-root publication remain executable obligations.
+An indexed missing key denotes false only in that completed-root representation;
+the symbolic unbounded root and stopped root preparation keep their existing
+owned-cube/fallback semantics. Both closures must borrow the same pre-pass
+decisions. All conflicts must be checked before committing any new decision,
+including a previously held atom missing from the upper result or a lower-derived
+gate already cut from the region. An upper constraint verdict does not refute
+the region. A stopped upper computation publishes no smaller bound; earlier
+completed decisions survive a later resource stop, while cancellation and
+deadlines retain stopped coverage. These control and allocation properties are
+Rust obligations, not consequences of the representation equality.
+
 The scalar lazy closure retains one typed `Catalog` for each predicate. Every
 round borrows their existing ordered rows; new consequences remain separate
 until that round's complete template scan finishes. Catalogs are consumed once

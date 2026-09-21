@@ -4850,6 +4850,26 @@
     "line": 281
   },
   {
+    "name": "Zetesis.RegionBounds.lookup_selection_exact",
+    "file": "Zetesis/RegionBounds.lean",
+    "line": 48
+  },
+  {
+    "name": "Zetesis.RegionBounds.materialization_exact",
+    "file": "Zetesis/RegionBounds.lean",
+    "line": 100
+  },
+  {
+    "name": "Zetesis.RegionBounds.gate_readings_exact",
+    "file": "Zetesis/RegionBounds.lean",
+    "line": 123
+  },
+  {
+    "name": "Zetesis.RegionBounds.narrowing_exact",
+    "file": "Zetesis/RegionBounds.lean",
+    "line": 139
+  },
+  {
     "name": "Zetesis.RelationExtension.reconstruction_preserved",
     "file": "Zetesis/RelationExtension.lean",
     "line": 27

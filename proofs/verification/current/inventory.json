@@ -4851,6 +4851,26 @@
       "name": "Zetesis.ReductRegions.masked_known_narrows"
     },
     {
+      "file": "Zetesis/RegionBounds.lean",
+      "line": 48,
+      "name": "Zetesis.RegionBounds.lookup_selection_exact"
+    },
+    {
+      "file": "Zetesis/RegionBounds.lean",
+      "line": 100,
+      "name": "Zetesis.RegionBounds.materialization_exact"
+    },
+    {
+      "file": "Zetesis/RegionBounds.lean",
+      "line": 123,
+      "name": "Zetesis.RegionBounds.gate_readings_exact"
+    },
+    {
+      "file": "Zetesis/RegionBounds.lean",
+      "line": 139,
+      "name": "Zetesis.RegionBounds.narrowing_exact"
+    },
+    {
       "file": "Zetesis/RelationExtension.lean",
       "line": 27,
       "name": "Zetesis.RelationExtension.reconstruction_preserved"
@@ -6565,6 +6585,7 @@
     "Zetesis/Propagation.lean",
     "Zetesis/QueryCompaction.lean",
     "Zetesis/ReductRegions.lean",
+    "Zetesis/RegionBounds.lean",
     "Zetesis/RelationExtension.lean",
     "Zetesis/RowSteps.lean",
     "Zetesis/RuleFactorization.lean",
@@ -6598,8 +6619,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "ef57bd955983bfa5c9250928a133e8864a7714064aef4f8d0f74f29203249dc3",
-    "Zetesis.lean": "a94e8b3eb4a08b16970e5c50a2c076af930d0595689eb4c9bd2f9f4368f17549",
+    "Audit.lean": "a48613d148359df3abf76629e25b672af14c01a3236189d3bf8787114466b905",
+    "Zetesis.lean": "266afb2dd4603dfaf10086c791809d0b1b511f66885bcde956fef744c7da2b05",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
     "Zetesis/AggregateBounds.lean": "c1a49f93ac5140bcd22876b42c52c23c4f447352c9cf61f2f01741fbbdc98452",
     "Zetesis/AggregateConsumers.lean": "41aded89dbfaa79833ed3b336030ef4b08afa5be8e7029060416c2f8de59ef97",
@@ -6708,6 +6729,7 @@
     "Zetesis/Propagation.lean": "fc62487ece686b02daf4f2b229e90b266e09e624f8236fc70076ac427a2a745b",
     "Zetesis/QueryCompaction.lean": "47e08ca3b250dd8c0099635a836a7a3953cfb55863da57ac00324fa010b56c53",
     "Zetesis/ReductRegions.lean": "b7956362dd83030cce1912d6b4d57a4c95747d32382d85d92c28986a095b897a",
+    "Zetesis/RegionBounds.lean": "3039f2f8d0d8f166a919007299b443264048c2a98473cd3152cb63853e401baa",
     "Zetesis/RelationExtension.lean": "b14a16ce85275538d71b742aa5889f2c4fd0fbf27710b3b4de4f1b6cb14be2f0",
     "Zetesis/RowSteps.lean": "9490851c801ef1f2d2a5233e75ed0b25dcfbe51778dc2051b9c2965a6189f3cf",
     "Zetesis/RuleFactorization.lean": "1fcd20b2f23dc91c91f9d2a7af2c47df212ef001815e868762c74de6e37b658c",

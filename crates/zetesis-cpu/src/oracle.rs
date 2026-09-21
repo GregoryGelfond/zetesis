@@ -13,6 +13,8 @@ mod window;
 mod relations;
 mod prepared;
 mod argument_bounds;
+mod bounds;
+pub(crate) use bounds::{Bounds, RegionBounds};
 pub use prepared::{ClosureWorkspace, PreparationLimits, PreparationStatistics, PreparedQueries};
 use relations::{
     Block, Catalogs, Dense, Layouts, PendingMarks, Relational, Relations, Resolution, Row, RowSet,
@@ -366,10 +368,10 @@ enum Gates<'a> {
     /// A gate holds only if it holds under every seed of the cube, so the
     /// closure lies inside every answer set the cube contains: its lower
     /// closure.
-    Definite(&'a Cube),
+    Definite(Bounds<'a>),
     /// A gate holds if it holds under some seed of the cube, so every answer
     /// set the cube contains lies inside the closure: its upper closure.
-    Possible(&'a Cube),
+    Possible(Bounds<'a>),
     /// Every gate passes without being read: the join is asked for its
     /// bindings alone, as the source scan and the restriction plan ask, and
     /// no gate key is built.
@@ -384,8 +386,8 @@ impl Gates<'_> {
         match self {
             Self::Frozen(_) | Self::Possible(_) | Self::Unjudged => true,
             Self::Definite(cube) => {
-                (template.gate_true().is_empty() || !cube.must.is_empty())
-                    && (template.gate_false().is_empty() || cube.may.is_some())
+                (template.gate_true().is_empty() || !cube.lower_is_empty())
+                    && (template.gate_false().is_empty() || cube.upper_is_bounded())
             }
         }
     }
@@ -416,7 +418,7 @@ impl Gates<'_> {
 pub(crate) fn definite_closure(
     prepared: &PreparedQueries,
     workspace: &mut ClosureWorkspace,
-    cube: &Cube,
+    cube: Bounds<'_>,
     limits: Limits,
     control: &Control,
 ) -> Result<CompletedClosure, Stop> {
@@ -434,7 +436,7 @@ pub(crate) fn definite_closure(
 pub(crate) fn possible_closure(
     prepared: &PreparedQueries,
     workspace: &mut ClosureWorkspace,
-    cube: &Cube,
+    cube: Bounds<'_>,
     limits: Limits,
     control: &Control,
 ) -> Result<CompletedClosure, Stop> {

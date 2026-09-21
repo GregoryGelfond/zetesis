@@ -224,6 +224,15 @@ and only the remainder becomes open candidate coordinates. Canonical positions
 are computed in the original carrier without enumerating its excluded tuples.
 This is justified by coverage of every answer set, not by assuming that possible
 atoms hold. If narrowing stops, the existing conservative fallback remains.
+
+Below the completed root, each region reads its bounds from those retained atom
+owners and its held/cut/open decisions. It does not rebuild owned lower and upper
+atom sets. Both closures read the same pre-pass bounds; only their completed
+results can change decisions. A lower constraint or inconsistent bounds refutes
+the region. An upper-only constraint cannot do so. The
+[representation correspondence](../lean/correspondence.md#ownership-and-execution-correspondence)
+separates this borrowed view from the semantic narrowing law.
+
 The predicate/domain carrier can still contain many combinations, and seed
 enumeration can remain exponential in the number of open gate atoms. A small
 demanded catalog during one check does not establish that other choices are
