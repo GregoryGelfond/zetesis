@@ -41,32 +41,34 @@ fn malformed_utf8_uses_an_explicit_byte_view() {
 
 #[test]
 fn matrix_capture_view_preserves_invocation_metadata() {
-    let capture = Capture {
-        helper_child_id: None,
-        executable: "/sealed/zetesis".into(),
-        arguments: vec!["--json".into()],
-        directory: "/private/source".into(),
-        started_unix_ns: Some(7),
-        elapsed_ns: Some(11),
-        stop: Some(process::Stop::OutputLimit),
-        exit: Some(process::Exit {
-            code: None,
-            signal: Some(9),
-        }),
-        stdout: b"prefix\0".to_vec(),
-        stderr: vec![0xff],
-        failure: None,
-        cleanup_failure: None,
-        unresolved_child: Some(13),
-    };
-    let mut legacy = serde_json::to_value(&capture).unwrap();
-    let mut compact = serde_json::to_value(View::new(&capture)).unwrap();
-    assert_eq!(decoded(&compact["stdout"]), capture.stdout());
-    assert_eq!(decoded(&compact["stderr"]), capture.stderr());
-    for key in ["stdout", "stderr"] {
-        assert!(legacy[key].is_array());
-        legacy.as_object_mut().unwrap().remove(key);
-        compact.as_object_mut().unwrap().remove(key);
+    for helper_child_id in [None, Some(17)] {
+        let capture = Capture {
+            helper_child_id,
+            executable: "/sealed/zetesis".into(),
+            arguments: vec!["--json".into()],
+            directory: "/private/source".into(),
+            started_unix_ns: Some(7),
+            elapsed_ns: Some(11),
+            stop: Some(process::Stop::OutputLimit),
+            exit: Some(process::Exit {
+                code: None,
+                signal: Some(9),
+            }),
+            stdout: b"prefix\0".to_vec(),
+            stderr: vec![0xff],
+            failure: None,
+            cleanup_failure: None,
+            unresolved_child: Some(13),
+        };
+        let mut legacy = serde_json::to_value(&capture).unwrap();
+        let mut compact = serde_json::to_value(View::new(&capture)).unwrap();
+        assert_eq!(decoded(&compact["stdout"]), capture.stdout());
+        assert_eq!(decoded(&compact["stderr"]), capture.stderr());
+        for key in ["stdout", "stderr"] {
+            assert!(legacy[key].is_array());
+            legacy.as_object_mut().unwrap().remove(key);
+            compact.as_object_mut().unwrap().remove(key);
+        }
+        assert_eq!(legacy, compact);
     }
-    assert_eq!(legacy, compact);
 }

@@ -123,13 +123,23 @@ fn memory_rounds_record_the_reference_peak_resident_set() {
             .unwrap()
             .starts_with("memory_rounds:")
     );
-    let recorded = encoded["report"]["samples"]
+    let recorded: Vec<_> = encoded["report"]["samples"]
         .as_array()
         .unwrap()
         .iter()
         .filter(|sample| sample["slot"]["phase"] == "memory" && sample["decision"] == "pass")
-        .count();
-    assert_eq!(recorded, 2);
+        .collect();
+    assert_eq!(recorded.len(), 2);
+    for (sample, original) in recorded.iter().zip(
+        memory
+            .iter()
+            .filter(|sample| sample.slot().producer == Producer::Reference),
+    ) {
+        assert_eq!(
+            sample["capture"]["helper_child_id"].as_u64(),
+            original.capture().unwrap().helper_child_id().map(u64::from)
+        );
+    }
 }
 
 #[test]

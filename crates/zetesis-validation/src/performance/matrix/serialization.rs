@@ -41,6 +41,8 @@ struct View<'a> {
     failure: Option<&'a InvocationFailure>,
     cleanup_failure: Option<&'a InvocationFailure>,
     unresolved_child: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    helper_child_id: Option<u32>,
 }
 impl<'a> View<'a> {
     fn new(capture: &'a Capture) -> Self {
@@ -57,6 +59,7 @@ impl<'a> View<'a> {
             failure: capture.failure(),
             cleanup_failure: capture.cleanup_failure(),
             unresolved_child: capture.unresolved_child,
+            helper_child_id: capture.helper_child_id(),
         }
     }
 }

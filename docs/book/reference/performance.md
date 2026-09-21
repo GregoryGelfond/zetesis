@@ -75,6 +75,11 @@ Memory runs are separate from timed runs. A GPU solve can still perform source
 preparation, candidate generation and some exact checks on the CPU. Device
 selection therefore does not mean that the whole request runs on the GPU.
 
+Memory captures retain the helper process ID separately from the measured solver
+ID. The runner checks that they differ before accepting a measurement. Older
+matrix reports can omit the helper ID; their retained data cannot independently
+repeat that identity check.
+
 Before comparing two reports, check the program and constants, answer request,
 grounder, thread count, device, limits, statistics and output settings. Keep
 timeouts and failures visible. A failed run has no successful solve time to
