@@ -92,7 +92,7 @@ fn command(legacy: bool) -> Command {
     Command::new("zetesis")
         .version(VERSION_INFORMATION)
         .propagate_version(true)
-        .about("Answer-set solving through the reduct")
+        .about("An answer-set solver")
         .subcommand_required(true)
         .disable_help_subcommand(true)
         .subcommand(solve_command(legacy))

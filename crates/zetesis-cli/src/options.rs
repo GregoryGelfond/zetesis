@@ -23,7 +23,7 @@ pub enum Command {
     arg(clap::Arg::new("help").short('h').long("help").global(true).action(clap::ArgAction::HelpShort).help("Show everyday solving options")),
     arg(clap::Arg::new("help-all").long("help-all").global(true).action(clap::ArgAction::HelpLong).help("Show all oracle, worker, batch and resource options")),
     args_conflicts_with_subcommands = true,
-    about = "Candidate-directed answer-set solving through the reduct"
+    about = "An answer-set solver"
 )]
 pub struct Options {
     /// Statistics presentation selected by the invocation adapter.
