@@ -186,8 +186,11 @@ with the full closure check.
 Before its first seed, the closure route narrows the region of seeds it
 must enumerate. The region starts with nothing decided. Each pass computes
 the region's two closures: the lower one, in which a rule fires only if its
-gates hold under every seed of the region, and the upper one, in which a
-rule fires if its gates hold under some seed. A gate atom the lower closure
+gates hold under every seed of the region, and the upper one, in which each
+gate is tested for possibility separately. The upper reading is conservative:
+it can enable a rule even when no single seed satisfies all its gates. For
+example, an open atom can pass both a required-true and a required-false gate.
+A gate atom the lower closure
 derives belongs to every answer set and is held in every seed; a gate atom
 the upper closure does not derive belongs to no answer set and is cut,
 never offered. The next pass reads those decisions, and the passes stop

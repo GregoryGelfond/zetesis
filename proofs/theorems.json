@@ -652,77 +652,77 @@
   {
     "name": "Zetesis.Bounds.gate_sandwich",
     "file": "Zetesis/Bounds.lean",
-    "line": 69
+    "line": 70
   },
   {
     "name": "Zetesis.Bounds.selected_consequence_mono",
     "file": "Zetesis/Bounds.lean",
-    "line": 86
+    "line": 87
   },
   {
     "name": "Zetesis.Bounds.selected_consequence_refines",
     "file": "Zetesis/Bounds.lean",
-    "line": 92
+    "line": 93
   },
   {
     "name": "Zetesis.Bounds.consequence_sandwich",
     "file": "Zetesis/Bounds.lean",
-    "line": 99
+    "line": 100
   },
   {
     "name": "Zetesis.Bounds.gamma_sandwich",
     "file": "Zetesis/Bounds.lean",
-    "line": 108
+    "line": 109
   },
   {
     "name": "Zetesis.Bounds.lower_prefix_sound",
     "file": "Zetesis/Bounds.lean",
-    "line": 115
+    "line": 116
   },
   {
     "name": "Zetesis.Bounds.closed_upper_sound",
     "file": "Zetesis/Bounds.lean",
-    "line": 122
+    "line": 123
   },
   {
     "name": "Zetesis.Bounds.accepted_seed_agrees",
     "file": "Zetesis/Bounds.lean",
-    "line": 127
+    "line": 128
   },
   {
     "name": "Zetesis.Bounds.acceptance_survives_narrowing",
     "file": "Zetesis/Bounds.lean",
-    "line": 139
+    "line": 140
   },
   {
     "name": "Zetesis.Bounds.undecided_bounds_accepted",
     "file": "Zetesis/Bounds.lean",
-    "line": 167
+    "line": 168
   },
   {
     "name": "Zetesis.Bounds.narrowed_contains_accepted",
     "file": "Zetesis/Bounds.lean",
-    "line": 189
+    "line": 190
   },
   {
     "name": "Zetesis.Bounds.inconsistent_narrowing_refutes",
     "file": "Zetesis/Bounds.lean",
-    "line": 206
+    "line": 207
   },
   {
     "name": "Zetesis.Bounds.conflicting_atom_refutes",
     "file": "Zetesis/Bounds.lean",
-    "line": 215
+    "line": 216
   },
   {
     "name": "Zetesis.Bounds.lower_constraint_refutes",
     "file": "Zetesis/Bounds.lean",
-    "line": 222
+    "line": 223
   },
   {
     "name": "Zetesis.Bounds.lower_prefix_constraint_refutes",
     "file": "Zetesis/Bounds.lean",
-    "line": 231
+    "line": 232
   },
   {
     "name": "Zetesis.CandidateCursor.next_preserves",

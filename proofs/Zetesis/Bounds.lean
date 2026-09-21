@@ -5,9 +5,10 @@ import Zetesis.Search
 # Concrete must/may bounds for reduct search
 
 The objects are a cube of seeds, the region of a search, and two readings of
-a rule's gates under it: `MustGate`, the gates every seed of the cube
-satisfies, and `MayGate`, the gates some seed does. Each reading selects the
-rules that fire and gives a least consequence set, `LowerGamma` and
+a rule's gates under it. `MustGate` requires every gate to hold for every seed
+in the cube. `MayGate` checks each gate's possibility separately; it can hold
+without a single seed satisfying all the gates together. Each reading selects
+rules and gives a least consequence set, `LowerGamma` and
 `UpperGamma`, over the actual normalized rule semantics; positive bodies,
 filters and heads are read unchanged, and only the frozen candidate gates
 are approximated.

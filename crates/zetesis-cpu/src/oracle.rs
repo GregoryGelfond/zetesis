@@ -369,8 +369,8 @@ enum Gates<'a> {
     /// closure lies inside every answer set the cube contains: its lower
     /// closure.
     Definite(Bounds<'a>),
-    /// A gate holds if it holds under some seed of the cube, so every answer
-    /// set the cube contains lies inside the closure: its upper closure.
+    /// Each gate is tested for possibility separately. This overapproximation
+    /// contains every answer set of the cube: its upper closure.
     Possible(Bounds<'a>),
     /// Every gate passes without being read: the join is asked for its
     /// bindings alone, as the source scan and the restriction plan ask, and
@@ -426,10 +426,11 @@ pub(crate) fn definite_closure(
 }
 
 /// The upper closure of `cube` over `prepared`, computed in `workspace`:
-/// rules fire under gates some seed of the cube satisfies, so every answer
-/// set of the cube lies inside it and every accepted seed inside its gate
-/// atoms; a gate atom outside it belongs to no answer set of the cube. Its
-/// constraint verdict says nothing about any seed.
+/// rules fire when each gate remains possible under the bounds. There need
+/// not be one seed satisfying all those gates. Every answer set of the cube
+/// lies inside this overapproximation, and every accepted seed inside its gate
+/// atoms; a gate atom outside it belongs to no answer set of the cube. A fired
+/// upper constraint does not refute a seed.
 ///
 /// # Errors
 /// As [`definite_closure`].

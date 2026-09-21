@@ -652,77 +652,77 @@
     },
     {
       "file": "Zetesis/Bounds.lean",
-      "line": 69,
+      "line": 70,
       "name": "Zetesis.Bounds.gate_sandwich"
     },
     {
       "file": "Zetesis/Bounds.lean",
-      "line": 86,
+      "line": 87,
       "name": "Zetesis.Bounds.selected_consequence_mono"
     },
     {
       "file": "Zetesis/Bounds.lean",
-      "line": 92,
+      "line": 93,
       "name": "Zetesis.Bounds.selected_consequence_refines"
     },
     {
       "file": "Zetesis/Bounds.lean",
-      "line": 99,
+      "line": 100,
       "name": "Zetesis.Bounds.consequence_sandwich"
     },
     {
       "file": "Zetesis/Bounds.lean",
-      "line": 108,
+      "line": 109,
       "name": "Zetesis.Bounds.gamma_sandwich"
     },
     {
       "file": "Zetesis/Bounds.lean",
-      "line": 115,
+      "line": 116,
       "name": "Zetesis.Bounds.lower_prefix_sound"
     },
     {
       "file": "Zetesis/Bounds.lean",
-      "line": 122,
+      "line": 123,
       "name": "Zetesis.Bounds.closed_upper_sound"
     },
     {
       "file": "Zetesis/Bounds.lean",
-      "line": 127,
+      "line": 128,
       "name": "Zetesis.Bounds.accepted_seed_agrees"
     },
     {
       "file": "Zetesis/Bounds.lean",
-      "line": 139,
+      "line": 140,
       "name": "Zetesis.Bounds.acceptance_survives_narrowing"
     },
     {
       "file": "Zetesis/Bounds.lean",
-      "line": 167,
+      "line": 168,
       "name": "Zetesis.Bounds.undecided_bounds_accepted"
     },
     {
       "file": "Zetesis/Bounds.lean",
-      "line": 189,
+      "line": 190,
       "name": "Zetesis.Bounds.narrowed_contains_accepted"
     },
     {
       "file": "Zetesis/Bounds.lean",
-      "line": 206,
+      "line": 207,
       "name": "Zetesis.Bounds.inconsistent_narrowing_refutes"
     },
     {
       "file": "Zetesis/Bounds.lean",
-      "line": 215,
+      "line": 216,
       "name": "Zetesis.Bounds.conflicting_atom_refutes"
     },
     {
       "file": "Zetesis/Bounds.lean",
-      "line": 222,
+      "line": 223,
       "name": "Zetesis.Bounds.lower_constraint_refutes"
     },
     {
       "file": "Zetesis/Bounds.lean",
-      "line": 231,
+      "line": 232,
       "name": "Zetesis.Bounds.lower_prefix_constraint_refutes"
     },
     {
@@ -6636,7 +6636,7 @@
     "Zetesis/BindingScopes.lean": "1ccfde0f879702572dbc25ed20531f2b85e04eeedb59fd7eeea45ad7972486a7",
     "Zetesis/BooleanHeadElements.lean": "1a8601feb54155f84d1fc9cb784236f7ba19471a3f7a129da203e94cb45f6ef6",
     "Zetesis/BooleanHeads.lean": "6c1bdb43ab5b5a4d5753f9396e89adc2e9c52cfa9a1df56860ad8d54005d4c27",
-    "Zetesis/Bounds.lean": "f1418ce1277f09e657729abc9d6af4e1801876cf2519553e50490de0e467f8f1",
+    "Zetesis/Bounds.lean": "4d1e698345c77d7a4a07ceda15f5f550f88923fefcac182053610c1e6bf6fd3a",
     "Zetesis/CandidateCursor.lean": "09bba309247ba7b7300dd8f6994ecb8482ac5b14fbfd356ab8c24103fbfe1039",
     "Zetesis/CertifiedExecution.lean": "693ec9dcd4542e70d21cd19b99dd13dc59ac375b9ac945c65ee1632ff7ccc3a0",
     "Zetesis/ChoiceConsumers.lean": "2505ef92e4694faddfe66bebeb26155b6d820a5493f94fa3653bcfbefc633d5a",
