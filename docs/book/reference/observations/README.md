@@ -1,6 +1,6 @@
 # Recorded release observations
 
-The current [0.1.4 coverage receipt](coverage-3108acfe.json) identifies the
+The current [0.1.4 coverage receipt](coverage-df99d4bb.json) identifies the
 qualified source, independent CPU and workspace populations, and 59 physical
 Metal tests. Three separate ordinary CLI backend checks also passed; they do
 not contribute instrumented coverage. See the [validation reference](../validation.md#coverage)
