@@ -251,14 +251,16 @@ deadline is therefore not a hard process-kill guarantee.
 
 For Rust consumers migrating from the previous API, `Cancellation` replaces
 `Control`, and operations named `with_control` or ending in `_with_control` now
-use `with_cancellation` or `_with_cancellation`. Update imports and calls; no
-compatibility alias is retained. The cancellation/deadline behavior is unchanged.
+use `with_cancellation` or `_with_cancellation`. Update imports, named fields and
+calls; no compatibility alias is retained. The cancellation/deadline behavior is
+unchanged.
 Typed interruption variants named `Control` that wrap broader stop reasons,
 and existing serialized control codes, keep their own meaning.
 
-The installed CLI maps `--time-limit SECONDS` to this `Cancellation`.
-The duration is a nonnegative whole number of seconds, measured from completion
-of input loading. Zero requests an immediate stop; omission sets no deadline.
+The installed CLI maps `--time-limit DURATION` to this `Cancellation`.
+The duration accepts nonnegative whole seconds, or a whole number with `s`, `m`
+or `h`, measured from completion of input loading. Zero requests an immediate
+stop; omission sets no deadline.
 `--stats` reports the requested process duration. A deadline during search leaves
 its coverage incomplete. A later deadline during publication preserves already
 established coverage. Either stop exits with code 3, in both human and JSON output.

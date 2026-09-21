@@ -226,15 +226,15 @@ status. A newer source remains unqualified until its own checks complete.
 
 | Population | Covered / instrumented lines | Coverage |
 | --- | ---: | ---: |
-| Workspace, all features, portable tests plus 59 physical Metal tests | 82,360 / 87,326 | 94.31% |
-| CPU-only solver library and CLI, separate instrumentation | 8,353 / 9,049 | 92.31% |
+| Workspace, all features, portable tests plus 59 physical Metal tests | 83,603 / 88,703 | 94.25% |
+| CPU-only solver library and CLI, separate instrumentation | 8,725 / 9,479 | 92.05% |
 
 This snapshot was qualified on 21 September 2026 UTC for version `0.1.4`, compiled
-source [`931a8805`](https://github.com/GregoryGelfond/zetesis/tree/931a8805ddc0f8af90a99052898de4c13f44d329),
+source [`9bb73da9`](https://github.com/GregoryGelfond/zetesis/tree/9bb73da998f0b77cdc5e7db497783ac3fdd21aba),
 using Rust 1.97.1, cargo-llvm-cov 0.8.7 and LLVM 22.1.6 on macOS 26.6.2 with
 Apple M4 Pro Metal. Later updates to this description and the README badge do
 not change that measured source or its compiled documentation and data inputs.
-The [coverage receipt](observations/coverage-931a8805.json) retains exact line
+The [coverage receipt](observations/coverage-9bb73da9.json) retains exact line
 counts, profile populations and report hashes. Performance measurements retain
 their own executable identities: the [worker comparison](worker-scaling.md)
 precedes the CLI changes in this qualification. The
@@ -242,20 +242,20 @@ precedes the CLI changes in this qualification. The
 current interface and correctness checks.
 
 Both populations passed their independent 91% floor. The workspace contains
-2,406 profiles: 2,390 portable profiles plus 16 physical profiles from 59 tests
-in 16 groups. The 321-profile CPU-only population remains separate.
+2,413 profiles: 2,397 portable profiles plus 16 physical profiles from 59 tests
+in 16 groups. The 326-profile CPU-only population remains separate.
 Before physical profile import, the portable-only workspace report already
-passed its floor at 79,791 of 87,326 lines (91.3714%). The separate ordinary
+passed its floor at 81,029 of 88,703 lines (91.3487%). The separate ordinary
 `zetesis test backend --device metal` command passed its three complete-family
 checks with actual device work. That release command is not instrumented;
 its execution and the 16 test-listing profiles contribute no coverage.
 Compiled-profile session checks belong to the 59 canonical physical tests.
 
 The portable, external-oracle and manual/example gates passed for this source.
-The unchanged Lean library retains its Lean 4.33.1 build, axiom audit and
-source-record checks, covering 139 semantic modules and 1,291 audited theorems.
+The Lean library retains its Lean 4.33.1 build, axiom audit and
+source-record checks, covering 141 semantic modules and 1,306 audited theorems.
 Their source hashes are recorded in the
-[verification record](https://github.com/GregoryGelfond/zetesis/blob/931a8805ddc0f8af90a99052898de4c13f44d329/proofs/verification.json).
+[verification record](https://github.com/GregoryGelfond/zetesis/blob/9bb73da998f0b77cdc5e7db497783ac3fdd21aba/proofs/verification.json).
 These counts describe the checked
 mathematical library, not verification of the Rust grounder, masks or GPU
 execution. Historical corpus and performance results retain their original
