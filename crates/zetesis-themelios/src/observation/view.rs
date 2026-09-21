@@ -84,6 +84,33 @@ impl ObservationProgram {
     }
 }
 impl ModelView<'_> {
+    /// Spell selected atoms and the already evaluated term channel as one line.
+    /// Equal symbols in the two channels remain repeated. The full model is not
+    /// changed, and observation expressions are not evaluated again.
+    ///
+    /// Rendering resumes the view's observation work counters under `limits`;
+    /// the returned statistics include evaluation and this spelling pass. Space
+    /// is one bounded UTF-8 line plus the existing explicit symbol cursor.
+    ///
+    /// # Errors
+    /// Returns the same spelling, resource and control refusals as
+    /// [`ObservationProgram::render`], without exposing a partial line.
+    pub fn render(&self, limits: Limits, control: &Control) -> Result<super::Rendered, Error> {
+        super::render::render_evaluated(
+            self.model,
+            self.selection,
+            self.shown_terms(),
+            super::evaluate::Work {
+                limits,
+                construction: ConstructionLimits::default(),
+                control,
+                statistics: self.terms.statistics(),
+                local_bytes: 0,
+                location: None,
+            },
+        )
+    }
+
     /// Complete semantic identity, unaffected by display directives.
     #[must_use]
     pub const fn model(&self) -> &Model {

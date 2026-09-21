@@ -2,17 +2,40 @@
 use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 use super::super::{Capture, Error, Fault, Phase, capture};
-use super::{Decision, Plan, Producer, Report, Request, Sample, Slot, Suite, Workload, outcome};
+use super::{
+    Decision, NativeInvocation, Plan, Producer, Report, Request, Sample, Slot, Suite, Workload,
+    outcome,
+};
 use crate::selected::{identity, publication};
 use crate::{answers, examples, process};
 use serde_json::Value;
 
+/// Scheduling limits shared by metadata, timed and supervised memory children.
+#[derive(Clone, Copy)]
+struct Schedule<'a> {
+    deadline: Instant,
+    cancelled: &'a AtomicBool,
+}
+impl Schedule<'_> {
+    fn stopped(self, report: &mut Report) -> bool {
+        if self.cancelled.load(Ordering::Relaxed) {
+            record_cancellation(report);
+            true
+        } else {
+            !report.unresolved_children.is_empty()
+        }
+    }
+}
+
 pub(super) fn campaign(
     request: &Request<'_>,
     workloads: Option<&[Workload]>,
+    invocation: NativeInvocation,
+    cancelled: &AtomicBool,
 ) -> Result<Report, Error> {
     if !cfg!(any(target_os = "linux", target_os = "macos")) {
         return Err(Error::Configuration(
@@ -88,7 +111,17 @@ pub(super) fn campaign(
     match materialize(&corpus, &sources, &cases, directory.path(), request) {
         Ok(sealed) => {
             report.before.extend(sealed);
-            execute(request, &cases, directory.path(), deadline, &mut report)?;
+            execute(
+                request,
+                &cases,
+                directory.path(),
+                Schedule {
+                    deadline,
+                    cancelled,
+                },
+                &mut report,
+                invocation,
+            )?;
         }
         Err(error) => {
             report.faults.push(Fault::InputWrite(error.to_string()));
@@ -311,22 +344,17 @@ fn fill_unattempted(report: &mut Report) -> Result<(), Error> {
 fn capture_metadata(
     request: &Request<'_>,
     directory: &Path,
-    deadline: Instant,
+    schedule: Schedule<'_>,
     report: &mut Report,
+    invocation: NativeInvocation,
 ) -> bool {
-    for (executable, argument) in [
-        (request.native, "--version"),
-        (request.native, "--help-all"),
-        (request.reference, "--version"),
+    for (executable, arguments) in [
+        (request.native, vec!["--version".into()]),
+        (request.native, invocation.help_arguments()),
+        (request.reference, vec!["--version".into()]),
     ] {
-        let Some(observed) = invoke(
-            executable,
-            vec![argument.into()],
-            false,
-            directory,
-            deadline,
-            report,
-        ) else {
+        let Some(observed) = invoke(executable, arguments, false, directory, schedule, report)
+        else {
             return false;
         };
         let completed = observed.complete(false);
@@ -342,10 +370,11 @@ fn execute(
     request: &Request<'_>,
     cases: &[Prepared<'_>],
     directory: &Path,
-    deadline: Instant,
+    schedule: Schedule<'_>,
     report: &mut Report,
+    invocation: NativeInvocation,
 ) -> Result<(), Error> {
-    if !capture_metadata(request, directory, deadline, report) {
+    if !capture_metadata(request, directory, schedule, report, invocation) {
         fill_unattempted(report)?;
         return Ok(());
     }
@@ -355,6 +384,7 @@ fn execute(
     let mut blocked: Vec<Option<usize>> = vec![None; cases.len() * width];
     let mut stopped = false;
     for slot in request.plan.slots(cases.len())? {
+        stopped |= schedule.stopped(report);
         let cell = slot.case * width + slot.producer.index();
         let skipped = if stopped {
             Some((None, "campaign scheduling stopped; no replacement launches"))
@@ -382,6 +412,7 @@ fn execute(
             &case_directory,
             selected.input.path(),
             slot.producer,
+            invocation,
         );
         let record = case_directory.join("child-rss.json");
         let launched = launch(
@@ -390,7 +421,7 @@ fn execute(
             (executable, arguments),
             &record,
             &case_directory,
-            deadline,
+            schedule,
             report,
         );
         let Some(capture) = launched else {
@@ -413,7 +444,10 @@ fn execute(
             observation: None,
             memory: None,
         };
-        if slot.phase == Phase::Memory && !measured(&mut sample, &record, report) {
+        if slot.phase == Phase::Memory
+            && !cancelled_capture(sample.capture.as_ref().unwrap())
+            && !measured(&mut sample, &record, report)
+        {
             continue;
         }
         let contract = selected.input.contract();
@@ -445,6 +479,7 @@ fn arguments<'a>(
     directory: &Path,
     path: &str,
     producer: Producer,
+    invocation: NativeInvocation,
 ) -> (&'a Path, Vec<OsString>) {
     let (executable, mut arguments): (_, Vec<OsString>) = match producer {
         Producer::Reference => (
@@ -461,8 +496,8 @@ fn arguments<'a>(
             let profile = request.plan.profiles[profile];
             (
                 request.native,
-                profile
-                    .arguments()
+                invocation
+                    .arguments(&profile)
                     .into_iter()
                     .chain(["--color".into(), "never".into()])
                     .chain(["--json".into(), "--stats".into()])
@@ -483,6 +518,9 @@ fn qualify(
         .capture
         .as_ref()
         .expect("qualification follows a launched capture");
+    if cancelled_capture(capture) {
+        return Err((Decision::Cancelled, "campaign cancelled".into()));
+    }
     if capture.stop() == Some(process::Stop::Deadline) {
         return Err((Decision::Timeout, "process deadline".into()));
     }
@@ -598,11 +636,11 @@ fn launch(
     (executable, arguments): (&Path, Vec<OsString>),
     record: &Path,
     directory: &Path,
-    deadline: Instant,
+    schedule: Schedule<'_>,
     report: &mut Report,
 ) -> Option<Capture> {
     if phase != Phase::Memory {
-        return invoke(executable, arguments, false, directory, deadline, report);
+        return invoke(executable, arguments, false, directory, schedule, report);
     }
     let helper = request
         .helper
@@ -613,7 +651,7 @@ fn launch(
         executable.as_os_str().to_owned(),
     ];
     supervised.extend(arguments);
-    invoke(helper, supervised, true, directory, deadline, report)
+    invoke(helper, supervised, true, directory, schedule, report)
 }
 
 /// Read a memory round's resource record into its sample. A missing or
@@ -647,13 +685,13 @@ fn invoke(
     arguments: Vec<OsString>,
     supervised: bool,
     directory: &Path,
-    deadline: Instant,
+    schedule: Schedule<'_>,
     report: &mut Report,
 ) -> Option<Capture> {
-    if !report.unresolved_children.is_empty() {
+    if schedule.stopped(report) {
         return None;
     }
-    let time = deadline.saturating_duration_since(Instant::now());
+    let time = schedule.deadline.saturating_duration_since(Instant::now());
     if time.is_zero() {
         report.faults.push(Fault::Deadline);
         return None;
@@ -672,10 +710,25 @@ fn invoke(
         ..report.limits.process
     };
     let (capture, fault) = if supervised {
-        capture::supervised(executable, arguments, directory, limits)
+        capture::supervised_with_cancellation(
+            executable,
+            arguments,
+            directory,
+            limits,
+            schedule.cancelled,
+        )
     } else {
-        capture::invoke(executable, arguments, directory, limits)
+        capture::invoke_with_cancellation(
+            executable,
+            arguments,
+            directory,
+            limits,
+            schedule.cancelled,
+        )
     };
+    if cancelled_capture(&capture) {
+        record_cancellation(report);
+    }
     report.total_capture_bytes += capture.stdout().len() + capture.stderr().len();
     if let Some(fault) = fault {
         report.faults.push(Fault::ChildCleanup(fault));
@@ -684,6 +737,23 @@ fn invoke(
         report.unresolved_children.push(id);
     }
     Some(capture)
+}
+
+fn cancelled_capture(capture: &Capture) -> bool {
+    capture.stop() == Some(process::Stop::Cancelled)
+        || capture
+            .failure()
+            .is_some_and(|failure| failure.kind() == crate::selected::InvocationFault::Cancelled)
+}
+
+fn record_cancellation(report: &mut Report) {
+    if !report
+        .faults
+        .iter()
+        .any(|fault| matches!(fault, Fault::Cancelled))
+    {
+        report.faults.push(Fault::Cancelled);
+    }
 }
 
 fn normalization_limits(request: &Request<'_>) -> Value {

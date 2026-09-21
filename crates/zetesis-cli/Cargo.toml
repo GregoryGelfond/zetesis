@@ -7,6 +7,9 @@ license.workspace = true
 publish = false
 
 [dependencies]
+zetesis-presentation = { workspace = true, features = ["clap"] }
+zetesis-validation.workspace = true
+zetesis-experiments = { workspace = true, optional = true }
 zetesis-solve.workspace = true
 zetesis-telemetry.workspace = true
 rayon.workspace = true
@@ -20,8 +23,10 @@ zetesis-wgpu = { workspace = true, optional = true }
 clap.workspace = true
 serde_json = "=1.0.151"
 
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
+signal-hook = { version = "=0.4.4", default-features = false }
+
 [dev-dependencies]
-zetesis-validation = { path = "../zetesis-validation" }
 tempfile = "3"
 
 [lints]
@@ -29,8 +34,12 @@ workspace = true
 
 [features]
 default = ["gpu"]
-gpu = ["dep:zetesis-wgpu", "zetesis-solve/gpu"]
+gpu = ["dep:zetesis-wgpu", "zetesis-solve/gpu", "dep:zetesis-experiments"]
 
 [[bin]]
 name = "zetesis"
 path = "src/main.rs"
+
+[[example]]
+name = "book-answer-renderer"
+path = "../../docs/book/examples/answer-renderer.rs"

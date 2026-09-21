@@ -20,6 +20,8 @@ pub enum Decision {
     Incomplete,
     /// Authored process timeout expired.
     Timeout,
+    /// The caller cancelled this invocation; its partial capture remains retained.
+    Cancelled,
     /// Authored capture ceiling was reached.
     CaptureLimit,
     /// Spawn/exit/capture/cleanup failed; a GPU error is not assumed to mean absence.

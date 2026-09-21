@@ -148,7 +148,8 @@ fn help_and_version_are_directly_runnable_without_input() {
         assert!(output.contains("zetesis"));
         if argument == "--help" {
             assert!(output.contains("devices"));
-            assert!(output.contains("[default: auto]"));
+            assert!(output.contains("solve"));
+            assert!(!output.contains("--max-search-work"));
         }
     }
 }

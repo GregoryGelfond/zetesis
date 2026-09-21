@@ -700,3 +700,61 @@ fn matrix_startup_identifies_the_evidence_destination() {
         )
     );
 }
+
+#[test]
+fn summary_keeps_refusal_out_of_timed_populations() {
+    let fixture = Fixture::new();
+    let report =
+        matrix::run_workloads(&fixture.request(Suite::Queens), &[variant(&fixture, 10)]).unwrap();
+    let summary = report.summary();
+    assert!(summary.accounted);
+    assert!(!summary.passed);
+    assert_eq!(summary.cells.len(), 2);
+    let native = summary
+        .cells
+        .iter()
+        .find(|cell| cell.producer == (Producer::Native { profile: 0 }))
+        .unwrap();
+    assert!(native.timing.is_none());
+    assert!(
+        native
+            .decisions
+            .iter()
+            .any(|count| count.decision == Decision::Refused && count.positions == 1)
+    );
+    assert!(
+        native
+            .decisions
+            .iter()
+            .any(|count| count.decision == Decision::NotAttempted && count.positions == 1)
+    );
+    let reference = summary
+        .cells
+        .iter()
+        .find(|cell| cell.producer == Producer::Reference)
+        .unwrap();
+    let elapsed = report
+        .samples()
+        .iter()
+        .find(|sample| {
+            sample.slot().producer == Producer::Reference && sample.slot().phase == Phase::Timed
+        })
+        .unwrap()
+        .capture()
+        .unwrap()
+        .elapsed_ns()
+        .unwrap();
+    assert_eq!(
+        u128::from(reference.timing.as_ref().unwrap().median_ns),
+        elapsed
+    );
+    assert_eq!(
+        summary
+            .cells
+            .iter()
+            .flat_map(|cell| &cell.decisions)
+            .map(|count| count.positions)
+            .sum::<usize>(),
+        report.samples().len()
+    );
+}

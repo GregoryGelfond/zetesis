@@ -132,7 +132,7 @@ fn duration<S: Serializer>(value: &Duration, serializer: S) -> Result<S::Ok, S::
 #[derive(Clone, Debug, Args)]
 pub struct Options {
     /// Require actual Metal/Vulkan or explicitly run the two CPU routes.
-    #[arg(long, value_enum, default_value_t)]
+    #[arg(long = "device", alias = "backend", value_enum, default_value_t)]
     pub backend: Backend,
     /// Complete tuple counts; zero exercises genuine empty extrema.
     #[arg(long, value_delimiter = ',', default_value = "0,64,4096")]
@@ -155,7 +155,7 @@ pub struct Options {
     #[arg(long, default_value = "12")]
     pub repetitions: NonZeroUsize,
     /// Independently owned Rayon workers.
-    #[arg(long, default_value = "4")]
+    #[arg(long = "threads", alias = "workers", default_value = "4")]
     pub workers: NonZeroUsize,
     /// Independent work ceilings for acquisition, reference, CPU and device work.
     #[arg(long, default_value_t = 100_000_000)]

@@ -24,8 +24,10 @@ impl Report {
         Ok(json!({
             "schema_version": 1,
             "child_cleanup": self.cleanup,
+            "cancelled": self.cancelled,
             "mode": if self.request.reference_only { "reference_only" } else { "native_full_target" },
             "native_oracle": self.request.native_oracle.label(),
+            "native_invocation": self.invocation,
             "native_backend": self.request.native_backend.label(),
             "native_batch_size": self.request.native_batch_size.get(),
             "native_completion_workers": self.request.native_completion_workers.get(),
@@ -47,9 +49,10 @@ impl Report {
             "corpus_root": serde_json::to_value(&self.corpus.root)?,
             "corpus_view": self.corpus.view,
             "case_count": self.cases.len(),
+            "required_case_count": self.required_cases(),
             "status_counts": counts,
             "limits": { "timeout_ms": self.request.timeout_ms, "combined_output_bytes": self.request.max_output_bytes },
-            "comparison_scope": "Complete final-optimal displays with both symbol and model multiplicities preserved, raw final model counts, cost vectors, and supported original contracts. Exactly the first final-cost optN incumbent is removed and its exact displayed-symbol multiset must recur. Native optimized SAT requires per-model Optimization: vectors plus exhausted coverage. Hidden atom identities are not reconstructed from display. Reference-only success never establishes native solver support.",
+            "comparison_scope": "Complete final-optimal displays with both symbol and model multiplicities preserved, raw final model counts, cost vectors, and supported original contracts. Exactly the first final-cost optN incumbent is removed and its exact displayed-symbol multiset must recur. Native reports require consistent per-model costs plus exhausted coverage and publication. Hidden atom identities are not reconstructed from displays. Reference-only success never establishes native solver support.",
             "cases": self.cases.iter().map(CaseResult::to_json).collect::<Result<Vec<_>, _>>()?,
         }))
     }

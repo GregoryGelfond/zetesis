@@ -32,8 +32,8 @@ sibling rustdoc tree. Source links lead to the maintained repository paths.
 
 ## Check the Rust examples
 
-The session, resource-sharing, measurement, source-preparation, objective-selection,
-reduct and derived-workload examples are
+The getting-started, session, answer-renderer, resource-sharing, measurement,
+source-preparation, objective-selection, reduct and derived-workload examples are
 included from Rust files under `docs/book/examples`; the code displayed in the
 chapters is the code tested by mdBook. Build their dependencies without requiring
 a physical GPU through the maintained command:
@@ -77,9 +77,11 @@ To run one example as an ordinary consumer from the checkout root:
 ```sh
 cargo run --locked -p zetesis-solve --no-default-features --example book-session
 cargo run --locked -p zetesis-solve --no-default-features --example book-source
+cargo run --locked -p zetesis-solve --no-default-features --example book-getting-started
 cargo run --locked -p zetesis-solve --no-default-features --example book-selection
 cargo run --locked -p zetesis-solve --no-default-features --example book-measurements
 cargo run --locked -p zetesis-themelios --example book-domain-grounding
+cargo run --locked -p zetesis-cli --no-default-features --example book-answer-renderer
 ```
 
 On a machine with an accessible physical GPU, run the shared-resource example:

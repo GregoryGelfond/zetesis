@@ -2,7 +2,7 @@
 
 use std::io::Write;
 
-use crate::RunError;
+use crate::{ColorMode, RunError};
 
 /// Print compiled GPU APIs and detected adapter capabilities without reading
 /// source, enumerating candidates, or creating a compute device. Advertised
@@ -12,11 +12,19 @@ use crate::RunError;
 /// Returns [`RunError`] for output or GPU discovery failures. A CPU-only build
 /// reports that GPU support is absent and succeeds without attempting discovery.
 pub fn devices(output: &mut impl Write) -> Result<(), RunError> {
-    writeln!(
+    devices_with_color(output, ColorMode::Never)
+}
+
+pub(crate) fn devices_with_color(
+    output: &mut impl Write,
+    color: ColorMode,
+) -> Result<(), RunError> {
+    color.metadata(
         output,
-        "CPU: available (lazy source joins and eager static closure scans)"
+        "CPU",
+        format_args!("available (lazy source joins and eager static closure scans)"),
     )?;
-    inventory(output)?;
+    inventory(output, color)?;
     writeln!(
         output,
         "Auto backend: CPU until a measured GPU crossover is established. Explicit GPU backends support eager and admitted lazy grounding."
@@ -29,21 +37,26 @@ pub fn devices(output: &mut impl Write) -> Result<(), RunError> {
 }
 
 #[cfg(not(feature = "gpu"))]
-fn inventory(output: &mut impl Write) -> Result<(), RunError> {
-    writeln!(
+fn inventory(output: &mut impl Write, color: ColorMode) -> Result<(), RunError> {
+    color.metadata(
         output,
-        "GPU: support not compiled; install the default build or enable --features gpu"
+        "GPU",
+        format_args!("support not compiled; install the default build or enable --features gpu"),
     )?;
     Ok(())
 }
 
 #[cfg(feature = "gpu")]
-fn inventory(output: &mut impl Write) -> Result<(), RunError> {
+fn inventory(output: &mut impl Write, color: ColorMode) -> Result<(), RunError> {
     let compiled = zetesis_wgpu::compiled_backends();
-    writeln!(output, "Compiled GPU APIs: {compiled:?}")?;
+    color.metadata(output, "Compiled GPU APIs", format_args!("{compiled:?}"))?;
     let adapters = zetesis_wgpu::discover_adapters().map_err(RunError::Gpu)?;
     if adapters.is_empty() {
-        writeln!(output, "GPU: no adapters detected; auto uses CPU")?;
+        color.metadata(
+            output,
+            "GPU",
+            format_args!("no adapters detected; auto uses CPU"),
+        )?;
     }
     for adapter in adapters {
         writeln!(

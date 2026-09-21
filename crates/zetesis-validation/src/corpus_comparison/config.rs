@@ -4,6 +4,17 @@ use super::NativeOracle;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
+/// Native command protocol; the default preserves historical executables.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NativeInvocation {
+    /// File-first command and checked human answer records.
+    #[default]
+    Legacy,
+    /// Explicit `solve` command and checked schema-1/schema-2 JSON records.
+    Solve,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 /// Requested native hardware policy; observed execution is checked separately.
 pub enum NativeBackend {

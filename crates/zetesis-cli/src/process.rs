@@ -1,43 +1,169 @@
 use crate::presentation::{Diagnostics, Streams};
-use crate::{Command, Completion, Options, PublicationOutcome, RunError, RunFailure, devices};
+use crate::{ColorMode, Completion, Invocation, Options, PublicationOutcome, RunError, RunFailure};
 use clap::Parser;
 use std::io::{self, BufWriter, IsTerminal, Read, Write};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 use zetesis_themelios::{BundleLimits, SourceBundle};
 
-/// Process adapter. Exit 0 means a completed request, 2 an input/backend/output
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+mod signals;
+
+/// Process adapter. Exit 0 means a completed request; test/bench use 1 for a
+/// completed check or campaign with non-passing evidence. Exit 2 is an input/backend/output
 /// error, and 3 interrupted search or publication. Satisfiability and coverage are printed
 /// independently; this is not clingo's numeric exit-code protocol.
 /// Standard output is explicitly flushed before returning. A flush failure is
 /// an output error, independently of any established semantic outcome.
 #[must_use]
 pub fn entry() -> ExitCode {
-    let mut options = Options::parse();
+    if std::env::args_os().nth(1).as_deref() == Some(std::ffi::OsStr::new("__measure-child")) {
+        return measure_child();
+    }
+    let mut invocation = match Invocation::try_parse_from(std::env::args_os()) {
+        Ok(invocation) => invocation,
+        Err(error) => {
+            let status = if error.use_stderr() {
+                ExitCode::from(2)
+            } else {
+                ExitCode::SUCCESS
+            };
+            return if error.print().is_ok() {
+                status
+            } else {
+                ExitCode::from(2)
+            };
+        }
+    };
     let output = io::stdout().lock();
     let output_terminal = output.is_terminal();
     let no_color = std::env::var_os("NO_COLOR");
     let term = std::env::var_os("TERM");
     let disabled = color_disabled(no_color.as_deref(), term.as_deref());
     let diagnostics = io::stderr().lock();
+    let (mode, json) = match &invocation {
+        Invocation::Solve(options) => (options.color, options.json),
+        Invocation::Devices => (ColorMode::Auto, false),
+        Invocation::Test(command) => (command.color(), command.json()),
+        Invocation::Bench(command) => (command.color(), command.json()),
+    };
     let colors = Streams::resolve(
-        options.color.human(options.json),
+        mode.human(json),
         output_terminal,
         diagnostics.is_terminal(),
         disabled,
     );
-    options.color = colors.output;
+    let width = terminal_width();
+    let layout = zetesis_presentation::Layout::new(width, colors.output);
     let mut output = buffered_output(output, output_terminal);
-    let mut diagnostics = Diagnostics::new(diagnostics, colors.diagnostics);
-    let result = if options.command == Some(Command::Devices) {
-        devices(&mut output)
+    let mut diagnostics = Diagnostics::new(diagnostics, colors.diagnostics).with_width(width);
+    let cancelled = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    let _signals = match signals::Signals::install(&invocation, &cancelled) {
+        Ok(signals) => signals,
+        Err(error) => {
+            let _ = diagnostics.diagnostic(&error);
+            return ExitCode::from(2);
+        }
+    };
+    let result = match &mut invocation {
+        Invocation::Solve(options) => {
+            options.color = colors.output;
+            run_input(options, &mut output, &mut diagnostics)
+                .map(|outcome| publication_status(&outcome))
+        }
+        Invocation::Devices => crate::devices::devices_with_color(&mut output, colors.output)
             .map(|()| ExitCode::SUCCESS)
-            .map_err(RunFailure::from)
-    } else {
-        run_input(&options, &mut output, &mut diagnostics)
-            .map(|outcome| publication_status(&outcome))
+            .map_err(RunFailure::from),
+        Invocation::Test(command) => {
+            let result = crate::testing::execute_with_cancellation(
+                command,
+                layout,
+                &mut output,
+                &mut diagnostics,
+                cancelled.as_ref(),
+            );
+            Ok(command_status(
+                result.map(|passed| passed == crate::testing::Completion::Passed),
+                &mut diagnostics,
+            ))
+        }
+        Invocation::Bench(command) => {
+            let result = crate::benchmark::execute_with_cancellation(
+                command,
+                layout,
+                &mut output,
+                &mut diagnostics,
+                cancelled.as_ref(),
+            );
+            Ok(command_status(
+                result.map(|passed| passed == crate::benchmark::Completion::Passed),
+                &mut diagnostics,
+            ))
+        }
     };
     finish_output(output, result, &mut diagnostics)
+}
+
+fn command_status<E: std::fmt::Display>(
+    result: Result<bool, E>,
+    diagnostics: &mut Diagnostics<impl Write>,
+) -> ExitCode {
+    match result {
+        Ok(true) => ExitCode::SUCCESS,
+        Ok(false) => ExitCode::FAILURE,
+        Err(error) => {
+            let _ = diagnostics.diagnostic(&error);
+            ExitCode::from(2)
+        }
+    }
+}
+
+// A terminal-provided width is presentation evidence only; cap it so a hostile
+// environment cannot request arbitrarily wide padding. Generic views use 80.
+fn terminal_width() -> std::num::NonZeroUsize {
+    std::env::var("COLUMNS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|width| *width <= 512)
+        .and_then(std::num::NonZeroUsize::new)
+        .unwrap_or(std::num::NonZeroUsize::new(80).unwrap())
+}
+
+#[derive(Parser)]
+struct ChildOptions {
+    record: std::path::PathBuf,
+    #[arg(required = true, trailing_var_arg = true, allow_hyphen_values = true)]
+    command: Vec<std::ffi::OsString>,
+}
+
+fn measure_child() -> ExitCode {
+    let options = match ChildOptions::try_parse_from(std::env::args_os().skip(1)) {
+        Ok(options) => options,
+        Err(error) => {
+            let _ = error.print();
+            return ExitCode::from(2);
+        }
+    };
+    let result = (|| -> Result<(), Box<dyn std::error::Error>> {
+        let (executable, arguments) = options
+            .command
+            .split_first()
+            .ok_or("missing measured executable")?;
+        zetesis_validation::process::memory::measure_to_file(
+            zetesis_validation::process::Invocation {
+                executable: std::path::Path::new(executable),
+                arguments,
+                directory: &std::env::current_dir()?,
+            },
+            &options.record,
+        )?;
+        Ok(())
+    })();
+    command_status(
+        result.map(|()| true),
+        &mut Diagnostics::new(io::stderr().lock(), ColorMode::Never),
+    )
 }
 
 fn publication_status(outcome: &PublicationOutcome) -> ExitCode {

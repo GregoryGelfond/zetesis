@@ -7,6 +7,9 @@
 //! waits for the helper. Neither uses another reaper or cumulative runner usage.
 //! As with ordinary capture, this does not certify escaped descendant cleanup.
 
+mod record;
+pub use record::{RecordError, measure_to_file};
+
 use std::fmt;
 use std::io;
 

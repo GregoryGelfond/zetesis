@@ -83,14 +83,14 @@ fn replay_human_footer(stopped: &crate::StoppedPublication) {
 
     let progress = stopped_progress(stopped);
     let mut reference = Vec::new();
-    crate::driver::finish(&mut reference, &progress, false, crate::ColorMode::Never).unwrap();
+    crate::view::human::finish(&mut reference, &progress, crate::ColorMode::Never).unwrap();
     let text = std::str::from_utf8(&reference).unwrap();
     assert!(text.starts_with("INCOMPLETE:"));
     assert!(text.contains("Publication: incomplete; complete model records: 1\n"));
     assert!(text.ends_with("Optimum proved; delivery incomplete\n"));
     for maximum in 0..reference.len() {
         let mut output = BoundedWriter::new(maximum);
-        let error = crate::driver::finish(&mut output, &progress, false, crate::ColorMode::Never)
+        let error = crate::view::human::finish(&mut output, &progress, crate::ColorMode::Never)
             .unwrap_err();
         assert!(
             matches!(error, RunError::Output(ref cause) if cause.kind() == io::ErrorKind::BrokenPipe)
@@ -103,7 +103,7 @@ fn replay_human_footer(stopped: &crate::StoppedPublication) {
         );
     }
     let mut output = BoundedWriter::new(reference.len());
-    crate::driver::finish(&mut output, &progress, false, crate::ColorMode::Never).unwrap();
+    crate::view::human::finish(&mut output, &progress, crate::ColorMode::Never).unwrap();
     assert_eq!(output.bytes(), reference);
 }
 
@@ -120,7 +120,8 @@ fn replay_json_footer(stopped: &crate::StoppedPublication, original: &[u8]) {
     for maximum in 0..footer.len() {
         options.max_json_record_bytes = maximum;
         let mut output = Vec::new();
-        let mut document = crate::output::Document::new(&mut output, true).unwrap();
+        let mut document =
+            crate::output::document_fixture::Document::new(&mut output, true).unwrap();
         // The original complete first model is replayed; no family or record
         // acknowledgement is invented to exercise the footer in isolation.
         document
@@ -148,7 +149,7 @@ fn replay_json_footer(stopped: &crate::StoppedPublication, original: &[u8]) {
     }
     options.max_json_record_bytes = footer.len();
     let mut output = Vec::new();
-    let mut document = crate::output::Document::new(&mut output, true).unwrap();
+    let mut document = crate::output::document_fixture::Document::new(&mut output, true).unwrap();
     document
         .write_all(&original[PREFIX.len()..boundary])
         .unwrap();
@@ -274,13 +275,13 @@ fn publication_stop_before_first_record_keeps_unclassified_search() {
         let mut display = crate::display::Display {
             selection: metadata.output(),
             observations: metadata.observations(),
-            options: &options,
+            limits: crate::PublicationConfig::from(&options).observations,
             control: &control,
-            atoms: zetesis_themelios::observation::json::AtomTable::new(options.max_atoms),
         };
         let mut output = Vec::new();
+        let mut renderer = crate::view::builtin::Builtin::new(&mut output, &options);
         let ControlFlow::Break(stop) = display
-            .write(&mut output, 1, answer.interpretation(), answer.score())
+            .write(&mut renderer, 1, answer.interpretation(), answer.score())
             .unwrap()
         else {
             panic!("stopped display")
@@ -294,10 +295,10 @@ fn publication_stop_before_first_record_keeps_unclassified_search() {
         assert!(output.is_empty());
         progress.stop = Some(stop);
         let phases = super::Recorder::new(false);
-        let mut document = crate::output::Document::new(&mut output, json).unwrap();
-        let progress =
-            super::complete(&mut document, &mut io::sink(), progress, &phases, &options).unwrap();
-        let outcome = document.finish(Ok(progress), &options).unwrap();
+        let mut renderer = crate::view::builtin::Builtin::new(&mut output, &options);
+        crate::AnswerRenderer::begin(&mut renderer).unwrap();
+        let progress = super::complete(&mut renderer, &mut io::sink(), progress, &phases).unwrap();
+        let outcome = super::finalize(&mut renderer, Ok(progress)).unwrap();
         assert!(matches!(outcome, PublicationOutcome::Stopped(_)));
         assert_eq!(outcome.semantic().completion(), None);
         assert_eq!(outcome.semantic().verified_models(), 1);

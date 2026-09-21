@@ -4,6 +4,7 @@ use std::io::{self, Read};
 use std::os::fd::AsFd;
 use std::os::unix::process::CommandExt;
 use std::process::{ChildStderr, ChildStdout, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -24,6 +25,7 @@ pub(super) fn invoke(
     started: Instant,
     deadline: Instant,
     supervised: bool,
+    cancelled: &AtomicBool,
 ) -> Result<Outcome, StartError> {
     let mut child = Command::new(invocation.executable)
         .args(invocation.arguments)
@@ -62,6 +64,7 @@ pub(super) fn invoke(
             &mut capture,
             limits.max_output_bytes,
             deadline,
+            cancelled,
         );
     }
     // No drain thread can outlive this call. Once stopped, keep the exact prefix
@@ -117,12 +120,17 @@ fn poll(
     capture: &mut Capture,
     output_limit: usize,
     deadline: Instant,
+    cancelled: &AtomicBool,
 ) {
     let mut remaining = output_limit;
     let mut stdout_open = true;
     let mut stderr_open = true;
     let mut stderr_first = false;
     loop {
+        if cancelled.load(Ordering::Relaxed) {
+            capture.stop = Stop::Cancelled;
+            break;
+        }
         if Instant::now() >= deadline {
             capture.stop = Stop::Deadline;
             break;

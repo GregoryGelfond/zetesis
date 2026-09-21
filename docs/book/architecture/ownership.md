@@ -351,7 +351,7 @@ selection and prefix commits; the quota is shared across the whole batch.
 Authored payload bounds exclude any costs their API says they exclude, such as
 allocator metadata or driver allocations. They are not process RSS. Dropping a
 device-buffer handle does not measure physical memory retirement. The
-[validation reference](../reference/validation.md#performance-evidence) reports
+[measurement reference](../reference/measurement-protocols.md#performance-evidence) reports
 elapsed time, authored storage and measured peak memory as separate evidence.
 
 ## Correctness boundaries

@@ -80,7 +80,7 @@ impl Configuration {
 #[derive(Clone, Debug, Args)]
 pub struct Options {
     /// Require Metal/Vulkan, or explicitly select CPU-only measurement.
-    #[arg(long, value_enum, default_value_t)]
+    #[arg(long = "device", alias = "backend", value_enum, default_value_t)]
     pub backend: Backend,
     /// Values per positive predicate; the union join can contain width cubed rows.
     #[arg(long, value_delimiter = ',', default_value = "4,8")]
@@ -103,7 +103,7 @@ pub struct Options {
     #[arg(long, default_value = "12")]
     pub repetitions: NonZeroUsize,
     /// Threads in the independently owned scalar-checking Rayon pool.
-    #[arg(long, default_value = "4")]
+    #[arg(long = "threads", alias = "workers", default_value = "4")]
     pub workers: NonZeroUsize,
     /// Maximum source instances in one portable/GPU consequence chunk.
     #[arg(long, default_value = "256")]

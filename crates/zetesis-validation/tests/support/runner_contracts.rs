@@ -20,6 +20,9 @@ const FIXTURE_LIVENESS: Duration = Duration::from_secs(10);
 #[path = "runner_stage_contracts.rs"]
 mod stage_contracts;
 
+#[path = "runner_cancellation.rs"]
+mod cancellation;
+
 fn reference() -> String {
     json!({
         "Solver": "synthetic protocol fixture",
@@ -173,7 +176,14 @@ fn options(directory: &Path) -> FixtureOptions {
 
 fn check(options: &Options, loaded: &Loaded, expected: &str) -> Value {
     let mut pending = Vec::new();
-    let result = super::check_case(options, loaded, &loaded.manifest.cases[0], &mut pending);
+    let result = super::check_case(
+        options,
+        loaded,
+        &loaded.manifest.cases[0],
+        super::NativeInvocation::Legacy,
+        &mut pending,
+        &std::sync::atomic::AtomicBool::new(false),
+    );
     let result = result.to_json().unwrap();
     assert!(pending.is_empty());
     assert_eq!(result["status"], expected, "{result:#}");
@@ -1107,7 +1117,14 @@ fn incomplete_metadata_remains_a_typed_failure() {
         let native = format!("{NATIVE}{marker}\n");
         options.zetesis = emitting(directory.path(), "native", &native, "", 0);
         let mut pending = Vec::new();
-        let result = super::check_case(&options, &loaded, &loaded.manifest.cases[0], &mut pending);
+        let result = super::check_case(
+            &options,
+            &loaded,
+            &loaded.manifest.cases[0],
+            super::NativeInvocation::Legacy,
+            &mut pending,
+            &std::sync::atomic::AtomicBool::new(false),
+        );
         assert!(matches!(
             result.decision(),
             super::Decision::NativeIncomplete
@@ -1115,4 +1132,73 @@ fn incomplete_metadata_remains_a_typed_failure() {
         assert!(result.native_answers().is_none());
         assert!(pending.is_empty());
     }
+}
+
+fn structured_native() -> Value {
+    json!({"schema":2,"format":"zetesis","models":[
+        {"number":1,"model":{"atoms":[{"predicate":"a","sign":"positive","arguments":[]}],"full_model":[0],"shown":{"atom_indices":[0],"terms":[]},"costs":null}}
+    ],"outcome":{"status":"satisfiable","completion":"exhausted","coverage":"exhausted","published_models":1,"verified_models":1,"checked":1,"interruption":null,"optimization":null,"error":null},"statistics":null})
+}
+
+#[test]
+fn modern_invocation_checks_structured_answers() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut options = options(directory.path());
+    options.zetesis = emitting(
+        directory.path(),
+        "native-json",
+        &structured_native().to_string(),
+        "",
+        0,
+    );
+    let report = super::run_with_invocation(
+        &options,
+        loaded(directory.path(), 1),
+        super::NativeInvocation::Solve,
+        |_| {},
+    );
+    assert_eq!(report.cases()[0].decision(), &super::Decision::Passed);
+    let value = report.to_json().unwrap();
+    let arguments: Vec<std::ffi::OsString> =
+        serde_json::from_value(value["cases"][0]["native_arguments"].clone()).unwrap();
+    assert_eq!(arguments[0], "solve");
+    assert!(arguments.iter().any(|value| value == "--json"));
+    assert!(arguments.iter().any(|value| value == "--all"));
+}
+
+#[test]
+fn malformed_modern_output_is_a_retained_nonpass() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut options = options(directory.path());
+    options.zetesis = emitting(directory.path(), "native-json", "{", "", 0);
+    let report = super::run_with_invocation(
+        &options,
+        loaded(directory.path(), 1),
+        super::NativeInvocation::Solve,
+        |_| {},
+    );
+    assert!(matches!(
+        report.cases()[0].decision(),
+        super::Decision::NativeOutputUnsupported(_)
+    ));
+    assert!(report.cases()[0].native_answers().is_none());
+}
+
+#[test]
+fn incomplete_modern_output_is_a_retained_nonpass() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut options = options(directory.path());
+    let mut output = structured_native();
+    output["outcome"]["coverage"] = "partial".into();
+    options.zetesis = emitting(directory.path(), "native-json", &output.to_string(), "", 0);
+    let report = super::run_with_invocation(
+        &options,
+        loaded(directory.path(), 1),
+        super::NativeInvocation::Solve,
+        |_| {},
+    );
+    assert_eq!(
+        report.cases()[0].decision(),
+        &super::Decision::NativeIncomplete
+    );
 }

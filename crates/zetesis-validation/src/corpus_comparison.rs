@@ -37,8 +37,14 @@ mod view;
 )]
 mod capture;
 
+// Exercise the weaker direct-child adapter on Unix as well as compiling it on
+// its production platforms; it must preserve the same cancellation meaning.
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+#[path = "corpus_comparison/process_portable.rs"]
+mod portable_capture_tests;
+
 pub use crate::selected::Oracle as NativeOracle;
-pub use config::{NativeBackend, Request};
+pub use config::{NativeBackend, NativeInvocation, Request};
 pub use decision::{CaptureFailure, Decision, Producer};
 pub use record::{CaseResult, PhysicalStatus, Report};
 
@@ -75,9 +81,58 @@ impl std::error::Error for Error {}
 /// Refuses zero process limits or a source view that fails corpus loading.
 /// Invocation/output failures are retained in [`Report`] instead.
 pub fn run(request: &Request, on_case: impl FnMut(&CaseResult)) -> Result<Report, Error> {
+    run_with_invocation(request, NativeInvocation::Legacy, on_case)
+}
+
+/// Compare the corpus using an explicitly selected native command protocol.
+///
+/// `Solve` requests structured full-model records and compares their selected
+/// displays with clingo. Hidden full atoms are validated by the native decoder,
+/// but are not inferred for clingo. Process, callback and cleanup contracts are
+/// identical to [`run`]. The legacy entry point retains its original protocol.
+/// Structured decoding keeps the native decoder's default atom/value ceilings;
+/// its input and selected-display spelling are bounded by the captured input
+/// and configured capture allowance, respectively.
+///
+/// # Errors
+/// Refuses invalid process limits or an unverified corpus before execution.
+pub fn run_with_invocation(
+    request: &Request,
+    invocation: NativeInvocation,
+    on_case: impl FnMut(&CaseResult),
+) -> Result<Report, Error> {
+    run_with_cancellation(
+        request,
+        invocation,
+        &std::sync::atomic::AtomicBool::new(false),
+        on_case,
+    )
+}
+
+/// Compare the corpus with cooperative cancellation of launches and captures.
+///
+/// The caller owns a monotone cancellation flag; this library installs no global
+/// signal handler. Source verification and callbacks are finite operations but
+/// are not preempted. Once cancellation is observed, no later solver starts.
+/// Active captures retain partial output and their normal cleanup evidence;
+/// completed earlier cases remain unchanged. [`Report::cancelled`] distinguishes
+/// the incomplete campaign even when no solver was launched. The platform's
+/// existing cleanup limitations still apply. Compatibility entry points use an
+/// uncancelled flag.
+///
+/// # Errors
+/// Refuses invalid process limits or an unverified corpus before execution.
+pub fn run_with_cancellation(
+    request: &Request,
+    invocation: NativeInvocation,
+    cancelled: &std::sync::atomic::AtomicBool,
+    on_case: impl FnMut(&CaseResult),
+) -> Result<Report, Error> {
     if request.timeout_ms == 0 || request.max_output_bytes == 0 {
         return Err(Error::InvalidLimits);
     }
     let corpus = corpus::load(request).map_err(Error::Corpus)?;
-    Ok(runner::run(request, corpus, on_case))
+    Ok(runner::run_with_cancellation(
+        request, corpus, invocation, cancelled, on_case,
+    ))
 }

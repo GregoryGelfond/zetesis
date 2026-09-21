@@ -22,7 +22,7 @@ enum Input {
 pub(crate) fn source(
     source: String,
     options: &Options,
-    output: &mut impl Write,
+    renderer: &mut impl crate::AnswerRenderer,
     diagnostics: &mut Diagnostics<impl Write>,
     control: &Control,
     phases: &Recorder,
@@ -30,7 +30,7 @@ pub(crate) fn source(
     crate::SolveConfig::from(options).validate()?;
     if options.oracle == Oracle::Countermodel
         && let Some(report) =
-            crate::publication::check_control(output, diagnostics, control, phases, options)?
+            crate::publication::check_control(renderer, diagnostics, control, phases)?
     {
         return Ok(report);
     }
@@ -55,8 +55,8 @@ pub(crate) fn source(
                 return crate::publication::solve(
                     crate::PreparedInput::admitted(&admitted),
                     Some(*admitted.expansion_usage()),
-                    options,
-                    output,
+                    &crate::PublicationConfig::from(options),
+                    renderer,
                     diagnostics,
                     control,
                     phases,
@@ -72,8 +72,7 @@ pub(crate) fn source(
         }
     };
     crate::SolveConfig::from(options).validate_formula()?;
-    if let Some(report) =
-        crate::publication::check_control(output, diagnostics, control, phases, options)?
+    if let Some(report) = crate::publication::check_control(renderer, diagnostics, control, phases)?
     {
         return Ok(report);
     }
@@ -102,8 +101,8 @@ pub(crate) fn source(
     crate::publication::solve(
         crate::PreparedInput::formula(&admitted),
         None,
-        options,
-        output,
+        &crate::PublicationConfig::from(options),
+        renderer,
         diagnostics,
         control,
         phases,
@@ -114,7 +113,7 @@ pub(crate) fn source(
 pub(crate) fn bundle(
     bundle: SourceBundle,
     options: &Options,
-    output: &mut impl Write,
+    renderer: &mut impl crate::AnswerRenderer,
     diagnostics: &mut Diagnostics<impl Write>,
     control: &Control,
     phases: &Recorder,
@@ -122,7 +121,7 @@ pub(crate) fn bundle(
     crate::SolveConfig::from(options).validate()?;
     if options.oracle == Oracle::Countermodel
         && let Some(report) =
-            crate::publication::check_control(output, diagnostics, control, phases, options)?
+            crate::publication::check_control(renderer, diagnostics, control, phases)?
     {
         return Ok(report);
     }
@@ -150,8 +149,8 @@ pub(crate) fn bundle(
                 return crate::publication::solve(
                     crate::PreparedInput::bundle(&admitted),
                     Some(*admitted.expansion_usage()),
-                    options,
-                    output,
+                    &crate::PublicationConfig::from(options),
+                    renderer,
                     diagnostics,
                     control,
                     phases,
@@ -169,8 +168,7 @@ pub(crate) fn bundle(
         }
     };
     crate::SolveConfig::from(options).validate_formula()?;
-    if let Some(report) =
-        crate::publication::check_control(output, diagnostics, control, phases, options)?
+    if let Some(report) = crate::publication::check_control(renderer, diagnostics, control, phases)?
     {
         return Ok(report);
     }
@@ -198,8 +196,8 @@ pub(crate) fn bundle(
     crate::publication::solve(
         crate::PreparedInput::formula_bundle(&admitted),
         None,
-        options,
-        output,
+        &crate::PublicationConfig::from(options),
+        renderer,
         diagnostics,
         control,
         phases,

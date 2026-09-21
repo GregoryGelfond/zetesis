@@ -1308,6 +1308,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "signal-hook"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b2a0c28ca5908dbdbcd52e6fdaa00358ab88637f8ab33e1f188dd510eb44b53d"
+dependencies = [
+ "libc",
+ "signal-hook-registry",
+]
+
+[[package]]
+name = "signal-hook-registry"
+version = "1.4.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c4db69cba1110affc0e9f7bcd48bbf87b3f4fc7c61fc9155afd4c469eb3d6c1b"
+dependencies = [
+ "errno",
+ "libc",
+]
+
+[[package]]
 name = "slab"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1936,16 +1956,19 @@ dependencies = [
 
 [[package]]
 name = "zetesis-cli"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "clap",
  "rayon",
  "serde_json",
+ "signal-hook",
  "tempfile",
  "zetesis-core",
  "zetesis-cpu",
+ "zetesis-experiments",
  "zetesis-ferraris",
  "zetesis-objective",
+ "zetesis-presentation",
  "zetesis-sat",
  "zetesis-solve",
  "zetesis-telemetry",
@@ -1956,14 +1979,14 @@ dependencies = [
 
 [[package]]
 name = "zetesis-core"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "proptest",
 ]
 
 [[package]]
 name = "zetesis-cpu"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "criterion",
  "rayon",
@@ -1972,7 +1995,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-domain"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "proptest",
  "themelios-base",
@@ -1982,7 +2005,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-experiments"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "clap",
  "criterion",
@@ -2004,7 +2027,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-ferraris"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "criterion",
  "proptest",
@@ -2016,7 +2039,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-maintenance"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "clap",
  "regex",
@@ -2029,7 +2052,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-objective"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "proptest",
  "zetesis-core",
@@ -2037,8 +2060,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "zetesis-presentation"
+version = "0.1.4"
+dependencies = [
+ "clap",
+ "unicode-width",
+]
+
+[[package]]
 name = "zetesis-sat"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "proptest",
  "rayon",
@@ -2049,7 +2080,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-solve"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "rayon",
  "zetesis-core",
@@ -2065,11 +2096,11 @@ dependencies = [
 
 [[package]]
 name = "zetesis-telemetry"
-version = "0.1.3"
+version = "0.1.4"
 
 [[package]]
 name = "zetesis-themelios"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "proptest",
  "serde_json",
@@ -2089,7 +2120,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-validation"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "clap",
  "nix",
@@ -2108,7 +2139,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-wgpu"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "bytemuck",
  "naga",

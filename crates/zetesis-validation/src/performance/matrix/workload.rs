@@ -314,6 +314,25 @@ impl Workload {
         &self.entry
     }
 
+    /// Human label with the generated size or recorded constant replacements.
+    ///
+    /// This allocates only presentation text from retained metadata. Labels are
+    /// descriptive, not authenticated identities; use [`Self::identity`] when
+    /// comparing workloads from different reports.
+    #[must_use]
+    pub fn label(&self) -> String {
+        workload_label(
+            &self.entry,
+            self.is_generated(),
+            self.sources.iter().flat_map(|source| {
+                source
+                    .edits
+                    .iter()
+                    .map(|edit| (edit.before(), edit.after()))
+            }),
+        )
+    }
+
     /// Content identity including the entry and original/derived source closure.
     #[must_use]
     pub fn identity(&self) -> &str {
@@ -441,6 +460,28 @@ impl Workload {
         }
         Ok(sealed)
     }
+}
+
+// Both typed campaign summaries and retained-report views use the same label
+// format. The latter supplies decoded edits without rebuilding a Workload.
+pub(crate) fn workload_label<'a>(
+    entry: &str,
+    generated: bool,
+    edits: impl IntoIterator<Item = (&'a str, &'a str)>,
+) -> String {
+    let path = entry.strip_suffix(".lp").unwrap_or(entry);
+    if generated {
+        return path.rsplit('/').next().unwrap_or(path).to_owned();
+    }
+    let components: Vec<&str> = path.rsplit('/').take(2).collect();
+    let mut label = components.into_iter().rev().collect::<Vec<_>>().join("/");
+    for (before, after) in edits {
+        label.push(' ');
+        label.push_str(before);
+        label.push('→');
+        label.push_str(after);
+    }
+    label
 }
 
 fn field(hash: &mut Sha256, value: &[u8]) {

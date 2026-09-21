@@ -9,6 +9,8 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Serialize)]
 #[serde(tag = "kind", content = "detail", rename_all = "snake_case")]
 pub enum Fault {
+    /// The caller cancelled; later scheduling positions remain unattempted.
+    Cancelled,
     /// No later invocation was launched after the campaign deadline.
     Deadline,
     /// The cumulative raw-capture budget was exhausted.

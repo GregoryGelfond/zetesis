@@ -7,68 +7,23 @@ clear queens variant 2 improvement over the earlier implementation, with higher
 process memory. The full suite shows smaller CPU changes and no established
 Metal improvement. Stock clingo is faster on most individual cases.
 
-## Sources, execution and evidence
+## How to read this comparison
 
-| Role | Compiled source | Solver SHA-256 |
-| --- | --- | --- |
-| A, before | [`f8146e50`](https://github.com/GregoryGelfond/zetesis/tree/f8146e50304aaff3186d827b84f1e4f91ab068f7) | `9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965` |
-| B, after | [`687f0d0b`](https://github.com/GregoryGelfond/zetesis/tree/687f0d0b473d015125d4e70040735625b4c042a3) | `d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513` |
+The question is whether reducing worker coordination makes a complete solve
+faster, and how the result compares with clingo. Both zetesis versions run the
+same programs with 1, 2, 4 or 14 host threads. Metal still uses host threads for
+candidate generation; this number is not a count of GPU execution units.
 
-The changes move a child's theory-sized knowledge copy outside the shared pool
-mutex and let a worker pop its own pending region without acquiring that mutex.
-A single atomic closure flag serves local and shared takes; shared donation,
-idle registration and exhaustion still synchronize through the pool mutex.
-An adjacent correctness fix retains a typed cancellation or deadline stop when
-an idle worker observes it, preventing channel disconnection from reporting
-unfinished search as exhausted. These changes are in the native CPU parallel
-region walk. They do not change Metal's separate parallel candidate producer.
+**A** is the version before the change; **B** is the version after it. Runs were
+ordered **A1, B1, B2, A2** to help reveal changes in machine conditions. Each
+table keeps those groups separate. The reported time includes process startup,
+input, eager grounding, solving, statistics and output. Clingo runs use one
+thread and request equivalent completed answers and optimum ties.
 
-Acquisition ran on 20 September 2026, on Apple M4 Pro and arm64 macOS 26.6.2,
-with stock clingo 5.8.2. CPU and Metal ran sequentially in the same environment.
-All native captures reported a 24 GiB memory allowance. Both zetesis executables
-were ordinary release builds with GPU support compiled in, without coverage instrumentation.
-The [provenance](observations/workers-687f0d0b-provenance.json) records executable,
-tool, source and raw-report identities and the measurement settings; each
-comparison retains its original timestamps.
-
-| Backend | Workers | Maintained comparison | All 94 cases |
-| --- | ---: | --- | --- |
-| CPU | 1 | [JSON](observations/workers-687f0d0b-cpu-1.json) | [tables](observations/workers-687f0d0b-cpu-1-tables.md) |
-| CPU | 2 | [JSON](observations/workers-687f0d0b-cpu-2.json) | [tables](observations/workers-687f0d0b-cpu-2-tables.md) |
-| CPU | 4 | [JSON](observations/workers-687f0d0b-cpu-4.json) | [tables](observations/workers-687f0d0b-cpu-4-tables.md) |
-| CPU | 14 | [JSON](observations/workers-687f0d0b-cpu-14.json) | [tables](observations/workers-687f0d0b-cpu-14-tables.md) |
-| Metal | 1 | [JSON](observations/workers-687f0d0b-metal-1.json) | [tables](observations/workers-687f0d0b-metal-1-tables.md) |
-| Metal | 2 | [JSON](observations/workers-687f0d0b-metal-2.json) | [tables](observations/workers-687f0d0b-metal-2-tables.md) |
-| Metal | 4 | [JSON](observations/workers-687f0d0b-metal-4.json) | [tables](observations/workers-687f0d0b-metal-4-tables.md) |
-| Metal | 14 | [JSON](observations/workers-687f0d0b-metal-14.json) | [tables](observations/workers-687f0d0b-metal-14-tables.md) |
-
-Each backend uses A1, B1, B2, A2. A1/B1 visit workers 1, 2, 4, 14; B2/A2 reverse
-that worker order. Fourteen was the observed host default. Each leg has one
-qualification, one warmup, two timed and one separate RSS invocation per case
-and producer. Each executable therefore has four timed and two RSS observations
-per case, worker count and backend. There is no cold-cache or confidence claim.
-
-The profile is eager grounding, indexed formula joins, region search and automatic
-checker selection, with batch size 64, one completion worker and one clingo
-worker. Native JSON and statistics are always enabled by this measurement
-protocol. Wall time includes process launch, preparation, grounding, solving,
-statistics and captured output. It does not isolate counter or lock overhead.
-This comparison does not cover lazy grounding or uninstrumented CLI execution.
-
-Native CPU workers both explore regions and check membership. Metal workers
-produce classical candidates, join, then submit batches to the device. General
-device queries may require exact CPU completion; complete tight checks do not
-use a residual worker pool. Actual receipts retain 53 tight and 41 countermodel
-cases in every leg. An UNSAT case can finish without submitting a GPU batch.
-
-All 30,080 scheduled positions passed. An additional comparison checked 15,040
-complete native captures across revisions, workers and backends, including hidden
-atoms, model multiplicity and objective priorities. The
-[native-family receipt](observations/workers-687f0d0b-native-families.json)
-records those checks separately. Clingo comparison covers the
-selected displayed families and costs, not its hidden interpretations. The
-separate 59 ordinary physical Metal tests also passed. Those tests and these
-timings are not coverage measurements or an update to a coverage percentage.
+Start with the totals below, then the examples and memory comparison. The
+[method and data](#sources-execution-and-evidence) give the compiled sources,
+complete per-program tables and measurement settings. These results describe
+those builds on this machine, not every program or newer zetesis version.
 
 ## Full-suite process time
 
@@ -199,6 +154,69 @@ an improvement. CPU scalar queens 02 also drifts from 129.447 ms at A1 to
 142.817 at A2. Four timed samples do not support a statistical neutrality claim.
 Accumulated worker phase timings can exceed wall time and must not be added as
 disjoint wall intervals. Kernel duration was not measured.
+
+## Sources, execution and evidence
+
+| Role | Compiled source | Solver SHA-256 |
+| --- | --- | --- |
+| A, before | [`f8146e50`](https://github.com/GregoryGelfond/zetesis/tree/f8146e50304aaff3186d827b84f1e4f91ab068f7) | `9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965` |
+| B, after | [`687f0d0b`](https://github.com/GregoryGelfond/zetesis/tree/687f0d0b473d015125d4e70040735625b4c042a3) | `d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513` |
+
+The changes move a child's theory-sized knowledge copy outside the shared pool
+mutex and let a worker pop its own pending region without acquiring that mutex.
+A single atomic closure flag serves local and shared takes; shared donation,
+idle registration and exhaustion still synchronize through the pool mutex.
+An adjacent correctness fix retains a typed cancellation or deadline stop when
+an idle worker observes it, preventing channel disconnection from reporting
+unfinished search as exhausted. These changes are in the native CPU parallel
+region walk. They do not change Metal's separate parallel candidate producer.
+
+Acquisition ran on 20 September 2026, on Apple M4 Pro and arm64 macOS 26.6.2,
+with stock clingo 5.8.2. CPU and Metal ran sequentially in the same environment.
+All native captures reported a 24 GiB memory allowance. Both zetesis executables
+were ordinary release builds with GPU support compiled in, without coverage instrumentation.
+The [provenance](observations/workers-687f0d0b-provenance.json) records executable,
+tool, source and raw-report identities and the measurement settings; each
+comparison retains its original timestamps.
+
+| Backend | Workers | Maintained comparison | All 94 cases |
+| --- | ---: | --- | --- |
+| CPU | 1 | [JSON](observations/workers-687f0d0b-cpu-1.json) | [tables](observations/workers-687f0d0b-cpu-1-tables.md) |
+| CPU | 2 | [JSON](observations/workers-687f0d0b-cpu-2.json) | [tables](observations/workers-687f0d0b-cpu-2-tables.md) |
+| CPU | 4 | [JSON](observations/workers-687f0d0b-cpu-4.json) | [tables](observations/workers-687f0d0b-cpu-4-tables.md) |
+| CPU | 14 | [JSON](observations/workers-687f0d0b-cpu-14.json) | [tables](observations/workers-687f0d0b-cpu-14-tables.md) |
+| Metal | 1 | [JSON](observations/workers-687f0d0b-metal-1.json) | [tables](observations/workers-687f0d0b-metal-1-tables.md) |
+| Metal | 2 | [JSON](observations/workers-687f0d0b-metal-2.json) | [tables](observations/workers-687f0d0b-metal-2-tables.md) |
+| Metal | 4 | [JSON](observations/workers-687f0d0b-metal-4.json) | [tables](observations/workers-687f0d0b-metal-4-tables.md) |
+| Metal | 14 | [JSON](observations/workers-687f0d0b-metal-14.json) | [tables](observations/workers-687f0d0b-metal-14-tables.md) |
+
+Each backend uses A1, B1, B2, A2. A1/B1 visit workers 1, 2, 4, 14; B2/A2 reverse
+that worker order. Fourteen was the observed host default. Each leg has one
+qualification, one warmup, two timed and one separate RSS invocation per case
+and producer. Each executable therefore has four timed and two RSS observations
+per case, worker count and backend. There is no cold-cache or confidence claim.
+
+The profile is eager grounding, indexed formula joins, region search and automatic
+checker selection, with batch size 64, one completion worker and one clingo
+worker. Native JSON and statistics are always enabled by this measurement
+protocol. Wall time includes process launch, preparation, grounding, solving,
+statistics and captured output. It does not isolate counter or lock overhead.
+This comparison does not cover lazy grounding or uninstrumented CLI execution.
+
+Native CPU workers both explore regions and check membership. Metal workers
+produce classical candidates, join, then submit batches to the device. General
+device queries may require exact CPU completion; complete tight checks do not
+use a residual worker pool. Actual receipts retain 53 tight and 41 countermodel
+cases in every leg. An UNSAT case can finish without submitting a GPU batch.
+
+All 30,080 scheduled positions passed. An additional comparison checked 15,040
+complete native captures across revisions, workers and backends, including hidden
+atoms, model multiplicity and objective priorities. The
+[native-family receipt](observations/workers-687f0d0b-native-families.json)
+records those checks separately. Clingo comparison covers the
+selected displayed families and costs, not its hidden interpretations. The
+separate 59 ordinary physical Metal tests also passed. Those tests and these
+timings are not coverage measurements or an update to a coverage percentage.
 
 ## Reproduction and semantic scope
 

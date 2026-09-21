@@ -240,7 +240,7 @@ and after execution. Derived-workload reports use matrix schema 2; unchanged
 suite reports retain schema 1. No first-answer phase is added by this entry
 point; memory rounds follow the plan when requested. See [workload admission](tests/workload_admission.rs) and
 [matrix acquisition](tests/matrix_campaign.rs) for checked library usage.
-The [manual's runnable client](../../docs/book/reference/validation.md#compare-a-parameterized-workload)
+The [manual's runnable client](../../docs/book/reference/measurement-protocols.md#compare-a-parameterized-workload)
 shows a complete N=4 comparison using this API, with explicit executable paths
 and a new report destination.
 
@@ -354,3 +354,28 @@ Maintained tests include [capture](tests/process_capture.rs),
 [ordinary timing](tests/performance_campaign.rs).
 The [outcome guide](../../docs/book/rust/outcomes.md) explains the corresponding
 semantic distinctions on the solver side.
+
+
+### Application benchmark adapters
+
+`performance::command::run` accepts the existing typed matrix request and an
+explicit `matrix::NativeInvocation`. `Solve` uses `solve --device … --threads …
+--all`; `Legacy` retains the flat interface for sealed older executables. Both
+request machine answers and statistics and share all fixed scheduling,
+qualification, timeout, no-clobber publication and failure accounting. The
+command adapter owns the maintained series expansion but never raises supplied
+limits; the legacy executable still applies its documented series presets.
+
+`matrix::Report::summary` borrows source identities and profiles and derives
+compact counts, all-passing timed distributions and separate validated RSS
+medians directly from typed samples. Its JSON view has format
+`zetesis_benchmark_summary`, schema 1. It does not duplicate or reparse raw answer
+captures. A failed or unlaunched timed position prevents a timing distribution
+for that cell; the outcome counts remain visible. Memory medians use only
+successfully validated separate memory rounds and are absent when unavailable.
+
+`series::read_compare` reads saved matrix reports within an explicit per-file
+source-byte bound, then calls the existing identity-checked comparison. The
+`zetesis-series` compatibility executable and `zetesis bench compare` use this
+same reader. `process::memory::measure_to_file` is the fresh supervised helper's
+shared no-clobber resource-record adapter, not a cumulative in-process RSS API.

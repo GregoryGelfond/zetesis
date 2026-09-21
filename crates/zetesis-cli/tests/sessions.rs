@@ -523,28 +523,40 @@ fn failed_first_answer_preserves_unknown_coverage() {
 
 #[test]
 fn reporting_failures_remain_separately_observable() {
-    struct HeaderOnly(bool);
-    impl Write for HeaderOnly {
+    struct HeaderOnly<'a>(&'a [u8]);
+    impl Write for HeaderOnly<'_> {
         fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-            if std::mem::replace(&mut self.0, false) {
-                Ok(bytes.len())
-            } else {
-                Err(io::Error::new(io::ErrorKind::BrokenPipe, "summary closed"))
+            if bytes.is_empty() {
+                return Ok(0);
             }
+            if self.0.is_empty() {
+                return Err(io::Error::new(io::ErrorKind::BrokenPipe, "summary closed"));
+            }
+            let accepted = bytes.len().min(self.0.len());
+            assert_eq!(&bytes[..accepted], &self.0[..accepted]);
+            self.0 = &self.0[accepted..];
+            Ok(accepted)
         }
         fn flush(&mut self) -> io::Result<()> {
             Ok(())
         }
     }
     // Admission is the first cause; statistics and the JSON footer each fail later.
+    // Accept the entire header independently of how its formatter divides writes.
+    let header = format!(
+        "{{\"schema\":{},\"format\":\"zetesis\",\"models\":[",
+        zetesis_themelios::observation::json::RECORD_SCHEMA_VERSION
+    );
+    let mut output = HeaderOnly(header.as_bytes());
     let failure = run_finalized_with_diagnostics(
         "a(".into(),
         &options(&["--json", "--stats"]),
-        &mut HeaderOnly(true),
+        &mut output,
         &mut Closed,
         &Control::default(),
     )
     .unwrap_err();
+    assert!(output.0.is_empty(), "the complete JSON header was accepted");
     assert!(matches!(*failure.cause, RunError::Expansion(_)));
     assert_eq!(failure.diagnostics_failure().unwrap().to_string(), "closed");
     assert_eq!(

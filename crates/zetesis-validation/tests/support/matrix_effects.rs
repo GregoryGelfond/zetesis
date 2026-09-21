@@ -21,7 +21,7 @@ fn executable(path: &Path, body: &str) {
 }
 
 struct Fixture {
-    _directory: tempfile::TempDir,
+    directory: tempfile::TempDir,
     corpus: PathBuf,
     native: PathBuf,
     reference: PathBuf,
@@ -63,7 +63,7 @@ impl Fixture {
         )
         .unwrap();
         Self {
-            _directory: directory,
+            directory,
             corpus,
             native,
             reference,
@@ -276,4 +276,81 @@ fn exact_metadata_budget_cannot_launch_a_replacement_sample() {
     }));
     report.publish().unwrap();
     assert!(!report.passed());
+}
+
+#[test]
+fn cancelled_matrix_launches_no_metadata() {
+    let fixture = Fixture::new();
+    let report = crate::performance::matrix::run_workloads_with_cancellation(
+        &fixture.request(),
+        std::slice::from_ref(&fixture.workload),
+        NativeInvocation::Legacy,
+        &AtomicBool::new(true),
+    )
+    .unwrap();
+    assert!(report.metadata().is_empty());
+    assert!(report.accounted());
+    assert!(!report.passed());
+    assert!(matches!(report.faults(), [Fault::Cancelled]));
+    assert!(report.samples().iter().all(|sample| sample.capture().is_none()
+        && sample.decision() == Decision::NotAttempted));
+}
+
+#[test]
+fn cancelled_matrix_retains_the_active_position() {
+    let fixture = Fixture::new();
+    let ready = fixture.directory.path().join("ready");
+    executable(
+        &fixture.reference,
+        &format!(": > {}; exec sleep 5", quote(ready.to_str().unwrap())),
+    );
+    let cancelled = AtomicBool::new(false);
+    let (report, observed) = std::thread::scope(|scope| {
+        let trigger = scope.spawn(|| {
+            let deadline = Instant::now() + std::time::Duration::from_secs(3);
+            while !ready.exists() && Instant::now() < deadline {
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            let observed = ready.exists();
+            cancelled.store(true, Ordering::Relaxed);
+            observed
+        });
+        let report = crate::performance::matrix::run_workloads_with_cancellation(
+            &fixture.request(),
+            std::slice::from_ref(&fixture.workload),
+            NativeInvocation::Legacy,
+            &cancelled,
+        );
+        (report.unwrap(), trigger.join().unwrap())
+    });
+    assert!(observed);
+    assert!(report.accounted());
+    assert!(!report.passed());
+    assert!(report.unresolved_children().is_empty());
+    let attempted: Vec<_> = report
+        .samples()
+        .iter()
+        .filter(|sample| sample.capture().is_some())
+        .collect();
+    assert_eq!(attempted.len(), 1);
+    assert_eq!(attempted[0].decision(), Decision::Cancelled);
+    assert_eq!(
+        attempted[0].capture().unwrap().stop(),
+        Some(process::Stop::Cancelled)
+    );
+    assert_eq!(
+        attempted[0].capture().unwrap().exit().unwrap().signal,
+        Some(9)
+    );
+    assert!(
+        report
+            .samples()
+            .iter()
+            .filter(|sample| sample.capture().is_none())
+            .all(|sample| sample.decision() == Decision::NotAttempted)
+    );
+    report.publish().unwrap();
+    let published: Value = serde_json::from_slice(&fs::read(&fixture.report).unwrap()).unwrap();
+    assert_eq!(published["passed"], false);
+    assert_eq!(published["accounted"], true);
 }

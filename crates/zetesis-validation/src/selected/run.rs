@@ -29,6 +29,8 @@ pub enum Decision {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(tag = "stage", content = "operation", rename_all = "snake_case")]
 pub enum InvocationFault {
+    /// The caller cancelled before starting this invocation.
+    Cancelled,
     /// The bounded process implementation is unavailable.
     UnsupportedPlatform,
     /// An invocation path was relative.
@@ -66,6 +68,7 @@ impl InvocationFailure {
     }
     pub(crate) fn start(failure: &process::StartError) -> Self {
         let kind = match failure {
+            process::StartError::Cancelled => InvocationFault::Cancelled,
             process::StartError::UnsupportedPlatform => InvocationFault::UnsupportedPlatform,
             process::StartError::RelativePath => InvocationFault::RelativePath,
             process::StartError::DeadlineOverflow => InvocationFault::DeadlineOverflow,

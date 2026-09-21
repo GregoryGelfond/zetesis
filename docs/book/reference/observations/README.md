@@ -49,7 +49,7 @@ TSV views are separate from the four fixed JSON datasets and their renderer.
 The [observation data](release-6bebb980-1e5b78ce.json),
 [provenance](release-6bebb980-1e5b78ce-provenance.json) and
 [table view](release-6bebb980-1e5b78ce-tables.md) reproduce the canonical release
-comparison in the [performance reference](../performance.md#canonical-release-comparison).
+comparison in the [performance reference](../grounding-measurements.md#canonical-release-comparison).
 They describe source `6bebb980f9c102dbb7f943076d7cde92374841ce` versus
 `1e5b78ce913ab3aeece6ed496f69ca8176f0644d`, measured on 12 September 2026.
 They do not qualify a later implementation.
@@ -63,7 +63,7 @@ The [observation data](release-1e5b78ce-ca10a5e7.json),
 `ca10a5e7ec84e13fbcc4a23bd0de8b0232c53fe1`, observed on 14 September 2026
 from 03:42:07 to 03:43:27 UTC. Both native versions explicitly use Indexed joins.
 Task allocation uses less sampled child RSS, SEND takes longer, and the other
-workloads have mixed results. The [earlier atom-catalog comparison](../performance.md#earlier-atom-catalog-cpu-comparison)
+workloads have mixed results. The [earlier atom-catalog comparison](../grounding-measurements.md#earlier-atom-catalog-cpu-comparison)
 keeps all four block medians and ranges visible.
 
 ## Prepared-grounding comparisons

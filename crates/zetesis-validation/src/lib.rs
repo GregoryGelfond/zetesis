@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 
 pub mod answers;
+pub mod backend_check;
 pub mod curated;
 pub mod corpus_comparison;
 mod phase;

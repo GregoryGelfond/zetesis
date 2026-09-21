@@ -28,7 +28,7 @@ fn historical_samples_reproduce_the_published_tables() {
     // The retained table fixture is the actual public section, not an unrelated
     // expectation that can drift independently of the manual's numbers.
     assert!(
-        include_str!("../../../../docs/book/reference/performance.md")
+        include_str!("../../../../docs/book/reference/grounding-measurements.md")
             .contains(HISTORICAL.tables.trim_end())
     );
 }
@@ -41,7 +41,7 @@ fn catalog_samples_reproduce_the_published_tables() {
         ATOM_CATALOG.tables
     );
     assert!(
-        include_str!("../../../../docs/book/reference/performance.md")
+        include_str!("../../../../docs/book/reference/grounding-measurements.md")
             .contains(ATOM_CATALOG.tables.trim_end())
     );
 }
@@ -54,7 +54,7 @@ fn prepared_grounding_samples_reproduce_the_published_tables() {
         PREPARED_GROUNDING.tables
     );
     assert!(
-        include_str!("../../../../docs/book/reference/performance.md")
+        include_str!("../../../../docs/book/reference/grounding-measurements.md")
             .contains(PREPARED_GROUNDING.tables.trim_end())
     );
 }
@@ -67,7 +67,7 @@ fn prepared_algorithm_samples_reproduce_the_published_tables() {
         PREPARED_ALGORITHMS.tables
     );
     assert!(
-        include_str!("../../../../docs/book/reference/performance.md")
+        include_str!("../../../../docs/book/reference/grounding-measurements.md")
             .contains(PREPARED_ALGORITHMS.tables.trim_end())
     );
 }

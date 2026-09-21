@@ -4,7 +4,7 @@ The prepared-grounding changes reduce repeated work in independent CPU closure.
 The measurements here show no general Metal speedup or reduction in GPU
 transport storage. Eager timings include some regressions and substantial block
 variation. These results complement the
-[ordinary CPU timing and RSS comparison](performance.md#prepared-grounding-cpu-comparison);
+[ordinary CPU timing and RSS comparison](grounding-measurements.md#prepared-grounding-cpu-comparison);
 they use different output and execution profiles.
 
 ## Subjects and measurement scope
@@ -22,7 +22,7 @@ Each uses Rust 1.97.1 and ordinary release optimization. Q/B used the explicit
 Apple-target recipe; A used the native-target recipe. The retained records do
 not establish identical transitive build recipes. These are integrated revision
 comparisons, not isolated algorithm measurements. Native executable identities
-are listed with the [CPU comparison](performance.md#prepared-grounding-cpu-comparison).
+are listed with the [CPU comparison](grounding-measurements.md#prepared-grounding-cpu-comparison).
 
 The acquisition order was Q/A/B/B/A/Q. Eager matrices ran first, followed by
 six lazy-library commands. The complete interval was 18:30:46–18:39:45 UTC;

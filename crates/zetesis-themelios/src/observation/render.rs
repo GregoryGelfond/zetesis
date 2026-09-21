@@ -190,6 +190,16 @@ pub(super) fn render(
         location: None,
     };
     let symbols = terms(program, model, &mut work)?;
+    render_evaluated(model, selection, &symbols, work)
+}
+
+/// Spell a previously evaluated term channel without evaluating it again.
+pub(super) fn render_evaluated(
+    model: &Model,
+    selection: &crate::OutputSelection,
+    symbols: &[Symbol],
+    mut work: Work<'_>,
+) -> Result<Rendered, Error> {
     work.location = None;
     let mut text = String::new();
     let mut first = true;
@@ -218,7 +228,7 @@ pub(super) fn render(
             append(&mut text, ")", &mut work)?;
         }
     }
-    for value in &symbols {
+    for value in symbols {
         if !first {
             append(&mut text, " ", &mut work)?;
         }

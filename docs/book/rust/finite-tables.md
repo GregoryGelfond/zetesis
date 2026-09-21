@@ -180,7 +180,7 @@ memory. See the [experiment contract](https://github.com/GregoryGelfond/zetesis/
 for finite populations and report limits. This experiment establishes neither
 source-grounding completeness nor ordinary solver acceleration.
 
-The [measured comparison](../reference/performance.md#optional-finite-table-experiment)
+The [measured comparison](../reference/grounding-measurements.md#optional-finite-table-experiment)
 retains the earlier standalone fixture timings, preparation costs and capacity
 limitations separately from measurements of the ordinary grounding consumer.
 

@@ -219,10 +219,10 @@ fn byte_ceilings_are_the_library_defaults_scaled_by_the_memory_allowance() {
 }
 
 #[test]
-fn workers_default_to_the_host_parallelism() {
+fn automatic_workers_use_at_most_four_threads() {
     let options = Options::try_parse_from(["zetesis"]).unwrap();
     let host = std::thread::available_parallelism().unwrap_or(std::num::NonZeroUsize::MIN);
-    assert_eq!(options.workers, host);
+    assert_eq!(options.workers.get(), host.get().min(4));
     assert_eq!(options.completion_workers.get(), 1);
 }
 

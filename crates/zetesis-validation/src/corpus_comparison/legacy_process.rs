@@ -3,9 +3,10 @@
 use std::ffi::OsString;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use super::decision::CaptureStatus;
+use super::decision::{CaptureStatus, InvocationFailure};
 use crate::process::{self, Invocation, Limits, PendingChild, Stop};
 use serde::Serialize;
 
@@ -28,16 +29,44 @@ pub(crate) struct Capture {
     pub(crate) pending: Option<PendingChild>,
 }
 
-pub(crate) fn invoke(
+impl Capture {
+    pub(crate) const fn cleanup_unresolved(&self) -> bool {
+        self.pending_child_id.is_some()
+    }
+}
+
+#[cfg(test)]
+pub(super) fn invoke(
     executable: &Path,
     arguments: &[OsString],
     directory: &Path,
     timeout: Duration,
     output_limit: usize,
-) -> Result<Capture, String> {
+) -> Result<Capture, InvocationFailure> {
+    invoke_with_cancellation(
+        executable,
+        arguments,
+        directory,
+        timeout,
+        output_limit,
+        &AtomicBool::new(false),
+    )
+}
+
+pub(super) fn invoke_with_cancellation(
+    executable: &Path,
+    arguments: &[OsString],
+    directory: &Path,
+    timeout: Duration,
+    output_limit: usize,
+    cancelled: &AtomicBool,
+) -> Result<Capture, InvocationFailure> {
+    if cancelled.load(Ordering::Relaxed) {
+        return Err(InvocationFailure::Cancelled);
+    }
     let executable = resolve(executable)?;
     let directory = std::path::absolute(directory).map_err(|error| error.to_string())?;
-    let outcome = process::invoke(
+    let outcome = process::invoke_with_cancellation(
         Invocation {
             executable: &executable,
             arguments,
@@ -48,14 +77,19 @@ pub(crate) fn invoke(
             max_output_bytes: output_limit,
             cleanup_timeout: Duration::from_secs(1),
         },
+        cancelled,
     )
-    .map_err(|error| format!("{}: {error}", executable.display()))?;
+    .map_err(|error| match error {
+        process::StartError::Cancelled => InvocationFailure::Cancelled,
+        error => InvocationFailure::Other(format!("{}: {error}", executable.display())),
+    })?;
     let (capture, pending) = outcome.into_parts();
     let utf8 = capture.stdout_text().and_then(|_| capture.stderr_text());
     let lossy_text = utf8.is_err();
     let status = match capture.stop() {
         Stop::Completed if lossy_text => CaptureStatus::InvalidUtf8,
         Stop::Completed => CaptureStatus::Completed,
+        Stop::Cancelled => CaptureStatus::Cancelled,
         Stop::Deadline => CaptureStatus::Timeout,
         Stop::OutputLimit => CaptureStatus::OutputLimit,
         Stop::Failure => CaptureStatus::CaptureFailure,

@@ -3,7 +3,8 @@
 #[path = "spelled.rs"]
 mod spelled;
 
-use super::{Document, Progress, summary};
+use super::document_fixture::{Document, summary};
+use crate::failure::Progress;
 use crate::{Options, PublicationOutcome, RunError};
 use clap::Parser;
 use std::io::{self, Write};

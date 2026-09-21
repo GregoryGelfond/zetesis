@@ -1,6 +1,7 @@
 //! Shared bounded raw invocation; interpretation belongs to each campaign.
 use std::ffi::OsString;
 use std::path::Path;
+use std::sync::atomic::AtomicBool;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::Capture;
@@ -19,7 +20,23 @@ pub(super) fn invoke(
     directory: &Path,
     limits: process::Limits,
 ) -> (Capture, Option<String>) {
-    capture(executable, arguments, directory, limits, false)
+    invoke_with_cancellation(
+        executable,
+        arguments,
+        directory,
+        limits,
+        &AtomicBool::new(false),
+    )
+}
+
+pub(super) fn invoke_with_cancellation(
+    executable: &Path,
+    arguments: Vec<OsString>,
+    directory: &Path,
+    limits: process::Limits,
+    cancelled: &AtomicBool,
+) -> (Capture, Option<String>) {
+    capture(executable, arguments, directory, limits, false, cancelled)
 }
 
 pub(super) fn supervised(
@@ -28,7 +45,23 @@ pub(super) fn supervised(
     directory: &Path,
     limits: process::Limits,
 ) -> (Capture, Option<String>) {
-    capture(executable, arguments, directory, limits, true)
+    supervised_with_cancellation(
+        executable,
+        arguments,
+        directory,
+        limits,
+        &AtomicBool::new(false),
+    )
+}
+
+pub(super) fn supervised_with_cancellation(
+    executable: &Path,
+    arguments: Vec<OsString>,
+    directory: &Path,
+    limits: process::Limits,
+    cancelled: &AtomicBool,
+) -> (Capture, Option<String>) {
+    capture(executable, arguments, directory, limits, true, cancelled)
 }
 
 fn capture(
@@ -37,6 +70,7 @@ fn capture(
     directory: &Path,
     limits: process::Limits,
     supervised: bool,
+    cancelled: &AtomicBool,
 ) -> (Capture, Option<String>) {
     let mut cleanup_fault = None;
     let mut record = Capture {
@@ -60,9 +94,9 @@ fn capture(
         directory,
     };
     let outcome = if supervised {
-        process::invoke_supervised(invocation, limits)
+        process::invoke_supervised_with_cancellation(invocation, limits, cancelled)
     } else {
-        process::invoke(invocation, limits)
+        process::invoke_with_cancellation(invocation, limits, cancelled)
     };
     match outcome {
         Err(error) => record.failure = Some(InvocationFailure::start(&error)),

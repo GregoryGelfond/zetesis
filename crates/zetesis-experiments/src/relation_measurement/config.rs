@@ -74,10 +74,10 @@ pub struct Options {
     #[arg(long, default_value_t = 8)]
     pub queries: usize,
     /// CPU-only, or a required physical Metal/Vulkan GPU with no fallback.
-    #[arg(long, value_enum, default_value = "cpu")]
+    #[arg(long = "device", alias = "backend", value_enum, default_value = "cpu")]
     pub backend: Backend,
     /// Owned Rayon pool size (1..=64).
-    #[arg(long, default_value_t = 4)]
+    #[arg(long = "threads", alias = "workers", default_value_t = 4)]
     pub workers: usize,
     /// Retained warmup batches per route (0..=2).
     #[arg(long, default_value_t = 1)]

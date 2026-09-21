@@ -5,6 +5,8 @@ use std::path::PathBuf;
 
 use crate::{Backend, Grounder, Oracle, SearchMethod, SourceBatching};
 
+pub(crate) mod values;
+
 /// Commands that do not read an answer-set program.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Subcommand)]
 pub enum Command {
@@ -24,6 +26,10 @@ pub enum Command {
     about = "Candidate-directed answer-set solving through the reduct"
 )]
 pub struct Options {
+    /// Statistics presentation selected by the invocation adapter.
+    /// Legacy library/parser callers retain the line-oriented record view.
+    #[arg(skip)]
+    pub statistics_view: crate::StatisticsView,
     /// Optional device inventory command; no source input is read for it.
     #[command(subcommand)]
     pub command: Option<Command>,
@@ -40,7 +46,7 @@ pub struct Options {
     ///
     /// Auto retains CPU execution. Explicit GPU requests fail if unavailable;
     /// device failure does not silently retry on CPU. GPU support is enabled by default.
-    #[arg(long, value_parser = backend_parser(), default_value = "auto")]
+    #[arg(long, visible_alias = "device", value_parser = backend_parser(), default_value = "auto")]
     pub backend: Backend,
     /// Grounding mode, independent of execution backend.
     ///
@@ -89,7 +95,7 @@ pub struct Options {
     /// JSON is always plain.
     #[arg(long, value_enum, default_value_t)]
     pub color: crate::ColorMode,
-    /// Cooperative process deadline after input loading, in whole seconds.
+    /// Cooperative process deadline after input loading: seconds, or a whole number with s, m or h.
     ///
     /// Zero requests an immediate stop. No deadline is imposed when omitted.
     /// A timer thread marks the deadline and checked work boundaries observe
@@ -97,9 +103,11 @@ pub struct Options {
     /// an unreached deadline costs nothing measurable. Blocking source I/O,
     /// frontend operations and a running GPU kernel cannot be preempted.
     /// Library callers supply their own Control instead of this process option.
-    #[arg(long, value_name = "SECONDS")]
+    #[arg(long, value_name = "DURATION", value_parser = values::seconds)]
     pub time_limit: Option<u64>,
-    /// The session's memory allowance in bytes. The session's byte ceilings
+    /// Memory allowance in bytes, or a whole number with KiB, MiB, GiB or TiB.
+    ///
+    /// The session's byte ceilings
     /// are the shares of a two-gibibyte allowance; each one not given (the
     /// projection, objective key, optimal, reduct, completion scratch,
     /// candidate, closure, closure batch and batch bytes) is its library
@@ -111,7 +119,7 @@ pub struct Options {
     /// two gibibytes when the host does not report its memory. Work, count
     /// and structural ceilings are not memory and do not scale. The
     /// ceilings bound named storage, not resident memory.
-    #[arg(long, default_value_t = host_memory_allowance(), hide_short_help = true)]
+    #[arg(long, visible_alias = "memory-budget", value_name = "SIZE", value_parser = values::bytes, default_value_t = host_memory_allowance(), hide_short_help = true)]
     pub memory: u64,
     /// Maximum encoded JSON bytes per model record or terminal outcome; not an all-model buffer.
     #[arg(long, default_value_t = 8_388_608, hide_short_help = true)]
@@ -221,15 +229,17 @@ pub struct Options {
     /// and the leaves a device checks; closure batches follow its first seed.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.batch_size, hide_short_help = true)]
     pub batch_size: NonZeroUsize,
-    /// Worker count for the closure route's pool and for the walkers of the
-    /// region tree; the default is the host's available parallelism, or one
-    /// when the host does not report it. Each closure worker is admitted at
+    /// Threads for candidate search; auto uses at most four available threads.
+    ///
+    /// The closure route's pool and the region tree's walkers use this count.
+    /// Auto falls back to one when the host does not report its parallelism.
+    /// Each closure worker is admitted at
     /// the per-closure allowance, so workers × max-closure-bytes must not
     /// exceed max-closure-batch-bytes. Under `--search regions` with more
     /// than one worker, models arrive in the schedule's order, which differs
     /// between runs; the family of answer sets is the same. Formula
     /// completion under `--search clauses` has a separate worker setting.
-    #[arg(long, default_value_t = host_workers(), hide_short_help = true)]
+    #[arg(long, visible_alias = "threads", value_name = "auto|N", value_parser = values::workers, default_value = "auto", hide_short_help = true)]
     pub workers: NonZeroUsize,
     /// Workers for unresolved formula queries: under `--search clauses`, and
     /// under regions with one CPU walker or general device propagation.
@@ -330,9 +340,11 @@ pub struct Options {
     pub max_batch_bytes: Option<u64>,
 }
 
-/// The host's available parallelism, or one worker when it cannot be reported.
+/// A conservative automatic pool, falling back to one when the host is unknown.
 fn host_workers() -> NonZeroUsize {
-    std::thread::available_parallelism().unwrap_or(NonZeroUsize::MIN)
+    std::thread::available_parallelism()
+        .unwrap_or(NonZeroUsize::MIN)
+        .min(NonZeroUsize::new(4).expect("four is nonzero"))
 }
 
 /// The host's physical memory in bytes, read once per process the first

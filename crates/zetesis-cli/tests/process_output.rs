@@ -28,13 +28,13 @@ fn run(source: Option<&[u8]>, args: &[&str], stdout: Stdio) -> Output {
 
 fn solve(source: &[u8], json: bool, limited: bool, stdout: Stdio) -> Output {
     let mut args = vec![
+        "solve",
         "-",
-        "--backend",
+        "--device",
         "cpu",
-        "--workers",
+        "--threads",
         "1",
-        "--models",
-        "0",
+        "--all",
         "--color",
         "never",
     ];

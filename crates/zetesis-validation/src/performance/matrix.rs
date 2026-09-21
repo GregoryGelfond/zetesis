@@ -11,17 +11,22 @@
 //! Callers arrange a qualified executable and quiet physical-device window.
 
 mod config;
+mod invocation;
 mod outcome;
 mod record;
 mod run;
 mod serialization;
+mod summary;
+pub use summary::{CellSummary, DecisionCount, Summary};
 mod telemetry;
 mod workload;
 
 pub use config::{Plan, Producer, Request, Slot, Suite};
+pub use invocation::NativeInvocation;
 pub use record::{
     Decision, DeviceWork, Execution, FormulaResidualStatistics, Observation, Procedure, Sample,
 };
+pub(crate) use workload::workload_label;
 pub use workload::{ConstantAmendment, Workload, WorkloadLimits};
 
 use super::{Capture, Error, Fault};
@@ -57,6 +62,15 @@ pub struct Report {
     destination: publication::Destination,
 }
 impl Report {
+    /// Derive compact typed counts, successful timed distributions and separate
+    /// memory observations without copying or parsing raw answer captures.
+    /// It scans all positions once per source/producer cell and retains only
+    /// one cell's interval scratch plus the returned compact rows.
+    #[must_use]
+    pub fn summary(&self) -> Summary<'_> {
+        summary::summarize(self)
+    }
+
     /// Every planned position is represented; this does not require solver parity.
     #[must_use]
     pub fn accounted(&self) -> bool {
@@ -160,7 +174,7 @@ impl Report {
 /// # Errors
 /// Returns configuration/source/identity failures before any solver is launched.
 pub fn run(request: &Request<'_>) -> Result<Report, Error> {
-    run::campaign(request, None)
+    run_with_invocation(request, NativeInvocation::Legacy)
 }
 
 /// Run explicit constant variants drawn from the plan's allowed source suite.
@@ -179,9 +193,76 @@ pub fn run(request: &Request<'_>) -> Result<Report, Error> {
 /// Materialization failures are retained in the returned report before any
 /// solver invocation.
 pub fn run_workloads(request: &Request<'_>, workloads: &[Workload]) -> Result<Report, Error> {
-    run::campaign(request, Some(workloads))
+    run_workloads_with_invocation(request, workloads, NativeInvocation::Legacy)
 }
 
 #[cfg(test)]
 #[path = "../../tests/support/matrix_reports.rs"]
 mod fixtures;
+
+/// Run the fixed matrix using an explicit native command interface.
+///
+/// The sealed executable must support the selected interface. Both interfaces
+/// request the same machine answers and statistics; all qualification, bounds
+/// and failure retention are shared with [`run`].
+///
+/// # Errors
+/// Returns the same pre-launch failures as [`run`].
+pub fn run_with_invocation(
+    request: &Request<'_>,
+    invocation: NativeInvocation,
+) -> Result<Report, Error> {
+    run_with_cancellation(
+        request,
+        invocation,
+        &std::sync::atomic::AtomicBool::new(false),
+    )
+}
+
+/// Run a fixed matrix with caller-owned cancellation and no signal handlers.
+///
+/// The active child receives bounded ownership-checked cleanup. No subsequent
+/// child starts after cancellation is observed; the fixed remaining schedule is
+/// retained as unattempted. Partial capture and cancellation are nonpassing
+/// evidence, not an empty answer family or a completed measurement.
+/// The cancellation flag must remain set once requested.
+///
+/// # Errors
+/// Returns the same pre-launch refusals as [`run_with_invocation`].
+pub fn run_with_cancellation(
+    request: &Request<'_>,
+    invocation: NativeInvocation,
+    cancelled: &std::sync::atomic::AtomicBool,
+) -> Result<Report, Error> {
+    run::campaign(request, None, invocation, cancelled)
+}
+
+/// Run explicit workloads using an explicit native command interface.
+///
+/// # Errors
+/// Returns the same configuration and preparation failures as [`run_workloads`].
+pub fn run_workloads_with_invocation(
+    request: &Request<'_>,
+    workloads: &[Workload],
+    invocation: NativeInvocation,
+) -> Result<Report, Error> {
+    run_workloads_with_cancellation(
+        request,
+        workloads,
+        invocation,
+        &std::sync::atomic::AtomicBool::new(false),
+    )
+}
+
+/// Run explicit workloads under [`run_with_cancellation`]'s cancellation contract.
+///
+/// # Errors
+/// Returns the same preparation refusals as [`run_workloads_with_invocation`].
+pub fn run_workloads_with_cancellation(
+    request: &Request<'_>,
+    workloads: &[Workload],
+    invocation: NativeInvocation,
+    cancelled: &std::sync::atomic::AtomicBool,
+) -> Result<Report, Error> {
+    run::campaign(request, Some(workloads), invocation, cancelled)
+}

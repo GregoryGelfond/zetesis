@@ -15,6 +15,82 @@ fn atom(name: &str, values: Vec<Value>) -> Atom {
     Atom::new(Predicate::new(name, values.len()).unwrap(), values).unwrap()
 }
 
+#[test]
+fn evaluated_views_resume_the_original_rendering_budget() {
+    let fixture = ObservationFixture::with_directives(
+        Model::new([atom("p", vec![Value::Number(1)])]),
+        "p(1). #show p/1. #show f(X):p(X).",
+    );
+    let expected = fixture
+        .program
+        .render(
+            &fixture.model,
+            &fixture.selection,
+            Limits::default(),
+            &fixture.control,
+        )
+        .unwrap();
+    let view = fixture.view();
+    let limits = Limits {
+        max_work: expected.statistics().work,
+        ..Limits::default()
+    };
+    let rendered = view.render(limits, &fixture.control).unwrap();
+    assert_eq!(rendered.text(), expected.text());
+    assert_eq!(rendered.statistics(), expected.statistics());
+    assert!(view.observation_statistics().work < expected.statistics().work);
+    let refused = view
+        .render(
+            Limits {
+                max_work: limits.max_work - 1,
+                ..limits
+            },
+            &fixture.control,
+        )
+        .unwrap_err();
+    assert!(matches!(
+        refused.kind(),
+        zetesis_themelios::observation::ErrorKind::Limit {
+            resource: zetesis_themelios::observation::Resource::Work,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn evaluated_view_rendering_refuses_partial_lines() {
+    let fixture = ObservationFixture::with_directives(
+        Model::new([atom("p", vec![Value::Number(1)])]),
+        "p(1). #show f(X):p(X).",
+    );
+    let view = fixture.view();
+    let expected = view.render(Limits::default(), &fixture.control).unwrap();
+    for max_output_bytes in 0..expected.text().len() {
+        assert!(
+            view.render(
+                Limits {
+                    max_output_bytes,
+                    ..Limits::default()
+                },
+                &fixture.control
+            )
+            .is_err()
+        );
+    }
+    assert_eq!(
+        view.render(
+            Limits {
+                max_output_bytes: expected.text().len(),
+                ..Limits::default()
+            },
+            &fixture.control
+        )
+        .unwrap()
+        .text(),
+        expected.text()
+    );
+}
+
 struct ObservationFixture {
     model: Model,
     program: ObservationProgram,

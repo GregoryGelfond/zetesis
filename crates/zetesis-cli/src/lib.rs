@@ -6,9 +6,19 @@
 //! [`run`] accepts source and an injected output sink. Parsing, exact oracles,
 //! and candidate enumeration remain reusable libraries. [`entry`] adapts these
 //! operations to process arguments, standard streams, and exit codes.
+//! [`publish_prepared`] and [`AnswerRenderer`] provide a replaceable typed view
+//! without argument parsing or complete-family buffering. [`HumanRenderer`] and
+//! [`JsonRenderer`] use that same contract; semantic evidence stays independent
+//! of the renderer's acknowledgement.
 #![forbid(unsafe_code)]
 
 mod options;
+mod command;
+pub mod testing;
+pub mod benchmark;
+pub mod statistics_view;
+pub use command::Invocation;
+pub use statistics_view::StatisticsView;
 mod driver;
 mod failure;
 mod display;
@@ -21,6 +31,12 @@ mod statistics;
 mod phase_timing;
 mod stage_timing;
 mod output;
+mod view;
+
+pub use view::{
+    AnswerRenderer, AnswerView, HumanRenderer, JsonRenderer, PublicationConfig, PublicationView,
+    SummaryDelivery, SummaryStage,
+};
 
 #[cfg(test)]
 #[path = "../tests/support/bounded_writer.rs"]
@@ -28,10 +44,10 @@ mod test_writer;
 
 pub use devices::devices;
 pub use driver::{
-    Report, RunError, run, run_bundle_detailed_with_diagnostics,
-    run_bundle_finalized_with_diagnostics, run_bundle_with_diagnostics, run_detailed,
-    run_detailed_with_diagnostics, run_finalized, run_finalized_with_diagnostics,
-    run_with_diagnostics,
+    Report, RunError, publish_prepared, run, run_bundle_detailed_with_diagnostics,
+    run_bundle_finalized_with_diagnostics, run_bundle_with_diagnostics, run_bundle_with_renderer,
+    run_detailed, run_detailed_with_diagnostics, run_finalized, run_finalized_with_diagnostics,
+    run_with_diagnostics, run_with_renderer,
 };
 pub use failure::{PartialReport, RunFailure};
 pub use options::{Command, Options};

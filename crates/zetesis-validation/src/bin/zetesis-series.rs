@@ -3,7 +3,7 @@ use clap::Parser;
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
-use zetesis_validation::performance::series::{Labelled, compare};
+use zetesis_validation::performance::series::{ReportSource, read_compare};
 
 #[derive(Parser)]
 #[command(
@@ -24,23 +24,20 @@ struct Options {
 }
 
 fn execute(options: &Options) -> Result<(), Box<dyn std::error::Error>> {
-    let mut documents = Vec::with_capacity(options.reports.len());
-    for argument in &options.reports {
-        let (label, path) = argument
-            .split_once('=')
-            .ok_or("each --report is LABEL=PATH")?;
-        let file = std::fs::File::open(path)?;
-        if file.metadata()?.len() > options.report_bytes {
-            return Err(format!("{path} exceeds the report byte ceiling").into());
-        }
-        let document: serde_json::Value = serde_json::from_reader(io::BufReader::new(file))?;
-        documents.push((label.to_owned(), document));
-    }
-    let labelled: Vec<Labelled<'_>> = documents
+    let sources: Vec<_> = options
+        .reports
         .iter()
-        .map(|(label, report)| Labelled { label, report })
-        .collect();
-    let comparison = compare(&labelled)?;
+        .map(|argument| {
+            let (label, path) = argument
+                .split_once('=')
+                .ok_or("each --report is LABEL=PATH")?;
+            Ok(ReportSource {
+                label,
+                path: std::path::Path::new(path),
+            })
+        })
+        .collect::<Result<_, &'static str>>()?;
+    let comparison = read_compare(&sources, options.report_bytes)?;
     if let Some(path) = &options.json {
         let mut output = std::fs::OpenOptions::new()
             .write(true)

@@ -749,20 +749,18 @@ impl fmt::Display for Profile<'_> {
 }
 
 fn label(entry: &str, workload: Option<&Value>) -> String {
-    let path = entry.strip_suffix(".lp").unwrap_or(entry);
-    if workload.is_some_and(|workload| workload.get("generated").is_some()) {
-        return path.rsplit('/').next().unwrap_or(path).to_owned();
-    }
-    let components: Vec<&str> = path.rsplit('/').take(2).collect();
-    let label = components.into_iter().rev().collect::<Vec<_>>().join("/");
-    match workload
+    let edits = workload
         .filter(|workload| workload["amended"] == true)
-        .and_then(|workload| workload["sources"][0]["edits"][0].as_object())
-        .and_then(|edit| Some((edit["before"].as_str()?, edit["after"].as_str()?)))
-    {
-        Some((before, after)) => format!("{label} {before}→{after}"),
-        None => label,
-    }
+        .and_then(|workload| workload["sources"].as_array())
+        .into_iter()
+        .flatten()
+        .flat_map(|source| source["edits"].as_array().into_iter().flatten())
+        .filter_map(|edit| Some((edit["before"].as_str()?, edit["after"].as_str()?)));
+    super::super::matrix::workload_label(
+        entry,
+        workload.is_some_and(|workload| workload.get("generated").is_some()),
+        edits,
+    )
 }
 
 fn native_cell(record: Option<&Native>) -> String {
@@ -1223,7 +1221,7 @@ fn memory(
 
 /// The one median of the file: the middle value, or the midpoint of the two
 /// middle values for an even count; `None` of nothing.
-fn median(values: &mut [u64]) -> Option<u64> {
+pub(crate) fn median(values: &mut [u64]) -> Option<u64> {
     values.sort_unstable();
     let count = values.len();
     match count {

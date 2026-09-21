@@ -1,6 +1,7 @@
 # Summary
 
 [About this book](index.md)
+[Using the zetesis command](reference/commands.md)
 
 # Part I — Solver design and architecture
 
@@ -15,17 +16,19 @@
 
 # Part II — The Rust library programmer's manual
 
-- [Choosing a library boundary](rust/libraries.md)
-- [Preparing source and interpreting analysis](rust/source.md)
+- [Getting started with the library](rust/getting-started.md)
 - [Embedding an ordinary solve](rust/sessions.md)
+- [Costs and shown terms](rust/costs-and-output.md)
+- [Completion, resources, and output](rust/outcomes.md)
+- [Library reference index](rust/libraries.md)
+- [Reusing command workflows](rust/workflows.md)
+- [Preparing source and interpreting analysis](rust/source.md)
 - [Supplying a membership executor](rust/executors.md)
 - [Interpretations and retained atoms](rust/models.md)
-- [Costs and shown terms](rust/costs-and-output.md)
 - [Observations and host measurements](rust/measurements.md)
 - [Working with finite reducts](rust/reducts.md)
 - [Parallel and lazy checking](rust/parallel.md)
 - [Projecting finite domains through a table](rust/finite-tables.md)
-- [Completion, resources, and output](rust/outcomes.md)
 
 # Part III — The Lean proof library
 
@@ -40,16 +43,21 @@
 
 - [Exact event execution on neuromorphic hardware](appendices/neuromorphic.md)
 
+# Performance and testing
+
+- [Performance results](reference/performance.md)
+  - [Worker scaling: CPU and Metal](reference/worker-scaling.md)
+  - [Shared-plan execution: CPU and Metal](reference/plan-execution.md)
+  - [CPU and Metal execution series](reference/execution-series.md)
+  - [Reduct execution: CPU and Metal](reference/reduct-execution.md)
+  - [Prepared grounding: CPU and Metal](reference/prepared-metal.md)
+  - [Earlier grounding measurements](reference/grounding-measurements.md)
+- [Validating an implementation change](reference/validation.md)
+  - [Measurement protocols](reference/measurement-protocols.md)
+
 ---
 
 [Admitted language](reference/language.md)
 [Language coverage obligations](reference/language-coverage.md)
-[Validating an implementation change](reference/validation.md)
-[Performance comparisons](reference/performance.md)
-[Worker scaling: CPU and Metal](reference/worker-scaling.md)
-[Shared-plan execution: CPU and Metal](reference/plan-execution.md)
-[CPU and Metal execution series](reference/execution-series.md)
-[Reduct execution: CPU and Metal](reference/reduct-execution.md)
-[Prepared grounding: CPU and Metal](reference/prepared-metal.md)
 [Vocabulary](vocabulary.md)
 [Building the documentation](building.md)

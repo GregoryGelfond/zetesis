@@ -1,109 +1,67 @@
 # zetesis-solve
 
-Composed answer-set solving over coherent admitted programs. This library owns
-execution policy, sessions, checked answer sets, complete world views and typed
-failure evidence. It has no command-line parser, source-file loader, JSON encoder
-or output sink. The `zetesis` command is a consumer through `zetesis-cli`.
+Solve admitted programs from Rust and receive typed answer sets. This crate owns
+sessions, execution policy, complete-family collection and failure evidence.
+Applications provide source loading and presentation; no command-line parser or
+output stream is required.
 
-## Solve an admitted program
+## Start here
 
-`PreparedInput` borrows an admitted source owner, native relational program or
-complete ground graph. `Session::builder` composes policy, optional device
-resources and measurements before execution. `start` returns a streaming session;
-`collect` retains the complete original answer-set family within explicit limits.
+The [library quickstart](../../docs/book/rust/getting-started.md) shows dependency
+setup and a complete runnable example. Packages are consumed from this repository
+through path dependencies or a pinned Git revision, not from crates.io.
 
-```rust
-use zetesis_solve::{Backend, PreparedInput, Session, SolveConfig, WorldViewLimits};
-use zetesis_cpu::Control;
-use zetesis_themelios::{admit, AdmissionOptions};
+Run the quickstart example from the checkout root:
 
-let admitted = admit("a :- not b. b :- not a.".into(), AdmissionOptions::default())?;
-let config = SolveConfig { backend: Backend::Cpu, models: 0, ..Default::default() };
-let world_view = Session::builder(
-    PreparedInput::admitted(&admitted), config, Control::default(),
-).collect(WorldViewLimits::default())?;
-assert_eq!(world_view.len(), 2);
-# Ok::<(), Box<dyn std::error::Error>>(())
+```sh
+cargo run --locked -p zetesis-solve --no-default-features --example book-getting-started
 ```
 
-Collection consumes an unstarted request and selects all original answers,
-including nonoptimal answers when objectives are present. A limit, interruption
-or failed observer returns a retained prefix rather than a `WorldView`. A complete
-empty family establishes inconsistency; a family containing one empty answer
-does not. Streaming consumers choose when to retain or publish each answer.
+The [example source](../../docs/book/examples/getting-started.rs) admits a two-rule
+ASP program, starts a CPU session, prints each full interpretation in Rust's
+debug format and checks that search is exhausted. Errors propagate to its
+fallible `main`.
 
-## Execution and evidence
+For an application, source admission usually comes from `zetesis-themelios`.
+`PreparedInput::admitted` borrows that owner, `Session::enumerate` yields
+`Result<AnswerSet, SolveFailure>`, and `AnswerSet::interpretation` exposes the full
+true-atom set. Inspect `Session::outcome` separately to determine what completed.
 
-The reduct defines answer-set membership. Relational normal programs use exact
-reduct closure; general formulas require original satisfaction and the absence
-of a proper-subset model of the frozen reduct. CPU, Rayon and wgpu execution
-preserve this contract. Class certificates justify specializations only under
-their checked premises.
+## Choose the result you need
 
-Automatic CPU formula execution checks those premises against the complete ground
-theory. Positive atomic-head programs use least consequences and original
-constraint satisfaction; tight programs can use supportedness. Full normalized
-source analysis guides the order of these checks. It does not certify a ground
-theory by itself. Explicit countermodel checking retains the general reduct path.
+- `Session::enumerate` streams every original answer set with its score, including
+  nonoptimal answers when objectives exist.
+- `Session::new` uses ordinary optimization selection when an objective exists.
+  An interrupted incumbent is not a proved optimum; inspect the outcome.
+- `Session::builder(...).collect(...)` returns a `WorldView` only after complete
+  capture within `WorldViewLimits`. Failure retains a checked prefix instead.
 
-General reduct checking under the default regions method reads the original
-formula graph under each candidate's frozen truth mask. The optional clauses
-method prepares one candidate-parametric reduct encoding per search owner and
-reuses it across residual queries; Rayon workers share that encoding and retain
-separate query state. Preparation, original satisfaction and query work remain
-explicitly bounded and accounted; reuse does not carry candidate truth into
-another check.
+`models: 0` requests all answers. A positive answer limit or early stop does not
+establish exhaustive search. A complete empty `WorldView` establishes
+inconsistency; an empty partial result, or one answer with no true atoms, does not.
 
-Automatic device execution uses the same checked tight certificate as the CPU
-when available. Other theories retain general GPU propagation with exact host
-completion. Multiple region producers form bounded batches without deciding
-answer-set membership; the selected oracle supplies that decision. CPU-only
-execution can instead check membership directly on its native region workers.
+Keep the admitted theory, atom catalog, objectives and observations together.
+A prepared input borrows one coherent owner; it cannot combine unrelated source
+admissions. Returned answers retain their subject and full interpretation,
+independently of displayed projections.
 
-`SessionBuilder::executor` supplies a custom formula membership primitive through
-[`BatchExecutor`](../../docs/book/rust/executors.md). The host retains original
-satisfaction, candidate coverage, exact residual checking and publication.
-Decisive executor verdicts must be sound for the supplied plan and candidates;
-receipt identity and shape checks do not establish that soundness. The manual
-documents supported inputs, ownership, limits and failure evidence, with a
-bounded executable adapter example.
+## Execution and control
 
-With GPU support, `ExecutionResources::with_gpu` shares a selected context and
-`with_formula_profile` additionally shares one exact compiled formula primitive.
-Each session retains its own program preparation, residency, candidate stream,
-budgets, counters and incumbents. Shared infrastructure does not share truth or
-resume a previous search. Adapter policy, device health and contention are
-checked when execution uses the resource.
+`SolveConfig` selects CPU or device execution and named resource limits.
+`zetesis_cpu::Control` supplies cooperative cancellation and deadlines. GPU
+support is enabled by default; use `default-features = false` for a CPU-only
+consumer. Cargo feature unification can enable it through another dependency.
+Compiling GPU support does not select a device.
 
-Independent relational CPU sessions retain one exact-program query preparation
-and reuse empty workspaces across submitted batches. `max_source_work` bounds
-preparation; candidate work remains separately bounded by `max_work`.
-`SemanticOutcome::query_execution()` retains the CPU producer's actual ownership
-receipt and any snapshot fault, and `SemanticOutcome::closure_execution()` sums
-the counters of every completed check on the independent lazy and eager routes.
-Preparation and candidate stops remain distinct, and previously checked answers
-remain valid. Reused capacity is neither shared candidate truth nor a
-performance guarantee.
+`SessionBuilder` can accept shared `ExecutionResources`, optional
+`SolveMeasurements`, and an `ExecutionObserver`. A caller-supplied `BatchExecutor`
+is supported for formula membership under its explicit soundness contract.
+Shared resources do not reuse candidate truth, search coverage or budgets.
+Failures and interrupted searches preserve available evidence without claiming
+exhaustion, inconsistency or optimality. Lean laws do not yet certify the complete
+Rust or device implementation.
 
-`AnswerSet` retains its original subject and optional objective score.
-`SemanticOutcome` records verified membership and search coverage independently
-of consumer output. `Session::progress` snapshots current evidence without
-stopping search. `SolveFailure` retains the cause, subject, available semantics
-and optional timings; it contains no publication state.
-
-Retained-answer limits count each actual shared atom-catalog owner once, each
-answer's selection separately, and retained objective scores. Equal catalogs
-with distinct owners remain distinct charges. These canonical payload limits
-bound represented data, not allocator overhead or process memory.
-
-`ExecutionObserver` receives typed synchronous execution facts. An observer
-failure terminates its operation and preserves existing evidence; it cannot
-trigger device fallback. `SolveMeasurements` lets admission, execution and
-publication contribute to an explicit host-measurement scope. Measurements are
-not semantic evidence or GPU kernel timings.
-
-See the [library map](../../docs/book/rust/libraries.md),
-[session guide](../../docs/book/rust/sessions.md),
-[observation and measurement guide](../../docs/book/rust/measurements.md),
-[outcome contracts](../../docs/book/rust/outcomes.md) and
-[implementation correspondence](../../docs/book/lean/correspondence.md).
+Continue with [sessions](../../docs/book/rust/sessions.md),
+[completion and output](../../docs/book/rust/outcomes.md),
+[custom executors](../../docs/book/rust/executors.md), or the
+[library reference index](../../docs/book/rust/libraries.md).

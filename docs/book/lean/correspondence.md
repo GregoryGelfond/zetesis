@@ -154,6 +154,14 @@ back into it. `Outcomes` already distinguishes established membership, complete
 search and delivery. Removing redundant mutable copies does not turn these laws
 into a proof of the concrete Rust projection or writer behavior.
 
+The streaming `AnswerRenderer` boundary consumes a borrowed interpretation,
+evaluated `#show` channels and objective score. Its controller acknowledges an
+answer only after the callback succeeds and fixes the terminal callback stage
+once per invocation. Human and JSON encodings share that controller; custom
+views do not participate in membership checking. These are concrete publication
+contracts under the same `Outcomes` obligations, exercised by Rust regression
+tests. They add no end-to-end refinement theorem.
+
 The [ownership chapter](../architecture/ownership.md) and
 [session example](../rust/sessions.md#reuse-and-identity) connect these obligations
 to the maintained implementation.

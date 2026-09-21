@@ -145,7 +145,7 @@ impl Configuration {
 #[derive(Clone, Debug, Args)]
 pub struct Options {
     /// Require Metal/Vulkan or explicitly select scalar/Rayon checking only.
-    #[arg(long, value_enum, default_value_t)]
+    #[arg(long = "device", alias = "backend", value_enum, default_value_t)]
     pub backend: Backend,
     /// Physical support construction; applies only to this primitive experiment.
     #[arg(long, value_enum, default_value_t)]
@@ -171,7 +171,7 @@ pub struct Options {
     #[arg(long, default_value = "12")]
     pub repetitions: NonZeroUsize,
     /// Independently owned Rayon workers.
-    #[arg(long, default_value = "4")]
+    #[arg(long = "threads", alias = "workers", default_value = "4")]
     pub workers: NonZeroUsize,
     /// Per-operation logical work; different algorithms retain different charges.
     #[arg(long, default_value_t = 100_000_000)]

@@ -1,5 +1,19 @@
 # zetesis-experiments
 
+The main application exposes the typed relation, aggregate, tight and lazy
+profiles through `zetesis bench primitives`. `primitives::Request` selects a
+library configuration and `primitives::measure` publishes borrowed typed events;
+human tables consume these events directly. `--json` and an optional `--report`
+retain the profile's versioned JSON-lines stream. Physical requests never fall
+back to CPU. The current primitive command requires the application's `gpu`
+build feature even when selecting a CPU profile, because this experiment crate
+still includes its device implementations.
+
+The compatibility `zetesis-bench` executable delegates to `command::execute`.
+It retains static, formula, grounding, finite-table and feedback profiles and
+its existing views. A complete table applicability refusal remains distinct
+from both a passing campaign and an operation failure.
+
 Bounded development experiments with reusable Rust interfaces and a
 `zetesis-bench` command adapter. Each profile names the operation it measures,
 its reference comparison and its limits. Primitive measurements do not establish

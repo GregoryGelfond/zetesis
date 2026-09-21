@@ -143,6 +143,63 @@ cover additional search, scoring and storage failures. The
 [source preparation example](source.md) separately checks empty and inconsistent
 programs; neither an empty display nor a retained prefix decides inconsistency.
 
+## Replace answer presentation
+
+`AnswerRenderer` receives `AnswerView` callbacks one answer at a time, then a
+borrowed `PublicationView`. The controller evaluates `#show` in the themelios
+observation layer once per yielded answer. Both `HumanRenderer` and
+`JsonRenderer` consume that same typed `ModelView`: the complete interpretation,
+selected original atoms, evaluated terms and optional priority/cost pairs remain
+separate. An empty displayed projection never changes answer identity.
+
+`publish_prepared` accepts an admitted owner and `PublicationConfig`, containing
+ordinary `SolveConfig` and observation limits. It needs no argument parser,
+global stream or complete `WorldView` buffer. `run_with_renderer` and
+`run_bundle_with_renderer` are source conveniences using the existing CLI options;
+their `json` flag does not replace the injected renderer. The prepared entry
+retains requested phase timings in the terminal view; the consumer chooses how
+to present them. Its diagnostics writer receives plain execution diagnostics.
+
+The controller acknowledges a complete answer only after its renderer returns
+success. A renderer can write into a supplied sink or accept typed data directly.
+Failure after a partial write acknowledges no answer. Cooperative cancellation
+remains a publication stop, independently of any established exhaustion or
+optimum; a later writer failure remains a failure. Neither an accepted callback
+nor `SummaryDelivery::Accepted` implies durability. Callers own flushing.
+
+The human renderer preflights one complete record under its byte ceiling. The
+JSON renderer additionally retains a bounded document atom table; each invocation
+starts fresh indices. Custom renderers own their encoding limits and any copies
+they retain. The controller retains no complete family for presentation, although
+objective selection still uses the solver's separately bounded incumbent store.
+
+`SummaryStage::SearchFinished` preserves the human summary before statistics are
+written. That view cannot claim later reporting succeeded, and the callback is
+not reached after a source or execution failure. The default `Finalized` stage,
+used by JSON and custom renderers, includes attempted timings and later reporting
+failures. The controller invokes the chosen terminal callback at most once; a
+failed footer never replaces an earlier original cause.
+
+This consumer inspects full and shown channels while retaining only two scalar
+fields. It deliberately accepts typed records without producing text:
+
+```rust
+# extern crate zetesis_cli;
+# extern crate zetesis_cpu;
+# extern crate zetesis_themelios;
+{{#include ../examples/answer-renderer.rs:example}}
+```
+
+Run the checked example with:
+
+```sh
+cargo run --locked -p zetesis-cli --no-default-features --example book-answer-renderer
+```
+
+See the [view contract](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cli/src/view.rs),
+[publication controller](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cli/src/publication.rs)
+and [bounded model views](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/observation/view.rs).
+
 ## Resource contracts
 
 Each operation names the resources it bounds: source bytes, syntax depth, atoms,
@@ -258,6 +315,13 @@ Host intervals around device calls include transport, waits and readback.
 Enabled session elapsed time can include the consumer's delay between pulls;
 active solving spans do not include that delay. These scopes matter when using
 the same library in a server or comparing it with a command-line run.
+
+The compact human work table projects retained accounting without collecting
+extra counters. Its formula region reading work is a search-work subtotal;
+closure work covers completed checks and omits stopped-check partial work.
+GPU submissions do not imply a decoded result, and only decoded primitive work
+is shown. Eager rule/table rows cover rule instantiation. The typed statistics,
+JSON and compatibility record views retain the complete counter catalog.
 
 Closure sessions expose `SemanticOutcome::candidate_statistics()` separately
 from membership results. These counters report necessary source restrictions,

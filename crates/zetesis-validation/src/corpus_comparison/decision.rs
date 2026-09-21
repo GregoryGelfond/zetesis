@@ -13,6 +13,8 @@ pub enum Producer {
 /// Why a process capture cannot establish a completed solver result.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CaptureFailure {
+    /// Caller cancellation stopped an active child capture.
+    Cancelled,
     /// The invocation deadline was reached.
     Timeout,
     /// The combined output allowance was reached.
@@ -27,9 +29,9 @@ pub enum CaptureFailure {
 #[serde(rename_all = "snake_case")]
 pub(super) enum CaptureStatus {
     Completed,
+    Cancelled,
     Timeout,
     OutputLimit,
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[serde(rename = "capture_failure")]
     CaptureFailure,
     #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -39,9 +41,9 @@ impl CaptureStatus {
     pub(super) const fn failure(self) -> Option<CaptureFailure> {
         match self {
             Self::Completed => None,
+            Self::Cancelled => Some(CaptureFailure::Cancelled),
             Self::Timeout => Some(CaptureFailure::Timeout),
             Self::OutputLimit => Some(CaptureFailure::OutputLimit),
-            #[cfg(any(target_os = "linux", target_os = "macos"))]
             Self::CaptureFailure => Some(CaptureFailure::Capture),
             #[cfg(any(target_os = "linux", target_os = "macos"))]
             Self::InvalidUtf8 => Some(CaptureFailure::InvalidUtf8),
@@ -56,6 +58,8 @@ pub enum Decision {
     Passed,
     /// Only the reference was requested and its contracts hold.
     ReferencePassed,
+    /// Caller cancellation prevented this solver invocation from starting.
+    Cancelled(Producer),
     /// A solver could not be invoked.
     InvocationFailed(Producer, String),
     /// Solver output capture did not complete under the requested contract.
@@ -88,6 +92,14 @@ impl Decision {
         match self {
             Self::Passed => "pass",
             Self::ReferencePassed => "reference_pass",
+            Self::Cancelled(Producer::Reference)
+            | Self::CaptureFailed(Producer::Reference, CaptureFailure::Cancelled) => {
+                "reference_cancelled"
+            }
+            Self::Cancelled(Producer::Native)
+            | Self::CaptureFailed(Producer::Native, CaptureFailure::Cancelled) => {
+                "native_cancelled"
+            }
             Self::InvocationFailed(Producer::Reference, _) => "reference_invocation_error",
             Self::InvocationFailed(Producer::Native, _) => "native_invocation_error",
             Self::CaptureFailed(Producer::Reference, CaptureFailure::Timeout) => {
@@ -129,6 +141,7 @@ impl Decision {
     pub fn detail(&self) -> Option<&str> {
         match self {
             Self::Passed | Self::ReferencePassed => None,
+            Self::Cancelled(_) => Some("caller cancellation prevented solver invocation"),
             Self::InvocationFailed(_, error)
             | Self::ReferenceOutputError(error)
             | Self::ReferenceContractMismatch(error)
@@ -148,5 +161,24 @@ impl Decision {
             }
             Self::Mismatch => Some("native and reference completed results differ"),
         }
+    }
+}
+
+/// Start refusal has no child capture; preserve cancellation as typed evidence.
+#[derive(Debug)]
+pub(super) enum InvocationFailure {
+    Cancelled,
+    Other(String),
+}
+
+impl From<String> for InvocationFailure {
+    fn from(value: String) -> Self {
+        Self::Other(value)
+    }
+}
+
+impl From<&str> for InvocationFailure {
+    fn from(value: &str) -> Self {
+        Self::Other(value.to_owned())
     }
 }

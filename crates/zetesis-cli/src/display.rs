@@ -1,38 +1,31 @@
 //! Bounded complete observation records; original model identity stays outside.
 
-mod record;
+pub(crate) mod record;
 
-use std::{io::Write, ops::ControlFlow};
-
-use record::{Contents, Record};
+use std::ops::ControlFlow;
 
 use zetesis_core::Model;
 use zetesis_cpu::Control;
 use zetesis_objective::Score;
-use zetesis_themelios::{
-    OutputSelection,
-    observation::{ObservationProgram, json::AtomTable},
-};
+use zetesis_themelios::{OutputSelection, observation::ObservationProgram};
 
-use crate::{Options, PublicationStop, RunError};
+use crate::{AnswerRenderer, AnswerView, PublicationStop, RunError};
 
 pub(crate) struct Display<'a> {
     pub selection: &'a OutputSelection,
     pub observations: &'a ObservationProgram,
-    pub options: &'a Options,
+    pub limits: zetesis_themelios::observation::Limits,
     pub control: &'a Control,
-    /// The atoms the JSON document has spelled; a record refers to them by index.
-    pub atoms: AtomTable,
 }
 impl Display<'_> {
     pub fn write(
         &mut self,
-        output: &mut impl Write,
+        renderer: &mut impl AnswerRenderer,
         number: usize,
         model: &Model,
         score: Option<&Score>,
     ) -> Result<ControlFlow<PublicationStop>, RunError> {
-        match self.write_record(output, number, model, score) {
+        match self.write_record(renderer, number, model, score) {
             Ok(()) => Ok(ControlFlow::Continue(())),
             Err(error) => PublicationStop::classify(error).map(ControlFlow::Break),
         }
@@ -40,56 +33,24 @@ impl Display<'_> {
 
     fn write_record(
         &mut self,
-        output: &mut impl Write,
+        renderer: &mut impl AnswerRenderer,
         number: usize,
         model: &Model,
         score: Option<&Score>,
     ) -> Result<(), RunError> {
-        if self.options.json {
-            let view = self
-                .observations
-                .view(model, self.selection, score, self.limits(), self.control)
-                .map_err(RunError::Observation)?;
-            return crate::output::write_model_record(
-                output,
-                number,
-                &view,
-                &mut self.atoms,
-                self.options,
-                self.control,
-            );
-        }
-        let rendered;
-        let contents = if self.observations.is_empty() {
-            Contents::Atoms(model, self.selection)
-        } else {
-            rendered = self
-                .observations
-                .render(model, self.selection, self.limits(), self.control)
-                .map_err(RunError::Observation)?;
-            Contents::Observed(rendered.text())
-        };
-        let record = Record::prepare(
-            number,
-            contents,
-            score,
-            self.options.color,
-            self.options.max_observation_bytes,
-            self.control,
-        )?;
-        // Semantic, encoding, size and control refusals precede external emission.
+        let view = self
+            .observations
+            .view(model, self.selection, score, self.limits, self.control)
+            .map_err(RunError::Observation)?;
         self.control.poll().map_err(RunError::PublicationStopped)?;
-        output.write_all(record.bytes())?;
-        Ok(())
-    }
-
-    fn limits(&self) -> zetesis_themelios::observation::Limits {
-        zetesis_themelios::observation::Limits {
-            max_work: self.options.max_observation_work,
-            max_bindings: self.options.max_observation_bindings,
-            max_terms: self.options.max_observation_terms,
-            max_output_bytes: self.options.max_observation_bytes,
-            ..Default::default()
-        }
+        renderer.answer(
+            AnswerView {
+                number,
+                model: &view,
+                limits: self.limits,
+                observations: !self.observations.is_empty(),
+            },
+            self.control,
+        )
     }
 }

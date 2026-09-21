@@ -1,6 +1,6 @@
 //! Streaming typed metadata actions; arbitrary diagnostic bytes pass unchanged.
 
-use super::{ColorMode, RESET};
+use super::ColorMode;
 use std::{
     fmt,
     io::{self, Write},
@@ -32,19 +32,28 @@ impl Label {
 pub(crate) struct Diagnostics<W> {
     writer: W,
     color: ColorMode,
+    width: std::num::NonZeroUsize,
 }
 impl<W: Write> Diagnostics<W> {
     pub(crate) const fn new(writer: W, color: ColorMode) -> Self {
-        Self { writer, color }
+        Self {
+            writer,
+            color,
+            width: std::num::NonZeroUsize::new(80).unwrap(),
+        }
+    }
+
+    pub(crate) const fn with_width(mut self, width: std::num::NonZeroUsize) -> Self {
+        self.width = width;
+        self
+    }
+
+    pub(crate) const fn layout(&self) -> zetesis_presentation::Layout {
+        zetesis_presentation::Layout::new(self.width, self.color)
     }
 
     pub(crate) fn metadata(&mut self, label: Label, value: fmt::Arguments<'_>) -> io::Result<()> {
-        let label = label.text();
-        if self.color == ColorMode::Always {
-            writeln!(self.writer, "{BLUE}{label}:{ITALIC_GRAY} {value}{RESET}")
-        } else {
-            writeln!(self.writer, "{label}: {value}")
-        }
+        self.color.metadata(&mut self.writer, label.text(), value)
     }
 
     pub(crate) fn diagnostic(&mut self, diagnostic: &impl fmt::Display) -> io::Result<()> {
@@ -52,8 +61,6 @@ impl<W: Write> Diagnostics<W> {
     }
 }
 
-const BLUE: &str = "\u{1b}[34m";
-const ITALIC_GRAY: &str = "\u{1b}[3;90m";
 impl<W: Write> Write for Diagnostics<W> {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
         self.writer.write(bytes)

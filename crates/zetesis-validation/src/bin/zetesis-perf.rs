@@ -200,7 +200,7 @@ struct ChildOptions {
 
 fn measure_child() -> ExitCode {
     let options = ChildOptions::parse_from(std::env::args_os().skip(1));
-    match child_record(options) {
+    match child_record(&options) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             let _ = writeln!(io::stderr().lock(), "zetesis-perf child RSS: {error}");
@@ -209,22 +209,18 @@ fn measure_child() -> ExitCode {
     }
 }
 
-fn child_record(options: ChildOptions) -> Result<(), Box<dyn std::error::Error>> {
+fn child_record(options: &ChildOptions) -> Result<(), Box<dyn std::error::Error>> {
     let (executable, arguments) = options.command.split_first().ok_or("missing solver")?;
     // This entry point starts no other children: resource usage belongs solely
     // to this one waited-for solver invocation, excluding the helper itself.
-    let record =
-        zetesis_validation::process::memory::measure(zetesis_validation::process::Invocation {
+    zetesis_validation::process::memory::measure_to_file(
+        zetesis_validation::process::Invocation {
             executable: std::path::Path::new(executable),
             arguments,
             directory: &std::env::current_dir()?,
-        })?;
-    let mut output = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(options.record)?;
-    serde_json::to_writer(&mut output, &record)?;
-    output.flush()?;
+        },
+        &options.record,
+    )?;
     Ok(())
 }
 
@@ -388,16 +384,8 @@ fn matrix(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
         max_spelling_bytes: limits.answers.max_input_bytes,
         helper: helper.as_deref(),
     };
-    let report = if matches!(options.suite, SuiteArgument::Series) {
-        let corpus = zetesis_validation::examples::load(&options.root, limits.corpus)?;
-        let cells = zetesis_validation::performance::series::workloads(
-            &corpus,
-            matrix::WorkloadLimits::default(),
-        )?;
-        matrix::run_workloads(&request, &cells)?
-    } else {
-        matrix::run(&request)?
-    };
+    let report =
+        zetesis_validation::performance::command::run(&request, matrix::NativeInvocation::Legacy)?;
     report.publish()?;
     writeln!(
         io::stdout().lock(),

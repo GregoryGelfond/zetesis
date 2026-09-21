@@ -19,8 +19,12 @@ fn stopped_formula_adapter_retains_admitted_subject() {
     let progress = super::solve(
         crate::PreparedInput::formula(&admitted),
         None,
-        &options,
-        &mut std::io::sink(),
+        &crate::PublicationConfig::from(&options),
+        &mut crate::HumanRenderer::new(
+            std::io::sink(),
+            crate::ColorMode::Never,
+            options.max_observation_bytes,
+        ),
         &mut crate::presentation::Diagnostics::new(std::io::sink(), crate::ColorMode::Never),
         &control,
         &crate::phase_timing::Recorder::new(false),

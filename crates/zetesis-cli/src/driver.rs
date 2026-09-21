@@ -1,14 +1,12 @@
 use crate::failure::Progress;
 use crate::phase_timing::Recorder;
 use crate::presentation::Diagnostics;
-use crate::{Backend, Completion, Grounder, Interruption, Options, RunFailure, SearchState};
+use crate::{Backend, Completion, Grounder, Interruption, Options, RunFailure};
 use std::fmt;
 use std::io::{self, Write};
-use zetesis_core::Model;
 use zetesis_cpu::{BatchError, Control, Stop};
 use zetesis_themelios::{
-    AdmissionFailure, BundleAdmissionFailure, BundleError, ExpansionFailure, OutputSelection,
-    SourceBundle,
+    AdmissionFailure, BundleAdmissionFailure, BundleError, ExpansionFailure, SourceBundle,
 };
 
 /// Publication counts and search coverage from a completed driver invocation.
@@ -484,18 +482,8 @@ pub(crate) fn run_source_with_writer(
     diagnostics: &mut Diagnostics<impl Write>,
     control: &Control,
 ) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
-    let mut document = crate::output::Document::new(output, options.json)?;
-    let phases = Recorder::new(options.stats);
-    let result = crate::admission::source(
-        source,
-        options,
-        &mut document,
-        diagnostics,
-        control,
-        &phases,
-    );
-    let result = report_progress_statistics(result, diagnostics, options, &phases);
-    document.finish(result, options)
+    let mut renderer = crate::view::builtin::Builtin::new(output, options);
+    run_source_with_renderer(source, options, &mut renderer, diagnostics, control)
 }
 
 /// Admit an original include graph through the extended source profile, then
@@ -567,23 +555,115 @@ pub(crate) fn run_bundle_with_writer(
     diagnostics: &mut Diagnostics<impl Write>,
     control: &Control,
 ) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
-    let mut document = crate::output::Document::new(output, options.json)?;
+    let mut renderer = crate::view::builtin::Builtin::new(output, options);
+    run_bundle_renderer_inner(bundle, options, &mut renderer, diagnostics, control)
+}
+
+/// Admit source and stream typed views into a caller-supplied renderer.
+/// Renderer selection is independent of `options.json`; that legacy field only
+/// selects the default renderer in the writer convenience APIs. Observation
+/// limits, source/execution configuration and diagnostics remain explicit.
+///
+/// # Errors
+/// Preserves source, solver, view and external publication failures, including
+/// semantic progress independent of accepted record counts. Cooperative
+/// publication stops return `PublicationOutcome::Stopped`.
+pub fn run_with_renderer(
+    source: String,
+    options: &Options,
+    renderer: &mut impl crate::AnswerRenderer,
+    diagnostics: &mut impl Write,
+    control: &Control,
+) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
+    let mut diagnostics = Diagnostics::new(diagnostics, options.color.human(options.json));
+    run_source_with_renderer(source, options, renderer, &mut diagnostics, control)
+}
+
+fn run_source_with_renderer(
+    source: String,
+    options: &Options,
+    renderer: &mut impl crate::AnswerRenderer,
+    diagnostics: &mut Diagnostics<impl Write>,
+    control: &Control,
+) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
+    let mut invocation = crate::view::session::Session::start(renderer)?;
+    let renderer = &mut invocation;
     let phases = Recorder::new(options.stats);
-    let result = crate::admission::bundle(
-        bundle,
-        options,
-        &mut document,
-        diagnostics,
+    let result = crate::admission::source(source, options, renderer, diagnostics, control, &phases);
+    let result = report_progress_statistics(result, diagnostics, options, &phases);
+    crate::publication::finalize(renderer, result)
+}
+
+/// Admit an original source bundle using the same replaceable typed view stream.
+///
+/// # Errors
+/// Returns the same retained failures and cooperative publication outcomes as
+/// [`run_with_renderer`], with original bundle locations retained.
+pub fn run_bundle_with_renderer(
+    bundle: SourceBundle,
+    options: &Options,
+    renderer: &mut impl crate::AnswerRenderer,
+    diagnostics: &mut impl Write,
+    control: &Control,
+) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
+    let mut diagnostics = Diagnostics::new(diagnostics, options.color.human(options.json));
+    run_bundle_renderer_inner(bundle, options, renderer, &mut diagnostics, control)
+}
+
+fn run_bundle_renderer_inner(
+    bundle: SourceBundle,
+    options: &Options,
+    renderer: &mut impl crate::AnswerRenderer,
+    diagnostics: &mut Diagnostics<impl Write>,
+    control: &Control,
+) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
+    let mut invocation = crate::view::session::Session::start(renderer)?;
+    let renderer = &mut invocation;
+    let phases = Recorder::new(options.stats);
+    let result = crate::admission::bundle(bundle, options, renderer, diagnostics, control, &phases);
+    let result = report_progress_statistics(result, diagnostics, options, &phases);
+    crate::publication::finalize(renderer, result)
+}
+
+/// Publish an already admitted input without reparsing or collecting its family.
+/// The same session controller and renderer lifecycle serve source and prepared
+/// inputs; semantic membership stays in `zetesis-solve`.
+///
+/// # Errors
+/// Retains execution and publication evidence under the same contract as
+/// [`run_with_renderer`]. No source admission is performed here.
+pub fn publish_prepared(
+    input: crate::PreparedInput<'_>,
+    config: &crate::PublicationConfig,
+    renderer: &mut impl crate::AnswerRenderer,
+    diagnostics: &mut impl Write,
+    control: &Control,
+) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
+    let mut diagnostics = Diagnostics::new(diagnostics, crate::ColorMode::Never);
+    let mut invocation = crate::view::session::Session::start(renderer)?;
+    let renderer = &mut invocation;
+    let phases = Recorder::new(config.solve.stats);
+    let mut result = crate::publication::solve(
+        input,
+        None,
+        config,
+        renderer,
+        &mut diagnostics,
         control,
         &phases,
     );
-    let result = report_progress_statistics(result, diagnostics, options, &phases);
-    document.finish(result, options)
+    if let Some(timings) = phases.snapshot() {
+        match &mut result {
+            Ok(progress) => progress.phase_timings = Some(timings),
+            Err(failure) => failure.phase_timings = Some(Box::new(timings)),
+        }
+    }
+    crate::publication::finalize(renderer, result)
 }
 
 fn report_progress_statistics(
     mut result: Result<Progress, crate::PublicationFailure>,
-    diagnostics: &mut impl Write,
+    diagnostics: &mut Diagnostics<impl Write>,
     options: &Options,
     phases: &Recorder,
 ) -> Result<Progress, crate::PublicationFailure> {
@@ -592,15 +672,32 @@ fn report_progress_statistics(
             Ok(progress) => progress.phase_timings = Some(timings),
             Err(failure) => failure.phase_timings = Some(Box::new(timings)),
         }
-        let emitted = crate::statistics::write_progress(
-            diagnostics,
-            options,
-            result.as_ref(),
-            timings.driver_elapsed,
-        )
-        .and_then(|()| crate::stage_timing::write(diagnostics, &timings.stages))
-        .and_then(|()| crate::phase_timing::write(diagnostics, &timings))
-        .and_then(|()| crate::grounding_timing::write(diagnostics, &timings.grounding));
+        let emitted = match options.statistics_view {
+            crate::StatisticsView::Records => crate::statistics::write_progress(
+                diagnostics,
+                options,
+                result.as_ref(),
+                timings.driver_elapsed,
+            )
+            .and_then(|()| crate::stage_timing::write(diagnostics, &timings.stages))
+            .and_then(|()| crate::phase_timing::write(diagnostics, &timings))
+            .and_then(|()| crate::grounding_timing::write(diagnostics, &timings.grounding)),
+            crate::StatisticsView::Human => {
+                let view = crate::PublicationView {
+                    result: result.as_ref(),
+                };
+                let config = crate::SolveConfig::from(options);
+                let statistics = crate::statistics_view::Statistics {
+                    requested: &config,
+                    timings: &timings,
+                    semantic: view.semantic(),
+                    publication: view.publication(),
+                    failed: view.failure().is_some(),
+                };
+                let layout = diagnostics.layout();
+                statistics.write_human(diagnostics, layout)
+            }
+        };
         if let Err(error) = emitted {
             return Err(match result {
                 Ok(progress) => progress.fail(RunError::Output(error)),
@@ -612,138 +709,6 @@ fn report_progress_statistics(
         }
     }
     result
-}
-
-pub(crate) fn write_atoms(
-    output: &mut impl Write,
-    model: &Model,
-    selection: &OutputSelection,
-) -> io::Result<()> {
-    for (index, atom) in model
-        .atoms()
-        .iter()
-        .filter(|atom| selection.includes(atom))
-        .enumerate()
-    {
-        if index != 0 {
-            write!(output, " ")?;
-        }
-        if atom.predicate().sign() == zetesis_core::Sign::Negative {
-            write!(output, "-")?;
-        }
-        write!(output, "{}", atom.predicate().name())?;
-        if !atom.values().is_empty() {
-            write!(output, "(")?;
-            for (position, value) in atom.values().iter().enumerate() {
-                if position != 0 {
-                    write!(output, ",")?;
-                }
-                match value {
-                    zetesis_core::Value::Infimum => write!(output, "#inf")?,
-                    zetesis_core::Value::Supremum => write!(output, "#sup")?,
-                    zetesis_core::Value::Number(number) => write!(output, "{number}")?,
-                    zetesis_core::Value::Symbol(symbol) => write!(output, "{symbol}")?,
-                    zetesis_core::Value::String(string) => write_string(output, string)?,
-                    zetesis_core::Value::Structured(value) => write!(output, "{value}")?,
-                }
-            }
-            write!(output, ")")?;
-        }
-    }
-    writeln!(output)
-}
-
-fn write_string(output: &mut impl Write, value: &str) -> io::Result<()> {
-    // The admitted clingo string dialect has exactly these three escapes.
-    // Other admitted characters, including literal tabs, retain their bytes;
-    // Rust Debug's \t and \u{...} spellings are not clingo string escapes.
-    write!(output, "\"")?;
-    for character in value.chars() {
-        match character {
-            '"' => write!(output, "\\\"")?,
-            '\\' => write!(output, "\\\\")?,
-            '\n' => write!(output, "\\n")?,
-            other => write!(output, "{other}")?,
-        }
-    }
-    write!(output, "\"")
-}
-
-pub(crate) fn finish(
-    output: &mut impl Write,
-    progress: &Progress,
-    json: bool,
-    color: crate::ColorMode,
-) -> Result<(), RunError> {
-    let semantic = progress.semantic().ok_or(RunError::CompletionUnavailable)?;
-    if let Some(stop) = &progress.stop {
-        if !json {
-            writeln!(output, "INCOMPLETE: {stop}")?;
-            writeln!(
-                output,
-                "Publication: incomplete; complete model records: {}",
-                progress.publication.models
-            )?;
-            writeln!(output, "Search coverage: {:?}", semantic.completion())?;
-            if semantic.optimum_proved() {
-                writeln!(output, "Optimum proved; delivery incomplete")?;
-            }
-        }
-        return Ok(());
-    }
-    let state = semantic
-        .search_state()
-        .ok_or(RunError::CompletionUnavailable)?;
-    state.completion().ok_or(RunError::CompletionUnavailable)?;
-    // JSON emits one final outcome after statistics and failure accounting.
-    if json {
-        return Ok(());
-    }
-    match state {
-        SearchState::Exhausted => {
-            if semantic.unsatisfiable() {
-                color.status(output, "UNSATISFIABLE")?;
-            } else if semantic.optimum_proved() {
-                writeln!(output, "OPTIMUM FOUND")?;
-            } else {
-                color.status(output, "SATISFIABLE")?;
-            }
-            writeln!(output, "Coverage: exhausted")?;
-        }
-        SearchState::RequestedModels => {
-            color.status(output, "SATISFIABLE")?;
-            writeln!(output, "Coverage: partial (requested model count reached)")?;
-        }
-        SearchState::Interrupted(reason) => {
-            writeln!(output, "INCOMPLETE: {reason}")?;
-            writeln!(output, "Coverage: partial")?;
-        }
-        SearchState::PendingInterruption(_) => return Err(RunError::CompletionUnavailable),
-    }
-    if semantic.countermodel_statistics().is_some()
-        || matches!(semantic.interruption(), Some(Interruption::Countermodel(_)))
-    {
-        writeln!(
-            output,
-            "Models: {}; candidates examined: {}; gate tuples discovered: n/a (formula search)",
-            progress.publication.models,
-            semantic.candidate_progress()
-        )?;
-    } else {
-        let examined = if semantic.shared_execution().is_some() {
-            "closure result/control records examined"
-        } else {
-            "candidates examined"
-        };
-        writeln!(
-            output,
-            "Models: {}; {examined}: {}; gate tuples discovered: {}",
-            progress.publication.models,
-            semantic.candidate_progress(),
-            semantic.discovered_gate_atoms()
-        )?;
-    }
-    Ok(())
 }
 
 impl From<zetesis_solve::SolveError> for RunError {
@@ -797,84 +762,5 @@ impl From<zetesis_solve::SolveError> for RunError {
                 Err(error) => Self::ExecutionObservation(error),
             },
         }
-    }
-}
-
-#[cfg(test)]
-mod value_output_tests {
-    use super::write_atoms;
-    use zetesis_core::{Atom, Model, Predicate, Value};
-    use zetesis_themelios::OutputSelection;
-
-    #[test]
-    fn extrema_and_their_quoted_spellings_print_as_distinct_terms() {
-        let values = [
-            Value::Infimum,
-            Value::String("#inf".into()),
-            Value::String("#sup".into()),
-            Value::Supremum,
-        ];
-        let model = Model::new(
-            values
-                .into_iter()
-                .map(|value| Atom::new(Predicate::new("p", 1).unwrap(), vec![value]).unwrap()),
-        );
-        let mut output = Vec::new();
-        write_atoms(&mut output, &model, &OutputSelection::default()).unwrap();
-        assert_eq!(
-            String::from_utf8(output).unwrap(),
-            "p(#inf) p(\"#inf\") p(\"#sup\") p(#sup)\n"
-        );
-    }
-
-    #[test]
-    fn complete_typed_atom_spelling_preserves_every_writer_prefix() {
-        use crate::test_writer::BoundedWriter;
-        use zetesis_core::{Sign, ValueLimits, ValueNode};
-
-        let nested = Value::from_nodes(
-            vec![
-                ValueNode::Function {
-                    name: "f".into(),
-                    sign: Sign::Negative,
-                    arity: 1,
-                },
-                ValueNode::Tuple { arity: 1 },
-                ValueNode::Number(2),
-            ],
-            ValueLimits::default(),
-        )
-        .unwrap();
-        let model = Model::new([
-            Atom::new(Predicate::new("z", 0).unwrap(), vec![]).unwrap(),
-            Atom::new(
-                Predicate::with_sign("p", 6, Sign::Negative).unwrap(),
-                vec![
-                    Value::Infimum,
-                    Value::Number(-7),
-                    Value::String("quote\" backslash\\ newline\n tab\tλ".into()),
-                    Value::Symbol("s".into()),
-                    nested,
-                    Value::Supremum,
-                ],
-            )
-            .unwrap(),
-            Atom::new(Predicate::new("a", 0).unwrap(), vec![]).unwrap(),
-        ]);
-        let expected =
-            "a -p(#inf,-7,\"quote\\\" backslash\\\\ newline\\n tab\tλ\",s,-f((2,)),#sup) z\n";
-        let mut complete = Vec::new();
-        write_atoms(&mut complete, &model, &OutputSelection::default()).unwrap();
-        assert_eq!(complete, expected.as_bytes());
-        for capacity in 0..expected.len() {
-            let mut output = BoundedWriter::new(capacity);
-            let error = write_atoms(&mut output, &model, &OutputSelection::default()).unwrap_err();
-            assert_eq!(error.kind(), std::io::ErrorKind::BrokenPipe);
-            assert_eq!(error.to_string(), "diagnostic sink closed");
-            assert_eq!(output.bytes(), &expected.as_bytes()[..capacity]);
-        }
-        let mut output = BoundedWriter::new(expected.len());
-        write_atoms(&mut output, &model, &OutputSelection::default()).unwrap();
-        assert_eq!(output.bytes(), expected.as_bytes());
     }
 }

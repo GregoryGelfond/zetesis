@@ -9,13 +9,16 @@ use crate::SolvePhase;
 use crate::failure::Progress;
 use crate::phase_timing::Recorder;
 use crate::presentation::Diagnostics;
-use crate::{Options, PreparedInput, PublicationFailure, Session};
+use crate::{
+    AnswerRenderer, PreparedInput, PublicationConfig, PublicationFailure, PublicationView, Session,
+    SummaryDelivery, SummaryStage,
+};
 
 pub(crate) fn solve(
     input: PreparedInput<'_>,
     expansion: Option<zetesis_themelios::ExpansionUsage>,
-    options: &Options,
-    output: &mut impl Write,
+    config: &PublicationConfig,
+    renderer: &mut impl AnswerRenderer,
     diagnostics: &mut Diagnostics<impl Write>,
     control: &Control,
     phases: &Recorder,
@@ -29,11 +32,10 @@ pub(crate) fn solve(
             &observations,
             zetesis_themelios::SourceMetadata::observations,
         ),
-        options,
+        limits: config.observations,
         control,
-        atoms: zetesis_themelios::observation::json::AtomTable::new(options.max_atoms),
     };
-    let mut request = Session::builder(input, options.into(), control.clone()).measurements(phases);
+    let mut request = Session::builder(input, config.solve, control.clone()).measurements(phases);
     if input
         .projection()
         .is_some_and(zetesis_themelios::PreparedProjection::is_explicit)
@@ -50,7 +52,7 @@ pub(crate) fn solve(
             Some(Ok(answer)) => {
                 let result = phases.measure(SolvePhase::ObservationOutput, || {
                     display.write(
-                        output,
+                        renderer,
                         progress.publication.models + 1,
                         answer.interpretation(),
                         answer.score(),
@@ -69,32 +71,14 @@ pub(crate) fn solve(
             None => break,
         }
     }
-    if progress.stop.is_none()
-        && !options.json
-        && let Some(best) = progress
-            .semantic()
-            .and_then(crate::SemanticOutcome::incumbent)
-    {
-        let result = phases.measure(SolvePhase::ObservationOutput, || {
-            writeln!(
-                output,
-                "Incumbent ties: {}; stable models scored: {}; objective work: {}",
-                best.tied_models, best.scored_models, best.work
-            )
-        });
-        if let Err(error) = result {
-            return Err(progress.fail(error.into()));
-        }
-    }
-    complete(output, diagnostics, progress, phases, options)
+    complete(renderer, diagnostics, progress, phases)
 }
 
 fn complete(
-    output: &mut impl Write,
+    renderer: &mut impl AnswerRenderer,
     diagnostics: &mut impl Write,
     mut progress: Progress,
     phases: &Recorder,
-    options: &Options,
 ) -> Result<Progress, PublicationFailure> {
     if progress.stop.is_none()
         && let Err(cause) = progress.completion()
@@ -127,23 +111,22 @@ fn complete(
                 statistics.countermodels
             )?;
         }
-        crate::driver::finish(output, &progress, options.json, options.color)
+        if renderer.summary_stage() == SummaryStage::SearchFinished {
+            acknowledge(renderer, &mut progress)?;
+        }
+        Ok(())
     })();
     match result {
-        Ok(()) => {
-            progress.publication.summary = !options.json;
-            Ok(progress)
-        }
+        Ok(()) => Ok(progress),
         Err(error) => Err(progress.fail(error)),
     }
 }
 
 pub(crate) fn check_control(
-    output: &mut impl Write,
+    renderer: &mut impl AnswerRenderer,
     diagnostics: &mut impl Write,
     control: &Control,
     phases: &Recorder,
-    options: &Options,
 ) -> Result<Option<Progress>, PublicationFailure> {
     match control.poll() {
         Ok(()) => Ok(None),
@@ -152,9 +135,53 @@ pub(crate) fn check_control(
             progress.apply(crate::SemanticOutcome::interrupted_before_start(
                 crate::Interruption::Preparation(stop),
             ));
-            complete(output, diagnostics, progress, phases, options).map(Some)
+            complete(renderer, diagnostics, progress, phases).map(Some)
         }
     }
+}
+
+/// Final reporting never replaces an earlier failure with a reporting failure.
+pub(crate) fn finalize(
+    renderer: &mut impl AnswerRenderer,
+    mut result: Result<Progress, PublicationFailure>,
+) -> Result<crate::PublicationOutcome, PublicationFailure> {
+    if renderer.summary_stage() == SummaryStage::Finalized {
+        match renderer.finish(PublicationView {
+            result: result.as_ref(),
+        }) {
+            Ok(SummaryDelivery::Accepted) => match &mut result {
+                Ok(progress) => progress.publication.summary = true,
+                Err(failure) => failure.acknowledge_summary(),
+            },
+            Ok(SummaryDelivery::Omitted) => {}
+            Err(error) => {
+                return Err(match result {
+                    Ok(progress) => progress.fail(error),
+                    Err(mut failure) => {
+                        failure.record_summary(match error {
+                            crate::RunError::Output(error) => error,
+                            other => std::io::Error::other(other),
+                        });
+                        failure
+                    }
+                });
+            }
+        }
+    }
+    result.and_then(Progress::finalize)
+}
+
+fn acknowledge(
+    renderer: &mut impl AnswerRenderer,
+    progress: &mut Progress,
+) -> Result<(), crate::RunError> {
+    if renderer.finish(PublicationView {
+        result: Ok(progress),
+    })? == SummaryDelivery::Accepted
+    {
+        progress.publication.summary = true;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

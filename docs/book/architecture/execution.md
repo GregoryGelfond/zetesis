@@ -119,7 +119,7 @@ are then the same operation over the same index of the theory, and no
 clause form is built anywhere on the route.
 
 Because the regions share nothing, several workers can walk the tree at
-once (`--workers`, the host's parallelism by default), each deciding
+once (`--threads`, at most four available host threads by default), each deciding
 the leaves it reaches, over a pool of regions still to visit. The family is exact at any worker count, each
 answer arriving once, by the partition law; the order in which answers
 arrive is the schedule's, is not promised to repeat between runs, and is
@@ -341,7 +341,7 @@ The four physical
 exercise both policies on Apple M4 Pro Metal. They cover original-root precedence,
 least unsupported atoms, duplicate and skewed producers, packed-word boundaries,
 batch isolation, resource refusals and retained-theory identity. The
-[performance evidence](../reference/validation.md#performance-evidence) separates
+[performance evidence](../reference/measurement-protocols.md#performance-evidence) separates
 these correctness checks from latency and occupancy measurements.
 
 For 256 atoms and 128 candidates, the packed support buffer occupies 4,096 bytes

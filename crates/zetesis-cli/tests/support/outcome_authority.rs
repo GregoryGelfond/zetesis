@@ -160,7 +160,7 @@ fn scoring_stop_remains_distinct_from_publication() {
 fn missing_completion_prevents_a_success_footer() {
     let options = crate::Options::try_parse_from(["zetesis", "--json"]).unwrap();
     let mut bytes = Vec::new();
-    let document = crate::output::Document::new(&mut bytes, true).unwrap();
+    let document = crate::output::document_fixture::Document::new(&mut bytes, true).unwrap();
     let failure = document.finish(Ok(Progress::new()), &options).unwrap_err();
     assert!(matches!(*failure.cause, RunError::CompletionUnavailable));
     assert_eq!(failure.partial_report.as_ref().unwrap().completion, None);
@@ -172,7 +172,7 @@ fn missing_completion_prevents_a_success_footer() {
 fn completion_fault_has_an_unavailable_json_outcome() {
     let options = crate::Options::try_parse_from(["zetesis", "--json"]).unwrap();
     let mut bytes = Vec::new();
-    let document = crate::output::Document::new(&mut bytes, true).unwrap();
+    let document = crate::output::document_fixture::Document::new(&mut bytes, true).unwrap();
     let failed = Progress::new().fail(RunError::CompletionUnavailable);
     let failure = document.finish(Err(failed), &options).unwrap_err();
     let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
@@ -198,14 +198,14 @@ fn unpublished_session(input: PreparedInput<'_>, config: SolveConfig) -> Progres
 fn assert_status(progress: Progress, human: &str, json: &str, coverage: &str) {
     assert_eq!(progress.publication.models, 0);
     let mut bytes = Vec::new();
-    crate::driver::finish(&mut bytes, &progress, false, crate::ColorMode::Never).unwrap();
+    crate::view::human::finish(&mut bytes, &progress, crate::ColorMode::Never).unwrap();
     let text = String::from_utf8(bytes).unwrap();
     assert!(text.starts_with(human), "{text}");
     assert!(text.contains("Models: 0;"), "{text}");
 
     let options = crate::Options::try_parse_from(["zetesis", "--json"]).unwrap();
     let mut bytes = Vec::new();
-    let document = crate::output::Document::new(&mut bytes, true).unwrap();
+    let document = crate::output::document_fixture::Document::new(&mut bytes, true).unwrap();
     let report = document.finish(Ok(progress), &options).unwrap();
     let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(value["outcome"]["status"], json);
@@ -324,7 +324,7 @@ fn missing_completion_prevents_a_human_summary() {
     for progress in [Progress::new(), unclassified] {
         let mut bytes = Vec::new();
         assert!(matches!(
-            crate::driver::finish(&mut bytes, &progress, false, crate::ColorMode::Never),
+            crate::view::human::finish(&mut bytes, &progress, crate::ColorMode::Never),
             Err(RunError::CompletionUnavailable)
         ));
         assert!(bytes.is_empty());

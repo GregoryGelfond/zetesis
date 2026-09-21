@@ -10,6 +10,9 @@
 //! than dropped: their typed decisions are the observation.
 
 mod view;
+pub(crate) use view::median;
+mod read;
+pub use read::{ReadError, ReportSource, read_compare};
 
 pub use view::{
     Breakdown, Cell, Comparison, Labelled, Native, Passed, PhaseTiming, ProfileRow, Provenance,

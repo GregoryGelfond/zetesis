@@ -20,6 +20,7 @@ use std::fmt;
 use std::io;
 use std::path::Path;
 use std::process::{Child, ExitStatus};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
@@ -70,6 +71,8 @@ pub enum Stop {
     Completed,
     /// The invocation deadline was reached.
     Deadline,
+    /// The caller requested cancellation; partial capture and cleanup are retained.
+    Cancelled,
     /// A byte beyond the combined retained-output ceiling was observed.
     OutputLimit,
     /// A capture or child-lifetime operation failed; inspect the failure fields.
@@ -159,6 +162,8 @@ impl std::error::Error for Failure {
 /// Refusal before a child is started.
 #[derive(Debug)]
 pub enum StartError {
+    /// The caller requested cancellation before the child was started.
+    Cancelled,
     /// The strong process-group backend is unavailable on this platform.
     UnsupportedPlatform,
     /// Executable or working-directory path is relative.
@@ -171,6 +176,7 @@ pub enum StartError {
 impl fmt::Display for StartError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Cancelled => f.write_str("process invocation cancelled before spawn"),
             Self::UnsupportedPlatform => {
                 f.write_str("bounded process groups require Linux or macOS")
             }
@@ -351,7 +357,25 @@ pub struct Cleanup {
 /// Returns a typed refusal only before spawning. Every post-spawn failure
 /// returns an [`Outcome`] with partial capture and explicit cleanup ownership.
 pub fn invoke(invocation: Invocation<'_>, limits: Limits) -> Result<Outcome, StartError> {
-    start(invocation, limits, false)
+    invoke_with_cancellation(invocation, limits, &AtomicBool::new(false))
+}
+
+/// Capture a child while observing a caller-owned cancellation flag.
+///
+/// The caller may set the flag from another thread or its own signal handler.
+/// This library installs no handlers. A set flag refuses a new launch; after
+/// spawn it stops polling and performs the same bounded, ownership-checked group
+/// cleanup as a deadline. Cancellation never shortens the cleanup obligation.
+/// The flag must remain set once cancellation is requested.
+///
+/// # Errors
+/// Returns [`StartError::Cancelled`] before spawn, or the refusals of [`invoke`].
+pub fn invoke_with_cancellation(
+    invocation: Invocation<'_>,
+    limits: Limits,
+    cancelled: &AtomicBool,
+) -> Result<Outcome, StartError> {
+    start(invocation, limits, false, cancelled)
 }
 
 /// Capture a helper whose descendants inherit its process group.
@@ -372,14 +396,31 @@ pub fn invoke_supervised(
     invocation: Invocation<'_>,
     limits: Limits,
 ) -> Result<Outcome, StartError> {
-    start(invocation, limits, true)
+    invoke_supervised_with_cancellation(invocation, limits, &AtomicBool::new(false))
+}
+
+/// Supervised helper capture with the cancellation contract of
+/// [`invoke_with_cancellation`] and the group ownership of [`invoke_supervised`].
+///
+/// # Errors
+/// Returns the same pre-spawn refusals as [`invoke_with_cancellation`].
+pub fn invoke_supervised_with_cancellation(
+    invocation: Invocation<'_>,
+    limits: Limits,
+    cancelled: &AtomicBool,
+) -> Result<Outcome, StartError> {
+    start(invocation, limits, true, cancelled)
 }
 
 fn start(
     invocation: Invocation<'_>,
     limits: Limits,
     supervised: bool,
+    cancelled: &AtomicBool,
 ) -> Result<Outcome, StartError> {
+    if cancelled.load(Ordering::Relaxed) {
+        return Err(StartError::Cancelled);
+    }
     if !invocation.executable.is_absolute() || !invocation.directory.is_absolute() {
         return Err(StartError::RelativePath);
     }
@@ -392,7 +433,7 @@ fn start(
         .ok_or(StartError::DeadlineOverflow)?;
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
-        posix::invoke(invocation, limits, started, deadline, supervised)
+        posix::invoke(invocation, limits, started, deadline, supervised, cancelled)
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {

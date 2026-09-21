@@ -1,6 +1,7 @@
 //! Machine-visible failure identity and output publication boundaries.
 
-use super::{Buffer, Document, input_failure, write_interruption};
+use super::document_fixture::Document;
+use super::{Buffer, input_failure, write_interruption};
 use crate::test_writer::BoundedWriter;
 use crate::{Interruption, Options, RunError};
 use clap::Parser;
@@ -34,7 +35,7 @@ fn legacy_metadata_cannot_establish_optimality() {
     // the session's immutable semantic outcome and its optimality evidence.
     let failure = crate::PublicationFailure::from(failure);
     assert!(failure.semantic().is_none());
-    let record = super::summary(&Err(failure), 4096).unwrap();
+    let record = super::document_fixture::summary(&Err(failure), 4096).unwrap();
     let mut document = b"{\"models\":[".to_vec();
     document.extend(record);
     let value: serde_json::Value = serde_json::from_slice(&document).unwrap();

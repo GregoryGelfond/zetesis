@@ -7,24 +7,27 @@ views and process exit policy. Composed solving belongs to
 the same solver types.
 
 See [Install and run](../../README.md#install-and-run) for installation and the
-[session guide](../../docs/book/rust/sessions.md) for Rust composition.
+[command guide](../../docs/book/reference/commands.md) for user tasks and everyday
+options. The [session guide](../../docs/book/rust/sessions.md) covers Rust composition.
 
 ## Run a program
 
 ```sh
-zetesis input.lp
-zetesis encoding.lp instance.lp --models 0
-zetesis input.lp --models 0 --stats
-zetesis input.lp --models 0 --json
-printf 'a :- not b. b :- not a.\n' | zetesis --models 0
+zetesis solve input.lp
+zetesis solve encoding.lp instance.lp --all
+zetesis solve input.lp --all --stats
+zetesis solve input.lp --all --json
+printf 'a :- not b. b :- not a.\n' | zetesis solve - --all
 zetesis devices
-zetesis --help
-zetesis --help-all
+zetesis help solve
+zetesis help solve --advanced
 ```
 
-The compact help lists everyday input, enumeration, backend, grounder and output
-options. `--help-all` additionally describes oracle selection, workers, batching
-and resource ceilings. Both views describe the same solver.
+Bare `zetesis` shows the task list. Compact solve help lists everyday inputs,
+answers, execution, limits and output options. Advanced help additionally
+describes reduct selection, batching and individual resource ceilings.
+Both views describe the same solver. File-first syntax, numeric `--models`
+and the old option spellings remain compatibility adapters.
 
 Omitting `--max-expansion-work` preserves independent library defaults for
 source-term expansion and eager formula grounding. An explicit value sets both
@@ -33,15 +36,16 @@ change makes `Options::max_expansion_work` an `Option<usize>`: use `None` for th
 defaults and `Some(limit)` for the shared override. Library admission continues
 to accept separate `ExpansionLimits` and `FormulaLimits` without a CLI adapter.
 
-Without objectives, the default returns one answer set; `--models 0` requests
+Without objectives, the default returns one answer set; `--all` requests
 exhaustive enumeration. With an active objective, the search phase ends before
 retained incumbents are displayed. Exhaustion establishes optimality; an
 interrupted search can return incumbents whose optimality remains unproved.
-The model limit bounds displayed ties. Equal displays can represent distinct
+The `--answers N` limit bounds displayed ties. Equal displays can represent distinct
 full answer sets.
 
-`--time-limit SECONDS` requests a cooperative deadline after input loading.
-Whole nonnegative seconds are accepted; zero requests an immediate stop and
+`--time-limit DURATION` requests a cooperative deadline after input loading.
+Whole nonnegative seconds, or a whole number with `s`, `m` or `h`, are accepted;
+zero requests an immediate stop and
 omission imposes no deadline. Search polls the same `Control` used by library
 consumers; a timer thread marks the deadline and each poll reads that mark
 beside the cancellation flag, so an unreached deadline does not slow the run. A deadline during search leaves coverage incomplete. A later deadline
@@ -57,10 +61,18 @@ Classical satisfaction alone does not establish stability.
 
 ## Results and presentation
 
-Human output separates answer headings, atoms, optimization metadata and the
+Statistics are off by default; `--stats` requests them on stderr. Human output separates answer headings, atoms, optimization metadata and the
 terminal result. `--color auto` resolves stdout and stderr independently,
 respects nonempty `NO_COLOR` and `TERM=dumb`, and leaves redirected streams
 plain. `always` and `never` provide explicit overrides.
+
+Explicit human `solve --stats` uses compact phase, execution and work tables.
+Requested settings remain separate from retained execution receipts; unavailable
+measurements are not zeros. Work rows name their units and scope, including
+completed-check closure totals and decoded device work. They are not additive
+across operations. JSON statistics and the compatibility record view retain the
+full counter catalog; selected eager rule/table rows in the compact view cover
+rule instantiation only.
 
 Answer headings use cyan with a bold label; optimization metadata uses italic
 green. Source/oracle/grounder/backend labels use blue with italic gray values.
@@ -131,7 +143,8 @@ accepted. `--stats` reports the regions visited, refuted and reached as
 leaves for the candidate tree and, under `--search regions`, for the reduct
 queries.
 
-`--workers N`, the host's available parallelism by default, is the one
+`--threads auto|N` (`--workers` in existing scripts) defaults to at most four
+available host threads, or one when availability is unknown. It is the one
 worker count: the closure route's pool, and under `--search regions` the
 workers walking the region tree, each deciding the leaves it reaches. The
 family of answer sets is the same as with one worker, each answer once, and
@@ -152,10 +165,10 @@ budgets. `--stats` distinguishes actual table preparations, reuses and row visit
 See the [finite-table contract](../../docs/book/rust/finite-tables.md).
 
 ```sh
-zetesis input.lp --backend cpu
-zetesis input.lp --backend metal --grounder eager
-zetesis input.lp --backend metal --grounder lazy
-zetesis input.lp --oracle countermodel --completion-workers 4 --models 0
+zetesis solve input.lp --device cpu
+zetesis solve input.lp --device metal --grounder eager
+zetesis solve input.lp --device metal --grounder lazy
+zetesis solve input.lp --oracle countermodel --completion-workers 4 --all
 ```
 
 Closure checks candidate gates against the least closure of the reduct,
@@ -332,6 +345,15 @@ one source for later rendering; changed disk contents cannot replace its excerpt
 See the [diagnostic and publication regressions](tests/observation_diagnostics.rs).
 
 ## Compose the command adapter
+
+Use `publish_prepared` with `PublicationConfig` and an `AnswerRenderer` to replace
+presentation without parsing command arguments. Both built-in `HumanRenderer`
+and `JsonRenderer` consume the same borrowed `AnswerView` and `PublicationView`
+as custom consumers. The controller evaluates `#show` once in the observation
+layer, streams one answer at a time and owns publication acknowledgements.
+Renderers cannot strengthen membership or coverage by accepting a record.
+See the [checked renderer example](../../docs/book/examples/answer-renderer.rs)
+and [view contract](src/view.rs) for bounds, terminal stages and failure behavior.
 
 Use `zetesis_solve::Session` for typed answer sets without rendering or command
 options. Its builder composes selection, observations, measurements and reusable

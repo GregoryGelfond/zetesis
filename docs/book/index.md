@@ -1,49 +1,49 @@
 # The zetesis Book
 
-zetesis is an answer-set solver built around the reduct. Its libraries separate
-the logical question—whether an interpretation is an answer set—from the
-candidate generation, source joins, Boolean transforms and parallel execution
-used to answer it. The native grounding and solving paths do not invoke clingo.
+zetesis is an answer-set solver built around the reduct, with lazy grounding,
+parallel CPU execution and optional GPU computation. This manual covers using
+the command, embedding the libraries and understanding the solver.
 
-The [architecture alignment](architecture/alignment.md) connects ASP operations
-to exact execution transforms through a diagram and pseudocode, with links to
-their Rust implementations and Lean laws.
+## Start here
 
-This book has three parts:
+| I want to… | Read |
+| --- | --- |
+| Install zetesis and solve a program | [Installation and first solve](../../README.md#install-and-run), then the [command guide](reference/commands.md) |
+| Check whether my program is supported | [Admitted language](reference/language.md) |
+| Use zetesis from Rust | [Getting started with the library](rust/getting-started.md), then [solving sessions](rust/sessions.md) |
+| Understand how the solver works | [A guided tour](architecture/tour.md), then [programs, answer sets and the reduct](architecture/semantics.md) |
+| Read or use the proofs | [Lean definitions and imports](lean/foundations.md) |
+| Compare performance or run benchmarks | [Performance results](reference/performance.md), then the [benchmark commands](reference/commands.md#measure-a-corpus) |
 
-- **[Solver design and architecture](architecture/tour.md)** follows one program
-  through the solver, then develops the semantic and execution contracts. It
-  assumes familiarity with ASP rules, default negation and interpretations.
-- **[The Rust library programmer's manual](rust/libraries.md)** explains the
-  existing library boundaries, ownership, resource limits and results. It assumes
-  Rust fluency; it does not assume familiarity with clingo's API.
-- **[The Lean proof library](lean/foundations.md)** introduces the mathematical
-  definitions, reusable laws and their hypotheses. Its explanations assume ASP
-  and basic mathematical proof reading; the worked argument does not require
-  tactic fluency. Changing or extending proofs does require Lean.
+## Three parts
 
-The Rust examples teach zetesis's preparation, solving and result APIs. The
-themelios library has a separate documentation scope for its own APIs and solver
-integration. This book explains shared source/analysis types where they affect
-the guarantees of a zetesis operation.
+**[Part I: Solver design and architecture](architecture/tour.md)** follows a
+program from source to answer sets. It explains grounding, reduct checking and
+execution choices, assuming basic familiarity with ASP.
 
-The mathematical library is a deliverable in its own right. It can be imported
-without running the Rust solver. Its checked theorems establish the stated
-mathematics; they do not yet constitute end-to-end verification of the Rust
-implementation, source compiler or WGSL shaders.
+**[Part II: The Rust library programmer's manual](rust/getting-started.md)** starts
+with a complete solve, then covers results, source preparation and lower-level
+operations. Examples use public APIs and are checked with the code. The
+[library map](rust/libraries.md) helps locate a particular capability.
 
-The architecture uses **answer set** for a verified semantic interpretation and
-**world view** for a program's complete family of answer sets. The Rust
-`AnswerSet` records checked membership; optional bounded `WorldView` collection
-also requires exhaustive original enumeration and complete capture. The
-[vocabulary map](vocabulary.md) relates these guarantees to the execution
-representations. An incomplete stream and a display projection are not a world view.
+**[Part III: The Lean proof library](lean/foundations.md)** introduces the
+definitions and laws behind the solver. It includes a worked proof and explains
+the connection to the implementation. Reading the argument does not require
+Lean tactic fluency; extending the proofs does.
 
-The [neuromorphic appendix](appendices/neuromorphic.md) applies these contracts
-to a proposed event backend for Loihi 2 and SpiNNaker2, with explicit proof and
-hardware qualification obligations.
+## Results and limits
 
-Start with the [guided tour](architecture/tour.md), or go directly to
-[embedding a solve](rust/sessions.md). The examples use existing library APIs.
-The book deliberately separates current capabilities from unproved
-correspondences and unsupported execution combinations.
+An *answer set* has passed membership checking. A *world view* is the complete
+family of a program's answer sets. A stopped stream, a displayed projection and
+a selected optimum have different guarantees; the
+[results chapter](rust/outcomes.md) explains how to distinguish them.
+
+The solver is experimental. The [language reference](reference/language.md)
+describes supported inputs, and the [validation guide](reference/validation.md)
+explains the checks used to assess the implementation. Lean theorems establish
+their stated mathematical claims; they do not yet verify the complete Rust
+implementation, source compiler or GPU shaders. See the
+[proof correspondence](lean/correspondence.md) for that boundary.
+
+The [vocabulary](vocabulary.md) defines recurring terms. For local documentation
+builds and checked examples, see [Building the documentation](building.md).

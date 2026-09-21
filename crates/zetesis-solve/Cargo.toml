@@ -28,6 +28,10 @@ default = ["gpu"]
 gpu = ["dep:zetesis-wgpu"]
 
 [[example]]
+name = "book-getting-started"
+path = "../../docs/book/examples/getting-started.rs"
+
+[[example]]
 name = "book-session"
 path = "../../docs/book/examples/session.rs"
 test = true

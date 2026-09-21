@@ -1,7 +1,11 @@
-//! Bounded child lifetime and concurrently drained, capped temporary capture.
+//! Direct-child cancellation and bounded cleanup with capped temporary capture.
+//!
+//! This fallback does not own descendant processes. Failed reaping records the
+//! abandoned direct-child ID; an unclosed pipe is an explicit cleanup failure.
+//! Reader threads may outlive that failure until their external pipe closes.
 
 use std::ffi::OsString;
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{Read, Write};
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -9,7 +13,7 @@ use std::sync::{Arc, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use super::decision::CaptureStatus;
+use super::decision::{CaptureStatus, InvocationFailure};
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
@@ -19,19 +23,52 @@ pub(crate) struct Capture {
     pub(crate) elapsed_ms: u128,
     pub(crate) stdout: String,
     pub(crate) stderr: String,
+    #[serde(rename = "capture_failure")]
+    pub(crate) failure: Option<String>,
+    pub(crate) cleanup_failure: Option<String>,
+    /// Unreaped direct child explicitly abandoned after the cleanup ceiling.
+    pub(crate) pending_child_id: Option<u32>,
 }
 
-pub(crate) fn invoke(
+impl Capture {
+    pub(crate) fn cleanup_unresolved(&self) -> bool {
+        self.pending_child_id.is_some() || self.cleanup_failure.is_some()
+    }
+}
+
+#[cfg(all(test, unix))]
+pub(super) fn invoke(
     executable: &Path,
     arguments: &[OsString],
     directory: &Path,
     timeout: Duration,
     output_limit: usize,
-) -> Result<Capture, String> {
-    let mut stdout = tempfile::tempfile().map_err(|error| error.to_string())?;
-    let mut stderr = tempfile::tempfile().map_err(|error| error.to_string())?;
-    let stdout_copy = stdout.try_clone().map_err(|error| error.to_string())?;
-    let stderr_copy = stderr.try_clone().map_err(|error| error.to_string())?;
+) -> Result<Capture, InvocationFailure> {
+    invoke_with_cancellation(
+        executable,
+        arguments,
+        directory,
+        timeout,
+        output_limit,
+        &AtomicBool::new(false),
+    )
+}
+
+pub(super) fn invoke_with_cancellation(
+    executable: &Path,
+    arguments: &[OsString],
+    directory: &Path,
+    timeout: Duration,
+    output_limit: usize,
+    cancelled: &AtomicBool,
+) -> Result<Capture, InvocationFailure> {
+    if cancelled.load(Ordering::Relaxed) {
+        return Err(InvocationFailure::Cancelled);
+    }
+    let stdout = tempfile::NamedTempFile::new().map_err(|error| error.to_string())?;
+    let stderr = tempfile::NamedTempFile::new().map_err(|error| error.to_string())?;
+    let stdout_copy = stdout.reopen().map_err(|error| error.to_string())?;
+    let stderr_copy = stderr.reopen().map_err(|error| error.to_string())?;
     let started = Instant::now();
     let deadline = started
         .checked_add(timeout)
@@ -43,6 +80,9 @@ pub(crate) fn invoke(
             .map_err(|error| error.to_string())?
             .join(executable)
     };
+    if cancelled.load(Ordering::Relaxed) {
+        return Err(InvocationFailure::Cancelled);
+    }
     let mut child = Command::new(&executable)
         .args(arguments)
         .current_dir(directory)
@@ -68,44 +108,117 @@ pub(crate) fn invoke(
         exceeded.clone(),
         sender,
     );
-    let mut status = CaptureStatus::Completed;
-    let exit = loop {
-        if exceeded.load(Ordering::Relaxed) {
-            status = CaptureStatus::OutputLimit;
-            let _ = child.kill();
-            break child.wait().map_err(|error| error.to_string())?;
-        }
-        if Instant::now() >= deadline {
-            status = CaptureStatus::Timeout;
-            let _ = child.kill();
-            break child.wait().map_err(|error| error.to_string())?;
-        }
-        if let Some(exit) = child.try_wait().map_err(|error| error.to_string())? {
-            break exit;
-        }
-        thread::sleep(Duration::from_millis(5));
-    };
+    let mut capture = monitor(&mut child, deadline, &exceeded, cancelled);
     // Drain completion is bounded separately after killing/exiting. The command
     // operates on trusted solver executables, without an intermediate shell.
     for _ in 0..2 {
         match receiver.recv_timeout(Duration::from_secs(1)) {
             Ok(Ok(())) => (),
-            Ok(Err(error)) => return Err(format!("child capture: {error}")),
-            Err(_) => return Err("child capture did not close after process termination".into()),
+            Ok(Err(error)) => {
+                capture
+                    .failure
+                    .get_or_insert_with(|| format!("child capture: {error}"));
+            }
+            Err(_) => {
+                capture.cleanup_failure.get_or_insert_with(|| {
+                    "child capture did not close after process termination".into()
+                });
+            }
         }
     }
-    if exceeded.load(Ordering::Relaxed) {
-        status = CaptureStatus::OutputLimit;
+    if capture.status == CaptureStatus::Completed && exceeded.load(Ordering::Relaxed) {
+        capture.status = CaptureStatus::OutputLimit;
     }
-    let output = read_capture(&mut stdout, status == CaptureStatus::Completed)?;
-    let errors = read_capture(&mut stderr, status == CaptureStatus::Completed)?;
-    Ok(Capture {
-        status,
-        exit_code: exit.code(),
-        elapsed_ms: started.elapsed().as_millis(),
-        stdout: output,
-        stderr: errors,
-    })
+    // Reopened readers own independent cursors. If a pipe did not close, a
+    // bounded prefix can be inspected without rewinding its active writer.
+    let complete = capture.status == CaptureStatus::Completed && !capture.cleanup_unresolved();
+    for (file, target) in [
+        (&stdout, &mut capture.stdout),
+        (&stderr, &mut capture.stderr),
+    ] {
+        match read_capture(file, complete, output_limit) {
+            Ok(text) => *target = text,
+            Err(error) => {
+                capture.failure.get_or_insert(error);
+            }
+        }
+    }
+    if capture.status == CaptureStatus::Completed
+        && (capture.failure.is_some() || capture.cleanup_unresolved())
+    {
+        capture.status = CaptureStatus::CaptureFailure;
+    }
+    capture.elapsed_ms = started.elapsed().as_millis();
+    Ok(capture)
+}
+
+fn monitor(
+    child: &mut std::process::Child,
+    deadline: Instant,
+    exceeded: &AtomicBool,
+    cancelled: &AtomicBool,
+) -> Capture {
+    let mut capture = Capture {
+        status: CaptureStatus::Completed,
+        exit_code: None,
+        elapsed_ms: 0,
+        stdout: String::new(),
+        stderr: String::new(),
+        failure: None,
+        cleanup_failure: None,
+        pending_child_id: None,
+    };
+    loop {
+        if cancelled.load(Ordering::Relaxed) {
+            capture.status = CaptureStatus::Cancelled;
+        } else if exceeded.load(Ordering::Relaxed) {
+            capture.status = CaptureStatus::OutputLimit;
+        } else if Instant::now() >= deadline {
+            capture.status = CaptureStatus::Timeout;
+        } else {
+            match child.try_wait() {
+                Ok(Some(exit)) => {
+                    capture.exit_code = exit.code();
+                    return capture;
+                }
+                Ok(None) => {
+                    thread::sleep(Duration::from_millis(5));
+                    continue;
+                }
+                Err(error) => {
+                    capture.status = CaptureStatus::CaptureFailure;
+                    capture.failure = Some(error.to_string());
+                }
+            }
+        }
+        break;
+    }
+    if let Err(error) = child.kill() {
+        capture.cleanup_failure = Some(format!("direct-child kill: {error}"));
+    }
+    let cleanup_deadline = Instant::now().checked_add(Duration::from_secs(1));
+    loop {
+        match child.try_wait() {
+            Ok(Some(exit)) => {
+                capture.exit_code = exit.code();
+                break;
+            }
+            Ok(None) if cleanup_deadline.is_some_and(|deadline| Instant::now() < deadline) => {
+                thread::sleep(Duration::from_millis(5));
+            }
+            outcome => {
+                capture.pending_child_id = Some(child.id());
+                capture
+                    .cleanup_failure
+                    .get_or_insert_with(|| match outcome {
+                        Err(error) => format!("direct-child reap: {error}"),
+                        _ => "direct-child cleanup deadline reached".into(),
+                    });
+                break;
+            }
+        }
+    }
+    capture
 }
 
 fn drain(
@@ -140,9 +253,15 @@ fn drain(
     });
 }
 
-fn read_capture(file: &mut std::fs::File, require_utf8: bool) -> Result<String, String> {
-    file.seek(SeekFrom::Start(0))
-        .map_err(|error| error.to_string())?;
+fn read_capture(
+    file: &tempfile::NamedTempFile,
+    require_utf8: bool,
+    limit: usize,
+) -> Result<String, String> {
+    let mut file = file
+        .reopen()
+        .map_err(|error| error.to_string())?
+        .take(u64::try_from(limit).unwrap_or(u64::MAX));
     let mut bytes = Vec::new();
     file.read_to_end(&mut bytes)
         .map_err(|error| error.to_string())?;
@@ -188,5 +307,42 @@ mod tests {
         .unwrap();
         assert_eq!(captured.status, CaptureStatus::Timeout);
         assert!(captured.elapsed_ms < 1_000);
+    }
+
+    #[test]
+    fn cancellation_retains_portable_capture() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let directory = tempfile::tempdir().unwrap();
+        let cancelled = AtomicBool::new(false);
+        let (captured, observed) = std::thread::scope(|scope| {
+            let marker = directory.path().join("started");
+            let flag = &cancelled;
+            let sender = scope.spawn(move || {
+                let deadline = std::time::Instant::now() + Duration::from_secs(5);
+                while !marker.exists() && std::time::Instant::now() < deadline {
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                let observed = marker.exists();
+                flag.store(true, Ordering::Relaxed);
+                observed
+            });
+            let captured = super::invoke_with_cancellation(
+                Path::new("/bin/sh"),
+                &[
+                    "-c".into(),
+                    "printf partial; : > started; exec sleep 30".into(),
+                ],
+                directory.path(),
+                Duration::from_secs(10),
+                128,
+                &cancelled,
+            )
+            .unwrap();
+            (captured, sender.join().unwrap())
+        });
+        assert!(observed);
+        assert_eq!(captured.status, CaptureStatus::Cancelled);
+        assert_eq!(captured.stdout, "partial");
+        assert!(!captured.cleanup_unresolved());
     }
 }

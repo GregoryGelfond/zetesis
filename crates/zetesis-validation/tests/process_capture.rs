@@ -3,9 +3,70 @@
 
 use std::ffi::OsString;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use zetesis_validation::process::{self, Capture, Invocation, Limits, StartError, Stop};
+
+#[test]
+fn prior_cancellation_refuses_spawn() {
+    let result = process::invoke_with_cancellation(
+        Invocation {
+            executable: Path::new("/definitely-missing-cancelled-producer"),
+            arguments: &[],
+            directory: Path::new("/"),
+        },
+        Limits::default(),
+        &AtomicBool::new(true),
+    );
+    assert!(matches!(result, Err(StartError::Cancelled)));
+}
+
+#[test]
+fn cancellation_reaps_the_active_group_leader() {
+    let directory = tempfile::tempdir().unwrap();
+    let ready = directory.path().join("ready");
+    let cancelled = AtomicBool::new(false);
+    let arguments: Vec<OsString> = vec![
+        "-c".into(),
+        "printf prefix; : > ready; sleep 5 & wait".into(),
+    ];
+    let (outcome, observed_ready) = std::thread::scope(|scope| {
+        let trigger = scope.spawn(|| {
+            let deadline = std::time::Instant::now() + Duration::from_secs(3);
+            while !ready.exists() && std::time::Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            let observed = ready.exists();
+            cancelled.store(true, Ordering::Relaxed);
+            observed
+        });
+        let outcome = process::invoke_with_cancellation(
+            Invocation {
+                executable: Path::new("/bin/sh"),
+                arguments: &arguments,
+                directory: directory.path(),
+            },
+            Limits {
+                timeout: Duration::from_secs(5),
+                ..Limits::default()
+            },
+            &cancelled,
+        );
+        (outcome, trigger.join().unwrap())
+    });
+    let (capture, pending) = outcome.unwrap().into_parts();
+    // Settle any exceptional cleanup before assertions so the fixture never
+    // loses the direct-child owner on a failed assertion.
+    let cleanup = pending.map(|child| child.retry(Duration::from_secs(1)));
+    if let Some(pending) = cleanup.and_then(|cleanup| cleanup.pending) {
+        panic!("fixture cleanup abandoned child {}", pending.abandon());
+    }
+    assert!(observed_ready);
+    assert_eq!(capture.stop(), Stop::Cancelled);
+    assert_eq!(capture.exit().unwrap().signal, Some(9));
+    assert!(capture.cleanup_failure().is_none());
+}
 
 fn capture(script: &str, limit: usize, timeout: Duration) -> Capture {
     let arguments: Vec<OsString> = vec!["-c".into(), script.into()];

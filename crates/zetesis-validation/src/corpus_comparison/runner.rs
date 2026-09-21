@@ -2,24 +2,69 @@
 use super::capture::{self, Capture};
 use super::corpus::{Case, Loaded};
 use super::record::{CaseEvidence, Cleanup, Observation};
-use super::{CaseResult, Decision, Producer, Report, Request, execution, normalize};
+use super::{
+    CaseResult, Decision, NativeInvocation, Producer, Report, Request, execution, normalize,
+};
 use crate::{phase, stage};
 use std::ffi::OsString;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-pub(super) fn run(
+#[cfg(test)]
+pub(super) fn run(request: &Request, corpus: Loaded, on_case: impl FnMut(&CaseResult)) -> Report {
+    run_with_invocation(request, corpus, NativeInvocation::Legacy, on_case)
+}
+
+#[cfg(test)]
+pub(super) fn run_with_invocation(
     request: &Request,
     corpus: Loaded,
+    invocation: NativeInvocation,
+    on_case: impl FnMut(&CaseResult),
+) -> Report {
+    run_with_cancellation(
+        request,
+        corpus,
+        invocation,
+        &AtomicBool::new(false),
+        on_case,
+    )
+}
+
+pub(super) fn run_with_cancellation(
+    request: &Request,
+    corpus: Loaded,
+    invocation: NativeInvocation,
+    cancelled: &AtomicBool,
     mut on_case: impl FnMut(&CaseResult),
 ) -> Report {
     let mut cases = Vec::new();
     let mut pending = Vec::new();
+    let mut cancellation_observed = false;
     for case in &corpus.manifest.cases {
-        let result = check_case(request, &corpus, case, &mut pending);
+        if cancelled.load(Ordering::Relaxed) {
+            cancellation_observed = true;
+            break;
+        }
+        let result = check_case(request, &corpus, case, invocation, &mut pending, cancelled);
+        cancellation_observed = matches!(
+            result.decision,
+            Decision::Cancelled(_) | Decision::CaptureFailed(_, super::CaptureFailure::Cancelled)
+        );
+        let unresolved = result
+            .evidence
+            .reference_process
+            .as_ref()
+            .is_some_and(Capture::cleanup_unresolved)
+            || result
+                .evidence
+                .native_process
+                .as_ref()
+                .is_some_and(Capture::cleanup_unresolved);
         on_case(&result);
         cases.push(result);
-        if !pending.is_empty() {
+        if unresolved || cancellation_observed {
             break;
         }
     }
@@ -40,9 +85,12 @@ pub(super) fn run(
         .collect();
     Report {
         request: request.clone(),
+        invocation,
+        required_cases: 94,
         corpus,
         cases,
         cleanup,
+        cancelled: cancellation_observed,
     }
 }
 
@@ -50,7 +98,9 @@ fn check_case(
     request: &Request,
     corpus: &Loaded,
     case: &Case,
+    invocation: NativeInvocation,
     pending: &mut Vec<crate::process::PendingChild>,
+    cancelled: &AtomicBool,
 ) -> CaseResult {
     let input = corpus.root.join(&case.path);
     let arguments = vec![
@@ -59,12 +109,18 @@ fn check_case(
         "--opt-mode=optN".into(),
         input.as_os_str().to_owned(),
     ];
-    let reference = match invoke(request, &request.clingo, &arguments, &corpus.root) {
+    let reference = match invoke(
+        request,
+        &request.clingo,
+        &arguments,
+        &corpus.root,
+        cancelled,
+    ) {
         Ok(capture) => capture,
         Err(error) => {
             return decide(
                 CaseEvidence::new(case),
-                Decision::InvocationFailed(Producer::Reference, error),
+                invocation_failure(Producer::Reference, error),
             );
         }
     };
@@ -94,7 +150,7 @@ fn check_case(
     if request.reference_only {
         return decide(result, Decision::ReferencePassed);
     }
-    check_native(request, corpus, result, pending)
+    check_native(request, corpus, result, invocation, pending, cancelled)
 }
 
 fn retain_pending(capture: Capture, pending: &mut Vec<crate::process::PendingChild>) -> Capture {
@@ -117,16 +173,57 @@ fn check_native(
     request: &Request,
     corpus: &Loaded,
     mut result: CaseEvidence,
+    invocation: NativeInvocation,
     pending: &mut Vec<crate::process::PendingChild>,
+    cancelled: &AtomicBool,
 ) -> CaseResult {
     let input = corpus.root.join(&result.source.path);
-    let mut arguments = vec![
-        "--backend".into(),
+    let arguments = native_arguments(request, invocation, &input);
+    let native = invoke(
+        request,
+        &request.zetesis,
+        &arguments,
+        &corpus.root,
+        cancelled,
+    );
+    result.native_arguments = Some(arguments);
+    let native = match native {
+        Ok(capture) => retain_pending(capture, pending),
+        Err(error) => return decide(result, invocation_failure(Producer::Native, error)),
+    };
+    result.phase = observe(phase::parse(&native.stderr));
+    result.stage = observe(stage::parse(&native.stderr));
+    let decision = native_failure(&native);
+    result.native_process = Some(native);
+    if let Some(decision) = decision {
+        return decide(result, decision);
+    }
+    check_answers(request, invocation, result)
+}
+
+fn native_arguments(
+    request: &Request,
+    invocation: NativeInvocation,
+    input: &Path,
+) -> Vec<OsString> {
+    let mut arguments: Vec<OsString> = match invocation {
+        NativeInvocation::Legacy => vec!["--backend".into()],
+        NativeInvocation::Solve => vec![
+            "solve".into(),
+            "--all".into(),
+            "--json".into(),
+            "--device".into(),
+        ],
+    };
+    arguments.extend([
         request.native_backend.label().into(),
         "--oracle".into(),
         request.native_oracle.label().into(),
-        "--models".into(),
-        "0".into(),
+    ]);
+    if invocation == NativeInvocation::Legacy {
+        arguments.extend(["--models".into(), "0".into()]);
+    }
+    arguments.extend([
         "--batch-size".into(),
         request.native_batch_size.to_string().into(),
         "--completion-workers".into(),
@@ -136,29 +233,26 @@ fn check_native(
             .native_max_completion_scratch_bytes
             .to_string()
             .into(),
-    ];
+    ]);
     if request.effective_native_stats() {
         arguments.push("--stats".into());
     }
     arguments.push(input.as_os_str().to_owned());
-    let native = invoke(request, &request.zetesis, &arguments, &corpus.root);
-    result.native_arguments = Some(arguments);
-    let native = match native {
-        Ok(capture) => retain_pending(capture, pending),
-        Err(error) => return decide(result, Decision::InvocationFailed(Producer::Native, error)),
-    };
-    result.phase = observe(phase::parse(&native.stderr));
-    result.stage = observe(stage::parse(&native.stderr));
-    let decision = native_failure(&native);
-    result.native_process = Some(native);
-    if let Some(decision) = decision {
-        return decide(result, decision);
-    }
+    arguments
+}
+
+fn check_answers(
+    request: &Request,
+    invocation: NativeInvocation,
+    mut result: CaseEvidence,
+) -> CaseResult {
     let answer = result.reference_answer.as_ref().unwrap();
-    let native_answer = match normalize::native(
-        &result.native_process.as_ref().unwrap().stdout,
-        answer.cost.is_some(),
-    ) {
+    let output = &result.native_process.as_ref().unwrap().stdout;
+    let parsed = match invocation {
+        NativeInvocation::Legacy => normalize::native(output, answer.cost.is_some()),
+        NativeInvocation::Solve => normalize::native_json(output, request.max_output_bytes),
+    };
+    let native_answer = match parsed {
         Ok(answer) => answer,
         Err(crate::answers::Error::Invalid {
             issue: crate::answers::Issue::Incomplete,
@@ -230,14 +324,24 @@ fn invoke(
     executable: &Path,
     arguments: &[OsString],
     directory: &Path,
-) -> Result<Capture, String> {
-    capture::invoke(
+    cancelled: &AtomicBool,
+) -> Result<Capture, super::decision::InvocationFailure> {
+    capture::invoke_with_cancellation(
         executable,
         arguments,
         directory,
         Duration::from_millis(request.timeout_ms),
         request.max_output_bytes,
+        cancelled,
     )
+}
+fn invocation_failure(producer: Producer, error: super::decision::InvocationFailure) -> Decision {
+    match error {
+        super::decision::InvocationFailure::Cancelled => Decision::Cancelled(producer),
+        super::decision::InvocationFailure::Other(error) => {
+            Decision::InvocationFailed(producer, error)
+        }
+    }
 }
 fn decide(evidence: CaseEvidence, decision: Decision) -> CaseResult {
     CaseResult { evidence, decision }

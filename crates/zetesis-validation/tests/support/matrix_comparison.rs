@@ -461,7 +461,13 @@ fn complete_capture_cannot_hide_a_capture_stop() {
 fn deadline_profiles_pass_their_time_limit_to_the_native_solver() {
     let mut request = request();
     let flags = |request: &Request<'_>, producer| {
-        let (_, arguments) = arguments(request, Path::new("/unused"), "case.lp", producer);
+        let (_, arguments) = arguments(
+            request,
+            Path::new("/unused"),
+            "case.lp",
+            producer,
+            super::NativeInvocation::Legacy,
+        );
         arguments
             .iter()
             .map(|argument| argument.to_string_lossy().into_owned())

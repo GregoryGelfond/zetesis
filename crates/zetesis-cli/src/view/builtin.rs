@@ -1,0 +1,59 @@
+//! Legacy option selection at the edge of the shared renderer contract.
+
+use std::io::Write;
+use zetesis_cpu::Control;
+
+use crate::{
+    AnswerRenderer, AnswerView, HumanRenderer, JsonRenderer, Options, PublicationView, RunError,
+    SummaryDelivery, SummaryStage,
+};
+
+pub(crate) enum Builtin<W> {
+    Human(HumanRenderer<W>),
+    Json(JsonRenderer<W>),
+}
+
+impl<W: Write> Builtin<W> {
+    pub(crate) fn new(output: W, options: &Options) -> Self {
+        if options.json {
+            Self::Json(JsonRenderer::new(
+                output,
+                options.max_json_record_bytes,
+                options.max_atoms,
+            ))
+        } else {
+            Self::Human(HumanRenderer::new(
+                output,
+                options.color,
+                options.max_observation_bytes,
+            ))
+        }
+    }
+}
+
+impl<W: Write> AnswerRenderer for Builtin<W> {
+    fn begin(&mut self) -> Result<(), RunError> {
+        match self {
+            Self::Human(renderer) => renderer.begin(),
+            Self::Json(renderer) => renderer.begin(),
+        }
+    }
+    fn summary_stage(&self) -> SummaryStage {
+        match self {
+            Self::Human(renderer) => renderer.summary_stage(),
+            Self::Json(renderer) => renderer.summary_stage(),
+        }
+    }
+    fn answer(&mut self, view: AnswerView<'_>, control: &Control) -> Result<(), RunError> {
+        match self {
+            Self::Human(renderer) => renderer.answer(view, control),
+            Self::Json(renderer) => renderer.answer(view, control),
+        }
+    }
+    fn finish(&mut self, view: PublicationView<'_>) -> Result<SummaryDelivery, RunError> {
+        match self {
+            Self::Human(renderer) => renderer.finish(view),
+            Self::Json(renderer) => renderer.finish(view),
+        }
+    }
+}

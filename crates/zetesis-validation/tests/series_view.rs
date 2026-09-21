@@ -722,6 +722,25 @@ fn cells_are_labelled_by_family_or_by_amended_entry() {
 }
 
 #[test]
+fn workload_labels_retain_every_recorded_edit() {
+    let entry = "standalone/n-queens/variant-01.lp";
+    let mut one = report(&[entry], &[&[1]], &[1], None);
+    one["report"]["workloads"] = json!([{
+        "entry": entry, "amended": true, "identity": "22".repeat(32),
+        "sources": [
+            {"edits": [{"before": "8", "after": "10"}]},
+            {"edits": [{"before": "2", "after": "4"}]}
+        ]
+    }]);
+    let comparison = compare(&[Labelled {
+        label: "one",
+        report: &one,
+    }])
+    .unwrap();
+    assert_eq!(comparison.cells[0].label, "n-queens/variant-01 8→10 2→4");
+}
+
+#[test]
 fn blocked_positions_name_their_blocking_decision() {
     let mut one = report(&["generated/stratified-16.lp"], &[&[1, 1]], &[1], None);
     // The qualification position timed out and the timed positions were
@@ -835,5 +854,61 @@ fn a_report_whose_profiles_differ_in_method_is_refused() {
             report: &mixed
         }]),
         Err(ViewError::Methods { label }) if label == "mixed"
+    ));
+}
+
+#[test]
+fn loaded_reports_use_the_same_comparison_contract() {
+    use zetesis_validation::performance::series::{ReportSource, read_compare};
+    let document = report(&["generated/chain-1000.lp"], &[&[9, 3, 6]], &[12], None);
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("report.json");
+    let bytes = serde_json::to_vec(&document).unwrap();
+    std::fs::write(&path, &bytes).unwrap();
+    let loaded = read_compare(
+        &[ReportSource {
+            label: "run",
+            path: &path,
+        }],
+        u64::try_from(bytes.len()).unwrap(),
+    )
+    .unwrap();
+    let direct = compare(&[Labelled {
+        label: "run",
+        report: &document,
+    }])
+    .unwrap();
+    assert_eq!(
+        serde_json::to_value(loaded).unwrap(),
+        serde_json::to_value(direct).unwrap()
+    );
+}
+
+#[test]
+fn report_source_ceiling_refuses_before_decoding() {
+    use zetesis_validation::performance::series::{ReadError, ReportSource, read_compare};
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("oversized.json");
+    std::fs::write(&path, b"not JSON").unwrap();
+    assert!(
+        matches!(read_compare(&[ReportSource { label: "large", path: &path }], 3), Err(ReadError::Bytes { label, limit: 3 }) if label == "large")
+    );
+}
+
+#[test]
+fn invalid_json_retains_its_typed_failure() {
+    use zetesis_validation::performance::series::{ReadError, ReportSource, read_compare};
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("malformed.json");
+    std::fs::write(&path, b"not JSON").unwrap();
+    assert!(matches!(
+        read_compare(
+            &[ReportSource {
+                label: "bad",
+                path: &path
+            }],
+            100
+        ),
+        Err(ReadError::Json(_))
     ));
 }

@@ -12,6 +12,8 @@
 #![forbid(unsafe_code)]
 
 mod backend;
+pub mod command;
+pub mod primitives;
 mod fixtures;
 mod formula_completion;
 mod formula_fixtures;

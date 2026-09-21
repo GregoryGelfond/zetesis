@@ -4,69 +4,33 @@ use std::io::{self, Write};
 
 use zetesis_themelios::observation::ViewError;
 
-use crate::failure::Progress;
-use crate::{
-    Completion, Interruption, Options, PhaseTimings, PublicationFailure, PublicationOutcome,
-    RunError, RunFailure, SolvePhase,
-};
+use crate::{Completion, Interruption, Options, PhaseTimings, RunError, RunFailure, SolvePhase};
 
-pub(crate) struct Document<'a, W> {
-    sink: &'a mut W,
-    json: bool,
+pub(crate) struct Document<W> {
+    sink: W,
     failed: bool,
 }
-impl<'a, W: Write> Document<'a, W> {
-    pub(crate) fn new(sink: &'a mut W, json: bool) -> Result<Self, PublicationFailure> {
-        let mut document = Self {
+impl<W: Write> Document<W> {
+    pub(crate) const fn new(sink: W) -> Self {
+        Self {
             sink,
-            json,
             failed: false,
-        };
-        if json {
-            let head = format!(
-                "{{\"schema\":{},\"format\":\"zetesis\",\"models\":[",
-                zetesis_themelios::observation::json::RECORD_SCHEMA_VERSION
-            );
-            document.write_all(head.as_bytes())?;
         }
-        Ok(document)
     }
 
-    pub(crate) fn finish(
-        mut self,
-        mut result: Result<Progress, PublicationFailure>,
-        options: &Options,
-    ) -> Result<PublicationOutcome, PublicationFailure> {
-        if self.json && !self.failed {
-            let emitted = summary(&result, options.max_json_record_bytes)
-                .and_then(|record| self.write_all(&record).map_err(RunError::Output));
-            match emitted {
-                Ok(()) => match &mut result {
-                    Ok(progress) => progress.publication.summary = true,
-                    Err(failure) => {
-                        failure.acknowledge_summary();
-                    }
-                },
-                Err(error) => {
-                    return Err(match result {
-                        Ok(progress) => progress.fail(error),
-                        Err(mut failure) => {
-                            // The original error remains authoritative. A failed JSON
-                            // footer is independently retained as secondary output.
-                            failure.record_summary(match error {
-                                RunError::Output(error) => error,
-                                other => io::Error::other(other),
-                            });
-                            failure
-                        }
-                    });
-                }
-            }
-        }
-        result.and_then(Progress::finalize)
+    pub(crate) const fn failed(&self) -> bool {
+        self.failed
+    }
+
+    pub(crate) fn start(&mut self) {
+        self.failed = false;
+    }
+
+    pub(crate) fn into_inner(self) -> W {
+        self.sink
     }
 }
-impl<W: Write> Write for Document<'_, W> {
+impl<W: Write> Write for Document<W> {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
         let result = self.sink.write(bytes);
         if result
@@ -93,7 +57,7 @@ pub(crate) fn write_model_record(
     number: usize,
     view: &zetesis_themelios::observation::ModelView<'_>,
     atoms: &mut zetesis_themelios::observation::json::AtomTable,
-    options: &Options,
+    max_record_bytes: usize,
     control: &zetesis_cpu::Control,
 ) -> Result<(), RunError> {
     let prefix = format!(
@@ -101,8 +65,7 @@ pub(crate) fn write_model_record(
         if number == 1 { "" } else { "," }
     );
     let overhead = prefix.len() + 2;
-    let maximum = options
-        .max_json_record_bytes
+    let maximum = max_record_bytes
         .checked_sub(overhead)
         .ok_or(RunError::JsonRecord(ViewError::Bytes))?;
     let record = view
@@ -132,9 +95,11 @@ pub(crate) fn input_failure(
     failure: RunFailure,
     options: &Options,
 ) -> RunFailure {
-    match Document::new(output, true) {
-        Ok(document) => document
-            .finish(Err(failure.into()), options)
+    use crate::AnswerRenderer;
+    let mut renderer =
+        crate::JsonRenderer::new(output, options.max_json_record_bytes, options.max_atoms);
+    match renderer.begin() {
+        Ok(()) => crate::publication::finalize(&mut renderer, Err(failure.into()))
             .expect_err("input failure remains failed")
             .into_legacy(),
         Err(output_failure) => {
@@ -153,10 +118,11 @@ fn completion(value: Completion) -> &'static str {
     }
 }
 
-fn summary(
-    result: &Result<Progress, PublicationFailure>,
+pub(crate) fn summary(
+    publication: crate::PublicationView<'_>,
     maximum: usize,
 ) -> Result<Vec<u8>, RunError> {
+    let result = publication.result;
     let status = match result {
         Err(_) => "failed",
         Ok(progress) if progress.stop.is_some() => "incomplete",
@@ -170,7 +136,7 @@ fn summary(
         }
     };
     let mut out = Buffer::new(maximum);
-    let view = SummaryView::new(result);
+    let view = SummaryView::new(publication);
     out.text("],\"outcome\":{\"status\":")?;
     out.string(status)?;
     out.text(",\"completion\":")?;
@@ -674,8 +640,8 @@ struct SummaryView<'a> {
     timings: Option<&'a PhaseTimings>,
 }
 impl<'a> SummaryView<'a> {
-    fn new(result: &'a Result<Progress, PublicationFailure>) -> Self {
-        match result {
+    fn new(publication: crate::PublicationView<'a>) -> Self {
+        match publication.result {
             Ok(progress) => {
                 let semantic = progress.semantic();
                 Self {
@@ -1183,6 +1149,10 @@ fn lazy_transport_usage(
 #[cfg(test)]
 #[path = "../tests/support/lazy_statistics_fixture.rs"]
 pub(crate) mod fixtures;
+
+#[cfg(test)]
+#[path = "../tests/support/json_document.rs"]
+pub(crate) mod document_fixture;
 
 #[cfg(test)]
 mod lazy_tests {

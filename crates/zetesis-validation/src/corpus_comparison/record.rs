@@ -88,6 +88,22 @@ impl CaseResult {
             .as_ref()
             .map(|answer| &answer.reported)
     }
+    /// Captured reference process elapsed milliseconds, not a benchmark sample.
+    #[must_use]
+    pub fn reference_elapsed_ms(&self) -> Option<u128> {
+        self.evidence
+            .reference_process
+            .as_ref()
+            .map(|capture| capture.elapsed_ms)
+    }
+    /// Captured native process elapsed milliseconds, not a benchmark sample.
+    #[must_use]
+    pub fn native_elapsed_ms(&self) -> Option<u128> {
+        self.evidence
+            .native_process
+            .as_ref()
+            .map(|capture| capture.elapsed_ms)
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -116,12 +132,28 @@ pub enum PhysicalStatus {
 #[derive(Debug)]
 pub struct Report {
     pub(super) request: Request,
+    pub(super) invocation: super::NativeInvocation,
+    pub(super) required_cases: usize,
     pub(super) corpus: corpus::Loaded,
     pub(super) cases: Vec<CaseResult>,
     pub(super) cleanup: Vec<Cleanup>,
+    pub(super) cancelled: bool,
 }
 impl Report {
-    /// Results in source-manifest order, stopping after unresolved child cleanup.
+    /// Caller cancellation prevented a required launch or stopped an active
+    /// capture. Completed earlier cases remain valid; the requested corpus
+    /// comparison is incomplete. A late flag after all cases does not erase
+    /// already completed evidence.
+    #[must_use]
+    pub const fn cancelled(&self) -> bool {
+        self.cancelled
+    }
+    /// Number of independently required sources in the pinned target.
+    #[must_use]
+    pub const fn required_cases(&self) -> usize {
+        self.required_cases
+    }
+    /// Results in source-manifest order, stopping on cancellation or unresolved cleanup.
     #[must_use]
     pub fn cases(&self) -> &[CaseResult] {
         &self.cases
@@ -129,7 +161,8 @@ impl Report {
     /// Whether all 94 cases satisfy the requested mode and its route requirements.
     #[must_use]
     pub fn passed(&self) -> bool {
-        self.cases.len() == 94
+        !self.cancelled
+            && self.cases.len() == self.required_cases()
             && self.cases.iter().all(|case| {
                 if self.request.reference_only {
                     case.decision == Decision::ReferencePassed
@@ -142,8 +175,9 @@ impl Report {
     /// Full native answer parity; reference-only execution cannot establish it.
     #[must_use]
     pub fn answer_parity_passed(&self) -> bool {
-        !self.request.reference_only
-            && self.cases.len() == 94
+        !self.cancelled
+            && !self.request.reference_only
+            && self.cases.len() == self.required_cases()
             && self.cases.iter().all(|case| case.evidence.answer_parity)
     }
     pub(super) fn gpu_exercised(&self) -> usize {
@@ -173,7 +207,8 @@ impl Report {
     pub fn physical_status(&self) -> PhysicalStatus {
         if !self.request.physical_formula() {
             PhysicalStatus::NotRequested
-        } else if self.cases.len() == 94
+        } else if !self.cancelled
+            && self.cases.len() == self.required_cases()
             && self
                 .cases
                 .iter()

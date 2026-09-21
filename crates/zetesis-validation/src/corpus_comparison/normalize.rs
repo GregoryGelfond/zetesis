@@ -41,6 +41,16 @@ pub(crate) fn native(text: &str, optimized: bool) -> Result<Answer, crate::answe
     .map(adapt)
 }
 
+pub(super) fn native_json(text: &str, max_bytes: usize) -> Result<Answer, crate::answers::Error> {
+    let limits = crate::answers::native_json::Limits {
+        report: crate::answers::Limits::for_bytes(text.len()),
+        ..crate::answers::native_json::Limits::default()
+    };
+    crate::answers::native_json::parse(text.as_bytes(), limits)?
+        .reported_displays(max_bytes)
+        .map(adapt)
+}
+
 fn adapt(answer: crate::answers::ReportedAnswers) -> Answer {
     Answer {
         satisfiable: answer.satisfiable(),
