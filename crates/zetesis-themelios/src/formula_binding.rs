@@ -80,6 +80,13 @@ impl Binding<'static> {
 }
 
 impl Binding<'_> {
+    /// Read the current immutable frame without copying its typed payload.
+    pub(crate) fn borrowed(slots: &[Option<Value>]) -> Binding<'_> {
+        Binding {
+            slots: Cow::Borrowed(slots),
+        }
+    }
+
     /// The compiler-owned body boundary must be within this frame.
     pub(crate) fn prefix(&self, end: usize) -> Binding<'_> {
         Binding {

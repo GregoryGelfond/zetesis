@@ -2,6 +2,7 @@
 
 mod evaluation;
 mod filters;
+mod rows;
 pub(crate) mod family;
 mod delta;
 mod order;
@@ -28,6 +29,7 @@ use crate::formula_binding::Binding;
 use crate::formula_ir::{Expression, HeadIr, LiteralIr, Prepared, value_bytes};
 use crate::grounding_observer::{Event, Work};
 use crate::{ExpansionFailure, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
+use rows::{Frame, Ownership, Staged};
 
 pub(crate) use evaluation::{Evaluation, Failures};
 pub(crate) use queries::{Candidates, Support};
@@ -492,6 +494,21 @@ enum Coverage {
     Complete,
 }
 
+/// Base-join progression is separate from generated continuations. Searching
+/// owns a live DFS prefix. `PendingUndo` owns one successfully completed nonempty
+/// frame at depth == `patterns.len()`; its final depth is undone exactly once.
+/// `EmptyVisited` records entering the sole empty-pattern prefix, even if its
+/// filtering or completion refused. It becomes Finished only on a subsequent
+/// admitted traversal step. Finished has no remaining base row and costs no
+/// further traversal work; an existing generator can still drain its own rows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Traversal {
+    Searching,
+    PendingUndo,
+    EmptyVisited,
+    Finished,
+}
+
 /// The cursor owns its current assignment, undo trails and bounded expression
 /// storage. Negative gates never restrict this upper relation; the emitted
 /// formulas still retain them.
@@ -526,14 +543,13 @@ pub(crate) struct Join<'a, 'source> {
     probes: Vec<Option<Probe<'a, 'source>>>,
     changes: Vec<Vec<usize>>,
     depth: usize,
-    empty_yielded: bool,
-    finished: bool,
+    traversal: Traversal,
 }
 /// One complete body binding and its scalar selection result. Selected rule
 /// rows also contain their evaluated head suffix; rejected rows contain only
 /// the genuine body frame needed by scoped source validation.
-pub(crate) struct Row {
-    pub values: Binding<'static>,
+pub(crate) struct Row<'a> {
+    pub values: Binding<'a>,
     pub passes: bool,
 }
 
@@ -809,8 +825,7 @@ impl<'a, 'source> Join<'a, 'source> {
             probes: std::iter::repeat_with(|| None).take(count).collect(),
             changes: vec![Vec::new(); count],
             depth: 0,
-            empty_yielded: false,
-            finished: false,
+            traversal: Traversal::Searching,
         })
     }
     /// Fix, for the current order and prefix, the depth at which each
@@ -880,8 +895,27 @@ impl<'a, 'source> Join<'a, 'source> {
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
-    ) -> Result<Option<Row>, FormulaFailure> {
-        self.next_staged(None, limits, budget, counters, location)
+    ) -> Result<Option<Row<'_>>, FormulaFailure> {
+        let row = self.next_staged(Ownership::Lend, None, limits, budget, counters, location)?;
+        Ok(row.map(|row| Row {
+            values: row.frame.into_binding(&self.values),
+            passes: row.passes,
+        }))
+    }
+    /// A continuation that outlives the current traversal step requests its
+    /// snapshot before filtering, rather than copying a borrowed result later.
+    pub(crate) fn next_owned_row(
+        &mut self,
+        limits: &FormulaLimits,
+        budget: &mut Budget,
+        counters: &mut Counters,
+        location: Location,
+    ) -> Result<Option<Row<'static>>, FormulaFailure> {
+        let row = self.next_staged(Ownership::Own, None, limits, budget, counters, location)?;
+        Ok(row.map(|row| Row {
+            values: row.frame.into_owned(),
+            passes: row.passes,
+        }))
     }
     fn next_support(
         &mut self,
@@ -902,9 +936,16 @@ impl<'a, 'source> Join<'a, 'source> {
         counters: &mut Counters,
         location: Location,
     ) -> Result<Option<Binding<'static>>, FormulaFailure> {
-        while let Some(row) = self.next_staged(projected, limits, budget, counters, location)? {
+        while let Some(row) = self.next_staged(
+            Ownership::Own,
+            projected,
+            limits,
+            budget,
+            counters,
+            location,
+        )? {
             if row.passes {
-                return Ok(Some(row.values));
+                return Ok(Some(row.frame.into_owned()));
             }
         }
         Ok(None)
@@ -913,19 +954,27 @@ impl<'a, 'source> Join<'a, 'source> {
     /// Negative gates and aggregate truth remain formulas, never row selection.
     fn next_staged(
         &mut self,
+        ownership: Ownership,
         projected: Option<(&AtomPattern, &BTreeSet<Atom>)>,
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
-    ) -> Result<Option<Row>, FormulaFailure> {
+    ) -> Result<Option<Staged>, FormulaFailure> {
+        // Generators own their input beyond this traversal step. The same
+        // consumer row carries their owned output; only unextended rows lend.
+        let ownership = if self.generated || !self.head_slots.is_empty() {
+            Ownership::Own
+        } else {
+            ownership
+        };
         loop {
             if let Some(pending) = &mut self.pending_head {
                 match pending.next(&mut self.evaluation, limits, budget, counters, location) {
                     Ok(Some(values)) => {
                         self.family.defined = true;
-                        return Ok(Some(Row {
-                            values,
+                        return Ok(Some(Staged {
+                            frame: Frame::Owned(values),
                             passes: true,
                         }));
                     }
@@ -941,7 +990,9 @@ impl<'a, 'source> Join<'a, 'source> {
                 }
             }
             self.pending_head = None;
-            let Some(row) = self.next_inner(projected, limits, budget, counters, location)? else {
+            let Some(row) =
+                self.next_inner(ownership, projected, limits, budget, counters, location)?
+            else {
                 return Ok(None);
             };
             if !row.passes || self.head_slots.is_empty() {
@@ -950,7 +1001,7 @@ impl<'a, 'source> Join<'a, 'source> {
             }
             self.pending_head = Some(crate::formula_binding_cursor::Cursor::new(
                 self.literals,
-                row.values,
+                row.frame.into_owned(),
                 self.support,
                 self.bindings,
                 self.head_slots.clone(),
@@ -958,13 +1009,9 @@ impl<'a, 'source> Join<'a, 'source> {
         }
     }
 
-    fn selected_row(
-        &mut self,
-        values: Binding<'static>,
-        selection: filters::Selection,
-    ) -> Option<Row> {
+    fn selected_row(&mut self, frame: Frame, selection: filters::Selection) -> Option<Staged> {
         match selection {
-            filters::Selection::Defined(passes) => Some(Row { values, passes }),
+            filters::Selection::Defined(passes) => Some(Staged { frame, passes }),
             filters::Selection::Excluded => None,
             filters::Selection::Zero(error) => {
                 self.family.zero.get_or_insert(error);
@@ -975,16 +1022,17 @@ impl<'a, 'source> Join<'a, 'source> {
 
     fn next_inner(
         &mut self,
+        ownership: Ownership,
         projected: Option<(&AtomPattern, &BTreeSet<Atom>)>,
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
-    ) -> Result<Option<Row>, FormulaFailure> {
+    ) -> Result<Option<Staged>, FormulaFailure> {
         loop {
             if !self.generated {
                 let Some(binding) =
-                    self.next_base(projected, limits, budget, counters, location)?
+                    self.next_base(ownership, projected, limits, budget, counters, location)?
                 else {
                     return Ok(None);
                 };
@@ -999,6 +1047,7 @@ impl<'a, 'source> Join<'a, 'source> {
             if let Some(pending) = &mut self.pending {
                 match pending.next(&mut self.evaluation, limits, budget, counters, location) {
                     Ok(Some(binding)) => {
+                        let binding = Frame::Owned(binding);
                         let selection = self.filters(
                             &binding,
                             self.comparisons.clone(),
@@ -1036,13 +1085,20 @@ impl<'a, 'source> Join<'a, 'source> {
                     Err(error) => return Err(error),
                 }
             }
-            let Some(binding) = self.next_base(projected, limits, budget, counters, location)?
+            let Some(binding) = self.next_base(
+                Ownership::Own,
+                projected,
+                limits,
+                budget,
+                counters,
+                location,
+            )?
             else {
                 return Ok(None);
             };
             self.pending = Some(crate::formula_binding_cursor::Cursor::new(
                 self.literals,
-                binding,
+                binding.into_owned(),
                 self.support,
                 self.bindings,
                 0..self.head_slots.start,
@@ -1051,50 +1107,45 @@ impl<'a, 'source> Join<'a, 'source> {
     }
     fn next_base(
         &mut self,
+        ownership: Ownership,
         projected: Option<(&AtomPattern, &BTreeSet<Atom>)>,
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
-    ) -> Result<Option<Binding<'static>>, FormulaFailure> {
+    ) -> Result<Option<Frame>, FormulaFailure> {
+        self.resume();
         self.comparisons = Comparisons::Deferred;
-        if self.finished {
+        if self.traversal == Traversal::Finished {
             return Ok(None);
         }
         loop {
             counters.work(limits, location)?;
             if self.skip_derived(projected, limits, counters, location)? {
-                if self.finished {
+                if self.traversal == Traversal::Finished {
                     return Ok(None);
                 }
                 continue;
             }
             if self.patterns.is_empty() {
-                if self.empty_yielded {
-                    self.finished = true;
+                if self.traversal == Traversal::EmptyVisited {
+                    self.traversal = Traversal::Finished;
                     return Ok(None);
                 }
-                self.empty_yielded = true;
+                self.traversal = Traversal::EmptyVisited;
                 if !self.filter_prefix(limits, budget, counters, location)? {
                     continue;
                 }
                 self.comparisons = self.certificate();
-                if let Some(binding) = self.complete(limits, budget, counters, location)? {
-                    return Ok(Some(binding));
-                }
-                continue;
+                return self
+                    .complete(ownership, limits, budget, counters, location)
+                    .map(Some);
             }
             if self.depth == self.patterns.len() {
-                // The certificate belongs to the returned binding snapshot,
-                // even though completing that snapshot undoes the last row.
                 self.comparisons = self.certificate();
-                let complete = self.complete(limits, budget, counters, location)?;
-                self.depth -= 1;
-                self.undo();
-                if complete.is_some() {
-                    return Ok(complete);
-                }
-                continue;
+                return self
+                    .complete(ownership, limits, budget, counters, location)
+                    .map(Some);
             }
             let pattern = self.patterns[self.depth];
             if self.probes[self.depth].is_none() {
@@ -1135,7 +1186,7 @@ impl<'a, 'source> Join<'a, 'source> {
                 self.positions[self.depth] = 0;
                 self.probes[self.depth] = None;
                 if self.depth == 0 {
-                    self.finished = true;
+                    self.traversal = Traversal::Finished;
                     return Ok(None);
                 }
                 self.depth -= 1;
@@ -1305,7 +1356,7 @@ impl<'a, 'source> Join<'a, 'source> {
             return Ok(false);
         }
         if self.depth == 0 {
-            self.finished = true;
+            self.traversal = Traversal::Finished;
         } else {
             if self.depth < self.patterns.len() {
                 self.positions[self.depth] = 0;
@@ -1343,22 +1394,54 @@ impl<'a, 'source> Join<'a, 'source> {
         counters.work(limits, location)?;
         Ok(self.support.contains(&key, limits, counters, location)? || key.get(delta).is_some())
     }
+    /// Materialization, when requested, remains before complete-row filters.
+    /// Its failure leaves the same unfinished depth and counters as before.
     fn complete(
-        &self,
+        &mut self,
+        ownership: Ownership,
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
-    ) -> Result<Option<Binding<'static>>, FormulaFailure> {
+    ) -> Result<Frame, FormulaFailure> {
         counters.substitution(limits, location)?;
         for (variable, (value, slot)) in self.values.iter().zip(&self.slots).enumerate() {
             if value.is_none() && matches!(slot, Slot::Relational) {
                 return Err(FormulaFailure::UnsafeVariable { variable, location });
             }
         }
-        let values = Binding::copy_slots(&self.values, limits, counters, budget, location)?;
-        counters.record(Event::BindingSnapshot);
-        Ok(Some(values))
+        let frame = match ownership {
+            Ownership::Own => {
+                let values = Binding::copy_slots(&self.values, limits, counters, budget, location)?;
+                counters.record(Event::BindingSnapshot);
+                Frame::Owned(values)
+            }
+            Ownership::Lend => {
+                // The same admitted slot span is inspected for a lent frame.
+                // No scalar payload is copied, and no snapshot is recorded.
+                for _ in &self.values {
+                    counters.work(limits, location)?;
+                }
+                Frame::Current
+            }
+        };
+        if !self.patterns.is_empty() {
+            self.traversal = Traversal::PendingUndo;
+        }
+        if matches!(ownership, Ownership::Own) {
+            self.resume();
+        }
+        Ok(frame)
+    }
+
+    /// Exactly one undo follows a successfully completed nonempty join. Owned
+    /// snapshots resume immediately; a lent row resumes on its next advance.
+    fn resume(&mut self) {
+        if self.traversal == Traversal::PendingUndo {
+            self.traversal = Traversal::Searching;
+            self.depth -= 1;
+            self.undo();
+        }
     }
 }
 

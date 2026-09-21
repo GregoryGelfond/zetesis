@@ -176,6 +176,19 @@ snapshot from being invalidated while those references are live; identity and
 join tests check the concrete behavior. This does not establish source-join
 coverage or a Lean-to-Rust refinement.
 
+The eager formula join likewise lends its completed partial frame through the
+same `Binding` interface when no generator needs ownership. The relevant existing
+laws are `BindingScopes.readAll_agrees`, `AtomKeys.tuple_agrees` and
+`TableBindings.join_family_preserved`: equal checked reads and equal ordered
+join-step families preserve typed atom identities and the joined family. The
+implementation must establish those premises while delaying the final-depth
+undo until the borrower finishes. Owning continuations still materialize before
+filters; lending does not copy scalar payload or record an owned snapshot.
+Rust lifetimes, pending-undo sequencing, substitution/work ceilings and the
+ordering of resource refusal versus source diagnostics remain executable
+obligations, covered by cursor, ownership, bounded-prefix and source tests. No
+new theorem or existing law certifies the concrete cursor state machine.
+
 Gate and consequence membership uses a checked `AtomKey` over that borrowed
 assignment. The key denotes the same signed predicate and complete typed tuple
 as materialization. Gate lookup and duplicate-head lookup create no owned atom;

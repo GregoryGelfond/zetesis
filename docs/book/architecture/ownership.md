@@ -57,6 +57,29 @@ Consuming finalization transfers the completed atom vector into the immutable
 catalog and releases the construction index. These operations consume the
 enclosing work budget; catalog membership alone does not establish truth.
 
+The eager formula join owns its current partial binding and undo trails. A
+completed row without a generated body or head suffix lends that binding to its
+immediate consumer through the existing `Binding` view. The final join depth
+stays intact until the borrow ends; the next advance performs its pending undo
+exactly once. Generated continuations return an owned binding through the same
+row interface. Support derivation and arithmetic family tasks explicitly request
+owned rows: those tasks can retain a row while taking join evidence or extending
+their continuation stack. Their copy still precedes complete-row filtering, so
+copy-budget refusal cannot move behind an authored-expression failure.
+
+One base-traversal state distinguishes searching, a completed nonempty row awaiting
+undo, a visited empty-pattern prefix, and exhaustion. Visiting the empty prefix
+does not establish exhaustion: its next traversal step still admits its ordinary
+work before finishing. Generated continuations have their own finite cursors and
+can finish consuming an owned row independently of that base state.
+
+Lent and owned completion admit the same substitution and checked slot span.
+Only owned copies consume copied scalar payload and record `binding_snapshots`;
+that counter is not an enumeration count. The consumer still owns every emitted
+atom and formula. Lending changes neither positive-row order nor source scopes,
+typed values, comparison meanings, negative gates or required rejected-row
+validation. It does not establish a process memory bound or a measured speedup.
+
 ## Shared original narrowing index
 
 Region enumeration prepares one immutable `IndexedTheory` in `zetesis-sat`:

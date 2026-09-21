@@ -1,5 +1,8 @@
 //! Public phase observation describes work without changing admitted formulas.
 
+#[path = "support/lending_rows.rs"]
+mod lending_rows;
+
 use std::cell::{Cell, RefCell};
 
 use themelios_base::span::Location;
@@ -204,7 +207,7 @@ fn arithmetic_counts_describe_the_joined_rule() {
     assert_eq!(arithmetic.work.expression_evaluations, Some(2));
     assert_eq!(arithmetic.work.join_probes, Some(1));
     assert_eq!(arithmetic.work.join_rows, Some(1));
-    assert_eq!(arithmetic.work.binding_snapshots, Some(1));
+    assert_eq!(arithmetic.work.binding_snapshots, Some(0));
     assert_eq!(arithmetic.work.roots, Some(1));
 }
 

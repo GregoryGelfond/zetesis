@@ -243,7 +243,7 @@ fn stopped_filters_release_live_workspace_values() {
     )
     .unwrap();
     let failure = join.filters(
-        &complete([Value::Number(3)]),
+        &crate::formula_support::rows::Frame::Owned(complete([Value::Number(3)])),
         Comparisons::Deferred,
         &FormulaLimits {
             max_work: 5,
@@ -266,7 +266,7 @@ fn stopped_filters_release_live_workspace_values() {
     // This exercises a fresh filter call, not resumption of a stopped Join.
     assert!(matches!(
         join.filters(
-            &complete([Value::Number(9)]),
+            &crate::formula_support::rows::Frame::Owned(complete([Value::Number(9)])),
             Comparisons::Deferred,
             &FormulaLimits::default(),
             &mut budget,

@@ -163,6 +163,7 @@ pub struct GroundingWork {
     ///
     /// These may contain placeholders for later generated assignments. This is
     /// not the number of completed generated bindings or emitted ground rules.
+    /// Complete rows lent directly to their consumer are not owned snapshots.
     pub binding_snapshots: Option<u64>,
     /// Expression evaluations entered, including ones that subsequently fail.
     pub expression_evaluations: Option<u64>,

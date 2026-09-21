@@ -245,7 +245,7 @@ impl<'a, 'source> Scan<'a, 'source, '_> {
             if let Some(row) =
                 frame
                     .join
-                    .next_row(self.limits, self.budget, self.counters, location)?
+                    .next_owned_row(self.limits, self.budget, self.counters, location)?
             {
                 let (body, body_variables, continuation) =
                     (frame.body, frame.body_variables, frame.continuation);

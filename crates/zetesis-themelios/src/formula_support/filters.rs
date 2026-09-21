@@ -19,13 +19,16 @@ pub(super) enum Selection {
 impl Join<'_, '_> {
     pub(super) fn filters(
         &mut self,
-        binding: &Binding,
+        frame: &super::rows::Frame,
         comparisons: Comparisons,
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
     ) -> Result<Selection, FormulaFailure> {
+        // Frame location and expression scratch are disjoint owners. Lending
+        // the current slots never prevents the evaluator from using its scratch.
+        let binding = frame.binding(&self.values);
         let mut passes = true;
         let mut excluded = false;
         let mut failure = match comparisons {
@@ -45,7 +48,7 @@ impl Join<'_, '_> {
             }
             let result = check(
                 literal,
-                binding,
+                &binding,
                 &mut self.evaluation,
                 limits,
                 budget,

@@ -145,8 +145,11 @@ fn finite_meets_avoid_real_prefixes_and_probes() {
         assert_eq!(after.join_probes, Some(1 + 4 + 4 * 4));
         assert_eq!(after.domain_rejected_rows, Some(4 + 4 * 4 + c_rejected));
         assert_eq!(after.domain_guard_rows, after.join_rows);
-        assert_eq!(before.binding_snapshots, Some(16));
-        assert_eq!(after.binding_snapshots, Some(16));
+        // Complete rows are lent to formula emission, with the same 16 roots.
+        assert_eq!(before.binding_snapshots, Some(0));
+        assert_eq!(after.binding_snapshots, Some(0));
+        assert_eq!(before.roots, Some(16));
+        assert_eq!(after.roots, Some(16));
         assert!(after.domain_guard_checks.unwrap() > 0);
         assert!(on.work.get().domain_prepare_work.unwrap() > after.domain_prepare_work.unwrap());
         if strategy == JoinStrategy::Table {
@@ -352,7 +355,8 @@ fn a_comparison_over_one_variable_narrows_its_candidates() {
     assert_eq!(on.work.get().domain_excluded_values, Some(198));
     let rules = *on.rules.borrow().last().unwrap();
     assert_eq!(rules.domain_rejected_rows, Some(198));
-    assert_eq!(rules.binding_snapshots, Some(2));
+    assert_eq!(rules.binding_snapshots, Some(0));
+    assert_eq!(rules.roots, Some(2));
 }
 
 #[test]
