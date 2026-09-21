@@ -9,7 +9,7 @@ use std::{fmt::Write as _, time::Instant};
 
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_sat::{StableModels, Statistics};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, CountPlanLimits, CountPlanStatus, ExpansionLimits,
@@ -101,12 +101,12 @@ fn measure(source: &str, mode: Mode) -> Sample {
     )
     .unwrap();
     let preparation_ns = elapsed(started);
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let started = Instant::now();
     let admitted = match mode {
         Mode::Ordinary => prepared.ground(),
         Mode::SourceCountPlan => {
-            prepared.ground_with_count_plan(CountPlanLimits::default(), &control, None)
+            prepared.ground_with_count_plan(CountPlanLimits::default(), &cancellation, None)
         }
     }
     .unwrap();
@@ -145,7 +145,7 @@ fn enumerate(admitted: &AdmittedFormula) -> (Vec<Vec<usize>>, Statistics) {
     let mut search = StableModels::new(
         admitted.theory(),
         zetesis_sat::Limits::default(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     if let CountPlanStatus::Ready(plan) = admitted.count_plan() {

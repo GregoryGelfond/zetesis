@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 use std::io::Write;
 use std::process::{Command, Stdio};
 use zetesis_cli::{Completion, Options, run};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 fn canonical(line: &str) -> BTreeSet<String> {
     // This campaign uses only scalar atoms without strings containing spaces,
@@ -59,7 +59,13 @@ fn compare_native(source: &str, search: &str, expected: &BTreeSet<BTreeSet<Strin
     ])
     .unwrap();
     let mut bytes = Vec::new();
-    let report = run(source.into(), &options, &mut bytes, &Control::default()).unwrap();
+    let report = run(
+        source.into(),
+        &options,
+        &mut bytes,
+        &Cancellation::default(),
+    )
+    .unwrap();
     assert_eq!(report.completion, Completion::Exhausted, "{source}");
     let text = String::from_utf8(bytes).unwrap();
     let mut lines = text.lines();

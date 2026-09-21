@@ -221,8 +221,8 @@ pub(crate) struct Opened {
 /// Open a region search over the theory: extract its producers and index
 /// it, charging both.
 pub(crate) fn open(theory: &Theory, budget: &mut Budget<'_>) -> Result<Opened, Incomplete> {
-    let extraction =
-        zetesis_ferraris::producers(theory, limits(budget), budget.control).map_err(stopped)?;
+    let extraction = zetesis_ferraris::producers(theory, limits(budget), budget.cancellation)
+        .map_err(stopped)?;
     budget.charge(extraction.work)?;
     let index = IndexedTheory::new(theory);
     let indexed_work = index.narrower().work();
@@ -380,13 +380,13 @@ pub(crate) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
                     .map_err(|_| Incomplete::Allocation)?;
                 knowledge.push(narrower.knowledge());
             }
-            let control = budget.control;
+            let cancellation = budget.cancellation;
             let attempt = narrower.narrow_known_metered(
                 formulas,
                 producers,
                 region,
                 &mut knowledge[index],
-                control,
+                cancellation,
                 || budget.tick().map_err(NarrowingStop),
             );
             match account(attempt, counts)? {
@@ -532,11 +532,15 @@ fn narrow_frozen<Q: Quota>(
     budget: &mut Budget<'_, Q>,
     counts: &mut RegionCounts,
 ) -> Result<Narrowing, Incomplete> {
-    let control = budget.control;
-    let attempt =
-        narrower.narrow_frozen_known_metered(theory, truth, region, knowledge, control, || {
-            budget.tick().map_err(NarrowingStop)
-        });
+    let cancellation = budget.cancellation;
+    let attempt = narrower.narrow_frozen_known_metered(
+        theory,
+        truth,
+        region,
+        knowledge,
+        cancellation,
+        || budget.tick().map_err(NarrowingStop),
+    );
     account(attempt, counts)
 }
 

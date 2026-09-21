@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 
 use zetesis_core::{Atom, AtomPattern, AtomRows, Filter, Model, Term, Value};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 use crate::{
     Condition, ConditionNode, Contribution, Error, ErrorKind, Evaluation, Limits, ObjectiveProgram,
@@ -10,7 +10,7 @@ use crate::{
 
 struct Work<'a> {
     limits: Limits,
-    control: &'a Control,
+    cancellation: &'a Cancellation,
     statistics: Statistics,
     template: Option<usize>,
 }
@@ -26,7 +26,7 @@ impl Work<'_> {
         self.error(ErrorKind::Stopped(reason))
     }
     fn tick(&mut self) -> Result<(), Error> {
-        self.control.poll().map_err(|reason| {
+        self.cancellation.poll().map_err(|reason| {
             self.stop(match reason {
                 zetesis_cpu::Stop::Cancelled => Stop::Cancelled,
                 zetesis_cpu::Stop::Deadline => Stop::Deadline,
@@ -149,11 +149,11 @@ pub fn evaluate(
     program: &ObjectiveProgram,
     model: &Model,
     limits: Limits,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<Evaluation, Error> {
     let mut work = Work {
         limits,
-        control,
+        cancellation,
         statistics: Statistics::default(),
         template: None,
     };

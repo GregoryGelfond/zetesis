@@ -1,6 +1,6 @@
 //! A formula reduct bound to the interpretation that determines its falsum mask.
 
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 
 use crate::oracle::{Work, evaluate, failed_root, identities, reserve};
 use crate::{Interpretation, Limits, Statistics, Theory};
@@ -45,12 +45,12 @@ impl<'a> FrozenReduct<'a> {
     pub fn new(
         candidate: &'a Interpretation,
         limits: Limits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Self, Stop> {
-        control.poll()?;
+        cancellation.poll()?;
         let mut work = Work {
             limits,
-            control,
+            cancellation,
             statistics: Statistics::default(),
         };
         Self::freeze(candidate, &mut work)
@@ -87,13 +87,13 @@ impl<'a> FrozenReduct<'a> {
         &self,
         tested: &Interpretation,
         limits: Limits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<bool, Stop> {
         identities(self.theory(), tested)?;
-        control.poll()?;
+        cancellation.poll()?;
         let mut work = Work {
             limits,
-            control,
+            cancellation,
             statistics: Statistics::default(),
         };
         let mut values = reserve(self.truth.len())?;

@@ -3,7 +3,7 @@
 use std::cmp::Ordering;
 
 use zetesis_core::Value as Term;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 use super::{Bound, Error, ErrorKind, Function, Group, Phase, Statistics, Work, add};
 use crate::{AggregateComparison, AggregateExtremum};
@@ -140,11 +140,11 @@ impl Group {
         original: &[bool],
         frozen: Option<&[bool]>,
         limits: ReductionLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Reduction<'_>, Error> {
         let mut work = Work {
             maximum: limits.max_work,
-            control,
+            cancellation,
             statistics: Statistics::default(),
         };
         let result = self.reduce_checked(original, frozen, &mut work);

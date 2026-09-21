@@ -3,7 +3,7 @@
 use crate::ExecutionObservation as Event;
 use crate::execution_observation::ExecutionSink;
 
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_objective::Score;
 use zetesis_sat::StableModels;
 use zetesis_themelios::objective_bound::{
@@ -23,7 +23,7 @@ impl Bounds {
         input: Input<'_>,
         options: &SolveConfig,
         observations: &mut impl ExecutionSink,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Self, SolveError> {
         let mut state = Self {
             plan: None,
@@ -44,7 +44,7 @@ impl Bounds {
             input.atoms.atoms(),
             input.objectives,
             limits,
-            control,
+            cancellation,
         ) {
             Ok(plan) => {
                 state.work = plan.statistics().work;
@@ -65,7 +65,7 @@ impl Bounds {
         models: &mut StableModels,
         options: &SolveConfig,
         observations: &mut impl ExecutionSink,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<(), SolveError> {
         let Some(plan) = &self.plan else {
             return Ok(());
@@ -74,7 +74,7 @@ impl Bounds {
             max_work: options.max_objective_bound_work.saturating_sub(self.work),
             ..Default::default()
         };
-        let bound = match plan.bound(score, limits, control) {
+        let bound = match plan.bound(score, limits, cancellation) {
             Ok(bound) => {
                 self.work += bound.statistics().work;
                 bound

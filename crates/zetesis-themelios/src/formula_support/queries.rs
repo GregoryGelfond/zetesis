@@ -36,7 +36,7 @@ pub(crate) struct Support<'source> {
 struct TableWorkspace<'source> {
     indices: RefCell<Vec<Table<'source, 'source>>>,
     // No source cancellation door exists; this private control has no deadline.
-    control: zetesis_cpu::Control,
+    cancellation: zetesis_cpu::Cancellation,
 }
 
 impl<'source> Deref for Support<'source> {
@@ -79,7 +79,7 @@ impl<'source> Support<'source> {
             relations,
             tables: (strategy == JoinStrategy::Table).then(|| TableWorkspace {
                 indices: RefCell::new(Vec::new()),
-                control: zetesis_cpu::Control::default(),
+                cancellation: zetesis_cpu::Cancellation::default(),
             }),
             live: Cell::new(bytes),
             entries: Cell::new(relations.entries),
@@ -164,7 +164,7 @@ impl<'source> Support<'source> {
         let Some(workspace) = &self.tables else {
             return Ok(None);
         };
-        let control = &workspace.control;
+        let cancellation = &workspace.cancellation;
         let PositivePattern::Flat(pattern) = pattern else {
             counters.record(Event::TableInapplicableProbe);
             return Ok(None);
@@ -185,7 +185,7 @@ impl<'source> Support<'source> {
             self.reserve_tables(&mut tables, limits, counters, location)?;
             let outer = self.live.get() - relation.storage().retained_bytes;
             let table_limits = self.table_limits(limits, counters, outer, location)?;
-            let prepared = Table::prepare(relation, &bound.scope, table_limits, control);
+            let prepared = Table::prepare(relation, &bound.scope, table_limits, cancellation);
             let table = self.result(prepared, true, outer, limits, counters, location)?;
             let retained = table.statistics().retained_bytes - size_of::<Table<'_, '_>>();
             self.live.set(self.live.get() + retained);
@@ -207,7 +207,7 @@ impl<'source> Support<'source> {
         table_limits.max_entries = table.support_entries();
         counters.record(Event::JoinProbe);
         counters.record(Event::TableProbe);
-        let selected = table.select(&bound.domains, table_limits, control);
+        let selected = table.select(&bound.domains, table_limits, cancellation);
         let selection = self.result(selected, false, outer, limits, counters, location)?;
         let bytes = selection.statistics().retained_bytes + ROW_LEASE_BYTES;
         self.live.set(self.live.get() + bytes);

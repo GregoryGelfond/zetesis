@@ -1,7 +1,7 @@
 //! Shared host scopes preserve attempts independently of application outcomes.
 
 use std::{sync::mpsc, thread, time::Duration};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     Backend, Completion, ExecutionObservation, ExecutionObserver, GroundingOutcome, GroundingPhase,
     GroundingWork, PreparedInput, Session, SolveConfig, SolveMeasurements, SolvePhase, SolveStage,
@@ -33,7 +33,7 @@ fn a_default_cpu_session_can_move_to_another_thread() {
     let mut session = Session::new(
         PreparedInput::admitted(&input),
         cpu_config(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     thread::scope(|scope| {
@@ -63,7 +63,7 @@ fn injected_measurements_move_with_the_session_and_choose_its_policy() {
                 stats: !enabled,
                 ..cpu_config()
             },
-            Control::default(),
+            Cancellation::default(),
         )
         .measurements(&owner)
         .start()
@@ -191,7 +191,7 @@ fn session_observations_can_snapshot_and_measure_their_shared_owner() {
         let mut session = Session::builder(
             PreparedInput::admitted(&input),
             cpu_config(),
-            Control::default(),
+            Cancellation::default(),
         )
         .measurements(&owner)
         .start_observed(&mut observer)

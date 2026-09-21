@@ -5,7 +5,7 @@ use std::num::NonZeroU32;
 use zetesis_core::{
     AdmissionLimits, Atom, AtomPattern, Predicate, Program, Seed, Template, Term, Value,
 };
-use zetesis_cpu::{Control, Limits, Stop, check, lazy};
+use zetesis_cpu::{Cancellation, Limits, Stop, check, lazy};
 
 use crate::{GpuBackendPreference, GpuErrorKind, GpuLimits, GpuOptions, GpuSelection};
 
@@ -293,7 +293,7 @@ fn execute_inspected(
     });
     let before = oracle.statistics();
     let expected = lazy::evaluate(chunk).unwrap();
-    let actual = oracle.execute(chunk, limits, &Control::default(), cached)?;
+    let actual = oracle.execute(chunk, limits, &Cancellation::default(), cached)?;
     assert_eq!(actual, expected);
     let transport = cached.as_ref().unwrap();
     assert!(transport.capacity.accounted(&plan).unwrap() <= limits.max_batch_bytes);
@@ -357,7 +357,7 @@ fn source_sequence_exercises_transport_resize_boundaries() {
                 ..Default::default()
             },
             selection,
-            &Control::default(),
+            &Cancellation::default(),
             |chunk| {
                 let plan = Plan::new(
                     NonZeroU32::MIN,
@@ -418,7 +418,7 @@ fn qualify_lazy_transport_reuse_preserves_round_truth(backend: GpuBackendPrefere
                 ..Default::default()
             },
             selection,
-            &Control::default(),
+            &Cancellation::default(),
             |chunk| {
                 let plan = Plan::new(
                     NonZeroU32::MIN,
@@ -450,7 +450,8 @@ fn qualify_lazy_transport_reuse_preserves_round_truth(backend: GpuBackendPrefere
         );
         assert_eq!(batch.checks.len(), seeds.len());
         for (actual, seed) in batch.checks.iter().zip(&seeds) {
-            let expected = check(&program, seed, Limits::default(), &Control::default()).unwrap();
+            let expected =
+                check(&program, seed, Limits::default(), &Cancellation::default()).unwrap();
             assert_eq!(actual.closure(), expected.closure());
             assert_eq!(actual.constraint_violated(), expected.constraint_violated());
             assert_eq!(actual.seed_mismatch(), expected.seed_mismatch());
@@ -481,7 +482,7 @@ fn qualify_lazy_transport_reuse_preserves_round_truth(backend: GpuBackendPrefere
                 },
                 GpuLimits::default(),
                 selection,
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
         assert_eq!(again.progress.chunks, oracle.statistics.dispatches);
@@ -516,7 +517,7 @@ fn qualify_input_slack_preserves_exact_admission(backend: GpuBackendPreference) 
                 ..Default::default()
             },
             selection,
-            &Control::default(),
+            &Cancellation::default(),
             |chunk| {
                 let plan = Plan::new(
                     NonZeroU32::MIN,
@@ -587,7 +588,7 @@ fn qualify_lazy_transport_refusal_preserves_reuse(backend: GpuBackendPreference)
                 .execute(
                     chunk,
                     GpuLimits::default(),
-                    &Control::default(),
+                    &Cancellation::default(),
                     &mut cached
                 )
                 .unwrap(),
@@ -602,7 +603,7 @@ fn qualify_lazy_transport_refusal_preserves_reuse(backend: GpuBackendPreference)
                         max_batch_bytes: exact - 1,
                         ..Default::default()
                     },
-                    &Control::default(),
+                    &Cancellation::default(),
                     &mut cached,
                 )
                 .unwrap_err()
@@ -619,7 +620,7 @@ fn qualify_lazy_transport_refusal_preserves_reuse(backend: GpuBackendPreference)
                         max_batch_bytes: exact,
                         ..Default::default()
                     },
-                    &Control::default(),
+                    &Cancellation::default(),
                     &mut cached,
                 )
                 .unwrap(),
@@ -656,14 +657,14 @@ fn qualify_lazy_transport_cancelled_read_discards_capacity(backend: GpuBackendPr
             .execute(
                 chunk,
                 GpuLimits::default(),
-                &Control::default(),
+                &Cancellation::default(),
                 &mut cached,
             )
             .unwrap();
         let completed = oracle.statistics();
         // Inject cancellation at the device-read boundary. The public source
         // coordinator normally polls earlier, but cancellation may race submit.
-        let cancelled = Control::default();
+        let cancelled = Cancellation::default();
         cancelled.cancel();
         let error = oracle
             .execute(chunk, GpuLimits::default(), &cancelled, &mut cached)
@@ -681,7 +682,7 @@ fn qualify_lazy_transport_cancelled_read_discards_capacity(backend: GpuBackendPr
                 .execute(
                     chunk,
                     GpuLimits::default(),
-                    &Control::default(),
+                    &Cancellation::default(),
                     &mut cached
                 )
                 .unwrap_err()
@@ -707,7 +708,7 @@ fn qualify_cancelled_replacement(backend: GpuBackendPreference) {
             ..Default::default()
         },
         lazy::SourceSelection::Worlds,
-        &Control::default(),
+        &Cancellation::default(),
         |chunk| {
             let plan = Plan::new(
                 NonZeroU32::MIN,
@@ -728,7 +729,7 @@ fn qualify_cancelled_replacement(backend: GpuBackendPreference) {
             }
             cancelled_replacement = true;
             let previous = oracle.statistics();
-            let cancelled = Control::default();
+            let cancelled = Cancellation::default();
             cancelled.cancel();
             let error = oracle
                 .execute(chunk, GpuLimits::default(), &cancelled, &mut cached)
@@ -753,7 +754,7 @@ fn qualify_cancelled_replacement(backend: GpuBackendPreference) {
                     .execute(
                         chunk,
                         GpuLimits::default(),
-                        &Control::default(),
+                        &Cancellation::default(),
                         &mut cached
                     )
                     .unwrap_err()
@@ -795,13 +796,13 @@ fn qualify_immutable_uploads(backend: GpuBackendPreference) {
                 ..Default::default()
             },
             selection,
-            &Control::default(),
+            &Cancellation::default(),
             |chunk| {
                 let before = oracle.statistics.uploaded_bytes;
                 let actual = oracle.execute(
                     chunk,
                     GpuLimits::default(),
-                    &Control::default(),
+                    &Cancellation::default(),
                     &mut cached,
                 )?;
                 assert_eq!(actual, lazy::evaluate(chunk).unwrap());
@@ -832,7 +833,7 @@ fn qualify_immutable_uploads(backend: GpuBackendPreference) {
                 lazy::Limits::default(),
                 GpuLimits::default(),
                 selection,
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
         assert_eq!(public.checks[0].closure(), batch.checks[0].closure());

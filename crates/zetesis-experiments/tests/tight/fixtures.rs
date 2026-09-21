@@ -1,6 +1,6 @@
 use super::*;
 use std::num::NonZeroUsize;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{TightPlan, TightPlanLimits};
 
 fn fixture(family: Family, atoms: usize) -> Fixture {
@@ -46,7 +46,7 @@ fn support_distributions_have_the_declared_producer_counts() {
             let plan = TightPlan::compile(
                 &fixture.theory,
                 TightPlanLimits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
             let mut counts = vec![0usize; atoms];

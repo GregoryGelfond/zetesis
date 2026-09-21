@@ -6,7 +6,7 @@
 use std::collections::BTreeSet;
 use zetesis_core::{Atom, Predicate, Program, Seed, Template, Term, Value};
 use zetesis_cpu::{
-    CandidateLimits, Candidates, Control, Limits, PreparationLimits, PreparedQueries, check,
+    Cancellation, CandidateLimits, Candidates, Limits, PreparationLimits, PreparedQueries, check,
 };
 
 #[path = "support/programs.rs"]
@@ -55,14 +55,16 @@ fn held_program() -> Program {
 
 /// The seeds the narrowed counter offers for `program`, with the statistics.
 fn narrowed(program: &Program) -> (Vec<Seed>, zetesis_cpu::CandidateStatistics) {
-    let mut candidates = Candidates::new(program, CandidateLimits::default(), Control::default());
+    let mut candidates =
+        Candidates::new(program, CandidateLimits::default(), Cancellation::default());
     candidates.bounded(Limits::default());
     let seeds = candidates.by_ref().map(Result::unwrap).collect();
     (seeds, candidates.statistics())
 }
 
 fn accepted_models(program: &Program, bounded: bool) -> BTreeSet<Vec<Atom>> {
-    let mut candidates = Candidates::new(program, CandidateLimits::default(), Control::default());
+    let mut candidates =
+        Candidates::new(program, CandidateLimits::default(), Cancellation::default());
     if bounded {
         candidates.bounded(Limits::default());
     }
@@ -72,7 +74,7 @@ fn accepted_models(program: &Program, bounded: bool) -> BTreeSet<Vec<Atom>> {
                 program,
                 &seed.unwrap(),
                 Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
             checked
@@ -208,7 +210,8 @@ fn enumerate(program: &Program, candidates: Candidates<'_>) -> Vec<(usize, bool)
     candidates
         .map(|seed| {
             let seed = seed.unwrap();
-            let checked = check(program, &seed, Limits::default(), &Control::default()).unwrap();
+            let checked =
+                check(program, &seed, Limits::default(), &Cancellation::default()).unwrap();
             (seed.atoms().len(), checked.accepted())
         })
         .collect()
@@ -219,7 +222,11 @@ fn the_unbounded_counter_enumerates_the_whole_symbolic_carrier() {
     // The symbolic carrier holds blocked(1..4) and r(1..4): eight atoms and
     // 256 seeds, of which one is the answer.
     let program = blocked_program();
-    let candidates = Candidates::new(&program, CandidateLimits::default(), Control::default());
+    let candidates = Candidates::new(
+        &program,
+        CandidateLimits::default(),
+        Cancellation::default(),
+    );
     let seeds = enumerate(&program, candidates);
     assert_eq!(seeds.len(), 256);
     assert_eq!(seeds.iter().filter(|(_, accepted)| *accepted).count(), 1);
@@ -230,7 +237,11 @@ fn a_resource_stop_while_bounding_leaves_the_symbolic_carrier() {
     // One unit of work cannot compute a closure; the counter then runs over
     // all eight symbolic gate atoms and the receipt names the stop.
     let program = blocked_program();
-    let mut candidates = Candidates::new(&program, CandidateLimits::default(), Control::default());
+    let mut candidates = Candidates::new(
+        &program,
+        CandidateLimits::default(),
+        Cancellation::default(),
+    );
     candidates.bounded(Limits {
         max_work: 1,
         ..Limits::default()
@@ -248,9 +259,9 @@ fn a_resource_stop_while_bounding_leaves_the_symbolic_carrier() {
 #[test]
 fn a_cancelled_bound_stops_the_first_pull() {
     let program = blocked_program();
-    let control = Control::default();
-    control.cancel();
-    let mut candidates = Candidates::new(&program, CandidateLimits::default(), control);
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
+    let mut candidates = Candidates::new(&program, CandidateLimits::default(), cancellation);
     candidates.bounded(Limits::default());
     assert!(matches!(
         candidates.next(),
@@ -264,7 +275,11 @@ fn the_narrowing_decides_the_blocked_program_outright() {
     // second reads those decisions, so r(1), r(3) and r(4) are necessary and
     // r(2) underivable. Nothing is left to count: one seed, the answer.
     let program = blocked_program();
-    let mut candidates = Candidates::new(&program, CandidateLimits::default(), Control::default());
+    let mut candidates = Candidates::new(
+        &program,
+        CandidateLimits::default(),
+        Cancellation::default(),
+    );
     candidates.bounded(Limits::default());
     let seeds = enumerate(&program, candidates);
     assert_eq!(seeds, [(4, true)]);
@@ -284,7 +299,11 @@ fn a_program_without_gate_predicates_computes_no_closure_for_its_bounds() {
             vec![],
         ),
     ]);
-    let mut candidates = Candidates::new(&program, CandidateLimits::default(), Control::default());
+    let mut candidates = Candidates::new(
+        &program,
+        CandidateLimits::default(),
+        Cancellation::default(),
+    );
     candidates.bounded(Limits {
         max_work: 0,
         ..Limits::default()
@@ -346,7 +365,11 @@ fn the_narrowing_decides_a_stratified_program_in_three_passes() {
     // reach(5..8) are necessary and reach(4) is underivable. Pass three
     // changes nothing, and the one seed is the answer.
     let program = stratified_program();
-    let mut candidates = Candidates::new(&program, CandidateLimits::default(), Control::default());
+    let mut candidates = Candidates::new(
+        &program,
+        CandidateLimits::default(),
+        Cancellation::default(),
+    );
     candidates.bounded(Limits::default());
     let seeds = enumerate(&program, candidates);
     assert_eq!(seeds, [(8, true)]);
@@ -355,7 +378,11 @@ fn the_narrowing_decides_a_stratified_program_in_three_passes() {
 /// The statistics of the stratified program's narrowing, after its one seed.
 fn stratified_statistics() -> zetesis_cpu::CandidateStatistics {
     let program = stratified_program();
-    let mut candidates = Candidates::new(&program, CandidateLimits::default(), Control::default());
+    let mut candidates = Candidates::new(
+        &program,
+        CandidateLimits::default(),
+        Cancellation::default(),
+    );
     candidates.bounded(Limits::default());
     assert_eq!(candidates.by_ref().map(Result::unwrap).count(), 1);
     candidates.statistics()
@@ -386,15 +413,21 @@ fn the_narrowing_charges_its_preparation_apart_from_its_closures() {
     // together, closure by closure on a fresh workspace, they would need
     // 1,213.
     let program = stratified_program();
-    let preparation =
-        PreparedQueries::new(&program, PreparationLimits::default(), &Control::default())
-            .unwrap()
-            .statistics()
-            .work;
+    let preparation = PreparedQueries::new(
+        &program,
+        PreparationLimits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap()
+    .statistics()
+    .work;
     assert_eq!(preparation, 329);
     let stop = |max_work| {
-        let mut candidates =
-            Candidates::new(&program, CandidateLimits::default(), Control::default());
+        let mut candidates = Candidates::new(
+            &program,
+            CandidateLimits::default(),
+            Cancellation::default(),
+        );
         candidates.bounded(Limits {
             max_work,
             ..Limits::default()
@@ -422,14 +455,22 @@ fn a_definite_constraint_refutes_the_whole_carrier() {
         vec![],
     ));
     let program = program(templates);
-    let mut candidates = Candidates::new(&program, CandidateLimits::default(), Control::default());
+    let mut candidates = Candidates::new(
+        &program,
+        CandidateLimits::default(),
+        Cancellation::default(),
+    );
     candidates.bounded(Limits::default());
     assert_eq!(candidates.by_ref().count(), 0);
     let statistics = candidates.statistics();
     assert!(statistics.root_refuted);
     assert_eq!(statistics.narrowing_passes, 1);
     // The unbounded counter finds the same absence the long way.
-    let unbounded = Candidates::new(&program, CandidateLimits::default(), Control::default());
+    let unbounded = Candidates::new(
+        &program,
+        CandidateLimits::default(),
+        Cancellation::default(),
+    );
     assert!(
         enumerate(&program, unbounded)
             .iter()

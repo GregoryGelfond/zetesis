@@ -4,7 +4,7 @@ use proptest::prelude::*;
 use zetesis_core::{
     AtomPattern, GroundProgram, Model, Predicate, Program, Seed, StaticLimits, Template,
 };
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AdmissionError, AdmissionLimits, Interpretation, from_ground_program,
     from_ground_program_supported,
@@ -63,7 +63,7 @@ fn compare(program: &Program) {
             program,
             &seed,
             zetesis_cpu::Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         let candidate = Interpretation::new(
@@ -75,7 +75,7 @@ fn compare(program: &Program) {
             &theory,
             &candidate,
             zetesis_ferraris::Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         let supported_candidate = Interpretation::new(&supported, candidate.atoms()).unwrap();
@@ -83,7 +83,7 @@ fn compare(program: &Program) {
             &supported,
             &supported_candidate,
             zetesis_ferraris::Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         assert_eq!(
@@ -202,7 +202,7 @@ fn unsupported_classical_atoms_are_pruned_before_countermodel_search() {
                 theory,
                 &candidate,
                 zetesis_ferraris::Limits::default(),
-                &Control::default()
+                &Cancellation::default()
             )
             .unwrap(),
             expected

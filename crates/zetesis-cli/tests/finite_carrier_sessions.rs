@@ -15,7 +15,7 @@ use zetesis_cli::{
     Backend, Completion, Options, Oracle, PreparedInput, SearchMethod, Session, SolveConfig,
     run_with_diagnostics,
 };
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::FormulaLimits;
 
 struct Expected {
@@ -151,9 +151,12 @@ fn sessions_preserve_scored_answer_families() {
                 batch_size: NonZeroUsize::new(batch).unwrap(),
                 ..SolveConfig::default()
             };
-            let mut session =
-                Session::enumerate(PreparedInput::formula(&input), config, Control::default())
-                    .unwrap();
+            let mut session = Session::enumerate(
+                PreparedInput::formula(&input),
+                config,
+                Cancellation::default(),
+            )
+            .unwrap();
             let mut records = Records::new();
             for answer in session.by_ref() {
                 let answer = answer.unwrap();
@@ -223,7 +226,7 @@ fn json_preserves_complete_optimum_answers() {
                 &options,
                 &mut output,
                 &mut Vec::new(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
             assert_eq!(report.completion, Completion::Exhausted);

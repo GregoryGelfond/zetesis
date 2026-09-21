@@ -6,7 +6,7 @@ use zetesis_cli::{
     PreparedProfile, PublicationFailure, RunError, Session, SolveConfig, SolveError, Subject,
 };
 use zetesis_core::{GroundProgram, Seed, StaticLimits, WordError};
-use zetesis_cpu::{BatchError, BatchOracle, Control, Limits};
+use zetesis_cpu::{BatchError, BatchOracle, Cancellation, Limits};
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit, admit_formula};
 
 fn config() -> SolveConfig {
@@ -75,7 +75,7 @@ fn typed_observer_failure_keeps_its_external_owner() {
     let original = Session::builder(
         PreparedInput::admitted(&owner),
         config(),
-        Control::default(),
+        Cancellation::default(),
     )
     .start_observed(&mut FailTyped(Arc::clone(&token)))
     .err()
@@ -110,7 +110,7 @@ fn io_observer_failure_keeps_its_writer_kind() {
     let original = Session::builder(
         PreparedInput::admitted(&owner),
         config(),
-        Control::default(),
+        Cancellation::default(),
     )
     .start_observed(&mut FailIo(Arc::clone(&token)))
     .err()
@@ -150,7 +150,7 @@ fn prepared_refusal_keeps_the_requested_policy() {
             grounder: Grounder::Eager,
             ..config()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .err()
     .unwrap();
@@ -187,7 +187,7 @@ fn batch_refusal_keeps_its_admission_counts() {
             owner.program(),
             &[seed.clone(), seed.clone()],
             Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
     // This is the typed failure adapter; the oversized batch did no membership work.
@@ -205,7 +205,7 @@ fn batch_refusal_keeps_its_admission_counts() {
             owner.program(),
             &[seed],
             Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     assert_eq!(checks.len(), 1);

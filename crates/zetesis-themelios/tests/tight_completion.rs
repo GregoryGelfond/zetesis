@@ -7,7 +7,7 @@ use std::num::NonZeroUsize;
 use std::path::Path;
 
 use zetesis_core::{Atom, Model};
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
     Theory, TightCheckLimits, TightError, TightPlan, TightPlanLimits, TightVerdict,
 };
@@ -34,9 +34,9 @@ fn run(
     certificate: Option<&TightPlan>,
     workers: usize,
 ) -> Run {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut search =
-        StableModels::new(theory, zetesis_sat::Limits::default(), control.clone()).unwrap();
+        StableModels::new(theory, zetesis_sat::Limits::default(), cancellation.clone()).unwrap();
     let mut executor = CompletionExecutor::new(NonZeroUsize::new(workers).unwrap()).unwrap();
     let batch_limits = BatchLimits {
         max_candidates: NonZeroUsize::new(17).unwrap(),
@@ -57,7 +57,7 @@ fn run(
                                 max_work: 100_000_000 - certificate_work,
                                 ..TightCheckLimits::default()
                             },
-                            &control,
+                            &cancellation,
                         )?;
                         certificate_work += checked.work;
                         match checked.verdict {
@@ -84,7 +84,7 @@ fn run(
                 objective,
                 &model,
                 zetesis_objective::Limits::default(),
-                &control,
+                &cancellation,
             )
             .expect("complete model score")
             .score()
@@ -128,15 +128,16 @@ fn compare(
     objectives: &ObjectiveProgram,
     workers: usize,
 ) -> (Run, Run) {
-    let plan = match TightPlan::compile(theory, TightPlanLimits::default(), &Control::default()) {
-        Ok(plan) => Some(plan),
-        Err(
-            TightError::PositiveCycle { .. }
-            | TightError::UnsupportedBody { .. }
-            | TightError::UnsupportedRoot { .. },
-        ) => None,
-        Err(error) => panic!("unexpected incomplete certification: {error}"),
-    };
+    let plan =
+        match TightPlan::compile(theory, TightPlanLimits::default(), &Cancellation::default()) {
+            Ok(plan) => Some(plan),
+            Err(
+                TightError::PositiveCycle { .. }
+                | TightError::UnsupportedBody { .. }
+                | TightError::UnsupportedRoot { .. },
+            ) => None,
+            Err(error) => panic!("unexpected incomplete certification: {error}"),
+        };
     let baseline = run(theory, atoms, objectives, None, 1);
     let certified = run(theory, atoms, objectives, plan.as_ref(), workers);
     assert_eq!(certified.models, baseline.models);

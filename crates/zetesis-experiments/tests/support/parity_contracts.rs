@@ -5,7 +5,7 @@ use std::error::Error;
 use zetesis_core::{
     AdmissionLimits, AtomPattern, GroundProgram, Predicate, Program, Seed, StaticLimits, Template,
 };
-use zetesis_cpu::{Control, Limits, StaticCheck, check_static};
+use zetesis_cpu::{Cancellation, Limits, StaticCheck, check_static};
 
 use super::{BenchmarkError, cpu_parity};
 
@@ -54,7 +54,7 @@ fn check(case: Case) -> StaticCheck {
         &graph,
         &Seed::new(&program, []).unwrap(),
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap()
 }

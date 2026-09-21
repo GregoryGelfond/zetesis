@@ -3,7 +3,7 @@
 use std::time::Instant;
 
 use proptest::prelude::*;
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
     AdmissionLimits, AggregateComparison as Comparison, AggregateElement as Element,
     AggregateErrorKind as Error, AggregateLimits, AggregateProfile, Interpretation, Limits, Node,
@@ -74,7 +74,7 @@ fn verify(elements: &[Element], comparison: Comparison, bound: i64) {
         comparison,
         bound,
         AggregateLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let theory = Theory::new(2, nodes, vec![built.root()], AdmissionLimits::default()).unwrap();
@@ -87,7 +87,13 @@ fn verify(elements: &[Element], comparison: Comparison, bound: i64) {
         let classical = holds(comparison, sum, bound);
         let candidate = world(&theory, outer);
         assert_eq!(
-            models(&theory, &candidate, Limits::default(), &Control::default()).unwrap(),
+            models(
+                &theory,
+                &candidate,
+                Limits::default(),
+                &Cancellation::default()
+            )
+            .unwrap(),
             classical,
             "classical: {elements:?}, {comparison:?}, bound={bound}, M={outer}"
         );
@@ -106,7 +112,7 @@ fn verify(elements: &[Element], comparison: Comparison, bound: i64) {
                     &candidate,
                     &world(&theory, inner),
                     Limits::default(),
-                    &Control::default()
+                    &Cancellation::default()
                 )
                 .unwrap(),
                 expected,
@@ -199,7 +205,7 @@ fn count_sixty_four_uses_threshold_states_without_subset_enumeration() {
             max_subsets: 0,
             ..AggregateLimits::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(built.profile(), AggregateProfile::Threshold);
@@ -210,7 +216,13 @@ fn count_sixty_four_uses_threshold_states_without_subset_enumeration() {
     for size in [0, 7, 8, 9, 64] {
         let candidate = Interpretation::new(&theory, 0..size).unwrap();
         assert_eq!(
-            models(&theory, &candidate, Limits::default(), &Control::default()).unwrap(),
+            models(
+                &theory,
+                &candidate,
+                Limits::default(),
+                &Cancellation::default()
+            )
+            .unwrap(),
             size == 8
         );
     }
@@ -225,7 +237,7 @@ fn limited(elements: &[Element], limits: AggregateLimits) -> Error {
         Comparison::Eq,
         1,
         limits,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .expect_err("one inclusive budget is below required work");
     assert_eq!(
@@ -254,7 +266,7 @@ fn exact_compilation_ceilings_and_rollback_are_observable() {
         Comparison::Eq,
         1,
         AggregateLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let exact = AggregateLimits {
@@ -271,7 +283,7 @@ fn exact_compilation_ceilings_and_rollback_are_observable() {
         Comparison::Eq,
         1,
         exact,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(built, repeated);
@@ -341,7 +353,7 @@ fn exact_subset_ceiling_and_temporary_state_are_independent() {
             max_states: 2,
             ..AggregateLimits::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(built.profile(), AggregateProfile::SubsetImplications);
@@ -389,7 +401,7 @@ fn hostile_dimensions_and_edges_are_refused_without_mutation() {
             Comparison::Eq,
             0,
             AggregateLimits::default(),
-            &Control::default()
+            &Cancellation::default()
         )
         .unwrap_err()
         .kind(),
@@ -425,7 +437,7 @@ fn hostile_dimensions_and_edges_are_refused_without_mutation() {
             Comparison::Ge,
             i64::from(i32::MAX),
             AggregateLimits::default(),
-            &Control::default()
+            &Cancellation::default()
         )
         .unwrap_err()
         .kind(),
@@ -436,12 +448,12 @@ fn hostile_dimensions_and_edges_are_refused_without_mutation() {
 
 #[test]
 fn cancellation_and_deadlines_precede_work_even_for_an_empty_aggregate() {
-    let cancelled = Control::default();
+    let cancelled = Cancellation::default();
     cancelled.cancel();
-    for (control, expected) in [
+    for (cancellation, expected) in [
         (cancelled, Stop::Cancelled),
         (
-            Control::with_deadline(Instant::now()).unwrap(),
+            Cancellation::with_deadline(Instant::now()).unwrap(),
             Stop::Deadline,
         ),
     ] {
@@ -455,7 +467,7 @@ fn cancellation_and_deadlines_precede_work_even_for_an_empty_aggregate() {
                 max_work: 0,
                 ..AggregateLimits::default()
             },
-            &control,
+            &cancellation,
         )
         .unwrap_err();
         assert_eq!(error.kind(), Error::Control(expected));

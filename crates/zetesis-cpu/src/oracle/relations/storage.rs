@@ -13,7 +13,7 @@ use super::super::Work;
 use crate::Stop;
 
 pub(in crate::oracle) fn admit(work: &mut Work<'_>, bytes: u128) -> Result<(), Stop> {
-    work.control.poll()?;
+    work.cancellation.poll()?;
     if bytes > work.limits.max_closure_bytes as u128 {
         return Err(Stop::StorageLimit);
     }

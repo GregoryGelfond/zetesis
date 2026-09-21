@@ -13,7 +13,7 @@ fn outcome(result: Solve) -> Result<Option<Assignment>, Incomplete> {
 
 #[test]
 fn reused_search_matches_fresh_state_after_every_interruption() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut workspace = Workspace::default();
     workspace.reserve(4, 4).unwrap();
     let retained = workspace.retained_bytes();
@@ -34,13 +34,13 @@ fn reused_search_matches_fresh_state_after_every_interruption() {
             let mut fresh = Budget {
                 quota: LocalQuota,
                 limits,
-                control: &control,
+                cancellation: &cancellation,
                 statistics: SearchStatistics::default(),
             };
             let mut reused = Budget {
                 quota: LocalQuota,
                 limits,
-                control: &control,
+                cancellation: &cancellation,
                 statistics: SearchStatistics::default(),
             };
             assert_eq!(
@@ -55,7 +55,7 @@ fn reused_search_matches_fresh_state_after_every_interruption() {
 
 #[test]
 fn search_keeps_reserved_arrays_across_smaller_queries() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut workspace = Workspace::default();
     workspace.reserve(5, 4).unwrap();
     let pointers = (
@@ -71,7 +71,7 @@ fn search_keeps_reserved_arrays_across_smaller_queries() {
         let mut budget = Budget {
             quota: LocalQuota,
             limits: SearchLimits::default(),
-            control: &control,
+            cancellation: &cancellation,
             statistics: SearchStatistics::default(),
         };
         let answer = outcome(workspace.query(&cnf, &mut budget))
@@ -95,7 +95,7 @@ fn search_keeps_reserved_arrays_across_smaller_queries() {
 
 #[test]
 fn changing_level_zero_parameters_matches_explicit_unit_queries() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut workspace = Workspace::default();
     let p = |variable| Literal::new(variable, true);
     let base = vec![
@@ -114,11 +114,11 @@ fn changing_level_zero_parameters_matches_explicit_unit_queries() {
         let mut clauses = base.clone();
         clauses.extend(assumptions.iter().map(|&literal| vec![literal]));
         let reference = Cnf::new(3, clauses, AdmissionLimits::default()).unwrap();
-        let expected = solve(&reference, SearchLimits::default(), &control);
+        let expected = solve(&reference, SearchLimits::default(), &cancellation);
         let mut budget = Budget {
             quota: LocalQuota,
             limits: SearchLimits::default(),
-            control: &control,
+            cancellation: &cancellation,
             statistics: SearchStatistics::default(),
         };
         let actual = workspace.query_assuming(&cnf, &assumptions, &mut budget);

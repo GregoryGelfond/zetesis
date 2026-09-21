@@ -64,9 +64,9 @@ fn shader_structs_match_host_buffer_strides() {
 
 #[test]
 fn control_failures_keep_their_typed_reason() {
-    let control = Control::default();
-    control.cancel();
-    let error = TightGpuError::from(poll(&control).unwrap_err());
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
+    let error = TightGpuError::from(poll(&cancellation).unwrap_err());
     assert_eq!(error, TightGpuError::Stopped(Stop::Cancelled));
     assert_eq!(error.to_string(), "operation cancelled");
     assert_eq!(error.source().unwrap().to_string(), error.to_string());
@@ -74,9 +74,9 @@ fn control_failures_keep_their_typed_reason() {
 
 #[test]
 fn expired_deadlines_are_not_device_failures() {
-    let control = Control::with_deadline(std::time::Instant::now()).unwrap();
+    let cancellation = Cancellation::with_deadline(std::time::Instant::now()).unwrap();
     assert_eq!(
-        TightGpuError::from(poll(&control).unwrap_err()),
+        TightGpuError::from(poll(&cancellation).unwrap_err()),
         TightGpuError::Stopped(Stop::Deadline)
     );
 }

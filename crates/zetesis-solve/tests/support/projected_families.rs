@@ -1,7 +1,7 @@
 //! Fixed keys select full members of the independently completed original family.
 
 use std::collections::BTreeSet;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, ExecutionResources, PreparedInput, ProjectionLimits,
     Session, SolveConfig, WorldViewLimits,
@@ -28,7 +28,7 @@ pub(super) fn check(
             backend: Backend::Cpu,
             ..config
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .collect(WorldViewLimits::default())
     .unwrap();
@@ -49,12 +49,16 @@ pub(super) fn check(
             .collect::<Vec<_>>()
     };
     let expected: BTreeSet<_> = selected.iter().map(|answer| key(answer)).collect();
-    let mut session = Session::builder(PreparedInput::formula(&owner), config, Control::default())
-        .resources(resources)
-        .selection(selection)
-        .projected(ProjectionLimits::default())
-        .start()
-        .unwrap();
+    let mut session = Session::builder(
+        PreparedInput::formula(&owner),
+        config,
+        Cancellation::default(),
+    )
+    .resources(resources)
+    .selection(selection)
+    .projected(ProjectionLimits::default())
+    .start()
+    .unwrap();
     let mut actual = BTreeSet::new();
     for answer in session.by_ref() {
         let answer = answer.unwrap();

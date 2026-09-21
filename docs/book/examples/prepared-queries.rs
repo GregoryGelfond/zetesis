@@ -5,7 +5,9 @@ use zetesis_core::{
     AdmissionLimits, AtomPattern, ConstructionError, Model, Predicate, Program, Seed, Template,
     Term, Value,
 };
-use zetesis_cpu::{ClosureWorkspace, Control, Limits, PreparationLimits, PreparedQueries, check};
+use zetesis_cpu::{
+    Cancellation, ClosureWorkspace, Limits, PreparationLimits, PreparedQueries, check,
+};
 
 fn pattern(name: &str, term: Term) -> Result<AtomPattern, ConstructionError> {
     AtomPattern::new(Predicate::new(name, 1)?, vec![term])
@@ -47,13 +49,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let right_atom = right.instantiate(&assignment)?;
     let first_seed = Seed::new(&program, [left_atom.clone()])?;
     let second_seed = Seed::new(&program, [right_atom.clone()])?;
-    let control = Control::default();
-    let prepared = PreparedQueries::new(&program, PreparationLimits::default(), &control)?;
+    let cancellation = Cancellation::default();
+    let prepared = PreparedQueries::new(&program, PreparationLimits::default(), &cancellation)?;
     let mut workspace = ClosureWorkspace::default();
     let limits = Limits::default();
 
-    let first = prepared.check_view(first_seed.view(), &mut workspace, limits, &control)?;
-    let second = prepared.check_view(second_seed.view(), &mut workspace, limits, &control)?;
+    let first = prepared.check_view(first_seed.view(), &mut workspace, limits, &cancellation)?;
+    let second = prepared.check_view(second_seed.view(), &mut workspace, limits, &cancellation)?;
     // Both results remain independent after the workspace serves another seed.
     for (result, seed, expected) in [
         (
@@ -67,7 +69,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Model::new([domain.instantiate(&assignment)?, right_atom]),
         ),
     ] {
-        let fresh = check(&program, seed, limits, &control)?;
+        let fresh = check(&program, seed, limits, &cancellation)?;
         assert!(result.program().same_instance(&program));
         assert!(result.accepted());
         assert_eq!(result.closure(), &expected);

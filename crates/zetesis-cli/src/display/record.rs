@@ -8,7 +8,7 @@
 
 use std::io::{self, Write};
 
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_objective::Score;
 use zetesis_themelios::observation::ModelView;
 
@@ -29,14 +29,14 @@ impl Record {
         score: Option<&Score>,
         color: ColorMode,
         maximum: usize,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Self, RunError> {
         let mut length = Length {
             bytes: 0,
             maximum,
             refusal: None,
             stopped: None,
-            control,
+            cancellation,
         };
         if let Err(error) = write_record(&mut length, number, contents, score, color) {
             if let Some(observed) = length.refusal {
@@ -94,12 +94,12 @@ struct Length<'a> {
     maximum: usize,
     refusal: Option<u128>,
     stopped: Option<Stop>,
-    control: &'a Control,
+    cancellation: &'a Cancellation,
 }
 
 impl Write for Length<'_> {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        if let Err(stop) = self.control.poll() {
+        if let Err(stop) = self.cancellation.poll() {
             self.stopped = Some(stop);
             return Err(io::Error::other(stop));
         }

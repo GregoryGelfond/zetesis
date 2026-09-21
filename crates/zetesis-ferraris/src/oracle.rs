@@ -2,7 +2,7 @@ use crate::{
     EvaluationError, EvaluationLimits, EvaluationWorkspace, FrozenReduct, Interpretation, Node,
     Theory,
 };
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 
 /// Per-call bounds for exact finite checking. Exceeding a bound is incomplete,
 /// never a proof of stability or nonminimality.
@@ -76,12 +76,12 @@ impl Check {
 
 pub(super) struct Work<'a> {
     pub(super) limits: Limits,
-    pub(super) control: &'a Control,
+    pub(super) cancellation: &'a Cancellation,
     pub(super) statistics: Statistics,
 }
 impl Work<'_> {
     pub(super) fn tick(&mut self) -> Result<(), Stop> {
-        self.control.poll()?;
+        self.cancellation.poll()?;
         if self.statistics.work >= self.limits.max_work {
             return Err(Stop::WorkLimit);
         }
@@ -152,7 +152,7 @@ pub fn models(
     theory: &Theory,
     interpretation: &Interpretation,
     limits: Limits,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<bool, Stop> {
     identities(theory, interpretation)?;
     EvaluationWorkspace::default()
@@ -162,7 +162,7 @@ pub fn models(
                 max_work: limits.max_work,
                 max_bytes: usize::MAX,
             },
-            control,
+            cancellation,
         )
         .result
         .map(|evaluation| evaluation.is_model())
@@ -187,14 +187,14 @@ pub fn models_reduct(
     candidate: &Interpretation,
     tested: &Interpretation,
     limits: Limits,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<bool, Stop> {
     identities(theory, candidate)?;
     identities(theory, tested)?;
-    control.poll()?;
+    cancellation.poll()?;
     let mut work = Work {
         limits,
-        control,
+        cancellation,
         statistics: Statistics::default(),
     };
     let mut values = reserve(theory.nodes().len())?;
@@ -214,13 +214,13 @@ pub fn check(
     theory: &Theory,
     candidate: &Interpretation,
     limits: Limits,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<Check, Stop> {
     identities(theory, candidate)?;
-    control.poll()?;
+    cancellation.poll()?;
     let mut work = Work {
         limits,
-        control,
+        cancellation,
         statistics: Statistics::default(),
     };
     let mut frozen = reserve(theory.nodes().len())?;
@@ -249,7 +249,7 @@ pub fn check(
     // over selected atom indices avoids machine-word cardinality restrictions.
     let mut present = 0;
     while present < selected.len() {
-        control.poll()?;
+        cancellation.poll()?;
         if work.statistics.subsets >= limits.max_subsets {
             return Err(Stop::CandidateLimit);
         }

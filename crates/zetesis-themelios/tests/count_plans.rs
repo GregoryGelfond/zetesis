@@ -4,7 +4,7 @@
 mod reference;
 
 use reference::{atom_text, exhaustive, external, holds, native, values};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, CountPlanLimits, CountPlanStatus, ExpansionLimits,
     FormulaLimits, prepare_formula,
@@ -33,7 +33,7 @@ fn admitted(source: &str, planned: bool) -> AdmittedFormula {
     .unwrap();
     if planned {
         source
-            .ground_with_count_plan(CountPlanLimits::default(), &Control::default(), None)
+            .ground_with_count_plan(CountPlanLimits::default(), &Cancellation::default(), None)
             .unwrap()
     } else {
         source.ground().unwrap()
@@ -112,7 +112,7 @@ fn preproposal_restrictions_preserve_stable_models() {
         let mut models = zetesis_sat::StableModels::new(
             admitted.theory(),
             zetesis_sat::Limits::default(),
-            Control::default(),
+            Cancellation::default(),
         )
         .unwrap();
         models
@@ -202,7 +202,11 @@ fn original_sources_match_clingo_full_models() {
     }
 }
 
-fn planned_with(source: &str, limits: CountPlanLimits, control: &Control) -> AdmittedFormula {
+fn planned_with(
+    source: &str,
+    limits: CountPlanLimits,
+    cancellation: &Cancellation,
+) -> AdmittedFormula {
     prepare_formula(
         source.into(),
         AdmissionOptions::default(),
@@ -210,7 +214,7 @@ fn planned_with(source: &str, limits: CountPlanLimits, control: &Control) -> Adm
         FormulaLimits::default(),
     )
     .unwrap()
-    .ground_with_count_plan(limits, control, None)
+    .ground_with_count_plan(limits, cancellation, None)
     .unwrap()
 }
 
@@ -261,10 +265,10 @@ fn inapplicable_sources_allocate_no_optional_storage() {
 
 #[test]
 fn cancelled_planning_preserves_successful_admission() {
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     for source in ["a.", SOURCES[0]] {
-        let admitted = planned_with(source, CountPlanLimits::default(), &control);
+        let admitted = planned_with(source, CountPlanLimits::default(), &cancellation);
         let CountPlanStatus::Incomplete(error) = admitted.count_plan() else {
             panic!("{source}");
         };
@@ -309,14 +313,14 @@ fn optional_ceilings_are_inclusive() {
         assert!(exact > 0);
         let mut limits = CountPlanLimits::default();
         set(&mut limits, exact);
-        let exact_input = planned_with(SOURCES[0], limits, &Control::default());
+        let exact_input = planned_with(SOURCES[0], limits, &Cancellation::default());
         assert!(
             matches!(exact_input.count_plan(), CountPlanStatus::Ready(_)),
             "{resource:?}: {:?}",
             exact_input.count_plan()
         );
         set(&mut limits, exact - 1);
-        let refused = planned_with(SOURCES[0], limits, &Control::default());
+        let refused = planned_with(SOURCES[0], limits, &Cancellation::default());
         let CountPlanStatus::Incomplete(error) = refused.count_plan() else {
             panic!("{resource:?}");
         };
@@ -331,7 +335,7 @@ fn partition_failure_retains_its_storage_prefix() {
     let full = admitted(SOURCES[0], true);
     let mut limits = CountPlanLimits::default(); // Two capacity dimensions are inspected before coverage storage is admitted.
     limits.partition.max_work = 2;
-    let input = planned_with(SOURCES[0], limits, &Control::default());
+    let input = planned_with(SOURCES[0], limits, &Cancellation::default());
     let CountPlanStatus::Incomplete(error) = input.count_plan() else {
         panic!();
     };
@@ -352,7 +356,7 @@ fn partition_failure_retains_its_storage_prefix() {
 fn emission_failure_publishes_no_partial_plan() {
     let mut limits = CountPlanLimits::default();
     limits.theory.max_roots = 1;
-    let input = planned_with(SOURCES[0], limits, &Control::default());
+    let input = planned_with(SOURCES[0], limits, &Cancellation::default());
     assert!(
         matches!(input.count_plan(), CountPlanStatus::Incomplete(error)
         if error.kind()==zetesis_themelios::CountPlanFailureKind::Theory(zetesis_ferraris::AdmissionError::Limit))
@@ -377,7 +381,7 @@ fn optional_planning_preserves_original_resource_failures() {
         };
         let ordinary = prepare().ground().unwrap_err();
         let planned = prepare()
-            .ground_with_count_plan(CountPlanLimits::default(), &Control::default(), None)
+            .ground_with_count_plan(CountPlanLimits::default(), &Cancellation::default(), None)
             .unwrap_err();
         assert_eq!(ordinary.to_string(), planned.to_string());
         assert_eq!(ordinary.diagnostics(), planned.diagnostics());
@@ -405,7 +409,7 @@ fn bundle_plans_retain_resolvable_premise_origins() {
         FormulaLimits::default(),
     )
     .unwrap()
-    .ground_with_count_plan(CountPlanLimits::default(), &Control::default(), None)
+    .ground_with_count_plan(CountPlanLimits::default(), &Cancellation::default(), None)
     .unwrap();
     let CountPlanStatus::Ready(plan) = input.count_plan() else {
         panic!();
@@ -448,7 +452,7 @@ fn included_source_refusal_keeps_bundle_ownership() {
     )
     .unwrap();
     let error = input
-        .ground_with_count_plan(CountPlanLimits::default(), &Control::default(), None)
+        .ground_with_count_plan(CountPlanLimits::default(), &Cancellation::default(), None)
         .unwrap_err();
     assert!(matches!(
         error.error(),
@@ -544,7 +548,7 @@ fn count_aliases_do_not_certify_atom_partitions() {
         };
         let original = prepare().ground().unwrap();
         let planned = prepare()
-            .ground_with_count_plan(CountPlanLimits::default(), &Control::default(), None)
+            .ground_with_count_plan(CountPlanLimits::default(), &Cancellation::default(), None)
             .unwrap();
         assert!(matches!(planned.count_plan(), CountPlanStatus::NoPlan(_)));
         assert_eq!(planned.theory().nodes(), original.theory().nodes());
@@ -600,7 +604,7 @@ fn stopped_bundle_planning_keeps_original_sources() {
             max_groups: 0,
             ..CountPlanLimits::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
         None,
     )
     .unwrap();

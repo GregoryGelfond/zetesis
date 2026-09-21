@@ -68,8 +68,8 @@ fn inconsistent_device_accounting_cannot_form_a_sample() {
     .configuration()
     .unwrap();
     let case = configuration.cases[0];
-    let fixture = fixture::build(case, &Control::default()).unwrap();
-    let prepared = Prepared::new(&fixture, 0, &configuration, &Control::default()).unwrap();
+    let fixture = fixture::build(case, &Cancellation::default()).unwrap();
+    let prepared = Prepared::new(&fixture, 0, &configuration, &Cancellation::default()).unwrap();
     let valid = observation(&prepared, case);
     assert!(validate_activity(case, &prepared, &valid).is_ok());
     let faults: &[fn(&mut DeviceWork)] = &[

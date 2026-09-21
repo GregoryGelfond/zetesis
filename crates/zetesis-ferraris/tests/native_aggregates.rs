@@ -1,7 +1,7 @@
 //! Direct original/frozen aggregate evaluation against existing exact lowering.
 
 use zetesis_core::{Sign, Value as Term, ValueLimits, ValueNode};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, AggregateComparison as Comparison, AggregateElement, AggregateExtremum,
     AggregateLimits, Interpretation, Node, Theory, ValueExtremumElement, append_aggregate,
@@ -102,7 +102,7 @@ fn lowered(group: &Group, comparison: Comparison, bound: &Term) -> Theory {
                 comparison,
                 i64::from(*bound),
                 AggregateLimits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap()
             .root()
@@ -130,7 +130,7 @@ fn lowered(group: &Group, comparison: Comparison, bound: &Term) -> Theory {
                 comparison,
                 bound,
                 AggregateLimits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap()
             .root()
@@ -146,7 +146,7 @@ fn lowered(group: &Group, comparison: Comparison, bound: &Term) -> Theory {
 }
 
 fn compare_worlds(group: &Group, lowered: &Theory) {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     for m in 0..4 {
         let candidate = world(group.theory(), m);
         let lowered_candidate = world(lowered, m);
@@ -154,7 +154,7 @@ fn compare_worlds(group: &Group, lowered: &Theory) {
             lowered,
             &lowered_candidate,
             zetesis_ferraris::Limits::default(),
-            &control,
+            &cancellation,
         )
         .unwrap();
         for j in 0..4 {
@@ -164,11 +164,11 @@ fn compare_worlds(group: &Group, lowered: &Theory) {
                     &candidate,
                     Some(&tested),
                     native::EligibilityLimits::default(),
-                    &control,
+                    &cancellation,
                 )
                 .unwrap();
             let direct = masks
-                .reduce(native::ReductionLimits::default(), &control)
+                .reduce(native::ReductionLimits::default(), &cancellation)
                 .unwrap();
             assert_eq!(direct.original().holds(), original);
             let frozen = models_reduct(
@@ -176,7 +176,7 @@ fn compare_worlds(group: &Group, lowered: &Theory) {
                 &lowered_candidate,
                 &world(lowered, j),
                 zetesis_ferraris::Limits::default(),
-                &control,
+                &cancellation,
             )
             .unwrap();
             assert_eq!(
@@ -209,7 +209,7 @@ fn native_guards_match_lowering_for_every_frozen_world() {
                             bound: Bound::Term(bound.clone()),
                         }],
                         native::AdmissionLimits::default(),
-                        &Control::default(),
+                        &Cancellation::default(),
                     )
                     .unwrap();
                     compare_worlds(&group, &lowered(&group, comparison, &bound));
@@ -244,7 +244,7 @@ fn neutral_weights_preserve_lowered_frozen_truth() {
                         bound: Bound::Term(bound.clone()),
                     }],
                     native::AdmissionLimits::default(),
-                    &Control::default(),
+                    &Cancellation::default(),
                 )
                 .unwrap();
                 compare_worlds(&group, &lowered(&group, comparison, &bound));
@@ -306,7 +306,7 @@ fn ordered_extrema_match_lowering_across_term_classes() {
                         bound: Bound::Term(bound.clone()),
                     }],
                     native::AdmissionLimits::default(),
-                    &Control::default(),
+                    &Cancellation::default(),
                 )
                 .unwrap();
                 compare_worlds(&group, &lowered(&group, comparison, bound));
@@ -337,7 +337,7 @@ fn empty_keys_retain_their_function_specific_contribution() {
                 bound: Bound::Term(bound.clone()),
             }],
             native::AdmissionLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         compare_worlds(&group, &lowered(&group, Comparison::Eq, &bound));
@@ -362,7 +362,7 @@ fn wide_sums_never_narrow_to_source_integers() {
                 bound: Bound::Integer(expected),
             }],
             native::AdmissionLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         let result = group
@@ -370,7 +370,7 @@ fn wide_sums_never_narrow_to_source_integers() {
                 &[true, true],
                 Some(&[false, true]),
                 native::ReductionLimits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
         assert!(result.original().holds());
@@ -400,7 +400,7 @@ fn numeric_comparison_respects_nonnumeric_term_order() {
                 bound: Bound::Term(bound),
             }],
             native::AdmissionLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         assert!(
@@ -409,7 +409,7 @@ fn numeric_comparison_respects_nonnumeric_term_order() {
                     &[true, true],
                     None,
                     native::ReductionLimits::default(),
-                    &Control::default()
+                    &Cancellation::default()
                 )
                 .unwrap()
                 .original()
@@ -430,7 +430,7 @@ fn aggregate_inequality_is_not_default_negation() {
             bound: Bound::Integer(0),
         }],
         native::AdmissionLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let candidate = world(&theory, 1);
@@ -440,10 +440,10 @@ fn aggregate_inequality_is_not_default_negation() {
             &candidate,
             Some(&tested),
             native::EligibilityLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap()
-        .reduce(native::ReductionLimits::default(), &Control::default())
+        .reduce(native::ReductionLimits::default(), &Cancellation::default())
         .unwrap();
     assert!(result.original().holds());
     assert_eq!(result.reduct_truth(), Some(false));

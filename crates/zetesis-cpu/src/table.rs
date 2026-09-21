@@ -14,7 +14,7 @@ use std::{mem::size_of, ops::Range};
 
 use zetesis_core::{Value, relation::Relation};
 
-use crate::{Control, Stop};
+use crate::{Cancellation, Stop};
 
 mod accounting;
 mod selection;
@@ -164,14 +164,14 @@ impl<'owner, 'source> Table<'owner, 'source> {
     /// # Examples
     /// ```
     /// use zetesis_core::{Atom, Predicate, Value, relation::Relation};
-    /// use zetesis_cpu::{Control, table::{Limits, Table}};
+    /// use zetesis_cpu::{Cancellation, table::{Limits, Table}};
     /// let predicate = Predicate::new("pair", 2)?;
     /// let rows = [Atom::new(predicate.clone(), vec![Value::Number(1), Value::Number(2)])?];
     /// let relation = Relation::from_atoms(&predicate, &rows, Default::default())?;
-    /// let table = Table::prepare(&relation, &[0, 1], Limits::default(), &Control::default())?;
+    /// let table = Table::prepare(&relation, &[0, 1], Limits::default(), &Cancellation::default())?;
     /// let first = [Value::Number(1), Value::Number(3)];
     /// let second = [Value::Number(2)];
-    /// let projected = table.project(&[&first, &second], Limits::default(), &Control::default())?;
+    /// let projected = table.project(&[&first, &second], Limits::default(), &Cancellation::default())?;
     /// assert!(projected.contains(0));
     /// assert_eq!(projected.domain(0).unwrap().collect::<Vec<_>>(), vec![&Value::Number(1)]);
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -180,13 +180,13 @@ impl<'owner, 'source> Table<'owner, 'source> {
         relation: &'owner Relation<'source>,
         scope: &[usize],
         limits: Limits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Self, Failure> {
         let scratch_headers = 2 * size_of::<Vec<RowValue<'_>>>() + size_of::<Vec<usize>>();
         let external = relation.storage().retained_bytes;
         let mut work = Work::new(
             limits,
-            control,
+            cancellation,
             external,
             size_of::<Self>() + scratch_headers,
         )?;
@@ -288,12 +288,12 @@ impl<'owner, 'source> Table<'owner, 'source> {
         &self,
         domains: &[&[Value]],
         limits: Limits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Projection<'_, 'owner, 'source>, Failure> {
         self.project_inner(
             domains.iter().map(|domain| Domain::Finite(domain)),
             limits,
-            control,
+            cancellation,
         )
     }
 
@@ -311,22 +311,22 @@ impl<'owner, 'source> Table<'owner, 'source> {
         &self,
         domains: &[Domain<'_>],
         limits: Limits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Projection<'_, 'owner, 'source>, Failure> {
-        self.project_inner(domains.iter().copied(), limits, control)
+        self.project_inner(domains.iter().copied(), limits, cancellation)
     }
 
     fn project_inner<'domain>(
         &self,
         domains: impl ExactSizeIterator<Item = Domain<'domain>>,
         limits: Limits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Projection<'_, 'owner, 'source>, Failure> {
         let external = self.retained_inputs()?;
         let scratch_header = size_of::<Vec<u32>>();
         let mut work = Work::new(
             limits,
-            control,
+            cancellation,
             external,
             size_of::<Projection<'_, '_, '_>>() + scratch_header,
         )?;

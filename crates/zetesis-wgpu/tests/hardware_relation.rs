@@ -8,7 +8,7 @@ use zetesis_core::{
     Atom, Predicate, Sign, Value, ValueLimits, ValueNode,
     relation::{Catalog, Limits, Relation},
 };
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_wgpu::{
     GpuOptions, GpuRelationExecutor, RelationGpuActivity, RelationGpuError, RelationGpuLimits,
 };
@@ -72,7 +72,11 @@ fn compare_rows(executor: &mut GpuRelationExecutor, rows: usize) {
         })
         .collect();
     let mut prepared = executor
-        .prepare(&relation, RelationGpuLimits::default(), &Control::default())
+        .prepare(
+            &relation,
+            RelationGpuLimits::default(),
+            &Cancellation::default(),
+        )
         .unwrap();
     let input = relation.all(Limits::default()).unwrap();
     for round in 0..2 {
@@ -81,7 +85,11 @@ fn compare_rows(executor: &mut GpuRelationExecutor, rows: usize) {
             specifications.reverse();
         }
         let masks = prepared
-            .filter(&queries, RelationGpuLimits::default(), &Control::default())
+            .filter(
+                &queries,
+                RelationGpuLimits::default(),
+                &Cancellation::default(),
+            )
             .unwrap();
         assert_eq!(masks.query_count(), queries.len());
         assert!(relation.same_owner(masks.relation()));
@@ -153,10 +161,18 @@ fn qualify_masks(backend: physical::Backend) {
     let relation = Relation::from_atoms(&predicate, &atoms, Limits::default()).unwrap();
     let queries = [relation.query(&[], Limits::default()).unwrap()];
     let mut prepared = executor
-        .prepare(&relation, RelationGpuLimits::default(), &Control::default())
+        .prepare(
+            &relation,
+            RelationGpuLimits::default(),
+            &Cancellation::default(),
+        )
         .unwrap();
     let masks = prepared
-        .filter(&queries, RelationGpuLimits::default(), &Control::default())
+        .filter(
+            &queries,
+            RelationGpuLimits::default(),
+            &Cancellation::default(),
+        )
         .unwrap();
     assert_eq!(
         masks.selection(0, Limits::default()).unwrap().positions(),
@@ -164,7 +180,7 @@ fn qualify_masks(backend: physical::Backend) {
     );
     assert_eq!(prepared.activity().completed_queries, 1);
     let empty = prepared
-        .filter(&[], RelationGpuLimits::default(), &Control::default())
+        .filter(&[], RelationGpuLimits::default(), &Cancellation::default())
         .unwrap();
     assert_eq!(empty.query_count(), 0);
     assert_eq!(prepared.activity(), RelationGpuActivity::default());
@@ -194,10 +210,18 @@ fn compare_catalog_growth(executor: &mut GpuRelationExecutor) {
             .map(|value| relation.query(&[(1, value)], Limits::default()).unwrap())
             .collect();
         let mut prepared = executor
-            .prepare(&relation, RelationGpuLimits::default(), &Control::default())
+            .prepare(
+                &relation,
+                RelationGpuLimits::default(),
+                &Cancellation::default(),
+            )
             .unwrap();
         let masks = prepared
-            .filter(&queries, RelationGpuLimits::default(), &Control::default())
+            .filter(
+                &queries,
+                RelationGpuLimits::default(),
+                &Cancellation::default(),
+            )
             .unwrap();
         assert_eq!(
             prepared.activity().completed_queries,
@@ -238,13 +262,17 @@ fn qualify_refusals(backend: physical::Backend) {
     let queries = [relation.query(&[], Limits::default()).unwrap()];
     let foreign_queries = [foreign.query(&[], Limits::default()).unwrap()];
     let mut prepared = executor
-        .prepare(&relation, RelationGpuLimits::default(), &Control::default())
+        .prepare(
+            &relation,
+            RelationGpuLimits::default(),
+            &Cancellation::default(),
+        )
         .unwrap();
     assert!(matches!(
         prepared.filter(
             &foreign_queries,
             RelationGpuLimits::default(),
-            &Control::default()
+            &Cancellation::default()
         ),
         Err(RelationGpuError::Relation(
             zetesis_core::relation::Failure::Owner
@@ -252,7 +280,11 @@ fn qualify_refusals(backend: physical::Backend) {
     ));
     assert_eq!(prepared.activity(), RelationGpuActivity::default());
     prepared
-        .filter(&queries, RelationGpuLimits::default(), &Control::default())
+        .filter(
+            &queries,
+            RelationGpuLimits::default(),
+            &Cancellation::default(),
+        )
         .unwrap();
     let bytes = prepared.last_stats().unwrap().accounted_bytes;
     let work = prepared.activity().completed_work;
@@ -275,7 +307,7 @@ fn qualify_refusals(backend: physical::Backend) {
         },
     ] {
         let error = prepared
-            .filter(&queries, limits, &Control::default())
+            .filter(&queries, limits, &Cancellation::default())
             .err()
             .unwrap();
         assert!(
@@ -284,7 +316,7 @@ fn qualify_refusals(backend: physical::Backend) {
         assert_eq!(prepared.activity(), RelationGpuActivity::default());
         assert!(prepared.last_stats().is_none());
     }
-    let cancelled = Control::default();
+    let cancelled = Cancellation::default();
     cancelled.cancel();
     assert!(matches!(
         prepared.filter(
@@ -304,7 +336,7 @@ fn qualify_refusals(backend: physical::Backend) {
         ..RelationGpuLimits::default()
     };
     let masks = prepared
-        .filter(&queries, exact, &Control::default())
+        .filter(&queries, exact, &Cancellation::default())
         .unwrap();
     assert_eq!(
         masks.selection(0, Limits::default()).unwrap().positions(),

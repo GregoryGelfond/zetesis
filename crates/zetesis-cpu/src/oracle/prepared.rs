@@ -10,7 +10,7 @@ use super::{
     block_steps::BlockSteps,
     relations::{Catalogs, Layout, Layouts, PendingMarks, storage},
 };
-use crate::{Control, Stop};
+use crate::{Cancellation, Stop};
 
 /// Independent bounds for preparing queries for one exact admitted program.
 /// Source program payload is already owned by `Program` and is not copied.
@@ -129,10 +129,10 @@ impl PreparedQueries {
     pub fn new(
         program: &Program,
         limits: PreparationLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Self, Stop> {
-        control.poll()?;
-        let mut work = Work::source(control, limits.max_work);
+        cancellation.poll()?;
+        let mut work = Work::source(cancellation, limits.max_work);
         work.limits.max_closure_bytes = limits.max_bytes;
         Self::prepare(program, limits.max_dense_atoms, &mut work)
     }
@@ -236,13 +236,13 @@ impl PreparedQueries {
         seed: SeedView<'_>,
         workspace: &mut ClosureWorkspace,
         limits: Limits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Check, Stop> {
-        control.poll()?;
+        cancellation.poll()?;
         if !self.program.same_instance(seed.program()) {
             return Err(Stop::WrongProgram);
         }
-        let mut work = Work::source(control, limits.max_work);
+        let mut work = Work::source(cancellation, limits.max_work);
         work.limits = limits;
         self.check_with(seed, workspace, &mut work)
     }
@@ -310,10 +310,10 @@ impl PreparedQueries {
         gates: super::Gates<'_>,
         workspace: &mut ClosureWorkspace,
         limits: Limits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<super::CompletedClosure, Stop> {
-        control.poll()?;
-        let mut work = Work::source(control, limits.max_work);
+        cancellation.poll()?;
+        let mut work = Work::source(cancellation, limits.max_work);
         work.limits = limits;
         self.with_workspace(workspace, |workspace| {
             self.closure_with(gates, workspace, super::Schedule::Delta, &mut work)
@@ -331,7 +331,7 @@ impl PreparedQueries {
         let seed_mismatch =
             !super::gate_agreement(&self.program, seed, completed.atoms.atoms(), work)?;
         work.statistics.derived_atoms = completed.atoms.atoms().len();
-        work.control.poll()?;
+        work.cancellation.poll()?;
         Ok(Check {
             program: self.program.clone(),
             closure: completed.atoms,

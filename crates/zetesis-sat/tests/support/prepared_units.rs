@@ -42,10 +42,10 @@ fn builder() -> Builder {
 fn unit_metadata_uses_canonical_clause_positions() {
     let mut builder = builder();
     let mut statistics = ReductPreparationStatistics::default();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut budget = Budget {
         quota: LocalQuota,
-        control: &control,
+        cancellation: &cancellation,
         limits: SearchLimits::default(),
         statistics: SearchStatistics::default(),
     };
@@ -66,10 +66,10 @@ fn refused_unit_storage_keeps_the_allocated_peak() {
     let required = before + 2 * size_of::<usize>() as u128;
     let limit = u64::try_from(required).unwrap() - 1;
     let mut statistics = ReductPreparationStatistics::default();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut budget = Budget {
         quota: LocalQuota,
-        control: &control,
+        cancellation: &cancellation,
         limits: SearchLimits::default(),
         statistics: SearchStatistics::default(),
     };

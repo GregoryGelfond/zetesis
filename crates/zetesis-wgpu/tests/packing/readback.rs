@@ -9,7 +9,7 @@ use crate::{GpuCheck, GpuErrorKind, GpuLimits};
 use zetesis_core::{
     AdmissionLimits, AtomPattern, GroundProgram, Predicate, Program, Seed, StaticLimits, Template,
 };
-use zetesis_cpu::{Control, Limits, check_static};
+use zetesis_cpu::{Cancellation, Limits, check_static};
 
 fn compile(templates: Vec<Template>) -> GroundProgram {
     let program = Program::new(templates, AdmissionLimits::default()).unwrap();
@@ -63,7 +63,8 @@ fn reply(graph: &GroundProgram, seeds: &[Seed], plan: &BatchPlan) -> Vec<u32> {
         .iter()
         .enumerate()
         .flat_map(|(world, seed)| {
-            let check = check_static(graph, seed, Limits::default(), &Control::default()).unwrap();
+            let check =
+                check_static(graph, seed, Limits::default(), &Cancellation::default()).unwrap();
             let status =
                 u32::from(check.constraint_violated()) | (u32::from(check.seed_mismatch()) << 1);
             [
@@ -82,7 +83,8 @@ fn reply(graph: &GroundProgram, seeds: &[Seed], plan: &BatchPlan) -> Vec<u32> {
 fn assert_matches_cpu(graph: &GroundProgram, seeds: &[Seed], checks: &[GpuCheck]) {
     assert_eq!(checks.len(), seeds.len());
     for (seed, actual) in seeds.iter().zip(checks) {
-        let expected = check_static(graph, seed, Limits::default(), &Control::default()).unwrap();
+        let expected =
+            check_static(graph, seed, Limits::default(), &Cancellation::default()).unwrap();
         assert_eq!(actual.closure_words(), expected.closure_words());
         assert_eq!(actual.accepted(), expected.accepted());
         assert_eq!(actual.constraint_violated(), expected.constraint_violated());

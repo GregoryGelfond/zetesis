@@ -1,7 +1,7 @@
 //! Necessary support for complete mixed ordinary/atomic-choice theories.
 
 use crate::{AdmissionError, AdmissionLimits, Node, Theory};
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 
 /// Bounds for constructing a candidate-only support restriction. Formula
 /// dimensions bound retained nodes, roots and atom-indexed scratch. Work counts
@@ -84,11 +84,11 @@ pub struct SupportAttempt {
 pub fn support_restriction(
     theory: &Theory,
     limits: SupportLimits,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> SupportAttempt {
     let mut builder = Builder {
         limits,
-        control,
+        cancellation,
         work: 0,
         nodes: Vec::new(),
     };
@@ -101,14 +101,14 @@ pub fn support_restriction(
 
 struct Builder<'a> {
     limits: SupportLimits,
-    control: &'a Control,
+    cancellation: &'a Cancellation,
     work: u64,
     nodes: Vec<Node>,
 }
 
 impl Builder<'_> {
     fn tick(&mut self) -> Result<(), SupportError> {
-        self.control.poll()?;
+        self.cancellation.poll()?;
         if self.work == self.limits.max_work {
             return Err(Stop::WorkLimit.into());
         }
@@ -130,7 +130,7 @@ impl Builder<'_> {
     }
 
     fn applicable(&mut self, theory: &Theory) -> Result<bool, SupportError> {
-        self.control.poll()?;
+        self.cancellation.poll()?;
         if theory.atom_count() > self.limits.admission.max_atoms
             || theory.atom_count() > self.limits.admission.max_roots
             || theory.nodes().len() > self.limits.admission.max_nodes

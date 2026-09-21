@@ -8,7 +8,7 @@ use crate::{
     AnswerSelection, Backend, FormulaExecutionStatistics, Oracle, SolveConfig, SolveError,
     SolveMeasurements,
 };
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Interpretation;
 use zetesis_sat::StableModels;
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
@@ -22,14 +22,14 @@ impl MembershipExecution for TruncatedExecution {
         &mut self,
         models: &mut StableModels,
         config: &SolveConfig,
-        control: &Control,
+        cancellation: &Cancellation,
         phases: &Recorder,
     ) -> Option<Result<Interpretation, Failure>> {
         if self.remaining == 0 {
             return None;
         }
         self.remaining -= 1;
-        Execution::Cpu.next(models, config, control, phases)
+        Execution::Cpu.next(models, config, cancellation, phases)
     }
     fn statistics(&self, _: &StableModels) -> Option<FormulaExecutionStatistics> {
         None
@@ -63,7 +63,7 @@ fn unexhausted_execution_preserves_only_established_evidence() {
             max_objective_bound_work: 0,
             ..SolveConfig::default()
         };
-        let control = Control::default();
+        let cancellation = Cancellation::default();
         let mut observations = Ignore;
         let mut session = FormulaSession::with_selection(
             Input {
@@ -80,13 +80,13 @@ fn unexhausted_execution_preserves_only_established_evidence() {
             },
             &config,
             &mut observations,
-            &control,
+            &cancellation,
             phases,
             selection,
         );
         let mut yielded = 0;
         loop {
-            match session.next(&config, &mut observations, &control, phases) {
+            match session.next(&config, &mut observations, &cancellation, phases) {
                 Some(Ok(_)) => yielded += 1,
                 Some(Err(SolveError::CandidateStreamNotExhausted)) => break,
                 other => panic!("expected the typed execution failure, got {other:?}"),
@@ -114,7 +114,7 @@ fn unexhausted_execution_preserves_only_established_evidence() {
         }
         assert!(
             session
-                .next(&config, &mut observations, &control, phases)
+                .next(&config, &mut observations, &cancellation, phases)
                 .is_none()
         );
     }

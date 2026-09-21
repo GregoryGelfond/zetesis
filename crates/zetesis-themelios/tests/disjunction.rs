@@ -8,7 +8,7 @@ use std::collections::BTreeSet;
 
 use serde_json::Value as Json;
 use zetesis_core::{Atom, Model, Sign, Value};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits as OracleLimits, models, models_reduct};
 use zetesis_sat::{Limits, StableModels};
 use zetesis_themelios::{
@@ -145,8 +145,12 @@ fn complete_models_match_manual_source_theories_and_recorded_clingo() {
         assert_eq!(manual_models(&case["manual_theory"]), predicted, "{label}");
         let admitted = input(case["source"].as_str().unwrap())
             .unwrap_or_else(|error| panic!("{label}: {error}"));
-        let mut search =
-            StableModels::new(admitted.theory(), Limits::default(), Control::default()).unwrap();
+        let mut search = StableModels::new(
+            admitted.theory(),
+            Limits::default(),
+            Cancellation::default(),
+        )
+        .unwrap();
         let mut found = Models::new();
         for model in search.by_ref() {
             assert!(
@@ -183,7 +187,7 @@ fn complete_models_match_manual_source_theories_and_recorded_clingo() {
 
 #[test]
 fn every_frozen_subset_matches_manual_formulas_and_necessary_support() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     for case in cases()
         .iter()
         .filter(|case| case["expected_native"] == "admit")
@@ -209,7 +213,7 @@ fn every_frozen_subset_matches_manual_formulas_and_necessary_support() {
                     admitted.theory(),
                     candidate,
                     OracleLimits::default(),
-                    &control
+                    &cancellation
                 )
                 .unwrap(),
                 supported && holds(manual, &outer, None),
@@ -226,7 +230,7 @@ fn every_frozen_subset_matches_manual_formulas_and_necessary_support() {
                         candidate,
                         tested,
                         OracleLimits::default(),
-                        &control
+                        &cancellation
                     )
                     .unwrap(),
                     supported && holds(manual, &inner, Some(&outer)),
@@ -244,8 +248,12 @@ fn unrelated_objectives_preserve_presence_priorities_and_tuple_identity() {
         .filter(|case| case["expected_native"] == "admit" && !case["objective"].is_null())
     {
         let admitted = input(case["source"].as_str().unwrap()).unwrap();
-        let mut search =
-            StableModels::new(admitted.theory(), Limits::default(), Control::default()).unwrap();
+        let mut search = StableModels::new(
+            admitted.theory(),
+            Limits::default(),
+            Cancellation::default(),
+        )
+        .unwrap();
         let mut scored = Vec::new();
         for result in search.by_ref() {
             let model = result.unwrap();
@@ -253,7 +261,7 @@ fn unrelated_objectives_preserve_presence_priorities_and_tuple_identity() {
                 admitted.objectives(),
                 &Model::new(model.atoms().map(|i| admitted.atoms()[i].clone())),
                 zetesis_objective::Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
             assert!(evaluated.score().is_present());
@@ -336,8 +344,12 @@ fn conditional_head_preserves_the_recorded_complete_family() {
     // Preserve the historical refusal label and raw reference. Current source
     // support is checked independently against this complete original family.
     let admitted = input(case["source"].as_str().unwrap()).unwrap();
-    let mut search =
-        StableModels::new(admitted.theory(), Limits::default(), Control::default()).unwrap();
+    let mut search = StableModels::new(
+        admitted.theory(),
+        Limits::default(),
+        Cancellation::default(),
+    )
+    .unwrap();
     let mut found = Models::new();
     for model in search.by_ref() {
         assert!(found.insert(projected(&admitted, &model.unwrap())));
@@ -525,8 +537,12 @@ fn extremal_head_preserves_the_recorded_complete_family() {
         .unwrap();
     // Keep the historical refusal label and raw clingo capture unchanged.
     let admitted = input(case["source"].as_str().unwrap()).unwrap();
-    let mut search =
-        StableModels::new(admitted.theory(), Limits::default(), Control::default()).unwrap();
+    let mut search = StableModels::new(
+        admitted.theory(),
+        Limits::default(),
+        Cancellation::default(),
+    )
+    .unwrap();
     let found: Models = search
         .by_ref()
         .map(|model| projected(&admitted, &model.unwrap()))

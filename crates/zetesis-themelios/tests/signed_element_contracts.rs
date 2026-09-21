@@ -83,7 +83,7 @@ fn independent_unsigned_groups_keep_count_plans() {
         .unwrap()
         .ground_with_count_plan(
             CountPlanLimits::default(),
-            &zetesis_cpu::Control::default(),
+            &zetesis_cpu::Cancellation::default(),
             None,
         )
         .unwrap();

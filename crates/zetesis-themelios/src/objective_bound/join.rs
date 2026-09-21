@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
 use zetesis_core::{Atom, AtomIndex, AtomIndexError, AtomPattern, AtomRows, Filter, Term, Value};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{AggregateElement, Node, Theory};
 use zetesis_objective::{Condition, ConditionNode, ObjectiveProgram, ObjectiveTemplate};
 
@@ -30,10 +30,10 @@ pub(super) fn compile(
     atoms: &[Atom],
     objectives: &ObjectiveProgram,
     limits: ObjectivePlanLimits,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<ObjectivePlan, ObjectiveBoundError> {
     let mut work = Work {
-        control,
+        cancellation,
         limits,
         template: None,
         statistics: ObjectiveBoundStatistics::default(),

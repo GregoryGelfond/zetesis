@@ -12,7 +12,7 @@ use clap::Parser;
 use zetesis_cli::{
     Completion, Options, Report, RunError, run_bundle_with_diagnostics, run_with_diagnostics,
 };
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::{BundleLimits, SourceBundle};
 
 fn options(arguments: &[&str]) -> Options {
@@ -40,7 +40,7 @@ fn solve(source: &str, options: &Options) -> (Report, Vec<u8>, String) {
         options,
         &mut output,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     (report, output, String::from_utf8(diagnostics).unwrap())
@@ -266,15 +266,15 @@ fn incomplete_and_requested_model_statistics_do_not_claim_exhaustion_or_optimali
 #[test]
 fn cancellation_and_source_refusal_have_unavailable_execution_not_zero_work() {
     let options = options(&["--stats", "--oracle", "countermodel"]);
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     let mut diagnostics = Vec::new();
     let report = run_with_diagnostics(
         "p(.".into(),
         &options,
         &mut io::sink(),
         &mut diagnostics,
-        &control,
+        &cancellation,
     )
     .unwrap();
     assert_eq!(report.completion, Completion::Interrupted);
@@ -289,7 +289,7 @@ fn cancellation_and_source_refusal_have_unavailable_execution_not_zero_work() {
         &options,
         &mut output,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(error, RunError::FormulaAdmission(_)));
@@ -319,7 +319,7 @@ fn bundled_sources_use_the_same_statistics_boundary_without_rewriting_stdout() {
         &configured,
         &mut baseline,
         &mut io::sink(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     configured.stats = true;
@@ -330,7 +330,7 @@ fn bundled_sources_use_the_same_statistics_boundary_without_rewriting_stdout() {
         &configured,
         &mut output,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(output, baseline);
@@ -354,7 +354,7 @@ fn statistics_writer_failure_is_a_typed_error_with_the_exact_written_prefix() {
             &options,
             &mut output,
             &mut diagnostics,
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
         let RunError::Output(error) = error else {
@@ -397,7 +397,7 @@ fn cpu_closure_refuses_an_oversized_reservation() {
         &configured,
         &mut output,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     let text = error.to_string();

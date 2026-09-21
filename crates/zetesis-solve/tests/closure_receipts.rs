@@ -3,7 +3,7 @@
 use std::num::NonZeroUsize;
 
 use zetesis_core::{AdmissionLimits, AtomPattern, Predicate, Program, Template};
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_solve::{
     Backend, ClosureRoute, Completion, Grounder, Interruption, PreparedInput, SemanticOutcome,
     Session, SolveConfig,
@@ -43,9 +43,13 @@ fn config(grounder: Grounder) -> SolveConfig {
 }
 
 fn run(program: &Program, config: SolveConfig) -> (usize, SemanticOutcome) {
-    let mut session = Session::builder(PreparedInput::program(program), config, Control::default())
-        .start()
-        .unwrap();
+    let mut session = Session::builder(
+        PreparedInput::program(program),
+        config,
+        Cancellation::default(),
+    )
+    .start()
+    .unwrap();
     let mut answers = 0;
     for answer in session.by_ref() {
         answer.unwrap();

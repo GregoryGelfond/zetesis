@@ -1,7 +1,7 @@
 //! Legacy option selection at the edge of the shared renderer contract.
 
 use std::io::Write;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 use crate::{
     AnswerRenderer, AnswerView, HumanRenderer, JsonRenderer, Options, PublicationView, RunError,
@@ -44,10 +44,14 @@ impl<W: Write> AnswerRenderer for Builtin<W> {
             Self::Json(renderer) => renderer.summary_stage(),
         }
     }
-    fn answer(&mut self, view: AnswerView<'_>, control: &Control) -> Result<(), RunError> {
+    fn answer(
+        &mut self,
+        view: AnswerView<'_>,
+        cancellation: &Cancellation,
+    ) -> Result<(), RunError> {
         match self {
-            Self::Human(renderer) => renderer.answer(view, control),
-            Self::Json(renderer) => renderer.answer(view, control),
+            Self::Human(renderer) => renderer.answer(view, cancellation),
+            Self::Json(renderer) => renderer.answer(view, cancellation),
         }
     }
     fn finish(&mut self, view: PublicationView<'_>) -> Result<SummaryDelivery, RunError> {

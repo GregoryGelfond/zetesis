@@ -5,13 +5,13 @@ use crate::{
     GpuFormulaOracle, GpuLimits, GpuOptions, GpuOracle, GpuSelection,
 };
 use zetesis_core::{AdmissionLimits, GroundProgram, Program, Seed, StaticLimits};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Node, Theory};
 
-fn cancelled() -> Control {
-    let control = Control::default();
-    control.cancel();
-    control
+fn cancelled() -> Cancellation {
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
+    cancellation
 }
 
 fn controlled_calls(backend: GpuBackendPreference) {
@@ -49,32 +49,32 @@ fn controlled_calls(backend: GpuBackendPreference) {
         Interpretation::new(&theory, []).unwrap(),
         Interpretation::new(&theory, [0]).unwrap(),
     ];
-    for control in [
+    for cancellation in [
         cancelled(),
-        Control::with_deadline(std::time::Instant::now()).unwrap(),
+        Cancellation::with_deadline(std::time::Instant::now()).unwrap(),
     ] {
-        let expected = control.poll().unwrap_err();
+        let expected = cancellation.poll().unwrap_err();
         for empty in [true, false] {
             let ordinary_error = ordinary
-                .check_batch_with_control(
+                .check_batch_with_cancellation(
                     &ground,
                     if empty { &[] } else { &seeds },
                     GpuLimits {
                         timeout: std::time::Duration::ZERO,
                         ..GpuLimits::default()
                     },
-                    &control,
+                    &cancellation,
                 )
                 .unwrap_err();
             let formula_error = formula
-                .propagate_batch_with_control(
+                .propagate_batch_with_cancellation(
                     &theory,
                     if empty { &[] } else { &candidates },
                     FormulaLimits {
                         timeout: std::time::Duration::ZERO,
                         ..FormulaLimits::default()
                     },
-                    &control,
+                    &cancellation,
                 )
                 .unwrap_err();
             for error in [ordinary_error, formula_error] {
@@ -88,17 +88,22 @@ fn controlled_calls(backend: GpuBackendPreference) {
         }
     }
     let complete = ordinary
-        .check_batch_with_control(&ground, &seeds, GpuLimits::default(), &Control::default())
+        .check_batch_with_cancellation(
+            &ground,
+            &seeds,
+            GpuLimits::default(),
+            &Cancellation::default(),
+        )
         .unwrap();
     assert_eq!(complete.len(), 1);
     assert!(complete[0].accepted());
     assert!(complete[0].closure_words().is_empty());
     let checks = formula
-        .propagate_batch_with_control(
+        .propagate_batch_with_cancellation(
             &theory,
             &candidates,
             FormulaLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     assert_eq!(
@@ -210,14 +215,14 @@ fn entry_precedence(
     let lease = context.lease().unwrap();
     assert_eq!(
         ordinary
-            .check_batch_with_control(ground, &[], GpuLimits::default(), &cancelled())
+            .check_batch_with_cancellation(ground, &[], GpuLimits::default(), &cancelled())
             .unwrap_err()
             .kind(),
         GpuErrorKind::Busy
     );
     assert_eq!(
         formula
-            .propagate_batch_with_control(theory, &[], FormulaLimits::default(), &cancelled())
+            .propagate_batch_with_cancellation(theory, &[], FormulaLimits::default(), &cancelled())
             .unwrap_err()
             .kind(),
         GpuErrorKind::Busy
@@ -226,14 +231,14 @@ fn entry_precedence(
     context.invalidate();
     assert_eq!(
         ordinary
-            .check_batch_with_control(ground, &[], GpuLimits::default(), &cancelled())
+            .check_batch_with_cancellation(ground, &[], GpuLimits::default(), &cancelled())
             .unwrap_err()
             .kind(),
         GpuErrorKind::Interrupted
     );
     assert_eq!(
         formula
-            .propagate_batch_with_control(theory, &[], FormulaLimits::default(), &cancelled())
+            .propagate_batch_with_cancellation(theory, &[], FormulaLimits::default(), &cancelled())
             .unwrap_err()
             .kind(),
         GpuErrorKind::Interrupted

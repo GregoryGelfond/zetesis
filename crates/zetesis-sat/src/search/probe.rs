@@ -55,11 +55,11 @@ impl State {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{AdmissionLimits, Control, SearchLimits, SearchStatistics};
+    use crate::{AdmissionLimits, Cancellation, SearchLimits, SearchStatistics};
 
     #[test]
     fn both_failed_polarities_and_watch_undo_are_classical_certificates() {
-        let control = Control::default();
+        let cancellation = Cancellation::default();
         for forced in [false, true] {
             let p = Literal::new(0, forced);
             let q = Literal::new(1, true);
@@ -72,7 +72,7 @@ mod tests {
             let mut budget = Budget {
                 quota: crate::search::LocalQuota,
                 limits: SearchLimits::default(),
-                control: &control,
+                cancellation: &cancellation,
                 statistics: SearchStatistics::default(),
             };
             let mut state = State::new(&cnf, &mut budget).unwrap();
@@ -98,7 +98,7 @@ mod tests {
         let mut budget = Budget {
             quota: crate::search::LocalQuota,
             limits: SearchLimits::default(),
-            control: &control,
+            cancellation: &cancellation,
             statistics: SearchStatistics::default(),
         };
         let mut state = State::new(&cnf, &mut budget).unwrap();

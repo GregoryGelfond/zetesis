@@ -5,10 +5,11 @@ use super::*;
 #[test]
 fn cancelled_materialization_does_not_count_an_emitted_candidate() {
     let program = Program::new(vec![], zetesis_core::AdmissionLimits::default()).unwrap();
-    let control = Control::default();
-    let mut candidates = Candidates::new(&program, CandidateLimits::default(), control.clone());
+    let cancellation = Cancellation::default();
+    let mut candidates =
+        Candidates::new(&program, CandidateLimits::default(), cancellation.clone());
     let result = candidates.pull(|selection| {
-        control.cancel();
+        cancellation.cancel();
         selection.to_seed()
     });
     assert!(matches!(result, Some(Err(Stop::Cancelled))));

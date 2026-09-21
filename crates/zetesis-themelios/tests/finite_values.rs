@@ -473,14 +473,18 @@ proptest::proptest! {
 fn competition_matches_bounded_completion() {
     use std::num::NonZeroUsize;
     use zetesis_sat::{
-        BatchLimits, BatchVerdict, CompletionExecutor, Control, Limits, StableModels,
+        BatchLimits, BatchVerdict, Cancellation, CompletionExecutor, Limits, StableModels,
     };
     let admitted = input(&competition());
     let expected = native(&admitted);
     for workers in [1, 2] {
         let mut executor = CompletionExecutor::new(NonZeroUsize::new(workers).unwrap()).unwrap();
-        let mut search =
-            StableModels::new(admitted.theory(), Limits::default(), Control::default()).unwrap();
+        let mut search = StableModels::new(
+            admitted.theory(),
+            Limits::default(),
+            Cancellation::default(),
+        )
+        .unwrap();
         let mut models = Models::new();
         while !search.exhausted() {
             let batch = search
@@ -544,7 +548,7 @@ fn constructed_keys_retain_objective_contributions() {
             admitted.objectives(),
             &model,
             zetesis_objective::Limits::default(),
-            &zetesis_cpu::Control::default(),
+            &zetesis_cpu::Cancellation::default(),
         )
         .unwrap();
         costs.push(score.score().costs().to_vec());

@@ -10,7 +10,12 @@ fn atomic(device: &wgpu::Limits) -> Packing<'_> {
 
 fn certificate() -> TightPlan {
     let theory = Theory::new(1, vec![Node::Atom(0)], vec![0], AdmissionLimits::default()).unwrap();
-    TightPlan::compile(&theory, TightPlanLimits::default(), &Control::default()).unwrap()
+    TightPlan::compile(
+        &theory,
+        TightPlanLimits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap()
 }
 
 #[test]
@@ -24,7 +29,7 @@ fn cold_admission_accounts_graph_upload() {
         atomic(&wgpu::Limits::default()),
         None,
         0,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert!(admission.fresh.is_some());
@@ -50,7 +55,7 @@ fn matching_identity_reuses_immutable_upload() {
         atomic(&wgpu::Limits::default()),
         Some((&graph, true)),
         4,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert!(admission.fresh.is_none());
@@ -72,7 +77,7 @@ fn changed_batch_shape_replaces_only_transport() {
         atomic(&wgpu::Limits::default()),
         Some((&graph, false)),
         0,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert!(admission.fresh.is_none());
@@ -93,7 +98,7 @@ fn independent_equal_theories_replace_the_graph() {
         atomic(&wgpu::Limits::default()),
         Some((&graph, true)),
         1,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert!(admission.fresh.is_some());
@@ -114,7 +119,7 @@ fn foreign_candidates_refuse_cache_replacement() {
         atomic(&wgpu::Limits::default()),
         Some((&graph, true)),
         1,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .err()
     .unwrap();
@@ -131,7 +136,7 @@ fn exhausted_epochs_never_wrap_to_old_receipts() {
         atomic(&wgpu::Limits::default()),
         None,
         u32::MAX,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .err()
     .unwrap();
@@ -141,8 +146,8 @@ fn exhausted_epochs_never_wrap_to_old_receipts() {
 
 #[test]
 fn cancelled_admission_never_creates_a_plan() {
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     assert_eq!(
         Admission::new(
             &certificate(),
@@ -151,7 +156,7 @@ fn cancelled_admission_never_creates_a_plan() {
             atomic(&wgpu::Limits::default()),
             None,
             0,
-            &control
+            &cancellation
         )
         .err()
         .unwrap()

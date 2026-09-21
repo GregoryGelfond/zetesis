@@ -1,4 +1,4 @@
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 use super::lower::{Builder, transaction, validate};
 use super::{
@@ -66,10 +66,10 @@ pub fn append_extremum(
     comparison: AggregateComparison,
     bound: impl Into<ExtremumBound>,
     limits: AggregateLimits,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<AggregateBuild, AggregateError> {
     let bound = bound.into();
-    transaction(nodes, limits, control, |builder| {
+    transaction(nodes, limits, cancellation, |builder| {
         compile(builder, elements, extremum, comparison, bound)
             .map(|root| (root, AggregateProfile::Extremum))
     })

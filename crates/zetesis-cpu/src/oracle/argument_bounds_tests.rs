@@ -5,7 +5,7 @@ use zetesis_core::{AtomPattern, Predicate, Program, Template, Term, Value};
 
 use super::{ArgumentBounds, Bound, infer};
 use crate::oracle::{PreparationLimits, Work};
-use crate::{Control, Limits, Stop};
+use crate::{Cancellation, Limits, Stop};
 
 #[path = "../../tests/support/programs.rs"]
 mod programs;
@@ -32,8 +32,8 @@ fn bound<'a>(bounds: &'a ArgumentBounds, predicate: &Predicate, argument: usize)
 
 /// The bounds under preparation's ceiling and an unlimited work.
 fn bounds(program: &Program) -> ArgumentBounds {
-    let control = Control::default();
-    let mut work = Work::source(&control, Limits::default().max_work);
+    let cancellation = Cancellation::default();
+    let mut work = Work::source(&cancellation, Limits::default().max_work);
     infer(
         program,
         PreparationLimits::default().max_dense_atoms,
@@ -60,8 +60,8 @@ fn reachability() -> Program {
 
 #[test]
 fn facts_bound_their_arguments() {
-    let control = Control::default();
-    let mut work = Work::source(&control, Limits::default().max_work);
+    let cancellation = Cancellation::default();
+    let mut work = Work::source(&cancellation, Limits::default().max_work);
     let bounds = infer(
         &reachability(),
         PreparationLimits::default().max_dense_atoms,
@@ -148,8 +148,8 @@ fn three_values_through_two_rules() -> Program {
 
 /// The bounds with two values the widest bound kept.
 fn narrow_bounds(program: &Program) -> ArgumentBounds {
-    let control = Control::default();
-    let mut work = Work::source(&control, Limits::default().max_work);
+    let cancellation = Cancellation::default();
+    let mut work = Work::source(&cancellation, Limits::default().max_work);
     infer(program, 2, &mut work).unwrap()
 }
 
@@ -177,8 +177,8 @@ fn an_unknown_argument_makes_the_arguments_bound_through_it_unknown() {
 #[test]
 fn a_work_ceiling_stops_the_inference() {
     let program = program(vec![fact("a", vec![number(1)]), fact("a", vec![number(2)])]);
-    let control = Control::default();
-    let mut work = Work::source(&control, 1);
+    let cancellation = Cancellation::default();
+    let mut work = Work::source(&cancellation, 1);
     let stopped = infer(
         &program,
         PreparationLimits::default().max_dense_atoms,

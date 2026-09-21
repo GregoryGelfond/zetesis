@@ -4,12 +4,12 @@ use std::collections::BTreeSet;
 
 use super::Cursor;
 use super::tests::{budget, exclude};
-use crate::{AdmissionLimits, Cnf, Control, Incomplete, Literal, ProjectionLimits, Solve};
+use crate::{AdmissionLimits, Cancellation, Cnf, Incomplete, Literal, ProjectionLimits, Solve};
 
 #[test]
 fn restarts_preserve_exclusions_without_watching_their_literals() {
-    let control = Control::default();
-    let mut charged = budget(&control);
+    let cancellation = Cancellation::default();
+    let mut charged = budget(&cancellation);
     let mut cnf = Cnf::new(5, vec![], AdmissionLimits::default()).unwrap();
     let mut cursor = Cursor::projected(3, crate::ProjectionLimits::default()).unwrap();
     let mut seen = BTreeSet::new();
@@ -45,8 +45,8 @@ fn restarts_preserve_exclusions_without_watching_their_literals() {
 
 #[test]
 fn final_membership_rejects_a_revisited_traversal_leaf() {
-    let control = Control::default();
-    let mut charged = budget(&control);
+    let cancellation = Cancellation::default();
+    let mut charged = budget(&cancellation);
     let cnf = Cnf::new(3, vec![], AdmissionLimits::default()).unwrap();
     let mut cursor = Cursor::projected(2, crate::ProjectionLimits::default()).unwrap();
     let Solve::Sat(first) = cursor.query(&cnf, &mut charged) else {
@@ -65,7 +65,7 @@ fn final_membership_rejects_a_revisited_traversal_leaf() {
 
 #[test]
 fn exclusion_history_does_not_consume_cnf_admission() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut cnf = Cnf::new(
         3,
         vec![],
@@ -77,7 +77,7 @@ fn exclusion_history_does_not_consume_cnf_admission() {
     )
     .unwrap();
     let mut cursor = Cursor::projected(3, ProjectionLimits::default()).unwrap();
-    let mut charged = budget(&control);
+    let mut charged = budget(&cancellation);
     let mut seen = BTreeSet::new();
     loop {
         match cursor.query(&cnf, &mut charged) {
@@ -99,9 +99,9 @@ fn exclusion_history_does_not_consume_cnf_admission() {
 
 #[test]
 fn interrupted_insertion_preserves_the_only_entry_slot() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let measured_cnf = Cnf::new(3, vec![], AdmissionLimits::default()).unwrap();
-    let mut measured = budget(&control);
+    let mut measured = budget(&cancellation);
     exclude(
         &mut Cursor::projected(3, crate::ProjectionLimits::default()).unwrap(),
         &measured_cnf,
@@ -119,7 +119,7 @@ fn interrupted_insertion_preserves_the_only_entry_slot() {
             },
         )
         .unwrap();
-        let mut short = budget(&control);
+        let mut short = budget(&cancellation);
         short.limits.max_work = ceiling;
         assert_eq!(
             exclude(&mut cursor, &cnf, &[false; 3], &mut short),
@@ -129,7 +129,7 @@ fn interrupted_insertion_preserves_the_only_entry_slot() {
         assert_eq!(cursor.projection_statistics().entries, 0);
         // A retry must fit the only logical history slot. An unfinished suffix
         // must not reject any of the remaining, independently enumerated keys.
-        let mut complete = budget(&control);
+        let mut complete = budget(&cancellation);
         exclude(&mut cursor, &cnf, &[false; 3], &mut complete).unwrap();
         let mut seen = BTreeSet::new();
         loop {
@@ -150,27 +150,27 @@ fn interrupted_insertion_preserves_the_only_entry_slot() {
 
 #[test]
 fn projection_width_is_fixed_across_restart() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let cnf = Cnf::new(3, vec![], AdmissionLimits::default()).unwrap();
     let mut cursor = Cursor::projected(2, crate::ProjectionLimits::default()).unwrap();
     cursor.restart();
     assert_eq!(
-        exclude(&mut cursor, &cnf, &[false; 3], &mut budget(&control)),
+        exclude(&mut cursor, &cnf, &[false; 3], &mut budget(&cancellation)),
         Err(Incomplete::InvalidWitness)
     );
     assert_eq!(
-        exclude(&mut cursor, &cnf, &[false; 1], &mut budget(&control)),
+        exclude(&mut cursor, &cnf, &[false; 1], &mut budget(&cancellation)),
         Err(Incomplete::InvalidWitness)
     );
 }
 
 #[test]
 fn distinct_projection_insertion_has_exact_partitioned_work() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     for width in 0..=4 {
         let cnf = Cnf::new(width, vec![], AdmissionLimits::default()).unwrap();
         let mut cursor = Cursor::projected(width, crate::ProjectionLimits::default()).unwrap();
-        let mut charged = budget(&control);
+        let mut charged = budget(&cancellation);
         for mask in 0..1 << width {
             let values: Vec<_> = (0..width).map(|bit| mask & (1 << bit) != 0).collect();
             let before = charged.statistics.work;
@@ -190,7 +190,7 @@ fn distinct_projection_insertion_has_exact_partitioned_work() {
 
 #[test]
 fn interrupted_suffix_never_changes_an_existing_key() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     for ceiling in 0..6 {
         let cnf = Cnf::new(
             3,
@@ -203,8 +203,8 @@ fn interrupted_suffix_never_changes_an_existing_key() {
         )
         .unwrap();
         let mut cursor = Cursor::projected(3, crate::ProjectionLimits::default()).unwrap();
-        exclude(&mut cursor, &cnf, &[false; 3], &mut budget(&control)).unwrap();
-        let mut short = budget(&control);
+        exclude(&mut cursor, &cnf, &[false; 3], &mut budget(&cancellation)).unwrap();
+        let mut short = budget(&cancellation);
         short.limits.max_work = ceiling;
         assert_eq!(
             exclude(&mut cursor, &cnf, &[false, true, true], &mut short),
@@ -216,7 +216,9 @@ fn interrupted_suffix_never_changes_an_existing_key() {
         for mask in 0..8 {
             let assignment = crate::Assignment((0..3).map(|bit| mask & (1 << bit) != 0).collect());
             assert_eq!(
-                index.permits(&assignment, &mut budget(&control)).unwrap(),
+                index
+                    .permits(&assignment, &mut budget(&cancellation))
+                    .unwrap(),
                 mask != 0
             );
         }
@@ -224,7 +226,7 @@ fn interrupted_suffix_never_changes_an_existing_key() {
             &mut cursor,
             &cnf,
             &[false, true, true],
-            &mut budget(&control),
+            &mut budget(&cancellation),
         )
         .unwrap();
     }

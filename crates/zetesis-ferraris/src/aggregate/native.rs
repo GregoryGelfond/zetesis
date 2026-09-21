@@ -9,7 +9,7 @@
 use std::fmt;
 
 use zetesis_core::Value as Term;
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 
 use crate::{AggregateComparison, Theory};
 
@@ -258,9 +258,9 @@ impl Group {
         tuples: Vec<Tuple>,
         guards: Vec<Guard>,
         limits: AdmissionLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Self, Error> {
-        admission::build(theory, function, tuples, guards, limits, control)
+        admission::build(theory, function, tuples, guards, limits, cancellation)
     }
 
     /// Immutable formula subject defining all eligibility node identities.
@@ -296,12 +296,12 @@ impl Group {
 
 struct Work<'a> {
     maximum: u64,
-    control: &'a Control,
+    cancellation: &'a Cancellation,
     statistics: Statistics,
 }
 impl Work<'_> {
     fn poll(&self) -> Result<(), ErrorKind> {
-        self.control.poll().map_err(ErrorKind::Stopped)
+        self.cancellation.poll().map_err(ErrorKind::Stopped)
     }
 
     fn charge(&mut self, amount: u64) -> Result<(), ErrorKind> {

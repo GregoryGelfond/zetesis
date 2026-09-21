@@ -42,7 +42,7 @@ use std::collections::BTreeSet;
 use std::mem::size_of;
 
 use zetesis_cpu::regions::{Narrowing, Region};
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 
 use crate::{Node, Theory};
 
@@ -112,9 +112,9 @@ pub struct Extraction {
 pub fn producers(
     theory: &Theory,
     limits: RegionLimits,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<Extraction, Stop> {
-    control.poll()?;
+    cancellation.poll()?;
     let mut work = Work::new(limits.max_work);
     let producers = extract(theory, &mut work)?;
     Ok(Extraction {
@@ -503,7 +503,7 @@ impl Narrower {
         region: &mut Region,
         knowledge: &mut Knowledge,
         limits: RegionLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<(Narrowing, NarrowingStatistics), Stop> {
         let subject = Subject {
             theory,
@@ -515,7 +515,7 @@ impl Narrower {
             region,
             knowledge,
             Work::new(limits.max_work),
-            control,
+            cancellation,
         );
         attempt
             .result
@@ -525,7 +525,7 @@ impl Narrower {
     /// Narrow original candidates with a caller-owned work quota. The quota
     /// is invoked before every charged node, parent, producer or open-atom read;
     /// a refused permit prevents that read. It owns the work ceiling and may
-    /// also poll control. This operation polls `control` before any mutation,
+    /// also poll control. This operation polls `cancellation` before any mutation,
     /// including when no charged read is necessary. The receipt counts only
     /// successful permits and survives every returned failure.
     ///
@@ -540,7 +540,7 @@ impl Narrower {
         producers: Option<&Producers>,
         region: &mut Region,
         knowledge: &mut Knowledge,
-        control: &Control,
+        cancellation: &Cancellation,
         charge: impl FnMut() -> Result<(), E>,
     ) -> NarrowingAttempt<E> {
         let subject = Subject {
@@ -548,7 +548,13 @@ impl Narrower {
             producers,
             frozen: None,
         };
-        self.narrow_with(subject, region, knowledge, Work::metered(charge), control)
+        self.narrow_with(
+            subject,
+            region,
+            knowledge,
+            Work::metered(charge),
+            cancellation,
+        )
     }
 
     /// Narrow a region of the theory's frozen reduct under a candidate from
@@ -570,7 +576,7 @@ impl Narrower {
         region: &mut Region,
         knowledge: &mut Knowledge,
         limits: RegionLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<(Narrowing, NarrowingStatistics), Stop> {
         let subject = Subject {
             theory,
@@ -582,7 +588,7 @@ impl Narrower {
             region,
             knowledge,
             Work::new(limits.max_work),
-            control,
+            cancellation,
         );
         attempt
             .result
@@ -598,7 +604,7 @@ impl Narrower {
         truth: &[bool],
         region: &mut Region,
         knowledge: &mut Knowledge,
-        control: &Control,
+        cancellation: &Cancellation,
         charge: impl FnMut() -> Result<(), E>,
     ) -> NarrowingAttempt<E> {
         let subject = Subject {
@@ -606,7 +612,13 @@ impl Narrower {
             producers: None,
             frozen: Some(truth),
         };
-        self.narrow_with(subject, region, knowledge, Work::metered(charge), control)
+        self.narrow_with(
+            subject,
+            region,
+            knowledge,
+            Work::metered(charge),
+            cancellation,
+        )
     }
 
     fn narrow_with<E: From<Stop>>(
@@ -615,11 +627,11 @@ impl Narrower {
         region: &mut Region,
         knowledge: &mut Knowledge,
         mut work: Work<impl FnMut() -> Result<(), E>>,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> NarrowingAttempt<E> {
         let mut statistics = NarrowingStatistics::default();
         let result = (|| {
-            control.poll().map_err(E::from)?;
+            cancellation.poll().map_err(E::from)?;
             let known = &mut knowledge.known;
             if known.close(subject, self, region, &mut work, &mut statistics)?
                 == Step::Contradiction

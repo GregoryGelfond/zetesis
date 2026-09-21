@@ -3,7 +3,7 @@
 // ANCHOR: example
 use std::convert::Infallible;
 use zetesis_core::{AdmissionLimits, Atom, AtomPattern, Model, Predicate, Program, Template};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     Backend, Completion, ExecutionObservation, ExecutionObserver, Grounder, PreparedInput, Session,
     SolveConfig,
@@ -45,7 +45,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut session = Session::enumerate_observed(
         PreparedInput::program(&program),
         config,
-        Control::default(),
+        Cancellation::default(),
         &mut preparation,
     )?;
     assert_eq!(preparation.grounder, Some(Grounder::Lazy));

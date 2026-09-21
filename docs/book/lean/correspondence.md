@@ -327,7 +327,7 @@ selection when row references and dictionary meanings survive extension.
 Concrete insertion rollback, borrowed access order and catalog work accounting
 remain executable obligations. `catalog_work` is a subtotal of oracle work;
 subtracting it leaves the other charged source operations, not a runtime estimate.
-Control is polled around each bounded catalog operation. Final `Model`
+`Cancellation` is polled around each bounded catalog operation. Final `Model`
 canonicalization retains its separate comparison and allocation contract.
 
 [`ModelSelections`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ModelSelections.lean)

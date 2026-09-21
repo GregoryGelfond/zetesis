@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Condvar, Mutex, MutexGuard};
 use std::time::Duration;
 
-use crate::{Control, Incomplete, SearchLimits, SearchStatistics};
+use crate::{Cancellation, Incomplete, SearchLimits, SearchStatistics};
 
 /// A scheduling policy, not a measured crossover: incremental query grants
 /// hold at most 64 permits. Accounted kernels reserve their complete bounded
@@ -76,10 +76,10 @@ impl SharedBudget {
         }
     }
 
-    pub(crate) fn lease<'a>(&'a self, control: &'a Control) -> WorkLease<'a> {
+    pub(crate) fn lease<'a>(&'a self, cancellation: &'a Cancellation) -> WorkLease<'a> {
         WorkLease {
             shared: self,
-            control,
+            cancellation,
             granted: Cell::new(0),
             remaining: Cell::new(0),
         }
@@ -137,7 +137,7 @@ impl SharedBudget {
 /// The Cells are local to that query; the lease is deliberately not Sync.
 pub(crate) struct WorkLease<'a> {
     shared: &'a SharedBudget,
-    control: &'a Control,
+    cancellation: &'a Cancellation,
     granted: Cell<u64>,
     remaining: Cell<u64>,
 }
@@ -150,7 +150,7 @@ impl WorkLease<'_> {
     pub(crate) fn reserve(&mut self, wanted: u64) -> Result<WorkReservation<'_>, Incomplete> {
         self.settle();
         loop {
-            self.control.poll()?;
+            self.cancellation.poll()?;
             let mut work = self.shared.lock();
             if let Some(granted) = work.reserve(wanted) {
                 return Ok(WorkReservation {
@@ -197,7 +197,7 @@ impl WorkLease<'_> {
     fn refill(&self) -> Result<(), Incomplete> {
         debug_assert_eq!(self.remaining.get(), 0);
         loop {
-            if let Err(error) = self.control.poll() {
+            if let Err(error) = self.cancellation.poll() {
                 // A refused renewal still commits the consumed grant before
                 // returning, without acquiring another allowance.
                 self.settle();

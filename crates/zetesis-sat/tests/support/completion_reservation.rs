@@ -36,7 +36,7 @@ fn partial_reservation_records_capacity_and_preserves_allocation_failure() {
     let prepared = PreparedReduct::prepare(
         &original,
         ReductPreparationLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .result
     .unwrap();
@@ -46,10 +46,10 @@ fn partial_reservation_records_capacity_and_preserves_allocation_failure() {
         let ceiling = required.shared_bytes + required.result_bytes + 3 * required.query_bytes;
         let mut executor =
             CompletionExecutor::with_scratch_limit(NonZeroUsize::new(3).unwrap(), ceiling).unwrap();
-        let control = Control::default();
+        let cancellation = Cancellation::default();
         let mut budget = Budget {
             quota: LocalQuota,
-            control: &control,
+            cancellation: &cancellation,
             limits: limits.search,
             statistics: SearchStatistics::default(),
         };
@@ -76,15 +76,15 @@ fn partial_reservation_records_capacity_and_preserves_allocation_failure() {
             &mut statistics,
             &mut accepted,
             &mut state,
-            |workspace, owner, limit, control| {
+            |workspace, owner, limit, cancellation| {
                 let result = if calls == failure_at {
-                    workspace.reserve(&larger, limit, control).unwrap();
+                    workspace.reserve(&larger, limit, cancellation).unwrap();
                     let mut refused = Vec::<Literal>::new();
                     refused
                         .try_reserve_exact(usize::MAX)
                         .map_err(|_| Incomplete::Allocation)
                 } else {
-                    workspace.reserve(owner, limit, control)
+                    workspace.reserve(owner, limit, cancellation)
                 };
                 calls += 1;
                 let bytes = workspace.retained_bytes() - std::mem::size_of_val(workspace) as u128;
@@ -130,7 +130,7 @@ fn larger_query() -> PreparedReduct {
     PreparedReduct::prepare(
         &theory,
         ReductPreparationLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .result
     .unwrap()

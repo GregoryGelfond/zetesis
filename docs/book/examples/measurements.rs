@@ -1,7 +1,7 @@
 //! Share one optional host-measurement scope across admission and solving.
 
 // ANCHOR: example
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     Backend, PreparedInput, Session, SolveConfig, SolveMeasurements, SolvePhase, WorldViewLimits,
 };
@@ -23,7 +23,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let family = Session::builder(
         PreparedInput::admitted(&admitted),
         config,
-        Control::default(),
+        Cancellation::default(),
     )
     .measurements(&measurements)
     .collect(WorldViewLimits::default())?;

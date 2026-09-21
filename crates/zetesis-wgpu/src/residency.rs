@@ -56,7 +56,7 @@ impl ResidentGraph {
         packed: &PackedSeeds<'_>,
         plan: &BatchPlan,
         timeout: Duration,
-        control: &zetesis_cpu::Control,
+        cancellation: &zetesis_cpu::Cancellation,
     ) -> Result<runtime::Completion<Vec<GpuCheck>>, GpuError> {
         let device = runtime.device();
         let queue = runtime.queue();
@@ -89,7 +89,7 @@ impl ResidentGraph {
             &transport.readback,
             submission,
             timeout,
-            || control.poll().map_err(GpuError::interrupted),
+            || cancellation.poll().map_err(GpuError::interrupted),
             |words| packing::decode(words, plan, packed),
         ))
     }

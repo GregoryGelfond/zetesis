@@ -4,7 +4,7 @@ use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
 use zetesis_core::{Atom, AtomPattern, Model, Predicate, Term, Value};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{AggregateErrorKind, AggregateLimits, Interpretation, Node, Theory, models};
 use zetesis_objective::{ObjectiveProgram, ObjectiveTemplate, Score, evaluate};
 use zetesis_sat::StableModels;
@@ -69,7 +69,7 @@ impl Fixture {
             &atoms,
             &objectives,
             ObjectivePlanLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         Self {
@@ -93,7 +93,7 @@ impl Fixture {
             &self.objectives,
             &model,
             zetesis_objective::Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap()
         .score()
@@ -130,7 +130,7 @@ impl Fixture {
         for incumbent in &scores {
             let bound = self
                 .plan
-                .bound(incumbent, limits, &Control::default())
+                .bound(incumbent, limits, &Cancellation::default())
                 .unwrap();
             assert!(bound.original().same_instance(&self.original));
             for (mask, score) in scores.iter().enumerate() {
@@ -155,7 +155,7 @@ fn permits(bound: &ObjectiveBound, mask: usize) -> bool {
         bound.theory(),
         &candidate,
         zetesis_ferraris::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap()
 }
@@ -207,7 +207,7 @@ fn tiny_large_magnitude_families_keep_the_bounded_signed_representation() {
         fixture.compare_all(limits);
         let error = fixture
             .plan
-            .bound(&fixture.score(0), no_subsets(), &Control::default())
+            .bound(&fixture.score(0), no_subsets(), &Cancellation::default())
             .unwrap_err();
         assert!(
             matches!(error.kind(), Kind::Aggregate(error) if error.kind() == AggregateErrorKind::SubsetLimit)
@@ -240,7 +240,7 @@ fn a_linear_threshold_family_avoids_exponential_subset_admission() {
     };
     let bound = fixture
         .plan
-        .bound(&incumbent, limits, &Control::default())
+        .bound(&incumbent, limits, &Cancellation::default())
         .unwrap();
     assert!(bound.statistics().work <= limits.max_work);
     assert!(bound.theory().nodes().len() <= limits.aggregate.max_nodes);
@@ -261,7 +261,7 @@ fn a_subset_count_beyond_machine_width_does_not_disable_small_thresholds() {
     let fixture = Fixture::new(1, (0..130).map(|tuple| (0, -1, tuple, 0)).collect());
     let bound = fixture
         .plan
-        .bound(&fixture.score(1), no_subsets(), &Control::default())
+        .bound(&fixture.score(1), no_subsets(), &Cancellation::default())
         .unwrap();
     assert!(!permits(&bound, 0));
     assert!(permits(&bound, 1));
@@ -287,7 +287,7 @@ fn outside_range_ceilings_need_no_threshold_states_and_keep_exact_truth() {
             &constant,
             &Model::new([]),
             zetesis_objective::Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         let limits = ObjectiveBoundLimits {
@@ -299,7 +299,7 @@ fn outside_range_ceilings_need_no_threshold_states_and_keep_exact_truth() {
         };
         let bound = fixture
             .plan
-            .bound(incumbent.score(), limits, &Control::default())
+            .bound(incumbent.score(), limits, &Cancellation::default())
             .unwrap();
         for mask in 0..4 {
             assert_eq!(permits(&bound, mask), expected);
@@ -313,7 +313,7 @@ fn normalization_limits_are_inclusive_and_failed_attempts_leave_exact_retry() {
     let incumbent = fixture.score((1 << 20) - 2);
     let complete = fixture
         .plan
-        .bound(&incumbent, no_subsets(), &Control::default())
+        .bound(&incumbent, no_subsets(), &Cancellation::default())
         .unwrap();
     let nodes = complete.theory().nodes().to_vec();
     let roots = complete.theory().roots().to_vec();
@@ -329,7 +329,7 @@ fn normalization_limits_are_inclusive_and_failed_attempts_leave_exact_retry() {
     };
     let retry = fixture
         .plan
-        .bound(&incumbent, exact, &Control::default())
+        .bound(&incumbent, exact, &Cancellation::default())
         .unwrap();
     assert_eq!(retry.statistics(), complete.statistics());
     assert_eq!(retry.theory().nodes(), nodes);
@@ -367,7 +367,7 @@ fn normalization_limits_are_inclusive_and_failed_attempts_leave_exact_retry() {
     ] {
         let error = fixture
             .plan
-            .bound(&incumbent, limits, &Control::default())
+            .bound(&incumbent, limits, &Cancellation::default())
             .unwrap_err();
         assert!(error.statistics().work <= limits.max_work);
         assert!(matches!(
@@ -376,19 +376,19 @@ fn normalization_limits_are_inclusive_and_failed_attempts_leave_exact_retry() {
                 | Kind::Limit(ObjectiveBoundResource::Work | ObjectiveBoundResource::Nodes)
         ));
     }
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     assert!(matches!(
         fixture
             .plan
-            .bound(&incumbent, exact, &control)
+            .bound(&incumbent, exact, &cancellation)
             .unwrap_err()
             .kind(),
         Kind::Control(_)
     ));
     let retry = fixture
         .plan
-        .bound(&incumbent, exact, &Control::default())
+        .bound(&incumbent, exact, &Cancellation::default())
         .unwrap();
     assert_eq!(retry.theory().nodes(), nodes);
     assert_eq!(retry.theory().roots(), roots);
@@ -401,12 +401,12 @@ fn nonstrict_normalized_bound_preserves_all_original_stable_optimal_ties() {
     let incumbent = fixture.score(1);
     let bound = fixture
         .plan
-        .bound(&incumbent, no_subsets(), &Control::default())
+        .bound(&incumbent, no_subsets(), &Cancellation::default())
         .unwrap();
     let mut search = StableModels::new(
         &fixture.original,
         zetesis_sat::Limits::default(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     search.restrict_candidates(bound.theory()).unwrap();

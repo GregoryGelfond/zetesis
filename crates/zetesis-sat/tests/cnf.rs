@@ -5,7 +5,7 @@
 
 use std::time::Instant;
 
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_sat::{AdmissionLimits, Cnf, Incomplete, Literal, SearchLimits, Solve, solve};
 
 fn literal(variable: usize, positive: bool) -> Literal {
@@ -51,7 +51,7 @@ fn assert_truth_table_agreement(variables: usize, clauses: &[Vec<Literal>]) {
             "admission changed truth at interpretation {interpretation}: {clauses:?}"
         );
     }
-    match solve(&cnf, generous_search(), &Control::default()) {
+    match solve(&cnf, generous_search(), &Cancellation::default()) {
         Solve::Sat(assignment) => {
             assert!(
                 expected,
@@ -345,13 +345,13 @@ fn admission_accepts_exact_ceilings_and_rejects_each_excess() {
 #[test]
 fn cancellation_and_expired_deadline_are_inconclusive_even_for_empty_cnf() {
     let cnf = formula(0, vec![]);
-    let cancelled = Control::default();
+    let cancelled = Cancellation::default();
     cancelled.cancel();
     assert!(matches!(
         solve(&cnf, generous_search(), &cancelled),
         Solve::Inconclusive(Incomplete::Cancelled)
     ));
-    let expired = Control::with_deadline(Instant::now()).unwrap();
+    let expired = Cancellation::with_deadline(Instant::now()).unwrap();
     assert!(matches!(
         solve(&cnf, generous_search(), &expired),
         Solve::Inconclusive(Incomplete::Deadline)
@@ -375,7 +375,7 @@ fn zero_decisions_allows_unit_proofs_but_not_a_required_choice() {
         solve(
             &formula(1, vec![vec![a]]),
             without_decisions,
-            &Control::default()
+            &Cancellation::default()
         ),
         Solve::Sat(_)
     ));
@@ -383,13 +383,13 @@ fn zero_decisions_allows_unit_proofs_but_not_a_required_choice() {
         solve(
             &formula(1, vec![vec![a], vec![a.negated()]]),
             without_decisions,
-            &Control::default()
+            &Cancellation::default()
         ),
         Solve::Unsat
     ));
     let exclusive = formula(2, vec![vec![a, b], vec![a.negated(), b.negated()]]);
     assert!(matches!(
-        solve(&exclusive, without_decisions, &Control::default()),
+        solve(&exclusive, without_decisions, &Cancellation::default()),
         Solve::Inconclusive(Incomplete::DecisionLimit)
     ));
     assert!(matches!(
@@ -399,7 +399,7 @@ fn zero_decisions_allows_unit_proofs_but_not_a_required_choice() {
                 max_decisions: 1,
                 ..generous_search()
             },
-            &Control::default()
+            &Cancellation::default()
         ),
         Solve::Sat(_)
     ));
@@ -427,7 +427,7 @@ fn work_limits_are_exact_for_sat_and_unsat_proofs() {
                     max_work,
                     ..generous_search()
                 },
-                &Control::default(),
+                &Cancellation::default(),
             )
         };
         let completed = |result: &Solve| {
@@ -471,7 +471,7 @@ fn deep_search_uses_a_heap_trail_on_a_small_thread_stack() {
         .name("bounded-iterative-sat".to_owned())
         .stack_size(64 * 1_024)
         .spawn(move || {
-            let result = solve(&cnf, generous_search(), &Control::default());
+            let result = solve(&cnf, generous_search(), &Cancellation::default());
             let Solve::Sat(assignment) = result else {
                 panic!("deep independent choices must be satisfiable: {result:?}");
             };

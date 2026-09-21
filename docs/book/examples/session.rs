@@ -3,7 +3,7 @@
 // ANCHOR: example
 use std::collections::BTreeSet;
 use zetesis_core::{Atom, Model, Predicate, Seed};
-use zetesis_cpu::{Control, Limits, check};
+use zetesis_cpu::{Cancellation, Limits, check};
 use zetesis_solve::{
     Backend, Completion, PreparedInput, Session, SolveConfig, WorldView, WorldViewLimits,
 };
@@ -21,7 +21,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut session = Session::enumerate(
         PreparedInput::admitted(&admitted),
         config,
-        Control::default(),
+        Cancellation::default(),
     )?;
     let answers = session.by_ref().collect::<Result<Vec<_>, _>>()?;
     let outcome = session.outcome().expect("the iterator reached its end");
@@ -47,7 +47,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         admitted.program(),
         &seed,
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )?;
     assert!(checked.accepted());
     assert_eq!(checked.closure(), &Model::new([a]));
@@ -61,7 +61,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             max_answer_sets: 2,
             ..WorldViewLimits::default()
         },
-        Control::default(),
+        Cancellation::default(),
     )?;
     assert_eq!(world_view.len(), 2);
     assert!(!world_view.is_empty());

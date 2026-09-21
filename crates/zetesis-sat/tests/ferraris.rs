@@ -4,19 +4,19 @@ use std::collections::BTreeSet;
 
 use proptest::prelude::*;
 use zetesis_ferraris::{AdmissionLimits, Interpretation, Node, Theory, Verdict};
-use zetesis_sat::{Check, Control, Incomplete, Limits, StableModels, check};
+use zetesis_sat::{Cancellation, Check, Incomplete, Limits, StableModels, check};
 
 /// Enumerate by the clause forms, the subject of the tests below.
 fn by_clauses(
     theory: &zetesis_ferraris::Theory,
     limits: zetesis_sat::Limits,
-    control: zetesis_sat::Control,
+    cancellation: zetesis_sat::Cancellation,
 ) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
     zetesis_sat::StableModels::with_method(
         theory,
         zetesis_sat::SearchMethod::Clauses,
         limits,
-        control,
+        cancellation,
     )
 }
 
@@ -44,10 +44,15 @@ fn compare(theory: &Theory) -> BTreeSet<Vec<usize>> {
             theory,
             &candidate,
             zetesis_ferraris::Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
-        let native = check(theory, &candidate, Limits::default(), &Control::default());
+        let native = check(
+            theory,
+            &candidate,
+            Limits::default(),
+            &Cancellation::default(),
+        );
         assert_eq!(
             native.accepted(),
             exhaustive.accepted(),
@@ -68,7 +73,7 @@ fn compare(theory: &Theory) -> BTreeSet<Vec<usize>> {
                         &candidate,
                         &subset,
                         zetesis_ferraris::Limits::default(),
-                        &Control::default()
+                        &Cancellation::default()
                     )
                     .unwrap()
                 );
@@ -77,7 +82,7 @@ fn compare(theory: &Theory) -> BTreeSet<Vec<usize>> {
         }
     }
     let mut actual = BTreeSet::new();
-    let mut models = StableModels::new(theory, Limits::default(), Control::default()).unwrap();
+    let mut models = StableModels::new(theory, Limits::default(), Cancellation::default()).unwrap();
     for model in models.by_ref() {
         assert!(
             actual.insert(key(&model.unwrap())),
@@ -232,7 +237,7 @@ fn exact_candidate_ceiling_allows_final_unsat_query_and_failure_is_fused() {
             max_candidates: 1,
             ..Default::default()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     assert_eq!(key(&exact.next().unwrap().unwrap()), vec![0]);
@@ -245,7 +250,7 @@ fn exact_candidate_ceiling_allows_final_unsat_query_and_failure_is_fused() {
             max_candidates: 0,
             ..Default::default()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     assert!(matches!(
@@ -261,7 +266,7 @@ fn exact_candidate_ceiling_allows_final_unsat_query_and_failure_is_fused() {
             max_candidates: 0,
             ..Default::default()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     assert!(no_candidates.next().is_none());
@@ -284,7 +289,7 @@ fn empty_theory_exhausts_with_one_cnf_clause() {
         },
         ..Default::default()
     };
-    let mut exact = by_clauses(&input, limits, Control::default()).unwrap();
+    let mut exact = by_clauses(&input, limits, Cancellation::default()).unwrap();
     assert!(exact.next().unwrap().unwrap().atoms().next().is_none());
     assert!(exact.next().is_none());
     assert!(exact.exhausted());
@@ -322,7 +327,7 @@ fn verified_models_precede_the_history_limit_stop() {
             },
             ..Default::default()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     let mut family = BTreeSet::new();
@@ -353,7 +358,7 @@ fn verified_models_precede_the_history_limit_stop() {
 fn verified_model_precedes_the_final_exclusion_work_stop() {
     let input = theory(2, vec![], vec![]);
     let complete = Limits::default();
-    let mut reference = by_clauses(&input, complete, Control::default()).unwrap();
+    let mut reference = by_clauses(&input, complete, Cancellation::default()).unwrap();
     assert!(reference.next().unwrap().is_ok());
     let after_first = reference.statistics().search.work;
     let bounded = Limits {
@@ -363,7 +368,7 @@ fn verified_model_precedes_the_final_exclusion_work_stop() {
         },
         ..complete
     };
-    let mut limited = by_clauses(&input, bounded, Control::default()).unwrap();
+    let mut limited = by_clauses(&input, bounded, Cancellation::default()).unwrap();
     assert!(
         limited.next().unwrap().is_ok(),
         "completed proof survives a final blocking-work refusal"
@@ -381,7 +386,7 @@ fn foreign_identity_verification_limits_and_cancelled_enumeration_are_incomplete
             &input,
             &interpretation(&foreign, 1),
             Limits::default(),
-            &Control::default()
+            &Cancellation::default()
         ),
         Check::Inconclusive(Incomplete::WrongTheory)
     ));
@@ -393,13 +398,13 @@ fn foreign_identity_verification_limits_and_cancelled_enumeration_are_incomplete
                 max_verification_work: 0,
                 ..Default::default()
             },
-            &Control::default()
+            &Cancellation::default()
         ),
         Check::Inconclusive(Incomplete::Verification(_))
     ));
-    let control = Control::default();
-    let mut models = StableModels::new(&input, Limits::default(), control.clone()).unwrap();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    let mut models = StableModels::new(&input, Limits::default(), cancellation.clone()).unwrap();
+    cancellation.cancel();
     assert!(matches!(models.next(), Some(Err(Incomplete::Cancelled))));
     assert!(!models.exhausted());
     assert!(models.next().is_none());
@@ -425,7 +430,7 @@ fn repeated_commuted_classical_gates_fit_one_auxiliary_without_changing_reducts(
             },
             ..Default::default()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     let actual: BTreeSet<_> = cursor.by_ref().map(|model| key(&model.unwrap())).collect();

@@ -42,11 +42,11 @@ fn lost_selected_rows_fail_the_independent_reference() {
         .num_threads(2)
         .build()
         .unwrap();
-    let mut batch = cpu_batch(&frame, Route::Scalar, &pool, &Control::default()).unwrap();
-    validate(&frame, &batch.masks, &Control::default()).unwrap();
+    let mut batch = cpu_batch(&frame, Route::Scalar, &pool, &Cancellation::default()).unwrap();
+    validate(&frame, &batch.masks, &Cancellation::default()).unwrap();
     batch.masks[0] &= !1;
     assert!(matches!(
-        validate(&frame, &batch.masks, &Control::default()),
+        validate(&frame, &batch.masks, &Cancellation::default()),
         Err(Error::Parity)
     ));
 }
@@ -86,7 +86,7 @@ fn truncated_mask_populations_fail_validation() {
         column_bytes: 0,
     };
     assert!(matches!(
-        validate(&frame, &[], &Control::default()),
+        validate(&frame, &[], &Cancellation::default()),
         Err(Error::Parity)
     ));
 }

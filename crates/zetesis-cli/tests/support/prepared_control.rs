@@ -1,7 +1,7 @@
 //! Cancellation after admission must retain the already established subject.
 
 use clap::Parser;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 #[test]
@@ -13,8 +13,8 @@ fn stopped_formula_adapter_retains_admitted_subject() {
         FormulaLimits::default(),
     )
     .unwrap();
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     let options = crate::Options::try_parse_from(["zetesis", "--backend", "cpu"]).unwrap();
     let progress = super::solve(
         crate::PreparedInput::formula(&admitted),
@@ -26,7 +26,7 @@ fn stopped_formula_adapter_retains_admitted_subject() {
             options.max_observation_bytes,
         ),
         &mut crate::presentation::Diagnostics::new(std::io::sink(), crate::ColorMode::Never),
-        &control,
+        &cancellation,
         &crate::phase_timing::Recorder::new(false),
     )
     .unwrap();

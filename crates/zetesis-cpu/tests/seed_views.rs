@@ -9,7 +9,7 @@ use zetesis_core::{
     SeedSelection, Sign, StaticLimits, Template, Term, Value,
 };
 use zetesis_cpu::{
-    BatchError, BatchOracle, Control, Limits, Stop, check, check_static, check_static_view,
+    BatchError, BatchOracle, Cancellation, Limits, Stop, check, check_static, check_static_view,
     check_view, lazy,
 };
 
@@ -110,13 +110,21 @@ fn scalar_views_preserve_full_reduct_results() {
     let graph = GroundProgram::compile(&program, StaticLimits::default()).unwrap();
     for (selection, mask) in selections.iter().zip(MASKS) {
         let owned = selection.to_seed();
-        let reference = check(&program, &owned, Limits::default(), &Control::default()).unwrap();
-        let dense = check_static(&graph, &owned, Limits::default(), &Control::default()).unwrap();
+        let reference = check(
+            &program,
+            &owned,
+            Limits::default(),
+            &Cancellation::default(),
+        )
+        .unwrap();
+        let dense =
+            check_static(&graph, &owned, Limits::default(), &Cancellation::default()).unwrap();
         for view in [owned.view(), selection.view()] {
             let actual =
-                check_view(&program, view, Limits::default(), &Control::default()).unwrap();
+                check_view(&program, view, Limits::default(), &Cancellation::default()).unwrap();
             let packed =
-                check_static_view(&graph, view, Limits::default(), &Control::default()).unwrap();
+                check_static_view(&graph, view, Limits::default(), &Cancellation::default())
+                    .unwrap();
             let (closure, accepted, violated, mismatch) = expected(mask);
             assert_eq!(actual.closure(), &closure);
             assert_eq!(
@@ -156,14 +164,19 @@ fn indexed_view_batches_preserve_occurrence_order() {
     let pool = pool(selections.len());
     let owned: Vec<_> = selections.iter().map(SeedSelection::to_seed).collect();
     let reference = reference_pool
-        .check_batch(&program, &owned, Limits::default(), &Control::default())
+        .check_batch(
+            &program,
+            &owned,
+            Limits::default(),
+            &Cancellation::default(),
+        )
         .unwrap();
     let actual = pool
         .check_batch_views(
             &program,
             selections.par_iter().map(SeedSelection::view),
             Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     let dense = pool
@@ -171,7 +184,7 @@ fn indexed_view_batches_preserve_occurrence_order() {
             &graph,
             selections.par_iter().map(SeedSelection::view),
             Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     assert_eq!(actual.len(), MASKS.len());
@@ -202,7 +215,13 @@ fn shared_views_preserve_source_and_world_accounting() {
     let pool = pool(selections.len());
     for mode in [lazy::SourceSelection::Union, lazy::SourceSelection::Worlds] {
         let reference = pool
-            .check_shared(&program, &owned, shared_limits(), mode, &Control::default())
+            .check_shared(
+                &program,
+                &owned,
+                shared_limits(),
+                mode,
+                &Cancellation::default(),
+            )
             .unwrap();
         let actual = pool
             .check_shared_views(
@@ -210,7 +229,7 @@ fn shared_views_preserve_source_and_world_accounting() {
                 selections.iter().map(SeedSelection::view),
                 shared_limits(),
                 mode,
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
         assert_eq!(actual.statistics.source, reference.statistics.source);
@@ -237,14 +256,14 @@ fn scalar_view_work_limits_are_inclusive() {
     let program = program();
     let selections = selections(&program);
     let graph = GroundProgram::compile(&program, StaticLimits::default()).unwrap();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     for selection in &selections {
         let owned = selection.to_seed();
-        let work = check(&program, &owned, Limits::default(), &control)
+        let work = check(&program, &owned, Limits::default(), &cancellation)
             .unwrap()
             .statistics()
             .work;
-        let static_work = check_static(&graph, &owned, Limits::default(), &control)
+        let static_work = check_static(&graph, &owned, Limits::default(), &cancellation)
             .unwrap()
             .statistics()
             .work;
@@ -257,7 +276,7 @@ fn scalar_view_work_limits_are_inclusive() {
                         max_work: maximum,
                         ..Default::default()
                     },
-                    &control,
+                    &cancellation,
                 );
                 assert_eq!(result.is_ok(), succeeds);
                 if !succeeds {
@@ -272,7 +291,7 @@ fn scalar_view_work_limits_are_inclusive() {
                         max_work: maximum,
                         ..Default::default()
                     },
-                    &control,
+                    &cancellation,
                 );
                 assert_eq!(result.is_ok(), succeeds);
                 if !succeeds {
@@ -294,7 +313,7 @@ fn lazy_view_failure_retains_the_same_progress() {
             &owned,
             shared_limits().source,
             mode,
-            &Control::default(),
+            &Cancellation::default(),
             lazy::evaluate,
         )
         .unwrap();
@@ -311,7 +330,7 @@ fn lazy_view_failure_retains_the_same_progress() {
                 &owned,
                 limits,
                 mode,
-                &Control::default(),
+                &Cancellation::default(),
                 lazy::evaluate,
             );
             let actual = lazy::check_with_source_views(
@@ -319,7 +338,7 @@ fn lazy_view_failure_retains_the_same_progress() {
                 selections.iter().map(SeedSelection::view),
                 limits,
                 mode,
-                &Control::default(),
+                &Cancellation::default(),
                 lazy::evaluate,
             );
             match (reference, actual) {
@@ -350,7 +369,7 @@ fn shared_view_world_failure_retains_ordered_progress() {
     };
     let mode = lazy::SourceSelection::Worlds;
     let reference = pool
-        .check_shared(&program, &owned, limits, mode, &Control::default())
+        .check_shared(&program, &owned, limits, mode, &Cancellation::default())
         .unwrap_err();
     let actual = pool
         .check_shared_views(
@@ -358,7 +377,7 @@ fn shared_view_world_failure_retains_ordered_progress() {
             selections.iter().map(SeedSelection::view),
             limits,
             mode,
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
     let (lazy::shared::Error::Incomplete(reference), lazy::shared::Error::Incomplete(actual)) =
@@ -384,14 +403,14 @@ fn views_preserve_foreign_program_rejection() {
     let foreign = Program::new(program.templates().to_vec(), AdmissionLimits::default()).unwrap();
     let selections = selections(&foreign);
     let graph = GroundProgram::compile(&program, StaticLimits::default()).unwrap();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     for selection in &selections {
         assert!(matches!(
-            check_view(&program, selection.view(), Limits::default(), &control),
+            check_view(&program, selection.view(), Limits::default(), &cancellation),
             Err(Stop::WrongProgram)
         ));
         assert!(matches!(
-            check_static_view(&graph, selection.view(), Limits::default(), &control),
+            check_static_view(&graph, selection.view(), Limits::default(), &cancellation),
             Err(Stop::WrongProgram)
         ));
     }
@@ -399,7 +418,7 @@ fn views_preserve_foreign_program_rejection() {
         &program,
         selections.iter().map(SeedSelection::view),
         lazy::Limits::default(),
-        &control,
+        &cancellation,
         |_| -> Result<Vec<u32>, Stop> { panic!("foreign input must not reach evaluator") },
     )
     .unwrap_err();
@@ -415,7 +434,7 @@ fn view_batch_capacity_refuses_before_oracle_work() {
     let program = program();
     let selections = selections(&program);
     let pool = pool(selections.len() - 1);
-    let cancelled = Control::default();
+    let cancelled = Cancellation::default();
     cancelled.cancel();
     assert!(matches!(
         pool.check_batch_views(
@@ -452,7 +471,7 @@ fn empty_view_batch_performs_no_evaluation() {
         &program,
         seeds.iter().map(Seed::view),
         lazy::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
         |_| -> Result<Vec<u32>, Stop> { panic!("empty batch must not execute") },
     )
     .unwrap();

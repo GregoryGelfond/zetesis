@@ -3,7 +3,7 @@
 use std::io;
 
 use clap::Parser;
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_experiments::{
     Backend, CommandOptions, Experiment,
     relation_fixtures::{Family, Payload},
@@ -26,7 +26,7 @@ fn configuration() -> Configuration {
 
 fn records(configuration: Configuration) -> Vec<serde_json::Value> {
     let mut records = Vec::new();
-    relation_measurement::measure(configuration, &Control::default(), |event| {
+    relation_measurement::measure(configuration, &Cancellation::default(), |event| {
         records.push(serde_json::to_value(event).unwrap());
         Ok(())
     })
@@ -107,16 +107,17 @@ fn source_identity_preserves_typed_payloads() {
 #[test]
 fn failed_observation_prevents_completion_offer() {
     let mut events = Vec::new();
-    let result = relation_measurement::measure(configuration(), &Control::default(), |event| {
-        let event = serde_json::to_value(event).unwrap();
-        let name = event["event"].as_str().unwrap().to_owned();
-        events.push(name.clone());
-        if name == "observation" {
-            Err(io::Error::other("closed output"))
-        } else {
-            Ok(())
-        }
-    });
+    let result =
+        relation_measurement::measure(configuration(), &Cancellation::default(), |event| {
+            let event = serde_json::to_value(event).unwrap();
+            let name = event["event"].as_str().unwrap().to_owned();
+            events.push(name.clone());
+            if name == "observation" {
+                Err(io::Error::other("closed output"))
+            } else {
+                Ok(())
+            }
+        });
     assert!(matches!(result, Err(Error::Output(_))));
     assert_eq!(events, ["start", "subject", "observation"]);
 }
@@ -124,25 +125,26 @@ fn failed_observation_prevents_completion_offer() {
 #[test]
 fn rejected_completion_returns_output_failure() {
     let mut offered = false;
-    let result = relation_measurement::measure(configuration(), &Control::default(), |event| {
-        if matches!(event, Event::Complete { .. }) {
-            offered = true;
-            Err(io::Error::other("completion sink failed"))
-        } else {
-            Ok(())
-        }
-    });
+    let result =
+        relation_measurement::measure(configuration(), &Cancellation::default(), |event| {
+            if matches!(event, Event::Complete { .. }) {
+                offered = true;
+                Err(io::Error::other("completion sink failed"))
+            } else {
+                Ok(())
+            }
+        });
     assert!(offered);
     assert!(matches!(result, Err(Error::Output(_))));
 }
 
 #[test]
 fn cancellation_after_preparation_stops_measurement() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut observations = 0;
-    let result = relation_measurement::measure(configuration(), &control, |event| {
+    let result = relation_measurement::measure(configuration(), &cancellation, |event| {
         match event {
-            Event::Subject { .. } => control.cancel(),
+            Event::Subject { .. } => cancellation.cancel(),
             Event::Observation(_) | Event::Complete { .. } => observations += 1,
             Event::Start { .. } => {}
         }
@@ -160,7 +162,7 @@ fn exhausted_capacity_is_not_a_complete_measurement() {
             max_bytes: 1,
             ..configuration()
         },
-        &Control::default(),
+        &Cancellation::default(),
         |event| {
             events.push(serde_json::to_value(event).unwrap());
             Ok(())

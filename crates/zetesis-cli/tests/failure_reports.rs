@@ -8,7 +8,7 @@ use zetesis_cli::{
     Completion, Interruption, Options, RunError, SolvePhase, run_detailed,
     run_detailed_with_diagnostics, run_with_diagnostics,
 };
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 fn options(oracle: &str) -> Options {
     Options::try_parse_from([
@@ -110,15 +110,25 @@ fn every_answer_prefix_counts_only_complete_publications_on_both_oracles() {
     for oracle in ["closure", "countermodel"] {
         let options = options(oracle);
         let mut reference = Vec::new();
-        let complete =
-            run_detailed("{a}.".into(), &options, &mut reference, &Control::default()).unwrap();
+        let complete = run_detailed(
+            "{a}.".into(),
+            &options,
+            &mut reference,
+            &Cancellation::default(),
+        )
+        .unwrap();
         assert_eq!(complete.models, 2);
         let ends = answer_ends(&reference, false);
         assert_eq!(ends.len(), 2);
         for capacity in 0..reference.len() {
             let mut output = Cut::at(capacity);
-            let failure = run_detailed("{a}.".into(), &options, &mut output, &Control::default())
-                .unwrap_err();
+            let failure = run_detailed(
+                "{a}.".into(),
+                &options,
+                &mut output,
+                &Cancellation::default(),
+            )
+            .unwrap_err();
             assert!(
                 matches!(&*failure.cause, RunError::Output(error) if error.kind() == io::ErrorKind::BrokenPipe)
             );
@@ -151,13 +161,24 @@ fn exhausted_objective_search_retains_all_hidden_ties_before_failed_cost_publica
     options.stats = true;
     let source = "1 {a;b} 1. #minimize {1,a:a;1,b:b}. #show.";
     let mut reference = Vec::new();
-    run_detailed(source.into(), &options, &mut reference, &Control::default()).unwrap();
+    run_detailed(
+        source.into(),
+        &options,
+        &mut reference,
+        &Cancellation::default(),
+    )
+    .unwrap();
     let ends = answer_ends(&reference, true);
     assert_eq!(ends.len(), 2);
     for capacity in 0..=ends[1] {
         let mut output = Cut::at(capacity);
-        let failure =
-            run_detailed(source.into(), &options, &mut output, &Control::default()).unwrap_err();
+        let failure = run_detailed(
+            source.into(),
+            &options,
+            &mut output,
+            &Cancellation::default(),
+        )
+        .unwrap_err();
         let partial = failure.partial_report.unwrap();
         assert_eq!(partial.completion, Some(Completion::Exhausted));
         assert!(!partial.summary_published);
@@ -185,7 +206,7 @@ fn observation_refusal_retains_verified_membership_without_an_answer_prefix() {
         "a. #show seen:a.".into(),
         &options,
         &mut output,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(
@@ -209,7 +230,7 @@ fn early_primary_source_error_survives_secondary_statistics_failure_and_legacy_m
         &options,
         &mut output,
         &mut Cut::at(0),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(&*failure.cause, RunError::FormulaAdmission(_)));
@@ -240,7 +261,7 @@ fn early_primary_source_error_survives_secondary_statistics_failure_and_legacy_m
         &options,
         &mut output,
         &mut Cut::at(0),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(original, RunError::FormulaAdmission(_)));
@@ -261,7 +282,7 @@ fn failure_of_post_summary_statistics_preserves_completed_output_and_search() {
         &options,
         &mut output,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(*failure.cause, RunError::Output(_)));
@@ -293,7 +314,7 @@ fn failed_restriction_diagnostic_retains_the_committed_restriction_and_incumbent
         &options,
         &mut output,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(*failure.cause, RunError::Output(_)));
@@ -318,13 +339,13 @@ fn failed_restriction_diagnostic_retains_the_committed_restriction_and_incumbent
 
 #[test]
 fn a_cancelled_request_keeps_its_interruption_when_its_summary_sink_fails() {
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     let failure = run_detailed(
         "a.".into(),
         &options("countermodel"),
         &mut Cut::at(0),
-        &control,
+        &cancellation,
     )
     .unwrap_err();
     let RunError::Output(error) = failure.cause.as_ref() else {
@@ -360,14 +381,24 @@ fn an_observed_closure_candidate_stop_survives_a_buffered_answer_failure() {
     options.batch_size = std::num::NonZeroUsize::new(64).unwrap();
     options.max_candidates = 3;
     let mut reference = Vec::new();
-    let report =
-        run_detailed(source.into(), &options, &mut reference, &Control::default()).unwrap();
+    let report = run_detailed(
+        source.into(),
+        &options,
+        &mut reference,
+        &Cancellation::default(),
+    )
+    .unwrap();
     assert_eq!(report.completion, Completion::Interrupted);
     assert_eq!(report.models, 3);
     let first = answer_ends(&reference, false)[0];
     let mut output = Cut::at(first + 4);
-    let failure =
-        run_detailed(source.into(), &options, &mut output, &Control::default()).unwrap_err();
+    let failure = run_detailed(
+        source.into(),
+        &options,
+        &mut output,
+        &Cancellation::default(),
+    )
+    .unwrap_err();
     assert!(matches!(*failure.cause, RunError::Output(_)));
     let partial = failure.partial_report.unwrap();
     assert_eq!(partial.interruption, report.interruption);
@@ -389,7 +420,7 @@ fn an_observed_closure_candidate_stop_survives_a_buffered_answer_failure() {
         source.into(),
         &options,
         &mut Vec::new(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(requested.completion, Completion::RequestedModels);
@@ -414,7 +445,7 @@ fn completed_closure_batch_membership_survives_a_later_requested_output_statisti
         &options,
         &mut output,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     let partial = failure.partial_report.unwrap();

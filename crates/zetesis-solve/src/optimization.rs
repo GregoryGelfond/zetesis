@@ -5,7 +5,7 @@ use std::fmt;
 
 use zetesis_core::Model;
 use zetesis_core::retention::{ModelRetention, RetentionError};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_objective::{ObjectiveProgram, Score};
 
 use crate::{Interruption, SolveConfig};
@@ -72,7 +72,7 @@ impl Incumbents {
         program: &ObjectiveProgram,
         model: &Model,
         options: &SolveConfig,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Score, Interruption> {
         let evaluation = zetesis_objective::evaluate(
             program,
@@ -83,7 +83,7 @@ impl Incumbents {
                 max_keys: options.max_objective_keys,
                 max_key_bytes: options.max_objective_key_bytes,
             },
-            control,
+            cancellation,
         )
         .map_err(|error| {
             // Each call receives only the remaining cumulative work allowance.
@@ -116,9 +116,9 @@ impl Incumbents {
         program: &ObjectiveProgram,
         model: Model,
         options: &SolveConfig,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<bool, Interruption> {
-        let score = self.evaluate(program, &model, options, control)?;
+        let score = self.evaluate(program, &model, options, cancellation)?;
         let order = self
             .best
             .as_ref()

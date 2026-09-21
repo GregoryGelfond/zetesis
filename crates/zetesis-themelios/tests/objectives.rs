@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use zetesis_core::{Atom, Model};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_objective::{Score, evaluate};
 use zetesis_sat::{Limits as SearchLimits, StableModels};
 use zetesis_themelios::{
@@ -27,9 +27,9 @@ fn scored(
     atoms: &[Atom],
     objectives: &zetesis_objective::ObjectiveProgram,
 ) -> Vec<(Model, Score)> {
-    let control = Control::default();
-    let mut search =
-        StableModels::new(theory, SearchLimits::default(), control.clone()).expect("SAT admission");
+    let cancellation = Cancellation::default();
+    let mut search = StableModels::new(theory, SearchLimits::default(), cancellation.clone())
+        .expect("SAT admission");
     let result = search
         .by_ref()
         .map(|candidate| {
@@ -39,7 +39,7 @@ fn scored(
                 objectives,
                 &model,
                 zetesis_objective::Limits::default(),
-                &control,
+                &cancellation,
             )
             .expect("complete objective score")
             .score()

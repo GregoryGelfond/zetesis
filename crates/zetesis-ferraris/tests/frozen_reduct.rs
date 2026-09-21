@@ -2,7 +2,7 @@
 
 use std::time::Instant;
 
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
     AdmissionLimits, FrozenReduct, Interpretation, Limits, Node, Theory, models_reduct,
 };
@@ -26,13 +26,13 @@ fn work_limit(max_work: u64) -> Limits {
 fn frozen_subject_is_the_original_borrow() {
     let theory = theory(vec![Node::Atom(0)], vec![0]);
     let candidate = interpretation(&theory, 1);
-    let frozen = FrozenReduct::new(&candidate, work_limit(1), &Control::default()).unwrap();
+    let frozen = FrozenReduct::new(&candidate, work_limit(1), &Cancellation::default()).unwrap();
     assert!(std::ptr::eq(frozen.candidate(), &raw const candidate));
     assert!(std::ptr::eq(frozen.theory(), candidate.theory()));
     let same_theory = interpretation(&theory.clone(), 1);
     assert!(
         frozen
-            .is_satisfied_by(&same_theory, work_limit(2), &Control::default())
+            .is_satisfied_by(&same_theory, work_limit(2), &Cancellation::default())
             .unwrap()
     );
 }
@@ -41,12 +41,16 @@ fn frozen_subject_is_the_original_borrow() {
 fn freezing_does_not_require_original_satisfaction() {
     let theory = theory(vec![Node::Atom(0)], vec![0]);
     let candidate = interpretation(&theory, 0);
-    let control = Control::default();
-    let frozen = FrozenReduct::new(&candidate, work_limit(1), &control).unwrap();
+    let cancellation = Cancellation::default();
+    let frozen = FrozenReduct::new(&candidate, work_limit(1), &cancellation).unwrap();
     for world in 0..4 {
         assert!(
             !frozen
-                .is_satisfied_by(&interpretation(&theory, world), work_limit(2), &control)
+                .is_satisfied_by(
+                    &interpretation(&theory, world),
+                    work_limit(2),
+                    &cancellation
+                )
                 .unwrap()
         );
     }
@@ -59,17 +63,17 @@ fn tested_interpretations_need_not_be_subsets() {
         vec![2],
     );
     let candidate = interpretation(&theory, 2);
-    let control = Control::default();
-    let frozen = FrozenReduct::new(&candidate, work_limit(3), &control).unwrap();
+    let cancellation = Cancellation::default();
+    let frozen = FrozenReduct::new(&candidate, work_limit(3), &cancellation).unwrap();
     // The candidate-false antecedent is falsum even when atom 0 belongs to J.
     for world in [1, 3, 0, 2, 1] {
         let tested = interpretation(&theory, world);
         assert!(
             frozen
-                .is_satisfied_by(&tested, work_limit(4), &control)
+                .is_satisfied_by(&tested, work_limit(4), &cancellation)
                 .unwrap()
         );
-        assert!(models_reduct(&theory, &candidate, &tested, work_limit(7), &control).unwrap());
+        assert!(models_reduct(&theory, &candidate, &tested, work_limit(7), &cancellation).unwrap());
     }
 }
 
@@ -79,25 +83,25 @@ fn distinct_candidates_keep_distinct_reducts() {
         vec![Node::Atom(0), Node::Atom(1), Node::Implies(0, 1)],
         vec![2],
     );
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let guarded = interpretation(&theory, 3);
     let vacuous = interpretation(&theory, 2);
-    let guarded = FrozenReduct::new(&guarded, work_limit(3), &control).unwrap();
-    let vacuous = FrozenReduct::new(&vacuous, work_limit(3), &control).unwrap();
+    let guarded = FrozenReduct::new(&guarded, work_limit(3), &cancellation).unwrap();
+    let vacuous = FrozenReduct::new(&vacuous, work_limit(3), &cancellation).unwrap();
     let tested = interpretation(&theory, 1);
     assert!(
         !guarded
-            .is_satisfied_by(&tested, work_limit(4), &control)
+            .is_satisfied_by(&tested, work_limit(4), &cancellation)
             .unwrap()
     );
     assert!(
         vacuous
-            .is_satisfied_by(&tested, work_limit(4), &control)
+            .is_satisfied_by(&tested, work_limit(4), &cancellation)
             .unwrap()
     );
     assert!(
         !guarded
-            .is_satisfied_by(&tested, work_limit(4), &control)
+            .is_satisfied_by(&tested, work_limit(4), &cancellation)
             .unwrap()
     );
 }
@@ -111,13 +115,13 @@ fn independent_queries_can_share_one_frozen_value() {
     let candidate = interpretation(&theory, 3);
     let false_tested = interpretation(&theory, 1);
     let true_tested = interpretation(&theory, 2);
-    let control = Control::default();
-    let frozen = FrozenReduct::new(&candidate, work_limit(3), &control).unwrap();
+    let cancellation = Cancellation::default();
+    let frozen = FrozenReduct::new(&candidate, work_limit(3), &cancellation).unwrap();
     std::thread::scope(|scope| {
         let false_query =
-            scope.spawn(|| frozen.is_satisfied_by(&false_tested, work_limit(4), &control));
+            scope.spawn(|| frozen.is_satisfied_by(&false_tested, work_limit(4), &cancellation));
         let true_query =
-            scope.spawn(|| frozen.is_satisfied_by(&true_tested, work_limit(4), &control));
+            scope.spawn(|| frozen.is_satisfied_by(&true_tested, work_limit(4), &cancellation));
         assert!(!false_query.join().unwrap().unwrap());
         assert!(true_query.join().unwrap().unwrap());
     });
@@ -136,13 +140,17 @@ fn nested_negation_retains_candidate_truth() {
         vec![4],
     );
     let candidate = interpretation(&theory, 1);
-    let control = Control::default();
-    let frozen = FrozenReduct::new(&candidate, work_limit(5), &control).unwrap();
+    let cancellation = Cancellation::default();
+    let frozen = FrozenReduct::new(&candidate, work_limit(5), &cancellation).unwrap();
     // In (not not a -> a)^M, double negation is true for every tested J.
     for world in 0..4 {
         assert_eq!(
             frozen
-                .is_satisfied_by(&interpretation(&theory, world), work_limit(6), &control)
+                .is_satisfied_by(
+                    &interpretation(&theory, world),
+                    work_limit(6),
+                    &cancellation
+                )
                 .unwrap(),
             world & 1 != 0
         );
@@ -155,14 +163,18 @@ fn constraints_keep_their_frozen_meaning() {
         vec![Node::Atom(0), Node::False, Node::Implies(0, 1)],
         vec![2],
     );
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     for candidate in 0..4 {
         let subject = interpretation(&theory, candidate);
-        let frozen = FrozenReduct::new(&subject, work_limit(3), &control).unwrap();
+        let frozen = FrozenReduct::new(&subject, work_limit(3), &cancellation).unwrap();
         for tested in 0..4 {
             assert_eq!(
                 frozen
-                    .is_satisfied_by(&interpretation(&theory, tested), work_limit(4), &control)
+                    .is_satisfied_by(
+                        &interpretation(&theory, tested),
+                        work_limit(4),
+                        &cancellation
+                    )
                     .unwrap(),
                 candidate & 1 == 0
             );
@@ -174,12 +186,16 @@ fn constraints_keep_their_frozen_meaning() {
 fn empty_theories_need_no_charged_work() {
     let theory = theory(vec![], vec![]);
     let candidate = interpretation(&theory, 3);
-    let control = Control::default();
-    let frozen = FrozenReduct::new(&candidate, work_limit(0), &control).unwrap();
+    let cancellation = Cancellation::default();
+    let frozen = FrozenReduct::new(&candidate, work_limit(0), &cancellation).unwrap();
     for world in 0..4 {
         assert!(
             frozen
-                .is_satisfied_by(&interpretation(&theory, world), work_limit(0), &control)
+                .is_satisfied_by(
+                    &interpretation(&theory, world),
+                    work_limit(0),
+                    &cancellation
+                )
                 .unwrap()
         );
     }
@@ -189,17 +205,17 @@ fn empty_theories_need_no_charged_work() {
 fn freeze_work_ceiling_is_inclusive() {
     let theory = theory(vec![Node::Atom(0), Node::Atom(1), Node::And(0, 1)], vec![2]);
     let candidate = interpretation(&theory, 3);
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     for limit in 0..3 {
         assert_eq!(
-            FrozenReduct::new(&candidate, work_limit(limit), &control).unwrap_err(),
+            FrozenReduct::new(&candidate, work_limit(limit), &cancellation).unwrap_err(),
             Stop::WorkLimit
         );
     }
-    let frozen = FrozenReduct::new(&candidate, work_limit(3), &control).unwrap();
+    let frozen = FrozenReduct::new(&candidate, work_limit(3), &cancellation).unwrap();
     assert!(
         frozen
-            .is_satisfied_by(&candidate, work_limit(4), &control)
+            .is_satisfied_by(&candidate, work_limit(4), &cancellation)
             .unwrap()
     );
 }
@@ -208,12 +224,12 @@ fn freeze_work_ceiling_is_inclusive() {
 fn satisfaction_does_not_recharge_the_freeze() {
     let theory = theory(vec![Node::Atom(0), Node::Atom(1), Node::And(0, 1)], vec![2]);
     let candidate = interpretation(&theory, 3);
-    let control = Control::default();
-    let frozen = FrozenReduct::new(&candidate, work_limit(3), &control).unwrap();
+    let cancellation = Cancellation::default();
+    let frozen = FrozenReduct::new(&candidate, work_limit(3), &cancellation).unwrap();
     for limit in 0..4 {
         assert_eq!(
             frozen
-                .is_satisfied_by(&candidate, work_limit(limit), &control)
+                .is_satisfied_by(&candidate, work_limit(limit), &cancellation)
                 .unwrap_err(),
             Stop::WorkLimit
         );
@@ -221,15 +237,31 @@ fn satisfaction_does_not_recharge_the_freeze() {
     for _ in 0..3 {
         assert!(
             frozen
-                .is_satisfied_by(&candidate, work_limit(4), &control)
+                .is_satisfied_by(&candidate, work_limit(4), &cancellation)
                 .unwrap()
         );
     }
     assert_eq!(
-        models_reduct(&theory, &candidate, &candidate, work_limit(6), &control).unwrap_err(),
+        models_reduct(
+            &theory,
+            &candidate,
+            &candidate,
+            work_limit(6),
+            &cancellation
+        )
+        .unwrap_err(),
         Stop::WorkLimit
     );
-    assert!(models_reduct(&theory, &candidate, &candidate, work_limit(7), &control).unwrap());
+    assert!(
+        models_reduct(
+            &theory,
+            &candidate,
+            &candidate,
+            work_limit(7),
+            &cancellation
+        )
+        .unwrap()
+    );
 }
 
 #[test]
@@ -239,17 +271,17 @@ fn roots_are_charged_until_the_first_failure() {
         vec![2, 1, 0],
     );
     let candidate = interpretation(&theory, 1);
-    let control = Control::default();
-    let frozen = FrozenReduct::new(&candidate, work_limit(3), &control).unwrap();
+    let cancellation = Cancellation::default();
+    let frozen = FrozenReduct::new(&candidate, work_limit(3), &cancellation).unwrap();
     assert_eq!(
         frozen
-            .is_satisfied_by(&candidate, work_limit(4), &control)
+            .is_satisfied_by(&candidate, work_limit(4), &cancellation)
             .unwrap_err(),
         Stop::WorkLimit
     );
     assert!(
         !frozen
-            .is_satisfied_by(&candidate, work_limit(5), &control)
+            .is_satisfied_by(&candidate, work_limit(5), &cancellation)
             .unwrap()
     );
 }
@@ -260,12 +292,12 @@ fn foreign_tested_identity_precedes_control() {
     let foreign = theory(vec![Node::Atom(0)], vec![0]);
     let candidate = interpretation(&own, 1);
     let tested = interpretation(&foreign, 1);
-    let control = Control::default();
-    let frozen = FrozenReduct::new(&candidate, work_limit(1), &control).unwrap();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    let frozen = FrozenReduct::new(&candidate, work_limit(1), &cancellation).unwrap();
+    cancellation.cancel();
     assert_eq!(
         frozen
-            .is_satisfied_by(&tested, work_limit(0), &control)
+            .is_satisfied_by(&tested, work_limit(0), &cancellation)
             .unwrap_err(),
         Stop::WrongProgram
     );
@@ -277,11 +309,11 @@ fn wrapper_identity_precedes_control() {
     let foreign = theory(vec![], vec![]);
     let candidate = interpretation(&own, 0);
     let other = interpretation(&foreign, 0);
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     for (candidate, tested) in [(&other, &candidate), (&candidate, &other)] {
         assert_eq!(
-            models_reduct(&own, candidate, tested, work_limit(0), &control).unwrap_err(),
+            models_reduct(&own, candidate, tested, work_limit(0), &cancellation).unwrap_err(),
             Stop::WrongProgram
         );
     }
@@ -291,14 +323,14 @@ fn wrapper_identity_precedes_control() {
 fn stopped_queries_leave_the_reduct_reusable() {
     let theory = theory(vec![Node::Atom(0)], vec![0]);
     let candidate = interpretation(&theory, 1);
-    let control = Control::default();
-    let frozen = FrozenReduct::new(&candidate, work_limit(1), &control).unwrap();
-    let cancelled = Control::default();
+    let cancellation = Cancellation::default();
+    let frozen = FrozenReduct::new(&candidate, work_limit(1), &cancellation).unwrap();
+    let cancelled = Cancellation::default();
     cancelled.cancel();
     for (stopped, expected) in [
         (cancelled, Stop::Cancelled),
         (
-            Control::with_deadline(Instant::now()).unwrap(),
+            Cancellation::with_deadline(Instant::now()).unwrap(),
             Stop::Deadline,
         ),
     ] {
@@ -310,7 +342,7 @@ fn stopped_queries_leave_the_reduct_reusable() {
         );
         assert!(
             frozen
-                .is_satisfied_by(&candidate, work_limit(2), &control)
+                .is_satisfied_by(&candidate, work_limit(2), &cancellation)
                 .unwrap()
         );
     }
@@ -320,17 +352,17 @@ fn stopped_queries_leave_the_reduct_reusable() {
 fn empty_freezes_still_poll_control() {
     let theory = theory(vec![], vec![]);
     let candidate = interpretation(&theory, 0);
-    let cancelled = Control::default();
+    let cancelled = Cancellation::default();
     cancelled.cancel();
-    for (control, expected) in [
+    for (cancellation, expected) in [
         (cancelled, Stop::Cancelled),
         (
-            Control::with_deadline(Instant::now()).unwrap(),
+            Cancellation::with_deadline(Instant::now()).unwrap(),
             Stop::Deadline,
         ),
     ] {
         assert_eq!(
-            FrozenReduct::new(&candidate, work_limit(0), &control).unwrap_err(),
+            FrozenReduct::new(&candidate, work_limit(0), &cancellation).unwrap_err(),
             expected
         );
     }
@@ -340,19 +372,19 @@ fn empty_freezes_still_poll_control() {
 fn empty_satisfaction_still_polls_control() {
     let theory = theory(vec![], vec![]);
     let candidate = interpretation(&theory, 0);
-    let frozen = FrozenReduct::new(&candidate, work_limit(0), &Control::default()).unwrap();
-    let cancelled = Control::default();
+    let frozen = FrozenReduct::new(&candidate, work_limit(0), &Cancellation::default()).unwrap();
+    let cancelled = Cancellation::default();
     cancelled.cancel();
-    for (control, expected) in [
+    for (cancellation, expected) in [
         (cancelled, Stop::Cancelled),
         (
-            Control::with_deadline(Instant::now()).unwrap(),
+            Cancellation::with_deadline(Instant::now()).unwrap(),
             Stop::Deadline,
         ),
     ] {
         assert_eq!(
             frozen
-                .is_satisfied_by(&candidate, work_limit(0), &control)
+                .is_satisfied_by(&candidate, work_limit(0), &cancellation)
                 .unwrap_err(),
             expected
         );

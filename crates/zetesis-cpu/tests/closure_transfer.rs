@@ -3,7 +3,7 @@
 use zetesis_core::{
     AdmissionLimits, Atom, AtomPattern, Model, Predicate, Program, Seed, Template, Term, Value,
 };
-use zetesis_cpu::{Control, Limits, check, lazy};
+use zetesis_cpu::{Cancellation, Limits, check, lazy};
 
 fn source(constraint: bool) -> Program {
     let head = AtomPattern::new(
@@ -40,7 +40,7 @@ fn shared_check(constraint: bool) -> lazy::Check {
         &program,
         &[Seed::new(&program, []).unwrap()],
         lazy::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
         lazy::evaluate,
     )
     .unwrap()
@@ -56,7 +56,7 @@ fn native_acceptance_transfers_payload_storage() {
         &program,
         &Seed::new(&program, []).unwrap(),
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let original = payload(checked.closure()).as_ptr();
@@ -110,7 +110,7 @@ fn shared_closures_retain_one_finished_catalog() {
             Seed::new(&program, [chosen.clone()]).unwrap(),
         ],
         lazy::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
         lazy::evaluate,
     )
     .unwrap()

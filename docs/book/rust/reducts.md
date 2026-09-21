@@ -74,7 +74,7 @@ operation consumes a subset budget.
 
 `Limits::max_work` bounds charged operations; `max_subsets` bounds the reference
 membership check's proper-subset queries. Cancellation and deadlines use
-`zetesis_cpu::Control`.
+`zetesis_cpu::Cancellation`.
 
 Every operation returns a typed stop on exceeded limits or invalid identity.
 The [local Rust API reference](../../doc/zetesis_ferraris/index.html), generated

@@ -672,19 +672,22 @@ fn pooled_scalar_equality_preserves_explicit_facts() {
 
 #[test]
 fn hidden_optimum_ties_and_cancellation_keep_complete_model_identity() {
-    use zetesis_cpu::Control;
+    use zetesis_cpu::Cancellation;
     let p = input("1{p(1;2)}1.#minimize{1@1:p(1);1@1:p(2)}.#show.");
-    let control = Control::default();
-    let mut search =
-        zetesis_sat::StableModels::new(p.theory(), zetesis_sat::Limits::default(), control.clone())
-            .unwrap();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    let mut search = zetesis_sat::StableModels::new(
+        p.theory(),
+        zetesis_sat::Limits::default(),
+        cancellation.clone(),
+    )
+    .unwrap();
+    cancellation.cancel();
     assert!(search.next().unwrap().is_err());
     assert!(!search.exhausted());
     let mut search = zetesis_sat::StableModels::new(
         p.theory(),
         zetesis_sat::Limits::default(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     let mut count = 0;
@@ -696,7 +699,7 @@ fn hidden_optimum_ties_and_cancellation_keep_complete_model_identity() {
             p.objectives(),
             &model,
             zetesis_objective::Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         assert_eq!(evaluated.score().costs(), &[(1, 1)]);
@@ -707,7 +710,7 @@ fn hidden_optimum_ties_and_cancellation_keep_complete_model_identity() {
                 &model,
                 p.metadata().output(),
                 zetesis_themelios::observation::Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
         assert_eq!(shown.text(), "");

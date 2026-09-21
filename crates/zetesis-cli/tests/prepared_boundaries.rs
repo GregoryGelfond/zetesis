@@ -15,7 +15,7 @@ use zetesis_cli::{
     SearchMethod, Session, SolveConfig, SolveError, SolvePhase, Subject, run_finalized,
 };
 use zetesis_core::{Model, StaticError};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{PositiveError, PositiveResource};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits, ExpansionLimits,
@@ -111,7 +111,7 @@ fn relational_bundles_outlive_their_source_files() {
     let input = PreparedInput::bundle(&owner);
     assert_eq!(input.profile(), PreparedProfile::Relational);
     assert!(std::ptr::eq(input.metadata().unwrap(), owner.metadata()));
-    let mut session = Session::new(input, config(), Control::default()).unwrap();
+    let mut session = Session::new(input, config(), Cancellation::default()).unwrap();
     let mut models = BTreeSet::new();
     for result in session.by_ref() {
         let model = result.unwrap();
@@ -148,7 +148,7 @@ fn formula_bundles_outlive_their_source_files() {
     let input = PreparedInput::formula_bundle(&owner);
     assert_eq!(input.profile(), PreparedProfile::Formula);
     assert!(std::ptr::eq(input.metadata().unwrap(), owner.metadata()));
-    let mut session = Session::new(input, config(), Control::default()).unwrap();
+    let mut session = Session::new(input, config(), Cancellation::default()).unwrap();
     let mut models = BTreeSet::new();
     for result in session.by_ref() {
         let model = result.unwrap();
@@ -181,7 +181,7 @@ fn certificate_setup_exhaustion_is_incomplete() {
             owner.theory(),
             search,
             zetesis_sat::Limits::default(),
-            Control::default(),
+            Cancellation::default(),
         )
         .unwrap();
         let encoding_work = encoded.statistics().search.work;
@@ -194,7 +194,7 @@ fn certificate_setup_exhaustion_is_incomplete() {
                 stats: true,
                 ..config()
             },
-            Control::default(),
+            Cancellation::default(),
         )
         .unwrap();
         let outcome = session.outcome().unwrap();
@@ -243,8 +243,12 @@ fn certificate_setup_exhaustion_is_incomplete() {
 #[test]
 fn consumer_stop_leaves_formula_coverage_unknown() {
     let owner = formula("a | b. #show.");
-    let mut session =
-        Session::new(PreparedInput::formula(&owner), config(), Control::default()).unwrap();
+    let mut session = Session::new(
+        PreparedInput::formula(&owner),
+        config(),
+        Cancellation::default(),
+    )
+    .unwrap();
     let answer = session.next().unwrap().unwrap();
     assert!(
         matches!(atoms(answer.interpretation()).as_slice(), [atom] if atom == "a" || atom == "b")
@@ -265,11 +269,15 @@ fn consumer_stop_leaves_formula_coverage_unknown() {
 #[test]
 fn raw_model_conversion_preserves_hidden_atoms() {
     let owner = formula("a. hidden. #show a.");
-    let answer = Session::new(PreparedInput::formula(&owner), config(), Control::default())
-        .unwrap()
-        .next()
-        .unwrap()
-        .unwrap();
+    let answer = Session::new(
+        PreparedInput::formula(&owner),
+        config(),
+        Cancellation::default(),
+    )
+    .unwrap()
+    .next()
+    .unwrap()
+    .unwrap();
     let original = answer.interpretation().clone();
     let detached = answer.into_interpretation();
     assert_eq!(detached, original);
@@ -293,7 +301,7 @@ fn eager_setup_refusal_leaves_the_owner_reusable() {
             stats: true,
             ..config()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .err()
     .unwrap();
@@ -330,7 +338,7 @@ fn eager_setup_refusal_leaves_the_owner_reusable() {
             grounder: Grounder::Eager,
             ..config()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     let answer = session.next().unwrap().unwrap();
@@ -357,7 +365,8 @@ fn silent_diagnostics_preserve_finalized_evidence() {
     ])
     .unwrap();
     let mut output = Vec::new();
-    let result = run_finalized("a.".into(), &options, &mut output, &Control::default()).unwrap();
+    let result =
+        run_finalized("a.".into(), &options, &mut output, &Cancellation::default()).unwrap();
     let report = result.report().unwrap();
     assert_eq!(report.completion, Completion::Exhausted);
     assert_eq!(report.models, 1);

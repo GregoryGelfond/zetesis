@@ -1,7 +1,7 @@
 //! Logical observation payload depends on term identity, not input allocation.
 
 use zetesis_core::{Atom, Model, Predicate, Sign, Value, ValueLimits, ValueNode};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::observation::{ErrorKind, Limits, Resource};
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
@@ -40,16 +40,16 @@ fn logical_payload_ignores_input_capacity() {
         max_output_bytes: 33,
         ..Limits::default()
     };
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let first = admitted
         .metadata()
         .observations()
-        .evaluate(&small, limits, &control)
+        .evaluate(&small, limits, &cancellation)
         .unwrap();
     let second = admitted
         .metadata()
         .observations()
-        .evaluate(&large, limits, &control)
+        .evaluate(&large, limits, &cancellation)
         .unwrap();
     assert_eq!(first.symbols(), second.symbols());
     assert_eq!(first.statistics(), second.statistics());
@@ -60,7 +60,7 @@ fn logical_text_limit_is_inclusive() {
     let admitted = observation();
     let model = term_model(128);
     let program = admitted.metadata().observations();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     assert!(
         program
             .evaluate(
@@ -69,7 +69,7 @@ fn logical_text_limit_is_inclusive() {
                     max_symbol_bytes: 1,
                     ..Limits::default()
                 },
-                &control
+                &cancellation
             )
             .is_ok()
     );
@@ -81,7 +81,7 @@ fn logical_text_limit_is_inclusive() {
                     max_symbol_bytes: 0,
                     ..Limits::default()
                 },
-                &control
+                &cancellation
             )
             .unwrap_err()
             .kind(),
@@ -98,7 +98,7 @@ fn logical_output_limit_is_inclusive() {
     let admitted = observation();
     let model = term_model(128);
     let program = admitted.metadata().observations();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     assert!(
         program
             .evaluate(
@@ -107,7 +107,7 @@ fn logical_output_limit_is_inclusive() {
                     max_output_bytes: 33,
                     ..Limits::default()
                 },
-                &control
+                &cancellation
             )
             .is_ok()
     );
@@ -119,7 +119,7 @@ fn logical_output_limit_is_inclusive() {
                     max_output_bytes: 32,
                     ..Limits::default()
                 },
-                &control
+                &cancellation
             )
             .unwrap_err()
             .kind(),
@@ -147,12 +147,12 @@ fn construction_limit_includes_conversion_stack() {
                     ConstructionLimits {
                         max_bytes: required
                     },
-                    &Control::default()
+                    &Cancellation::default()
                 )
                 .is_ok()
         );
         assert!(
-            matches!(program.evaluate_with_construction_limits(&model, Limits::default(), ConstructionLimits { max_bytes: required - 1 }, &Control::default()).unwrap_err().kind(), ErrorKind::Limit { resource: Resource::ConstructionBytes, observed, limit } if *observed == required as u128 && *limit == (required - 1) as u128)
+            matches!(program.evaluate_with_construction_limits(&model, Limits::default(), ConstructionLimits { max_bytes: required - 1 }, &Cancellation::default()).unwrap_err().kind(), ErrorKind::Limit { resource: Resource::ConstructionBytes, observed, limit } if *observed == required as u128 && *limit == (required - 1) as u128)
         );
     }
 }
@@ -177,7 +177,7 @@ fn template_construction_uses_storage_preflight() {
                 ConstructionLimits {
                     max_bytes: required
                 },
-                &Control::default()
+                &Cancellation::default()
             )
             .is_ok()
     );
@@ -189,7 +189,7 @@ fn template_construction_uses_storage_preflight() {
                 ConstructionLimits {
                     max_bytes: required - 1
                 },
-                &Control::default()
+                &Cancellation::default()
             )
             .unwrap_err()
             .kind(),
@@ -209,10 +209,15 @@ fn rendered_atoms_ignore_input_capacity() {
         ..Limits::default()
     };
     let first = program
-        .render(&term_model(2), &selection, limits, &Control::default())
+        .render(&term_model(2), &selection, limits, &Cancellation::default())
         .unwrap();
     let second = program
-        .render(&term_model(128), &selection, limits, &Control::default())
+        .render(
+            &term_model(128),
+            &selection,
+            limits,
+            &Cancellation::default(),
+        )
         .unwrap();
     assert_eq!(first.text(), "p(f(1))");
     assert_eq!(second.text(), first.text());
@@ -234,7 +239,7 @@ fn model_view_respects_construction_refusal() {
             None,
             Limits::default(),
             ConstructionLimits { max_bytes: 0 },
-            &Control::default(),
+            &Cancellation::default(),
         );
     let Err(error) = result else {
         panic!("construction cannot fit");
@@ -262,7 +267,7 @@ fn rendered_observations_respect_storage_refusal() {
             &zetesis_themelios::AtomSelection::all(),
             Limits::default(),
             ConstructionLimits { max_bytes: 0 },
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
     assert!(matches!(
@@ -293,7 +298,7 @@ fn construction_covers_name_validation_copy() {
         ConstructionLimits {
             max_bytes: old_bound,
         },
-        &Control::default(),
+        &Cancellation::default(),
     );
     assert!(
         matches!(result.unwrap_err().kind(), ErrorKind::Limit { resource: Resource::ConstructionBytes, observed, .. } if *observed == required as u128)
@@ -306,7 +311,7 @@ fn construction_covers_name_validation_copy() {
                 ConstructionLimits {
                     max_bytes: required
                 },
-                &Control::default()
+                &Cancellation::default()
             )
             .is_ok()
     );

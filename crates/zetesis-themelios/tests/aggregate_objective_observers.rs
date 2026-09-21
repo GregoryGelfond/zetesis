@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::Value as Json;
 use zetesis_core::{Atom, Model, Value};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
@@ -90,7 +90,7 @@ fn costs(values: &Json) -> Option<Vec<i64>> {
 fn exhaustive(input: &AdmittedFormula) -> Records {
     let count = input.atoms().len();
     assert!(count <= 16, "bounded independent subset enumeration");
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut records = Records::new();
     for bits in 0..(1_usize << count) {
         let candidate = Interpretation::new(
@@ -98,7 +98,7 @@ fn exhaustive(input: &AdmittedFormula) -> Records {
             (0..count).filter(|&atom| bits & (1 << atom) != 0),
         )
         .expect("same-theory candidate");
-        if !check(input.theory(), &candidate, Limits::default(), &control)
+        if !check(input.theory(), &candidate, Limits::default(), &cancellation)
             .expect("complete independent reduct check")
             .accepted()
         {
@@ -112,7 +112,7 @@ fn exhaustive(input: &AdmittedFormula) -> Records {
             input.objectives(),
             &Model::new(atoms.iter().cloned()),
             zetesis_objective::Limits::default(),
-            &control,
+            &cancellation,
         )
         .expect("objective of a verified stable model");
         let score = evaluation.score();

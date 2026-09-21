@@ -52,7 +52,7 @@ fn every_tile_receipt_requires_each_expected_field() {
                 &queries,
                 &input,
                 output(&plan),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
         assert_eq!(valid.query_count(), 2);
@@ -69,7 +69,7 @@ fn every_tile_receipt_requires_each_expected_field() {
                             &queries,
                             &changed,
                             output(&plan),
-                            &Control::default(),
+                            &Cancellation::default(),
                         )
                         .err()
                         .unwrap();
@@ -107,7 +107,7 @@ fn later_tiles_cannot_reuse_missing_or_foreign_receipts() {
                 &queries,
                 &changed,
                 output(&plan),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .err()
             .unwrap();
@@ -124,7 +124,7 @@ fn later_tiles_cannot_reuse_missing_or_foreign_receipts() {
                 &queries,
                 &changed,
                 output(&plan),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .err()
             .unwrap();
@@ -211,7 +211,7 @@ fn older_epochs_cannot_fill_a_later_tile() {
         &queries,
         &input,
         output(&next),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     // The final tile retains the preceding invocation's otherwise valid record.
@@ -222,7 +222,7 @@ fn older_epochs_cannot_fill_a_later_tile() {
             &queries,
             &input,
             output(&next),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .err()
         .unwrap()

@@ -2,7 +2,7 @@
 
 use zetesis_ferraris::{Interpretation, Theory};
 
-use crate::{Check, Control, Incomplete, Limits, StableModels};
+use crate::{Cancellation, Check, Incomplete, Limits, StableModels};
 
 /// A native membership attempt retaining its exact candidate and theory.
 /// Constructed only by [`check_interpretation`]; an inconclusive attempt remains
@@ -105,9 +105,9 @@ impl StableInterpretation {
 pub fn check_interpretation(
     candidate: Interpretation,
     limits: Limits,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> CheckedInterpretation {
-    let check = crate::check(candidate.theory(), &candidate, limits, control);
+    let check = crate::check(candidate.theory(), &candidate, limits, cancellation);
     CheckedInterpretation { candidate, check }
 }
 

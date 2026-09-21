@@ -8,7 +8,7 @@ use crate::formula_execution::{
 };
 use crate::phase_timing::{Recorder, SolvePhase};
 use crate::{ExecutionObservation, SolveConfig, SolveError};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, TightPlan, TightVerdict};
 use zetesis_sat::{BatchVerdict, Incomplete};
 use zetesis_wgpu::{GpuContext, GpuOptions, GpuTightOracle, TightGpuError, TightGpuLimits};
@@ -62,7 +62,7 @@ pub(crate) fn check(
     statistics: &mut FormulaExecutionStatistics,
     candidates: &[Interpretation],
     options: &SolveConfig,
-    control: &Control,
+    cancellation: &Cancellation,
     phases: &Recorder,
 ) -> Result<Vec<BatchVerdict>, Failure> {
     let limits = TightGpuLimits {
@@ -76,7 +76,7 @@ pub(crate) fn check(
         .try_reserve_exact(candidates.len())
         .map_err(|_| Failure::Search(Incomplete::Allocation))?;
     let result = phases.measure(SolvePhase::GpuHostOracle, || {
-        oracle.check_batch(plan, candidates, limits, control)
+        oracle.check_batch(plan, candidates, limits, cancellation)
     });
     // The primitive submits one ordered batch, even if its readback fails.
     // Retain that receipt before propagating the original device error.

@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection, runtime};
 use zetesis_core::relation::{Failure, Query, Relation};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 /// Reusable real-device pipeline for checked relation equality filtering.
 ///
@@ -90,27 +90,27 @@ impl GpuRelationExecutor {
         &'device mut self,
         relation: &'owner Relation<'source>,
         limits: RelationGpuLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<PreparedGpuRelation<'device, 'owner, 'source>, RelationGpuError> {
-        self.prepare_with(relation, limits, || poll(control))
+        self.prepare_with(relation, limits, || poll(cancellation))
     }
 
     fn prepare_with<'device, 'owner, 'source>(
         &'device mut self,
         relation: &'owner Relation<'source>,
         limits: RelationGpuLimits,
-        mut control: impl FnMut() -> Result<(), GpuError>,
+        mut cancellation: impl FnMut() -> Result<(), GpuError>,
     ) -> Result<PreparedGpuRelation<'device, 'owner, 'source>, RelationGpuError> {
         let context = self.runtime.context.clone();
         let _lease = context.lease()?;
-        control()?;
+        cancellation()?;
         self.runtime.check_health()?;
         let bytes = packing::column_bytes(relation, self.runtime.limits())?;
         if bytes > limits.max_bytes {
             return Err(capacity("relation upload exceeds authored byte ceiling").into());
         }
         let scopes = runtime::ErrorScopes::new(self.runtime.device());
-        let columns = upload_columns(self.runtime.device(), relation, bytes, &mut control);
+        let columns = upload_columns(self.runtime.device(), relation, bytes, &mut cancellation);
         let columns = self.runtime.complete_unsubmitted(scopes, columns)?;
         Ok(PreparedGpuRelation {
             executor: self,
@@ -189,13 +189,13 @@ impl<'owner, 'source> PreparedGpuRelation<'_, 'owner, 'source> {
         &mut self,
         queries: &[Query<'_, 'source>],
         limits: RelationGpuLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<RelationGpuMasks<'owner, 'source>, RelationGpuError> {
         self.activity = RelationGpuActivity::default();
         self.last = None;
         let context = self.executor.runtime.context.clone();
         let _lease = context.lease()?;
-        poll(control)?;
+        poll(cancellation)?;
         self.executor.runtime.check_health()?;
         if queries.len() > limits.max_queries || u32::try_from(queries.len()).is_err() {
             return Err(capacity("relation query count exceeds preflight ceiling").into());
@@ -227,14 +227,14 @@ impl<'owner, 'source> PreparedGpuRelation<'_, 'owner, 'source> {
                 words: Vec::new(),
             });
         }
-        let packed = plan.pack(queries, control, limits.max_bytes)?;
-        poll(control)?;
+        let packed = plan.pack(queries, cancellation, limits.max_bytes)?;
+        poll(cancellation)?;
         self.executor.epoch = epoch;
         let runtime = &mut self.executor.runtime;
         let scopes = runtime::ErrorScopes::new(runtime.device());
         let transport = Transport::new(runtime, &self.columns, &plan, &packed);
         self.activity.uploaded_bytes = PARAM_BYTES + plan.query_bytes + plan.equality_bytes;
-        let outcome = poll(control).map(|()| {
+        let outcome = poll(cancellation).map(|()| {
             let submission = runtime::submit(
                 runtime.device(),
                 runtime.queue(),
@@ -259,8 +259,8 @@ impl<'owner, 'source> PreparedGpuRelation<'_, 'owner, 'source> {
                 &transport.readback,
                 submission,
                 limits.timeout,
-                || poll(control),
-                |words| plan.decode(self.relation, queries, words, packed.masks, control),
+                || poll(cancellation),
+                |words| plan.decode(self.relation, queries, words, packed.masks, cancellation),
             )
         });
         let masks = runtime.complete(scopes, outcome)?;
@@ -379,7 +379,7 @@ fn upload_columns(
     device: &wgpu::Device,
     relation: &Relation<'_>,
     bytes: u64,
-    mut control: impl FnMut() -> Result<(), GpuError>,
+    mut cancellation: impl FnMut() -> Result<(), GpuError>,
 ) -> Result<wgpu::Buffer, GpuError> {
     let buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("zetesis immutable relation columns"),
@@ -397,7 +397,7 @@ fn upload_columns(
         } else {
             let mut offset = 0_usize;
             for source in relation.columns() {
-                control()?;
+                cancellation()?;
                 let source = bytemuck::cast_slice(source);
                 let end = offset
                     .checked_add(source.len())
@@ -410,7 +410,7 @@ fn upload_columns(
                 return Err(capacity("relation columns do not fill mapped upload"));
             }
         }
-        control()
+        cancellation()
     })();
     buffer.unmap();
     copied?;

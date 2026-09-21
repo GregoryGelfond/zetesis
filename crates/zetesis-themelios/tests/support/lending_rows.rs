@@ -3,15 +3,19 @@
 use std::collections::BTreeSet;
 
 use zetesis_core::Atom;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_sat::{Limits, StableModels};
 use zetesis_themelios::{AdmittedFormula, FormulaLimits, GroundingPhase};
 
 use super::{Observer, compile};
 
 fn family(admitted: &AdmittedFormula) -> BTreeSet<BTreeSet<Atom>> {
-    let mut search =
-        StableModels::new(admitted.theory(), Limits::default(), Control::default()).unwrap();
+    let mut search = StableModels::new(
+        admitted.theory(),
+        Limits::default(),
+        Cancellation::default(),
+    )
+    .unwrap();
     let models = search
         .by_ref()
         .map(|result| {

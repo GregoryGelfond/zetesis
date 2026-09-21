@@ -159,7 +159,7 @@ fn partition(
             groups: &caps,
         },
         limits,
-        &work.control,
+        &work.cancellation,
     );
     let statistics = match &plan {
         Ok(plan) => plan.statistics(),

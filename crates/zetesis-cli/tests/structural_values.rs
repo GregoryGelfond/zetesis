@@ -3,7 +3,7 @@ use clap::Parser;
 use zetesis_cli::{
     Completion, Interruption, OptimizationStop, Options, RunError, run_with_diagnostics,
 };
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 fn solve(source: &str, extra: &[&str]) -> (Result<zetesis_cli::Report, RunError>, String) {
     let options = Options::try_parse_from(
@@ -18,7 +18,7 @@ fn solve(source: &str, extra: &[&str]) -> (Result<zetesis_cli::Report, RunError>
         &options,
         &mut output,
         &mut Vec::new(),
-        &Control::default(),
+        &Cancellation::default(),
     );
     (result, String::from_utf8(output).unwrap())
 }

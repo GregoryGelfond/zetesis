@@ -10,7 +10,7 @@ use crate::{
     runtime::{DeviceProfile, ErrorScopes, Runtime},
 };
 use std::sync::Arc;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::native_aggregate::Eligibility;
 
 /// Exact device reduction of already-acquired aggregate eligibility.
@@ -121,11 +121,11 @@ impl GpuAggregateOracle {
         group: &AggregateGpuPlan<'_>,
         records: &[Eligibility<'_>],
         limits: AggregateGpuLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Vec<AggregateGpuReduction>, AggregateGpuError> {
         self.last = None;
         self.activity = AggregateGpuActivity::default();
-        self.check(group, records, limits, control)
+        self.check(group, records, limits, cancellation)
             .map_err(Into::into)
     }
 
@@ -134,11 +134,11 @@ impl GpuAggregateOracle {
         group: &AggregateGpuPlan<'_>,
         records: &[Eligibility<'_>],
         limits: AggregateGpuLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Vec<AggregateGpuReduction>, GpuError> {
         let context = self.runtime.context.clone();
         let _lease = context.lease()?;
-        poll(control)?;
+        poll(cancellation)?;
         self.runtime.check_health()?;
         if records.is_empty() {
             return Ok(Vec::new());
@@ -153,7 +153,7 @@ impl GpuAggregateOracle {
             limits,
             self.runtime.limits(),
             epoch,
-            control,
+            cancellation,
         )?;
         let fresh = self
             .resident
@@ -180,14 +180,14 @@ impl GpuAggregateOracle {
             occurrences: u64::from(plan.worlds),
             device_work: plan.total_work,
         };
-        poll(control)?;
+        poll(cancellation)?;
         if fresh {
             self.resident = None;
         } else if allocated && let Some(resident) = self.resident.as_mut() {
             resident.transport = None;
         }
-        let masks = plan.pack(records, control)?;
-        poll(control)?;
+        let masks = plan.pack(records, cancellation)?;
+        poll(cancellation)?;
         let scopes = ErrorScopes::new(self.runtime.device());
         if fresh {
             self.activity.uploaded_bytes = group.numeric.bytes;
@@ -201,11 +201,11 @@ impl GpuAggregateOracle {
             &masks,
             &plan,
             limits.timeout,
-            control,
+            cancellation,
             &mut self.activity,
         );
         let result = self.runtime.complete(scopes, outcome).and_then(|results| {
-            poll(control)?;
+            poll(cancellation)?;
             Ok(results)
         });
         if result.is_ok() {

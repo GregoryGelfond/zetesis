@@ -4,8 +4,8 @@ use themelios_program::symbol::{Name, Sign};
 
 use super::evaluate::{Work, structured_text_bytes, terms};
 use super::{
-    ConstructionLimits, Control, Error, ErrorKind, Limits, Model, ObservationProgram, Rendered,
-    Resource, Statistics, Symbol, Value,
+    Cancellation, ConstructionLimits, Error, ErrorKind, Limits, Model, ObservationProgram,
+    Rendered, Resource, Statistics, Symbol, Value,
 };
 
 fn append(out: &mut String, text: &str, work: &mut Work<'_>) -> Result<(), Error> {
@@ -179,12 +179,12 @@ pub(super) fn render(
     selection: &crate::OutputSelection,
     limits: Limits,
     construction: ConstructionLimits,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<Rendered, Error> {
     let mut work = Work {
         limits,
         construction,
-        control,
+        cancellation,
         statistics: Statistics::default(),
         local_bytes: 0,
         location: None,

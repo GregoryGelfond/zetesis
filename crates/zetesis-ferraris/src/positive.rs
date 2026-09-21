@@ -14,7 +14,7 @@ mod tests;
 use std::{fmt, mem::size_of};
 
 use crate::{Interpretation, Theory};
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 
 /// Independent limits for complete-root classification and least closure.
 #[derive(Clone, Copy, Debug)]
@@ -152,7 +152,7 @@ pub struct PositivePlanStatistics {
 /// It does not establish source completeness or verify the Rust implementation.
 ///
 /// ```
-/// use zetesis_cpu::Control;
+/// use zetesis_cpu::Cancellation;
 /// use zetesis_ferraris::{AdmissionLimits, Node, PositivePlan, PositivePlanLimits, Theory};
 ///
 /// // a. b :- a. a :- b. The positive cycle is seeded by the fact a.
@@ -162,7 +162,7 @@ pub struct PositivePlanStatistics {
 ///     vec![0, 2, 3],
 ///     AdmissionLimits::default(),
 /// )?;
-/// let plan = PositivePlan::compile(&theory, PositivePlanLimits::default(), &Control::default())?;
+/// let plan = PositivePlan::compile(&theory, PositivePlanLimits::default(), &Cancellation::default())?;
 /// assert_eq!(plan.least_consequences().atoms().collect::<Vec<_>>(), [0, 1]);
 /// assert_eq!(plan.failed_constraint(), None);
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -183,9 +183,9 @@ impl PositivePlan {
     pub fn compile(
         theory: &Theory,
         limits: PositivePlanLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Self, PositiveError> {
-        Self::compile_accounted(theory, limits, control).result
+        Self::compile_accounted(theory, limits, cancellation).result
     }
 
     /// Inspect all original roots and compute least consequences with forward
@@ -205,11 +205,11 @@ impl PositivePlan {
     pub fn compile_accounted(
         theory: &Theory,
         limits: PositivePlanLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> PositiveAttempt {
         let mut budget = Budget {
             limits,
-            control,
+            cancellation,
             statistics: PositivePlanStatistics::default(),
             current_bytes: 0,
         };
@@ -267,14 +267,14 @@ pub struct PositiveAttempt {
 
 struct Budget<'a> {
     limits: PositivePlanLimits,
-    control: &'a Control,
+    cancellation: &'a Cancellation,
     statistics: PositivePlanStatistics,
     current_bytes: u128,
 }
 
 impl Budget<'_> {
     fn tick(&mut self) -> Result<(), PositiveError> {
-        self.control.poll()?;
+        self.cancellation.poll()?;
         Self::ceiling(
             PositiveResource::Work,
             u128::from(self.statistics.work) + 1,
@@ -314,7 +314,7 @@ impl Budget<'_> {
     }
 
     fn reserve<T>(&mut self, count: usize) -> Result<Vec<T>, PositiveError> {
-        self.control.poll()?;
+        self.cancellation.poll()?;
         let requested = self
             .current_bytes
             .checked_add(count as u128 * size_of::<T>() as u128)

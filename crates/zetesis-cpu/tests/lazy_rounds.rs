@@ -3,7 +3,7 @@ use zetesis_core::{
     AdmissionLimits, Atom, AtomPattern, GroundProgram, Model, Predicate, Program, Seed,
     StaticLimits, Template, Term, Value,
 };
-use zetesis_cpu::{Control, Limits, Stop, check, check_static, lazy, source};
+use zetesis_cpu::{Cancellation, Limits, Stop, check, check_static, lazy, source};
 
 fn pattern(name: &str, terms: Vec<Term>) -> AtomPattern {
     AtomPattern::new(Predicate::new(name, terms.len()).unwrap(), terms).unwrap()
@@ -56,7 +56,7 @@ fn union_membership_never_establishes_world_truth() {
         &program,
         &seeds,
         lazy::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
         lazy::evaluate,
     )
     .unwrap();
@@ -89,13 +89,15 @@ fn chunk_boundaries_preserve_exact_cpu_closures() {
             &program,
             &seeds,
             limits,
-            &Control::default(),
+            &Cancellation::default(),
             lazy::evaluate,
         )
         .unwrap();
         for (actual, seed) in actual.checks.iter().zip(&seeds) {
-            let expected = check(&program, seed, Limits::default(), &Control::default()).unwrap();
-            let dense = check_static(&graph, seed, Limits::default(), &Control::default()).unwrap();
+            let expected =
+                check(&program, seed, Limits::default(), &Cancellation::default()).unwrap();
+            let dense =
+                check_static(&graph, seed, Limits::default(), &Cancellation::default()).unwrap();
             assert_eq!(actual.closure(), expected.closure());
             assert_eq!(
                 (
@@ -125,7 +127,7 @@ fn failed_final_chunk_never_publishes_a_batch() {
         &program,
         &seeds,
         lazy::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
         |_| Err::<Vec<u32>, _>("device failure"),
     )
     .unwrap_err();
@@ -142,7 +144,7 @@ fn failed_final_chunk_never_publishes_a_batch() {
 fn source_stop_discards_successful_pending_chunks() {
     let (program, seeds) = separated_worlds();
     let mut calls = 0;
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let failure = lazy::check_with(
         &program,
         &seeds,
@@ -150,12 +152,12 @@ fn source_stop_discards_successful_pending_chunks() {
             max_chunk_rules: 1,
             ..lazy::Limits::default()
         },
-        &control,
+        &cancellation,
         |chunk| {
             calls += 1;
             let result = lazy::evaluate(chunk);
             if calls == 1 {
-                control.cancel();
+                cancellation.cancel();
             }
             result
         },
@@ -182,7 +184,7 @@ fn a_seed_atom_is_not_a_derived_fact() {
         &program,
         &seeds,
         lazy::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
         lazy::evaluate,
     )
     .unwrap();
@@ -213,7 +215,7 @@ fn fresh_rounds_revisit_newly_derived_rows() {
         &program,
         &[seed],
         lazy::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
         lazy::evaluate,
     )
     .unwrap();
@@ -229,7 +231,7 @@ fn foreign_seed_identity_is_refused_before_execution() {
         &other,
         &seeds,
         lazy::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
         |_| panic!("foreign input must not dispatch"),
     )
     .unwrap_err();
@@ -246,7 +248,7 @@ fn malformed_output_cannot_be_a_completed_check() {
         &program,
         &seeds,
         lazy::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
         |_| Ok::<_, Stop>(vec![]),
     )
     .unwrap_err();
@@ -260,7 +262,7 @@ fn source_exhaustion_requires_successful_last_callback() {
         &program,
         &Model::default(),
         source::ScanLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
         |_| Err("last callback"),
     )
     .unwrap_err();
@@ -280,7 +282,7 @@ fn exact_shared_work_ceiling_preserves_completion() {
         &program,
         &seeds,
         limits,
-        &Control::default(),
+        &Cancellation::default(),
         lazy::evaluate,
     )
     .unwrap();
@@ -288,13 +290,28 @@ fn exact_shared_work_ceiling_preserves_completion() {
         max_source_work: expected.progress.source_work,
         ..limits
     };
-    assert!(lazy::check_with(&program, &seeds, exact, &Control::default(), lazy::evaluate).is_ok());
+    assert!(
+        lazy::check_with(
+            &program,
+            &seeds,
+            exact,
+            &Cancellation::default(),
+            lazy::evaluate
+        )
+        .is_ok()
+    );
     let below = lazy::Limits {
         max_source_work: expected.progress.source_work - 1,
         ..limits
     };
-    let error =
-        lazy::check_with(&program, &seeds, below, &Control::default(), lazy::evaluate).unwrap_err();
+    let error = lazy::check_with(
+        &program,
+        &seeds,
+        below,
+        &Cancellation::default(),
+        lazy::evaluate,
+    )
+    .unwrap_err();
     assert!(matches!(error.cause, lazy::Cause::Source(Stop::WorkLimit)));
     assert_eq!(error.progress.source_work, below.max_source_work);
 }
@@ -309,7 +326,7 @@ fn catalog_limit_counts_underived_atoms() {
             max_atoms: 2,
             ..lazy::Limits::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
         lazy::evaluate,
     )
     .unwrap_err();
@@ -327,7 +344,7 @@ fn union_truth_mutation_changes_the_expected_models() {
         &program,
         &seeds,
         lazy::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
         |chunk| {
             let mut output = lazy::evaluate(chunk)?;
             for offset in chunk.offsets() {
@@ -377,7 +394,7 @@ fn instance_scratch_is_reserved_before_catalog_growth() {
         &program,
         &seeds,
         limits,
-        &Control::default(),
+        &Cancellation::default(),
         lazy::evaluate,
     )
     .unwrap();
@@ -393,7 +410,7 @@ fn instance_scratch_is_reserved_before_catalog_growth() {
             + size_of::<Vec<usize>>(),
         ..limits
     };
-    let failure = lazy::check_with(&program, &seeds, below, &Control::default(), |_| {
+    let failure = lazy::check_with(&program, &seeds, below, &Cancellation::default(), |_| {
         panic!("catalog admission must fail before dispatch")
     })
     .unwrap_err();
@@ -415,7 +432,7 @@ fn failed_instance_copy_is_not_an_offered_binding() {
             max_instance_atoms: 0,
             ..Default::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
         |_| panic!("copy failed before a callback could be offered"),
     )
     .unwrap_err();
@@ -448,7 +465,7 @@ fn final_check_metadata_is_reserved_before_execution() {
         &program,
         &seeds,
         limits,
-        &Control::default(),
+        &Cancellation::default(),
         lazy::evaluate,
     )
     .unwrap();
@@ -460,7 +477,7 @@ fn final_check_metadata_is_reserved_before_execution() {
             max_host_bytes: fixed_bytes - 1,
             ..limits
         },
-        &Control::default(),
+        &Cancellation::default(),
         lazy::evaluate,
     )
     .unwrap_err();
@@ -496,7 +513,7 @@ fn catalog_growth_preserves_each_world_interpretation() {
             max_chunk_rules: 7,
             ..Default::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
         |chunk| {
             widths.insert(chunk.words());
             lazy::evaluate(chunk)
@@ -505,7 +522,7 @@ fn catalog_growth_preserves_each_world_interpretation() {
     .unwrap();
     assert_eq!(widths, [1, 2, 4].into_iter().collect());
     for (actual, seed) in result.checks.iter().zip(&seeds) {
-        let expected = check(&program, seed, Limits::default(), &Control::default()).unwrap();
+        let expected = check(&program, seed, Limits::default(), &Cancellation::default()).unwrap();
         assert_eq!(actual.closure(), expected.closure());
         assert_eq!(actual.accepted(), expected.accepted());
     }
@@ -523,7 +540,7 @@ fn a_large_catalog_ceiling_does_not_allocate_its_carrier() {
             max_host_bytes: 32 * 1024 * 1024,
             ..Default::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
         |chunk| {
             assert_eq!(chunk.words(), 1);
             lazy::evaluate(chunk)
@@ -561,7 +578,7 @@ fn demanded_ids_preserve_closure_across_word_boundaries() {
                 max_chunk_rules: 1,
                 ..Default::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
             lazy::evaluate,
         )
         .unwrap();
@@ -570,7 +587,8 @@ fn demanded_ids_preserve_closure_across_word_boundaries() {
             usize::try_from(count).unwrap()
         );
         for (actual, seed) in result.checks.iter().zip(&seeds) {
-            let expected = check(&program, seed, Limits::default(), &Control::default()).unwrap();
+            let expected =
+                check(&program, seed, Limits::default(), &Cancellation::default()).unwrap();
             assert_eq!(actual.closure(), expected.closure());
         }
     }
@@ -593,7 +611,7 @@ fn catalog_refusal_discards_already_evaluated_deltas() {
         &program,
         &seeds,
         limits,
-        &Control::default(),
+        &Cancellation::default(),
         lazy::evaluate,
     )
     .unwrap();
@@ -605,7 +623,7 @@ fn catalog_refusal_discards_already_evaluated_deltas() {
             max_atoms: 32,
             ..limits
         },
-        &Control::default(),
+        &Cancellation::default(),
         lazy::evaluate,
     )
     .unwrap_err();
@@ -643,7 +661,7 @@ fn final_zero_delta_round_keeps_underived_identity_across_word_growth() {
                 ..Default::default()
             },
             selection,
-            &Control::default(),
+            &Cancellation::default(),
             |chunk| {
                 widths.push(chunk.words());
                 assert!(chunk.snapshots().iter().all(|word| *word == 0));
@@ -666,9 +684,13 @@ fn final_zero_delta_round_keeps_underived_identity_across_word_growth() {
         }
         assert!(check.closure().atoms().is_empty());
         assert!(check.seed_mismatch());
-        let scalar =
-            zetesis_cpu::check(&program, &seeds[0], Limits::default(), &Control::default())
-                .unwrap();
+        let scalar = zetesis_cpu::check(
+            &program,
+            &seeds[0],
+            Limits::default(),
+            &Cancellation::default(),
+        )
+        .unwrap();
         assert_eq!(check.closure(), scalar.closure());
     }
 }

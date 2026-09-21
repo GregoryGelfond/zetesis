@@ -1,7 +1,7 @@
 //! Score and display completed answers without changing their identity.
 
 // ANCHOR: example
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     Backend, Completion, Grounder, Oracle, PreparedInput, Session, SolveConfig, WorldViewLimits,
 };
@@ -30,8 +30,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         models: 0,
         ..SolveConfig::default()
     };
-    let family = Session::builder(PreparedInput::formula(&input), config, Control::default())
-        .collect(WorldViewLimits::default())?;
+    let family = Session::builder(
+        PreparedInput::formula(&input),
+        config,
+        Cancellation::default(),
+    )
+    .collect(WorldViewLimits::default())?;
     assert_eq!(family.len(), 2);
 
     let mut observed = Vec::new();
@@ -42,7 +46,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             answer.interpretation(),
             input.metadata().output(),
             observation::Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )?;
         observed.push((
             display.text().to_owned(),

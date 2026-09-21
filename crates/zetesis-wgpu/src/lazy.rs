@@ -12,7 +12,7 @@ use std::borrow::Cow;
 use std::time::Duration;
 
 use zetesis_core::{Program, Seed, SeedView};
-use zetesis_cpu::{Control, lazy};
+use zetesis_cpu::{Cancellation, lazy};
 
 use crate::runtime::{self, DeviceProfile, ErrorScopes, Runtime};
 use crate::{GpuError, GpuErrorKind, GpuInfo, GpuLimits, GpuOptions, GpuSelection};
@@ -160,7 +160,7 @@ impl GpuLazyOracle {
         seeds: &[Seed],
         source_limits: lazy::Limits,
         limits: GpuLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<lazy::Batch, lazy::Failure<GpuError>> {
         self.check_batch_with_source(
             program,
@@ -168,7 +168,7 @@ impl GpuLazyOracle {
             source_limits,
             limits,
             lazy::SourceSelection::Union,
-            control,
+            cancellation,
         )
     }
 
@@ -191,7 +191,7 @@ impl GpuLazyOracle {
         source_limits: lazy::Limits,
         limits: GpuLimits,
         selection: lazy::SourceSelection,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<lazy::Batch, lazy::Failure<GpuError>> {
         self.check_batch_with_source_views(
             program,
@@ -199,7 +199,7 @@ impl GpuLazyOracle {
             source_limits,
             limits,
             selection,
-            control,
+            cancellation,
         )
     }
 
@@ -217,7 +217,7 @@ impl GpuLazyOracle {
         seeds: impl ExactSizeIterator<Item = SeedView<'seed>> + Clone,
         source_limits: lazy::Limits,
         limits: GpuLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<lazy::Batch, lazy::Failure<GpuError>> {
         self.check_batch_with_source_views(
             program,
@@ -225,7 +225,7 @@ impl GpuLazyOracle {
             source_limits,
             limits,
             lazy::SourceSelection::Union,
-            control,
+            cancellation,
         )
     }
 
@@ -242,7 +242,7 @@ impl GpuLazyOracle {
         source_limits: lazy::Limits,
         limits: GpuLimits,
         selection: lazy::SourceSelection,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<lazy::Batch, lazy::Failure<GpuError>> {
         self.statistics = LazyGpuStatistics::default();
         let context = self.runtime.context.clone();
@@ -250,7 +250,7 @@ impl GpuLazyOracle {
             cause: lazy::Cause::Execution(error),
             progress: lazy::Progress::default(),
         })?;
-        control.poll().map_err(|stop| lazy::Failure {
+        cancellation.poll().map_err(|stop| lazy::Failure {
             cause: lazy::Cause::Source(stop),
             progress: lazy::Progress::default(),
         })?;
@@ -264,8 +264,8 @@ impl GpuLazyOracle {
             seeds,
             source_limits,
             selection,
-            control,
-            |chunk| self.execute(chunk, limits, control, &mut transport),
+            cancellation,
+            |chunk| self.execute(chunk, limits, cancellation, &mut transport),
         );
         if matches!(
             &result,
@@ -293,7 +293,7 @@ impl GpuLazyOracle {
         &mut self,
         chunk: &lazy::Chunk<'_>,
         limits: GpuLimits,
-        control: &Control,
+        cancellation: &Cancellation,
         transport: &mut Option<Transport>,
     ) -> Result<Vec<u32>, GpuError> {
         self.runtime.check_health()?;
@@ -301,7 +301,7 @@ impl GpuLazyOracle {
         let plan = Plan::new(epoch, chunk, limits, self.runtime.limits())?;
         self.epoch = epoch.get();
         let scopes = ErrorScopes::new(self.runtime.device());
-        let outcome = self.dispatch(chunk, limits, &plan, control, transport);
+        let outcome = self.dispatch(chunk, limits, &plan, cancellation, transport);
         let result = self.runtime.complete(scopes, outcome);
         if result.is_err() {
             // Discard this transport after any failed read. A pending wait also
@@ -316,7 +316,7 @@ impl GpuLazyOracle {
         chunk: &lazy::Chunk<'_>,
         limits: GpuLimits,
         plan: &Plan,
-        control: &Control,
+        cancellation: &Cancellation,
         cached: &mut Option<Transport>,
     ) -> Result<runtime::Completion<Vec<u32>>, GpuError> {
         let device = self.runtime.device();
@@ -348,7 +348,7 @@ impl GpuLazyOracle {
             transport.readback(),
             submission,
             limits.timeout,
-            || control.poll().map_err(GpuError::interrupted),
+            || cancellation.poll().map_err(GpuError::interrupted),
             |words| plan.decode(words),
         );
         self.statistics.host_wait = self
@@ -446,7 +446,7 @@ mod tests {
     use crate::{GpuErrorKind, GpuLimits};
     use std::num::NonZeroU32;
     use zetesis_core::{AdmissionLimits, AtomPattern, Predicate, Program, Seed, Template};
-    use zetesis_cpu::{Control, lazy};
+    use zetesis_cpu::{Cancellation, lazy};
 
     pub(super) fn inspect(mut assertion: impl FnMut(&lazy::Chunk<'_>)) {
         let a = AtomPattern::new(Predicate::new("a", 0).unwrap(), vec![]).unwrap();
@@ -465,7 +465,7 @@ mod tests {
                     ..lazy::Limits::default()
                 },
                 selection,
-                &Control::default(),
+                &Cancellation::default(),
                 |chunk| {
                     assertion(chunk);
                     lazy::evaluate(chunk)

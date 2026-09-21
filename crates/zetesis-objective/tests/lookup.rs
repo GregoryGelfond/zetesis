@@ -4,7 +4,7 @@
 use zetesis_core::{
     Atom, AtomPattern, Model, Predicate, Sign, Term, Value, ValueLimits, ValueNode,
 };
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_objective::{
     AdmissionLimits, Condition, ConditionNode, ErrorKind, Limits, ObjectiveProgram,
     ObjectiveTemplate, Stop, evaluate,
@@ -84,14 +84,14 @@ fn predicate_windows_preserve_objective_contributions() {
         &program,
         &model(100),
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let large = evaluate(
         &program,
         &model(1_000),
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(small.score().costs(), &[(7, 10)]);
@@ -118,7 +118,7 @@ fn predicate_windows_retain_duplicate_eligibility() {
             &program(),
             &model(size),
             Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         assert_eq!(result.statistics().bindings, 10);
@@ -134,14 +134,14 @@ fn lookup_work_avoids_scanning_unrelated_predicates() {
         &program,
         &model(100),
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let large = evaluate(
         &program,
         &model(1_000),
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     // Ten times more unrelated atoms may deepen binary probes. They must not
@@ -153,8 +153,8 @@ fn lookup_work_avoids_scanning_unrelated_predicates() {
 fn every_work_cutoff_retains_the_exact_prefix_without_a_score() {
     let program = program();
     let model = model(8);
-    let control = Control::default();
-    let complete = evaluate(&program, &model, Limits::default(), &control).unwrap();
+    let cancellation = Cancellation::default();
+    let complete = evaluate(&program, &model, Limits::default(), &cancellation).unwrap();
     let exact = complete.statistics().work;
     for limit in 0..exact {
         let error = evaluate(
@@ -164,7 +164,7 @@ fn every_work_cutoff_retains_the_exact_prefix_without_a_score() {
                 max_work: limit,
                 ..Limits::default()
             },
-            &control,
+            &cancellation,
         )
         .unwrap_err();
         assert_eq!(error.kind(), ErrorKind::Stopped(Stop::WorkLimit));
@@ -177,7 +177,7 @@ fn every_work_cutoff_retains_the_exact_prefix_without_a_score() {
             max_work: exact,
             ..Limits::default()
         },
-        &control,
+        &cancellation,
     )
     .unwrap();
     assert_eq!(repeated.score(), complete.score());

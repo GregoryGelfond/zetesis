@@ -22,7 +22,7 @@ pub use themelios_program::symbol::{Name, Sign as SymbolSign, Symbol};
 pub use themelios_program::term::EvalError as EvaluationError;
 use themelios_program::term::{BinaryOp, UnaryOp};
 use zetesis_core::{Model, Predicate, Value};
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 
 pub(crate) use compile::compile;
 
@@ -442,13 +442,13 @@ impl ObservationProgram {
         &self,
         model: &Model,
         limits: Limits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Evaluation, Error> {
         self.evaluate_with_construction_limits(
             model,
             limits,
             ConstructionLimits::default(),
-            control,
+            cancellation,
         )
     }
     /// Evaluate with an explicit independent symbol-construction storage ceiling.
@@ -460,9 +460,9 @@ impl ObservationProgram {
         model: &Model,
         limits: Limits,
         construction: ConstructionLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Evaluation, Error> {
-        evaluate::evaluate(self, model, limits, construction, control)
+        evaluate::evaluate(self, model, limits, construction, cancellation)
     }
 
     /// Render selected original atoms plus distinct terms as one complete line.
@@ -475,14 +475,14 @@ impl ObservationProgram {
         model: &Model,
         selection: &crate::OutputSelection,
         limits: Limits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Rendered, Error> {
         self.render_with_construction_limits(
             model,
             selection,
             limits,
             ConstructionLimits::default(),
-            control,
+            cancellation,
         )
     }
     /// Render with an independent construction ceiling for observed terms.
@@ -496,9 +496,9 @@ impl ObservationProgram {
         selection: &crate::OutputSelection,
         limits: Limits,
         construction: ConstructionLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Rendered, Error> {
-        render::render(self, model, selection, limits, construction, control)
+        render::render(self, model, selection, limits, construction, cancellation)
     }
 }
 

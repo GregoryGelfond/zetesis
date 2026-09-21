@@ -3,7 +3,7 @@
 
 use std::{collections::BTreeSet, io, num::NonZeroUsize};
 
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     AnswerSelection, AnswerSet, Backend, Completion, ExecutionObservation, ExecutionObserver,
     ExecutionResources, Grounder, Oracle, PreparedInput, Session, SolveConfig, SolveError, Subject,
@@ -143,7 +143,7 @@ fn world_view_preserves_nonoptimal_answers(device: Device) {
     let world_view = Session::builder(
         PreparedInput::formula(&owner),
         config(device),
-        Control::default(),
+        Cancellation::default(),
     )
     .resources(&resources(device))
     .selection(AnswerSelection::Optimal)
@@ -207,7 +207,7 @@ fn collection_limit_retains_checked_accounting(device: Device) {
     let failure = Session::builder(
         PreparedInput::formula(&owner),
         config(device),
-        Control::default(),
+        Cancellation::default(),
     )
     .resources(&resources(device))
     .collect(WorldViewLimits {
@@ -278,7 +278,7 @@ fn collection_refuses_a_foreign_context(device: Device) {
             backend: device.foreign(),
             ..config(device)
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .resources(&resources(device))
     .collect(WorldViewLimits::default())
@@ -335,7 +335,7 @@ fn automatic_collection_retains_cpu_execution(device: Device) {
     let world_view = Session::builder(
         PreparedInput::admitted(&owner),
         lazy_config(Backend::Auto, device),
-        Control::default(),
+        Cancellation::default(),
     )
     .resources(&resources(device))
     .collect_observed(WorldViewLimits::default(), &mut observer)

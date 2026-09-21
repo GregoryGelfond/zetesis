@@ -1,4 +1,4 @@
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 use super::{
     AggregateBuild, AggregateComparison, AggregateElement, AggregateError, AggregateErrorKind,
@@ -11,12 +11,14 @@ type Result<T> = std::result::Result<T, AggregateErrorKind>;
 pub(super) struct Builder<'a> {
     nodes: &'a mut Vec<Node>,
     limits: AggregateLimits,
-    control: &'a Control,
+    cancellation: &'a Cancellation,
     statistics: AggregateStatistics,
 }
 impl Builder<'_> {
     pub(super) fn tick(&mut self) -> Result<()> {
-        self.control.poll().map_err(AggregateErrorKind::Control)?;
+        self.cancellation
+            .poll()
+            .map_err(AggregateErrorKind::Control)?;
         if self.statistics.work >= self.limits.max_work {
             return Err(AggregateErrorKind::WorkLimit);
         }
@@ -95,9 +97,9 @@ pub fn append_aggregate(
     comparison: AggregateComparison,
     bound: i64,
     limits: AggregateLimits,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> std::result::Result<AggregateBuild, AggregateError> {
-    transaction(nodes, limits, control, |builder| {
+    transaction(nodes, limits, cancellation, |builder| {
         compile(builder, elements, comparison, i128::from(bound))
     })
 }
@@ -105,10 +107,10 @@ pub fn append_aggregate(
 pub(super) fn transaction(
     nodes: &mut Vec<Node>,
     limits: AggregateLimits,
-    control: &Control,
+    cancellation: &Cancellation,
     compile: impl FnOnce(&mut Builder<'_>) -> Result<(usize, AggregateProfile)>,
 ) -> std::result::Result<AggregateBuild, AggregateError> {
-    transaction_value(nodes, limits, control, compile).map(|((root, profile), statistics)| {
+    transaction_value(nodes, limits, cancellation, compile).map(|((root, profile), statistics)| {
         AggregateBuild {
             root,
             profile,
@@ -120,14 +122,14 @@ pub(super) fn transaction(
 pub(super) fn transaction_value<T>(
     nodes: &mut Vec<Node>,
     limits: AggregateLimits,
-    control: &Control,
+    cancellation: &Cancellation,
     compile: impl FnOnce(&mut Builder<'_>) -> Result<T>,
 ) -> std::result::Result<(T, AggregateStatistics), AggregateError> {
     let original = nodes.len();
     let mut builder = Builder {
         nodes,
         limits,
-        control,
+        cancellation,
         statistics: AggregateStatistics::default(),
     };
     match compile(&mut builder) {

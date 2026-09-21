@@ -6,19 +6,19 @@ use std::time::Instant;
 
 use zetesis_cpu::Stop;
 use zetesis_ferraris::{AdmissionLimits, Interpretation, Node, Theory};
-use zetesis_sat::{Check, Control, Incomplete, Limits, StableModels, check};
+use zetesis_sat::{Cancellation, Check, Incomplete, Limits, StableModels, check};
 
 /// Enumerate by the clause forms, the subject of the tests below.
 fn by_clauses(
     theory: &zetesis_ferraris::Theory,
     limits: zetesis_sat::Limits,
-    control: zetesis_sat::Control,
+    cancellation: zetesis_sat::Cancellation,
 ) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
     zetesis_sat::StableModels::with_method(
         theory,
         zetesis_sat::SearchMethod::Clauses,
         limits,
-        control,
+        cancellation,
     )
 }
 
@@ -52,7 +52,8 @@ fn remaining(search: &mut StableModels) -> BTreeSet<Vec<usize>> {
 #[test]
 fn mismatched_restriction_error_does_not_consume_the_live_enumerator() {
     let original = choices();
-    let mut search = StableModels::new(&original, Limits::default(), Control::default()).unwrap();
+    let mut search =
+        StableModels::new(&original, Limits::default(), Cancellation::default()).unwrap();
     let wrong = Theory::new(1, vec![], vec![], AdmissionLimits::default()).unwrap();
     let before = search.statistics();
     let error = search.restrict_candidates(&wrong).unwrap_err();
@@ -83,7 +84,7 @@ fn late_restriction_capacity_error_keeps_its_cause_and_previous_model_block() {
     let mut limits = Limits::default();
     // Refuse the four-clause restriction itself, independently of history.
     limits.admission.max_clauses = 3;
-    let mut search = by_clauses(&original, limits, Control::default()).unwrap();
+    let mut search = by_clauses(&original, limits, Cancellation::default()).unwrap();
     assert_eq!(search.next().unwrap().unwrap().atoms().count(), 0);
     let guard = Theory::new(
         2,
@@ -122,7 +123,7 @@ fn independent_verification_and_foreign_candidate_failures_are_not_rejections() 
             max_verification_work: 0,
             ..Default::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
     ) else {
         panic!("verification must be incomplete")
     };
@@ -134,9 +135,12 @@ fn independent_verification_and_foreign_candidate_failures_are_not_rejections() 
     assert!(error.to_string().starts_with("independent verification:"));
     let other = choices();
     let foreign = Interpretation::new(&other, [0]).unwrap();
-    let Check::Inconclusive(error) =
-        check(&original, &foreign, Limits::default(), &Control::default())
-    else {
+    let Check::Inconclusive(error) = check(
+        &original,
+        &foreign,
+        Limits::default(),
+        &Cancellation::default(),
+    ) else {
         panic!("foreign candidate must be incomplete")
     };
     assert_eq!(error, Incomplete::WrongTheory);
@@ -146,7 +150,7 @@ fn independent_verification_and_foreign_candidate_failures_are_not_rejections() 
         &original,
         &candidate,
         Limits::default(),
-        &Control::with_deadline(Instant::now()).unwrap(),
+        &Cancellation::with_deadline(Instant::now()).unwrap(),
     ) else {
         panic!("deadline must be incomplete")
     };
@@ -157,7 +161,7 @@ fn independent_verification_and_foreign_candidate_failures_are_not_rejections() 
             &original,
             &candidate,
             Limits::default(),
-            &Control::default()
+            &Cancellation::default()
         )
         .accepted()
     );

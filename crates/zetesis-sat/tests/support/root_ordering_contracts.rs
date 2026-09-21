@@ -1,11 +1,11 @@
 //! Root assignments are omitted without losing any undecided variable or tie order.
 
 use crate::search::Budget;
-use crate::{Control, Incomplete, Literal, SearchLimits, SearchStatistics};
+use crate::{Cancellation, Incomplete, Literal, SearchLimits, SearchStatistics};
 
 #[test]
 fn partial_assignments_match_independent_unassigned_frequency_order() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     for code in 0..3_usize.pow(4) {
         let mut digits = code;
         let values: Vec<_> = (0..4)
@@ -42,7 +42,7 @@ fn partial_assignments_match_independent_unassigned_frequency_order() {
         let mut budget = Budget {
             quota: crate::search::LocalQuota,
             limits: SearchLimits::default(),
-            control: &control,
+            cancellation: &cancellation,
             statistics: SearchStatistics::default(),
         };
         assert_eq!(
@@ -57,7 +57,7 @@ fn partial_assignments_match_independent_unassigned_frequency_order() {
                     max_work: ceiling,
                     ..Default::default()
                 },
-                control: &control,
+                cancellation: &cancellation,
                 statistics: SearchStatistics::default(),
             };
             let result = super::variables(cnf.clauses(), &values, &mut budget);
@@ -73,13 +73,13 @@ fn partial_assignments_match_independent_unassigned_frequency_order() {
 
 #[test]
 fn all_root_assigned_variables_need_no_merge_work_and_still_poll_control() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     for count in [0, 1, 2, 128] {
         let values = vec![Some(false); count];
         let mut budget = Budget {
             quota: crate::search::LocalQuota,
             limits: SearchLimits::default(),
-            control: &control,
+            cancellation: &cancellation,
             statistics: SearchStatistics::default(),
         };
         assert!(
@@ -89,12 +89,12 @@ fn all_root_assigned_variables_need_no_merge_work_and_still_poll_control() {
         );
         assert_eq!(budget.statistics.work, u64::try_from(count * 2).unwrap());
     }
-    let cancelled = Control::default();
+    let cancelled = Cancellation::default();
     cancelled.cancel();
     let mut budget = Budget {
         quota: crate::search::LocalQuota,
         limits: SearchLimits::default(),
-        control: &cancelled,
+        cancellation: &cancelled,
         statistics: SearchStatistics::default(),
     };
     assert_eq!(

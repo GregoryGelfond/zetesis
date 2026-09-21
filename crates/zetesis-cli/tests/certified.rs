@@ -4,7 +4,7 @@ use std::io;
 use zetesis_cli::{
     Completion, Options, Oracle, Report, RunFailure, SolvePhase, run_detailed_with_diagnostics,
 };
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 fn options(oracle: Oracle, workers: usize) -> Options {
     let mut o =
@@ -30,9 +30,14 @@ fn options(oracle: Oracle, workers: usize) -> Options {
 fn solve(source: &str, o: &Options) -> (Report, String, String) {
     let mut out = Vec::new();
     let mut diag = Vec::new();
-    let r =
-        run_detailed_with_diagnostics(source.into(), o, &mut out, &mut diag, &Control::default())
-            .unwrap();
+    let r = run_detailed_with_diagnostics(
+        source.into(),
+        o,
+        &mut out,
+        &mut diag,
+        &Cancellation::default(),
+    )
+    .unwrap();
     (
         r,
         String::from_utf8(out).unwrap(),
@@ -152,7 +157,7 @@ fn early_requested_models_and_writer_failure_keep_unpublished_certified_models_e
         &o,
         &mut Broken,
         &mut Vec::new(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     let p = failure.partial_report.unwrap();

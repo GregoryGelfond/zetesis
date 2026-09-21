@@ -4,7 +4,7 @@
 use std::io;
 use std::num::NonZeroUsize;
 
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Interpretation;
 use zetesis_sat::{BatchVerdict, StableModels};
 
@@ -41,11 +41,11 @@ impl MembershipExecution for Injected {
         &mut self,
         models: &mut StableModels,
         options: &crate::SolveConfig,
-        control: &Control,
+        cancellation: &Cancellation,
         _: &Recorder,
     ) -> Option<Result<Interpretation, Failure>> {
         let mut queue = std::mem::take(&mut self.queue);
-        let result = queue.next(models, options, control, |batch| {
+        let result = queue.next(models, options, cancellation, |batch| {
             let verdicts = self.check(batch.candidates())?;
             batch.finish(verdicts).map_err(Failure::from)
         });
@@ -105,7 +105,7 @@ fn late_checker_failure_retains_the_checked_prefix() {
     let capture = run(
         &owner,
         &config(),
-        &Control::default(),
+        &Cancellation::default(),
         &mut Injected {
             fail_on: 2,
             ..Default::default()
@@ -134,7 +134,7 @@ fn checker_failure_retains_unyielded_incumbent_ties() {
     let capture = run(
         &owner,
         &config(),
-        &Control::default(),
+        &Cancellation::default(),
         &mut Injected {
             fail_on: 2,
             ..Default::default()
@@ -169,7 +169,7 @@ fn protocol_failure_retains_uncommitted_candidates() {
     let capture = run(
         &owner,
         &config,
-        &Control::default(),
+        &Cancellation::default(),
         &mut Injected {
             shape_on: 1,
             ..Default::default()
@@ -204,7 +204,7 @@ fn stopping_pulls_preserves_unconsumed_membership() {
         batch_size: NonZeroUsize::new(3).unwrap(),
         ..config()
     };
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let phases = Recorder::new(false);
     let mut execution = Injected::default();
     let mut session = crate::formula_session::FormulaSession::with_selection(
@@ -212,7 +212,7 @@ fn stopping_pulls_preserves_unconsumed_membership() {
         &mut execution,
         &config,
         &mut crate::execution_observation::Ignore,
-        &control,
+        &cancellation,
         &phases,
         crate::AnswerSelection::All,
     );
@@ -220,7 +220,7 @@ fn stopping_pulls_preserves_unconsumed_membership() {
         .next(
             &config,
             &mut crate::execution_observation::Ignore,
-            &control,
+            &cancellation,
             &phases,
         )
         .unwrap()
@@ -252,7 +252,7 @@ fn checker_failure_does_not_recount_completed_residuals() {
                 shape_on: if shape { 2 } else { 0 },
                 ..Default::default()
             };
-            let capture = run(&owner, &config, &Control::default(), &mut execution);
+            let capture = run(&owner, &config, &Cancellation::default(), &mut execution);
             let error = capture.error.as_ref().unwrap();
             if shape {
                 assert!(matches!(

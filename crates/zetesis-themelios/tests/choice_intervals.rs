@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use serde_json::Value as Json;
 use themelios_program::term::EvalError;
 use zetesis_core::{Atom, Model};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Node, Theory};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits,
@@ -75,7 +75,7 @@ fn record(admitted: &AdmittedFormula, mask: usize) -> Record {
             &model,
             admitted.metadata().output(),
             zetesis_themelios::observation::Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     // These fixtures have no whitespace inside a displayed atom.
@@ -89,7 +89,7 @@ fn record(admitted: &AdmittedFormula, mask: usize) -> Record {
         admitted.objectives(),
         &model,
         zetesis_objective::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     (

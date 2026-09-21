@@ -2,7 +2,7 @@
 
 use crate::search::{Budget, LocalQuota, SharedBudget, query};
 use crate::{
-    AdmissionLimits, Cnf, Control, Incomplete, Literal, SearchLimits, SearchStatistics, Solve,
+    AdmissionLimits, Cancellation, Cnf, Incomplete, Literal, SearchLimits, SearchStatistics, Solve,
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -21,19 +21,19 @@ fn outcome(result: Solve) -> Outcome {
 }
 
 fn compare_query(cnf: &Cnf, limits: SearchLimits, spent: SearchStatistics) -> SearchStatistics {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut local = Budget {
         quota: LocalQuota,
         limits,
-        control: &control,
+        cancellation: &cancellation,
         statistics: spent,
     };
     let expected = outcome(query(cnf, &mut local));
     let shared = SharedBudget::new(limits, spent);
     let mut worker = Budget {
-        quota: shared.lease(&control),
+        quota: shared.lease(&cancellation),
         limits,
-        control: &control,
+        cancellation: &cancellation,
         statistics: SearchStatistics::default(),
     };
     assert_eq!(outcome(query(cnf, &mut worker)), expected);
@@ -114,7 +114,7 @@ fn local_and_single_job_shared_queries_agree_at_every_small_work_and_decision_ce
 
 #[test]
 fn failed_decision_reserves_work_first_and_cancellation_precedes_either_quota() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let limits = SearchLimits {
         max_work: 2,
         max_decisions: 0,
@@ -122,14 +122,14 @@ fn failed_decision_reserves_work_first_and_cancellation_precedes_either_quota() 
     let mut local = Budget {
         quota: LocalQuota,
         limits,
-        control: &control,
+        cancellation: &cancellation,
         statistics: SearchStatistics::default(),
     };
     let shared = SharedBudget::new(limits, SearchStatistics::default());
     let mut worker = Budget {
-        quota: shared.lease(&control),
+        quota: shared.lease(&cancellation),
         limits,
-        control: &control,
+        cancellation: &cancellation,
         statistics: SearchStatistics::default(),
     };
     for remaining in [false, true] {
@@ -141,7 +141,7 @@ fn failed_decision_reserves_work_first_and_cancellation_precedes_either_quota() 
     }
     assert_eq!(local.decide(), Err(Incomplete::WorkLimit));
     assert_eq!(worker.decide(), Err(Incomplete::WorkLimit));
-    control.cancel();
+    cancellation.cancel();
     assert_eq!(local.tick(), Err(Incomplete::Cancelled));
     assert_eq!(worker.tick(), Err(Incomplete::Cancelled));
     assert_eq!(local.decide(), Err(Incomplete::Cancelled));
@@ -157,7 +157,7 @@ fn failed_decision_reserves_work_first_and_cancellation_precedes_either_quota() 
 
 #[test]
 fn cancellation_precedes_an_expired_deadline_and_exhausted_quotas() {
-    let control = Control::with_deadline(std::time::Instant::now()).unwrap();
+    let cancellation = Cancellation::with_deadline(std::time::Instant::now()).unwrap();
     let limits = SearchLimits {
         max_work: 0,
         max_decisions: 0,
@@ -165,19 +165,19 @@ fn cancellation_precedes_an_expired_deadline_and_exhausted_quotas() {
     let mut local = Budget {
         quota: LocalQuota,
         limits,
-        control: &control,
+        cancellation: &cancellation,
         statistics: SearchStatistics::default(),
     };
     let shared = SharedBudget::new(limits, SearchStatistics::default());
     let mut worker = Budget {
-        quota: shared.lease(&control),
+        quota: shared.lease(&cancellation),
         limits,
-        control: &control,
+        cancellation: &cancellation,
         statistics: SearchStatistics::default(),
     };
     assert_eq!(local.tick(), Err(Incomplete::Deadline));
     assert_eq!(worker.tick(), Err(Incomplete::Deadline));
-    control.clone().cancel();
+    cancellation.clone().cancel();
     assert_eq!(local.decide(), Err(Incomplete::Cancelled));
     assert_eq!(worker.decide(), Err(Incomplete::Cancelled));
     assert_eq!(local.statistics, SearchStatistics::default());
@@ -190,7 +190,7 @@ fn cancellation_precedes_an_expired_deadline_and_exhausted_quotas() {
 
 #[test]
 fn the_last_representable_local_or_shared_charge_never_wraps() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let limits = SearchLimits {
         max_work: u64::MAX,
         max_decisions: u64::MAX,
@@ -204,13 +204,13 @@ fn the_last_representable_local_or_shared_charge_never_wraps() {
     let mut local = Budget {
         quota: LocalQuota,
         limits,
-        control: &control,
+        cancellation: &cancellation,
         statistics: spent,
     };
     let mut worker = Budget {
-        quota: shared.lease(&control),
+        quota: shared.lease(&cancellation),
         limits,
-        control: &control,
+        cancellation: &cancellation,
         statistics: SearchStatistics::default(),
     };
     assert_eq!(local.decide(), Ok(()));
@@ -246,7 +246,7 @@ fn frozen_encoding_limits_and_clauses_match_before_search() {
         zetesis_ferraris::AdmissionLimits::default(),
     )
     .unwrap();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     for bits in 0..4 {
         let candidate =
             Interpretation::new(&theory, (0..2).filter(|atom| bits & (1 << atom) != 0)).unwrap();
@@ -259,14 +259,14 @@ fn frozen_encoding_limits_and_clauses_match_before_search() {
                 let mut local = Budget {
                     quota: LocalQuota,
                     limits,
-                    control: &control,
+                    cancellation: &cancellation,
                     statistics: SearchStatistics::default(),
                 };
                 let shared = SharedBudget::new(limits, SearchStatistics::default());
                 let mut worker = Budget {
-                    quota: shared.lease(&control),
+                    quota: shared.lease(&cancellation),
                     limits,
-                    control: &control,
+                    cancellation: &cancellation,
                     statistics: SearchStatistics::default(),
                 };
                 let expected = crate::encoding::encode(

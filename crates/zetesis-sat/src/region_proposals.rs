@@ -25,7 +25,7 @@ use super::regions::{
     self, IndexedTheory, RegionCounts, RegionFrontierStatistics, RegionSearchStatistics,
 };
 use crate::search::{Budget, SharedBudget, WorkLease};
-use crate::{Control, Incomplete, SearchStatistics};
+use crate::{Cancellation, Incomplete, SearchStatistics};
 
 /// Idle producers poll control while another producer owns the last region.
 const CONTROL_WAIT: Duration = Duration::from_millis(1);
@@ -237,7 +237,7 @@ impl RegionProposals {
             restrictions: &self.restrictions,
             allowance: &allowance,
             limits: budget.limits,
-            control: budget.control,
+            cancellation: budget.cancellation,
             maximum: maximum.min(usize::try_from(remaining).unwrap_or(usize::MAX).max(1)),
             remaining,
             changed: Condvar::new(),
@@ -297,7 +297,7 @@ struct Round<'a> {
     restrictions: &'a [(Theory, Narrower)],
     allowance: &'a SharedBudget,
     limits: crate::SearchLimits,
-    control: &'a Control,
+    cancellation: &'a Cancellation,
     maximum: usize,
     remaining: u64,
     changed: Condvar,
@@ -326,7 +326,7 @@ impl Round<'_> {
             if state.stopped.is_some() || state.output.len() == self.maximum {
                 return None;
             }
-            if let Err(error) = self.control.poll() {
+            if let Err(error) = self.cancellation.poll() {
                 state.stopped.get_or_insert(error.into());
                 self.changed.notify_all();
                 return None;
@@ -358,9 +358,9 @@ impl Round<'_> {
             // an idle producer must not strand another worker's allowance.
             let result = {
                 let mut budget = Budget {
-                    quota: self.allowance.lease(self.control),
+                    quota: self.allowance.lease(self.cancellation),
                     limits: self.limits,
-                    control: self.control,
+                    cancellation: self.cancellation,
                     statistics: SearchStatistics::default(),
                 };
                 self.step(&mut entry, &mut budget, &mut counts)

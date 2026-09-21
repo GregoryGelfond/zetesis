@@ -3,7 +3,7 @@
 use std::fmt::Write;
 
 use serde::Serialize;
-use zetesis_sat::{Control, StableModels, Statistics};
+use zetesis_sat::{Cancellation, StableModels, Statistics};
 use zetesis_themelios::AdmittedFormulaBundle;
 
 use super::{Configuration, Error, storage};
@@ -58,7 +58,7 @@ fn enumerate_into(
     retained: &mut Models,
 ) -> Result<(), Error> {
     retained.interpretations = storage::reserve(config.capture.max_models)?;
-    let mut search = StableModels::new(subject.theory(), config.search, Control::default())
+    let mut search = StableModels::new(subject.theory(), config.search, Cancellation::default())
         .map_err(Error::Search)?;
     let outcome = search
         .enable_certified_checking(config.certificate)

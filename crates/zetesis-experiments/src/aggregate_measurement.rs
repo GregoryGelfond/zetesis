@@ -11,7 +11,7 @@ mod run;
 mod view;
 
 pub use config::{Case, Configuration, Function, Options};
-pub use run::{measure, measure_with_control};
+pub use run::{measure, measure_with_cancellation};
 use std::{fmt, io};
 pub use view::{
     Activity, DeviceWork, Evaluation, Event, Observation, Outcome, Phase, Preparation, Route,

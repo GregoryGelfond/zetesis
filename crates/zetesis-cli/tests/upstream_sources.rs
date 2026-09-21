@@ -4,7 +4,7 @@ use clap::Parser;
 use serde_json::Value;
 use std::path::Path;
 use zetesis_cli::{Completion, Options, run_detailed_with_diagnostics};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_validation::curated::{self, Limits};
 
 #[test]
@@ -126,7 +126,7 @@ fn replay<'a>(
                 &options,
                 &mut output,
                 &mut diagnostics,
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap_or_else(|error| panic!("{} via {oracle}: {error}", case.id));
             assert_eq!(report.completion, Completion::Exhausted);

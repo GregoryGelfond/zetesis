@@ -2,13 +2,15 @@
 //! dequeued occurrence and every visited clause before publishing deductions.
 
 use super::{Budget, LocalQuota, State};
-use crate::{AdmissionLimits, Cnf, Control, Incomplete, Literal, SearchLimits, SearchStatistics};
+use crate::{
+    AdmissionLimits, Cancellation, Cnf, Incomplete, Literal, SearchLimits, SearchStatistics,
+};
 
-fn budget(control: &Control) -> Budget<'_> {
+fn budget(cancellation: &Cancellation) -> Budget<'_> {
     Budget {
         quota: LocalQuota,
         limits: SearchLimits::default(),
-        control,
+        cancellation,
         statistics: SearchStatistics::default(),
     }
 }
@@ -25,8 +27,8 @@ fn binary() -> Cnf {
 #[test]
 fn binary_propagation_fits_its_exact_work_ceiling() {
     let cnf = binary();
-    let control = Control::default();
-    let mut charged = budget(&control);
+    let cancellation = Cancellation::default();
+    let mut charged = budget(&cancellation);
     let mut state = State::new(&cnf, &mut charged).unwrap();
     assert!(state.initialize(&cnf, &mut charged).unwrap());
     assert!(state.assign(Literal::new(0, false)));
@@ -43,8 +45,8 @@ fn binary_propagation_fits_its_exact_work_ceiling() {
 #[test]
 fn binary_propagation_stops_before_an_unpaid_dequeue() {
     let cnf = binary();
-    let control = Control::default();
-    let mut charged = budget(&control);
+    let cancellation = Cancellation::default();
+    let mut charged = budget(&cancellation);
     let mut state = State::new(&cnf, &mut charged).unwrap();
     assert!(state.initialize(&cnf, &mut charged).unwrap());
     assert!(state.assign(Literal::new(0, false)));
@@ -64,8 +66,8 @@ fn binary_propagation_stops_before_an_unpaid_dequeue() {
 #[test]
 fn an_unpaid_binary_watch_cannot_assign_its_other_literal() {
     let cnf = binary();
-    let control = Control::default();
-    let mut charged = budget(&control);
+    let cancellation = Cancellation::default();
+    let mut charged = budget(&cancellation);
     let mut state = State::new(&cnf, &mut charged).unwrap();
     assert!(state.initialize(&cnf, &mut charged).unwrap());
     assert!(state.assign(Literal::new(0, false)));
@@ -81,13 +83,13 @@ fn an_unpaid_binary_watch_cannot_assign_its_other_literal() {
 #[test]
 fn cancellation_precedes_the_binary_fast_path() {
     let cnf = binary();
-    let control = Control::default();
-    let mut charged = budget(&control);
+    let cancellation = Cancellation::default();
+    let mut charged = budget(&cancellation);
     let mut state = State::new(&cnf, &mut charged).unwrap();
     assert!(state.initialize(&cnf, &mut charged).unwrap());
     assert!(state.assign(Literal::new(0, false)));
     let before = charged.statistics;
-    control.cancel();
+    cancellation.cancel();
     assert_eq!(
         state.propagate(&cnf, &mut charged),
         Err(Incomplete::Cancelled)
@@ -100,8 +102,8 @@ fn cancellation_precedes_the_binary_fast_path() {
 #[test]
 fn a_false_binary_clause_conflicts_at_its_watch_visit() {
     let cnf = binary();
-    let control = Control::default();
-    let mut charged = budget(&control);
+    let cancellation = Cancellation::default();
+    let mut charged = budget(&cancellation);
     let mut state = State::new(&cnf, &mut charged).unwrap();
     assert!(state.initialize(&cnf, &mut charged).unwrap());
     assert!(state.assign(Literal::new(0, false)));
@@ -121,8 +123,8 @@ fn a_third_literal_remains_a_replacement_candidate() {
         AdmissionLimits::default(),
     )
     .unwrap();
-    let control = Control::default();
-    let mut charged = budget(&control);
+    let cancellation = Cancellation::default();
+    let mut charged = budget(&cancellation);
     let mut state = State::new(&cnf, &mut charged).unwrap();
     assert!(state.initialize(&cnf, &mut charged).unwrap());
     assert!(state.assign(Literal::new(0, false)));

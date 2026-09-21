@@ -50,7 +50,7 @@ pub(super) fn build(
     theory: &Theory,
     budget: &mut Budget<'_>,
 ) -> Result<(Interpretation, Option<usize>), PositiveError> {
-    budget.control.poll()?;
+    budget.cancellation.poll()?;
     let headers = size_of::<PositivePlan>()
         + size_of::<Graph>()
         + size_of::<Vec<Kind>>()

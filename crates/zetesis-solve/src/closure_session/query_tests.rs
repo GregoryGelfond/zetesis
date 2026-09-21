@@ -3,7 +3,7 @@
 use std::{num::NonZeroUsize, sync::Arc};
 
 use zetesis_core::{AdmissionLimits, Atom, AtomPattern, Predicate, Program, Template};
-use zetesis_cpu::{BatchError, Control, Stop};
+use zetesis_cpu::{BatchError, Cancellation, Stop};
 
 use super::ClosureSession;
 use crate::{
@@ -38,7 +38,7 @@ fn program(choice: bool) -> Program {
 fn checked_prefix<'a>(
     program: &'a Program,
     config: &SolveConfig,
-    control: &Control,
+    cancellation: &Cancellation,
     phases: &Recorder,
 ) -> ClosureSession<'a> {
     let mut session = ClosureSession::with_resources(
@@ -47,11 +47,11 @@ fn checked_prefix<'a>(
         config,
         &ExecutionResources::default(),
         &mut Ignore,
-        control,
+        cancellation,
         phases,
     )
     .unwrap();
-    let answer = session.next(config, control, phases).unwrap().unwrap();
+    let answer = session.next(config, cancellation, phases).unwrap().unwrap();
     assert_eq!(
         answer.atoms().iter().cloned().collect::<Vec<_>>(),
         vec![Atom::new(Predicate::new("a", 0).unwrap(), vec![]).unwrap()]
@@ -64,7 +64,7 @@ fn checked_prefix<'a>(
 fn fail_snapshot(
     session: &mut ClosureSession<'_>,
     config: &SolveConfig,
-    control: &Control,
+    cancellation: &Cancellation,
     phases: &Recorder,
 ) {
     // Exercise only the private notification/state seam after real membership
@@ -72,14 +72,17 @@ fn fail_snapshot(
     // fabricate candidate work, preparation or ownership receipts.
     let fault = Arc::new(BatchError::Busy);
     session.pending_query_fault = Some(Arc::clone(&fault));
-    let error = session.next(config, control, phases).unwrap().unwrap_err();
+    let error = session
+        .next(config, cancellation, phases)
+        .unwrap()
+        .unwrap_err();
     let SolveError::QueryObservation(original) = error else {
         panic!("lost snapshot cause");
     };
     assert!(Arc::ptr_eq(&original, &fault));
     assert_eq!(session.outcome().verified_models(), 1);
     assert_eq!(session.outcome().candidate_progress(), 1);
-    assert!(session.next(config, control, phases).is_none());
+    assert!(session.next(config, cancellation, phases).is_none());
 }
 
 #[test]
@@ -98,9 +101,9 @@ fn snapshot_failure_preserves_known_search_state() {
             ..Default::default()
         };
         let owner = program(expected != SearchState::Exhausted);
-        let control = Control::default();
+        let cancellation = Cancellation::default();
         let phases = Recorder::new(false);
-        let mut session = checked_prefix(&owner, &config, &control, &phases);
+        let mut session = checked_prefix(&owner, &config, &cancellation, &phases);
         match expected {
             SearchState::Exhausted => {
                 assert!(session.candidates.next_selection().is_none());
@@ -114,7 +117,7 @@ fn snapshot_failure_preserves_known_search_state() {
             SearchState::RequestedModels => {}
             _ => unreachable!("the finite cases above contain only these states"),
         }
-        fail_snapshot(&mut session, &config, &control, &phases);
+        fail_snapshot(&mut session, &config, &cancellation, &phases);
         assert_eq!(session.outcome().search_state(), Some(expected));
     }
 }
@@ -129,11 +132,11 @@ fn snapshot_failure_does_not_infer_coverage() {
         ..Default::default()
     };
     let owner = program(true);
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let phases = Recorder::new(false);
-    let mut session = checked_prefix(&owner, &config, &control, &phases);
+    let mut session = checked_prefix(&owner, &config, &cancellation, &phases);
     assert!(session.candidates.termination().is_none());
-    fail_snapshot(&mut session, &config, &control, &phases);
+    fail_snapshot(&mut session, &config, &cancellation, &phases);
     assert!(session.outcome().search_state().is_none());
     assert!(session.outcome().completion().is_none());
 }

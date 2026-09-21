@@ -232,16 +232,31 @@ checking its identity; it does not collect a `WorldView` or bypass that type's
 retention limits. This demonstrates completed enumeration within the ordinary
 allowances, not a running-time guarantee or a change to answer-set semantics.
 
-`Control` is cloneable shared cancellation with an optional absolute deadline.
-Cancellation is observed at cooperative polling boundaries, not by forcibly
-terminating arbitrary work. A deadline is observed the same way: a control
-armed with one owns a timer thread that sets an expiry flag at the deadline
-and retires then or when the last clone drops, and a poll reads two flags
-and never the clock. In particular, an already-started bounded static
-compilation is not preemptible; session setup polls before it and subsequent
-work polls again. A deadline is therefore not a hard process-kill guarantee.
+### Cancellation and deadlines
 
-The installed CLI maps `--time-limit SECONDS` to this existing `Control`.
+[`zetesis_cpu::Cancellation`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/cancellation.rs)
+carries shared cancellation and an optional absolute deadline. `Session` owns
+solving; callers pass this value to the session and can cancel it through a clone.
+`Cancellation::default()` sets no deadline. `with_deadline(Instant)` can fail if
+the timer thread cannot be started; an already expired deadline starts no thread.
+Clones observe the same flags, and `poll()` reports `Stop::Cancelled` before
+`Stop::Deadline` when both apply.
+
+Cancellation is observed at cooperative polling boundaries, not by forcibly
+terminating arbitrary work. A future deadline owns a timer that sets an expiry
+flag and retires then or when the last clone drops. Polling reads shared flags
+without reading the clock. An already-started bounded static compilation is not
+preemptible; session setup polls before it and subsequent work polls again. A
+deadline is therefore not a hard process-kill guarantee.
+
+For Rust consumers migrating from the previous API, `Cancellation` replaces
+`Control`, and operations named `with_control` or ending in `_with_control` now
+use `with_cancellation` or `_with_cancellation`. Update imports and calls; no
+compatibility alias is retained. The cancellation/deadline behavior is unchanged.
+Typed interruption variants named `Control` that wrap broader stop reasons,
+and existing serialized control codes, keep their own meaning.
+
+The installed CLI maps `--time-limit SECONDS` to this `Cancellation`.
 The duration is a nonnegative whole number of seconds, measured from completion
 of input loading. Zero requests an immediate stop; omission sets no deadline.
 `--stats` reports the requested process duration. A deadline during search leaves
@@ -249,8 +264,8 @@ its coverage incomplete. A later deadline during publication preserves already
 established coverage. Either stop exits with code 3, in both human and JSON output.
 Input, device and output errors remain distinct failures. Source loading,
 frontend operations, blocking output and a running device kernel are not
-preempted. Rust library consumers construct and supply their own `Control`;
-the process option does not replace an explicitly supplied library control.
+preempted. Rust library consumers construct and supply their own `Cancellation`;
+the process option does not replace an explicitly supplied library value.
 
 Admission limits also do not retroactively bound vectors constructed by the
 caller. A documented logical payload budget excludes what its contract names,

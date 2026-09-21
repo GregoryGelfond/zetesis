@@ -9,7 +9,7 @@ use std::{hint::black_box, time::Duration};
 
 use criterion::{BenchmarkId, Criterion, Throughput};
 use zetesis_core::Value as Term;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, AggregateComparison as Comparison, AggregateElement, AggregateExtremum,
     AggregateLimits, Interpretation, Node, Theory, ValueExtremumElement, append_aggregate,
@@ -33,7 +33,7 @@ struct Fixture {
     group: Group,
     lowered: Theory,
     worlds: Vec<Worlds>,
-    control: Control,
+    cancellation: Cancellation,
 }
 
 fn original() -> Theory {
@@ -102,7 +102,7 @@ fn retained_group(theory: &Theory, function: Function, count: usize, bound: i32)
         tuples,
         vec![guard],
         native::AdmissionLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap()
 }
@@ -115,7 +115,7 @@ fn fixture(function: Function, count: usize) -> Fixture {
     };
     let group = retained_group(&theory, function, count, threshold);
     let lowered = lower(&group, threshold);
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut worlds = Vec::new();
     let mut acquisition_work = 0;
     let mut reduction_work = 0;
@@ -130,7 +130,7 @@ fn fixture(function: Function, count: usize) -> Fixture {
                     &lowered,
                     &lowered_candidate,
                     zetesis_ferraris::Limits::default(),
-                    &control,
+                    &cancellation,
                 )
                 .unwrap(),
                 models_reduct(
@@ -138,7 +138,7 @@ fn fixture(function: Function, count: usize) -> Fixture {
                     &lowered_candidate,
                     &lowered_tested,
                     zetesis_ferraris::Limits::default(),
-                    &control,
+                    &cancellation,
                 )
                 .unwrap(),
             );
@@ -147,11 +147,11 @@ fn fixture(function: Function, count: usize) -> Fixture {
                     &candidate,
                     Some(&tested),
                     native::EligibilityLimits::default(),
-                    &control,
+                    &cancellation,
                 )
                 .unwrap();
             let result = acquired
-                .reduce(native::ReductionLimits::default(), &control)
+                .reduce(native::ReductionLimits::default(), &cancellation)
                 .unwrap();
             assert_eq!(
                 (result.original().holds(), result.reduct_truth().unwrap()),
@@ -189,7 +189,7 @@ fn fixture(function: Function, count: usize) -> Fixture {
         group,
         lowered,
         worlds,
-        control,
+        cancellation,
     }
 }
 
@@ -221,7 +221,7 @@ fn lower(group: &Group, bound: i32) -> Theory {
                 Comparison::Ge,
                 &Term::Number(bound),
                 AggregateLimits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap()
             .root()
@@ -251,7 +251,7 @@ fn lower(group: &Group, bound: i32) -> Theory {
                 Comparison::Ge,
                 i64::from(bound),
                 AggregateLimits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap()
             .root()
@@ -276,7 +276,7 @@ impl Fixture {
                     &world.original,
                     Some(&world.frozen),
                     native::ReductionLimits::default(),
-                    &self.control,
+                    &self.cancellation,
                 )
                 .unwrap();
             (result.original().holds(), result.reduct_truth().unwrap())
@@ -292,11 +292,11 @@ impl Fixture {
                     &world.candidate,
                     Some(&world.tested),
                     native::EligibilityLimits::default(),
-                    &self.control,
+                    &self.cancellation,
                 )
                 .unwrap();
             let result = acquired
-                .reduce(native::ReductionLimits::default(), &self.control)
+                .reduce(native::ReductionLimits::default(), &self.cancellation)
                 .unwrap();
             (result.original().holds(), result.reduct_truth().unwrap())
         })
@@ -310,7 +310,7 @@ impl Fixture {
                     &self.lowered,
                     &world.lowered_candidate,
                     zetesis_ferraris::Limits::default(),
-                    &self.control,
+                    &self.cancellation,
                 )
                 .unwrap(),
                 models_reduct(
@@ -318,7 +318,7 @@ impl Fixture {
                     &world.lowered_candidate,
                     &world.lowered_tested,
                     zetesis_ferraris::Limits::default(),
-                    &self.control,
+                    &self.cancellation,
                 )
                 .unwrap(),
             )

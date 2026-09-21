@@ -10,7 +10,7 @@ use std::fmt::Write as _;
 
 use cases::CASES;
 use reference::{Models, atom_text, exhaustive, external, holds, native, values};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, CountPlanLimits, CountPlanStatus, ExpansionFailure,
     ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource,
@@ -155,7 +155,7 @@ fn optional_planning_declines_nonbijective_groups() {
             FormulaLimits::default(),
         )
         .unwrap()
-        .ground_with_count_plan(CountPlanLimits::default(), &Control::default(), None)
+        .ground_with_count_plan(CountPlanLimits::default(), &Cancellation::default(), None)
         .unwrap();
         assert!(
             matches!(planned.count_plan(), CountPlanStatus::NoPlan(_)),
@@ -181,7 +181,7 @@ fn alias_groups_preserve_other_count_certificates() {
         FormulaLimits::default(),
     )
     .unwrap()
-    .ground_with_count_plan(CountPlanLimits::default(), &Control::default(), None)
+    .ground_with_count_plan(CountPlanLimits::default(), &Cancellation::default(), None)
     .unwrap();
     let CountPlanStatus::Ready(plan) = planned.count_plan() else {
         panic!("the original disjoint atom partition remains applicable");

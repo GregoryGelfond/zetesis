@@ -2,7 +2,7 @@
 
 use clap::Parser;
 use zetesis_cli::{Completion, Options, run_with_diagnostics};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 fn options(arguments: &[&str]) -> Options {
     let mut selected =
@@ -17,8 +17,8 @@ fn options(arguments: &[&str]) -> Options {
 
 #[test]
 fn lazy_device_cancellation_precedes_adapter_initialization() {
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     let mut output = Vec::new();
     let mut diagnostics = Vec::new();
     let report = run_with_diagnostics(
@@ -26,7 +26,7 @@ fn lazy_device_cancellation_precedes_adapter_initialization() {
         &options(&["--backend", "metal", "--stats"]),
         &mut output,
         &mut diagnostics,
-        &control,
+        &cancellation,
     )
     .unwrap();
     assert_eq!(report.completion, Completion::Interrupted);
@@ -42,7 +42,7 @@ fn cpu_lazy_reports_no_device_execution() {
         &options(&["--backend", "cpu", "--stats", "--json"]),
         &mut output,
         &mut Vec::new(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(report.completion, Completion::Exhausted);
@@ -65,7 +65,7 @@ fn physical_fixtures_belong_to_the_lazy_source_profile() {
             &options(&["--backend", "cpu", "--json"]),
             &mut Vec::new(),
             &mut Vec::new(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         assert_eq!(report.completion, Completion::Exhausted);
@@ -79,7 +79,7 @@ mod physical_backend;
 #[cfg(feature = "gpu")]
 mod physical {
     use super::physical_backend::Backend;
-    use super::{Completion, Control, options, run_with_diagnostics};
+    use super::{Cancellation, Completion, options, run_with_diagnostics};
     use zetesis_cli::{Interruption, RunError};
     use zetesis_cpu::Stop;
 
@@ -114,7 +114,7 @@ mod physical {
                 &selected,
                 &mut output,
                 &mut diagnostics,
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
             let actual: serde_json::Value = serde_json::from_slice(&output).unwrap();
@@ -145,7 +145,7 @@ mod physical {
             &options(arguments),
             &mut output,
             &mut diagnostics,
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         (
@@ -373,7 +373,7 @@ mod physical {
             ]),
             &mut BrokenWriter,
             &mut Vec::new(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
         assert!(matches!(*error.cause, RunError::Output(_)));

@@ -216,8 +216,9 @@ fn run_input(
     output: &mut impl Write,
     diagnostics: &mut Diagnostics<impl Write>,
 ) -> Result<PublicationOutcome, RunFailure> {
-    let (input, control) = match load_input(options).and_then(|input| {
-        process_control(options.time_limit, Instant::now()).map(|control| (input, control))
+    let (input, cancellation) = match load_input(options).and_then(|input| {
+        process_cancellation(options.time_limit, Instant::now())
+            .map(|cancellation| (input, cancellation))
     }) {
         Ok(input) => input,
         Err(error) => {
@@ -230,24 +231,35 @@ fn run_input(
         }
     };
     let result = match input {
-        Input::Source(source) => {
-            crate::driver::run_source_with_writer(source, options, output, diagnostics, &control)
-        }
-        Input::Bundle(bundle) => {
-            crate::driver::run_bundle_with_writer(bundle, options, output, diagnostics, &control)
-        }
+        Input::Source(source) => crate::driver::run_source_with_writer(
+            source,
+            options,
+            output,
+            diagnostics,
+            &cancellation,
+        ),
+        Input::Bundle(bundle) => crate::driver::run_bundle_with_writer(
+            bundle,
+            options,
+            output,
+            diagnostics,
+            &cancellation,
+        ),
     };
     result.map_err(crate::PublicationFailure::into_legacy)
 }
 
-fn process_control(seconds: Option<u64>, start: Instant) -> Result<zetesis_cpu::Control, RunError> {
+fn process_cancellation(
+    seconds: Option<u64>,
+    start: Instant,
+) -> Result<zetesis_cpu::Cancellation, RunError> {
     let Some(seconds) = seconds else {
-        return Ok(zetesis_cpu::Control::default());
+        return Ok(zetesis_cpu::Cancellation::default());
     };
     let deadline = start
         .checked_add(Duration::from_secs(seconds))
         .ok_or(RunError::TimeLimitRange { seconds })?;
-    zetesis_cpu::Control::with_deadline(deadline).map_err(RunError::DeadlineTimer)
+    zetesis_cpu::Cancellation::with_deadline(deadline).map_err(RunError::DeadlineTimer)
 }
 
 enum Input {

@@ -25,6 +25,8 @@ representations. A representation name does not confer a semantic property.
 | A statistics record; an admission's usage; a receipt | `RegionCounts` and its kin; `ExpansionUsage`; a `receipt` in `zetesis-core` is a value proving an operation completed | None |
 | This solver's run and the reference solver | `native` and `reference` in the series view; clingo is the tool filling the reference's role | None |
 | A requested solver configuration | a validation `profile`, a request for a `SolveConfig` | None |
+| An ongoing solve | `zetesis_solve::Session` owns search and membership execution | Membership and coverage laws describe its semantic obligations |
+| Cooperative cancellation and a deadline | `zetesis_cpu::Cancellation` carries shared cancellation and an optional absolute deadline | Stopped coverage remains distinct from exhaustion |
 
 An ordinary Rust `Model` is an atom collection, not by itself a sealed
 answer-set certificate. Likewise, a `Check` value describing a decision should

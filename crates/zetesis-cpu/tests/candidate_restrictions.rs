@@ -2,8 +2,8 @@
 use std::collections::BTreeSet;
 use zetesis_core::{AdmissionLimits, Atom, AtomPattern, Predicate, Program, Template, Term, Value};
 use zetesis_cpu::{
-    CandidateLimits, CandidateRestrictionLimits, CandidateTermination, Candidates, Control, Limits,
-    Stop, check,
+    Cancellation, CandidateLimits, CandidateRestrictionLimits, CandidateTermination, Candidates,
+    Limits, Stop, check,
 };
 
 fn atom(name: &str, terms: Vec<Term>) -> AtomPattern {
@@ -27,7 +27,7 @@ fn restricted(program: &Program) -> Candidates<'_> {
         program,
         CandidateLimits::default(),
         CandidateRestrictionLimits::default(),
-        Control::default(),
+        Cancellation::default(),
     )
 }
 fn path(size: i32) -> Program {
@@ -53,7 +53,7 @@ fn answer_sets(program: &Program, candidates: Candidates<'_>) -> BTreeSet<Vec<At
                 program,
                 &seed.unwrap(),
                 Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap()
         })
@@ -73,7 +73,7 @@ fn path_constraints_reduce_eight_node_seeds_to_fifty_five() {
                 &source,
                 &seed.unwrap(),
                 Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
             assert!(checked.accepted());
@@ -87,7 +87,7 @@ fn path_constraints_reduce_eight_node_seeds_to_fifty_five() {
     );
     assert!(candidates.statistics().conflicts > 0);
     assert_eq!(
-        Candidates::new(&source, CandidateLimits::default(), Control::default()).count(),
+        Candidates::new(&source, CandidateLimits::default(), Cancellation::default()).count(),
         256
     );
 }
@@ -98,7 +98,7 @@ fn restricted_path_enumeration_preserves_every_answer_set() {
         let source = path(size);
         let complete = answer_sets(
             &source,
-            Candidates::new(&source, CandidateLimits::default(), Control::default()),
+            Candidates::new(&source, CandidateLimits::default(), Cancellation::default()),
         );
         assert_eq!(
             answer_sets(&source, restricted(&source)),
@@ -118,7 +118,7 @@ fn candidate_bound_counts_only_returned_seeds() {
             ..CandidateLimits::default()
         },
         CandidateRestrictionLimits::default(),
-        Control::default(),
+        Cancellation::default(),
     );
     assert_eq!(candidates.by_ref().map(Result::unwrap).count(), 55);
     assert_eq!(
@@ -137,7 +137,7 @@ fn restriction_work_stop_does_not_claim_exhaustion() {
             max_work: 1,
             ..CandidateRestrictionLimits::default()
         },
-        Control::default(),
+        Cancellation::default(),
     );
     assert!(matches!(candidates.next(), Some(Err(Stop::WorkLimit))));
     assert_eq!(candidates.statistics().restriction_work, 1);
@@ -166,7 +166,7 @@ fn candidate_bound_zero_is_not_unsatisfiability() {
             ..CandidateLimits::default()
         },
         CandidateRestrictionLimits::default(),
-        Control::default(),
+        Cancellation::default(),
     );
     assert!(matches!(candidates.next(), Some(Err(Stop::CandidateLimit))));
     assert_eq!(
@@ -200,7 +200,7 @@ fn possible_support_is_not_an_unconditional_fact() {
         answer_sets(&source, restricted(&source)),
         answer_sets(
             &source,
-            Candidates::new(&source, CandidateLimits::default(), Control::default())
+            Candidates::new(&source, CandidateLimits::default(), Cancellation::default())
         )
     );
 }
@@ -272,10 +272,10 @@ fn every_small_positive_constraint_family_keeps_exact_seed_order() {
             .map(|seed| seed.unwrap().atoms().clone())
             .collect();
         let expected: Vec<_> =
-            Candidates::new(&source, CandidateLimits::default(), Control::default())
+            Candidates::new(&source, CandidateLimits::default(), Cancellation::default())
                 .map(Result::unwrap)
                 .filter(|seed| {
-                    check(&source, seed, Limits::default(), &Control::default())
+                    check(&source, seed, Limits::default(), &Cancellation::default())
                         .unwrap()
                         .accepted()
                 })
@@ -353,25 +353,30 @@ fn facts_of_gate_predicates_do_not_change_seed_identity() {
     assert_eq!(seeds.len(), 1);
     assert!(seeds[0].atoms().is_empty());
     assert!(
-        !check(&source, &seeds[0], Limits::default(), &Control::default())
-            .unwrap()
-            .accepted()
+        !check(
+            &source,
+            &seeds[0],
+            Limits::default(),
+            &Cancellation::default()
+        )
+        .unwrap()
+        .accepted()
     );
 }
 
 #[test]
 fn cancellation_after_preparation_retains_incomplete_coverage() {
     let source = path(4);
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut candidates = Candidates::restricted(
         &source,
         CandidateLimits::default(),
         CandidateRestrictionLimits::default(),
-        control.clone(),
+        cancellation.clone(),
     );
     candidates.next().unwrap().unwrap();
     let work = candidates.statistics().restriction_work;
-    control.cancel();
+    cancellation.cancel();
     assert!(matches!(candidates.next(), Some(Err(Stop::Cancelled))));
     assert_eq!(candidates.statistics().restriction_work, work);
     assert_eq!(
@@ -397,7 +402,7 @@ fn restriction_payload_limits_are_real_ceilings() {
             &source,
             CandidateLimits::default(),
             limits,
-            Control::default(),
+            Cancellation::default(),
         );
         assert!(candidates.next().unwrap().is_err());
         assert!(matches!(

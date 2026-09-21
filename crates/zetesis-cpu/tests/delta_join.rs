@@ -2,7 +2,7 @@
 //! entered only through bound-prefix windows and never scanned in full.
 
 use zetesis_core::{AdmissionLimits, AtomPattern, Predicate, Program, Seed, Template, Term, Value};
-use zetesis_cpu::{Control, Limits, check};
+use zetesis_cpu::{Cancellation, Limits, check};
 
 /// `e(0,1). … e(n-1,n). r(0). r(Y) :- r(X), e(X,Y).`: one derivation per round
 /// for `n` rounds, with `e` unchanged after the first.
@@ -37,7 +37,7 @@ fn a_chain_round_probes_the_new_row_and_its_window_only() {
     let length = 256;
     let program = chain(length);
     let seed = Seed::new(&program, []).unwrap();
-    let check = check(&program, &seed, Limits::default(), &Control::default()).unwrap();
+    let check = check(&program, &seed, Limits::default(), &Cancellation::default()).unwrap();
     assert!(check.accepted());
     let statistics = check.statistics();
     assert_eq!(
@@ -81,7 +81,7 @@ fn padded(length: i32, count: i32) -> Program {
 
 fn work(program: &Program) -> u64 {
     let seed = Seed::new(program, []).unwrap();
-    check(program, &seed, Limits::default(), &Control::default())
+    check(program, &seed, Limits::default(), &Cancellation::default())
         .unwrap()
         .statistics()
         .work

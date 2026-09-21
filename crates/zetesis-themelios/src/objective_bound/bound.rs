@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, AggregateComparison, AggregateElement, AggregateFamilyBuild,
     AggregateFamilyLimits, AggregateGuard, Node, Theory, append_aggregate_family,
@@ -18,10 +18,10 @@ pub(super) fn compile(
     plan: &ObjectivePlan,
     incumbent: &Score,
     limits: ObjectiveBoundLimits,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<ObjectiveBound, ObjectiveBoundError> {
     let mut work = Work {
-        control,
+        cancellation,
         limits: ObjectivePlanLimits {
             max_nodes: limits.aggregate.max_nodes,
             max_work: limits.max_work,
@@ -111,7 +111,7 @@ fn family(
             aggregate,
             max_guards: 2,
         },
-        work.control,
+        work.cancellation,
     );
     let build = match result {
         Ok(build) => build,

@@ -1,7 +1,7 @@
 //! Acquired original/frozen truth over every connective in a small prefix.
 
 use zetesis_core::Value;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, AggregateComparison as Comparison, Interpretation, Node, Theory,
     native_aggregate::{self as native, Bound, Eligibility, Function, Group, Guard, Tuple},
@@ -70,7 +70,7 @@ pub fn operation(
         tuples,
         guards,
         limits,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap()
 }
@@ -109,7 +109,7 @@ pub fn observations<'a>(
                     &worlds[(index / 5) % 4],
                     (index % 5 != 4).then(|| &worlds[index % 5]),
                     native::EligibilityLimits::default(),
-                    &Control::default(),
+                    &Cancellation::default(),
                 )
                 .unwrap()
         })

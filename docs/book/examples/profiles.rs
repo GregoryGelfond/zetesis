@@ -1,7 +1,7 @@
 //! Reuse an immutable compiled primitive while collecting independent families.
 
 // ANCHOR: example
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     Backend, ExecutionResources, Grounder, Oracle, PreparedInput, Session, SolveConfig,
     WorldViewLimits,
@@ -29,7 +29,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let family = Session::builder(
             PreparedInput::formula(&admitted),
             config,
-            Control::default(),
+            Cancellation::default(),
         )
         .resources(&resources)
         .collect(WorldViewLimits::default())?;

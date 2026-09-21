@@ -22,7 +22,7 @@ the same public session interface as an embedding application.
 ```text
 source or native program
     → admission and preparation
-    → PreparedInput + SolveConfig + Control
+    → PreparedInput + SolveConfig + Cancellation
     → SessionBuilder + optional resources and measurements
     → Session: candidate generation → exact membership → checked AnswerSet
     → consumer retention or publication

@@ -3,7 +3,7 @@
 use std::fmt;
 
 use zetesis_core::retention::{ModelRetention, RetentionError};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 use crate::execution_observation::ExecutionSink;
 use crate::{
@@ -229,9 +229,9 @@ impl WorldView {
         input: PreparedInput<'_>,
         config: SolveConfig,
         limits: WorldViewLimits,
-        control: Control,
+        cancellation: Cancellation,
     ) -> Result<Self, WorldViewFailure> {
-        Session::builder(input, config, control).collect(limits)
+        Session::builder(input, config, cancellation).collect(limits)
     }
 
     pub(crate) fn collect_request(

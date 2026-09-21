@@ -3,7 +3,7 @@
 use std::{collections::BTreeSet, num::NonZeroUsize};
 
 use zetesis_core::{Atom, Predicate, Sign, Value};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     Backend, Completion, Grounder, Interruption, Oracle, PreparedInput, SemanticOutcome, Session,
     SolveConfig, SolveError, Subject,
@@ -77,7 +77,7 @@ fn hybrid(source: &str, limits: &FormulaLimits) -> HybridFormula {
 }
 
 fn capture(input: PreparedInput<'_>, config: SolveConfig) -> (Family, SemanticOutcome) {
-    let mut session = Session::builder(input, config, Control::default())
+    let mut session = Session::builder(input, config, Cancellation::default())
         .start()
         .unwrap();
     let mut family = Family::new();
@@ -156,7 +156,7 @@ fn objective_free_hybrid_preserves_selection_policy() {
         let mut session = Session::builder(
             PreparedInput::hybrid(&admitted),
             configuration(),
-            Control::default(),
+            Cancellation::default(),
         )
         .selection(selection)
         .start()
@@ -317,7 +317,7 @@ fn checker_setup_work_is_visible_before_search() {
     let session = Session::builder(
         PreparedInput::hybrid(&admitted),
         configuration(),
-        Control::default(),
+        Cancellation::default(),
     )
     .start()
     .unwrap();
@@ -338,10 +338,14 @@ fn checker_setup_refusal_retains_the_source_subject() {
         },
         ..configuration()
     };
-    let failure = Session::builder(PreparedInput::hybrid(&admitted), config, Control::default())
-        .start()
-        .err()
-        .expect("zero work refuses the nonempty checker snapshot");
+    let failure = Session::builder(
+        PreparedInput::hybrid(&admitted),
+        config,
+        Cancellation::default(),
+    )
+    .start()
+    .err()
+    .expect("zero work refuses the nonempty checker snapshot");
     let SolveError::Constraint(error) = failure.cause.as_ref() else {
         panic!("wrong setup failure: {failure:?}");
     };
@@ -376,10 +380,13 @@ fn unfinished_constraint_check_never_yields_a_core_answer() {
         },
         ..configuration()
     };
-    let mut session =
-        Session::builder(PreparedInput::hybrid(&admitted), config, Control::default())
-            .start()
-            .unwrap();
+    let mut session = Session::builder(
+        PreparedInput::hybrid(&admitted),
+        config,
+        Cancellation::default(),
+    )
+    .start()
+    .unwrap();
     let failure = session.next().unwrap().unwrap_err();
     let SolveError::Constraint(error) = failure.cause.as_ref() else {
         panic!("wrong runtime failure: {failure:?}");
@@ -410,11 +417,11 @@ fn unfinished_constraint_check_never_yields_a_core_answer() {
 #[test]
 fn cancellation_preserves_only_the_verified_prefix() {
     let admitted = hybrid("a|b. :-a,b.", &limits());
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut session = Session::builder(
         PreparedInput::hybrid(&admitted),
         configuration(),
-        control.clone(),
+        cancellation.clone(),
     )
     .start()
     .unwrap();
@@ -425,7 +432,7 @@ fn cancellation_preserves_only_the_verified_prefix() {
             .same_instance(&Subject::Hybrid(admitted.clone()))
     );
     assert_eq!(answer.interpretation().atoms().len(), 1);
-    control.cancel();
+    cancellation.cancel();
     assert!(session.next().is_none());
     let outcome = session.outcome().unwrap();
     assert_eq!(outcome.completion(), Some(Completion::Interrupted));

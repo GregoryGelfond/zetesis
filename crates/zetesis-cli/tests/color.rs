@@ -8,7 +8,7 @@ use zetesis_cli::{
     ColorMode, Completion, Options, RunError, run_detailed_with_diagnostics,
     run_finalized_with_diagnostics,
 };
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 /// One worker: the bytes of two runs are compared, and several walkers of
 /// the region tree deliver models in the schedule's order.
@@ -36,7 +36,7 @@ fn output(source: &str, options: &Options) -> String {
         options,
         &mut bytes,
         &mut io::sink(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(report.completion, Completion::Exhausted);
@@ -188,7 +188,7 @@ fn requested_model_completion_styles_its_status() {
             &settings,
             &mut bytes,
             &mut io::sink(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         assert_eq!(report.completion, Completion::RequestedModels);
@@ -203,7 +203,7 @@ fn requested_model_completion_styles_its_status() {
             &settings,
             &mut plain,
             &mut io::sink(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         settings.color = ColorMode::Always;
@@ -229,7 +229,7 @@ fn partial_status_output_cannot_acknowledge_summary() {
                 &settings,
                 &mut prefix,
                 &mut io::sink(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap_err();
             assert!(matches!(*failure.cause, RunError::Output(_)));
@@ -257,7 +257,7 @@ fn styling_bytes_obey_the_complete_record_limit() {
         &settings,
         &mut bytes,
         &mut io::sink(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(
@@ -304,7 +304,7 @@ fn interrupted_styled_records_are_not_published_models() {
             &settings,
             &mut prefix,
             &mut io::sink(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
         assert!(matches!(*failure.cause, RunError::Output(_)));

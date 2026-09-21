@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use clap::Parser;
 use serde_json::Value as Json;
 use zetesis_cli::{Completion, Options, Oracle, Report, RunError, run_with_diagnostics};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::{AdmissionFailure, ExpansionFailure, FormulaFailure, ProfileFeature};
 
 type Records = Vec<(Vec<String>, Option<Vec<i64>>)>;
@@ -101,7 +101,7 @@ fn solve(source: &str, options: &Options) -> (Result<Report, RunError>, String, 
         options,
         &mut stdout,
         &mut stderr,
-        &Control::default(),
+        &Cancellation::default(),
     );
     (
         result,

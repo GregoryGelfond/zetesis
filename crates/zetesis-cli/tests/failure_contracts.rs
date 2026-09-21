@@ -7,7 +7,7 @@ use std::process::{Command, Stdio};
 
 use clap::Parser;
 use zetesis_cli::{Completion, Options, RunError, run_with_diagnostics};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 struct CutWriter {
     capacity: usize,
@@ -91,7 +91,7 @@ fn every_output_truncation_propagates_through_each_cpu_oracle() {
             &options,
             &mut complete,
             &mut io::sink(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         assert_eq!(report.completion, Completion::Exhausted);
@@ -102,7 +102,7 @@ fn every_output_truncation_propagates_through_each_cpu_oracle() {
                 &options,
                 &mut output,
                 &mut io::sink(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap_err();
             output_error(&error);
@@ -114,7 +114,7 @@ fn every_output_truncation_propagates_through_each_cpu_oracle() {
             &options,
             &mut output,
             &mut io::sink(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         assert_eq!(report.completion, Completion::Exhausted);
@@ -136,7 +136,7 @@ fn diagnostic_truncation_is_a_transport_failure_before_false_completion() {
             &options,
             &mut io::sink(),
             &mut complete,
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         for capacity in 0..complete.len() {
@@ -147,7 +147,7 @@ fn diagnostic_truncation_is_a_transport_failure_before_false_completion() {
                 &options,
                 &mut output,
                 &mut diagnostics,
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap_err();
             output_error(&error);
@@ -190,7 +190,7 @@ fn admission_and_materialization_failures_retain_causes_and_locations() {
             &options(&arguments),
             &mut output,
             &mut io::sink(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
         match (&error, expected) {
@@ -216,7 +216,7 @@ fn admission_and_materialization_failures_retain_causes_and_locations() {
         &options,
         &mut output,
         &mut io::sink(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(
@@ -262,7 +262,7 @@ fn lower_layer_failures_preserve_typed_causes_at_the_public_cli_boundary() {
             admitted.program(),
             &[seed.clone(), seed],
             zetesis_cpu::Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
     let error = RunError::Batch(failure);
@@ -348,7 +348,7 @@ fn hybrid_device_policy_is_refused_before_parsing() {
         &options,
         &mut output,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     match &error {
@@ -422,7 +422,7 @@ fn partial_and_interrupted_summaries_propagate_every_output_failure() {
             &options,
             &mut complete,
             &mut io::sink(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         assert_ne!(report.completion, Completion::Exhausted);
@@ -436,7 +436,7 @@ fn partial_and_interrupted_summaries_propagate_every_output_failure() {
                 &options,
                 &mut output,
                 &mut io::sink(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap_err();
             output_error(&error);
@@ -470,7 +470,7 @@ fn cpu_only_auto_eager_routing_reports_its_compiled_capability() {
         &options,
         &mut output,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(report.completion, Completion::Exhausted);
@@ -518,7 +518,7 @@ fn tiny_automatic_lazy_run_uses_cpu() {
         &options,
         &mut output,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(report.completion, Completion::Exhausted);
@@ -547,7 +547,7 @@ fn cpu_only_binary_reports_explicit_gpu_unavailability_without_fallback() {
             &options,
             &mut output,
             &mut io::sink(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
         assert!(matches!(error, RunError::BackendUnavailable));

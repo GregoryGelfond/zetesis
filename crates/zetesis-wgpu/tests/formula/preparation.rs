@@ -28,7 +28,7 @@ fn preparation(theory: &Theory, limits: FormulaLimits) -> Result<Preparation, Gp
 fn shared_interleaved_nodes_have_literal_stable_levels() {
     let (prepared, plan) = preparation(&fixture(), FormulaLimits::default())
         .unwrap()
-        .finish(&wgpu::Limits::default(), &Control::default())
+        .finish(&wgpu::Limits::default(), &Cancellation::default())
         .unwrap();
     assert_eq!(prepared.graph.schedule.levels, 4);
     assert_eq!(
@@ -48,7 +48,7 @@ fn pure_chains_keep_serial_truth() {
     let chain = Theory::new(1, nodes, vec![127], AdmissionLimits::default()).unwrap();
     let (prepared, plan) = preparation(&chain, FormulaLimits::default())
         .unwrap()
-        .finish(&wgpu::Limits::default(), &Control::default())
+        .finish(&wgpu::Limits::default(), &Cancellation::default())
         .unwrap();
     assert_eq!(prepared.graph.schedule.levels, 0);
     assert_eq!(prepared.roots, [127]);
@@ -60,7 +60,7 @@ fn empty_graphs_keep_only_required_padding() {
     let empty = Theory::new(0, vec![], vec![], AdmissionLimits::default()).unwrap();
     let (prepared, plan) = preparation(&empty, FormulaLimits::default())
         .unwrap()
-        .finish(&wgpu::Limits::default(), &Control::default())
+        .finish(&wgpu::Limits::default(), &Cancellation::default())
         .unwrap();
     assert_eq!(prepared.graph.schedule.levels, 0);
     assert_eq!((prepared.nodes, prepared.roots), (vec![0; 4], vec![0]));
@@ -78,7 +78,7 @@ fn zero_roots_still_cover_every_duplicate_leaf() {
     .unwrap();
     let (prepared, _) = preparation(&theory, FormulaLimits::default())
         .unwrap()
-        .finish(&wgpu::Limits::default(), &Control::default())
+        .finish(&wgpu::Limits::default(), &Cancellation::default())
         .unwrap();
     assert_eq!(prepared.graph.schedule.levels, 1);
     assert_eq!(prepared.roots, [0, 2, 0, 1]);
@@ -105,7 +105,7 @@ fn retained_upload_capacities_are_admitted_in_the_cold_peak() {
             },
         )
         .unwrap()
-        .finish_with(&wgpu::Limits::default(), &Control::default(), |_| {
+        .finish_with(&wgpu::Limits::default(), &Cancellation::default(), |_| {
             Ok(allocations.next().unwrap())
         });
         if below == 0 {
@@ -124,15 +124,19 @@ fn either_upload_reservation_preserves_allocation_failure() {
         let mut calls = 0;
         let result = preparation(&fixture(), FormulaLimits::default())
             .unwrap()
-            .finish_with(&wgpu::Limits::default(), &Control::default(), |length| {
-                let current = calls;
-                calls += 1;
-                if current == fail_at {
-                    vector::<u32>(usize::MAX)
-                } else {
-                    vector(length)
-                }
-            });
+            .finish_with(
+                &wgpu::Limits::default(),
+                &Cancellation::default(),
+                |length| {
+                    let current = calls;
+                    calls += 1;
+                    if current == fail_at {
+                        vector::<u32>(usize::MAX)
+                    } else {
+                        vector(length)
+                    }
+                },
+            );
         assert_eq!(result.err().unwrap().kind(), GpuErrorKind::Allocation);
         assert_eq!(calls, fail_at + 1);
     }
@@ -141,14 +145,14 @@ fn either_upload_reservation_preserves_allocation_failure() {
 #[test]
 fn interruption_after_either_reservation_publishes_no_graph() {
     for stop_at in [0, 1] {
-        let control = Control::default();
+        let cancellation = Cancellation::default();
         let mut calls = 0;
         let result = preparation(&fixture(), FormulaLimits::default())
             .unwrap()
-            .finish_with(&wgpu::Limits::default(), &control, |length| {
+            .finish_with(&wgpu::Limits::default(), &cancellation, |length| {
                 let words = vector(length)?;
                 if calls == stop_at {
-                    control.cancel();
+                    cancellation.cancel();
                 }
                 calls += 1;
                 Ok(words)
@@ -197,7 +201,7 @@ fn level_setup_is_admitted_after_the_minimum_serial_envelope() {
             },
         )
         .unwrap()
-        .finish(&wgpu::Limits::default(), &Control::default());
+        .finish(&wgpu::Limits::default(), &Cancellation::default());
         assert_eq!(result.is_ok(), accepted);
         if let Err(error) = result {
             assert_eq!(error.kind(), GpuErrorKind::Capacity);

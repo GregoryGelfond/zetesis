@@ -8,7 +8,7 @@ use crate::failure::Progress;
 use crate::{Options, PublicationOutcome, RunError};
 use clap::Parser;
 use std::io::{self, Write};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::observation::ViewError;
 
 const PREFIX: &[u8] = b"{\"schema\":2,\"format\":\"zetesis\",\"models\":[";
@@ -103,7 +103,7 @@ fn every_footer_byte_ceiling_preserves_completed_cpu_evidence() {
             &options,
             &mut io::sink(),
             &mut io::sink(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         assert!(outcome.semantic().unsatisfiable());
@@ -130,7 +130,7 @@ fn batched_cpu_footer_admission_preserves_exact_completion() {
         &options,
         &mut original,
         &mut io::sink(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(
@@ -209,7 +209,7 @@ fn every_footer_byte_ceiling_preserves_shared_cpu_refusals() {
             &options,
             &mut io::sink(),
             &mut io::sink(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         assert_eq!(
@@ -248,7 +248,7 @@ fn footer_capacity_failure_cannot_replace_a_real_source_refusal() {
         &options,
         &mut io::sink(),
         &mut io::sink(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(*failure.cause, RunError::FormulaAdmission(_)));

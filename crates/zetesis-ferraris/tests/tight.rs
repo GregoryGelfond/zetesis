@@ -2,7 +2,7 @@
 
 use std::time::{Duration, Instant};
 
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
     AdmissionLimits, Interpretation, Node, Theory, TightCheckLimits, TightError, TightPlan,
     TightPlanLimits, TightProducerKind, TightResource, TightVerdict,
@@ -85,7 +85,7 @@ fn stable(formulas: &[Tree], candidate: usize) -> bool {
         .any(|subset| subset & candidate == subset && reduced.iter().all(|tree| tree.truth(subset)))
 }
 fn plan(theory: &Theory) -> TightPlan {
-    TightPlan::compile(theory, TightPlanLimits::default(), &Control::default()).unwrap()
+    TightPlan::compile(theory, TightPlanLimits::default(), &Cancellation::default()).unwrap()
 }
 fn compare(theory: &Theory, formulas: &[Tree]) -> usize {
     let plan = plan(theory);
@@ -94,7 +94,7 @@ fn compare(theory: &Theory, formulas: &[Tree]) -> usize {
             .check(
                 &interpretation(theory, candidate),
                 TightCheckLimits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
         assert_eq!(
@@ -169,7 +169,11 @@ fn every_small_normal_choice_pair_matches_independently_materialized_reducts() {
         for second in &rules {
             let formulas = [first.clone(), second.clone()];
             let theory = theory(3, &formulas); // One unsupported carrier atom.
-            match TightPlan::compile(&theory, TightPlanLimits::default(), &Control::default()) {
+            match TightPlan::compile(
+                &theory,
+                TightPlanLimits::default(),
+                &Cancellation::default(),
+            ) {
                 Ok(_) => worlds += compare(&theory, &formulas),
                 Err(TightError::PositiveCycle { .. }) => cyclic += 1,
                 result => panic!("unexpected shape refusal: {result:?}"),
@@ -239,17 +243,31 @@ fn unnegated_implications_disjunctions_cycles_and_missing_root_coverage_refuse()
     for formula in cases {
         let source = theory(2, &[formula]);
         assert!(
-            TightPlan::compile(&source, TightPlanLimits::default(), &Control::default()).is_err()
+            TightPlan::compile(
+                &source,
+                TightPlanLimits::default(),
+                &Cancellation::default()
+            )
+            .is_err()
         );
     }
     let source = theory(2, &[a.clone(), b.clone().imp(b)]);
     assert!(matches!(
-        TightPlan::compile(&source, TightPlanLimits::default(), &Control::default()),
+        TightPlan::compile(
+            &source,
+            TightPlanLimits::default(),
+            &Cancellation::default()
+        ),
         Err(TightError::PositiveCycle { atom: 1 })
     ));
     let source = theory(2, &[a.clone(), a.or(Tree::atom(1))]);
     assert_eq!(
-        TightPlan::compile(&source, TightPlanLimits::default(), &Control::default()).unwrap_err(),
+        TightPlan::compile(
+            &source,
+            TightPlanLimits::default(),
+            &Cancellation::default()
+        )
+        .unwrap_err(),
         TightError::UnsupportedRoot {
             root: source.roots()[1]
         }
@@ -262,20 +280,20 @@ fn supplied_ranks_and_theory_identity_are_checked() {
     let b = Tree::atom(1);
     let formulas = [a.clone(), a.imp(b)];
     let source = theory(3, &formulas);
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let limits = TightPlanLimits::default();
     let generated = plan(&source);
     assert_eq!(generated.ranks(), &[0, 1, 0]);
-    assert!(TightPlan::certify(&source, &[1, 2, 2], limits, &control).is_ok());
+    assert!(TightPlan::certify(&source, &[1, 2, 2], limits, &cancellation).is_ok());
     for ranks in [&[0, 0, 0][..], &[2, 1, 0]] {
         assert_eq!(
-            TightPlan::certify(&source, ranks, limits, &control).unwrap_err(),
+            TightPlan::certify(&source, ranks, limits, &cancellation).unwrap_err(),
             TightError::RankOrder { head: 1 }
         );
     }
     for ranks in [&[][..], &[0, 1], &[0, 1, 3]] {
         assert_eq!(
-            TightPlan::certify(&source, ranks, limits, &control).unwrap_err(),
+            TightPlan::certify(&source, ranks, limits, &cancellation).unwrap_err(),
             TightError::RankShape
         );
     }
@@ -284,7 +302,7 @@ fn supplied_ranks_and_theory_identity_are_checked() {
         generated.check(
             &interpretation(&independent, 3),
             TightCheckLimits::default(),
-            &control
+            &cancellation
         ),
         Err(TightError::Stopped(Stop::WrongProgram))
     );
@@ -293,7 +311,7 @@ fn supplied_ranks_and_theory_identity_are_checked() {
             .check(
                 &interpretation(&source.clone(), 3),
                 TightCheckLimits::default(),
-                &control
+                &cancellation
             )
             .unwrap()
             .verdict,
@@ -305,7 +323,7 @@ fn supplied_ranks_and_theory_identity_are_checked() {
 #[test]
 fn exact_construction_and_check_limits_do_not_turn_partial_work_into_acceptance() {
     let source = theory(2, &[Tree::atom(0), Tree::atom(0).imp(Tree::atom(1))]);
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let certified = plan(&source);
     let stats = certified.statistics();
     let exact = TightPlanLimits {
@@ -314,7 +332,7 @@ fn exact_construction_and_check_limits_do_not_turn_partial_work_into_acceptance(
         max_bytes: stats.construction_bytes,
         max_work: stats.work,
     };
-    assert!(TightPlan::compile(&source, exact, &control).is_ok());
+    assert!(TightPlan::compile(&source, exact, &cancellation).is_ok());
     for (limits, resource) in [
         (
             TightPlanLimits {
@@ -352,13 +370,13 @@ fn exact_construction_and_check_limits_do_not_turn_partial_work_into_acceptance(
             TightResource::Bytes,
         ),
     ] {
-        let error = TightPlan::compile(&source, limits, &control).unwrap_err();
+        let error = TightPlan::compile(&source, limits, &cancellation).unwrap_err();
         assert_eq!(error, TightError::Limit(resource));
         assert!(!error.to_string().is_empty());
     }
     let candidate = interpretation(&source, 3);
     let checked = certified
-        .check(&candidate, TightCheckLimits::default(), &control)
+        .check(&candidate, TightCheckLimits::default(), &cancellation)
         .unwrap();
     let exact = TightCheckLimits {
         max_work: checked.work,
@@ -366,7 +384,7 @@ fn exact_construction_and_check_limits_do_not_turn_partial_work_into_acceptance(
     };
     assert_eq!(
         certified
-            .check(&candidate, exact, &control)
+            .check(&candidate, exact, &cancellation)
             .unwrap()
             .verdict,
         TightVerdict::Stable
@@ -378,7 +396,7 @@ fn exact_construction_and_check_limits_do_not_turn_partial_work_into_acceptance(
                 max_work: exact.max_work - 1,
                 ..exact
             },
-            &control
+            &cancellation
         ),
         Err(TightError::Limit(TightResource::Work))
     );
@@ -389,7 +407,7 @@ fn exact_construction_and_check_limits_do_not_turn_partial_work_into_acceptance(
                 max_bytes: exact.max_bytes - 1,
                 ..exact
             },
-            &control
+            &cancellation
         ),
         Err(TightError::Limit(TightResource::Bytes))
     );
@@ -401,27 +419,29 @@ fn cancellation_and_deadlines_refuse_certification_and_evaluation() {
     let certified = plan(&source);
     let candidate = interpretation(&source, 3);
     let exact = TightCheckLimits::default();
-    for (control, expected) in [
+    for (cancellation, expected) in [
         (
             {
-                let control = Control::default();
-                control.cancel();
-                control
+                let cancellation = Cancellation::default();
+                cancellation.cancel();
+                cancellation
             },
             Stop::Cancelled,
         ),
         (
-            Control::with_deadline(Instant::now().checked_sub(Duration::from_secs(1)).unwrap())
-                .unwrap(),
+            Cancellation::with_deadline(
+                Instant::now().checked_sub(Duration::from_secs(1)).unwrap(),
+            )
+            .unwrap(),
             Stop::Deadline,
         ),
     ] {
         assert_eq!(
-            TightPlan::compile(&source, TightPlanLimits::default(), &control).unwrap_err(),
+            TightPlan::compile(&source, TightPlanLimits::default(), &cancellation).unwrap_err(),
             TightError::Stopped(expected)
         );
         assert_eq!(
-            certified.check(&candidate, exact, &control),
+            certified.check(&candidate, exact, &cancellation),
             Err(TightError::Stopped(expected))
         );
     }
@@ -445,7 +465,7 @@ fn shared_deep_bodies_are_linear_graphs_with_matched_duplicate_edges() {
         plan.check(
             &interpretation(&source, 3),
             TightCheckLimits::default(),
-            &Control::default()
+            &Cancellation::default()
         )
         .unwrap()
         .verdict,
@@ -462,9 +482,9 @@ fn empty_universes_and_ranked_chains_keep_every_carrier_atom_explicit() {
         max_bytes: 0,
         max_work: 0,
     };
-    let compiled = TightPlan::compile(&empty, zero, &Control::default()).unwrap();
+    let compiled = TightPlan::compile(&empty, zero, &Cancellation::default()).unwrap();
     assert_eq!(compiled.ranks(), &[]);
-    assert!(TightPlan::certify(&empty, &[], zero, &Control::default()).is_ok());
+    assert!(TightPlan::certify(&empty, &[], zero, &Cancellation::default()).is_ok());
     assert_eq!(
         compiled
             .check(
@@ -473,7 +493,7 @@ fn empty_universes_and_ranked_chains_keep_every_carrier_atom_explicit() {
                     max_bytes: 0,
                     max_work: 0,
                 },
-                &Control::default()
+                &Cancellation::default()
             )
             .unwrap()
             .verdict,
@@ -498,7 +518,7 @@ fn empty_universes_and_ranked_chains_keep_every_carrier_atom_explicit() {
         ],
     );
     assert!(matches!(
-        TightPlan::compile(&cycle, TightPlanLimits::default(), &Control::default()),
+        TightPlan::compile(&cycle, TightPlanLimits::default(), &Cancellation::default()),
         Err(TightError::PositiveCycle { .. })
     ));
 }

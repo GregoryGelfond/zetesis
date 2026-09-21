@@ -287,7 +287,7 @@ fn empty_wake_sets_do_not_discharge_original_constraints() {
                     admitted.theory(),
                     &interpretation,
                     zetesis_ferraris::Limits::default(),
-                    &zetesis_cpu::Control::default()
+                    &zetesis_cpu::Cancellation::default()
                 )
                 .unwrap(),
                 expected

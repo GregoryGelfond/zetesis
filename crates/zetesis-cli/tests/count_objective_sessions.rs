@@ -16,7 +16,7 @@ use zetesis_cli::{
     Backend, Completion, Interruption, Oracle, PreparedInput, SearchMethod, Session, SolveConfig,
 };
 use zetesis_core::{Atom, Predicate, Value};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_sat::Incomplete;
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
@@ -123,9 +123,12 @@ fn prepared_sessions_preserve_complete_model_records() {
                     if !pruning {
                         config.max_objective_bound_work = 0;
                     }
-                    let mut session =
-                        Session::new(PreparedInput::formula(&input), config, Control::default())
-                            .unwrap();
+                    let mut session = Session::new(
+                        PreparedInput::formula(&input),
+                        config,
+                        Cancellation::default(),
+                    )
+                    .unwrap();
                     let mut actual = BTreeSet::new();
                     for result in session.by_ref() {
                         let model = result.unwrap();
@@ -205,9 +208,12 @@ fn completion_refusal_retains_pending_candidates() {
                     max_completion_scratch_bytes: 0,
                     ..bounded_config(workers, batch, pruning)
                 };
-                let mut session =
-                    Session::new(PreparedInput::formula(&input), config, Control::default())
-                        .unwrap();
+                let mut session = Session::new(
+                    PreparedInput::formula(&input),
+                    config,
+                    Cancellation::default(),
+                )
+                .unwrap();
                 assert!(session.next().is_none());
                 let outcome = session.outcome().unwrap();
                 assert_eq!(outcome.completion(), Some(Completion::Interrupted));
@@ -272,9 +278,12 @@ fn candidate_ceiling_retains_an_unproved_incumbent() {
                     max_candidates: 2,
                     ..bounded_config(workers, batch, pruning)
                 };
-                let mut session =
-                    Session::new(PreparedInput::formula(&input), config, Control::default())
-                        .unwrap();
+                let mut session = Session::new(
+                    PreparedInput::formula(&input),
+                    config,
+                    Cancellation::default(),
+                )
+                .unwrap();
                 let mut delivered = BTreeSet::new();
                 for result in session.by_ref() {
                     let model = result.unwrap();

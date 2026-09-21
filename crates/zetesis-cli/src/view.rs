@@ -8,7 +8,7 @@ pub(crate) mod session;
 pub use human::HumanRenderer;
 pub use json::JsonRenderer;
 
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::observation::{Limits, ModelView};
 
 use crate::{Publication, PublicationFailure, PublicationStop, RunError, SemanticOutcome};
@@ -184,7 +184,8 @@ pub trait AnswerRenderer {
     ///
     /// # Errors
     /// A refusal acknowledges no record, even if a writer accepted a prefix.
-    fn answer(&mut self, view: AnswerView<'_>, control: &Control) -> Result<(), RunError>;
+    fn answer(&mut self, view: AnswerView<'_>, cancellation: &Cancellation)
+    -> Result<(), RunError>;
 
     /// Render the terminal view at the declared stage, at most once.
     /// `SearchFinished` is not reached when source or execution fails;

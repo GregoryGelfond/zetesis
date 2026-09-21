@@ -3,7 +3,7 @@
 use std::time::Instant;
 
 use proptest::prelude::*;
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
     AdmissionLimits, AggregateComparison as Comparison, AggregateElement as Element,
     AggregateErrorKind as Error, AggregateExtremum as Extremum, AggregateLimits, AggregateProfile,
@@ -129,7 +129,7 @@ fn verify(elements: &[Element], extremum: Extremum, comparison: Comparison, boun
         comparison,
         bound,
         AggregateLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let theory = Theory::new(2, nodes, vec![built.root()], AdmissionLimits::default()).unwrap();
@@ -143,7 +143,13 @@ fn verify(elements: &[Element], extremum: Extremum, comparison: Comparison, boun
         let candidate = world(&theory, outer);
         assert_eq!(eval(&reference, root, outer, None), classical);
         assert_eq!(
-            models(&theory, &candidate, Limits::default(), &Control::default()).unwrap(),
+            models(
+                &theory,
+                &candidate,
+                Limits::default(),
+                &Cancellation::default()
+            )
+            .unwrap(),
             classical,
             "classical: {elements:?}, {extremum:?}, {comparison:?}, {bound:?}, M={outer}"
         );
@@ -161,7 +167,7 @@ fn verify(elements: &[Element], extremum: Extremum, comparison: Comparison, boun
                     &candidate,
                     &world(&theory, inner),
                     Limits::default(),
-                    &Control::default()
+                    &Cancellation::default()
                 )
                 .unwrap(),
                 expected,
@@ -291,7 +297,7 @@ fn linear_extrema_need_neither_subset_carriers_nor_threshold_rows() {
                 max_subsets: 0,
                 ..AggregateLimits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         assert_eq!(built.profile(), AggregateProfile::Extremum);
@@ -301,7 +307,7 @@ fn linear_extrema_need_neither_subset_carriers_nor_threshold_rows() {
         let theory =
             Theory::new(4_096, nodes, vec![built.root()], AdmissionLimits::default()).unwrap();
         let empty = Interpretation::new(&theory, []).unwrap();
-        assert!(models(&theory, &empty, Limits::default(), &Control::default()).unwrap());
+        assert!(models(&theory, &empty, Limits::default(), &Cancellation::default()).unwrap());
     }
 }
 
@@ -315,7 +321,7 @@ fn limited(elements: &[Element], limits: AggregateLimits) -> Error {
         Comparison::Eq,
         1,
         limits,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert_eq!(nodes, original);
@@ -342,7 +348,7 @@ fn inclusive_limits_and_failed_append_restore_every_prefix_node() {
         Comparison::Eq,
         1,
         AggregateLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let exact = AggregateLimits {
@@ -361,7 +367,7 @@ fn inclusive_limits_and_failed_append_restore_every_prefix_node() {
             Comparison::Eq,
             1,
             exact,
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap(),
         built
@@ -420,7 +426,7 @@ fn bad_conditions_and_topology_are_typed_failures_with_rollback() {
         Comparison::Eq,
         Bound::NegativeInfinity,
         AggregateLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert_eq!(error.kind(), Error::InvalidPrefix { node: 0 });
@@ -429,12 +435,12 @@ fn bad_conditions_and_topology_are_typed_failures_with_rollback() {
 
 #[test]
 fn cancelled_and_expired_empty_extrema_are_refusals_before_work() {
-    let cancelled = Control::default();
+    let cancelled = Cancellation::default();
     cancelled.cancel();
-    for (control, expected) in [
+    for (cancellation, expected) in [
         (cancelled, Stop::Cancelled),
         (
-            Control::with_deadline(Instant::now()).unwrap(),
+            Cancellation::with_deadline(Instant::now()).unwrap(),
             Stop::Deadline,
         ),
     ] {
@@ -449,7 +455,7 @@ fn cancelled_and_expired_empty_extrema_are_refusals_before_work() {
                 max_work: 0,
                 ..AggregateLimits::default()
             },
-            &control,
+            &cancellation,
         )
         .unwrap_err();
         assert_eq!(error.kind(), Error::Control(expected));

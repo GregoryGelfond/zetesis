@@ -2,7 +2,7 @@
 
 use serde_json::{Value as Json, json};
 use zetesis_core::{Atom, Model, Predicate, Sign, Value, ValueLimits, ValueNode};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::observation::json::{self, AtomTable};
 use zetesis_themelios::observation::{
     Limits, ModelView, ObservationProgram, Symbol, SymbolSign, ViewError, ViewLimits,
@@ -27,7 +27,7 @@ fn evaluated_views_resume_the_original_rendering_budget() {
             &fixture.model,
             &fixture.selection,
             Limits::default(),
-            &fixture.control,
+            &fixture.cancellation,
         )
         .unwrap();
     let view = fixture.view();
@@ -35,7 +35,7 @@ fn evaluated_views_resume_the_original_rendering_budget() {
         max_work: expected.statistics().work,
         ..Limits::default()
     };
-    let rendered = view.render(limits, &fixture.control).unwrap();
+    let rendered = view.render(limits, &fixture.cancellation).unwrap();
     assert_eq!(rendered.text(), expected.text());
     assert_eq!(rendered.statistics(), expected.statistics());
     assert!(view.observation_statistics().work < expected.statistics().work);
@@ -45,7 +45,7 @@ fn evaluated_views_resume_the_original_rendering_budget() {
                 max_work: limits.max_work - 1,
                 ..limits
             },
-            &fixture.control,
+            &fixture.cancellation,
         )
         .unwrap_err();
     assert!(matches!(
@@ -64,7 +64,9 @@ fn evaluated_view_rendering_refuses_partial_lines() {
         "p(1). #show f(X):p(X).",
     );
     let view = fixture.view();
-    let expected = view.render(Limits::default(), &fixture.control).unwrap();
+    let expected = view
+        .render(Limits::default(), &fixture.cancellation)
+        .unwrap();
     for max_output_bytes in 0..expected.text().len() {
         assert!(
             view.render(
@@ -72,7 +74,7 @@ fn evaluated_view_rendering_refuses_partial_lines() {
                     max_output_bytes,
                     ..Limits::default()
                 },
-                &fixture.control
+                &fixture.cancellation
             )
             .is_err()
         );
@@ -83,7 +85,7 @@ fn evaluated_view_rendering_refuses_partial_lines() {
                 max_output_bytes: expected.text().len(),
                 ..Limits::default()
             },
-            &fixture.control
+            &fixture.cancellation
         )
         .unwrap()
         .text(),
@@ -95,7 +97,7 @@ struct ObservationFixture {
     model: Model,
     program: ObservationProgram,
     selection: OutputSelection,
-    control: Control,
+    cancellation: Cancellation,
 }
 impl ObservationFixture {
     fn plain(model: Model) -> Self {
@@ -103,7 +105,7 @@ impl ObservationFixture {
             model,
             program: ObservationProgram::default(),
             selection: OutputSelection::default(),
-            control: Control::default(),
+            cancellation: Cancellation::default(),
         }
     }
 
@@ -119,7 +121,7 @@ impl ObservationFixture {
             model,
             program: admitted.metadata().observations().clone(),
             selection: admitted.metadata().output().clone(),
-            control: Control::default(),
+            cancellation: Cancellation::default(),
         }
     }
 
@@ -130,7 +132,7 @@ impl ObservationFixture {
                 &self.selection,
                 None,
                 Limits::default(),
-                &self.control,
+                &self.cancellation,
             )
             .unwrap()
     }
@@ -139,12 +141,13 @@ impl ObservationFixture {
     /// atom is spelled.
     fn record(&self, limits: ViewLimits) -> Result<String, ViewError> {
         let mut table = AtomTable::new(usize::MAX);
-        self.view().record(&mut table, limits, &self.control)
+        self.view().record(&mut table, limits, &self.cancellation)
     }
 
     fn encode(&self, limits: json::Limits) -> Result<json::Encoded, json::Failure> {
         let mut table = AtomTable::new(usize::MAX);
-        self.view().encode_record(&mut table, limits, &self.control)
+        self.view()
+            .encode_record(&mut table, limits, &self.cancellation)
     }
 
     fn json(&self) -> Json {
@@ -163,7 +166,7 @@ fn a_refused_record_after_the_first_leaves_the_first_records_atoms_indexed() {
     let mut table = AtomTable::new(16);
     first
         .view()
-        .record(&mut table, ViewLimits::default(), &first.control)
+        .record(&mut table, ViewLimits::default(), &first.cancellation)
         .unwrap();
     let refused = later.view().record(
         &mut table,
@@ -171,13 +174,13 @@ fn a_refused_record_after_the_first_leaves_the_first_records_atoms_indexed() {
             max_bytes: 1,
             ..ViewLimits::default()
         },
-        &later.control,
+        &later.cancellation,
     );
     assert!(matches!(refused, Err(ViewError::Bytes)));
     let third: Json = serde_json::from_str(
         &later
             .view()
-            .record(&mut table, ViewLimits::default(), &later.control)
+            .record(&mut table, ViewLimits::default(), &later.cancellation)
             .unwrap(),
     )
     .unwrap();
@@ -373,10 +376,10 @@ fn encoding_depth_limit_refuses() {
 fn cancelled_encoding_refuses() {
     let fixture = string_observation();
     let view = fixture.view();
-    fixture.control.cancel();
+    fixture.cancellation.cancel();
     let mut table = AtomTable::new(usize::MAX);
     assert_eq!(
-        view.record(&mut table, ViewLimits::default(), &fixture.control),
+        view.record(&mut table, ViewLimits::default(), &fixture.cancellation),
         Err(ViewError::Stopped(zetesis_cpu::Stop::Cancelled))
     );
 }
@@ -481,10 +484,10 @@ fn encoding_work_accounting_is_inclusive() {
 fn cancelled_encoding_has_zero_accounting() {
     let fixture = string_observation();
     let view = fixture.view();
-    fixture.control.cancel();
+    fixture.cancellation.cancel();
     let mut table = AtomTable::new(usize::MAX);
     let failure = view
-        .encode_record(&mut table, json::Limits::default(), &fixture.control)
+        .encode_record(&mut table, json::Limits::default(), &fixture.cancellation)
         .unwrap_err();
     assert_eq!(
         failure.cause(),

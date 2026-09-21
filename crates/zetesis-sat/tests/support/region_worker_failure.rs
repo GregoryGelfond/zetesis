@@ -4,8 +4,8 @@ use super::*;
 
 #[test]
 fn shared_narrowing_never_executes_an_unleased_read() {
-    let control =
-        Control::with_deadline(std::time::Instant::now() + Duration::from_secs(2)).unwrap();
+    let cancellation =
+        Cancellation::with_deadline(std::time::Instant::now() + Duration::from_secs(2)).unwrap();
     let theory = Theory::new(
         1,
         vec![
@@ -26,11 +26,11 @@ fn shared_narrowing_never_executes_an_unleased_read() {
         SearchStatistics::default(),
     );
     let mut budget = Budget {
-        quota: shared.lease(&control),
+        quota: shared.lease(&cancellation),
         // Worker-local work is only a delta; the shared owner has the
         // authoritative one-permit remainder of the whole search.
         limits: crate::SearchLimits::default(),
-        control: &control,
+        cancellation: &cancellation,
         statistics: SearchStatistics::default(),
     };
     let narrower = Narrower::new(&theory);
@@ -60,8 +60,8 @@ fn shared_narrowing_never_executes_an_unleased_read() {
 
 #[test]
 fn a_panicked_worker_keeps_coverage_incomplete() {
-    let control =
-        Control::with_deadline(std::time::Instant::now() + Duration::from_secs(2)).unwrap();
+    let cancellation =
+        Cancellation::with_deadline(std::time::Instant::now() + Duration::from_secs(2)).unwrap();
     let theory = Theory::new(
         0,
         vec![],
@@ -73,14 +73,14 @@ fn a_panicked_worker_keeps_coverage_incomplete() {
     let mut budget = Budget {
         quota: crate::search::LocalQuota,
         limits: limits.search,
-        control: &control,
+        cancellation: &cancellation,
         statistics: SearchStatistics::default(),
     };
     let mut search = ParallelRegions::new(
         &theory,
         NonZeroUsize::new(2).unwrap(),
         limits,
-        control.clone(),
+        cancellation.clone(),
         &mut budget,
     )
     .unwrap();
@@ -94,13 +94,13 @@ fn a_panicked_worker_keeps_coverage_incomplete() {
         contain_worker(&idle_shared, || worker(&idle_shared, &sender))
     }));
     while search.shared.lock().idle == 0 {
-        control.poll().unwrap();
+        cancellation.poll().unwrap();
         std::thread::yield_now();
     }
     let failed_shared = Arc::clone(&search.shared);
     search.handles.push(std::thread::spawn(move || {
         contain_worker(&failed_shared, || {
-            let mut lease = failed_shared.budget.lease(&failed_shared.control);
+            let mut lease = failed_shared.budget.lease(&failed_shared.cancellation);
             let _reservation = lease.reserve(4).unwrap();
             panic!("injected failure while a worker owns a kernel allowance");
         })
@@ -115,8 +115,8 @@ fn a_panicked_worker_keeps_coverage_incomplete() {
 
 #[test]
 fn a_refused_certificate_refunds_its_reserved_work() {
-    let control =
-        Control::with_deadline(std::time::Instant::now() + Duration::from_secs(2)).unwrap();
+    let cancellation =
+        Cancellation::with_deadline(std::time::Instant::now() + Duration::from_secs(2)).unwrap();
     let theory = Theory::new(
         1,
         vec![zetesis_ferraris::Node::Atom(0)],
@@ -127,7 +127,7 @@ fn a_refused_certificate_refunds_its_reserved_work() {
     let plan = zetesis_ferraris::TightPlan::compile(
         &theory,
         zetesis_ferraris::TightPlanLimits::default(),
-        &control,
+        &cancellation,
     )
     .unwrap();
     // Inject a lowered checking-storage allowance after valid construction:
@@ -140,14 +140,14 @@ fn a_refused_certificate_refunds_its_reserved_work() {
     let mut budget = Budget {
         quota: crate::search::LocalQuota,
         limits: limits.search,
-        control: &control,
+        cancellation: &cancellation,
         statistics: SearchStatistics::default(),
     };
     let mut search = ParallelRegions::new(
         &theory,
         NonZeroUsize::new(2).unwrap(),
         limits,
-        control.clone(),
+        cancellation.clone(),
         &mut budget,
     )
     .unwrap();

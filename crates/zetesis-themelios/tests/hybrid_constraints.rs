@@ -3,7 +3,7 @@
 use std::fmt::Write;
 
 use zetesis_core::Model;
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_themelios::{
     AdmissionOptions, ConstraintCheckCause, ConstraintCheckLimits, ConstraintCheckStatistics,
     ConstraintVerdict, ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure,
@@ -49,7 +49,7 @@ fn verdict(owner: &HybridFormula, selected: &[&str]) -> ConstraintVerdict {
     owner
         .checker(ConstraintCheckLimits::default())
         .unwrap()
-        .check(&model(owner, selected), &Control::default())
+        .check(&model(owner, selected), &Cancellation::default())
         .unwrap()
 }
 
@@ -223,7 +223,7 @@ fn empty_stream_requires_no_check_budget() {
         .unwrap();
     assert_eq!(
         checker
-            .check(&model(&owner, &["a"]), &Control::default())
+            .check(&model(&owner, &["a"]), &Cancellation::default())
             .unwrap(),
         ConstraintVerdict::Satisfied
     );
@@ -236,12 +236,12 @@ fn source_equivalence_does_not_replace_owner_identity() {
     let other = admit("{p}. :-p.");
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
     let failure = checker
-        .check(&model(&other, &[]), &Control::default())
+        .check(&model(&other, &[]), &Cancellation::default())
         .unwrap_err();
     assert!(matches!(failure.cause, ConstraintCheckCause::WrongProgram));
     assert_eq!(
         checker
-            .check(&model(&owner.clone(), &[]), &Control::default())
+            .check(&model(&owner.clone(), &[]), &Cancellation::default())
             .unwrap(),
         ConstraintVerdict::Satisfied
     );
@@ -252,9 +252,11 @@ fn cancellation_preserves_the_unchecked_verdict() {
     let owner = admit("{p}. :-p.");
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
     let before = checker.statistics();
-    let control = Control::default();
-    control.cancel();
-    let failure = checker.check(&model(&owner, &[]), &control).unwrap_err();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
+    let failure = checker
+        .check(&model(&owner, &[]), &cancellation)
+        .unwrap_err();
     assert_eq!(failure.stop(), Some(Stop::Cancelled));
     assert_eq!(failure.statistics, before);
 }
@@ -270,10 +272,12 @@ fn repeated_checks_share_a_cumulative_substitution_ceiling() {
         .unwrap();
     let candidate = model(&owner, &[]);
     assert_eq!(
-        checker.check(&candidate, &Control::default()).unwrap(),
+        checker.check(&candidate, &Cancellation::default()).unwrap(),
         ConstraintVerdict::Satisfied
     );
-    let failure = checker.check(&candidate, &Control::default()).unwrap_err();
+    let failure = checker
+        .check(&candidate, &Cancellation::default())
+        .unwrap_err();
     assert!(matches!(
         failure.cause,
         ConstraintCheckCause::Source(error) if matches!(error.as_ref(), FormulaFailure::Limit {
@@ -297,14 +301,16 @@ fn moving_a_checker_preserves_its_cumulative_budget() {
         .unwrap();
     let candidate = model(&owner, &[]);
     assert_eq!(
-        checker.check(&candidate, &Control::default()).unwrap(),
+        checker.check(&candidate, &Cancellation::default()).unwrap(),
         ConstraintVerdict::Satisfied
     );
     let before = checker.statistics();
     let (checker, failure) = std::thread::scope(|scope| {
         scope
             .spawn(move || {
-                let failure = checker.check(&candidate, &Control::default()).unwrap_err();
+                let failure = checker
+                    .check(&candidate, &Cancellation::default())
+                    .unwrap_err();
                 (checker, failure)
             })
             .join()
@@ -327,7 +333,9 @@ fn repeated_checks_share_a_cumulative_work_ceiling() {
     let owner = admit("{p}. :-p.");
     let candidate = model(&owner, &[]);
     let mut baseline = owner.checker(ConstraintCheckLimits::default()).unwrap();
-    baseline.check(&candidate, &Control::default()).unwrap();
+    baseline
+        .check(&candidate, &Cancellation::default())
+        .unwrap();
     let complete = baseline.statistics();
     let mut checker = owner
         .checker(ConstraintCheckLimits {
@@ -335,10 +343,12 @@ fn repeated_checks_share_a_cumulative_work_ceiling() {
             ..Default::default()
         })
         .unwrap();
-    checker.check(&candidate, &Control::default()).unwrap();
+    checker.check(&candidate, &Cancellation::default()).unwrap();
     assert_eq!(checker.statistics(), complete);
     for _ in 0..2 {
-        let failure = checker.check(&candidate, &Control::default()).unwrap_err();
+        let failure = checker
+            .check(&candidate, &Cancellation::default())
+            .unwrap_err();
         assert!(
             matches!(failure.cause, ConstraintCheckCause::Source(ref error)
                 if matches!(error.as_ref(), FormulaFailure::Limit {
@@ -359,7 +369,9 @@ fn generated_checks_share_a_cumulative_scalar_ceiling() {
     let candidate = model(&owner, &["d(1)", "d(2)", "p(f(1))"]);
     let mut baseline = owner.checker(ConstraintCheckLimits::default()).unwrap();
     assert_eq!(
-        baseline.check(&candidate, &Control::default()).unwrap(),
+        baseline
+            .check(&candidate, &Cancellation::default())
+            .unwrap(),
         ConstraintVerdict::Satisfied
     );
     let complete = baseline.statistics();
@@ -370,9 +382,11 @@ fn generated_checks_share_a_cumulative_scalar_ceiling() {
             ..Default::default()
         })
         .unwrap();
-    checker.check(&candidate, &Control::default()).unwrap();
+    checker.check(&candidate, &Cancellation::default()).unwrap();
     assert_eq!(checker.statistics(), complete);
-    let failure = checker.check(&candidate, &Control::default()).unwrap_err();
+    let failure = checker
+        .check(&candidate, &Cancellation::default())
+        .unwrap_err();
     assert!(
         matches!(failure.cause, ConstraintCheckCause::Source(ref error)
             if matches!(error.as_ref(), FormulaFailure::Expansion(ExpansionFailure::Limit {
@@ -426,7 +440,7 @@ fn streamed_satisfaction_composes_with_the_retained_core() {
         let count = hybrid.atom_catalog().atoms().len();
         assert!(count <= 8, "bounded complete interpretation population");
         let mut checker = hybrid.checker(ConstraintCheckLimits::default()).unwrap();
-        let control = Control::default();
+        let cancellation = Cancellation::default();
         for mask in 0..(1_usize << count) {
             let candidate = Model::from_positions(
                 hybrid.atom_catalog(),
@@ -445,11 +459,16 @@ fn streamed_satisfaction_composes_with_the_retained_core() {
             let core =
                 Interpretation::new(hybrid.core_theory(), candidate.positions().iter().copied())
                     .unwrap();
-            let original = models(eager.theory(), &full, Limits::default(), &control).unwrap();
-            let retained =
-                models(hybrid.core_theory(), &core, Limits::default(), &control).unwrap();
+            let original = models(eager.theory(), &full, Limits::default(), &cancellation).unwrap();
+            let retained = models(
+                hybrid.core_theory(),
+                &core,
+                Limits::default(),
+                &cancellation,
+            )
+            .unwrap();
             let streamed =
-                checker.check(&candidate, &control).unwrap() == ConstraintVerdict::Satisfied;
+                checker.check(&candidate, &cancellation).unwrap() == ConstraintVerdict::Satisfied;
             assert_eq!(original, retained && streamed, "{source}: mask {mask}");
         }
     }

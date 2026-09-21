@@ -2,7 +2,7 @@
 
 use super::{CertificateError, Verdict};
 use crate::search::{Budget, LocalQuota};
-use crate::{Cnf, Control, Incomplete, Limits, Literal, SearchStatistics};
+use crate::{Cancellation, Cnf, Incomplete, Limits, Literal, SearchStatistics};
 use zetesis_ferraris::{
     EvaluationError, EvaluationLimits, EvaluationWorkspace, Interpretation, PositivePlan,
 };
@@ -41,7 +41,7 @@ pub(super) fn check(
     candidate: &Interpretation,
     max_bytes: usize,
     limits: Limits,
-    control: &Control,
+    cancellation: &Cancellation,
     search: &mut SearchStatistics,
 ) -> (Result<Verdict, Incomplete>, u128) {
     let remaining = limits.search.max_work.saturating_sub(search.work);
@@ -53,7 +53,7 @@ pub(super) fn check(
                 .saturating_add(remaining.min(limits.max_verification_work)),
             ..limits.search
         },
-        control,
+        cancellation,
         statistics: *search,
     };
     let mut peak = plan.statistics().retained_bytes;
@@ -75,7 +75,7 @@ fn validate(
     budget: &mut Budget<'_>,
     peak: &mut u128,
 ) -> Result<Verdict, Incomplete> {
-    budget.control.poll()?;
+    budget.cancellation.poll()?;
     if !plan.theory().same_instance(candidate.theory()) {
         return Err(Incomplete::WrongTheory);
     }
@@ -100,7 +100,7 @@ fn validate(
                 .saturating_sub(budget.statistics.work),
             max_bytes: usize::try_from(available).map_err(|_| Incomplete::CounterOverflow)?,
         },
-        budget.control,
+        budget.cancellation,
     );
     budget.statistics.work += attempt.work;
     *peak = (*peak).max(plan.statistics().retained_bytes + attempt.retained_bytes);

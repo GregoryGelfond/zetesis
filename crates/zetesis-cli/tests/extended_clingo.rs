@@ -10,7 +10,7 @@ use std::process::{Command, Stdio};
 use clap::Parser;
 use serde_json::Value as Json;
 use zetesis_cli::{Completion, Options, run};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, ExpansionFailure, ExpansionLimits, ProfileFeature, admit,
     admit_extended,
@@ -73,8 +73,13 @@ fn native_search(source: &str, search: &str) -> (Models, String) {
     ])
     .expect("test options");
     let mut bytes = Vec::new();
-    let report = run(source.to_owned(), &options, &mut bytes, &Control::default())
-        .unwrap_or_else(|error| panic!("native source {source}: {error}"));
+    let report = run(
+        source.to_owned(),
+        &options,
+        &mut bytes,
+        &Cancellation::default(),
+    )
+    .unwrap_or_else(|error| panic!("native source {source}: {error}"));
     assert_eq!(report.completion, Completion::Exhausted, "source: {source}");
     let text = String::from_utf8(bytes).expect("native UTF-8 output");
     let mut models = Models::new();

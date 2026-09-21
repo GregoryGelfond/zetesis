@@ -13,7 +13,7 @@ use source_records::{Records, admit, exhaustive};
 use sources::{DIRECTIONS, PROGRAM, WEIGHTS, cases, directive};
 use std::collections::BTreeSet;
 use zetesis_core::{Model, Value};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_objective::{AdmissionError, AdmissionLimits, AdmissionResource};
 use zetesis_themelios::{
     AdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure,
@@ -372,7 +372,7 @@ proptest::proptest! {
         let input = admit(&source, &FormulaLimits::default()).unwrap();
         let model = Model::new(input.atoms().iter().filter(|atom| selected && atom.values().is_empty()).cloned());
         let evaluation = zetesis_objective::evaluate(input.objectives(), &model,
-            zetesis_objective::Limits::default(), &Control::default()).unwrap();
+            zetesis_objective::Limits::default(), &Cancellation::default()).unwrap();
         proptest::prop_assert_eq!(evaluation.score().costs(), &[(priority, if selected { i64::from(amount) } else { 0 })]);
         proptest::prop_assert_eq!(evaluation.contributions().len(), usize::from(selected));
         if let Some(key) = evaluation.contributions().first() {

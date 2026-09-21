@@ -3,7 +3,7 @@
 use std::cmp::Ordering;
 
 use zetesis_core::{Atom, AtomPattern, Model, Predicate, Term, Value};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Node, Theory, models};
 use zetesis_objective::{Condition, ConditionNode, ObjectiveProgram, ObjectiveTemplate, evaluate};
 use zetesis_themelios::objective_bound::{
@@ -72,13 +72,13 @@ fn closed_query_bounds_preserve_all_candidate_ties() {
         zetesis_objective::AdmissionLimits::default(),
     )
     .unwrap();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let plan = ObjectivePlan::new(
         &original,
         &atoms,
         &objective,
         ObjectivePlanLimits::default(),
-        &control,
+        &cancellation,
     )
     .unwrap();
     let scores: Vec<_> = (0..8)
@@ -94,7 +94,7 @@ fn closed_query_bounds_preserve_all_candidate_ties() {
                 &objective,
                 &model,
                 zetesis_objective::Limits::default(),
-                &control,
+                &cancellation,
             )
             .unwrap()
             .score()
@@ -103,7 +103,7 @@ fn closed_query_bounds_preserve_all_candidate_ties() {
         .collect();
     for incumbent in &scores {
         let bound = plan
-            .bound(incumbent, ObjectiveBoundLimits::default(), &control)
+            .bound(incumbent, ObjectiveBoundLimits::default(), &cancellation)
             .unwrap();
         assert!(bound.original().same_instance(&original));
         assert_eq!(bound.theory().atom_count(), atoms.len());
@@ -118,7 +118,7 @@ fn closed_query_bounds_preserve_all_candidate_ties() {
                     bound.theory(),
                     &candidate,
                     zetesis_ferraris::Limits::default(),
-                    &control
+                    &cancellation
                 )
                 .unwrap(),
                 score.compare_costs(incumbent) != Ordering::Greater,

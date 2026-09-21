@@ -6,7 +6,7 @@ use clap::Parser;
 use zetesis_cli::{
     Completion, Interruption, Options, Report, RunError, run_detailed_with_diagnostics,
 };
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_sat::Incomplete;
 
 #[path = "support/bounded_writer.rs"]
@@ -42,7 +42,7 @@ fn solve(source: &str, options: &Options) -> (Report, String, String) {
         options,
         &mut output,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     (
@@ -175,7 +175,7 @@ fn output_failure_preserves_verified_queued_models_after_join() {
             &options(workers, 3),
             &mut writer,
             &mut Vec::new(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
         assert!(matches!(*failure.cause, RunError::Output(_)));

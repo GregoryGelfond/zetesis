@@ -4,7 +4,7 @@ use std::io::{self, Write};
 
 use clap::Parser;
 use zetesis_cli::{Completion, Options, RunError, SourceBatching, run_with_diagnostics};
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 
 fn options(extra: &[&str]) -> Options {
     Options::try_parse_from(
@@ -23,7 +23,7 @@ fn solve(source: &str, extra: &[&str]) -> (zetesis_cli::Report, serde_json::Valu
         &options(extra),
         &mut output,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     (
@@ -87,7 +87,7 @@ fn requested_model_stop_retains_complete_queued_checks() {
         &selected,
         &mut Vec::new(),
         &mut Vec::new(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(report.completion, Completion::RequestedModels);
@@ -210,7 +210,7 @@ fn incompatible_execution_is_refused_as_route_capability() {
             &options(&extra),
             &mut Vec::new(),
             &mut Vec::new(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
         assert!(matches!(error, RunError::UnsupportedSourceBatching));
@@ -224,7 +224,7 @@ fn automatic_formula_admission_cannot_ignore_shared_policy() {
         &options(&["--source-batching", "worlds"]),
         &mut Vec::new(),
         &mut Vec::new(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(error, RunError::UnsupportedSourceBatching));
@@ -232,14 +232,14 @@ fn automatic_formula_admission_cannot_ignore_shared_policy() {
 
 #[test]
 fn cancelled_solve_does_not_initialize_shared_execution() {
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     let report = run_with_diagnostics(
         "a.".into(),
         &options(&["--source-batching", "union"]),
         &mut Vec::new(),
         &mut Vec::new(),
-        &control,
+        &cancellation,
     )
     .unwrap();
     assert_eq!(report.completion, Completion::Interrupted);
@@ -265,7 +265,7 @@ fn output_failure_retains_completed_shared_evidence() {
         &selected,
         &mut RefuseOutput,
         &mut Vec::new(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(*error.cause, RunError::Output(_)));
@@ -312,7 +312,7 @@ fn prepared_relational_sessions_expose_shared_evidence() {
             models: 0,
             ..Default::default()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     assert_eq!(session.by_ref().map(Result::unwrap).count(), 4);
@@ -339,7 +339,7 @@ fn prepared_formula_cannot_ignore_shared_source_selection() {
             source_batching: SourceBatching::Union,
             ..Default::default()
         },
-        Control::default(),
+        Cancellation::default(),
     ) else {
         panic!("formula route cannot honor shared relational traversal");
     };

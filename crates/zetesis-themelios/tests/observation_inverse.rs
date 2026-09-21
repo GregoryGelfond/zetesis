@@ -1,7 +1,7 @@
 //! Finite inverse matching, structural alternatives and wildcard key identities.
 
 use zetesis_core::Model;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::observation::{ErrorKind, EvaluationError, Limits, Resource};
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
@@ -24,7 +24,7 @@ fn shown(source: &str) -> Vec<String> {
             &model,
             input.metadata().output(),
             Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap()
         .text()
@@ -55,7 +55,11 @@ fn authored_arithmetic_errors_remain_errors_after_inverse_capture() {
     let error = input
         .metadata()
         .observations()
-        .evaluate(&Model::default(), Limits::default(), &Control::default())
+        .evaluate(
+            &Model::default(),
+            Limits::default(),
+            &Cancellation::default(),
+        )
         .unwrap_err();
     assert_eq!(
         error.kind(),
@@ -118,7 +122,11 @@ fn numeric_aggregate_mismatch_preserves_authored_errors() {
     let error = input
         .metadata()
         .observations()
-        .evaluate(&Model::default(), Limits::default(), &Control::default())
+        .evaluate(
+            &Model::default(),
+            Limits::default(),
+            &Cancellation::default(),
+        )
         .unwrap_err();
     assert_eq!(
         error.kind(),
@@ -135,7 +143,7 @@ fn inverse_work_admission_is_inclusive() {
                 max_work,
                 ..Limits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
     };
     let complete = evaluate(u64::MAX).unwrap();

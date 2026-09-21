@@ -84,10 +84,14 @@ pub fn run(options: &Options, output: &mut impl io::Write) -> Result<bool, Error
     use io::Write as _;
     let configuration = options.configuration()?;
     let mut writer = view::BoundedWriter::new(output, config::MAX_REPORT_BYTES);
-    measure(configuration, &zetesis_cpu::Control::default(), |event| {
-        serde_json::to_writer(&mut writer, event).map_err(io::Error::other)?;
-        writeln!(writer)
-    })
+    measure(
+        configuration,
+        &zetesis_cpu::Cancellation::default(),
+        |event| {
+            serde_json::to_writer(&mut writer, event).map_err(io::Error::other)?;
+            writeln!(writer)
+        },
+    )
 }
 
 #[cfg(test)]

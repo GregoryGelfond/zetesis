@@ -19,7 +19,12 @@ fn certificate(atoms: usize, heads: &[usize]) -> TightPlan {
         })
         .collect();
     let theory = Theory::new(atoms, nodes, roots, AdmissionLimits::default()).unwrap();
-    TightPlan::compile(&theory, TightPlanLimits::default(), &Control::default()).unwrap()
+    TightPlan::compile(
+        &theory,
+        TightPlanLimits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap()
 }
 
 fn graph(certificate: &TightPlan, support: TightSupport) -> Graph {
@@ -41,7 +46,9 @@ fn groups_preserve_every_original_producer_occurrence() {
             .collect();
         let certificate = certificate(atoms, &heads);
         let grouped = graph(&certificate, TightSupport::Grouped);
-        let packed = grouped.pack(&certificate, &Control::default()).unwrap();
+        let packed = grouped
+            .pack(&certificate, &Cancellation::default())
+            .unwrap();
         let offset = certificate.producers().len() * 4;
         let bounds = &packed.producers[offset..=offset + atoms.div_ceil(32)];
         assert_eq!(bounds[0], 0);
@@ -72,7 +79,9 @@ fn grouped_masks_equal_original_enabled_support() {
         .collect();
     let certificate = certificate(65, &heads);
     let grouped = graph(&certificate, TightSupport::Grouped);
-    let packed = grouped.pack(&certificate, &Control::default()).unwrap();
+    let packed = grouped
+        .pack(&certificate, &Cancellation::default())
+        .unwrap();
     let offset = certificate.producers().len() * 4;
     for gate in [false, true] {
         let truth = |node| node == 1 && gate;
@@ -106,7 +115,9 @@ fn grouped_masks_equal_original_enabled_support() {
 fn empty_groups_retain_repeated_offsets() {
     let certificate = certificate(65, &[64, 64, 0]);
     let grouped = graph(&certificate, TightSupport::Grouped);
-    let packed = grouped.pack(&certificate, &Control::default()).unwrap();
+    let packed = grouped
+        .pack(&certificate, &Cancellation::default())
+        .unwrap();
     assert_eq!(&packed.producers[12..], &[0, 1, 1, 3]);
 }
 
@@ -186,11 +197,11 @@ fn grouped_indices_obey_device_storage_limits() {
 fn cancelled_group_packing_has_no_partial_output() {
     let certificate = certificate(65, &[64, 0]);
     let grouped = graph(&certificate, TightSupport::Grouped);
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     assert_eq!(
         grouped
-            .pack_producers(&certificate, &control)
+            .pack_producers(&certificate, &cancellation)
             .err()
             .unwrap()
             .interruption,
@@ -238,7 +249,15 @@ fn readback_requires_the_selected_support_policy() {
         .unwrap();
         let record = |marker| [1, 0, STATUS_STABLE, 0, plan.work, marker];
         assert_eq!(
-            decode(&record(marker), &graph, &plan, &[1], &Control::default()).unwrap()[0].verdict(),
+            decode(
+                &record(marker),
+                &graph,
+                &plan,
+                &[1],
+                &Cancellation::default()
+            )
+            .unwrap()[0]
+                .verdict(),
             TightVerdict::Stable
         );
         assert_eq!(
@@ -247,7 +266,7 @@ fn readback_requires_the_selected_support_policy() {
                 &graph,
                 &plan,
                 &[1],
-                &Control::default()
+                &Cancellation::default()
             )
             .unwrap_err()
             .kind(),

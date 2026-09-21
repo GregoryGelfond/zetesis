@@ -10,7 +10,7 @@ use std::{
     io::{self, Write},
     num::NonZeroUsize,
 };
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 fn options() -> Options {
     let mut options = Options::try_parse_from([
@@ -33,11 +33,11 @@ fn options() -> Options {
 fn run(
     source: &str,
     options: &Options,
-    control: &Control,
+    cancellation: &Cancellation,
     output: &mut impl Write,
     diagnostics: &mut impl Write,
 ) -> Result<PublicationReport, PublicationFailure> {
-    run_finalized_with_diagnostics(source.into(), options, output, diagnostics, control)
+    run_finalized_with_diagnostics(source.into(), options, output, diagnostics, cancellation)
         .and_then(crate::PublicationOutcome::into_legacy)
 }
 
@@ -95,7 +95,7 @@ fn cpu_batches_preserve_complete_model_displays() {
         let expected = run(
             source,
             &options,
-            &Control::default(),
+            &Cancellation::default(),
             &mut scalar,
             &mut Vec::new(),
         )
@@ -106,7 +106,7 @@ fn cpu_batches_preserve_complete_model_displays() {
         let actual = run(
             source,
             &options,
-            &Control::default(),
+            &Cancellation::default(),
             &mut output,
             &mut Vec::new(),
         )
@@ -138,7 +138,7 @@ fn requested_publication_limit_reports_partial_coverage() {
     let captured = run(
         "{a;b;c}.",
         &options,
-        &Control::default(),
+        &Cancellation::default(),
         &mut output,
         &mut Vec::new(),
     )
@@ -165,7 +165,7 @@ fn proposal_limit_publishes_an_incomplete_prefix() {
     let captured = run(
         "{a;b;c}.",
         &options,
-        &Control::default(),
+        &Cancellation::default(),
         &mut output,
         &mut Vec::new(),
     )
@@ -186,13 +186,13 @@ fn proposal_limit_publishes_an_incomplete_prefix() {
 
 struct CancelOnAnswer {
     bytes: Vec<u8>,
-    control: Control,
+    cancellation: Cancellation,
 }
 impl Write for CancelOnAnswer {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
         self.bytes.extend_from_slice(bytes);
         if bytes.starts_with(b"Answer:") {
-            self.control.cancel();
+            self.cancellation.cancel();
         }
         Ok(bytes.len())
     }
@@ -203,15 +203,15 @@ impl Write for CancelOnAnswer {
 
 #[test]
 fn cancellation_prevents_queued_answer_publication() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut output = CancelOnAnswer {
         bytes: Vec::new(),
-        control: control.clone(),
+        cancellation: cancellation.clone(),
     };
     let captured = run(
         "{a;b;c}. #show x.",
         &options(),
-        &control,
+        &cancellation,
         &mut output,
         &mut Vec::new(),
     )
@@ -245,7 +245,7 @@ fn hidden_optimal_ties_keep_display_multiplicity() {
         let captured = run(
             source,
             &options,
-            &Control::default(),
+            &Cancellation::default(),
             &mut output,
             &mut diagnostics,
         )
@@ -286,7 +286,7 @@ fn bounded_search_never_publishes_optimum_status() {
         let captured = run(
             "1 {a;b;c} 1. #minimize{1,a:a;1,b:b;1,c:c}.",
             &options,
-            &Control::default(),
+            &Cancellation::default(),
             &mut output,
             &mut Vec::new(),
         )
@@ -316,7 +316,7 @@ fn every_publication_truncation_preserves_its_prefix() {
         let captured = run(
             source,
             &options,
-            &Control::default(),
+            &Cancellation::default(),
             &mut output,
             &mut diagnostics,
         )
@@ -330,7 +330,7 @@ fn every_publication_truncation_preserves_its_prefix() {
                     run(
                         source,
                         &options,
-                        &Control::default(),
+                        &Cancellation::default(),
                         &mut other,
                         &mut broken,
                     )
@@ -338,7 +338,7 @@ fn every_publication_truncation_preserves_its_prefix() {
                     run(
                         source,
                         &options,
-                        &Control::default(),
+                        &Cancellation::default(),
                         &mut broken,
                         &mut other,
                     )
@@ -406,7 +406,7 @@ fn original_case(
         &options,
         &mut output,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(

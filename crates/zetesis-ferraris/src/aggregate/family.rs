@@ -1,4 +1,4 @@
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 use super::lower::{Builder, reserve, subsets, transaction_value, validate};
 use super::{
@@ -95,9 +95,9 @@ pub fn append_aggregate_family(
     elements: &[AggregateElement],
     guards: &[AggregateGuard],
     limits: AggregateFamilyLimits,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<AggregateFamilyBuild, AggregateError> {
-    transaction_value(nodes, limits.aggregate, control, |builder| {
+    transaction_value(nodes, limits.aggregate, cancellation, |builder| {
         compile(builder, elements, guards, limits.max_guards)
     })
     .map(|((roots, profile), statistics)| AggregateFamilyBuild {

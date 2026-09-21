@@ -25,7 +25,7 @@ fn legacy_metadata_cannot_establish_optimality() {
         &options,
         &mut Vec::new(),
         &mut io::sink(),
-        &zetesis_cpu::Control::default(),
+        &zetesis_cpu::Cancellation::default(),
     )
     .unwrap_err();
     let partial = failure.partial_report.as_ref().unwrap();

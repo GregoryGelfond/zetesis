@@ -45,7 +45,7 @@ impl Workspace {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Check, Control, Limits, SearchStatistics, Statistics};
+    use crate::{Cancellation, Check, Limits, SearchStatistics, Statistics};
     use zetesis_ferraris::Node;
 
     fn theory(nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
@@ -74,13 +74,13 @@ mod tests {
         );
         let fact = theory(vec![Node::Atom(0)], vec![0]);
         let mut workspace = Workspace::default();
-        let control = Control::default();
+        let cancellation = Cancellation::default();
         for original in [&input, &fact, &input] {
             let candidate = Interpretation::new(original, [0]).unwrap();
             let mut budget = Budget {
                 quota: search::LocalQuota,
                 limits: Limits::default().search,
-                control: &control,
+                cancellation: &cancellation,
                 statistics: SearchStatistics::default(),
             };
             let result = super::super::fresh_membership(
@@ -107,7 +107,7 @@ mod tests {
                         &candidate,
                         &witness,
                         zetesis_ferraris::Limits::default(),
-                        &control
+                        &cancellation
                     )
                     .unwrap()
                 );
@@ -139,11 +139,11 @@ mod tests {
         );
         let fact = theory(vec![Node::Atom(0)], vec![0]);
         let candidate = Interpretation::new(&fact, [0]).unwrap();
-        let control = Control::default();
+        let cancellation = Cancellation::default();
         let mut budget = Budget {
             quota: search::LocalQuota,
             limits: Limits::default().search,
-            control: &control,
+            cancellation: &cancellation,
             statistics: SearchStatistics::default(),
         };
         let (cnf, search) = workspace
@@ -170,7 +170,7 @@ mod tests {
             &choice,
             crate::SearchMethod::Clauses,
             Limits::default(),
-            Control::default(),
+            Cancellation::default(),
         )
         .unwrap();
         let first = models.next().unwrap().unwrap();

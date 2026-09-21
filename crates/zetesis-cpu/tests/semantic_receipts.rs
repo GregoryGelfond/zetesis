@@ -5,7 +5,8 @@ use zetesis_core::{
     StaticLimits, Template,
 };
 use zetesis_cpu::{
-    CandidateLimits, CandidateTermination, Candidates, Control, Limits, Stop, check, check_static,
+    Cancellation, CandidateLimits, CandidateTermination, Candidates, Limits, Stop, check,
+    check_static,
 };
 
 fn fact(name: &str) -> Template {
@@ -38,7 +39,7 @@ fn lazy_receipt_retains_the_checked_program() {
         &source,
         &Seed::new(&source, []).unwrap(),
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert!(result.program().same_instance(&source));
@@ -57,7 +58,7 @@ fn rejected_lazy_check_cannot_yield_a_stable_receipt() {
         &source,
         &Seed::new(&source, []).unwrap(),
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap()
     .into_stable_interpretation()
@@ -81,12 +82,12 @@ fn seed_mismatch_cannot_yield_a_stable_receipt() {
         vec![],
     )]);
     let seed = Seed::new(&source, [atom]).unwrap();
-    let lazy = check(&source, &seed, Limits::default(), &Control::default()).unwrap();
+    let lazy = check(&source, &seed, Limits::default(), &Cancellation::default()).unwrap();
     assert!(lazy.seed_mismatch());
     assert!(!lazy.constraint_violated());
     assert!(lazy.into_stable_interpretation().is_err());
     let graph = compile(&source);
-    let dense = check_static(&graph, &seed, Limits::default(), &Control::default()).unwrap();
+    let dense = check_static(&graph, &seed, Limits::default(), &Cancellation::default()).unwrap();
     assert!(dense.seed_mismatch());
     assert!(!dense.constraint_violated());
     assert!(dense.stable_interpretation(&graph).unwrap().is_none());
@@ -100,7 +101,7 @@ fn static_receipt_accepts_a_recompiled_same_instance() {
         &graph,
         &Seed::new(&source, []).unwrap(),
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let rebuilt = compile(&source.clone());
@@ -118,7 +119,7 @@ fn static_decoding_rejects_equal_width_foreign_graphs() {
         &graph,
         &Seed::new(&source, []).unwrap(),
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     // Both equal syntax and an equally wide, differently named carrier are
@@ -145,7 +146,7 @@ fn rejected_static_check_cannot_yield_a_stable_receipt() {
         &graph,
         &Seed::new(&source, []).unwrap(),
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert!(result.stable_interpretation(&graph).unwrap().is_none());
@@ -159,7 +160,8 @@ fn rejected_static_check_cannot_yield_a_stable_receipt() {
 #[test]
 fn candidate_exhaustion_remains_observable() {
     let source = program(vec![]);
-    let mut candidates = Candidates::new(&source, CandidateLimits::default(), Control::default());
+    let mut candidates =
+        Candidates::new(&source, CandidateLimits::default(), Cancellation::default());
     assert_eq!(candidates.termination(), None);
     assert!(candidates.next().unwrap().unwrap().atoms().is_empty());
     assert_eq!(candidates.termination(), None);
@@ -181,7 +183,7 @@ fn candidate_refusal_remains_observable() {
             max_candidates: 0,
             ..CandidateLimits::default()
         },
-        Control::default(),
+        Cancellation::default(),
     );
     assert!(matches!(candidates.next(), Some(Err(Stop::CandidateLimit))));
     for _ in 0..3 {
@@ -196,9 +198,9 @@ fn candidate_refusal_remains_observable() {
 #[test]
 fn candidate_cancellation_remains_observable() {
     let source = program(vec![]);
-    let control = Control::default();
-    let mut candidates = Candidates::new(&source, CandidateLimits::default(), control.clone());
-    control.cancel();
+    let cancellation = Cancellation::default();
+    let mut candidates = Candidates::new(&source, CandidateLimits::default(), cancellation.clone());
+    cancellation.cancel();
     assert!(matches!(candidates.next(), Some(Err(Stop::Cancelled))));
     for _ in 0..3 {
         assert_eq!(

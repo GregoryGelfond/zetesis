@@ -25,7 +25,7 @@ fn fixture_work_counts_packed_support_initialization() {
             let plan = zetesis_ferraris::TightPlan::compile(
                 &fixture.theory,
                 zetesis_ferraris::TightPlanLimits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
             assert_eq!(

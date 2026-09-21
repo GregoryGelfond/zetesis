@@ -1,7 +1,7 @@
 //! Closed objective conditions read full models without supplying support.
 
 use zetesis_core::{Atom, AtomPattern, Model, Predicate, Sign, Term, Value};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_objective::{
     AdmissionError, AdmissionLimits, AdmissionResource, Condition, ConditionNode as Node,
     ErrorKind, Limits, ObjectiveProgram, ObjectiveTemplate, Stop, evaluate,
@@ -48,7 +48,7 @@ fn closed_conditions_follow_the_original_model() {
                 .map(|(_, name)| atom(name)),
         );
         let before = model.clone();
-        let result = evaluate(&query, &model, Limits::default(), &Control::default()).unwrap();
+        let result = evaluate(&query, &model, Limits::default(), &Cancellation::default()).unwrap();
         assert_eq!(
             result.score().costs(),
             &[(7, if (p && !q) || r { 2 } else { 0 })]
@@ -65,7 +65,7 @@ fn absent_queries_retain_zero_priority_slots() {
         &query,
         &Model::new([]),
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert!(result.score().is_present());
@@ -87,7 +87,7 @@ fn closed_and_lifted_rows_share_complete_keys() {
         &query,
         &Model::new([atom("p")]),
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(result.score().costs(), &[(7, 2)]);
@@ -120,7 +120,7 @@ fn condition_atoms_preserve_signed_value_identity() {
             0,
         ),
     ] {
-        let result = evaluate(&query, &model, Limits::default(), &Control::default()).unwrap();
+        let result = evaluate(&query, &model, Limits::default(), &Cancellation::default()).unwrap();
         assert_eq!(result.score().costs(), &[(7, expected)]);
     }
 }
@@ -174,14 +174,14 @@ fn condition_node_limits_are_inclusive() {
 fn condition_work_refusal_returns_no_score() {
     let query = program(vec![row(vec![Node::Atom(atom("p")), Node::Not(0)])]);
     let model = Model::new([atom("other")]);
-    let complete = evaluate(&query, &model, Limits::default(), &Control::default()).unwrap();
+    let complete = evaluate(&query, &model, Limits::default(), &Cancellation::default()).unwrap();
     let exact = complete.statistics().work;
     let limits = Limits {
         max_work: exact,
         ..Limits::default()
     };
     assert_eq!(
-        evaluate(&query, &model, limits, &Control::default())
+        evaluate(&query, &model, limits, &Cancellation::default())
             .unwrap()
             .score(),
         complete.score()
@@ -193,13 +193,13 @@ fn condition_work_refusal_returns_no_score() {
             max_work: exact - 1,
             ..limits
         },
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert_eq!(error.kind(), ErrorKind::Stopped(Stop::WorkLimit));
     assert_eq!(error.statistics().work, exact - 1);
     assert_eq!(
-        evaluate(&query, &model, limits, &Control::default())
+        evaluate(&query, &model, limits, &Cancellation::default())
             .unwrap()
             .score(),
         complete.score()

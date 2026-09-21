@@ -10,7 +10,7 @@ pub(super) fn complete(
     least: &Interpretation,
     budget: &mut Budget<'_>,
 ) -> Result<Option<usize>, PositiveError> {
-    budget.control.poll()?;
+    budget.cancellation.poll()?;
     // The CSR and its construction vectors have been dropped. Only the final
     // plan header and its interpretation words overlap this evaluation owner.
     let base = size_of::<PositivePlan>() as u128
@@ -25,7 +25,7 @@ pub(super) fn complete(
             max_work: budget.limits.max_work - budget.statistics.work,
             max_bytes: available,
         },
-        budget.control,
+        budget.cancellation,
     );
     // Evaluation admits at most its supplied remaining work. Preserve its
     // original error even if observed allocation slack also exceeds the cap.
@@ -60,6 +60,6 @@ pub(super) fn complete(
             return Err(PositiveError::InvalidClosure { root });
         }
     }
-    budget.control.poll()?;
+    budget.cancellation.poll()?;
     Ok(failed)
 }

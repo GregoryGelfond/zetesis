@@ -5,7 +5,7 @@ use super::{
     replay,
 };
 use std::io;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Theory;
 
 /// Run complete refinement checks and the finite whole-owner observations.
@@ -17,7 +17,7 @@ pub fn measure(
     configuration: &Configuration,
     observe: impl FnMut(&Event<'_>) -> io::Result<()>,
 ) -> Result<(), Error> {
-    measure_with_control(configuration, &Control::default(), observe)
+    measure_with_cancellation(configuration, &Cancellation::default(), observe)
 }
 
 /// Same finite study under caller-owned cancellation and an absolute deadline.
@@ -25,9 +25,9 @@ pub fn measure(
 ///
 /// # Errors
 /// Returns control, admission, construction, native, parity or publication failure.
-pub fn measure_with_control(
+pub fn measure_with_cancellation(
     configuration: &Configuration,
-    control: &Control,
+    cancellation: &Cancellation,
     mut observe: impl FnMut(&Event<'_>) -> io::Result<()>,
 ) -> Result<(), Error> {
     configuration.validate()?;
@@ -41,9 +41,9 @@ pub fn measure_with_control(
     .map_err(Error::Output)?;
     let mut samples = 0;
     for case in Case::ALL {
-        control.poll().map_err(Error::Control)?;
+        cancellation.poll().map_err(Error::Control)?;
         let source = case.theory()?;
-        let (expected, pairs) = qualify(&source, configuration.max_reference_work, control)?;
+        let (expected, pairs) = qualify(&source, configuration.max_reference_work, cancellation)?;
         observe(&Event::Qualified {
             case,
             atoms: source.atom_count(),
@@ -79,7 +79,7 @@ pub fn measure_with_control(
                             &source,
                             route == Route::Feedback,
                             *configuration,
-                            control,
+                            cancellation,
                             &mut sample.progress,
                             &mut sample.elapsed,
                         )
@@ -96,7 +96,7 @@ pub fn measure_with_control(
                                 None
                             },
                             *configuration,
-                            control,
+                            cancellation,
                             &mut sample.progress,
                             &mut sample.elapsed,
                         ),
@@ -154,7 +154,7 @@ pub(super) fn family(progress: &Progress, expected: &[u64]) -> Result<(), Error>
 pub(super) fn qualify(
     source: &Theory,
     max_work: u64,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<(Vec<u64>, u64), Error> {
     fixtures::shape(source)?;
     let mut expected = super::reserve(64)?;
@@ -162,7 +162,7 @@ pub(super) fn qualify(
     let reference = super::reference_limits(max_work);
     for bits in 0..limit {
         let candidate = fixtures::interpretation(source, bits)?;
-        if zetesis_ferraris::check(source, &candidate, reference, control)
+        if zetesis_ferraris::check(source, &candidate, reference, cancellation)
             .map_err(Error::Control)?
             .accepted()
         {
@@ -174,15 +174,20 @@ pub(super) fn qualify(
         let witness = fixtures::interpretation(source, witness_bits)?;
         // Qualification has fixed construction maxima, separately from the
         // caller's measured construction ceilings. No timing is taken here.
-        let mut budget = Budget::new(ConstructionLimits::default(), control);
+        let mut budget = Budget::new(ConstructionLimits::default(), cancellation);
         let guard = guard::compile(source, &witness, &mut budget)?;
         for candidate_bits in 0..limit {
             let candidate = fixtures::interpretation(source, candidate_bits)?;
             let proper = witness_bits != candidate_bits && witness_bits & !candidate_bits == 0;
-            let models =
-                zetesis_ferraris::models_reduct(source, &candidate, &witness, reference, control)
-                    .map_err(Error::Control)?;
-            let allows = guard.allows(&candidate, max_work, control)?;
+            let models = zetesis_ferraris::models_reduct(
+                source,
+                &candidate,
+                &witness,
+                reference,
+                cancellation,
+            )
+            .map_err(Error::Control)?;
+            let allows = guard.allows(&candidate, max_work, cancellation)?;
             if allows == (proper && models) || (!allows && expected.contains(&candidate_bits)) {
                 return Err(Error::Parity);
             }

@@ -4,7 +4,7 @@ use crate::{ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource};
 use themelios_base::source::SourceId;
 use themelios_base::span::{ByteOffset, Location, Span};
 use zetesis_core::Value;
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 
 fn location() -> Location {
     Location {
@@ -21,7 +21,7 @@ fn refused_checks_retain_their_accepted_prefix() {
         max_substitutions: 1,
         ..FormulaLimits::default()
     };
-    let result = accounting.with_control(&Control::default(), |counters| {
+    let result = accounting.with_cancellation(&Cancellation::default(), |counters| {
         counters.charge_work(2, &limits, location())?;
         counters.substitution(&limits, location())?;
         counters.charge_work(2, &limits, location())
@@ -37,7 +37,7 @@ fn refused_checks_retain_their_accepted_prefix() {
     ));
     assert_eq!(accounting.work, 2);
     assert_eq!(accounting.substitutions, 1);
-    let next = accounting.with_control(&Control::default(), |counters| {
+    let next = accounting.with_cancellation(&Cancellation::default(), |counters| {
         counters.substitution(&limits, location())
     });
     assert!(matches!(
@@ -64,14 +64,14 @@ fn generated_identities_survive_check_boundaries() {
     // Inline numbers carry no variable payload. A symbol makes the copied-byte
     // assertion meaningful; a same-spelling string is a different typed value.
     let value = Value::Symbol("generated".into());
-    accounting.with_control(&Control::default(), |counters| {
+    accounting.with_cancellation(&Cancellation::default(), |counters| {
         counters
             .generated(&value, &limits, &mut budget, location())
             .unwrap();
     });
     let copied = budget.usage().scalar_bytes;
     assert!(copied > 0);
-    let result = accounting.with_control(&Control::default(), |counters| {
+    let result = accounting.with_cancellation(&Cancellation::default(), |counters| {
         counters.generated(&value, &limits, &mut budget, location())?;
         counters.generated(
             &Value::String("generated".into()),
@@ -96,12 +96,13 @@ fn generated_identities_survive_check_boundaries() {
 fn stopped_checks_do_not_retain_the_previous_control() {
     let mut accounting = Accounting::default();
     let limits = FormulaLimits::default();
-    accounting.with_control(&Control::default(), |counters| {
+    accounting.with_cancellation(&Cancellation::default(), |counters| {
         counters.work(&limits, location()).unwrap();
     });
-    let stopped = Control::default();
+    let stopped = Cancellation::default();
     stopped.cancel();
-    let result = accounting.with_control(&stopped, |counters| counters.work(&limits, location()));
+    let result =
+        accounting.with_cancellation(&stopped, |counters| counters.work(&limits, location()));
     assert!(matches!(
         result,
         Err(FormulaFailure::Interrupted {
@@ -110,7 +111,7 @@ fn stopped_checks_do_not_retain_the_previous_control() {
         })
     ));
     assert_eq!(accounting.work, 1);
-    accounting.with_control(&Control::default(), |counters| {
+    accounting.with_cancellation(&Cancellation::default(), |counters| {
         counters.work(&limits, location()).unwrap();
     });
     assert_eq!(accounting.work, 2);
@@ -120,7 +121,7 @@ fn stopped_checks_do_not_retain_the_previous_control() {
 fn unwind_restores_accepted_history() {
     let mut accounting = Accounting::default();
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        accounting.with_control(&Control::default(), |counters| {
+        accounting.with_cancellation(&Cancellation::default(), |counters| {
             counters
                 .work(&FormulaLimits::default(), location())
                 .unwrap();

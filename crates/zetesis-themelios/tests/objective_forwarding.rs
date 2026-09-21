@@ -11,7 +11,7 @@ use source_cases::cases;
 use source_oracle::records as clingo;
 use source_records::{Records, admit, canonical, exhaustive};
 use zetesis_core::Model;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Node, Theory};
 use zetesis_themelios::{
     AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
@@ -123,7 +123,7 @@ fn search_preserves_every_optimum_tie() {
         let mut search = zetesis_sat::StableModels::new(
             input.theory(),
             zetesis_sat::Limits::default(),
-            Control::default(),
+            Cancellation::default(),
         )
         .unwrap();
         let mut records = Records::new();
@@ -137,7 +137,7 @@ fn search_preserves_every_optimum_tie() {
                 input.objectives(),
                 &Model::new(atoms.iter().cloned()),
                 zetesis_objective::Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
             let score = evaluation.score();

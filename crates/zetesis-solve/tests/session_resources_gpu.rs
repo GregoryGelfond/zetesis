@@ -7,7 +7,7 @@ use zetesis_core::{
     Atom, Predicate, Sign, Value,
     relation::{Limits, Relation},
 };
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_solve::{
     AnswerSelection, AnswerSet, Backend, Completion, ExecutionObservation, ExecutionObserver,
     ExecutionResources, Grounder, Interruption, Oracle, PreparedInput, SemanticOutcome, Session,
@@ -234,7 +234,7 @@ fn solve(
     selection: AnswerSelection,
 ) -> Capture {
     let mut routes = Routes::default();
-    let mut session = Session::builder(input, config, Control::default())
+    let mut session = Session::builder(input, config, Cancellation::default())
         .resources(resources)
         .selection(selection)
         .start_observed(&mut routes)
@@ -414,7 +414,11 @@ fn independent_sessions(device: Device) {
     let relation = Relation::from_catalog(&predicate, &atoms, &rows, Limits::default()).unwrap();
     let mut executor = GpuRelationExecutor::from_context(&context).unwrap();
     let mut prepared = executor
-        .prepare(&relation, RelationGpuLimits::default(), &Control::default())
+        .prepare(
+            &relation,
+            RelationGpuLimits::default(),
+            &Cancellation::default(),
+        )
         .unwrap();
     drop(resources);
     drop(context);
@@ -423,7 +427,11 @@ fn independent_sessions(device: Device) {
     let value = Value::Number(7);
     let query = relation.query(&[(0, &value)], Limits::default()).unwrap();
     let masks = prepared
-        .filter(&[query], RelationGpuLimits::default(), &Control::default())
+        .filter(
+            &[query],
+            RelationGpuLimits::default(),
+            &Cancellation::default(),
+        )
         .unwrap();
     assert!(relation.same_owner(masks.relation()));
     let selected = masks.selection(0, Limits::default()).unwrap();
@@ -514,7 +522,7 @@ fn policy_refusal_with(resources: &ExecutionResources, device: Device) {
         let failure = Session::builder(
             input,
             config(device.other().backend(), profile),
-            Control::default(),
+            Cancellation::default(),
         )
         .resources(resources)
         .start_observed(&mut routes)
@@ -643,12 +651,15 @@ fn observer_failure_with(resources: &ExecutionResources, device: Device) {
             cause: cause.clone(),
             calls: 0,
         };
-        let failure =
-            Session::builder(input, config(device.backend(), profile), Control::default())
-                .resources(resources)
-                .start_observed(&mut observer)
-                .err()
-                .expect("the preparation observer refuses the session");
+        let failure = Session::builder(
+            input,
+            config(device.backend(), profile),
+            Cancellation::default(),
+        )
+        .resources(resources)
+        .start_observed(&mut observer)
+        .err()
+        .expect("the preparation observer refuses the session");
         let SolveError::ExecutionObservation(error) = failure.cause.as_ref() else {
             panic!("external failure changed class: {failure:?}");
         };
@@ -800,7 +811,7 @@ fn ordinary_tight_fixtures_have_complete_certificates() {
         zetesis_ferraris::TightPlan::compile(
             owner.theory(),
             zetesis_ferraris::TightPlanLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     }
@@ -813,7 +824,7 @@ fn unseeded_cycle_has_one_empty_answer_set() {
     zetesis_ferraris::TightPlan::compile(
         owner.theory(),
         zetesis_ferraris::TightPlanLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let subject = Subject::Theory(owner.theory().clone());
@@ -840,14 +851,14 @@ fn seeded_cycle_preserves_positive_nontight_class() {
     zetesis_ferraris::PositivePlan::compile(
         owner.theory(),
         zetesis_ferraris::PositivePlanLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert!(matches!(
         zetesis_ferraris::TightPlan::compile(
             owner.theory(),
             zetesis_ferraris::TightPlanLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         ),
         Err(zetesis_ferraris::TightError::PositiveCycle { .. })
     ));
@@ -942,7 +953,7 @@ fn general_formula_selection(device: Device) {
                     zetesis_ferraris::TightPlan::compile(
                         owner.theory(),
                         zetesis_ferraris::TightPlanLimits::default(),
-                        &Control::default(),
+                        &Cancellation::default(),
                     ),
                     Err(zetesis_ferraris::TightError::PositiveCycle { .. }
                         | zetesis_ferraris::TightError::UnsupportedRoot { .. })
@@ -1007,10 +1018,14 @@ fn tight_refusal(device: Device) {
     options.oracle = Oracle::Auto;
     options.gpu_formula_work = 0;
     let mut routes = Routes::default();
-    let mut session = Session::builder(PreparedInput::formula(&owner), options, Control::default())
-        .resources(&resources)
-        .start_observed(&mut routes)
-        .unwrap();
+    let mut session = Session::builder(
+        PreparedInput::formula(&owner),
+        options,
+        Cancellation::default(),
+    )
+    .resources(&resources)
+    .start_observed(&mut routes)
+    .unwrap();
     let failure = session.next_observed(&mut routes).unwrap().unwrap_err();
     assert!(matches!(failure.cause.as_ref(), SolveError::Gpu(_)));
     assert!(session.next_observed(&mut routes).is_none());

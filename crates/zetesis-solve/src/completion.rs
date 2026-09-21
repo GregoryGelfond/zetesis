@@ -60,7 +60,7 @@ impl SearchState {
 /// A typed reason why model enumeration could not establish complete coverage.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Interruption {
-    /// Control stopped preparation before an executor began checking candidates.
+    /// Cancellation stopped preparation before an executor began checking candidates.
     Preparation(Stop),
     /// Incremental candidate enumeration or a closure oracle stopped.
     Oracle(Stop),

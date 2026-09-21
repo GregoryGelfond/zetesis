@@ -26,7 +26,7 @@ fn configuration(family: Family) -> Configuration {
 
 #[test]
 fn tiny_certificates_agree_with_every_reduct_subset() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     for family in [
         Family::Normal,
         Family::Choices,
@@ -34,7 +34,7 @@ fn tiny_certificates_agree_with_every_reduct_subset() {
         Family::SupportSkewed,
     ] {
         let configuration = configuration(family);
-        let prepared = prepare(configuration.cases[0], &configuration, &control).unwrap();
+        let prepared = prepare(configuration.cases[0], &configuration, &cancellation).unwrap();
         let theory = &prepared.fixture.theory;
         for mask in 0..16 {
             let candidate =
@@ -43,7 +43,7 @@ fn tiny_certificates_agree_with_every_reduct_subset() {
                 theory,
                 &candidate,
                 configuration.reference_limits,
-                &control,
+                &cancellation,
             )
             .unwrap();
             let mut smaller_model = false;
@@ -59,13 +59,13 @@ fn tiny_certificates_agree_with_every_reduct_subset() {
                     &candidate,
                     &tested,
                     configuration.reference_limits,
-                    &control,
+                    &cancellation,
                 )
                 .unwrap();
             }
             let verdict = prepared
                 .plan
-                .check_accounted(&candidate, configuration.certificate_limits, &control)
+                .check_accounted(&candidate, configuration.certificate_limits, &cancellation)
                 .result
                 .unwrap()
                 .verdict;
@@ -80,8 +80,8 @@ fn tiny_certificates_agree_with_every_reduct_subset() {
 #[test]
 fn certificate_witness_substitution_is_detected() {
     let configuration = configuration(Family::Normal);
-    let control = Control::default();
-    let prepared = prepare(configuration.cases[0], &configuration, &control).unwrap();
+    let cancellation = Cancellation::default();
+    let prepared = prepare(configuration.cases[0], &configuration, &cancellation).unwrap();
     let mut changed = prepared.certificates.clone();
     changed[0] = TightVerdict::NotModel { root: usize::MAX };
     assert!(matches!(
@@ -90,7 +90,7 @@ fn certificate_witness_substitution_is_detected() {
             &changed,
             &prepared.reference,
             &configuration,
-            &control
+            &cancellation
         ),
         Err(Error::Parity)
     ));
@@ -99,15 +99,15 @@ fn certificate_witness_substitution_is_detected() {
 #[test]
 fn missing_occurrences_cannot_pass_parity() {
     let configuration = configuration(Family::Normal);
-    let control = Control::default();
-    let prepared = prepare(configuration.cases[0], &configuration, &control).unwrap();
+    let cancellation = Cancellation::default();
+    let prepared = prepare(configuration.cases[0], &configuration, &cancellation).unwrap();
     assert!(matches!(
         validate(
             &prepared,
             &prepared.certificates,
             &prepared.reference[..31],
             &configuration,
-            &control
+            &cancellation
         ),
         Err(Error::Parity)
     ));
@@ -116,12 +116,12 @@ fn missing_occurrences_cannot_pass_parity() {
 #[test]
 fn a_candidate_is_not_its_own_countermodel() {
     let configuration = configuration(Family::Normal);
-    let control = Control::default();
-    let prepared = prepare(configuration.cases[0], &configuration, &control).unwrap();
+    let cancellation = Cancellation::default();
+    let prepared = prepare(configuration.cases[0], &configuration, &cancellation).unwrap();
     let candidate = &prepared.fixture.candidates[1];
     let false_witness = zetesis_sat::Check::NonMinimal(candidate.clone());
     assert!(matches!(
-        validate_witness(candidate, &false_witness, &configuration, &control),
+        validate_witness(candidate, &false_witness, &configuration, &cancellation),
         Err(Error::Parity)
     ));
 }
@@ -129,15 +129,15 @@ fn a_candidate_is_not_its_own_countermodel() {
 #[test]
 fn a_foreign_countermodel_is_refused() {
     let configuration = configuration(Family::Normal);
-    let control = Control::default();
-    let prepared = prepare(configuration.cases[0], &configuration, &control).unwrap();
-    let foreign = prepare(configuration.cases[0], &configuration, &control).unwrap();
+    let cancellation = Cancellation::default();
+    let prepared = prepare(configuration.cases[0], &configuration, &cancellation).unwrap();
+    let foreign = prepare(configuration.cases[0], &configuration, &cancellation).unwrap();
     assert!(matches!(
         validate_witness(
             &prepared.fixture.candidates[1],
             &foreign.reference[1],
             &configuration,
-            &control
+            &cancellation
         ),
         Err(Error::Parity)
     ));
@@ -146,15 +146,15 @@ fn a_foreign_countermodel_is_refused() {
 #[test]
 fn a_subset_failing_the_frozen_reduct_is_refused() {
     let configuration = configuration(Family::Normal);
-    let control = Control::default();
-    let prepared = prepare(configuration.cases[0], &configuration, &control).unwrap();
+    let cancellation = Cancellation::default();
+    let prepared = prepare(configuration.cases[0], &configuration, &cancellation).unwrap();
     let false_witness = zetesis_sat::Check::NonMinimal(prepared.fixture.candidates[0].clone());
     assert!(matches!(
         validate_witness(
             &prepared.fixture.candidates[1],
             &false_witness,
             &configuration,
-            &control
+            &cancellation
         ),
         Err(Error::Parity)
     ));
@@ -163,8 +163,8 @@ fn a_subset_failing_the_frozen_reduct_is_refused() {
 #[test]
 fn certificate_failure_keeps_every_joined_charge() {
     let mut configuration = configuration(Family::Normal);
-    let control = Control::default();
-    let prepared = prepare(configuration.cases[0], &configuration, &control).unwrap();
+    let cancellation = Cancellation::default();
+    let prepared = prepare(configuration.cases[0], &configuration, &cancellation).unwrap();
     configuration.certificate_limits.max_work = 1;
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(2)
@@ -173,7 +173,13 @@ fn certificate_failure_keeps_every_joined_charge() {
     for pool in [None, Some(&pool)] {
         let mut activity = Activity::default();
         assert!(matches!(
-            classify(&prepared, &configuration, pool, &control, &mut activity),
+            classify(
+                &prepared,
+                &configuration,
+                pool,
+                &cancellation,
+                &mut activity
+            ),
             Err(Error::Certificate(_))
         ));
         assert_eq!(activity.cpu_certificate_work, 32);
@@ -186,17 +192,17 @@ fn certificate_failure_keeps_every_joined_charge() {
 fn stopped_control_prevents_direct_completion() {
     let mut configuration = configuration(Family::Choices);
     configuration.cases[0].candidates = NonZeroUsize::new(1).unwrap();
-    let control = Control::default();
-    let prepared = prepare(configuration.cases[0], &configuration, &control).unwrap();
+    let cancellation = Cancellation::default();
+    let prepared = prepare(configuration.cases[0], &configuration, &cancellation).unwrap();
     assert_eq!(prepared.certificates, [TightVerdict::Stable]);
-    control.cancel();
+    cancellation.cancel();
     let mut activity = Activity::default();
     assert!(matches!(
         complete(
             &prepared,
             &prepared.certificates,
             &configuration,
-            &control,
+            &cancellation,
             &mut activity
         ),
         Err(Error::Cpu(zetesis_cpu::Stop::Cancelled))
@@ -208,16 +214,16 @@ fn stopped_control_prevents_direct_completion() {
 fn stopped_control_prevents_direct_validation() {
     let mut configuration = configuration(Family::Choices);
     configuration.cases[0].candidates = NonZeroUsize::new(1).unwrap();
-    let control = Control::default();
-    let prepared = prepare(configuration.cases[0], &configuration, &control).unwrap();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    let prepared = prepare(configuration.cases[0], &configuration, &cancellation).unwrap();
+    cancellation.cancel();
     assert!(matches!(
         validate(
             &prepared,
             &prepared.certificates,
             &prepared.reference,
             &configuration,
-            &control
+            &cancellation
         ),
         Err(Error::Cpu(zetesis_cpu::Stop::Cancelled))
     ));

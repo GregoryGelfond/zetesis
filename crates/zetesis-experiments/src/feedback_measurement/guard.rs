@@ -5,7 +5,7 @@
 //! witnesses, through the opaque checked-subject record.
 
 use std::mem::size_of;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{AdmissionLimits, Interpretation, Node, Theory};
 
 use super::{ConstructionLimits, Error, Resource};
@@ -32,7 +32,7 @@ impl Guard {
         &self,
         candidate: &Interpretation,
         max_work: u64,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<bool, Error> {
         if !self.source.same_instance(candidate.theory()) {
             return Err(Error::Owner);
@@ -45,7 +45,7 @@ impl Guard {
             &self.restriction,
             &rebound,
             super::reference_limits(max_work),
-            control,
+            cancellation,
         )
         .map_err(Error::Control)
     }
@@ -68,7 +68,7 @@ impl Guard {
 #[derive(Debug)]
 pub(super) struct Budget<'a> {
     pub(super) limits: ConstructionLimits,
-    control: &'a Control,
+    cancellation: &'a Cancellation,
     pub(super) work: u64,
     pub(super) peak_build_bytes: usize,
     pub(super) peak_live_bytes: usize,
@@ -76,10 +76,10 @@ pub(super) struct Budget<'a> {
     pub(super) retained_nodes: usize,
 }
 impl<'a> Budget<'a> {
-    pub(super) const fn new(limits: ConstructionLimits, control: &'a Control) -> Self {
+    pub(super) const fn new(limits: ConstructionLimits, cancellation: &'a Cancellation) -> Self {
         Self {
             limits,
-            control,
+            cancellation,
             work: 0,
             peak_build_bytes: 0,
             peak_live_bytes: 0,
@@ -92,7 +92,7 @@ impl<'a> Budget<'a> {
     // reservation/publication boundary. Theory admission's second node/root
     // scan is also precharged. These are specified units, not instructions.
     fn tick(&mut self) -> Result<(), Error> {
-        self.control.poll().map_err(Error::Control)?;
+        self.cancellation.poll().map_err(Error::Control)?;
         if self.work >= self.limits.max_work {
             return Err(Error::Limit(Resource::Work));
         }

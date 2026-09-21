@@ -13,7 +13,7 @@ use crate::{PreparedReduct, ReductWorkspace};
 
 #[path = "completion_scratch.rs"]
 mod scratch;
-use crate::{Control, Incomplete, PhaseMeasurement, SearchPhaseTimings};
+use crate::{Cancellation, Incomplete, PhaseMeasurement, SearchPhaseTimings};
 pub use scratch::CompletionScratch;
 
 /// Accounting for the last entered completion attempt, including failed jobs.
@@ -200,7 +200,7 @@ impl CompletionExecutor {
             &mut ReductWorkspace,
             &PreparedReduct,
             u64,
-            &Control,
+            &Cancellation,
         ) -> Result<(), Incomplete>,
     ) -> Result<(), Incomplete> {
         self.last = None;
@@ -247,7 +247,7 @@ impl CompletionExecutor {
                 + workspaces.capacity() as u128 * std::mem::size_of::<ReductWorkspace>() as u128;
             record_peak(&mut progress, peak)?;
             for _ in 0..admission.0 {
-                budget.control.poll()?;
+                budget.cancellation.poll()?;
                 let mut workspace = ReductWorkspace::default();
                 // The region query has no prepared owner to reserve against;
                 // its worker workspace holds the evaluation alone.
@@ -256,7 +256,7 @@ impl CompletionExecutor {
                         &mut workspace,
                         owner,
                         input.limits.max_reduct_bytes,
-                        budget.control,
+                        budget.cancellation,
                     ),
                     None => Ok(()),
                 };
@@ -343,7 +343,7 @@ fn classify(
     statistics: &mut Statistics,
     workspace: &mut ReductWorkspace,
 ) -> Result<bool, Incomplete> {
-    budget.control.poll()?;
+    budget.cancellation.poll()?;
     match verdict {
         BatchVerdict::NoProperSubset => Ok(true),
         BatchVerdict::Refuted => Ok(false),
@@ -354,8 +354,12 @@ fn classify(
                     prepared.check_with(candidate, workspace, input.limits, budget, statistics)?
                 }
                 (None, Some(query)) => {
-                    let (truth, _) =
-                        workspace.evaluate(candidate, input.limits, budget.control, statistics)?;
+                    let (truth, _) = workspace.evaluate(
+                        candidate,
+                        input.limits,
+                        budget.cancellation,
+                        statistics,
+                    )?;
                     if !truth.is_model() {
                         return Err(Incomplete::InvalidWitness);
                     }
@@ -393,7 +397,7 @@ fn scalar(
     let mut bounded = Budget {
         quota: BoundedQuota(LocalQuota),
         limits: budget.limits,
-        control: budget.control,
+        cancellation: budget.cancellation,
         statistics: budget.statistics,
     };
     let mut unused = ReductWorkspace::default();
@@ -430,7 +434,7 @@ fn parallel(
     let mut outcomes = storage(input.candidates.len())?;
     outcomes.resize_with(input.candidates.len(), || None);
     let shared = SharedBudget::new(budget.limits, budget.statistics);
-    let control = budget.control;
+    let cancellation = budget.cancellation;
     let timed = statistics.phase_timings.is_some();
     let chunk_size = outcomes.len().div_ceil(progress.effective_workers.max(1));
     pool.install(|| {
@@ -444,7 +448,7 @@ fn parallel(
                         input,
                         chunk * chunk_size + offset,
                         &shared,
-                        control,
+                        cancellation,
                         timed,
                         workspace,
                     ));
@@ -476,14 +480,14 @@ fn run(
     input: Input<'_>,
     index: usize,
     shared: &SharedBudget,
-    control: &Control,
+    cancellation: &Cancellation,
     timed: bool,
     workspace: &mut ReductWorkspace,
 ) -> Outcome {
     let mut budget = Budget {
-        quota: BoundedQuota(shared.lease(control)),
+        quota: BoundedQuota(shared.lease(cancellation)),
         limits: input.limits.search,
-        control,
+        cancellation,
         statistics: crate::SearchStatistics::default(),
     };
     let mut statistics = Statistics {

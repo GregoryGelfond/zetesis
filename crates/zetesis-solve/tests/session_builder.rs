@@ -2,7 +2,7 @@
 
 use std::{collections::BTreeSet, io};
 
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, ExecutionObservation, ExecutionObserver,
     ExecutionResources, Grounder, Oracle, PreparedInput, Session, SolveConfig, SolveError, Subject,
@@ -33,12 +33,15 @@ fn config() -> SolveConfig {
 fn all_selection_preserves_nonoptimal_answers() {
     let owner = objective();
     let resources = ExecutionResources::default();
-    let mut session =
-        Session::builder(PreparedInput::formula(&owner), config(), Control::default())
-            .resources(&resources)
-            .selection(AnswerSelection::All)
-            .start()
-            .unwrap();
+    let mut session = Session::builder(
+        PreparedInput::formula(&owner),
+        config(),
+        Cancellation::default(),
+    )
+    .resources(&resources)
+    .selection(AnswerSelection::All)
+    .start()
+    .unwrap();
     let answers: BTreeSet<_> = session
         .by_ref()
         .map(|answer| {
@@ -73,10 +76,13 @@ fn all_selection_preserves_nonoptimal_answers() {
 #[test]
 fn default_selection_retains_the_optimum() {
     let owner = objective();
-    let mut session =
-        Session::builder(PreparedInput::formula(&owner), config(), Control::default())
-            .start()
-            .unwrap();
+    let mut session = Session::builder(
+        PreparedInput::formula(&owner),
+        config(),
+        Cancellation::default(),
+    )
+    .start()
+    .unwrap();
     let answer = session.next().unwrap().unwrap();
     assert_eq!(answer.score().unwrap().costs(), [(2, 1)]);
     assert_eq!(answer.interpretation().atoms().len(), 1);
@@ -99,7 +105,7 @@ fn default_selection_retains_the_optimum() {
 #[test]
 fn start_polls_control_before_device_setup() {
     let owner = admit("a.".into(), AdmissionOptions::default()).unwrap();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let builder = Session::builder(
         PreparedInput::admitted(&owner),
         SolveConfig {
@@ -107,11 +113,11 @@ fn start_polls_control_before_device_setup() {
             grounder: Grounder::Eager,
             ..config()
         },
-        control.clone(),
+        cancellation.clone(),
     );
     // Cancellation after request construction must still precede device setup,
     // including in a CPU-only build where that setup would otherwise fail.
-    control.cancel();
+    cancellation.cancel();
     let mut session = builder.start().unwrap();
     assert!(session.next().is_none());
     let outcome = session.outcome().unwrap();
@@ -129,7 +135,7 @@ fn invalid_request_retains_its_original_subject() {
             oracle: Oracle::Countermodel,
             ..config()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .start()
     .err()
@@ -160,7 +166,7 @@ fn observed_start_preserves_the_external_failure() {
     let failure = Session::builder(
         PreparedInput::admitted(&owner),
         config(),
-        Control::default(),
+        Cancellation::default(),
     )
     .selection(AnswerSelection::All)
     .resources(&ExecutionResources::default())

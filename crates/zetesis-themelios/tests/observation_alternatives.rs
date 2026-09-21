@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 
 use zetesis_core::Model;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::observation::{ErrorKind, EvaluationError, Limits, Resource};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
@@ -28,7 +28,7 @@ fn display(expression: &str) -> BTreeSet<String> {
             &Model::default(),
             input.metadata().output(),
             Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap()
         .text()
@@ -85,7 +85,11 @@ fn invalid_alternatives_refuse_the_complete_evaluation() {
         let error = input
             .metadata()
             .observations()
-            .evaluate(&Model::default(), Limits::default(), &Control::default())
+            .evaluate(
+                &Model::default(),
+                Limits::default(),
+                &Cancellation::default(),
+            )
             .unwrap_err();
         assert_eq!(error.kind(), &ErrorKind::Evaluation(cause), "{expression}");
         let location = error.location().expect("authored show directive");
@@ -111,7 +115,7 @@ fn finite_evaluation_refuses_every_incomplete_work_prefix() {
                     max_work,
                     ..Limits::default()
                 },
-                &Control::default(),
+                &Cancellation::default(),
             )
         };
         let complete = run(Limits::default().max_work).unwrap();
@@ -143,7 +147,7 @@ fn tuple_products_admit_all_simultaneous_payload() {
                 max_local_bytes,
                 ..Limits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
     };
     // Four argument numbers remain live while four three-node tuples collect.
@@ -168,7 +172,7 @@ fn a_term_ceiling_cannot_publish_a_partial_pool() {
                 max_terms: 1,
                 ..Limits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
     assert_eq!(

@@ -8,7 +8,7 @@ use rayon::prelude::*;
 use zetesis_core::{GroundProgram, Program, Seed, SeedView};
 
 use crate::{
-    Check, Control, Limits, PreparationLimits, PreparationStatistics, StaticCheck, Stop,
+    Cancellation, Check, Limits, PreparationLimits, PreparationStatistics, StaticCheck, Stop,
     check_static_view,
 };
 
@@ -101,9 +101,14 @@ impl BatchOracle {
         program: &Program,
         seeds: &[Seed],
         limits: Limits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Vec<Result<Check, Stop>>, BatchError> {
-        self.check_batch_views(program, seeds.par_iter().map(Seed::view), limits, control)
+        self.check_batch_views(
+            program,
+            seeds.par_iter().map(Seed::view),
+            limits,
+            cancellation,
+        )
     }
 
     /// Check indexed candidate views on this owned pool, preserving input order.
@@ -124,7 +129,7 @@ impl BatchOracle {
         program: &Program,
         seeds: impl IndexedParallelIterator<Item = SeedView<'seed>>,
         limits: Limits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Vec<Result<Check, Stop>>, BatchError> {
         if seeds.len() > self.max_candidates {
             return Err(BatchError::Capacity {
@@ -148,10 +153,10 @@ impl BatchOracle {
             active,
             self.preparation_limits,
             self.max_closure_bytes,
-            control,
+            cancellation,
         )?;
         cache.admit(active, limits, self.max_closure_bytes)?;
-        let execution = cache.execution(length, active, limits, control);
+        let execution = cache.execution(length, active, limits, cancellation);
         Ok(self.pool.install(|| seeds.with_producer(execution)))
     }
 
@@ -170,14 +175,14 @@ impl BatchOracle {
         seeds: &[Seed],
         limits: crate::lazy::shared::Limits,
         selection: crate::lazy::SourceSelection,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<crate::lazy::shared::Batch, crate::lazy::shared::Error> {
         self.check_shared_views(
             program,
             seeds.iter().map(Seed::view),
             limits,
             selection,
-            control,
+            cancellation,
         )
     }
 
@@ -195,7 +200,7 @@ impl BatchOracle {
         seeds: impl ExactSizeIterator<Item = SeedView<'seed>> + Clone,
         limits: crate::lazy::shared::Limits,
         selection: crate::lazy::SourceSelection,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<crate::lazy::shared::Batch, crate::lazy::shared::Error> {
         use crate::lazy::shared::Error;
         if seeds.len() > self.max_candidates {
@@ -210,7 +215,7 @@ impl BatchOracle {
                 TryLockError::Poisoned(_) => BatchError::Poisoned,
             })
         })?;
-        crate::lazy::shared::check(&self.pool, program, seeds, limits, selection, control)
+        crate::lazy::shared::check(&self.pool, program, seeds, limits, selection, cancellation)
     }
 
     /// Check a bounded slice against an explicitly compiled graph, preserving
@@ -225,9 +230,14 @@ impl BatchOracle {
         graph: &GroundProgram,
         seeds: &[Seed],
         limits: Limits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Vec<Result<StaticCheck, Stop>>, BatchError> {
-        self.check_static_batch_views(graph, seeds.par_iter().map(Seed::view), limits, control)
+        self.check_static_batch_views(
+            graph,
+            seeds.par_iter().map(Seed::view),
+            limits,
+            cancellation,
+        )
     }
 
     /// Check indexed borrowed candidates against the explicit static graph.
@@ -241,7 +251,7 @@ impl BatchOracle {
         graph: &GroundProgram,
         seeds: impl IndexedParallelIterator<Item = SeedView<'seed>>,
         limits: Limits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Vec<Result<StaticCheck, Stop>>, BatchError> {
         if seeds.len() > self.max_candidates {
             return Err(BatchError::Capacity {
@@ -255,7 +265,7 @@ impl BatchOracle {
         })?;
         Ok(self.pool.install(|| {
             seeds
-                .map(|seed| check_static_view(graph, seed, limits, control))
+                .map(|seed| check_static_view(graph, seed, limits, cancellation))
                 .collect()
         }))
     }
@@ -368,7 +378,7 @@ mod tests {
     };
 
     use super::{BatchError, BatchOracle};
-    use crate::{Control, Limits};
+    use crate::{Cancellation, Limits};
 
     pub(super) fn fixture() -> (GroundProgram, Vec<Seed>) {
         let [a, b, c] = ["a", "b", "c"]
@@ -405,11 +415,11 @@ mod tests {
                 graph.program(),
                 seeds,
                 Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .expect("lazy admission is available");
         let dense = pool
-            .check_static_batch(graph, seeds, Limits::default(), &Control::default())
+            .check_static_batch(graph, seeds, Limits::default(), &Cancellation::default())
             .expect("static admission is available");
         let expected = [
             (model(&["b"]), true, false, false),
@@ -455,7 +465,7 @@ mod tests {
             let (sender, receiver) = sync_channel(1);
             let (pool, graph, seeds) = (&pool, &graph, &seeds);
             let worker = scope.spawn(move || {
-                let cancelled = Control::default();
+                let cancelled = Cancellation::default();
                 cancelled.cancel();
                 let limits = Limits {
                     max_work: 0,
@@ -504,7 +514,7 @@ mod tests {
                     &seeds,
                     crate::lazy::shared::Limits::default(),
                     selection,
-                    &Control::default(),
+                    &Cancellation::default(),
                 )
                 .unwrap();
             assert_eq!(batch.checks.len(), expected.len());
@@ -537,7 +547,7 @@ mod tests {
                     seeds,
                     crate::lazy::shared::Limits::default(),
                     crate::lazy::SourceSelection::Union,
-                    &Control::default(),
+                    &Cancellation::default(),
                 );
                 sender.send(result).unwrap();
             });
@@ -557,7 +567,7 @@ mod tests {
                 &seeds,
                 crate::lazy::shared::Limits::default(),
                 crate::lazy::SourceSelection::Union,
-                &Control::default()
+                &Cancellation::default()
             )
             .is_ok()
         );

@@ -1,7 +1,7 @@
 //! One publication invocation fixes its terminal callback stage before execution.
 
 use super::{AnswerRenderer, AnswerView, PublicationView, RunError, SummaryDelivery, SummaryStage};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 /// Owns invocation policy while borrowing the consumer's rendering state.
 /// Changing that state during a callback cannot reschedule terminal publication.
@@ -23,8 +23,12 @@ impl<R: AnswerRenderer> AnswerRenderer for Session<'_, R> {
         self.stage
     }
 
-    fn answer(&mut self, view: AnswerView<'_>, control: &Control) -> Result<(), RunError> {
-        self.renderer.answer(view, control)
+    fn answer(
+        &mut self,
+        view: AnswerView<'_>,
+        cancellation: &Cancellation,
+    ) -> Result<(), RunError> {
+        self.renderer.answer(view, cancellation)
     }
 
     fn finish(&mut self, view: PublicationView<'_>) -> Result<SummaryDelivery, RunError> {

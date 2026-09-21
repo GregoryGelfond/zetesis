@@ -1,6 +1,6 @@
 use std::io;
 
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 use super::*;
 
@@ -23,7 +23,7 @@ fn complete_domain_projections_agree_at_word_boundaries() {
         for rows in [1, 31, 32, 33, 65] {
             let mut observations = 0;
             assert!(
-                measure(config(case, rows), &Control::default(), |event| {
+                measure(config(case, rows), &Cancellation::default(), |event| {
                     if let Event::Batch { outcomes, .. } = event {
                         assert_eq!(outcomes.len(), 7);
                         assert!(
@@ -45,18 +45,22 @@ fn complete_domain_projections_agree_at_word_boundaries() {
 #[test]
 fn restoration_recovers_the_original_projection() {
     let mut restored = 0;
-    measure(config(Case::Aliased, 65), &Control::default(), |event| {
-        if let Event::Batch { outcomes, .. } = event {
-            let output = |index| match &outcomes[index] {
-                Outcome::Complete { output, .. } => output,
-                Outcome::Refused { .. } => panic!("fixture is admitted"),
-            };
-            assert_eq!(output(0), output(6));
-            assert!(output(4).rows.is_empty());
-            restored += 1;
-        }
-        Ok(())
-    })
+    measure(
+        config(Case::Aliased, 65),
+        &Cancellation::default(),
+        |event| {
+            if let Event::Batch { outcomes, .. } = event {
+                let output = |index| match &outcomes[index] {
+                    Outcome::Complete { output, .. } => output,
+                    Outcome::Refused { .. } => panic!("fixture is admitted"),
+                };
+                assert_eq!(output(0), output(6));
+                assert!(output(4).rows.is_empty());
+                restored += 1;
+            }
+            Ok(())
+        },
+    )
     .unwrap();
     assert_eq!(restored, 6);
 }
@@ -68,7 +72,7 @@ fn query_order_is_independent_of_pool_width() {
         config.workers = workers;
         config.queries = 19;
         let mut results = Vec::new();
-        measure(config, &Control::default(), |event| {
+        measure(config, &Cancellation::default(), |event| {
             if let Event::Batch {
                 route: Route::Rayon,
                 outcomes,
@@ -98,7 +102,7 @@ fn preparation_refusal_keeps_scan_evidence() {
     request.max_table_bytes = 0;
     let mut refused = 0;
     let mut scanned = 0;
-    let passed = measure(request, &Control::default(), |event| {
+    let passed = measure(request, &Cancellation::default(), |event| {
         match event {
             Event::PreparationRefused { failure } => {
                 assert!(matches!(
@@ -125,7 +129,7 @@ fn preparation_refusal_keeps_scan_evidence() {
 fn query_refusals_preserve_the_remaining_schedule() {
     let mut request = config(Case::Correlated, 1);
     let mut preparation_work = None;
-    measure(request, &Control::default(), |event| {
+    measure(request, &Cancellation::default(), |event| {
         if let Event::Subject { preparation, .. } = event {
             preparation_work = Some(preparation.table.unwrap().work);
         }
@@ -136,7 +140,7 @@ fn query_refusals_preserve_the_remaining_schedule() {
     let mut refused = 0;
     let mut complete = 0;
     assert!(
-        !measure(request, &Control::default(), |event| {
+        !measure(request, &Cancellation::default(), |event| {
             if let Event::Batch {
                 outcomes, route, ..
             } = event
@@ -163,12 +167,12 @@ fn query_refusals_preserve_the_remaining_schedule() {
 
 #[test]
 fn cancelled_measurement_does_not_claim_completion() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut published = 0;
-    let result = measure(config(Case::Correlated, 33), &control, |event| {
+    let result = measure(config(Case::Correlated, 33), &cancellation, |event| {
         published += 1;
         if matches!(event, Event::Subject { .. }) {
-            control.cancel();
+            cancellation.cancel();
         }
         assert!(!matches!(event, Event::Complete { .. }));
         Ok(())
@@ -182,12 +186,16 @@ fn cancelled_measurement_does_not_claim_completion() {
 
 #[test]
 fn output_failure_preserves_its_original_cause() {
-    let result = measure(config(Case::Correlated, 1), &Control::default(), |_| {
-        Err(io::Error::new(
-            io::ErrorKind::BrokenPipe,
-            "closed measurement sink",
-        ))
-    });
+    let result = measure(
+        config(Case::Correlated, 1),
+        &Cancellation::default(),
+        |_| {
+            Err(io::Error::new(
+                io::ErrorKind::BrokenPipe,
+                "closed measurement sink",
+            ))
+        },
+    );
     assert!(
         matches!(result, Err(Error::Output(error)) if error.kind() == io::ErrorKind::BrokenPipe)
     );
@@ -198,7 +206,7 @@ fn invalid_scope_is_refused_before_publication() {
     let mut request = config(Case::Independent, config::MAX_ROWS + 1);
     let mut events = 0;
     assert!(matches!(
-        measure(request, &Control::default(), |_| {
+        measure(request, &Cancellation::default(), |_| {
             events += 1;
             Ok(())
         }),
@@ -207,7 +215,7 @@ fn invalid_scope_is_refused_before_publication() {
     request.rows = 1;
     request.queries = config::MAX_QUERIES + 1;
     assert!(matches!(
-        measure(request, &Control::default(), |_| {
+        measure(request, &Cancellation::default(), |_| {
             events += 1;
             Ok(())
         }),
@@ -219,7 +227,7 @@ fn invalid_scope_is_refused_before_publication() {
 #[test]
 fn subject_identifies_typed_values_and_row_occurrences() {
     let fixture =
-        fixture::Fixture::new(config(Case::Independent, 33), &Control::default()).unwrap();
+        fixture::Fixture::new(config(Case::Independent, 33), &Cancellation::default()).unwrap();
     let subject = serde_json::to_value(fixture.subject(Case::Independent).unwrap()).unwrap();
     let values = subject["values"].as_array().unwrap();
     assert!(

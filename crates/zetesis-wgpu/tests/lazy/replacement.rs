@@ -254,7 +254,7 @@ fn join_seeds(
 #[test]
 fn three_way_joins_expose_retention_causes() {
     use super::Capacity;
-    use zetesis_cpu::{Control, lazy};
+    use zetesis_cpu::{Cancellation, lazy};
     let mut causes = super::LazyTransportReplacements::default();
     let mut submissions = 0;
     let mut allocations = 0;
@@ -276,7 +276,7 @@ fn three_way_joins_expose_retention_causes() {
                             ..Default::default()
                         },
                         selection,
-                        &Control::default(),
+                        &Cancellation::default(),
                         |chunk| {
                             let plan = Plan::new(
                                 NonZeroU32::MIN,

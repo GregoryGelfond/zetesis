@@ -16,7 +16,7 @@ use zetesis_cli::{
     SessionModel, SolveConfig, Subject, run_finalized_with_diagnostics,
 };
 use zetesis_core::{GroundProgram, StaticLimits};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
     AdmissionOptions, Admitted, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_extended,
     admit_formula,
@@ -101,7 +101,7 @@ fn prepared_closure_preserves_hidden_interpretations() {
     let mut session = Session::new(
         PreparedInput::admitted(&admitted),
         config(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     let actual: BTreeSet<_> = session
@@ -133,7 +133,7 @@ fn detached_model_retains_program_identity() {
         let mut session = Session::new(
             PreparedInput::admitted(&admitted),
             config(),
-            Control::default(),
+            Cancellation::default(),
         )
         .unwrap();
         session.next().unwrap().unwrap()
@@ -153,7 +153,7 @@ fn detached_model_retains_theory_identity() {
     let model = Session::new(
         PreparedInput::formula(&admitted),
         config(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap()
     .next()
@@ -183,7 +183,7 @@ fn ground_session_reuses_the_supplied_graph() {
     let mut session = Session::new(
         PreparedInput::ground(&graph),
         configured,
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     assert_eq!(Arc::strong_count(&graph), 2);
@@ -231,7 +231,7 @@ fn prepared_strategies_refuse_incompatible_requests() {
             grounder,
             ..config()
         };
-        let failure = Session::new(input, configured, Control::default())
+        let failure = Session::new(input, configured, Cancellation::default())
             .err()
             .unwrap();
         assert!(matches!(
@@ -248,7 +248,7 @@ fn early_consumer_stop_preserves_partial_coverage() {
     let mut session = Session::new(
         PreparedInput::admitted(&admitted),
         config(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     session.next().unwrap().unwrap();
@@ -269,7 +269,7 @@ fn requested_count_preserves_batch_verification() {
             models: 2,
             ..config()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     assert_eq!(session.by_ref().count(), 2);
@@ -287,7 +287,7 @@ fn repeated_sessions_own_independent_search_budgets() {
         let mut session = Session::new(
             PreparedInput::formula(&admitted),
             config(),
-            Control::default(),
+            Cancellation::default(),
         )
         .unwrap();
         assert_eq!(session.by_ref().filter_map(Result::ok).count(), 2);
@@ -308,7 +308,7 @@ fn source_and_prepared_objective_costs_agree() {
                 completion_workers: NonZeroUsize::new(workers).unwrap(),
                 ..config()
             },
-            Control::default(),
+            Cancellation::default(),
         )
         .unwrap();
         let models: Vec<_> = session.by_ref().map(Result::unwrap).collect();
@@ -319,7 +319,7 @@ fn source_and_prepared_objective_costs_agree() {
             &options(&["--json", "--completion-workers", &workers.to_string()]),
             &mut output,
             &mut io::sink(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         assert_eq!(
@@ -363,7 +363,7 @@ fn objective_retention_precedes_tie_delivery() {
     let mut session = Session::new(
         PreparedInput::formula(&admitted),
         config(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     session.next().unwrap().unwrap();
@@ -384,7 +384,7 @@ fn interruption_retains_an_unproved_incumbent() {
             max_objective_bound_work: 0,
             ..config()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     let model = session.next().unwrap().unwrap();
@@ -422,7 +422,7 @@ fn scoring_refusal_preserves_verified_membership() {
             max_objective_work: 0,
             ..config()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     assert!(session.next().is_none());
@@ -445,9 +445,10 @@ fn scoring_refusal_preserves_verified_membership() {
 #[test]
 fn cancelled_formula_does_not_enter_membership() {
     let admitted = formula("a | b.");
-    let control = Control::default();
-    control.cancel();
-    let mut session = Session::new(PreparedInput::formula(&admitted), config(), control).unwrap();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
+    let mut session =
+        Session::new(PreparedInput::formula(&admitted), config(), cancellation).unwrap();
     assert!(session.next().is_none());
     let outcome = session.outcome().unwrap();
     assert_eq!(outcome.verified_models(), 0);
@@ -468,7 +469,7 @@ fn empty_exhausted_search_establishes_unsatisfiability() {
     let mut session = Session::new(
         PreparedInput::formula(&admitted),
         config(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     assert!(session.next().is_none());
@@ -492,7 +493,7 @@ fn failed_publication_preserves_established_optimum() {
         &options(&[]),
         &mut Closed,
         &mut io::sink(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     let outcome = failure.semantic().unwrap();
@@ -511,7 +512,7 @@ fn failed_first_answer_preserves_unknown_coverage() {
         &options(&[]),
         &mut Closed,
         &mut io::sink(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     let outcome = failure.semantic().unwrap();
@@ -553,7 +554,7 @@ fn reporting_failures_remain_separately_observable() {
         &options(&["--json", "--stats"]),
         &mut output,
         &mut Closed,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(output.0.is_empty(), "the complete JSON header was accepted");
@@ -577,7 +578,7 @@ fn detached_outcome_retains_original_subject() {
         let mut session = Session::new(
             PreparedInput::formula(&admitted),
             config(),
-            Control::default(),
+            Cancellation::default(),
         )
         .unwrap();
         assert_eq!(session.by_ref().map(Result::unwrap).count(), 2);
@@ -597,7 +598,7 @@ fn compatibility_mutation_cannot_rewrite_publication() {
         &options(&[]),
         &mut Closed,
         &mut io::sink(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     let before = failure.publication().unwrap();
@@ -615,15 +616,15 @@ fn compatibility_mutation_cannot_rewrite_publication() {
 fn cancelled_closure_retains_typed_incomplete_coverage() {
     let admitted = normal("a.");
     for grounder in [Grounder::Lazy, Grounder::Eager] {
-        let control = Control::default();
-        control.cancel();
+        let cancellation = Cancellation::default();
+        cancellation.cancel();
         let mut session = Session::new(
             PreparedInput::admitted(&admitted),
             SolveConfig {
                 grounder,
                 ..config()
             },
-            control,
+            cancellation,
         )
         .unwrap();
         assert!(session.next().is_none());
@@ -647,8 +648,8 @@ fn stopped_prepared_inputs_skip_execution_setup() {
         PreparedInput::admitted(&admitted),
         PreparedInput::ground(&graph),
     ] {
-        let control = Control::default();
-        control.cancel();
+        let cancellation = Cancellation::default();
+        cancellation.cancel();
         let mut session = Session::new(
             input,
             SolveConfig {
@@ -658,7 +659,7 @@ fn stopped_prepared_inputs_skip_execution_setup() {
                 stats: true,
                 ..config()
             },
-            control,
+            cancellation,
         )
         .unwrap();
         assert!(session.next().is_none());
@@ -687,7 +688,7 @@ fn native_program_preparation_reuses_the_original_subject() {
     let admitted = normal("{a}. b :- a.");
     let prepared = PreparedInput::program(admitted.program());
     assert!(prepared.metadata().is_none());
-    let mut session = Session::new(prepared, config(), Control::default()).unwrap();
+    let mut session = Session::new(prepared, config(), Cancellation::default()).unwrap();
     let actual: BTreeSet<_> = session
         .by_ref()
         .map(|answer| {
@@ -719,7 +720,7 @@ fn prepared_strategy_failure_retains_only_known_subject() {
             oracle: Oracle::Countermodel,
             ..config()
         },
-        Control::default(),
+        Cancellation::default(),
     );
     let Err(failure) = result else {
         panic!("native source is not an eager formula")
@@ -817,7 +818,7 @@ fn execution_refusal_retains_preparation_timing() {
             stats: true,
             ..config()
         },
-        Control::default(),
+        Cancellation::default(),
         &mut observer,
     );
     let Err(failure) = result else {
@@ -871,7 +872,7 @@ fn formula_setup_observer_failure_is_retained_for_first_pull() {
             stats: true,
             ..config()
         },
-        Control::default(),
+        Cancellation::default(),
         &mut observer,
     )
     .unwrap();
@@ -915,7 +916,7 @@ fn bound_observer_failure_retains_the_verified_incumbent() {
     let mut session = Session::new_observed(
         PreparedInput::formula(&admitted),
         config(),
-        Control::default(),
+        Cancellation::default(),
         &mut observer,
     )
     .unwrap();
@@ -977,7 +978,8 @@ fn observed_enumeration_preserves_all_objective_scores() {
     let input = PreparedInput::formula(&admitted);
     let mut observer = Facts::default();
     let mut session =
-        Session::enumerate_observed(input, config(), Control::default(), &mut observer).unwrap();
+        Session::enumerate_observed(input, config(), Cancellation::default(), &mut observer)
+            .unwrap();
     assert_eq!(
         observer.formula,
         Some((
@@ -991,7 +993,7 @@ fn observed_enumeration_preserves_all_objective_scores() {
         let answer = answer.unwrap();
         actual.push((atoms(&answer), answer.score().unwrap().costs().to_vec()));
     }
-    let mut expected: Vec<_> = Session::enumerate(input, config(), Control::default())
+    let mut expected: Vec<_> = Session::enumerate(input, config(), Cancellation::default())
         .unwrap()
         .map(|answer| {
             let answer = answer.unwrap();

@@ -6,7 +6,7 @@ use std::num::NonZeroUsize;
 
 use zetesis_ferraris::{AdmissionLimits, Interpretation, Node, Theory};
 use zetesis_sat::{
-    BatchError, BatchLimits, BatchVerdict, CompletionExecutor, CompletionScratch, Control,
+    BatchError, BatchLimits, BatchVerdict, Cancellation, CompletionExecutor, CompletionScratch,
     Incomplete, Limits, PreparedReduct, ReductPreparationLimits, SearchLimits, StableModels,
 };
 
@@ -14,13 +14,13 @@ use zetesis_sat::{
 fn by_clauses(
     theory: &zetesis_ferraris::Theory,
     limits: zetesis_sat::Limits,
-    control: zetesis_sat::Control,
+    cancellation: zetesis_sat::Cancellation,
 ) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
     zetesis_sat::StableModels::with_method(
         theory,
         zetesis_sat::SearchMethod::Clauses,
         limits,
-        control,
+        cancellation,
     )
 }
 
@@ -55,7 +55,7 @@ fn prepared_requirements(theory: &Theory, candidates: usize) -> CompletionScratc
     PreparedReduct::prepare(
         theory,
         ReductPreparationLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .result
     .unwrap()
@@ -65,7 +65,7 @@ fn prepared_requirements(theory: &Theory, candidates: usize) -> CompletionScratc
 
 fn retained_query_bytes(theory: &Theory, candidates: usize) -> u64 {
     let required = prepared_requirements(theory, candidates);
-    let mut search = by_clauses(theory, Limits::default(), Control::default()).unwrap();
+    let mut search = by_clauses(theory, Limits::default(), Cancellation::default()).unwrap();
     let mut executor = executor(1);
     search
         .next_batch_with_completion(batch(candidates), &mut executor, residual)
@@ -108,7 +108,7 @@ fn collect(
     count: usize,
     executor: &mut CompletionExecutor,
 ) -> (Vec<Vec<usize>>, zetesis_sat::Statistics) {
-    let mut search = by_clauses(t, Limits::default(), Control::default()).unwrap();
+    let mut search = by_clauses(t, Limits::default(), Cancellation::default()).unwrap();
     let mut result = Vec::new();
     while !search.exhausted() {
         result.extend(atoms(
@@ -205,7 +205,7 @@ fn parallel_completion_matches_reference_and_scalar_order_across_reused_theories
                                 &t,
                                 &candidate,
                                 zetesis_ferraris::Limits::default(),
-                                &Control::default(),
+                                &Cancellation::default(),
                             )
                             .unwrap()
                             .accepted()
@@ -234,7 +234,7 @@ fn parallel_completion_matches_reference_and_scalar_order_across_reused_theories
 }
 
 fn partial(limits: Limits, executor: &mut CompletionExecutor) -> StableModels {
-    let mut search = by_clauses(&choices(), limits, Control::default()).unwrap();
+    let mut search = by_clauses(&choices(), limits, Cancellation::default()).unwrap();
     let result = search.next_batch_with_completion(batch(3), executor, |_, candidates| {
         assert_eq!(candidates.len(), 3);
         Err::<Vec<BatchVerdict>, _>("retain proposals before completion")
@@ -333,7 +333,7 @@ fn shared_decision_ceiling_includes_proposals_and_residuals() {
     // Independent unconstrained atoms require proper-subset branching. Find a
     // measured batch with reduct decisions before testing its shared decision cap.
     let t = theory(5, vec![], vec![]);
-    let mut measured = by_clauses(&t, Limits::default(), Control::default()).unwrap();
+    let mut measured = by_clauses(&t, Limits::default(), Cancellation::default()).unwrap();
     let _ = measured.next_batch(batch(16), |_, _| Err::<Vec<BatchVerdict>, _>("measure"));
     let proposed_decisions = measured.statistics().search.decisions;
     measured
@@ -349,7 +349,7 @@ fn shared_decision_ceiling_includes_proposals_and_residuals() {
             },
             ..Limits::default()
         };
-        let mut search = by_clauses(&t, limits, Control::default()).unwrap();
+        let mut search = by_clauses(&t, limits, Cancellation::default()).unwrap();
         let result = search.next_batch_with_completion(batch(16), &mut parallel, residual);
         assert_eq!(search.statistics().search.decisions, ceiling);
         if ceiling == total {
@@ -381,7 +381,7 @@ fn checker_retry_restriction_and_failed_certificate_preserve_the_owned_batch() {
                     theory,
                     candidate,
                     zetesis_ferraris::Limits::default(),
-                    &Control::default()
+                    &Cancellation::default()
                 )
                 .unwrap()
                 .accepted()
@@ -429,11 +429,11 @@ fn checker_retry_restriction_and_failed_certificate_preserve_the_owned_batch() {
 
 #[test]
 fn cancellation_before_workspace_reservation_keeps_pending_candidates() {
-    let control = Control::default();
-    let mut search = by_clauses(&choices(), Limits::default(), control.clone()).unwrap();
+    let cancellation = Cancellation::default();
+    let mut search = by_clauses(&choices(), Limits::default(), cancellation.clone()).unwrap();
     let mut pool = executor(4);
     let result = search.next_batch_with_completion(batch(3), &mut pool, |theory, candidates| {
-        control.cancel();
+        cancellation.cancel();
         residual(theory, candidates)
     });
     assert!(matches!(
@@ -453,7 +453,8 @@ fn cancellation_before_workspace_reservation_keeps_pending_candidates() {
 fn opt_in_worker_sums_do_not_replace_scalar_search_wall_intervals() {
     for workers in [1, 3] {
         let mut pool = executor(workers);
-        let mut search = by_clauses(&choices(), Limits::default(), Control::default()).unwrap();
+        let mut search =
+            by_clauses(&choices(), Limits::default(), Cancellation::default()).unwrap();
         search.enable_phase_timing();
         search
             .next_batch_with_completion(batch(3), &mut pool, residual)
@@ -483,7 +484,7 @@ fn opt_in_worker_sums_do_not_replace_scalar_search_wall_intervals() {
 fn scratch_admission_precedes_results_and_is_retryable_without_new_proposals() {
     let t = choices();
     for workers in [1, 2, 4] {
-        let mut search = by_clauses(&t, Limits::default(), Control::default()).unwrap();
+        let mut search = by_clauses(&t, Limits::default(), Cancellation::default()).unwrap();
         let mut refused =
             CompletionExecutor::with_scratch_limit(NonZeroUsize::new(workers).unwrap(), 0).unwrap();
         assert_eq!(refused.scratch_limit(), 0);
@@ -544,7 +545,7 @@ fn prepared_owner_survives_capacity_refusal_and_retry() {
     let theory = choices();
     let requested = prepared_requirements(&theory, 3);
     let actual = requested.shared_bytes + requested.result_bytes + retained_query_bytes(&theory, 3);
-    let mut search = by_clauses(&theory, Limits::default(), Control::default()).unwrap();
+    let mut search = by_clauses(&theory, Limits::default(), Cancellation::default()).unwrap();
     let _ = search.next_batch(batch(3), |_, _| {
         Err::<Vec<BatchVerdict>, _>("retain proposals")
     });
@@ -627,7 +628,7 @@ fn certificate_only_completion_needs_result_storage_but_no_query_workspace() {
     let t = choices();
     let requirements = prepared_requirements(&t, 3);
     for workers in [1, 2, 4] {
-        let mut search = by_clauses(&t, Limits::default(), Control::default()).unwrap();
+        let mut search = by_clauses(&t, Limits::default(), Cancellation::default()).unwrap();
         let mut pool = CompletionExecutor::with_scratch_limit(
             NonZeroUsize::new(workers).unwrap(),
             requirements.result_bytes,
@@ -651,18 +652,22 @@ fn certificate_only_completion_needs_result_storage_but_no_query_workspace() {
 fn one_workspace_parallel_failure_joins_all_residual_slots_and_accounts_each() {
     let t = choices();
     let required = prepared_requirements(&t, 3);
-    let mut probe = by_clauses(&t, Limits::default(), Control::default()).unwrap();
+    let mut probe = by_clauses(&t, Limits::default(), Cancellation::default()).unwrap();
     let _ = probe.next_batch(batch(3), |_, _| {
         Err::<Vec<BatchVerdict>, _>("retain proposals")
     });
     let mut limits = Limits::default();
     limits.search.max_work = probe.statistics().search.work
-        + PreparedReduct::prepare(&t, ReductPreparationLimits::default(), &Control::default())
-            .result
-            .unwrap()
-            .statistics()
-            .work;
-    let mut search = by_clauses(&t, limits, Control::default()).unwrap();
+        + PreparedReduct::prepare(
+            &t,
+            ReductPreparationLimits::default(),
+            &Cancellation::default(),
+        )
+        .result
+        .unwrap()
+        .statistics()
+        .work;
+    let mut search = by_clauses(&t, limits, Cancellation::default()).unwrap();
     let mut pool = CompletionExecutor::with_scratch_limit(
         NonZeroUsize::new(4).unwrap(),
         required.shared_bytes + required.result_bytes + retained_query_bytes(&t, 3),
@@ -704,7 +709,7 @@ fn independent_query_capacity_is_admitted_before_worker_entry() {
     let prepared = PreparedReduct::prepare(
         &input,
         ReductPreparationLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .result
     .unwrap();
@@ -713,7 +718,7 @@ fn independent_query_capacity_is_admitted_before_worker_entry() {
         max_reduct_bytes: limit,
         ..Limits::default()
     };
-    let mut search = by_clauses(&input, limits, Control::default()).unwrap();
+    let mut search = by_clauses(&input, limits, Cancellation::default()).unwrap();
     let mut pool = executor(3);
     let result = search.next_batch_with_completion(batch(1), &mut pool, residual);
     assert!(

@@ -5,7 +5,7 @@
 
 use std::collections::BTreeSet;
 
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
     AdmissionLimits, Interpretation, Limits, Narrower, Narrowing, NarrowingStatistics, Node,
     Producers, Region, RegionLimits, Theory, check, producers,
@@ -18,11 +18,18 @@ fn narrow_fresh(
     producers: Option<&Producers>,
     region: &mut Region,
     limits: RegionLimits,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<(Narrowing, NarrowingStatistics), Stop> {
     let narrower = Narrower::new(theory);
     let mut knowledge = narrower.knowledge();
-    narrower.narrow_known(theory, producers, region, &mut knowledge, limits, control)
+    narrower.narrow_known(
+        theory,
+        producers,
+        region,
+        &mut knowledge,
+        limits,
+        cancellation,
+    )
 }
 
 fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
@@ -37,9 +44,14 @@ fn stable_models(theory: &Theory) -> BTreeSet<usize> {
         .filter(|mask| {
             let candidate =
                 Interpretation::new(theory, (0..atoms).filter(|a| mask & (1 << a) != 0)).unwrap();
-            check(theory, &candidate, Limits::default(), &Control::default())
-                .unwrap()
-                .accepted()
+            check(
+                theory,
+                &candidate,
+                Limits::default(),
+                &Cancellation::default(),
+            )
+            .unwrap()
+            .accepted()
         })
         .collect()
 }
@@ -56,13 +68,13 @@ fn region(theory: &Theory, held: &[usize], cut: &[usize]) -> Region {
 }
 
 fn narrowed(theory: &Theory, region: &mut Region) -> Narrowing {
-    let extracted = producers(theory, RegionLimits::default(), &Control::default()).unwrap();
+    let extracted = producers(theory, RegionLimits::default(), &Cancellation::default()).unwrap();
     narrow_fresh(
         theory,
         extracted.producers.as_ref(),
         region,
         RegionLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap()
     .0
@@ -204,7 +216,7 @@ fn a_unit_root_decides_its_one_open_atom() {
             None,
             region,
             RegionLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap()
         .0
@@ -276,7 +288,7 @@ fn outside_the_producer_fragment_the_readings_still_narrow() {
     ];
     let t = theory(3, nodes, vec![4]);
     assert!(
-        producers(&t, RegionLimits::default(), &Control::default())
+        producers(&t, RegionLimits::default(), &Cancellation::default())
             .unwrap()
             .producers
             .is_none()
@@ -326,9 +338,14 @@ fn the_leaves_of_the_region_tree_are_the_stable_models() {
                     (0..theory.atom_count()).filter(|a| mask & (1 << a) != 0),
                 )
                 .unwrap();
-                if check(theory, &candidate, Limits::default(), &Control::default())
-                    .unwrap()
-                    .accepted()
+                if check(
+                    theory,
+                    &candidate,
+                    Limits::default(),
+                    &Cancellation::default(),
+                )
+                .unwrap()
+                .accepted()
                 {
                     found.push(mask);
                 }
@@ -420,7 +437,7 @@ fn a_failing_consequent_teaches_the_antecedent_to_fail() {
         None,
         &mut region,
         RegionLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert!(matches!(outcome, Narrowing::Fixed { changed: true }));
@@ -482,7 +499,7 @@ fn a_clause_of_three_literals_forces_its_last_open_one() {
             None,
             region,
             RegionLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap()
         .0
@@ -517,7 +534,7 @@ fn a_node_reached_on_both_sides_of_a_chain_is_one_operand() {
             None,
             &mut both_cut,
             RegionLimits::default(),
-            &Control::default()
+            &Cancellation::default()
         )
         .unwrap()
         .0,
@@ -530,7 +547,7 @@ fn a_node_reached_on_both_sides_of_a_chain_is_one_operand() {
             None,
             &mut a_cut,
             RegionLimits::default(),
-            &Control::default()
+            &Cancellation::default()
         )
         .unwrap()
         .0,
@@ -563,7 +580,7 @@ fn a_subformula_shared_by_two_parents_serves_both_as_one_operand() {
             None,
             &mut cut_c,
             RegionLimits::default(),
-            &Control::default()
+            &Cancellation::default()
         )
         .unwrap()
         .0,
@@ -595,7 +612,7 @@ fn a_frozen_mask_on_a_chain_node_reads_as_its_operands_masks() {
         let attempt = workspace.evaluate(
             &interpretation,
             zetesis_ferraris::EvaluationLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         );
         let evaluation = attempt.result.unwrap();
         let truth = evaluation.truth();
@@ -610,7 +627,7 @@ fn a_frozen_mask_on_a_chain_node_reads_as_its_operands_masks() {
                 &mut subsets,
                 &mut narrower.knowledge(),
                 RegionLimits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
         assert!(matches!(narrowing, Narrowing::Fixed { changed: true }));
@@ -643,7 +660,7 @@ fn carried_knowledge_narrows_every_region_as_a_fresh_narrowing_does() {
         theory(5, nodes, vec![4, 6, 11, 13, 15])
     }] {
         let narrower = Narrower::new(&t);
-        let extracted = producers(&t, RegionLimits::default(), &Control::default()).unwrap();
+        let extracted = producers(&t, RegionLimits::default(), &Cancellation::default()).unwrap();
         let producers = extracted.producers.as_ref();
         let mut stack = vec![(Region::all_open(t.atom_count()), narrower.knowledge())];
         let mut leaves = 0;
@@ -656,7 +673,7 @@ fn carried_knowledge_narrows_every_region_as_a_fresh_narrowing_does() {
                     &mut fresh,
                     &mut narrower.knowledge(),
                     RegionLimits::default(),
-                    &Control::default(),
+                    &Cancellation::default(),
                 )
                 .unwrap();
             let (from_carried, _) = narrower
@@ -666,7 +683,7 @@ fn carried_knowledge_narrows_every_region_as_a_fresh_narrowing_does() {
                     &mut carried,
                     &mut knowledge,
                     RegionLimits::default(),
-                    &Control::default(),
+                    &Cancellation::default(),
                 )
                 .unwrap();
             assert_eq!(
@@ -704,7 +721,7 @@ fn holding_an_atom_without_producers_rechecks_no_support() {
         None,
         &mut region,
         RegionLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert!(matches!(narrowing, Narrowing::Fixed { changed: true }));
@@ -728,7 +745,7 @@ fn an_implication_from_an_atom_to_itself_is_one_parent_of_the_atom() {
             &mut region,
             &mut knowledge,
             RegionLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     assert!(matches!(narrowing, Narrowing::Fixed { changed: false }));
@@ -743,14 +760,14 @@ fn every_propagation_event_is_charged_work() {
     // stops the narrowing with the work stop. The work ceiling is the one
     // ceiling a narrowing needs.
     let t = disjunctive();
-    let extracted = producers(&t, RegionLimits::default(), &Control::default()).unwrap();
+    let extracted = producers(&t, RegionLimits::default(), &Cancellation::default()).unwrap();
     let mut region = Region::all_open(4);
     let (_, statistics) = narrow_fresh(
         &t,
         extracted.producers.as_ref(),
         &mut region,
         RegionLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert!(statistics.propagations > 1);
@@ -763,7 +780,7 @@ fn every_propagation_event_is_charged_work() {
         RegionLimits {
             max_work: statistics.propagations - 1,
         },
-        &Control::default(),
+        &Cancellation::default(),
     );
     assert!(matches!(stopped, Err(Stop::WorkLimit)));
 }
@@ -786,7 +803,7 @@ fn a_same_connective_node_reached_on_both_sides_is_absorbed_once() {
         None,
         &mut region,
         RegionLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert!(matches!(narrowing, Narrowing::Refuted));
@@ -803,7 +820,7 @@ fn a_same_connective_node_reached_on_both_sides_is_absorbed_once() {
         None,
         &mut region,
         RegionLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert!(matches!(narrowing, Narrowing::Fixed { changed: true }));

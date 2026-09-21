@@ -2,8 +2,8 @@
 
 use crate::search::{Budget, LocalQuota};
 use crate::{
-    AdmissionError, AdmissionLimits, Cnf, Control, Incomplete, Literal, Resource, SearchLimits,
-    SearchStatistics, Solve,
+    AdmissionError, AdmissionLimits, Cancellation, Cnf, Incomplete, Literal, Resource,
+    SearchLimits, SearchStatistics, Solve,
 };
 use zetesis_ferraris::{
     AdmissionLimits as FormulaLimits, Node, PositivePlan, PositivePlanLimits, Theory,
@@ -11,7 +11,12 @@ use zetesis_ferraris::{
 
 fn plan() -> PositivePlan {
     let theory = Theory::new(3, vec![Node::Atom(0)], vec![0], FormulaLimits::default()).unwrap();
-    PositivePlan::compile(&theory, PositivePlanLimits::default(), &Control::default()).unwrap()
+    PositivePlan::compile(
+        &theory,
+        PositivePlanLimits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap()
 }
 
 fn original(limits: AdmissionLimits) -> Cnf {
@@ -27,7 +32,7 @@ fn contents(cnf: &Cnf) -> Vec<Vec<Literal>> {
 #[test]
 fn unit_admission_refusal_preserves_the_original_cnf() {
     let plan = plan();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut cnf = original(AdmissionLimits {
         max_clauses: 2,
         ..Default::default()
@@ -36,7 +41,7 @@ fn unit_admission_refusal_preserves_the_original_cnf() {
     let mut budget = Budget {
         quota: LocalQuota,
         limits: SearchLimits::default(),
-        control: &control,
+        cancellation: &cancellation,
         statistics: SearchStatistics::default(),
     };
     assert_eq!(
@@ -58,7 +63,7 @@ fn unit_admission_refusal_preserves_the_original_cnf() {
 #[test]
 fn stopped_unit_construction_rolls_back_every_partial_prefix() {
     let plan = plan();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let required = 2 * plan.theory().atom_count() as u64;
     for limit in 0..required {
         let mut cnf = original(AdmissionLimits::default());
@@ -69,7 +74,7 @@ fn stopped_unit_construction_rolls_back_every_partial_prefix() {
                 max_work: limit,
                 ..Default::default()
             },
-            control: &control,
+            cancellation: &cancellation,
             statistics: SearchStatistics::default(),
         };
         assert_eq!(
@@ -90,12 +95,12 @@ fn stopped_unit_construction_rolls_back_every_partial_prefix() {
 #[test]
 fn committed_units_select_exactly_the_least_interpretation() {
     let plan = plan();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut cnf = original(AdmissionLimits::default());
     let mut budget = Budget {
         quota: LocalQuota,
         limits: SearchLimits::default(),
-        control: &control,
+        cancellation: &cancellation,
         statistics: SearchStatistics::default(),
     };
     assert_eq!(
@@ -112,7 +117,7 @@ fn committed_units_select_exactly_the_least_interpretation() {
             vec![Literal::new(2, false)]
         ]
     );
-    let Solve::Sat(assignment) = crate::solve(&cnf, SearchLimits::default(), &control) else {
+    let Solve::Sat(assignment) = crate::solve(&cnf, SearchLimits::default(), &cancellation) else {
         panic!("least model must satisfy its units");
     };
     assert_eq!(
@@ -134,7 +139,7 @@ fn positive_membership_rejects_equal_looking_foreign_owners() {
         &candidate,
         usize::MAX,
         crate::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
         &mut search,
     );
     assert!(matches!(result, Err(Incomplete::WrongTheory)));
@@ -151,7 +156,7 @@ fn positive_membership_refutes_a_nonleast_model() {
         &candidate,
         usize::MAX,
         crate::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
         &mut search,
     );
     assert!(matches!(result, Ok(super::Verdict::NonMinimal)));
@@ -171,7 +176,7 @@ fn positive_membership_identifies_a_nonmodel() {
         &candidate,
         usize::MAX,
         crate::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
         &mut search,
     );
     assert!(matches!(result, Ok(super::Verdict::NotModel)));

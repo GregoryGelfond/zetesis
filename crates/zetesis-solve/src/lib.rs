@@ -13,14 +13,14 @@
 //! across unrelated admissions. Preparing this borrow performs no execution.
 //!
 //! ```
-//! use zetesis_cpu::Control;
+//! use zetesis_cpu::Cancellation;
 //! use zetesis_solve::{Backend, PreparedInput, Session, SolveConfig, WorldViewLimits};
 //! use zetesis_themelios::{AdmissionOptions, admit};
 //!
 //! let admitted = admit("a :- not b. b :- not a.".into(), AdmissionOptions::default())?;
 //! let config = SolveConfig { backend: Backend::Cpu, models: 0, ..Default::default() };
 //! let family = Session::builder(
-//!     PreparedInput::admitted(&admitted), config, Control::default(),
+//!     PreparedInput::admitted(&admitted), config, Cancellation::default(),
 //! ).collect(WorldViewLimits::default())?;
 //! assert_eq!(family.len(), 2);
 //! # Ok::<(), Box<dyn std::error::Error>>(())

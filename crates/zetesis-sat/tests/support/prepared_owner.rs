@@ -1,6 +1,6 @@
 //! Actual ordinary ownership, restriction and pending-batch contracts.
 use super::*;
-use crate::{BatchLimits, BatchVerdict, Control, StableModels};
+use crate::{BatchLimits, BatchVerdict, Cancellation, StableModels};
 use std::{convert::Infallible, num::NonZeroUsize};
 use zetesis_ferraris::Node;
 
@@ -26,7 +26,7 @@ fn ordinary_restrictions_keep_the_original_prepared_owner() {
         &theory,
         crate::SearchMethod::Clauses,
         Limits::default(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     search.enable_phase_timing();
@@ -66,7 +66,7 @@ fn all_certified_batches_do_not_prepare_a_reduct() {
         &choice(),
         crate::SearchMethod::Clauses,
         Limits::default(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     search.enable_phase_timing();
@@ -105,7 +105,7 @@ fn preparation_refusal_preserves_pending_candidate_coverage() {
         &choice(),
         crate::SearchMethod::Clauses,
         limits,
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     let result = search.next_batch(

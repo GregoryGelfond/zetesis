@@ -58,7 +58,7 @@ pub(crate) fn write_model_record(
     view: &zetesis_themelios::observation::ModelView<'_>,
     atoms: &mut zetesis_themelios::observation::json::AtomTable,
     max_record_bytes: usize,
-    control: &zetesis_cpu::Control,
+    cancellation: &zetesis_cpu::Cancellation,
 ) -> Result<(), RunError> {
     let prefix = format!(
         "{}{{\"number\":{number},\"model\":",
@@ -75,10 +75,10 @@ pub(crate) fn write_model_record(
                 max_bytes: maximum,
                 ..Default::default()
             },
-            control,
+            cancellation,
         )
         .map_err(RunError::JsonRecord)?;
-    control
+    cancellation
         .poll()
         .map_err(|error| RunError::JsonRecord(ViewError::Stopped(error)))?;
     // All semantic/encoding failures precede publication. I/O can still fail
@@ -169,7 +169,7 @@ pub(crate) fn summary(
             crate::PublicationPhase::RecordPreparation => "record_preparation",
         })?;
         out.text(",\"code\":")?;
-        out.string(control_code(stop.reason()))?;
+        out.string(stop_code(stop.reason()))?;
         out.text("}")?;
     } else {
         out.text("null")?;
@@ -318,7 +318,7 @@ fn reason_code(reason: Interruption) -> &'static str {
     match reason {
         Interruption::Preparation(reason)
         | Interruption::Oracle(reason)
-        | Interruption::Constraint(reason) => control_code(reason),
+        | Interruption::Constraint(reason) => stop_code(reason),
         Interruption::Countermodel(reason) => {
             use zetesis_sat::Incomplete;
             match reason {
@@ -379,7 +379,7 @@ fn reason_code(reason: Interruption) -> &'static str {
     }
 }
 
-fn control_code(reason: zetesis_cpu::Stop) -> &'static str {
+fn stop_code(reason: zetesis_cpu::Stop) -> &'static str {
     use zetesis_cpu::Stop;
     match reason {
         Stop::Cancelled => "cancelled",
@@ -1024,7 +1024,7 @@ fn query_fault(out: &mut Buffer, fault: &zetesis_cpu::BatchError) -> Result<(), 
     match fault {
         BatchError::Preparation(stop) => {
             out.text(",\"reason\":")?;
-            out.string(control_code(*stop))?;
+            out.string(stop_code(*stop))?;
         }
         BatchError::ClosureStorage { required, limit } => {
             out.number_field("required", *required)?;
@@ -1075,12 +1075,12 @@ fn shared_statistics(
         None => out.text("null")?,
         Some(zetesis_cpu::lazy::shared::Cause::Source(stop)) => {
             out.text("{\"scope\":\"source\",\"reason\":")?;
-            out.string(control_code(stop))?;
+            out.string(stop_code(stop))?;
             out.text("}")?;
         }
         Some(zetesis_cpu::lazy::shared::Cause::World { index, stop }) => {
             out.text("{\"scope\":\"world\",\"reason\":")?;
-            out.string(control_code(stop))?;
+            out.string(stop_code(stop))?;
             out.number_field("index", index)?;
             out.text("}")?;
         }

@@ -7,7 +7,7 @@ use std::path::Path;
 
 use super::{Budget, Cursor, LocalQuota};
 use crate::{
-    AdmissionLimits, Control, Incomplete, SearchLimits, SearchStatistics, Solve, encoding,
+    AdmissionLimits, Cancellation, Incomplete, SearchLimits, SearchStatistics, Solve, encoding,
 };
 use zetesis_themelios::{
     BundleAdmissionOptions, BundleLimits, ExpansionLimits, FormulaLimits, SourceBundle,
@@ -128,11 +128,11 @@ fn profile_finite_candidate_prefixes() {
         )
         .unwrap();
         let theory = admitted.theory();
-        let control = Control::default();
+        let cancellation = Cancellation::default();
         let mut budget = Budget {
             quota: LocalQuota,
             limits: SearchLimits::default(),
-            control: &control,
+            cancellation: &cancellation,
             statistics: SearchStatistics::default(),
         };
         let cnf = encoding::encode(theory, None, AdmissionLimits::default(), &mut budget).unwrap();

@@ -34,7 +34,7 @@ fn supplied_context(backend: Backend, expected_api: &str) {
         zetesis_ferraris::TightPlan::compile(
             &theory,
             zetesis_ferraris::TightPlanLimits::default(),
-            &zetesis_cpu::Control::default(),
+            &zetesis_cpu::Cancellation::default(),
         )
         .unwrap(),
     );
@@ -129,7 +129,7 @@ fn supplied_profile(backend: Backend, expected_api: &str) {
                 &theory,
                 &candidates,
                 &options,
-                &zetesis_cpu::Control::default(),
+                &zetesis_cpu::Cancellation::default(),
                 &crate::phase_timing::Recorder::new(false),
             );
             assert!(result.is_ok());

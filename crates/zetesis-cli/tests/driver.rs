@@ -2,7 +2,7 @@
 use clap::Parser;
 use std::io;
 use zetesis_cli::{Completion, Options, RunError, run};
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 
 fn options(extra: &[&str]) -> Options {
     Options::try_parse_from(["zetesis"].into_iter().chain(extra.iter().copied())).unwrap()
@@ -13,7 +13,7 @@ fn solve(source: &str, extra: &[&str]) -> (zetesis_cli::Report, String) {
         source.into(),
         &options(extra),
         &mut output,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     (report, String::from_utf8(output).unwrap())
@@ -85,10 +85,10 @@ fn partial_batch_limit_does_not_discard_completed_models() {
 
 #[test]
 fn cancelled_invocation_never_claims_unsat() {
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     let mut output = Vec::new();
-    let report = run(String::new(), &options(&[]), &mut output, &control).unwrap();
+    let report = run(String::new(), &options(&[]), &mut output, &cancellation).unwrap();
     assert_eq!(
         report.interruption,
         Some(zetesis_cli::Interruption::Preparation(Stop::Cancelled))
@@ -104,7 +104,7 @@ fn admission_errors_keep_source_positions() {
         source.into(),
         &options(&[]),
         &mut Vec::new(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     let RunError::FormulaAdmission(ref refusal) = error else {
@@ -135,7 +135,13 @@ fn output_failure_is_propagated() {
             Ok(())
         }
     }
-    let error = run("a.".into(), &options(&[]), &mut Broken, &Control::default()).unwrap_err();
+    let error = run(
+        "a.".into(),
+        &options(&[]),
+        &mut Broken,
+        &Cancellation::default(),
+    )
+    .unwrap_err();
     assert!(matches!(error, RunError::Output(_)));
 }
 
@@ -192,7 +198,7 @@ fn gpu_request_never_falls_back_to_cpu() {
         "a.".into(),
         &options(&["--backend", "gpu"]),
         &mut Vec::new(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(error, RunError::BackendUnavailable));

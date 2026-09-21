@@ -7,7 +7,7 @@ mod source_oracle;
 
 use source_records::{Records, canonical, exhaustive};
 use zetesis_core::{Term, Value};
-use zetesis_cpu::{CandidateLimits, CandidateTermination, Candidates, Control, Limits, check};
+use zetesis_cpu::{Cancellation, CandidateLimits, CandidateTermination, Candidates, Limits, check};
 use zetesis_themelios::{AdmissionOptions, FormulaLimits, admit};
 
 #[test]
@@ -81,7 +81,7 @@ fn ordinary_extremal_sources_preserve_complete_models() {
         let mut candidates = Candidates::new(
             input.program(),
             CandidateLimits::default(),
-            Control::default(),
+            Cancellation::default(),
         );
         let mut actual = Records::new();
         for seed in candidates.by_ref() {
@@ -89,7 +89,7 @@ fn ordinary_extremal_sources_preserve_complete_models() {
                 input.program(),
                 &seed.unwrap(),
                 Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
             if result.accepted() {

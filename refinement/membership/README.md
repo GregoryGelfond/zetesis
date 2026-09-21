@@ -64,7 +64,14 @@ checker. These commands use the pinned macOS ARM64 release. Other platforms need
 the matching upstream release or a build of the same commits; this package does
 not qualify those tool binaries.
 
-Run from the repository root:
+Run from the repository root of a separate checkout at the
+[retained package revision `983e5ba9`](https://github.com/GregoryGelfond/zetesis/commit/983e5ba9c84adbcfe8dae77df7403c3687548cb9).
+Its selected Rust source bytes match `sourceRevision`
+`0798e1a6e770d88610104dab4d7ed44cae1c86a8` in `provenance.json`; both inventories
+identify that historical extraction. Later source renames, lockfile changes and
+README clarifications can make checks against a current checkout fail. Preserve
+the recorded hashes; qualifying changed source requires a new extraction and
+proof check.
 
 ```sh
 shasum -a 256 -c refinement/membership/source-inputs.sha256
@@ -101,7 +108,8 @@ pin. Check source hashes before extraction. A source change requires a fresh
 extraction and proof check; an old artifact hash is not a correctness argument
 for changed code.
 
-From this directory, after preparing the tools above:
+From this directory in the retained package checkout, after preparing the tools
+above:
 
 ```sh
 repository_dir="$(git rev-parse --show-toplevel)"

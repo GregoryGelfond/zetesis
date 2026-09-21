@@ -5,7 +5,7 @@ use crate::lazy::{Plan, Selection, plan::Retention};
 use crate::{GpuLimits, LazyGpuStatistics};
 use std::num::NonZeroU32;
 use zetesis_core::{AdmissionLimits, AtomPattern, Predicate, Program, Seed, Template};
-use zetesis_cpu::{Control, lazy};
+use zetesis_cpu::{Cancellation, lazy};
 
 fn retained(snapshots: bool, seeds: bool) -> Retention {
     Retention {
@@ -118,7 +118,7 @@ fn source_round_receipts_preserve_actual_input_prefixes() {
                 ..Default::default()
             },
             selection,
-            &Control::default(),
+            &Cancellation::default(),
             |chunk| {
                 chunks[usize::try_from(chunk.round_index()).unwrap()] += 1;
                 widths.insert(chunk.words());

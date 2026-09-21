@@ -2,7 +2,7 @@
 
 use clap::Parser;
 use zetesis_cli::{Completion, Options, Report, run_with_diagnostics};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 fn solve(source: &str, arguments: &[&str]) -> (Report, String) {
     let options =
@@ -13,7 +13,7 @@ fn solve(source: &str, arguments: &[&str]) -> (Report, String) {
         &options,
         &mut output,
         &mut Vec::new(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     (report, String::from_utf8(output).unwrap())

@@ -6,7 +6,7 @@ use std::num::NonZeroUsize;
 use std::time::{Duration, Instant};
 
 use clap::Args;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Interpretation;
 use zetesis_wgpu::{FormulaLimits, GpuFormulaOracle, GpuOptions};
 
@@ -308,7 +308,7 @@ impl FormulaCase<'_> {
             self.fixture.theory(),
             candidates,
             self.options.max_work,
-            &Control::default(),
+            &Cancellation::default(),
         )?;
         let elapsed = started.elapsed();
         verify(&parallel, &expected)?;

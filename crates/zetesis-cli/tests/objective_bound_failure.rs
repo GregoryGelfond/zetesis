@@ -2,7 +2,7 @@
 
 use clap::Parser;
 use zetesis_cli::{Completion, Options, Report, run_with_diagnostics};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::objective_bound::{ObjectivePlan, ObjectivePlanLimits};
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
@@ -27,7 +27,7 @@ fn exact_plan_work(source: &str) -> u64 {
                 max_work,
                 ..Default::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
         .expect("planning succeeds at the inclusive work ceiling")
     };
@@ -59,7 +59,7 @@ fn solve(source: &str, bound_work: u64) -> (Report, String, String) {
         &options,
         &mut output,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .expect("optional pruning failure leaves exact search available");
     (

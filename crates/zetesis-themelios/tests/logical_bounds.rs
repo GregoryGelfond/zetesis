@@ -110,7 +110,7 @@ fn logical_guards_do_not_certify_numeric_count_plans() {
         .unwrap()
         .ground_with_count_plan(
             CountPlanLimits::default(),
-            &zetesis_cpu::Control::default(),
+            &zetesis_cpu::Cancellation::default(),
             None,
         )
         .unwrap();
@@ -134,7 +134,7 @@ fn independent_numeric_groups_retain_count_plans() {
     .unwrap()
     .ground_with_count_plan(
         CountPlanLimits::default(),
-        &zetesis_cpu::Control::default(),
+        &zetesis_cpu::Cancellation::default(),
         None,
     )
     .unwrap();

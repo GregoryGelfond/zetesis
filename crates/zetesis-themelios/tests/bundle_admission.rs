@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
 use zetesis_core::{Atom, Program, Term};
-use zetesis_cpu::{CandidateLimits, Candidates, Control, Limits, check};
+use zetesis_cpu::{Cancellation, CandidateLimits, Candidates, Limits, check};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedBundle, BundleAdmissionError,
     BundleAdmissionFailure, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
@@ -66,13 +66,13 @@ impl Drop for Fixture {
 }
 
 fn native(program: &Program) -> Models {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut models = BTreeSet::new();
-    let mut candidates = Candidates::new(program, CandidateLimits::default(), control.clone());
+    let mut candidates = Candidates::new(program, CandidateLimits::default(), cancellation.clone());
     for seed in candidates.by_ref() {
         let seed = seed.expect("candidate budget permits full exhaustion");
-        let result =
-            check(program, &seed, Limits::default(), &control).expect("complete reduct closure");
+        let result = check(program, &seed, Limits::default(), &cancellation)
+            .expect("complete reduct closure");
         if result.accepted() {
             assert!(
                 models.insert(

@@ -6,7 +6,7 @@ use zetesis_cli::{
     AnswerRenderer, AnswerView, Backend, Completion, PreparedInput, PublicationConfig,
     PublicationView, RunError, SummaryDelivery, publish_prepared,
 };
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 #[derive(Default)]
@@ -16,7 +16,7 @@ struct CountViews {
 }
 
 impl AnswerRenderer for CountViews {
-    fn answer(&mut self, answer: AnswerView<'_>, _: &Control) -> Result<(), RunError> {
+    fn answer(&mut self, answer: AnswerView<'_>, _: &Cancellation) -> Result<(), RunError> {
         // Full identity includes hidden; #show selects a separate atom channel
         // and evaluates item(X) into a separate typed term channel.
         let view = answer.model();
@@ -65,7 +65,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &config,
         &mut renderer,
         &mut io::sink(),
-        &Control::default(),
+        &Cancellation::default(),
     )?;
     assert_eq!(renderer.records, 2);
     assert_eq!(renderer.completion, Some(Completion::Exhausted));

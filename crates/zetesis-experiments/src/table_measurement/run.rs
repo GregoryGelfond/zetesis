@@ -4,7 +4,7 @@ use rayon::prelude::*;
 use sha2::{Digest, Sha256};
 use zetesis_core::{Value, relation::Relation};
 use zetesis_cpu::{
-    Control,
+    Cancellation,
     table::{self, Table},
 };
 
@@ -34,18 +34,18 @@ use super::{
 /// events, allocator metadata and thread stacks remain outside these limits.
 pub fn measure(
     configuration: Configuration,
-    control: &Control,
+    cancellation: &Cancellation,
     mut emit: impl FnMut(&Event<'_>) -> io::Result<()>,
 ) -> Result<bool, Error> {
     let configuration = configuration.validate()?;
-    control.poll().map_err(Error::Stopped)?;
+    cancellation.poll().map_err(Error::Stopped)?;
     emit(&Event::Start {
         schema: 1,
         configuration,
     })
     .map_err(Error::Output)?;
     let started = Instant::now();
-    let fixture = Fixture::new(configuration, control)?;
+    let fixture = Fixture::new(configuration, cancellation)?;
     let fixture_ns = started.elapsed().as_nanos();
     let subject = fixture.subject(configuration.case)?;
     let mut bytes = Vec::new();
@@ -58,7 +58,7 @@ pub fn measure(
     drop(bytes);
     let started = Instant::now();
     let expected = (0..configuration.queries)
-        .map(|query| fixture.reference(query, control))
+        .map(|query| fixture.reference(query, cancellation))
         .collect::<Result<Vec<_>, _>>()?;
     let reference_ns = started.elapsed().as_nanos();
     let reference_bytes = expected.capacity() * size_of::<Output>()
@@ -77,7 +77,12 @@ pub fn measure(
     .map_err(Error::Relation)?;
     let relation_ns = started.elapsed().as_nanos();
     let started = Instant::now();
-    let table = match Table::prepare(&relation, &fixture.scope, limits(configuration), control) {
+    let table = match Table::prepare(
+        &relation,
+        &fixture.scope,
+        limits(configuration),
+        cancellation,
+    ) {
         Ok(table) => Ok(table),
         Err(failure) => Err(applicability(failure)?),
     };
@@ -121,7 +126,7 @@ pub fn measure(
         domains: &domains,
         table: table.as_ref().ok(),
         configuration,
-        control,
+        cancellation,
     };
     schedule(&plan, &expected, &fingerprint, &pool, &mut emit)
 }
@@ -134,7 +139,7 @@ fn schedule(
     emit: &mut impl FnMut(&Event<'_>) -> io::Result<()>,
 ) -> Result<bool, Error> {
     let configuration = plan.configuration;
-    let control = plan.control;
+    let cancellation = plan.cancellation;
     let mut batches = 0;
     let mut passed = plan.table.is_some();
     for route in [Route::Scan, Route::Table, Route::Rayon] {
@@ -147,7 +152,7 @@ fn schedule(
             (Phase::Timed, configuration.repetitions),
         ] {
             for repetition in 0..count {
-                control.poll().map_err(Error::Stopped)?;
+                cancellation.poll().map_err(Error::Stopped)?;
                 let started = Instant::now();
                 let outcomes = if route == Route::Rayon {
                     pool.install(|| {
@@ -164,7 +169,7 @@ fn schedule(
                 let batch_ns = started.elapsed().as_nanos();
                 let mut output_bytes = outcomes.capacity() * size_of::<Outcome>();
                 for (query, outcome) in outcomes.iter().enumerate() {
-                    control.poll().map_err(Error::Stopped)?;
+                    cancellation.poll().map_err(Error::Stopped)?;
                     match outcome {
                         Outcome::Complete {
                             query: position,
@@ -201,7 +206,7 @@ fn schedule(
             }
         }
     }
-    control.poll().map_err(Error::Stopped)?;
+    cancellation.poll().map_err(Error::Stopped)?;
     emit(&Event::Complete {
         queries: configuration.queries,
         batches,
@@ -274,14 +279,14 @@ struct Plan<'a, 'owner, 'source> {
     domains: &'a Domains<'a>,
     table: Option<&'a Table<'owner, 'source>>,
     configuration: Configuration,
-    control: &'a Control,
+    cancellation: &'a Cancellation,
 }
 impl Plan<'_, '_, '_> {
     fn query(&self, route: Route, query: usize) -> Result<Outcome, Error> {
-        self.control.poll().map_err(Error::Stopped)?;
+        self.cancellation.poll().map_err(Error::Stopped)?;
         let started = Instant::now();
         if route == Route::Scan {
-            let raw = scan(self.fixture, &self.domains[query], self.control)?;
+            let raw = scan(self.fixture, &self.domains[query], self.cancellation)?;
             let projection_ns = started.elapsed().as_nanos();
             let conversion = Instant::now();
             let comparisons = raw.comparisons;
@@ -306,7 +311,7 @@ impl Plan<'_, '_, '_> {
         let projection = match table.project(
             &domains[..family.len()],
             limits(self.configuration),
-            self.control,
+            self.cancellation,
         ) {
             Ok(projection) => projection,
             Err(failure) => {
@@ -366,7 +371,7 @@ impl Scanned<'_> {
 fn scan<'a>(
     fixture: &'a Fixture,
     domains: &[Vec<&Value>],
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<Scanned<'a>, Error> {
     let mut rows = Vec::new();
     rows.try_reserve_exact(fixture.indices.len())
@@ -376,7 +381,7 @@ fn scan<'a>(
         .collect();
     let mut comparisons = 0;
     for (position, &original) in fixture.indices.iter().enumerate() {
-        control.poll().map_err(Error::Stopped)?;
+        cancellation.poll().map_err(Error::Stopped)?;
         let tuple = fixture.atoms[original].values();
         let mut present = true;
         for (column, &variable) in fixture.scope.iter().enumerate() {

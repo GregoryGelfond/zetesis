@@ -3,11 +3,11 @@
 use std::num::NonZeroUsize;
 
 use rayon::prelude::*;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Theory};
 
 use crate::FormulaBenchmarkError;
-use crate::formula_completion::{Membership, native_with_control};
+use crate::formula_completion::{Membership, native_with_cancellation};
 use crate::formula_fixtures::reserve;
 
 pub(super) struct FormulaPool {
@@ -46,14 +46,14 @@ impl FormulaPool {
         theory: &Theory,
         candidates: &[Interpretation],
         work: u64,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Vec<Membership>, FormulaBenchmarkError> {
-        poll(control)?;
+        poll(cancellation)?;
         if candidates.len() > self.max_candidates {
             return Err(FormulaBenchmarkError::Dimensions);
         }
         for candidate in candidates {
-            poll(control)?;
+            poll(cancellation)?;
             if !theory.same_instance(candidate.theory()) {
                 return Err(FormulaBenchmarkError::Incomplete(
                     zetesis_sat::Incomplete::WrongTheory,
@@ -67,21 +67,21 @@ impl FormulaPool {
         self.pool.install(|| {
             candidates
                 .par_iter()
-                .map(|candidate| native_with_control(theory, candidate, work, control))
+                .map(|candidate| native_with_cancellation(theory, candidate, work, cancellation))
                 .collect_into_vec(&mut outcomes);
         });
-        poll(control)?;
+        poll(cancellation)?;
         let mut completed = reserve(candidates.len())?;
         for outcome in outcomes {
-            poll(control)?;
+            poll(cancellation)?;
             completed.push(outcome?);
         }
         Ok(completed)
     }
 }
 
-fn poll(control: &Control) -> Result<(), FormulaBenchmarkError> {
-    control
+fn poll(cancellation: &Cancellation) -> Result<(), FormulaBenchmarkError> {
+    cancellation
         .poll()
         .map_err(|error| FormulaBenchmarkError::Incomplete(error.into()))
 }

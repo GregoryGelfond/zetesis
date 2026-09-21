@@ -6,7 +6,7 @@ use std::{
 };
 
 use zetesis_ferraris::{AdmissionLimits, Node, Theory};
-use zetesis_sat::{Control, Incomplete, Limits, SearchLimits, StableModels};
+use zetesis_sat::{Cancellation, Incomplete, Limits, SearchLimits, StableModels};
 
 #[test]
 fn exhausted_root_narrowing_keeps_its_charged_work() {
@@ -23,10 +23,14 @@ fn exhausted_root_narrowing_keeps_its_charged_work() {
     )
     .unwrap();
     let workers = NonZeroUsize::new(2).unwrap();
-    let initial =
-        StableModels::with_region_workers(&theory, workers, Limits::default(), Control::default())
-            .unwrap()
-            .statistics();
+    let initial = StableModels::with_region_workers(
+        &theory,
+        workers,
+        Limits::default(),
+        Cancellation::default(),
+    )
+    .unwrap()
+    .statistics();
     assert_eq!(initial.regions.unwrap().counts.work, initial.search.work);
     let limit = initial.search.work + 1;
     let mut search = StableModels::with_region_workers(
@@ -39,7 +43,7 @@ fn exhausted_root_narrowing_keeps_its_charged_work() {
             },
             ..Limits::default()
         },
-        Control::with_deadline(Instant::now() + Duration::from_secs(2)).unwrap(),
+        Cancellation::with_deadline(Instant::now() + Duration::from_secs(2)).unwrap(),
     )
     .unwrap();
     assert!(matches!(search.next(), Some(Err(Incomplete::WorkLimit))));
@@ -74,7 +78,7 @@ fn failed_reduct_narrowing_keeps_its_query_count() {
         &theory,
         workers,
         Limits::default(),
-        Control::with_deadline(Instant::now() + Duration::from_secs(2)).unwrap(),
+        Cancellation::with_deadline(Instant::now() + Duration::from_secs(2)).unwrap(),
     )
     .unwrap();
     assert_eq!(
@@ -100,7 +104,7 @@ fn failed_reduct_narrowing_keeps_its_query_count() {
             },
             ..Limits::default()
         },
-        Control::with_deadline(Instant::now() + Duration::from_secs(2)).unwrap(),
+        Cancellation::with_deadline(Instant::now() + Duration::from_secs(2)).unwrap(),
     )
     .unwrap();
     assert!(matches!(search.next(), Some(Err(Incomplete::WorkLimit))));

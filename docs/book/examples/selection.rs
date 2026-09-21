@@ -4,7 +4,7 @@
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 use zetesis_core::{Atom, Model, Predicate};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, PreparedInput, Session, SolveConfig, WorldView,
     WorldViewError, WorldViewFailureParts, WorldViewLimits,
@@ -16,7 +16,7 @@ fn check_optimum(
     config: SolveConfig,
     expected: Atom,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut selected = Session::new(input, config, Control::default())?;
+    let mut selected = Session::new(input, config, Cancellation::default())?;
     let optimum = selected.by_ref().collect::<Result<Vec<_>, _>>()?;
     assert_eq!(optimum.len(), 1);
     assert_eq!(optimum[0].interpretation(), &Model::new([expected]));
@@ -54,7 +54,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     check_optimum(input, config, a.clone())?;
 
-    let mut all = Session::enumerate(input, config, Control::default())?;
+    let mut all = Session::enumerate(input, config, Cancellation::default())?;
     let streamed = all.by_ref().collect::<Result<Vec<_>, _>>()?;
     let full_answers = streamed
         .iter()
@@ -81,7 +81,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         input,
         config,
         WorldViewLimits::default(),
-        Control::default(),
+        Cancellation::default(),
     )?;
     assert_eq!(family.len(), 2);
     assert_eq!(family.outcome().selection(), Some(AnswerSelection::All));
@@ -105,7 +105,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             max_answer_sets: 1,
             ..WorldViewLimits::default()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .expect_err("the original family has two answers");
     let WorldViewFailureParts {

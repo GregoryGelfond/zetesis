@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use zetesis_core::Atom;
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{AggregateElement, AggregateError, AggregateLimits, Node, Theory};
 use zetesis_objective::{ObjectiveProgram, Score};
 
@@ -208,9 +208,9 @@ impl ObjectivePlan {
         atoms: &[Atom],
         objectives: &ObjectiveProgram,
         limits: ObjectivePlanLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Self, ObjectiveBoundError> {
-        join::compile(original, atoms, objectives, limits, control)
+        join::compile(original, atoms, objectives, limits, cancellation)
     }
     /// Original theory instance, unchanged by planning.
     #[must_use]
@@ -234,9 +234,9 @@ impl ObjectivePlan {
         &self,
         incumbent: &Score,
         limits: ObjectiveBoundLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<ObjectiveBound, ObjectiveBoundError> {
-        bound::compile(self, incumbent, limits, control)
+        bound::compile(self, incumbent, limits, cancellation)
     }
 }
 
@@ -266,7 +266,7 @@ impl ObjectiveBound {
 }
 
 struct Work<'a> {
-    control: &'a Control,
+    cancellation: &'a Cancellation,
     limits: ObjectivePlanLimits,
     template: Option<usize>,
     statistics: ObjectiveBoundStatistics,
@@ -283,7 +283,7 @@ impl Work<'_> {
         self.error(ObjectiveBoundErrorKind::Limit(resource))
     }
     fn charge(&mut self, amount: u64) -> Result<(), ObjectiveBoundError> {
-        self.control
+        self.cancellation
             .poll()
             .map_err(|error| self.error(ObjectiveBoundErrorKind::Control(error)))?;
         self.account(amount)

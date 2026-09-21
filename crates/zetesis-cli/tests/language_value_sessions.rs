@@ -18,7 +18,7 @@ use zetesis_cli::{
     SolveConfig, run_with_diagnostics,
 };
 use zetesis_core::{Atom, Predicate, Value};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_sat::Incomplete;
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
@@ -198,9 +198,12 @@ fn source_extensions_preserve_complete_session_records() {
                     if !pruning {
                         config.max_objective_bound_work = 0;
                     }
-                    let mut session =
-                        Session::new(PreparedInput::formula(&input), config, Control::default())
-                            .unwrap();
+                    let mut session = Session::new(
+                        PreparedInput::formula(&input),
+                        config,
+                        Cancellation::default(),
+                    )
+                    .unwrap();
                     let mut actual = BTreeSet::new();
                     for result in session.by_ref() {
                         let model = result.unwrap();
@@ -269,7 +272,7 @@ fn automatic_admission_preserves_typed_json_records() {
                 &options,
                 &mut output,
                 &mut Vec::new(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
             assert_eq!(report.completion, Completion::Exhausted);
@@ -315,9 +318,12 @@ fn stopped_composition_preserves_objective_presence() {
                     max_candidates: 1,
                     ..Default::default()
                 };
-                let mut session =
-                    Session::new(PreparedInput::formula(&input), config, Control::default())
-                        .unwrap();
+                let mut session = Session::new(
+                    PreparedInput::formula(&input),
+                    config,
+                    Cancellation::default(),
+                )
+                .unwrap();
                 let mut actual = BTreeSet::new();
                 for result in session.by_ref() {
                     let model = result.unwrap();

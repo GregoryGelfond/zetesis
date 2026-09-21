@@ -7,7 +7,7 @@ use zetesis_core::{
     Value,
 };
 
-use crate::{Control, Stop};
+use crate::{Cancellation, Stop};
 
 mod window;
 mod relations;
@@ -173,7 +173,7 @@ impl Check {
 }
 
 pub(crate) struct Work<'a> {
-    control: &'a Control,
+    cancellation: &'a Cancellation,
     limits: Limits,
     statistics: Statistics,
     mask_words: u64,
@@ -188,14 +188,14 @@ impl Work<'_> {
 
     /// Charge bookkeeping units before one indivisible operation, without
     /// iterating over its payload. With unchanged control, a refusal records
-    /// the same admitted prefix as repeated ticks. Control is polled before any
+    /// the same admitted prefix as repeated ticks. Cancellation is polled before any
     /// nonzero charge; zero preserves the old empty-loop behavior and neither
     /// polls nor changes work. No real operation happens between these units.
     fn charge(&mut self, amount: usize) -> Result<(), Stop> {
         if amount == 0 {
             return Ok(());
         }
-        self.control.poll()?;
+        self.cancellation.poll()?;
         let remaining = self.limits.max_work.saturating_sub(self.statistics.work);
         if let Ok(amount) = u64::try_from(amount)
             && amount <= remaining
@@ -208,9 +208,9 @@ impl Work<'_> {
         }
     }
 
-    pub(crate) fn source(control: &Control, max_work: u64) -> Work<'_> {
+    pub(crate) fn source(cancellation: &Cancellation, max_work: u64) -> Work<'_> {
         Work {
-            control,
+            cancellation,
             limits: Limits {
                 max_work,
                 max_derived_atoms: 0,
@@ -254,9 +254,9 @@ pub fn check(
     program: &Program,
     seed: &Seed,
     limits: Limits,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<Check, Stop> {
-    check_view(program, seed.view(), limits, control)
+    check_view(program, seed.view(), limits, cancellation)
 }
 
 /// Check a borrowed owned seed or shared selection without copying its true
@@ -269,9 +269,9 @@ pub fn check_view(
     program: &Program,
     seed: SeedView<'_>,
     limits: Limits,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<Check, Stop> {
-    control.poll()?;
+    cancellation.poll()?;
     if !program.same_instance(seed.program()) {
         return Err(Stop::WrongProgram);
     }
@@ -285,7 +285,7 @@ pub fn check_view(
         });
     }
     let mut work = Work {
-        control,
+        cancellation,
         limits,
         statistics: Statistics::default(),
         mask_words: 0,
@@ -420,9 +420,9 @@ pub(crate) fn definite_closure(
     workspace: &mut ClosureWorkspace,
     cube: Bounds<'_>,
     limits: Limits,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<CompletedClosure, Stop> {
-    prepared.closure_of(Gates::Definite(cube), workspace, limits, control)
+    prepared.closure_of(Gates::Definite(cube), workspace, limits, cancellation)
 }
 
 /// The upper closure of `cube` over `prepared`, computed in `workspace`:
@@ -439,9 +439,9 @@ pub(crate) fn possible_closure(
     workspace: &mut ClosureWorkspace,
     cube: Bounds<'_>,
     limits: Limits,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<CompletedClosure, Stop> {
-    prepared.closure_of(Gates::Possible(cube), workspace, limits, control)
+    prepared.closure_of(Gates::Possible(cube), workspace, limits, cancellation)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

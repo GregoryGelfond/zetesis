@@ -61,7 +61,7 @@ fn varied_checks() -> [Check; 4] {
             &fixture.program,
             &dense,
             configuration.cpu_limits,
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap(),
     );
@@ -170,7 +170,7 @@ fn reordered_checks_fail_parity() {
         &fixture.program,
         &fixture.seeds,
         configuration.source_limits,
-        &Control::default(),
+        &Cancellation::default(),
         lazy::evaluate,
     )
     .unwrap();
@@ -187,7 +187,7 @@ fn missing_checks_fail_parity() {
         &fixture.program,
         &fixture.seeds,
         configuration.source_limits,
-        &Control::default(),
+        &Cancellation::default(),
         lazy::evaluate,
     )
     .unwrap();

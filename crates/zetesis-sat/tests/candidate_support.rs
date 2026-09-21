@@ -3,19 +3,19 @@
 use std::collections::BTreeSet;
 
 use zetesis_ferraris::{AdmissionLimits, Interpretation, Node, Theory};
-use zetesis_sat::{Control, Incomplete, Limits, StableModels, SupportStatus};
+use zetesis_sat::{Cancellation, Incomplete, Limits, StableModels, SupportStatus};
 
 /// Enumerate by the clause forms, the subject of the tests below.
 fn by_clauses(
     theory: &zetesis_ferraris::Theory,
     limits: zetesis_sat::Limits,
-    control: zetesis_sat::Control,
+    cancellation: zetesis_sat::Cancellation,
 ) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
     zetesis_sat::StableModels::with_method(
         theory,
         zetesis_sat::SearchMethod::Clauses,
         limits,
-        control,
+        cancellation,
     )
 }
 
@@ -46,7 +46,7 @@ fn collect(models: &mut StableModels) -> BTreeSet<Vec<usize>> {
                 &original,
                 &model,
                 zetesis_ferraris::Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap()
             .accepted()
@@ -79,13 +79,13 @@ fn independent_disjunctions_generate_only_two_choices_per_pair() {
                     &input,
                     &candidate,
                     zetesis_ferraris::Limits::default(),
-                    &Control::default(),
+                    &Cancellation::default(),
                 )
                 .unwrap()
             })
             .count();
         assert_eq!(classical, 3_usize.pow(u32::try_from(pairs).unwrap()));
-        let mut models = by_clauses(&input, Limits::default(), Control::default()).unwrap();
+        let mut models = by_clauses(&input, Limits::default(), Cancellation::default()).unwrap();
         assert!(models.theory().same_instance(&input));
         assert_eq!(
             models.statistics().support.unwrap().status,
@@ -108,7 +108,7 @@ fn independent_facts_can_support_both_disjuncts() {
         vec![Node::Atom(0), Node::Atom(1), Node::Or(0, 1)],
         vec![0, 1, 2],
     );
-    let mut models = by_clauses(&input, Limits::default(), Control::default()).unwrap();
+    let mut models = by_clauses(&input, Limits::default(), Cancellation::default()).unwrap();
     assert_eq!(
         models.statistics().support.unwrap().status,
         SupportStatus::Applied
@@ -133,7 +133,7 @@ fn mixed_choices_generate_only_supported_candidates() {
         ],
         vec![4, 6],
     );
-    let mut models = by_clauses(&input, Limits::default(), Control::default()).unwrap();
+    let mut models = by_clauses(&input, Limits::default(), Cancellation::default()).unwrap();
     let support = models.statistics().support.unwrap();
     assert_eq!(support.status, SupportStatus::Applied);
     assert!(support.construction_work > 0);
@@ -165,7 +165,7 @@ fn opaque_choice_heads_retain_general_candidate_search() {
         ],
         vec![4, 7],
     );
-    let mut models = by_clauses(&input, Limits::default(), Control::default()).unwrap();
+    let mut models = by_clauses(&input, Limits::default(), Cancellation::default()).unwrap();
     let support = models.statistics().support.unwrap();
     assert_eq!(support.status, SupportStatus::NotApplicable);
     assert_eq!(support.construction_work, 10); // Eight nodes, two roots.
@@ -197,7 +197,7 @@ fn mixed_support_keeps_positive_cycle_minimality_checks() {
         ],
         vec![5, 7, 8],
     );
-    let mut models = by_clauses(&input, Limits::default(), Control::default()).unwrap();
+    let mut models = by_clauses(&input, Limits::default(), Cancellation::default()).unwrap();
     assert_eq!(
         models.statistics().support.unwrap().status,
         SupportStatus::Applied
@@ -219,7 +219,7 @@ fn optional_formula_limit_preserves_the_original_query() {
     // the separately bounded support formula. Reduct-query admission and
     // exclusion history are independent of this original candidate limit.
     limits.admission.max_literals = 8;
-    let mut models = by_clauses(&input, limits, Control::default()).unwrap();
+    let mut models = by_clauses(&input, limits, Cancellation::default()).unwrap();
     let support = models.statistics().support.unwrap();
     assert_eq!(support.status, SupportStatus::FormulaLimit);
     assert!(support.construction_work > 0);
@@ -238,7 +238,7 @@ fn cold_reduct_admission_refusal_cannot_publish_an_answer() {
     // cannot admit its next ten-literal prefix and never enters native search.
     limits.admission.max_literals = 8;
     limits.reduct_admission.max_literals = 8;
-    let mut models = by_clauses(&input, limits, Control::default()).unwrap();
+    let mut models = by_clauses(&input, limits, Cancellation::default()).unwrap();
     assert_eq!(
         models.statistics().support.unwrap().status,
         SupportStatus::FormulaLimit
@@ -268,7 +268,7 @@ fn optional_encoding_limit_rolls_back_to_general_search() {
     let input = disjunctions(1);
     let mut limits = Limits::default();
     limits.admission.max_variables = 3; // The original a-or-b gate fits exactly.
-    let mut models = by_clauses(&input, limits, Control::default()).unwrap();
+    let mut models = by_clauses(&input, limits, Cancellation::default()).unwrap();
     let support = models.statistics().support.unwrap();
     assert!(matches!(support.status, SupportStatus::EncodingLimit(_)));
     assert!(support.construction_work > 0);
@@ -281,19 +281,19 @@ fn optional_encoding_limit_rolls_back_to_general_search() {
 #[test]
 fn setup_work_ceiling_is_inclusive() {
     let input = disjunctions(2);
-    let complete = StableModels::new(&input, Limits::default(), Control::default()).unwrap();
+    let complete = StableModels::new(&input, Limits::default(), Cancellation::default()).unwrap();
     let work = complete.statistics().search.work;
     for max_work in [0, 1, work - 1] {
         let mut limits = Limits::default();
         limits.search.max_work = max_work;
         assert!(matches!(
-            StableModels::new(&input, limits, Control::default()),
+            StableModels::new(&input, limits, Cancellation::default()),
             Err(Incomplete::WorkLimit)
         ));
     }
     let mut limits = Limits::default();
     limits.search.max_work = work;
-    let mut exact = StableModels::new(&input, limits, Control::default()).unwrap();
+    let mut exact = StableModels::new(&input, limits, Cancellation::default()).unwrap();
     assert_eq!(exact.statistics().search.work, work);
     assert_eq!(exact.next().unwrap().unwrap_err(), Incomplete::WorkLimit);
     assert!(!exact.exhausted());

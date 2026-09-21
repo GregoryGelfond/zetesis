@@ -33,7 +33,7 @@ use std::fmt;
 use std::time::Duration;
 
 use zetesis_core::{GroundProgram, Seed, SeedView};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 use packing::{BatchPlan, GraphPlan, PackedGraph, PackedSeeds};
 use residency::ResidentGraph;
@@ -392,15 +392,20 @@ impl GpuOracle {
     /// Check owned seeds with caller cancellation and deadline observation.
     ///
     /// # Errors
-    /// Preserves [`Self::check_batch_views_with_control`]'s failure contract.
-    pub fn check_batch_with_control(
+    /// Preserves [`Self::check_batch_views_with_cancellation`]'s failure contract.
+    pub fn check_batch_with_cancellation(
         &mut self,
         program: &GroundProgram,
         seeds: &[Seed],
         limits: GpuLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Vec<GpuCheck>, GpuError> {
-        self.check_batch_views_with_control(program, seeds.iter().map(Seed::view), limits, control)
+        self.check_batch_views_with_cancellation(
+            program,
+            seeds.iter().map(Seed::view),
+            limits,
+            cancellation,
+        )
     }
 
     /// Check the same static candidate occurrences through borrowed seed views.
@@ -418,7 +423,7 @@ impl GpuOracle {
         seeds: impl ExactSizeIterator<Item = SeedView<'seed>> + Clone,
         limits: GpuLimits,
     ) -> Result<Vec<GpuCheck>, GpuError> {
-        self.check_batch_views_with_control(program, seeds, limits, &Control::default())
+        self.check_batch_views_with_cancellation(program, seeds, limits, &Cancellation::default())
     }
 
     /// Check borrowed seeds with cooperative caller control. Busy admission
@@ -432,17 +437,17 @@ impl GpuOracle {
     /// batch. Pre-submission stops leave health reusable; an interrupted wait
     /// invalidates it. Scope/device faults retain priority over interruption.
     /// Other failures follow [`Self::check_batch`].
-    pub fn check_batch_views_with_control<'seed>(
+    pub fn check_batch_views_with_cancellation<'seed>(
         &mut self,
         program: &GroundProgram,
         seeds: impl ExactSizeIterator<Item = SeedView<'seed>> + Clone,
         limits: GpuLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Vec<GpuCheck>, GpuError> {
         self.last_batch_stats = None;
         let context = self.runtime.context.clone();
         let _lease = context.lease()?;
-        control.poll().map_err(GpuError::interrupted)?;
+        cancellation.poll().map_err(GpuError::interrupted)?;
         self.runtime.check_health()?;
         let fresh_graph = if self
             .resident
@@ -505,7 +510,7 @@ impl GpuOracle {
             .as_ref()
             .map(|graph| PackedGraph::new(program, graph))
             .transpose()?;
-        control.poll().map_err(GpuError::interrupted)?;
+        cancellation.poll().map_err(GpuError::interrupted)?;
         let scopes = ErrorScopes::new(self.runtime.device());
         if let Some((graph, packed)) = fresh_graph.zip(packed_graph) {
             self.resident = Some(ResidentGraph::new(self.runtime.device(), graph, &packed));
@@ -518,7 +523,7 @@ impl GpuOracle {
             .as_mut()
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing resident graph"))
             .and_then(|resident| {
-                resident.dispatch(&self.runtime, &packed, &plan, limits.timeout, control)
+                resident.dispatch(&self.runtime, &packed, &plan, limits.timeout, cancellation)
             });
         let result = self.runtime.complete(scopes, outcome);
         if result.is_ok() {

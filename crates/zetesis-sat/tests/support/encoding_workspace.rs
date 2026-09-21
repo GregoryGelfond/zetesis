@@ -1,7 +1,7 @@
 //! Reused storage never supplies candidate-dependent clauses or truth values.
 
 use super::*;
-use crate::{Control, SearchLimits, SearchStatistics};
+use crate::{Cancellation, SearchLimits, SearchStatistics};
 
 fn input() -> Theory {
     Theory::new(
@@ -22,14 +22,14 @@ fn input() -> Theory {
     .unwrap()
 }
 
-fn budget(control: &Control, max_work: u64) -> Budget<'_> {
+fn budget(cancellation: &Cancellation, max_work: u64) -> Budget<'_> {
     Budget {
         quota: crate::search::LocalQuota,
         limits: SearchLimits {
             max_work,
             ..Default::default()
         },
-        control,
+        cancellation,
         statistics: SearchStatistics::default(),
     }
 }
@@ -46,7 +46,7 @@ fn contents(cnf: &Cnf) -> (usize, Vec<Vec<Literal>>) {
 #[test]
 fn interrupted_reencoding_matches_fresh_candidate_state() {
     let theory = input();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let limits = AdmissionLimits::default();
     let mut workspace = Workspace::default();
     workspace.reserve(&theory, limits).unwrap();
@@ -55,10 +55,10 @@ fn interrupted_reencoding_matches_fresh_candidate_state() {
         let candidate =
             Interpretation::new(&theory, (0..3).filter(|atom| mask & (1 << atom) != 0)).unwrap();
         for ceiling in 0..=180 {
-            let mut fresh = budget(&control, ceiling);
+            let mut fresh = budget(&cancellation, ceiling);
             let expected =
                 encode(&theory, Some(&candidate), limits, &mut fresh).map(|cnf| contents(&cnf));
-            let mut reused = budget(&control, ceiling);
+            let mut reused = budget(&cancellation, ceiling);
             let actual = workspace
                 .encode(&theory, Some(&candidate), limits, &mut reused)
                 .map(contents);
@@ -73,11 +73,11 @@ fn interrupted_reencoding_matches_fresh_candidate_state() {
 fn encoding_reuses_the_reserved_vector_allocations() {
     let theory = input();
     let limits = AdmissionLimits::default();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut workspace = Workspace::default();
     workspace.reserve(&theory, limits).unwrap();
     workspace
-        .encode(&theory, None, limits, &mut budget(&control, 10_000))
+        .encode(&theory, None, limits, &mut budget(&cancellation, 10_000))
         .unwrap();
     let pointers = (
         workspace.mask.as_ptr(),
@@ -93,7 +93,7 @@ fn encoding_reuses_the_reserved_vector_allocations() {
                 &theory,
                 Some(&candidate),
                 limits,
-                &mut budget(&control, 10_000),
+                &mut budget(&cancellation, 10_000),
             )
             .unwrap();
         assert_eq!(

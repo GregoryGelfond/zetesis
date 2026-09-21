@@ -7,20 +7,21 @@ use std::num::NonZeroUsize;
 use zetesis_cpu::Stop;
 use zetesis_ferraris::{AdmissionLimits, Interpretation, Node, Theory};
 use zetesis_sat::{
-    BatchError, BatchLimits, BatchVerdict, Control, Incomplete, Limits, SearchLimits, StableModels,
+    BatchError, BatchLimits, BatchVerdict, Cancellation, Incomplete, Limits, SearchLimits,
+    StableModels,
 };
 
 /// Enumerate by the clause forms, the subject of the tests below.
 fn by_clauses(
     theory: &zetesis_ferraris::Theory,
     limits: zetesis_sat::Limits,
-    control: zetesis_sat::Control,
+    cancellation: zetesis_sat::Cancellation,
 ) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
     zetesis_sat::StableModels::with_method(
         theory,
         zetesis_sat::SearchMethod::Clauses,
         limits,
-        control,
+        cancellation,
     )
 }
 
@@ -65,7 +66,7 @@ fn certified(theory: &Theory, candidates: &[Interpretation]) -> Result<Vec<Batch
                 theory,
                 candidate,
                 zetesis_ferraris::Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )?
             .accepted()
         );
@@ -87,8 +88,9 @@ fn closed(search: &mut StableModels) {
 fn cancellation_before_proposal_and_before_retry_preserves_owned_candidates() {
     for retain_pending in [false, true] {
         let theory = choices();
-        let control = Control::default();
-        let mut search = StableModels::new(&theory, Limits::default(), control.clone()).unwrap();
+        let cancellation = Cancellation::default();
+        let mut search =
+            StableModels::new(&theory, Limits::default(), cancellation.clone()).unwrap();
         if retain_pending {
             let failure = search.next_batch(batch(3), |_, _| {
                 Err::<Vec<BatchVerdict>, _>("checker temporarily unavailable")
@@ -97,7 +99,7 @@ fn cancellation_before_proposal_and_before_retry_preserves_owned_candidates() {
         }
         let before = search.statistics();
         let pending = search.batch_statistics();
-        control.cancel();
+        cancellation.cancel();
         assert!(matches!(
             search.next_batch(batch(3), never_called),
             Err(BatchError::Search(Incomplete::Cancelled))
@@ -139,7 +141,7 @@ fn candidate_decision_and_original_verification_limits_cannot_publish_proposals(
             Incomplete::Verification(Stop::WorkLimit),
         ),
     ] {
-        let mut search = by_clauses(&theory, limits, Control::default()).unwrap();
+        let mut search = by_clauses(&theory, limits, Cancellation::default()).unwrap();
         assert!(matches!(
             search.next_batch(batch(3), never_called),
             Err(BatchError::Search(actual)) if actual == expected
@@ -154,7 +156,7 @@ fn candidate_decision_and_original_verification_limits_cannot_publish_proposals(
 }
 
 fn proposal_work(theory: &Theory, count: usize) -> (u64, u64) {
-    let mut search = StableModels::new(theory, Limits::default(), Control::default()).unwrap();
+    let mut search = StableModels::new(theory, Limits::default(), Cancellation::default()).unwrap();
     let encoded = search.statistics().search.work;
     let result = search.next_batch(batch(count), |_, candidates| {
         assert_eq!(candidates.len(), count);
@@ -174,7 +176,7 @@ fn with_work(theory: &Theory, max_work: u64) -> StableModels {
             },
             ..Limits::default()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap()
 }
@@ -204,7 +206,8 @@ fn residual_work_exhaustion_cannot_commit_an_earlier_certified_prefix() {
     assert_eq!(search.batch_statistics().residuals, 0);
     closed(&mut search);
     // A fresh exact run of the same immutable theory still has all eight models.
-    let mut complete = StableModels::new(&theory, Limits::default(), Control::default()).unwrap();
+    let mut complete =
+        StableModels::new(&theory, Limits::default(), Cancellation::default()).unwrap();
     let models: BTreeSet<Vec<_>> = complete
         .by_ref()
         .map(|model| model.unwrap().atoms().collect())

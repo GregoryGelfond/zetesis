@@ -10,7 +10,9 @@ mod theories;
 use std::collections::BTreeSet;
 
 use zetesis_ferraris::{Interpretation, Node, Theory, Verdict};
-use zetesis_sat::{Check, Control, Incomplete, Limits, SearchLimits, SearchMethod, check_with};
+use zetesis_sat::{
+    Cancellation, Check, Incomplete, Limits, SearchLimits, SearchMethod, check_with,
+};
 
 use theories::{mixed, theory};
 
@@ -96,7 +98,7 @@ fn a_negative_literal_false_under_the_candidate_teaches_nothing_in_the_reduct() 
         &candidate,
         SearchMethod::Regions,
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     );
     assert!(matches!(verdict, Check::NonMinimal(ref subset) if subset.atoms().count() == 0));
 }
@@ -116,7 +118,7 @@ fn the_region_query_agrees_with_the_reference_on_every_candidate() {
                 &theory,
                 &candidate,
                 zetesis_ferraris::Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
             let regions = check_with(
@@ -124,14 +126,14 @@ fn the_region_query_agrees_with_the_reference_on_every_candidate() {
                 &candidate,
                 SearchMethod::Regions,
                 Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             );
             let clauses = check_with(
                 &theory,
                 &candidate,
                 SearchMethod::Clauses,
                 Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             );
             assert_eq!(
                 regions.accepted(),
@@ -155,7 +157,7 @@ fn the_region_query_agrees_with_the_reference_on_every_candidate() {
                             &candidate,
                             &subset,
                             zetesis_ferraris::Limits::default(),
-                            &Control::default()
+                            &Cancellation::default()
                         )
                         .unwrap()
                     );
@@ -182,7 +184,7 @@ fn a_work_limit_stops_the_region_query_without_a_verdict() {
         &candidate,
         SearchMethod::Regions,
         limits,
-        &Control::default(),
+        &Cancellation::default(),
     );
     assert!(matches!(
         verdict,

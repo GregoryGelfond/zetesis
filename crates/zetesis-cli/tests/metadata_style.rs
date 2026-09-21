@@ -9,7 +9,7 @@ use zetesis_cli::{
     ColorMode, Completion, Options, RunError, run_bundle_finalized_with_diagnostics,
     run_finalized_with_diagnostics,
 };
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::{BundleLimits, SourceBundle};
 
 #[path = "support/bounded_writer.rs"]
@@ -57,7 +57,7 @@ fn diagnostics(mode: ColorMode, json: bool) -> (Vec<u8>, String) {
         &options,
         &mut output,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(report.semantic().completion(), Some(Completion::Exhausted));
@@ -127,7 +127,7 @@ fn metadata_prefix_failures_cannot_publish_a_model() {
             &options(ColorMode::Always),
             &mut output,
             &mut prefix,
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
         assert!(matches!(*failure.cause, RunError::Output(ref error)
@@ -158,7 +158,7 @@ fn later_diagnostic_failure_retains_exhaustion() {
         &settings,
         &mut io::sink(),
         &mut initial,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     settings.stats = true;
@@ -169,7 +169,7 @@ fn later_diagnostic_failure_retains_exhaustion() {
         &settings,
         &mut output,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(*failure.cause, RunError::Output(ref error)

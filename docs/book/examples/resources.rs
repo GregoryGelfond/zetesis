@@ -2,7 +2,7 @@
 
 // ANCHOR: example
 use zetesis_core::{AdmissionLimits, Atom, AtomPattern, Model, Predicate, Program, Template};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, ExecutionResources, Grounder, PreparedInput, Session,
     SolveConfig, Subject,
@@ -31,11 +31,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             models: 0,
             ..Default::default()
         };
-        let mut session =
-            Session::builder(PreparedInput::program(&program), config, Control::default())
-                .selection(AnswerSelection::All)
-                .resources(&resources)
-                .start()?;
+        let mut session = Session::builder(
+            PreparedInput::program(&program),
+            config,
+            Cancellation::default(),
+        )
+        .selection(AnswerSelection::All)
+        .resources(&resources)
+        .start()?;
         let answer = session.next().unwrap()?;
         assert_eq!(
             answer.interpretation(),

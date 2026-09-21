@@ -4,7 +4,9 @@ use crate::execution_observation::ExecutionSink;
 use std::sync::Arc;
 
 use zetesis_core::{GroundProgram, Model, Program};
-use zetesis_cpu::{CandidateLimits, CandidateRestrictionLimits, Candidates, Control, Limits, Stop};
+use zetesis_cpu::{
+    Cancellation, CandidateLimits, CandidateRestrictionLimits, Candidates, Limits, Stop,
+};
 
 use crate::engine::Engine;
 use crate::phase_timing::{Recorder, SolvePhase};
@@ -34,10 +36,10 @@ impl<'a> ClosureSession<'a> {
         config: &SolveConfig,
         resources: &ExecutionResources,
         observations: &mut impl ExecutionSink,
-        control: &Control,
+        cancellation: &Cancellation,
         phases: &Recorder,
     ) -> Result<Self, SolveError> {
-        let engine = match control.poll() {
+        let engine = match cancellation.poll() {
             Ok(()) => Ok(phases.measure(SolvePhase::ExecutionSetup, || {
                 Engine::with_ground(config, program, ground, resources, observations, phases)
             })?),
@@ -55,7 +57,7 @@ impl<'a> ClosureSession<'a> {
                     max_atoms: config.max_atoms,
                     max_bytes: config.max_candidate_bytes,
                 },
-                control.clone(),
+                cancellation.clone(),
             );
             // The program's two closures, each charged as one candidate check,
             // bound the counter to the gate atoms some seed could derive and
@@ -86,7 +88,7 @@ impl<'a> ClosureSession<'a> {
     pub(crate) fn next(
         &mut self,
         config: &SolveConfig,
-        control: &Control,
+        cancellation: &Cancellation,
         phases: &Recorder,
     ) -> Option<Result<Model, SolveError>> {
         if self.terminal {
@@ -134,7 +136,7 @@ impl<'a> ClosureSession<'a> {
                 config.batch_size.get()
             };
             let generation = phases.start(SolvePhase::CandidateGeneration);
-            let mut seeds = match batch_storage(count, control) {
+            let mut seeds = match batch_storage(count, cancellation) {
                 Ok(seeds) => seeds,
                 Err(stop) => {
                     self.complete(SearchState::Interrupted(Interruption::Oracle(stop)));
@@ -156,7 +158,7 @@ impl<'a> ClosureSession<'a> {
             }
             drop(generation);
             let results = match &mut self.engine {
-                Ok(engine) => engine.check(config, self.program, &seeds, control, phases),
+                Ok(engine) => engine.check(config, self.program, &seeds, cancellation, phases),
                 Err(_) if seeds.is_empty() => Ok(Vec::new()),
                 Err(stop) => Ok(vec![Err(*stop)]),
             };
@@ -258,9 +260,9 @@ impl<'a> ClosureSession<'a> {
 // already checked batch prefix. Payload owners still belong to each selection.
 fn batch_storage(
     count: usize,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<Vec<zetesis_core::SeedSelection>, Stop> {
-    control.poll()?;
+    cancellation.poll()?;
     let mut seeds = Vec::new();
     seeds
         .try_reserve_exact(count)
@@ -271,26 +273,31 @@ fn batch_storage(
 #[cfg(test)]
 mod storage_tests {
     use super::batch_storage;
-    use zetesis_cpu::{Control, Stop};
+    use zetesis_cpu::{Cancellation, Stop};
 
     #[test]
     fn capacity_refusal_is_typed_and_control_precedes_reservation() {
         assert!(matches!(
-            batch_storage(usize::MAX, &Control::default()),
+            batch_storage(usize::MAX, &Cancellation::default()),
             Err(Stop::Allocation)
         ));
-        let cancelled = Control::default();
+        let cancelled = Cancellation::default();
         cancelled.cancel();
         assert!(matches!(
             batch_storage(usize::MAX, &cancelled),
             Err(Stop::Cancelled)
         ));
-        let expired = Control::with_deadline(std::time::Instant::now()).unwrap();
+        let expired = Cancellation::with_deadline(std::time::Instant::now()).unwrap();
         assert!(matches!(
             batch_storage(usize::MAX, &expired),
             Err(Stop::Deadline)
         ));
-        assert!(batch_storage(3, &Control::default()).unwrap().capacity() >= 3);
+        assert!(
+            batch_storage(3, &Cancellation::default())
+                .unwrap()
+                .capacity()
+                >= 3
+        );
     }
 }
 

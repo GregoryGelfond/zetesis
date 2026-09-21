@@ -3,7 +3,7 @@
 // ANCHOR: example
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     Backend, PreparedInput, ProjectionLimits, Session, SolveConfig, WorldViewLimits,
 };
@@ -25,11 +25,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         completion_workers: NonZeroUsize::MIN,
         ..SolveConfig::default()
     };
-    let full =
-        Session::builder(input, config, Control::default()).collect(WorldViewLimits::default())?;
+    let full = Session::builder(input, config, Cancellation::default())
+        .collect(WorldViewLimits::default())?;
     assert_eq!(full.len(), 4);
 
-    let mut projected = Session::builder(input, config, Control::default())
+    let mut projected = Session::builder(input, config, Cancellation::default())
         .projected(ProjectionLimits::default())
         .start()?;
     let mut keys = BTreeSet::new();

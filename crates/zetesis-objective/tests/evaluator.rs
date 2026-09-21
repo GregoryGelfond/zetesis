@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use proptest::prelude::*;
 use zetesis_core::{Atom, AtomPattern, Filter, Model, Predicate, Term, Value};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_objective::{
     AdmissionError, AdmissionLimits, ErrorKind, Limits, ObjectiveProgram, ObjectiveTemplate, Stop,
     evaluate,
@@ -58,7 +58,13 @@ fn extrema_are_distinct_deduplicated_tuple_keys_with_exact_byte_limits() {
     );
     let objectives = program(vec![row.clone(), row]);
     compare(&objectives, &model);
-    let result = evaluate(&objectives, &model, Limits::default(), &Control::default()).unwrap();
+    let result = evaluate(
+        &objectives,
+        &model,
+        Limits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
     assert_eq!(result.score().costs(), &[(0, 2)]);
     assert_eq!(result.contributions().len(), 2);
     // Each contribution has 16 fixed bytes and one extremum tag, with no payload.
@@ -71,7 +77,7 @@ fn extrema_are_distinct_deduplicated_tuple_keys_with_exact_byte_limits() {
                 max_key_bytes: bytes,
                 ..Limits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         );
         if complete {
             assert!(result.is_ok());
@@ -94,7 +100,7 @@ fn extrema_are_distinct_deduplicated_tuple_keys_with_exact_byte_limits() {
             &objectives,
             &spellings,
             Limits::default(),
-            &Control::default()
+            &Cancellation::default()
         )
         .unwrap()
         .score()
@@ -114,7 +120,7 @@ fn extrema_are_distinct_deduplicated_tuple_keys_with_exact_byte_limits() {
                 &nonnumeric,
                 &Model::new([]),
                 Limits::default(),
-                &Control::default()
+                &Cancellation::default()
             )
             .unwrap()
             .score()
@@ -186,7 +192,7 @@ fn naive(program: &ObjectiveProgram, model: &Model) -> BTreeSet<Key> {
 
 fn compare(program: &ObjectiveProgram, model: &Model) {
     let expected = naive(program, model);
-    let actual = evaluate(program, model, Limits::default(), &Control::default()).unwrap();
+    let actual = evaluate(program, model, Limits::default(), &Cancellation::default()).unwrap();
     let keys: BTreeSet<_> = actual
         .contributions()
         .iter()
@@ -231,10 +237,15 @@ fn partial_repeated_variable_matches_backtrack_without_leaking_bindings() {
     )]);
     compare(&program, &model);
     assert_eq!(
-        evaluate(&program, &model, Limits::default(), &Control::default())
-            .unwrap()
-            .score()
-            .costs(),
+        evaluate(
+            &program,
+            &model,
+            Limits::default(),
+            &Cancellation::default()
+        )
+        .unwrap()
+        .score()
+        .costs(),
         &[(0, 3)]
     );
 }
@@ -270,7 +281,13 @@ fn global_keys_include_weight_priority_and_scalar_value_class() {
     ]);
     let model = Model::new([fact("p", &[1]), fact("p", &[2])]);
     compare(&program, &model);
-    let evaluation = evaluate(&program, &model, Limits::default(), &Control::default()).unwrap();
+    let evaluation = evaluate(
+        &program,
+        &model,
+        Limits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
     assert_eq!(evaluation.score().costs(), &[(1, 5), (0, 4)]);
     assert_eq!(evaluation.statistics().duplicates, 3);
     assert_eq!(evaluation.contributions().len(), 5);
@@ -283,28 +300,28 @@ fn absent_inactive_zero_and_cancelled_objectives_remain_distinguishable() {
         &ObjectiveProgram::none(),
         &model,
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let empty = evaluate(
         &program(vec![]),
         &model,
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let zero = evaluate(
         &program(vec![cost(0, 7)]),
         &model,
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let cancellation = evaluate(
         &program(vec![cost(2, 7), cost(-2, 7)]),
         &model,
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let inactive = evaluate(
@@ -317,7 +334,7 @@ fn absent_inactive_zero_and_cancelled_objectives_remain_distinguishable() {
         )]),
         &model,
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert!(!absent.score().is_present());
@@ -342,14 +359,14 @@ fn higher_priority_costs_dominate_and_missing_priorities_are_zero() {
         &program(vec![cost(2, 9), cost(-100, 1)]),
         &model,
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let right = evaluate(
         &program(vec![cost(3, 9), cost(-200, 1)]),
         &model,
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(left.score().compare_costs(right.score()), Ordering::Less);
@@ -358,7 +375,7 @@ fn higher_priority_costs_dominate_and_missing_priorities_are_zero() {
         &program(vec![cost(0, 10), cost(2, 9), cost(-100, 1), cost(0, -5)]),
         &model,
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(left.score().compare_costs(missing.score()), Ordering::Equal);
@@ -382,12 +399,12 @@ fn nonnumeric_weights_contribute_no_keys_and_preserve_declared_priorities() {
         &input,
         &Model::default(),
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(inactive.score().costs(), &[(3, 0), (0, 1)]);
     let model = Model::new([fact("p", &[1])]);
-    let evaluation = evaluate(&input, &model, Limits::default(), &Control::default()).unwrap();
+    let evaluation = evaluate(&input, &model, Limits::default(), &Cancellation::default()).unwrap();
     assert_eq!(evaluation.score().costs(), &[(3, 0), (0, 1)]);
     assert_eq!(evaluation.statistics().keys, 1);
     assert_eq!(evaluation.statistics().active_bindings, 2);
@@ -398,7 +415,13 @@ fn nonnumeric_weights_contribute_no_keys_and_preserve_declared_priorities() {
         vec![pattern("p", vec![variable(0)])],
         vec![Filter::Eq(variable(0), number(9))],
     )]);
-    let result = evaluate(&filtered, &model, Limits::default(), &Control::default()).unwrap();
+    let result = evaluate(
+        &filtered,
+        &model,
+        Limits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
     assert_eq!(result.score().costs(), &[(3, 0)]);
     assert_eq!(result.statistics().bindings, 1);
     assert_eq!(result.statistics().active_bindings, 0);
@@ -414,7 +437,13 @@ fn every_runtime_ceiling_is_inclusive_and_duplicates_do_not_consume_key_budget()
         vec![pattern("p", vec![variable(0)])],
         vec![],
     )]);
-    let full = evaluate(&distinct, &model, Limits::default(), &Control::default()).unwrap();
+    let full = evaluate(
+        &distinct,
+        &model,
+        Limits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
     assert_eq!(full.statistics().key_bytes, 42); // Two 16-byte headers plus two tagged i32s.
     let exact = Limits {
         max_work: full.statistics().work,
@@ -422,7 +451,7 @@ fn every_runtime_ceiling_is_inclusive_and_duplicates_do_not_consume_key_budget()
         max_keys: 2,
         max_key_bytes: 42,
     };
-    assert!(evaluate(&distinct, &model, exact, &Control::default()).is_ok());
+    assert!(evaluate(&distinct, &model, exact, &Cancellation::default()).is_ok());
     for (limits, expected) in [
         (
             Limits {
@@ -454,7 +483,7 @@ fn every_runtime_ceiling_is_inclusive_and_duplicates_do_not_consume_key_budget()
         ),
     ] {
         assert_eq!(
-            evaluate(&distinct, &model, limits, &Control::default())
+            evaluate(&distinct, &model, limits, &Cancellation::default())
                 .unwrap_err()
                 .kind(),
             ErrorKind::Stopped(expected)
@@ -475,7 +504,7 @@ fn every_runtime_ceiling_is_inclusive_and_duplicates_do_not_consume_key_budget()
             max_key_bytes: 16,
             ..Limits::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(evaluation.score().costs(), &[(0, 1)]);
@@ -575,13 +604,15 @@ fn admission_enforces_safe_dense_variables_and_each_shape_bound() {
 
 #[test]
 fn cancellation_and_deadlines_precede_evaluation_even_without_templates() {
-    let control = Control::default();
-    control.cancel();
-    for (control, expected) in [
-        (control, Stop::Cancelled),
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
+    for (cancellation, expected) in [
+        (cancellation, Stop::Cancelled),
         (
-            Control::with_deadline(Instant::now().checked_sub(Duration::from_secs(1)).unwrap())
-                .unwrap(),
+            Cancellation::with_deadline(
+                Instant::now().checked_sub(Duration::from_secs(1)).unwrap(),
+            )
+            .unwrap(),
             Stop::Deadline,
         ),
     ] {
@@ -592,7 +623,7 @@ fn cancellation_and_deadlines_precede_evaluation_even_without_templates() {
                 max_work: 0,
                 ..Limits::default()
             },
-            &control,
+            &cancellation,
         )
         .unwrap_err();
         assert_eq!(error.kind(), ErrorKind::Stopped(expected));
@@ -616,7 +647,7 @@ fn deep_positive_joins_use_heap_frames_on_a_small_thread_stack() {
                 &input,
                 &Model::new([fact("p", &[1])]),
                 Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
             assert_eq!(result.score().costs(), &[(0, 3)]);
@@ -642,9 +673,9 @@ proptest! {
         compare(&program(templates.clone()), &model);
         let mut reversed = templates;
         reversed.reverse();
-        let forward = evaluate(&program(reversed.clone()), &model, Limits::default(), &Control::default()).unwrap();
+        let forward = evaluate(&program(reversed.clone()), &model, Limits::default(), &Cancellation::default()).unwrap();
         reversed.reverse();
-        let backward = evaluate(&program(reversed), &model, Limits::default(), &Control::default()).unwrap();
+        let backward = evaluate(&program(reversed), &model, Limits::default(), &Cancellation::default()).unwrap();
         prop_assert_eq!(forward.score(), backward.score());
         prop_assert_eq!(forward.contributions(), backward.contributions());
     }

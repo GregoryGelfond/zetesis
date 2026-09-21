@@ -183,7 +183,7 @@ impl StableModels {
         completion: &mut CompletionExecutor,
         checker: impl FnOnce(&Theory, &[Interpretation]) -> Result<Vec<BatchVerdict>, E>,
     ) -> Result<Vec<Interpretation>, BatchError<E>> {
-        self.control
+        self.cancellation
             .poll()
             .map_err(|e| BatchError::Search(e.into()))?;
         if self.batch.pending.is_empty() {
@@ -248,7 +248,7 @@ impl StableModels {
                     certificate,
                     candidate,
                     self.limits,
-                    &self.control,
+                    &self.cancellation,
                     &mut self.statistics,
                     &mut search,
                 )? {
@@ -280,7 +280,7 @@ impl StableModels {
         let mut budget = Budget {
             quota: crate::search::LocalQuota,
             limits: self.limits.search,
-            control: &self.control,
+            cancellation: &self.cancellation,
             statistics: self.statistics.search,
         };
         if let super::Proposer::Proposals(proposals) = &mut self.proposer {
@@ -310,7 +310,7 @@ impl StableModels {
                     &self.theory,
                     candidate,
                     self.limits,
-                    &self.control,
+                    &self.cancellation,
                     &mut self.statistics,
                 )
                 .and_then(|()| increment(&mut self.statistics.candidates));
@@ -383,7 +383,7 @@ impl StableModels {
         let mut budget = Budget {
             quota: crate::search::LocalQuota,
             limits: self.limits.search,
-            control: &self.control,
+            cancellation: &self.cancellation,
             statistics: self.statistics.search,
         };
         increment(&mut self.batch.statistics.completion_calls)?;
@@ -452,7 +452,7 @@ fn proposal(
     // Proposals cross to an external checker, so they are validated here
     // under their own limit and phase before that boundary, whatever the
     // proposer's construction promises.
-    validate_proposal(theory, &candidate, limits, budget.control, statistics)?;
+    validate_proposal(theory, &candidate, limits, budget.cancellation, statistics)?;
     increment(&mut statistics.candidates)?;
     Ok(Some(candidate))
 }
@@ -461,11 +461,11 @@ fn validate_proposal(
     theory: &Theory,
     candidate: &Interpretation,
     limits: super::Limits,
-    control: &crate::Control,
+    cancellation: &crate::Cancellation,
     statistics: &mut super::Statistics,
 ) -> Result<(), Incomplete> {
     let started = timing::start(statistics.phase_timings.as_ref());
-    let original = models(theory, candidate, verification(limits), control);
+    let original = models(theory, candidate, verification(limits), cancellation);
     timing::finish(
         &mut statistics.phase_timings,
         Phase::OriginalValidation,

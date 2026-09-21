@@ -15,7 +15,7 @@ mod view;
 use std::{fmt, io};
 
 pub use config::{Case, Configuration, Family, Options, Reference, Support};
-pub use run::{measure, measure_with_control};
+pub use run::{measure, measure_with_cancellation};
 pub use view::{
     Activity, Certificate, Decision, Device, DeviceWork, Event, Formula, Observation, Outcome,
     Phase, Producer, ProducerKind, Residency, Route, Sample,

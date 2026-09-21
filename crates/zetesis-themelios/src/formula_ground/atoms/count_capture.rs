@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use themelios_base::source::{Source, SourceId};
 use themelios_base::span::{ByteOffset, Location, Span};
 use zetesis_core::Sign;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, AggregateComparison, AggregateElement, AggregateLimits, Interpretation,
     Limits, Node, Theory, append_aggregate, models,
@@ -27,12 +27,12 @@ struct Fixture {
 }
 
 impl Fixture {
-    fn new(control: &Control) -> Self {
+    fn new(cancellation: &Cancellation) -> Self {
         let source = Source::new(SourceId::new(7), SOURCE.into()).unwrap();
         let collector = Collector::new(
             Request {
                 limits: CountPlanLimits::default(),
-                control,
+                cancellation,
             },
             location(&source, "{a;b}1."),
         );
@@ -69,7 +69,7 @@ impl Fixture {
         comparison: AggregateComparison,
         bound: i32,
         statement: &str,
-        control: &Control,
+        cancellation: &Cancellation,
     ) {
         let elements: Vec<_> = members
             .iter()
@@ -84,7 +84,7 @@ impl Fixture {
             comparison,
             i64::from(bound),
             AggregateLimits::default(),
-            control,
+            cancellation,
         )
         .unwrap()
         .root();
@@ -129,36 +129,48 @@ fn location(source: &Source, statement: &str) -> Location {
     }
 }
 
-fn holds(theory: &Theory, mask: usize, control: &Control) -> bool {
+fn holds(theory: &Theory, mask: usize, cancellation: &Cancellation) -> bool {
     let interpretation = Interpretation::new(
         theory,
         (0..theory.atom_count()).filter(|&id| mask & (1 << id) != 0),
     )
     .unwrap();
-    models(theory, &interpretation, Limits::default(), control).unwrap()
+    models(theory, &interpretation, Limits::default(), cancellation).unwrap()
 }
 
 #[test]
 fn captured_members_keep_their_meaning_after_catalog_growth() {
-    let control = Control::default();
-    let mut fixture = Fixture::new(&control);
+    let cancellation = Cancellation::default();
+    let mut fixture = Fixture::new(&cancellation);
     fixture.choice("a");
     fixture.choice("b");
     assert_eq!(fixture.atoms.len(), 2);
-    fixture.capture(&[0, 1], AggregateComparison::Le, 1, "{a;b}1.", &control);
+    fixture.capture(
+        &[0, 1],
+        AggregateComparison::Le,
+        1,
+        "{a;b}1.",
+        &cancellation,
+    );
 
     // Unlike complete source admission, this actually appends new atoms after
     // the first capture. Subsequent captures use the enlarged same catalog.
     fixture.choice("c");
     fixture.choice("d");
     assert_eq!(fixture.atoms.len(), 4);
-    fixture.capture(&[2, 3], AggregateComparison::Le, 1, "{c;d}1.", &control);
+    fixture.capture(
+        &[2, 3],
+        AggregateComparison::Le,
+        1,
+        "{c;d}1.",
+        &cancellation,
+    );
     fixture.capture(
         &[0, 1, 2, 3],
         AggregateComparison::Eq,
         2,
         "2{a;b;c;d}2.",
-        &control,
+        &cancellation,
     );
     fixture.choice("late");
     let expected: Vec<_> = ["a", "b", "c", "d", "late"]
@@ -197,8 +209,8 @@ fn captured_members_keep_their_meaning_after_catalog_growth() {
     for mask in 0_usize..1 << atoms.len() {
         let left = (mask & 0b00011).count_ones();
         let right = (mask & 0b01100).count_ones();
-        let original = holds(&theory, mask, &control);
-        let restricted = holds(plan.restriction(), mask, &control);
+        let original = holds(&theory, mask, &cancellation);
+        let restricted = holds(plan.restriction(), mask, &cancellation);
         assert_eq!(original, left <= 1 && right <= 1 && left + right == 2);
         assert_eq!(restricted, left >= 1 && right >= 1);
         assert!(!original || restricted);

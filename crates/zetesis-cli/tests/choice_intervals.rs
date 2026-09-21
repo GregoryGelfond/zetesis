@@ -2,7 +2,7 @@
 
 use clap::Parser;
 use zetesis_cli::{Backend, Completion, Options, Report, RunError, run_with_diagnostics};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
     AdmissionFailure, ExpansionFailure, FormulaFailure, FormulaResource, ProfileFeature,
 };
@@ -21,7 +21,7 @@ fn solve(source: &str, arguments: &[&str]) -> (Result<Report, RunError>, String,
         &options,
         &mut output,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     );
     (
         result,

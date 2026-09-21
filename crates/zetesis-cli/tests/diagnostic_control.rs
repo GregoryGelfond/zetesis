@@ -8,7 +8,7 @@ use std::io;
 use bounded_writer::BoundedWriter;
 use clap::Parser;
 use zetesis_cli::{Completion, Interruption, Options, RunError, run_with_diagnostics};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::objective_bound::{ObjectivePlan, ObjectivePlanLimits};
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
@@ -40,7 +40,7 @@ fn planning_work() -> u64 {
         admitted.atoms(),
         admitted.objectives(),
         ObjectivePlanLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap()
     .statistics()
@@ -63,7 +63,7 @@ fn real_optional_plan_and_bound_refusals_propagate_diagnostic_writer_errors() {
             &options,
             &mut io::sink(),
             &mut complete,
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         if cause == "Work" {
@@ -83,7 +83,7 @@ fn real_optional_plan_and_bound_refusals_propagate_diagnostic_writer_errors() {
                 &options,
                 &mut output,
                 &mut diagnostics,
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap_err();
             let RunError::Output(error) = error else {
@@ -102,8 +102,8 @@ fn real_optional_plan_and_bound_refusals_propagate_diagnostic_writer_errors() {
 
 #[test]
 fn cancellation_before_auto_formula_fallback_has_no_fabricated_admission_or_model() {
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     let mut options = options();
     options.max_atoms = 0;
     let mut output = Vec::new();
@@ -113,7 +113,7 @@ fn cancellation_before_auto_formula_fallback_has_no_fabricated_admission_or_mode
         &options,
         &mut output,
         &mut diagnostics,
-        &control,
+        &cancellation,
     )
     .unwrap();
     assert_eq!(report.completion, Completion::Interrupted);

@@ -55,7 +55,7 @@ pub fn measure(
     match request {
         Request::Relation(configuration) => relation_measurement::measure(
             *configuration,
-            &zetesis_cpu::Control::default(),
+            &zetesis_cpu::Cancellation::default(),
             |event| observe(Event::Relation(event)),
         )
         .map_err(Error::Relation),

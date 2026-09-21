@@ -6,7 +6,7 @@
 use std::fmt::Write as _;
 
 use zetesis_core::{Atom, Model, Seed};
-use zetesis_cpu::{ClosureWorkspace, Control, Limits, PreparationLimits, PreparedQueries};
+use zetesis_cpu::{Cancellation, ClosureWorkspace, Limits, PreparationLimits, PreparedQueries};
 
 fn edges(name: &str, first: u32, last: u32) -> String {
     let mut text = String::new();
@@ -80,15 +80,15 @@ fn closures(
     program: &zetesis_core::Program,
     limits: PreparationLimits,
     seeds: &[Seed],
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> (usize, Vec<(Model, bool, bool)>) {
-    let prepared = PreparedQueries::new(program, limits, control).unwrap();
+    let prepared = PreparedQueries::new(program, limits, cancellation).unwrap();
     let mut workspace = ClosureWorkspace::default();
     let checks = seeds
         .iter()
         .map(|seed| {
             let check = prepared
-                .check_view(seed.view(), &mut workspace, Limits::default(), control)
+                .check_view(seed.view(), &mut workspace, Limits::default(), cancellation)
                 .unwrap();
             (
                 check.closure().clone(),
@@ -102,7 +102,7 @@ fn closures(
 
 #[test]
 fn dense_and_tree_closures_agree_atom_for_atom_on_every_family() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let dense = PreparationLimits::default();
     let tree = PreparationLimits {
         max_dense_atoms: 0,
@@ -117,8 +117,8 @@ fn dense_and_tree_closures_agree_atom_for_atom_on_every_family() {
         .unwrap_or_else(|error| panic!("{name}: {error:?}"));
         let program = owner.program();
         let seeds = seeds(program);
-        let (dense_predicates, with_dense) = closures(program, dense, &seeds, &control);
-        let (tree_predicates, with_trees) = closures(program, tree, &seeds, &control);
+        let (dense_predicates, with_dense) = closures(program, dense, &seeds, &cancellation);
+        let (tree_predicates, with_trees) = closures(program, tree, &seeds, &cancellation);
         assert!(dense_predicates > 0, "{name}: no predicate was laid out");
         assert_eq!(tree_predicates, 0, "{name}");
         for (seed, (dense, tree)) in seeds.iter().zip(with_dense.iter().zip(&with_trees)) {
@@ -158,17 +158,17 @@ fn stores() -> [PreparationLimits; 2] {
 /// The heads a closure of the transitive path recorded as bits, and its
 /// atoms, under one store.
 fn heads_recorded_as_bits(limits: PreparationLimits) -> (u64, usize) {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let owner = transitive_path();
     let program = owner.program();
     let seed = Seed::new(program, []).unwrap();
-    let prepared = PreparedQueries::new(program, limits, &control).unwrap();
+    let prepared = PreparedQueries::new(program, limits, &cancellation).unwrap();
     let check = prepared
         .check_view(
             seed.view(),
             &mut ClosureWorkspace::default(),
             Limits::default(),
-            &control,
+            &cancellation,
         )
         .unwrap();
     (
@@ -195,18 +195,18 @@ fn the_transitive_rule_joins_one_block_for_each_new_path_with_an_onward_edge() {
     // visits it outermost and takes the edges leaving its end as one block.
     // The seven paths ending at node 8 have none: 8 lies outside the bound
     // of an edge's first argument, so their block is empty and not joined.
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let owner = transitive_path();
     let program = owner.program();
     let seed = Seed::new(program, []).unwrap();
     let [dense, tree] = stores().map(|limits| {
-        let prepared = PreparedQueries::new(program, limits, &control).unwrap();
+        let prepared = PreparedQueries::new(program, limits, &cancellation).unwrap();
         let check = prepared
             .check_view(
                 seed.view(),
                 &mut ClosureWorkspace::default(),
                 Limits::default(),
-                &control,
+                &cancellation,
             )
             .unwrap();
         let statistics = check.statistics();
@@ -224,12 +224,12 @@ fn the_transitive_rule_joins_one_block_for_each_new_path_with_an_onward_edge() {
 
 #[test]
 fn the_derived_atom_limit_stops_a_dense_closure_where_it_stops_a_tree() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let owner = transitive_path();
     let program = owner.program();
     let seed = Seed::new(program, []).unwrap();
     for limits in stores() {
-        let prepared = PreparedQueries::new(program, limits, &control).unwrap();
+        let prepared = PreparedQueries::new(program, limits, &cancellation).unwrap();
         let check = |max_derived_atoms| {
             prepared
                 .check_view(
@@ -239,7 +239,7 @@ fn the_derived_atom_limit_stops_a_dense_closure_where_it_stops_a_tree() {
                         max_derived_atoms,
                         ..Limits::default()
                     },
-                    &control,
+                    &cancellation,
                 )
                 .map(|check| check.closure().atoms().len())
         };
@@ -253,7 +253,7 @@ fn a_predicate_wider_than_the_ceiling_keeps_its_tree_beside_dense_ones() {
     // `n` has four tuples inside its bounds and `e` sixteen: a ceiling of
     // four lays out `n` and keeps `e` a tree, and the mixed store agrees
     // with both pure ones.
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let owner = zetesis_themelios::admit_extended(
         "n(1..4).\ne(X,Y) :- n(X), n(Y), X != Y.\nreach(X,Y) :- e(X,Y).\nreach(X,Z) :- reach(X,Y), e(Y,Z).\n"
             .into(),
@@ -271,9 +271,9 @@ fn a_predicate_wider_than_the_ceiling_keeps_its_tree_beside_dense_ones() {
         max_dense_atoms: 0,
         ..PreparationLimits::default()
     };
-    let (laid_out, with_mixed) = closures(program, mixed, &seeds, &control);
-    let (all, with_dense) = closures(program, PreparationLimits::default(), &seeds, &control);
-    let (none, with_trees) = closures(program, tree, &seeds, &control);
+    let (laid_out, with_mixed) = closures(program, mixed, &seeds, &cancellation);
+    let (all, with_dense) = closures(program, PreparationLimits::default(), &seeds, &cancellation);
+    let (none, with_trees) = closures(program, tree, &seeds, &cancellation);
     assert_eq!((laid_out, all, none), (1, 3, 0));
     assert_eq!(with_mixed, with_dense);
     assert_eq!(with_mixed, with_trees);

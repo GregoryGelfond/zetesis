@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use zetesis_ferraris::{AdmissionLimits, Node, Theory};
 use zetesis_sat::{
-    BatchError, BatchLimits, BatchVerdict, Control, Incomplete, Limits, PhaseMeasurement,
+    BatchError, BatchLimits, BatchVerdict, Cancellation, Incomplete, Limits, PhaseMeasurement,
     SearchLimits, StableModels,
 };
 
@@ -13,13 +13,13 @@ use zetesis_sat::{
 fn by_clauses(
     theory: &zetesis_ferraris::Theory,
     limits: zetesis_sat::Limits,
-    control: zetesis_sat::Control,
+    cancellation: zetesis_sat::Cancellation,
 ) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
     zetesis_sat::StableModels::with_method(
         theory,
         zetesis_sat::SearchMethod::Clauses,
         limits,
-        control,
+        cancellation,
     )
 }
 
@@ -62,7 +62,7 @@ fn enabling_clocks_preserves_models_and_all_deterministic_counters() {
         let mut expected = None;
         for enabled in [false, true] {
             let mut search =
-                StableModels::new(&theory, Limits::default(), Control::default()).unwrap();
+                StableModels::new(&theory, Limits::default(), Cancellation::default()).unwrap();
             if enabled {
                 search.enable_phase_timing();
             }
@@ -98,7 +98,7 @@ fn enabling_clocks_preserves_models_and_all_deterministic_counters() {
 #[test]
 fn failed_checker_keeps_proposals_and_retry_measures_only_actual_native_residuals() {
     let theory = choice();
-    let mut search = by_clauses(&theory, Limits::default(), Control::default()).unwrap();
+    let mut search = by_clauses(&theory, Limits::default(), Cancellation::default()).unwrap();
     search.enable_phase_timing();
     assert!(matches!(
         search.next_batch(batch(), |_, candidates| {
@@ -151,7 +151,7 @@ fn failed_outer_and_original_attempts_are_recorded_without_false_completion() {
             max_verification_work: if verification { 0 } else { u64::MAX },
             ..Limits::default()
         };
-        let mut search = StableModels::new(&theory, limits, Control::default()).unwrap();
+        let mut search = StableModels::new(&theory, limits, Cancellation::default()).unwrap();
         search.enable_phase_timing();
         let error = search.next().unwrap().unwrap_err();
         assert!(matches!(
@@ -196,7 +196,7 @@ fn measurement_overflow_preserves_an_explicit_incomplete_prefix() {
 #[test]
 fn failed_cold_preparation_is_recorded_before_worker_entry() {
     let theory = choice();
-    let mut probe = by_clauses(&theory, Limits::default(), Control::default()).unwrap();
+    let mut probe = by_clauses(&theory, Limits::default(), Cancellation::default()).unwrap();
     assert!(matches!(
         probe.next_batch(batch(), |_, _| Err::<Vec<BatchVerdict>, _>("hold")),
         Err(BatchError::Checker("hold"))
@@ -210,7 +210,7 @@ fn failed_cold_preparation_is_recorded_before_worker_entry() {
             },
             ..Limits::default()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     search.enable_phase_timing();

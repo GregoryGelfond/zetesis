@@ -3,7 +3,7 @@
 use super::*;
 use crate::oracle::relations::{Catalogs, Relational};
 use crate::{
-    Control,
+    Cancellation,
     oracle::{Limits, Statistics},
 };
 use zetesis_core::{Atom, Model, Predicate, Value};
@@ -12,8 +12,8 @@ fn atom(value: i32) -> Atom {
     Atom::new(Predicate::new("p", 1).unwrap(), vec![Value::Number(value)]).unwrap()
 }
 
-fn work(control: &Control) -> Work<'_> {
-    let mut work = Work::source(control, Limits::default().max_work);
+fn work(cancellation: &Cancellation) -> Work<'_> {
+    let mut work = Work::source(cancellation, Limits::default().max_work);
     work.limits = Limits::default();
     work
 }
@@ -72,8 +72,8 @@ fn assert_rows(catalogs: &Catalogs, set: RowSet, ids: &[usize], values: &[i32]) 
 
 #[test]
 fn age_tracks_insertion_identity_when_canonical_ranks_move() {
-    let control = Control::default();
-    let mut work = work(&control);
+    let cancellation = Cancellation::default();
+    let mut work = work(&cancellation);
     let mut catalogs = mixed(&mut work);
     let before = catalogs.owned_bytes();
     catalogs.prepare_delta(&mut work).unwrap();
@@ -99,8 +99,8 @@ fn a_refused_merge_keeps_the_old_view_and_publishes_no_partial_run() {
     // As `mixed`, but the merge of the second round's rows is refused for
     // bytes: the first round's view stays borrowable, the delta views are
     // unavailable, and the merge succeeds once the ceiling is raised.
-    let control = Control::default();
-    let mut work = work(&control);
+    let cancellation = Cancellation::default();
+    let mut work = work(&cancellation);
     let mut catalogs = Catalogs::default();
     for value in [4, 2] {
         catalogs.insert(atom(value), 0, &mut work).unwrap();
@@ -132,15 +132,15 @@ fn a_refused_merge_keeps_the_old_view_and_publishes_no_partial_run() {
 
 #[test]
 fn an_interrupted_delta_preparation_charges_exactly_its_limit() {
-    let control = Control::default();
-    let mut observed = work(&control);
+    let cancellation = Cancellation::default();
+    let mut observed = work(&cancellation);
     let mut reference = mixed(&mut observed);
     observed.statistics = Statistics::default();
     reference.prepare_delta(&mut observed).unwrap();
     let needed = observed.statistics.work;
     assert_eq!(needed, observed.statistics.catalog_work);
     for max_work in 0..needed {
-        let mut limited = work(&control);
+        let mut limited = work(&cancellation);
         let mut catalogs = mixed(&mut limited);
         limited.statistics = Statistics::default();
         limited.limits.max_work = max_work;
@@ -159,8 +159,8 @@ fn an_interrupted_delta_preparation_charges_exactly_its_limit() {
 
 #[test]
 fn extraction_retires_delta_identity_but_retains_empty_capacity() {
-    let control = Control::default();
-    let mut work = work(&control);
+    let cancellation = Cancellation::default();
+    let mut work = work(&cancellation);
     let mut catalogs = mixed(&mut work);
     catalogs.prepare_delta(&mut work).unwrap();
     let predicate = Predicate::new("p", 1).unwrap();
@@ -195,8 +195,8 @@ fn signed_typed_rows_keep_their_own_partition() {
         Value::Number(1),
         Value::Symbol("1".into()),
     ];
-    let control = Control::default();
-    let mut work = work(&control);
+    let cancellation = Cancellation::default();
+    let mut work = work(&cancellation);
     let mut catalogs = Catalogs::default();
     let predicates = [Sign::Positive, Sign::Negative]
         .map(|sign| Predicate::with_sign("typed", 1, sign).unwrap());

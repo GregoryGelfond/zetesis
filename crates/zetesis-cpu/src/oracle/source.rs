@@ -10,7 +10,7 @@ use std::fmt;
 use zetesis_core::{Atom, AtomPattern, Model, Program, Value};
 
 use super::{Relations, Work, visit, worlds};
-use crate::{Control, Stop};
+use crate::{Cancellation, Stop};
 
 /// Bounds on a source scan, including a single emitted instance's copied data.
 #[derive(Clone, Copy, Debug)]
@@ -161,10 +161,10 @@ pub fn scan<E>(
     program: &Program,
     snapshot: &Model,
     limits: ScanLimits,
-    control: &Control,
+    cancellation: &Cancellation,
     mut consume: impl FnMut(Instance) -> Result<(), E>,
 ) -> Result<ScanStatistics, ScanFailure<E>> {
-    let mut work = Work::source(control, limits.max_work);
+    let mut work = Work::source(cancellation, limits.max_work);
     scan_rows(
         program,
         snapshot.atoms().iter(),
@@ -232,7 +232,7 @@ fn scan_inner<'a, E>(
     offered: &mut u64,
     consume: &mut impl FnMut(Instance, &mut Work<'_>) -> Result<(), E>,
 ) -> Result<(), ScanCause<E>> {
-    work.control.poll()?;
+    work.cancellation.poll()?;
     let mut relations = Relations::new();
     for atom in atoms {
         work.tick()?;
@@ -288,7 +288,7 @@ fn scan_inner<'a, E>(
             },
         )?;
     }
-    work.control.poll()?;
+    work.cancellation.poll()?;
     Ok(())
 }
 

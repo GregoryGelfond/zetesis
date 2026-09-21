@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 
 use zetesis_ferraris::{AdmissionLimits, Interpretation, Node, Theory};
 use zetesis_sat::{
-    Control, Limits, StableModels,
+    Cancellation, Limits, StableModels,
     partition::{Group, Plan, Premises, RestrictionLimits},
 };
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
@@ -13,7 +13,7 @@ fn search(
     theory: &Theory,
     restriction: Option<&Theory>,
 ) -> (BTreeSet<Vec<usize>>, zetesis_sat::Statistics) {
-    let mut search = StableModels::new(theory, Limits::default(), Control::default()).unwrap();
+    let mut search = StableModels::new(theory, Limits::default(), Cancellation::default()).unwrap();
     if let Some(restriction) = restriction {
         search.restrict_candidates(restriction).unwrap();
     }
@@ -66,11 +66,11 @@ fn candidate_consequences_preserve_independent_stability() {
     let plan = Plan::new(
         premises,
         zetesis_sat::partition::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let restriction = plan
-        .restriction(RestrictionLimits::default(), &Control::default())
+        .restriction(RestrictionLimits::default(), &Cancellation::default())
         .unwrap();
     let mut expected = BTreeSet::new();
     for mask in 0_usize..16 {
@@ -80,7 +80,7 @@ fn candidate_consequences_preserve_independent_stability() {
             theory,
             &candidate,
             zetesis_ferraris::Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         if original {
@@ -98,7 +98,7 @@ fn candidate_consequences_preserve_independent_stability() {
             theory,
             &candidate,
             zetesis_ferraris::Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap()
         .accepted()
@@ -140,11 +140,11 @@ fn a_candidate_bound_does_not_supply_reduct_support() {
             groups: &groups,
         },
         zetesis_sat::partition::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let restriction = plan
-        .restriction(RestrictionLimits::default(), &Control::default())
+        .restriction(RestrictionLimits::default(), &Cancellation::default())
         .unwrap();
     let (models, statistics) = search(&original, Some(restriction.theory()));
     assert!(models.is_empty());
@@ -166,11 +166,11 @@ fn shape_validation_does_not_certify_theory_entailment() {
             groups: &groups,
         },
         zetesis_sat::partition::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let restriction = plan
-        .restriction(RestrictionLimits::default(), &Control::default())
+        .restriction(RestrictionLimits::default(), &Cancellation::default())
         .unwrap();
     let empty = Interpretation::new(&original, []).unwrap();
     assert!(
@@ -178,7 +178,7 @@ fn shape_validation_does_not_certify_theory_entailment() {
             &original,
             &empty,
             zetesis_ferraris::Limits::default(),
-            &Control::default()
+            &Cancellation::default()
         )
         .unwrap()
     );
@@ -188,7 +188,7 @@ fn shape_validation_does_not_certify_theory_entailment() {
             restriction.theory(),
             &empty,
             zetesis_ferraris::Limits::default(),
-            &Control::default()
+            &Cancellation::default()
         )
         .unwrap()
     );
@@ -228,11 +228,11 @@ fn inactive_capacity_cannot_justify_an_unconditional_bound() {
             groups: &groups,
         },
         zetesis_sat::partition::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let restriction = plan
-        .restriction(RestrictionLimits::default(), &Control::default())
+        .restriction(RestrictionLimits::default(), &Cancellation::default())
         .unwrap();
     let original = Interpretation::new(admitted.theory(), members[..2].iter().copied()).unwrap();
     assert!(
@@ -240,7 +240,7 @@ fn inactive_capacity_cannot_justify_an_unconditional_bound() {
             admitted.theory(),
             &original,
             zetesis_ferraris::Limits::default(),
-            &Control::default()
+            &Cancellation::default()
         )
         .unwrap()
     );
@@ -251,7 +251,7 @@ fn inactive_capacity_cannot_justify_an_unconditional_bound() {
             restriction.theory(),
             &constrained,
             zetesis_ferraris::Limits::default(),
-            &Control::default()
+            &Cancellation::default()
         )
         .unwrap()
     );

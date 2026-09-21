@@ -4,7 +4,7 @@ use std::fmt;
 
 use crate::oracle::{Work, evaluate, failed_root};
 use crate::{Interpretation, Limits, Statistics, Theory};
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 
 /// Per-evaluation bounds, including storage retained from earlier evaluations.
 #[derive(Clone, Copy, Debug)]
@@ -58,9 +58,9 @@ impl EvaluationWorkspace {
         &mut self,
         theory: &Theory,
         max_bytes: usize,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<(), EvaluationError> {
-        control.poll()?;
+        cancellation.poll()?;
         Self::check_storage(theory.nodes().len().max(self.values.capacity()), max_bytes)?;
         self.values.clear();
         self.values
@@ -82,14 +82,14 @@ impl EvaluationWorkspace {
         &'a mut self,
         interpretation: &'a Interpretation,
         limits: EvaluationLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> EvaluationAttempt<'a> {
         let mut work = Work {
             limits: Limits {
                 max_work: limits.max_work,
                 max_subsets: 0,
             },
-            control,
+            cancellation,
             statistics: Statistics::default(),
         };
         let result = self.evaluate_into(interpretation, limits.max_bytes, &mut work);
@@ -111,7 +111,7 @@ impl EvaluationWorkspace {
         work: &mut Work<'_>,
     ) -> Result<Option<usize>, EvaluationError> {
         let theory = interpretation.theory();
-        self.reserve(theory, max_bytes, work.control)?;
+        self.reserve(theory, max_bytes, work.cancellation)?;
         evaluate(theory, interpretation, None, &mut self.values, work)?;
         Ok(failed_root(theory, &self.values, work)?)
     }
@@ -141,10 +141,10 @@ impl EvaluationWorkspace {
 ///
 /// ```compile_fail
 /// # use zetesis_ferraris::{EvaluationLimits, EvaluationWorkspace, Interpretation};
-/// # use zetesis_cpu::Control;
+/// # use zetesis_cpu::Cancellation;
 /// # fn stale(candidate: &Interpretation) {
 /// let mut workspace = EvaluationWorkspace::default();
-/// let control = Control::default();
+/// let control = Cancellation::default();
 /// let truth = workspace.evaluate(candidate, EvaluationLimits::default(), &control)
 ///     .result.unwrap();
 /// let next = workspace.evaluate(candidate, EvaluationLimits::default(), &control);

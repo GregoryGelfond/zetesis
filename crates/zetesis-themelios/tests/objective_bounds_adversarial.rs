@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::Value as Json;
 use zetesis_core::{Atom, Model, Term, Value};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check, models};
 use zetesis_objective::{ObjectiveProgram, ObjectiveTemplate, Score};
 use zetesis_sat::{Limits as SearchLimits, StableModels};
@@ -119,7 +119,7 @@ fn score(input: &AdmittedFormula, mask: usize) -> Score {
         input.objectives(),
         &relation(input, mask),
         zetesis_objective::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .expect("complete independent objective evaluation")
     .score()
@@ -134,7 +134,7 @@ fn stable(input: &AdmittedFormula) -> Vec<usize> {
                 input.theory(),
                 &interpretation(input, mask),
                 Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .expect("independent complete Ferraris subset enumeration")
             .accepted()
@@ -163,7 +163,7 @@ fn plan(input: &AdmittedFormula) -> ObjectivePlan {
         input.atoms(),
         input.objectives(),
         ObjectivePlanLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .expect("complete objective key/eligibility plan in original atom order")
 }
@@ -172,8 +172,12 @@ fn bounded_models(
     input: &AdmittedFormula,
     restriction: &zetesis_ferraris::Theory,
 ) -> BTreeSet<usize> {
-    let mut search =
-        StableModels::new(input.theory(), SearchLimits::default(), Control::default()).unwrap();
+    let mut search = StableModels::new(
+        input.theory(),
+        SearchLimits::default(),
+        Cancellation::default(),
+    )
+    .unwrap();
     search.restrict_candidates(restriction).unwrap();
     assert!(search.theory().same_instance(input.theory()));
     let mut result = BTreeSet::new();
@@ -215,7 +219,7 @@ fn every_verified_incumbent_retains_exactly_improving_and_tied_original_models()
                 .bound(
                     incumbent_score,
                     ObjectiveBoundLimits::default(),
-                    &Control::default(),
+                    &Cancellation::default(),
                 )
                 .unwrap();
             assert!(bound.original().same_instance(input.theory()));
@@ -229,7 +233,7 @@ fn every_verified_incumbent_retains_exactly_improving_and_tied_original_models()
                     bound.theory(),
                     &candidate,
                     Limits::default(),
-                    &Control::default(),
+                    &Cancellation::default(),
                 )
                 .unwrap();
                 assert_eq!(
@@ -278,8 +282,12 @@ fn repeated_strict_incumbent_improvements_keep_all_optimal_ties_without_duplicat
             .filter(|&mask| score(&input, mask).compare_costs(&optimum) == Ordering::Equal)
             .collect();
         let plan = plan(&input);
-        let mut search =
-            StableModels::new(input.theory(), SearchLimits::default(), Control::default()).unwrap();
+        let mut search = StableModels::new(
+            input.theory(),
+            SearchLimits::default(),
+            Cancellation::default(),
+        )
+        .unwrap();
         let mut seen = BTreeSet::new();
         let mut best: Option<Score> = None;
         while let Some(result) = search.next() {
@@ -299,7 +307,7 @@ fn repeated_strict_incumbent_improvements_keep_all_optimal_ties_without_duplicat
                     .bound(
                         &candidate_score,
                         ObjectiveBoundLimits::default(),
-                        &Control::default(),
+                        &Cancellation::default(),
                     )
                     .unwrap();
                 search.restrict_candidates(bound.theory()).unwrap();
@@ -346,7 +354,7 @@ fn constant_score(values: &[(i32, i32)]) -> Score {
         &program,
         &Model::new([]),
         zetesis_objective::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap()
     .score()
@@ -371,7 +379,7 @@ fn foreign_numeric_score_slots_are_compared_with_missing_priorities_as_zero() {
             .bound(
                 &ceiling,
                 ObjectiveBoundLimits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
         for mask in 0..1 << input.atoms().len() {
@@ -385,7 +393,7 @@ fn foreign_numeric_score_slots_are_compared_with_missing_priorities_as_zero() {
                     bound.theory(),
                     &candidate,
                     Limits::default(),
-                    &Control::default()
+                    &Cancellation::default()
                 )
                 .unwrap(),
                 score(&input, mask).compare_costs(&ceiling) != Ordering::Greater
@@ -408,7 +416,7 @@ fn exact_global_key_limits_count_coalesced_keys_and_all_complete_bindings() {
         input.atoms(),
         input.objectives(),
         exact,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(
@@ -461,7 +469,7 @@ fn exact_global_key_limits_count_coalesced_keys_and_all_complete_bindings() {
             input.atoms(),
             input.objectives(),
             limits,
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
         assert_eq!(error.kind(), ObjectiveBoundErrorKind::Limit(resource));
@@ -473,7 +481,7 @@ fn optional_bound_refusals_leave_the_original_available_for_complete_search() {
     let input = admit("{a;b}. #minimize{2@1,k:a;2@1,k:b}.");
     let baseline = stable(&input);
     let plan = plan(&input);
-    let cancelled = Control::default();
+    let cancelled = Cancellation::default();
     cancelled.cancel();
     assert!(matches!(
         plan.bound(
@@ -492,7 +500,7 @@ fn optional_bound_refusals_leave_the_original_available_for_complete_search() {
                 max_work: 0,
                 ..ObjectiveBoundLimits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
     assert_eq!(
@@ -503,7 +511,7 @@ fn optional_bound_refusals_leave_the_original_available_for_complete_search() {
         .bound(
             &score(&input, baseline[0]),
             ObjectiveBoundLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     assert!(valid.original().same_instance(input.theory()));

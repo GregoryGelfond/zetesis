@@ -52,7 +52,7 @@ pub(super) fn restrict(
                 .max_work
                 .saturating_sub(budget.statistics.work),
         },
-        budget.control,
+        budget.cancellation,
     );
     // Construction admits operations against exactly the coordinator's
     // remaining quota. No parallel worker exists during initial setup.
@@ -94,7 +94,7 @@ pub(super) fn restrict(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Control, SearchStatistics};
+    use crate::{Cancellation, SearchStatistics};
     use zetesis_ferraris::Node;
 
     fn input() -> Theory {
@@ -125,11 +125,11 @@ mod tests {
         .unwrap()
     }
 
-    fn budget(control: &Control) -> Budget<'_> {
+    fn budget(cancellation: &Cancellation) -> Budget<'_> {
         Budget {
             quota: crate::search::LocalQuota,
             limits: Limits::default().search,
-            control,
+            cancellation,
             statistics: SearchStatistics::default(),
         }
     }
@@ -137,9 +137,9 @@ mod tests {
     #[test]
     fn every_interrupted_support_attempt_keeps_spent_work() {
         for theory in [input(), mixed_input()] {
-            let control = Control::default();
+            let cancellation = Cancellation::default();
             let limits = Limits::default();
-            let mut complete = budget(&control);
+            let mut complete = budget(&cancellation);
             let mut cnf = encoding::encode(&theory, None, limits.admission, &mut complete).unwrap();
             let before = complete.statistics.work;
             let clauses: Vec<Vec<_>> = cnf
@@ -157,7 +157,7 @@ mod tests {
             // exactly its inclusive quota even when construction cannot return a
             // formula or the appended encoding is rolled back.
             for max_work in before..complete.statistics.work {
-                let mut interrupted = budget(&control);
+                let mut interrupted = budget(&cancellation);
                 let mut cnf =
                     encoding::encode(&theory, None, limits.admission, &mut interrupted).unwrap();
                 interrupted.limits.max_work = max_work;
@@ -179,12 +179,12 @@ mod tests {
     #[test]
     fn cancelled_support_attempt_cannot_fall_back() {
         let theory = input();
-        let control = Control::default();
+        let cancellation = Cancellation::default();
         let limits = Limits::default();
-        let mut budget = budget(&control);
+        let mut budget = budget(&cancellation);
         let mut cnf = encoding::encode(&theory, None, limits.admission, &mut budget).unwrap();
         let before = budget.statistics;
-        control.cancel();
+        cancellation.cancel();
         assert_eq!(
             restrict(&mut cnf, &theory, limits, &mut budget),
             Err(Incomplete::Cancelled)

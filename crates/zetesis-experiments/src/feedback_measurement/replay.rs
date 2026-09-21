@@ -3,24 +3,24 @@ use super::{
     guard::{Budget, Store},
 };
 use std::time::Instant;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Theory;
 
 pub(super) fn fixed(
     source: &Theory,
     feedback: bool,
     configuration: Configuration,
-    control: &Control,
+    cancellation: &Cancellation,
     progress: &mut Progress,
     elapsed: &mut StageTimes,
 ) -> Result<Store, Error> {
     let started = Instant::now();
-    let mut budget = Budget::new(configuration.construction, control);
+    let mut budget = Budget::new(configuration.construction, cancellation);
     let outcome = fixed_inner(
         source,
         feedback,
         configuration,
-        control,
+        cancellation,
         progress,
         elapsed,
         &mut budget,
@@ -38,28 +38,28 @@ fn fixed_inner(
     source: &Theory,
     feedback: bool,
     configuration: Configuration,
-    control: &Control,
+    cancellation: &Cancellation,
     progress: &mut Progress,
     elapsed: &mut StageTimes,
     budget: &mut Budget<'_>,
 ) -> Result<Store, Error> {
     progress.stable = super::reserve(64)?;
     progress.witnesses = super::reserve(8)?;
-    control.poll().map_err(Error::Control)?;
+    cancellation.poll().map_err(Error::Control)?;
     let mut store = if feedback {
         Store::new(budget)?
     } else {
         Store { guards: Vec::new() }
     };
     for bits in 0..1 << source.atom_count() {
-        control.poll().map_err(Error::Control)?;
+        cancellation.poll().map_err(Error::Control)?;
         let candidate = fixtures::interpretation(source, bits)?;
         progress.candidates_started += 1;
         let mut allowed = true;
         for guard in &store.guards {
             progress.guard_evaluations += 1;
             let clock = Instant::now();
-            let result = guard.allows(&candidate, configuration.max_reference_work, control);
+            let result = guard.allows(&candidate, configuration.max_reference_work, cancellation);
             elapsed.application_ns += clock.elapsed().as_nanos();
             if !result? {
                 allowed = false;
@@ -67,7 +67,7 @@ fn fixed_inner(
             }
         }
         if allowed {
-            let checked = membership(candidate, configuration, control, progress, elapsed)?;
+            let checked = membership(candidate, configuration, cancellation, progress, elapsed)?;
             if feedback && let zetesis_sat::Check::NonMinimal(witness) = checked.verdict() {
                 let clock = Instant::now();
                 let learned = store.learn(&checked, budget);
@@ -84,7 +84,7 @@ fn fixed_inner(
             progress.candidates_completed += 1;
         }
     }
-    control.poll().map_err(Error::Control)?;
+    cancellation.poll().map_err(Error::Control)?;
     progress.exhausted = true;
     Ok(store)
 }
@@ -92,13 +92,14 @@ fn fixed_inner(
 fn membership(
     candidate: zetesis_ferraris::Interpretation,
     configuration: Configuration,
-    control: &Control,
+    cancellation: &Cancellation,
     progress: &mut Progress,
     elapsed: &mut StageTimes,
 ) -> Result<zetesis_sat::CheckedInterpretation, Error> {
     progress.membership_calls += 1;
     let clock = Instant::now();
-    let checked = zetesis_sat::check_interpretation(candidate, configuration.native(), control);
+    let checked =
+        zetesis_sat::check_interpretation(candidate, configuration.native(), cancellation);
     elapsed.membership_ns += clock.elapsed().as_nanos();
     match checked.verdict() {
         zetesis_sat::Check::Stable => progress.stable.push(fixtures::bits(checked.candidate())),
@@ -116,12 +117,19 @@ pub(super) fn search(
     source: &Theory,
     guards: Option<&Store>,
     configuration: Configuration,
-    control: &Control,
+    cancellation: &Cancellation,
     progress: &mut Progress,
     elapsed: &mut StageTimes,
 ) -> Result<(), Error> {
     let started = Instant::now();
-    let result = search_inner(source, guards, configuration, control, progress, elapsed);
+    let result = search_inner(
+        source,
+        guards,
+        configuration,
+        cancellation,
+        progress,
+        elapsed,
+    );
     elapsed.total_ns = started.elapsed().as_nanos();
     result
 }
@@ -129,7 +137,7 @@ fn search_inner(
     source: &Theory,
     guards: Option<&Store>,
     configuration: Configuration,
-    control: &Control,
+    cancellation: &Cancellation,
     progress: &mut Progress,
     elapsed: &mut StageTimes,
 ) -> Result<(), Error> {
@@ -149,7 +157,7 @@ fn search_inner(
         source,
         zetesis_sat::SearchMethod::Clauses,
         configuration.native(),
-        control.clone(),
+        cancellation.clone(),
     );
     elapsed.search_setup_ns += clock.elapsed().as_nanos();
     let mut search = result.map_err(Error::Native)?;

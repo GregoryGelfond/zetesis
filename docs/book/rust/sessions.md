@@ -1,8 +1,10 @@
 # Embedding an ordinary solve
 
-A session owns search state and borrows a coherent admitted input. It accepts
-semantic configuration and control, with no argument parsing, standard streams
-or answer rendering. This example enumerates the guided tour's complete family:
+A `Session` owns solving state and borrows a coherent admitted input.
+`SolveConfig` selects execution policy and limits; `zetesis_cpu::Cancellation`
+carries shared cancellation and an optional deadline. The session accepts these
+values without argument parsing, standard streams or answer rendering. This
+example enumerates the guided tour's complete family:
 
 ```rust
 # extern crate zetesis_solve;
@@ -28,7 +30,7 @@ its own resources. CPU closure setup conservatively requires
 `workers * max_closure_bytes <= max_closure_batch_bytes` for lazy, eager and
 shared execution, before allocating its pool or initializing candidates.
 Formula and device execution do not inherit this unused reservation. With valid
-policies, an already cancelled control stops before executor resource checks
+policies, an already cancelled request stops before executor resource checks
 and allocation; an incompatible policy remains a setup error.
 
 ## Pulling and stopping
@@ -251,7 +253,7 @@ session starts new search and check budgets.
 
 ## Collecting the original world view
 
-`WorldView::collect(input, config, limits, control)` owns a fresh unrestricted
+`WorldView::collect(input, config, limits, cancellation)` owns a fresh unrestricted
 session and returns its complete original answer-set family only after
 exhaustion. Use `models: 0`; a positive model limit is honored and can prevent
 completion. Every member retains its full interpretation and original subject.
@@ -360,7 +362,7 @@ cargo run --locked -p zetesis-solve --no-default-features --example book-project
 
 ### Composing requests
 
-`Session::builder(input, config, control)` composes a request before execution.
+`Session::builder(input, config, cancellation)` composes a request before execution.
 Use `selection(AnswerSelection::All)` for unrestricted enumeration, or retain
 the default objective selection. `resources(&resources)` supplies reusable
 execution infrastructure. `collect(limits)` consumes the unstarted request,

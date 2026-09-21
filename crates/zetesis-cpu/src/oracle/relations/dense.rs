@@ -625,7 +625,7 @@ fn cover(range: &Range<usize>, word: usize) -> Range<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Control;
+    use crate::Cancellation;
 
     fn numbers(values: &[i32]) -> Bound {
         Bound::Finite(values.iter().map(|&value| Value::Number(value)).collect())
@@ -685,8 +685,8 @@ mod tests {
 
     #[test]
     fn rows_are_scanned_in_position_order_within_a_set() {
-        let control = Control::default();
-        let mut work = Work::source(&control, 1_000);
+        let cancellation = Cancellation::default();
+        let mut work = Work::source(&cancellation, 1_000);
         work.limits.max_closure_bytes = 1 << 20;
         let (_, mut pending) = pending(&mut work);
         let mut dense = Dense::new(Arc::new(layout())).unwrap();
@@ -748,8 +748,8 @@ mod tests {
 
     #[test]
     fn a_position_is_marked_pending_once() {
-        let control = Control::default();
-        let mut work = Work::source(&control, 1_000);
+        let cancellation = Cancellation::default();
+        let mut work = Work::source(&cancellation, 1_000);
         work.limits.max_closure_bytes = 1 << 20;
         let (_, mut pending) = pending(&mut work);
         assert!(pending.is_empty());
@@ -761,8 +761,8 @@ mod tests {
 
     #[test]
     fn absorbing_pending_rows_inserts_exactly_the_marked_positions() {
-        let control = Control::default();
-        let mut work = Work::source(&control, 1_000);
+        let cancellation = Cancellation::default();
+        let mut work = Work::source(&cancellation, 1_000);
         work.limits.max_closure_bytes = 1 << 20;
         let (layouts, mut pending) = pending(&mut work);
         let mut dense = Dense::new(layouts.iter().next().unwrap().clone()).unwrap();
@@ -788,8 +788,8 @@ mod tests {
 
     #[test]
     fn absorbed_pending_rows_are_empty_for_the_next_round() {
-        let control = Control::default();
-        let mut work = Work::source(&control, 1_000);
+        let cancellation = Cancellation::default();
+        let mut work = Work::source(&cancellation, 1_000);
         work.limits.max_closure_bytes = 1 << 20;
         let (layouts, mut pending) = pending(&mut work);
         let mut dense = Dense::new(layouts.iter().next().unwrap().clone()).unwrap();
@@ -804,8 +804,8 @@ mod tests {
     /// A body of three values by seventy and a head of two by seventy: rows
     /// wider than a word, starting off a word boundary.
     fn wide() -> (Layouts, PendingMarks, Dense, Dense) {
-        let control = Control::default();
-        let mut work = Work::source(&control, 100_000);
+        let cancellation = Cancellation::default();
+        let mut work = Work::source(&cancellation, 100_000);
         work.limits.max_closure_bytes = 1 << 20;
         let last: Vec<i32> = (0..70).collect();
         let mut layouts = Layouts::default();
@@ -841,8 +841,8 @@ mod tests {
 
     #[test]
     fn joining_a_row_marks_what_marking_each_of_its_positions_would() {
-        let control = Control::default();
-        let mut work = Work::source(&control, 100_000);
+        let cancellation = Cancellation::default();
+        let mut work = Work::source(&cancellation, 100_000);
         let (_, mut pending, mut body, mut head) = wide();
         // The body's second row, positions 70..140, holds these last values.
         let values = [0, 1, 5, 58, 63, 64, 69];
@@ -880,8 +880,8 @@ mod tests {
 
     #[test]
     fn joining_a_row_reads_only_the_selected_rows() {
-        let control = Control::default();
-        let mut work = Work::source(&control, 100_000);
+        let cancellation = Cancellation::default();
+        let mut work = Work::source(&cancellation, 100_000);
         let (_, mut pending, mut body, head) = wide();
         assert!(pending.mark(0, 3));
         pending.absorb_into(0, &mut body, &mut work).unwrap();
@@ -916,8 +916,8 @@ mod tests {
 
     #[test]
     fn taken_atoms_are_in_canonical_order() {
-        let control = Control::default();
-        let mut work = Work::source(&control, 10_000);
+        let cancellation = Cancellation::default();
+        let mut work = Work::source(&cancellation, 10_000);
         let (_, atoms) = taken(&mut work);
         let values: Vec<Vec<i32>> = atoms
             .iter()
@@ -937,8 +937,8 @@ mod tests {
 
     #[test]
     fn taking_the_atoms_empties_the_relation() {
-        let control = Control::default();
-        let mut work = Work::source(&control, 10_000);
+        let cancellation = Cancellation::default();
+        let mut work = Work::source(&cancellation, 10_000);
         let (dense, _) = taken(&mut work);
         assert_eq!(dense.len(), 0);
         assert!(!dense.contains(5));

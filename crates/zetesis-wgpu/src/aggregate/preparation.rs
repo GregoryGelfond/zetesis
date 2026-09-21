@@ -6,7 +6,7 @@ use super::{
 };
 use std::sync::Arc;
 use zetesis_core::Value;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AggregateComparison,
     native_aggregate::{Bound, Function, Group},
@@ -53,9 +53,9 @@ impl<'g> AggregateGpuPlan<'g> {
     pub fn new(
         group: &'g Group,
         limits: AggregateGpuPlanLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Self, Error> {
-        poll(control)?;
+        poll(cancellation)?;
         let tuples = group.tuples().len();
         let guards = group.guards().len();
         let work = u64::try_from(tuples)
@@ -100,8 +100,8 @@ impl<'g> AggregateGpuPlan<'g> {
             bytes,
             work,
         };
-        numeric.pack(group, control)?;
-        poll(control)?;
+        numeric.pack(group, cancellation)?;
+        poll(cancellation)?;
         Ok(Self {
             group,
             numeric: Arc::new(numeric),
@@ -125,9 +125,9 @@ impl<'g> AggregateGpuPlan<'g> {
 }
 
 impl Numeric {
-    fn pack(&mut self, group: &Group, control: &Control) -> Result<(), Error> {
+    fn pack(&mut self, group: &Group, cancellation: &Cancellation) -> Result<(), Error> {
         for (index, tuple) in group.tuples().iter().enumerate() {
-            poll(control)?;
+            poll(cancellation)?;
             let first = tuple.key.first();
             let (value, present) = match self.function {
                 Function::Count => (1, true),
@@ -151,7 +151,7 @@ impl Numeric {
             self.tuples.extend([bits(value), u32::from(present)]);
         }
         for (index, guard) in group.guards().iter().enumerate() {
-            poll(control)?;
+            poll(cancellation)?;
             let value = match &guard.bound {
                 Bound::Integer(value) => i32::try_from(*value)
                     .map_err(|_| Error::Capability(Capability::GuardRange { guard: index }))?,

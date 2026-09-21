@@ -8,7 +8,12 @@ fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
 }
 
 fn plan(theory: &Theory) -> PositivePlan {
-    PositivePlan::compile(theory, PositivePlanLimits::default(), &Control::default()).unwrap()
+    PositivePlan::compile(
+        theory,
+        PositivePlanLimits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap()
 }
 
 fn aliased() -> Theory {
@@ -96,7 +101,7 @@ fn failed_constraint_keeps_the_complete_least_consequences() {
             &owner,
             complete.least_consequences(),
             Limits::default(),
-            &Control::default()
+            &Cancellation::default()
         )
         .unwrap()
     );
@@ -137,9 +142,13 @@ fn arbitrary_constraints_filter_answers_without_supplying_support() {
                 let candidate =
                     Interpretation::new(&owner, (0..2).filter(|atom| mask & (1 << atom) != 0))
                         .unwrap();
-                let reference =
-                    crate::check(&owner, &candidate, Limits::default(), &Control::default())
-                        .unwrap();
+                let reference = crate::check(
+                    &owner,
+                    &candidate,
+                    Limits::default(),
+                    &Cancellation::default(),
+                )
+                .unwrap();
                 assert_eq!(
                     reference.accepted(),
                     complete.failed_constraint().is_none() && mask == facts,
@@ -168,12 +177,17 @@ fn failed_nonmonotone_constraint_can_have_a_larger_classical_model() {
     assert_eq!(complete.least_consequences().atoms().count(), 0);
     assert_eq!(complete.failed_constraint(), Some(3));
     let larger = Interpretation::new(&owner, [0]).unwrap();
-    assert!(crate::models(&owner, &larger, Limits::default(), &Control::default()).unwrap());
+    assert!(crate::models(&owner, &larger, Limits::default(), &Cancellation::default()).unwrap());
     for candidate in [complete.least_consequences(), &larger] {
         assert!(
-            !crate::check(&owner, candidate, Limits::default(), &Control::default())
-                .unwrap()
-                .accepted()
+            !crate::check(
+                &owner,
+                candidate,
+                Limits::default(),
+                &Cancellation::default()
+            )
+            .unwrap()
+            .accepted()
         );
     }
 }
@@ -198,7 +212,7 @@ fn final_original_evaluation_is_charged_and_cannot_publish_a_partial_plan() {
     let evaluated = workspace.evaluate(
         complete.least_consequences(),
         crate::EvaluationLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     );
     assert!(evaluated.result.unwrap().is_model());
     let before_validation = complete.statistics().work - evaluated.work;
@@ -209,7 +223,7 @@ fn final_original_evaluation_is_charged_and_cannot_publish_a_partial_plan() {
                 max_work,
                 ..PositivePlanLimits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         );
         assert!(matches!(attempt.result, Err(PositiveError::Limit {
             resource: PositiveResource::Work, observed, limit,
@@ -223,10 +237,10 @@ fn final_original_evaluation_is_charged_and_cannot_publish_a_partial_plan() {
 fn false_producer_from_an_invalid_closure_is_a_refusal() {
     let owner = theory(1, vec![Node::Atom(0)], vec![0]);
     let not_closed = Interpretation::new(&owner, []).unwrap();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut budget = Budget {
         limits: PositivePlanLimits::default(),
-        control: &control,
+        cancellation: &cancellation,
         statistics: PositivePlanStatistics::default(),
         current_bytes: 0,
     };
@@ -274,9 +288,13 @@ fn complete_families_agree_with_general_reduct_checking() {
                     let candidate =
                         Interpretation::new(&owner, (0..4).filter(|atom| mask & (1 << atom) != 0))
                             .unwrap();
-                    let actual =
-                        crate::check(&owner, &candidate, Limits::default(), &Control::default())
-                            .unwrap();
+                    let actual = crate::check(
+                        &owner,
+                        &candidate,
+                        Limits::default(),
+                        &Cancellation::default(),
+                    )
+                    .unwrap();
                     let same = candidate.atoms().eq(complete.least_consequences().atoms());
                     assert_eq!(
                         actual.accepted(),
@@ -301,8 +319,11 @@ fn every_original_root_must_have_a_supported_form() {
         ],
         vec![0, 3],
     );
-    let attempt =
-        PositivePlan::compile_accounted(&owner, PositivePlanLimits::default(), &Control::default());
+    let attempt = PositivePlan::compile_accounted(
+        &owner,
+        PositivePlanLimits::default(),
+        &Cancellation::default(),
+    );
     assert!(matches!(
         attempt.result,
         Err(PositiveError::UnsupportedRoot { root: 3 })
@@ -327,9 +348,12 @@ fn implication_bodies_cannot_enter_positive_plans() {
             ],
             vec![6],
         );
-        let error =
-            PositivePlan::compile(&owner, PositivePlanLimits::default(), &Control::default())
-                .unwrap_err();
+        let error = PositivePlan::compile(
+            &owner,
+            PositivePlanLimits::default(),
+            &Cancellation::default(),
+        )
+        .unwrap_err();
         assert_eq!(error, PositiveError::UnsupportedBody { root: 6, body });
     }
 }
@@ -346,7 +370,7 @@ fn every_proper_work_prefix_returns_no_certificate() {
                 max_work: maximum,
                 ..PositivePlanLimits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         );
         assert!(
             matches!(attempt.result, Err(PositiveError::Limit { resource: PositiveResource::Work, observed, limit }) if observed == u128::from(maximum) + 1 && limit == u128::from(maximum))
@@ -360,7 +384,7 @@ fn every_proper_work_prefix_returns_no_certificate() {
             max_work: work,
             ..PositivePlanLimits::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(
@@ -379,7 +403,7 @@ fn actual_dependency_limit_is_inclusive() {
                 max_dependencies: maximum,
                 ..PositivePlanLimits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         );
         assert!(
             matches!(attempt.result, Err(PositiveError::Limit { resource: PositiveResource::Dependencies, observed, limit }) if observed == maximum as u128 + 1 && limit == maximum as u128)
@@ -393,7 +417,7 @@ fn actual_dependency_limit_is_inclusive() {
                 max_dependencies: 10,
                 ..PositivePlanLimits::default()
             },
-            &Control::default()
+            &Cancellation::default()
         )
         .unwrap()
         .statistics()
@@ -414,7 +438,7 @@ fn construction_peak_covers_the_retained_owner() {
             max_bytes: peak,
             ..PositivePlanLimits::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(exact.statistics().peak_bytes, peak as u128);
@@ -424,7 +448,7 @@ fn construction_peak_covers_the_retained_owner() {
             max_bytes: peak - 1,
             ..PositivePlanLimits::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
     );
     assert!(
         matches!(short.result, Err(PositiveError::Limit { resource: PositiveResource::Bytes, observed, limit }) if observed > limit && limit == (peak - 1) as u128)
@@ -435,8 +459,8 @@ fn construction_peak_covers_the_retained_owner() {
 #[test]
 fn cancellation_precedes_empty_shape_limits() {
     let owner = theory(0, vec![], vec![]);
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     let attempt = PositivePlan::compile_accounted(
         &owner,
         PositivePlanLimits {
@@ -444,7 +468,7 @@ fn cancellation_precedes_empty_shape_limits() {
             max_bytes: 0,
             max_dependencies: 0,
         },
-        &control,
+        &cancellation,
     );
     assert!(matches!(
         attempt.result,

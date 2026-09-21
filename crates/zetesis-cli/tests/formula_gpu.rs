@@ -2,7 +2,7 @@
 
 use clap::Parser;
 use zetesis_cli::{Completion, Options, RunError, run_with_diagnostics};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 #[path = "support/formula_records.rs"]
 mod formula_records;
@@ -50,7 +50,7 @@ fn cpu_output(source: &str, json: bool) -> Vec<u8> {
         &configuration,
         &mut output,
         &mut Vec::new(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(report.completion, Completion::Exhausted);
@@ -195,8 +195,8 @@ fn cancellation_precedes_explicit_formula_device_initialization() {
         vec!["--backend", "metal"],
         vec!["--backend", "gpu", "--oracle", "countermodel"],
     ] {
-        let control = Control::default();
-        control.cancel();
+        let cancellation = Cancellation::default();
+        cancellation.cancel();
         let mut output = Vec::new();
         let mut diagnostics = Vec::new();
         let report = run_with_diagnostics(
@@ -204,7 +204,7 @@ fn cancellation_precedes_explicit_formula_device_initialization() {
             &options(&arguments),
             &mut output,
             &mut diagnostics,
-            &control,
+            &cancellation,
         )
         .unwrap();
         assert_eq!(report.completion, Completion::Interrupted);
@@ -225,7 +225,7 @@ fn formula_admission_precedes_device_initialization() {
         &options(&["--backend", "metal", "--oracle", "countermodel"]),
         &mut output,
         &mut Vec::new(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(error, RunError::FormulaAdmission(_)));
@@ -240,7 +240,7 @@ fn formula_device_route_refuses_explicit_lazy_grounding() {
         &options(&["--backend", "metal", "--grounder", "lazy"]),
         &mut output,
         &mut Vec::new(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(
@@ -261,7 +261,7 @@ fn automatic_formula_route_reports_the_checked_cpu_specialization() {
         &options(&["--stats"]),
         &mut output,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(report.completion, Completion::Exhausted);
@@ -281,7 +281,7 @@ fn cpu_only_formula_hardware_request_is_explicitly_unavailable() {
         &options(&["--backend", "metal"]),
         &mut output,
         &mut Vec::new(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(error, RunError::BackendUnavailable));
@@ -304,7 +304,7 @@ mod language_value_sources;
 mod physical {
     use super::formula_records::{displayed_records, full_records};
     use super::physical_backend::Backend;
-    use super::{Completion, Control, options, run_with_diagnostics};
+    use super::{Cancellation, Completion, options, run_with_diagnostics};
 
     #[test]
     #[ignore = "requires actual Metal; executes the ordinary solver and never substitutes CPU"]
@@ -338,7 +338,7 @@ mod physical {
             &options(&["--backend", "cpu", "--json", "--formula-joins", "indexed"]),
             &mut expected,
             &mut Vec::new(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         assert_eq!(cpu.completion, Completion::Exhausted);
@@ -360,7 +360,7 @@ mod physical {
             ]),
             &mut actual,
             &mut Vec::new(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         assert_eq!(gpu.completion, Completion::Exhausted);
@@ -428,7 +428,7 @@ mod physical {
             &configuration,
             &mut expected,
             &mut Vec::new(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         assert_eq!(cpu.completion, Completion::Exhausted);
@@ -450,7 +450,7 @@ mod physical {
                 &configuration,
                 &mut actual,
                 &mut diagnostics,
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
             assert_eq!(report.completion, Completion::Exhausted);
@@ -516,7 +516,7 @@ mod physical {
             ]),
             &mut output,
             &mut Vec::new(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         assert_eq!(report.completion, Completion::Interrupted);
@@ -533,7 +533,7 @@ mod physical {
             &limited,
             &mut Vec::new(),
             &mut Vec::new(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         assert_eq!(report.completion, Completion::Interrupted);
@@ -546,7 +546,7 @@ mod physical {
             &options(&["--backend", backend.argument(), "--oracle", "countermodel"]),
             &mut output,
             &mut broken,
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
         assert!(
@@ -577,7 +577,7 @@ mod physical {
                 &configuration,
                 &mut output,
                 &mut Vec::new(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
             assert_eq!(report.completion, Completion::Interrupted);

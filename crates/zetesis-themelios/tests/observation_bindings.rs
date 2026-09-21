@@ -4,7 +4,7 @@
 mod observation_reference;
 
 use zetesis_core::{Atom, Model, Predicate, Value};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, check};
 use zetesis_themelios::observation::{
     AdmissionLimits, ErrorKind, EvaluationError, Feature, Limits, Resource, Symbol,
@@ -94,7 +94,7 @@ fn display(input: &AdmittedFormula, model: &Model) -> Vec<String> {
             model,
             input.metadata().output(),
             Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap()
         .text()
@@ -173,7 +173,7 @@ fn family(input: &AdmittedFormula) -> Vec<(Model, Vec<String>)> {
             input.theory(),
             &candidate,
             zetesis_ferraris::Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap()
         .accepted()
@@ -230,7 +230,7 @@ fn assert_exact_work(source: &str) {
                 max_work,
                 ..Limits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
     };
     let full = run(Limits::default().max_work).unwrap();
@@ -259,7 +259,7 @@ fn chain_bindings_obey_the_live_payload_limit() {
                 max_local_bytes,
                 ..Limits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
     };
     assert_eq!(run(32).unwrap().symbols().len(), 1);
@@ -291,7 +291,7 @@ fn assert_complete_value_budget(source: &str, bytes: usize) {
                 max_local_bytes,
                 ..Limits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
     };
     // Each owned f(1) is two nodes and one name byte; X owns one number.
@@ -321,7 +321,7 @@ fn mismatched_structural_choices_release_partial_captures() {
                 max_local_bytes: 212,
                 ..Limits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     assert_eq!(result.symbols(), &[Symbol::Number(2)]);
@@ -420,7 +420,11 @@ fn assert_undefined(source: &str) {
     let error = input
         .metadata()
         .observations()
-        .evaluate(&Model::default(), Limits::default(), &Control::default())
+        .evaluate(
+            &Model::default(),
+            Limits::default(),
+            &Cancellation::default(),
+        )
         .unwrap_err();
     assert_eq!(
         error.kind(),
@@ -446,7 +450,7 @@ fn extremum_capture_counts_its_local_substitutions() {
                 max_bindings,
                 ..Limits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
     };
     assert_eq!(run(3).unwrap().symbols(), &[Symbol::Number(1)]);
@@ -468,7 +472,7 @@ fn assert_binding_limit(source: &str) {
                 max_bindings,
                 ..Limits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
     };
     assert_eq!(run(2).unwrap().symbols().len(), 2);
@@ -487,7 +491,11 @@ fn chain_generation_propagates_arithmetic_failure() {
     let error = input
         .metadata()
         .observations()
-        .evaluate(&Model::default(), Limits::default(), &Control::default())
+        .evaluate(
+            &Model::default(),
+            Limits::default(),
+            &Cancellation::default(),
+        )
         .unwrap_err();
     assert_eq!(
         error.kind(),
@@ -509,12 +517,12 @@ fn equality_generation_propagates_cancellation() {
 
 fn assert_cancelled(source: &str) {
     let input = admit(source);
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     let error = input
         .metadata()
         .observations()
-        .evaluate(&Model::default(), Limits::default(), &control)
+        .evaluate(&Model::default(), Limits::default(), &cancellation)
         .unwrap_err();
     assert!(matches!(
         error.kind(),

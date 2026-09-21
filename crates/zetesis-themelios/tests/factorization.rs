@@ -8,7 +8,7 @@ use std::fmt::Write;
 
 use stable_models::stable;
 use zetesis_core::{Atom, Predicate, Value};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, models, models_reduct};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, FormulaResource,
@@ -52,20 +52,20 @@ fn equivalent(left: &str, right: &str) {
         .enumerate()
         .map(|(index, atom)| (atom, index))
         .collect();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     for candidate in 0..1 << left.atoms().len() {
         let lm = interpretation(&left, &indices, candidate);
         let rm = interpretation(&right, &indices, candidate);
         assert_eq!(
-            models(left.theory(), &lm, Limits::default(), &control).unwrap(),
-            models(right.theory(), &rm, Limits::default(), &control).unwrap()
+            models(left.theory(), &lm, Limits::default(), &cancellation).unwrap(),
+            models(right.theory(), &rm, Limits::default(), &cancellation).unwrap()
         );
         for tested in 0..1 << left.atoms().len() {
             let lj = interpretation(&left, &indices, tested);
             let rj = interpretation(&right, &indices, tested);
             assert_eq!(
-                models_reduct(left.theory(), &lm, &lj, Limits::default(), &control).unwrap(),
-                models_reduct(right.theory(), &rm, &rj, Limits::default(), &control).unwrap(),
+                models_reduct(left.theory(), &lm, &lj, Limits::default(), &cancellation).unwrap(),
+                models_reduct(right.theory(), &rm, &rj, Limits::default(), &cancellation).unwrap(),
                 "M={candidate}, J={tested}"
             );
         }

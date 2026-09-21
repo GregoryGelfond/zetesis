@@ -1,7 +1,7 @@
 //! Retention failure preserves the last completely admitted incumbent.
 
 use zetesis_core::Model;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
 };
@@ -19,11 +19,14 @@ fn fixture() -> (AdmittedFormula, Model, Model) {
     .unwrap();
     // Use genuinely checked answers; order the two verified models explicitly
     // so this retention test does not assume a SAT enumeration order.
-    let mut answers =
-        Session::enumerate(PreparedInput::formula(&owner), config(), Control::default())
-            .unwrap()
-            .map(|answer| answer.unwrap().into_interpretation())
-            .collect::<Vec<_>>();
+    let mut answers = Session::enumerate(
+        PreparedInput::formula(&owner),
+        config(),
+        Cancellation::default(),
+    )
+    .unwrap()
+    .map(|answer| answer.unwrap().into_interpretation())
+    .collect::<Vec<_>>();
     answers.sort_by_key(|model| model.atoms().len());
     assert_eq!(
         answers.iter().map(|m| m.atoms().len()).collect::<Vec<_>>(),
@@ -59,13 +62,18 @@ fn refused_improvement_preserves_the_old_incumbent() {
                 owner.objectives(),
                 first.clone(),
                 &options,
-                &Control::default()
+                &Cancellation::default()
             )
             .unwrap()
     );
     let before = retained.retention.payload();
     assert!(matches!(
-        retained.consider(owner.objectives(), second, &options, &Control::default()),
+        retained.consider(
+            owner.objectives(),
+            second,
+            &options,
+            &Cancellation::default()
+        ),
         Err(Interruption::Incumbent(OptimizationStop::Bytes)),
     ));
     assert_eq!(retained.models, [first]);
@@ -86,7 +94,12 @@ fn improvement_replaces_the_complete_charge() {
     };
     let mut retained = Incumbents::default();
     retained
-        .consider(owner.objectives(), first, &options, &Control::default())
+        .consider(
+            owner.objectives(),
+            first,
+            &options,
+            &Cancellation::default(),
+        )
         .unwrap();
     assert!(
         retained
@@ -94,7 +107,7 @@ fn improvement_replaces_the_complete_charge() {
                 owner.objectives(),
                 second.clone(),
                 &options,
-                &Control::default()
+                &Cancellation::default()
             )
             .unwrap()
     );

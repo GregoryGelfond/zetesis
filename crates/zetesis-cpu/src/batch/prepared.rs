@@ -6,7 +6,9 @@ use rayon::iter::plumbing::{Producer, ProducerCallback};
 use zetesis_core::{Program, SeedView};
 
 use super::{BatchError, QueryStatistics};
-use crate::{Check, ClosureWorkspace, Control, Limits, PreparationLimits, PreparedQueries, Stop};
+use crate::{
+    Cancellation, Check, ClosureWorkspace, Limits, PreparationLimits, PreparedQueries, Stop,
+};
 
 #[derive(Default)]
 pub(super) struct Cache {
@@ -116,9 +118,9 @@ impl Cache {
         count: usize,
         limits: PreparationLimits,
         collective: usize,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<(), BatchError> {
-        control.poll().map_err(BatchError::Preparation)?;
+        cancellation.poll().map_err(BatchError::Preparation)?;
         if self
             .prepared
             .as_ref()
@@ -138,7 +140,8 @@ impl Cache {
                 .checked_add(1)
                 .ok_or(BatchError::Preparation(Stop::WorkLimit))?;
             self.prepared = Some(
-                PreparedQueries::new(program, limits, control).map_err(BatchError::Preparation)?,
+                PreparedQueries::new(program, limits, cancellation)
+                    .map_err(BatchError::Preparation)?,
             );
             self.builds = builds;
         }
@@ -193,7 +196,7 @@ impl Cache {
         length: usize,
         active: usize,
         limits: Limits,
-        control: &'a Control,
+        cancellation: &'a Cancellation,
     ) -> Execution<'a> {
         Execution {
             prepared: self
@@ -203,7 +206,7 @@ impl Cache {
             workspaces: &mut self.workspaces[..active],
             length,
             limits,
-            control,
+            cancellation,
         }
     }
 }
@@ -224,7 +227,7 @@ pub(super) struct Execution<'a> {
     workspaces: &'a mut [ClosureWorkspace],
     length: usize,
     limits: Limits,
-    control: &'a Control,
+    cancellation: &'a Cancellation,
 }
 
 impl<'seed> ProducerCallback<SeedView<'seed>> for Execution<'_> {
@@ -249,7 +252,7 @@ impl Execution<'_> {
                 .into_iter()
                 .map(|seed| {
                     self.prepared
-                        .check_view(seed, workspace, self.limits, self.control)
+                        .check_view(seed, workspace, self.limits, self.cancellation)
                 })
                 .collect();
         }
@@ -268,7 +271,7 @@ impl Execution<'_> {
                     workspaces: left_slots,
                     length: left_length,
                     limits: self.limits,
-                    control: self.control,
+                    cancellation: self.cancellation,
                 }
                 .run(left_rows)
             },
@@ -278,7 +281,7 @@ impl Execution<'_> {
                     workspaces: right_slots,
                     length: self.length - left_length,
                     limits: self.limits,
-                    control: self.control,
+                    cancellation: self.cancellation,
                 }
                 .run(right_rows)
             },

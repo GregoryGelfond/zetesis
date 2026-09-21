@@ -107,7 +107,7 @@ pub(crate) fn row_values<'source>(
 
 #[derive(Default)]
 pub(crate) struct Counters {
-    control: Option<zetesis_cpu::Control>,
+    cancellation: Option<zetesis_cpu::Cancellation>,
     pub work: u64,
     pub substitutions: u64,
     generated_values: BTreeSet<Value>,
@@ -136,8 +136,8 @@ impl Counters {
         limits: &FormulaLimits,
         location: Location,
     ) -> Result<(), FormulaFailure> {
-        if let Some(control) = &self.control {
-            control
+        if let Some(cancellation) = &self.cancellation {
+            cancellation
                 .poll()
                 .map_err(|reason| FormulaFailure::Interrupted { reason, location })?;
         }

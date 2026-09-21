@@ -6,7 +6,7 @@
 //! instance coverage and completed admission remain separate prerequisites.
 
 use zetesis_core::Model;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_objective::Score;
 use zetesis_themelios::{ConstraintChecker, ConstraintVerdict, HybridFormula};
 
@@ -50,7 +50,7 @@ impl<'a> HybridSession<'a> {
         config: &SolveConfig,
         resources: crate::session::Executors<'_>,
         observations: &mut impl ExecutionSink,
-        control: &Control,
+        cancellation: &Cancellation,
         phases: &Recorder,
         selection: AnswerSelection,
     ) -> Result<Self, SolveError> {
@@ -89,7 +89,7 @@ impl<'a> HybridSession<'a> {
             &core_config,
             resources,
             observations,
-            control,
+            cancellation,
             phases,
             selection,
         )?;
@@ -107,7 +107,7 @@ impl<'a> HybridSession<'a> {
         &mut self,
         config: &SolveConfig,
         observations: &mut impl ExecutionSink,
-        control: &Control,
+        cancellation: &Cancellation,
         phases: &Recorder,
     ) -> Option<Result<(Model, Option<Score>), SolveError>> {
         if self.final_outcome.is_some() {
@@ -120,7 +120,7 @@ impl<'a> HybridSession<'a> {
         loop {
             let model = match self
                 .core
-                .next(&self.core_config, observations, control, phases)
+                .next(&self.core_config, observations, cancellation, phases)
             {
                 Some(Ok((model, _))) => model,
                 Some(Err(error)) => {
@@ -139,7 +139,7 @@ impl<'a> HybridSession<'a> {
             self.statistics.core_answers = count;
             self.statistics.pending = 1;
             let checked = phases.measure(SolvePhase::OriginalValidation, || {
-                self.checker.check(&model, control)
+                self.checker.check(&model, cancellation)
             });
             self.statistics.constraints = self.checker.statistics();
             match checked {

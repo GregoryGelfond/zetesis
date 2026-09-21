@@ -4,7 +4,7 @@
 #[path = "support/physical.rs"]
 mod physical;
 
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, FrozenReduct, Interpretation, Limits, Node, Theory, Verdict, check,
 };
@@ -73,7 +73,7 @@ fn compare(oracle: &mut GpuFormulaOracle, theory: &Theory) -> (usize, usize) {
                 max_subsets: 8,
                 ..Limits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         assert_eq!(
@@ -305,10 +305,10 @@ fn qualify_subset_strides(oracle: &mut GpuFormulaOracle) {
             // asserted fact. No enumeration of 2^131 subsets is needed.
             let witness = Interpretation::new(&graph, (0..131).filter(|a| a != omitted)).unwrap();
             let reduct =
-                FrozenReduct::new(&candidate, Limits::default(), &Control::default()).unwrap();
+                FrozenReduct::new(&candidate, Limits::default(), &Cancellation::default()).unwrap();
             assert!(
                 reduct
-                    .is_satisfied_by(&witness, Limits::default(), &Control::default())
+                    .is_satisfied_by(&witness, Limits::default(), &Cancellation::default())
                     .unwrap()
             );
         }

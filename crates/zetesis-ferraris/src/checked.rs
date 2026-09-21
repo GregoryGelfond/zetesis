@@ -1,6 +1,6 @@
 //! Owned native decisions bound to the candidate and theory actually checked.
 
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 
 use crate::{Check, Interpretation, Limits, Statistics, Theory, Verdict};
 
@@ -111,8 +111,8 @@ impl StableInterpretation {
 pub fn check_interpretation(
     candidate: Interpretation,
     limits: Limits,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<CheckedInterpretation, Stop> {
-    let check = crate::check(candidate.theory(), &candidate, limits, control)?;
+    let check = crate::check(candidate.theory(), &candidate, limits, cancellation)?;
     Ok(CheckedInterpretation { candidate, check })
 }

@@ -151,7 +151,7 @@ fn cold_preparation_refusals(
         .propagate_batch(old, candidates, FormulaLimits::default())
         .unwrap();
     assert!(oracle.last_batch_stats().unwrap().theory_uploaded);
-    let cancelled = Control::default();
+    let cancelled = Cancellation::default();
     cancelled.cancel();
     let epoch = oracle.epoch;
     // Directly enter the host preparation phase, after the public pre-poll.
@@ -409,10 +409,10 @@ fn submission_receipt(backend: GpuBackendPreference) {
     }
     oracle.propagate_batch(&theory, &[], limits).unwrap();
     assert_eq!(oracle.last_submission_candidates(), None);
-    let cancelled = Control::default();
+    let cancelled = Cancellation::default();
     cancelled.cancel();
     let failure = oracle
-        .propagate_batch_with_control(&theory, &candidates, limits, &cancelled)
+        .propagate_batch_with_cancellation(&theory, &candidates, limits, &cancelled)
         .unwrap_err();
     assert_eq!(failure.interruption(), Some(zetesis_cpu::Stop::Cancelled));
     assert_eq!(oracle.last_submission_candidates(), None);
@@ -438,7 +438,7 @@ fn submitted_interruption(
     oracle: &mut GpuFormulaOracle,
     candidates: &[Interpretation],
     limits: FormulaLimits,
-    cancelled: &Control,
+    cancelled: &Cancellation,
 ) {
     // Invoke the same transport after host admission with already-stopped control.
     // The receipt is written only after queue.submit; readback then observes Stop.

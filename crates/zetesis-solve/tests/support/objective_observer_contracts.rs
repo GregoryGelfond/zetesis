@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::io;
 
 use zetesis_core::Model;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Interpretation;
 use zetesis_sat::{Limits, StableModels};
 use zetesis_themelios::{
@@ -20,13 +20,13 @@ use crate::{ExecutionObservation, ExecutionObserver, SolveConfig, SolveError};
 fn by_clauses(
     theory: &zetesis_ferraris::Theory,
     limits: zetesis_sat::Limits,
-    control: zetesis_sat::Control,
+    cancellation: zetesis_sat::Cancellation,
 ) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
     zetesis_sat::StableModels::with_method(
         theory,
         zetesis_sat::SearchMethod::Clauses,
         limits,
-        control,
+        cancellation,
     )
 }
 
@@ -54,7 +54,7 @@ fn attempt(
             planned.theory(),
             &candidate,
             zetesis_ferraris::Limits::default(),
-            &Control::default()
+            &Cancellation::default()
         )
         .unwrap()
         .accepted()
@@ -64,7 +64,7 @@ fn attempt(
         planned.objectives(),
         &model,
         zetesis_objective::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let mut bounds = Bounds::new(
@@ -79,7 +79,7 @@ fn attempt(
         },
         &options,
         &mut crate::execution_observation::Ignore,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert!(bounds.plan.is_some());
@@ -87,13 +87,13 @@ fn attempt(
     if !foreign {
         limits.admission.max_variables = original.atoms().len();
     }
-    let mut models = by_clauses(original.theory(), limits, Control::default()).unwrap();
+    let mut models = by_clauses(original.theory(), limits, Cancellation::default()).unwrap();
     let result = bounds.improve(
         score.score(),
         &mut models,
         &options,
         &mut Observer(observer),
-        &Control::default(),
+        &Cancellation::default(),
     );
     assert_eq!(models.statistics().candidate_restrictions, 0);
     assert!(models.theory().same_instance(original.theory()));

@@ -6,7 +6,7 @@ use zetesis_core::{
     AdmissionLimits, Atom, AtomPattern, Predicate, Program, Sign, Template, Term, Value,
     ValueLimits, ValueNode,
 };
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_solve::{
     Backend, Completion, ExecutionObservation, ExecutionObserver, Grounder, Interruption,
     PreparedInput, SearchState, SemanticOutcome, Session, SolveConfig,
@@ -144,7 +144,7 @@ fn run(fixture: &Fixture, config: SolveConfig) -> (Vec<Vec<Atom>>, SemanticOutco
     let mut session = Session::builder(
         PreparedInput::program(&fixture.program),
         config,
-        Control::default(),
+        Cancellation::default(),
     )
     .start_observed(&mut route)
     .unwrap();
@@ -261,7 +261,7 @@ fn pending_candidate_stop_preserves_the_checked_answers_before_finalization() {
                 max_candidates: 4,
                 ..config
             },
-            Control::default(),
+            Cancellation::default(),
         )
         .start()
         .unwrap();
@@ -301,11 +301,11 @@ fn batch_storage_refusal_preserves_the_already_checked_prefix() {
     for mut config in configurations() {
         config.batch_size = NonZeroUsize::new(usize::MAX).unwrap();
         for cancel in [false, true] {
-            let control = Control::default();
+            let cancellation = Cancellation::default();
             let mut session = Session::builder(
                 PreparedInput::program(&fixture.program),
                 config,
-                control.clone(),
+                cancellation.clone(),
             )
             .start()
             .unwrap();
@@ -322,7 +322,7 @@ fn batch_storage_refusal_preserves_the_already_checked_prefix() {
             // The first one-candidate batch is complete. The next capacity is
             // unrepresentable, so this does not rely on exhausting host memory.
             if cancel {
-                control.cancel();
+                cancellation.cancel();
             }
             assert!(session.next().is_none());
             let outcome = session.outcome().unwrap();

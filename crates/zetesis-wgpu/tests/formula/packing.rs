@@ -4,7 +4,7 @@ use zetesis_ferraris::AdmissionLimits;
 
 fn prepared(theory: &Theory, device: &wgpu::Limits) -> Result<PreparedGraph, GpuError> {
     Preparation::new(theory, 2, FormulaLimits::default(), device, 7)?
-        .finish(device, &zetesis_cpu::Control::default())
+        .finish(device, &zetesis_cpu::Cancellation::default())
         .map(|(prepared, _)| prepared)
 }
 fn graph(theory: &Theory, device: &wgpu::Limits) -> Result<Graph, GpuError> {

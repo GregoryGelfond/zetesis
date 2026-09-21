@@ -84,7 +84,7 @@ pub(super) fn cost_records(source: &str) -> BTreeSet<(BTreeSet<String>, Option<V
                 admitted.objectives(),
                 &model,
                 zetesis_objective::Limits::default(),
-                &zetesis_cpu::Control::default(),
+                &zetesis_cpu::Cancellation::default(),
             )
             .unwrap();
             let score = evaluation.score();

@@ -2,7 +2,7 @@ use std::{hint::black_box, io, mem::size_of, time::Instant};
 
 use rayon::prelude::*;
 use zetesis_core::relation::{Limits, Mask, Query, Relation, Selection};
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_wgpu::{
     GpuOptions, GpuRelationExecutor, PreparedGpuRelation, RelationGpuLimits, RelationGpuMasks,
 };
@@ -40,11 +40,11 @@ use crate::{
 /// failures. A published prefix has no completion claim without Complete.
 pub fn measure(
     configuration: Configuration,
-    control: &Control,
+    cancellation: &Cancellation,
     mut emit: impl FnMut(&Event<'_>) -> io::Result<()>,
 ) -> Result<(), Error> {
     let configuration = configuration.validate()?;
-    poll(control)?;
+    poll(cancellation)?;
     emit(&Event::Start {
         schema: 2,
         configuration,
@@ -106,7 +106,7 @@ pub fn measure(
             .prepare(
                 &relation,
                 gpu_limits(configuration.max_bytes, preparation.shared_bytes)?,
-                control,
+                cancellation,
             )
             .map_err(Error::Gpu)?;
         preparation.upload_ns = Some(started.elapsed().as_nanos());
@@ -139,7 +139,7 @@ pub fn measure(
         &pool,
         prepared.as_mut(),
         &identity,
-        control,
+        cancellation,
         &mut emit,
     )
 }
@@ -173,7 +173,7 @@ fn schedule<'owner, 'source>(
     pool: &rayon::ThreadPool,
     mut prepared: Option<&mut PreparedGpuRelation<'_, 'owner, 'source>>,
     identity: &str,
-    control: &Control,
+    cancellation: &Cancellation,
     emit: &mut impl FnMut(&Event<'_>) -> io::Result<()>,
 ) -> Result<(), Error> {
     let mut observations = 0;
@@ -185,7 +185,7 @@ fn schedule<'owner, 'source>(
         for repetition in 0..repetitions {
             for route in [Route::Scalar, Route::Rayon] {
                 let started = Instant::now();
-                let batch = cpu_batch(frame, route, pool, control)?;
+                let batch = cpu_batch(frame, route, pool, cancellation)?;
                 let elapsed = started.elapsed().as_nanos();
                 publish(
                     frame,
@@ -197,14 +197,14 @@ fn schedule<'owner, 'source>(
                         elapsed,
                     },
                     identity,
-                    control,
+                    cancellation,
                     emit,
                 )?;
                 observations += 1;
             }
             if let Some(prepared) = prepared.as_mut() {
                 let started = Instant::now();
-                let batch = gpu_batch(frame, prepared, control)?;
+                let batch = gpu_batch(frame, prepared, cancellation)?;
                 let elapsed = started.elapsed().as_nanos();
                 let route = match frame.configuration.backend {
                     Backend::Metal => Route::Metal,
@@ -221,14 +221,14 @@ fn schedule<'owner, 'source>(
                         elapsed,
                     },
                     identity,
-                    control,
+                    cancellation,
                     emit,
                 )?;
                 observations += 1;
             }
         }
     }
-    poll(control)?;
+    poll(cancellation)?;
     emit(&Event::Complete { observations }).map_err(Error::Output)
 }
 
@@ -335,9 +335,9 @@ fn cpu_batch(
     frame: &Frame<'_, '_>,
     route: Route,
     pool: &rayon::ThreadPool,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<Batch, Error> {
-    poll(control)?;
+    poll(cancellation)?;
     let workers = if route == Route::Rayon {
         frame.configuration.workers.min(frame.queries.len())
     } else {
@@ -350,7 +350,7 @@ fn cpu_batch(
     work.resize(frame.queries.len(), 0u128);
     let select =
         |((query, words), work): ((&Query<'_, '_>, &mut [u32]), &mut u128)| -> Result<(), Error> {
-            poll(control)?;
+            poll(cancellation)?;
             let maximum = frame.relation.storage().retained_bytes
                 + query.retained_bytes()
                 + frame.input.retained_bytes()
@@ -401,9 +401,9 @@ fn cpu_batch(
 fn gpu_batch<'owner, 'source>(
     frame: &Frame<'owner, 'source>,
     prepared: &mut PreparedGpuRelation<'_, 'owner, 'source>,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<Batch, Error> {
-    poll(control)?;
+    poll(cancellation)?;
     let reconstruction = frame.capacity(0)?;
     let mut masks = vector(frame.words() * frame.queries.len())?;
     let limits = gpu_limits(
@@ -411,7 +411,7 @@ fn gpu_batch<'owner, 'source>(
         frame.shared_bytes + frame.mask_bytes() + size_of::<RelationGpuMasks<'_, '_>>(),
     )?;
     let output = prepared
-        .filter(frame.queries, limits, control)
+        .filter(frame.queries, limits, cancellation)
         .map_err(Error::Gpu)?;
     if output.query_count() != frame.queries.len() || !frame.relation.same_owner(output.relation())
     {
@@ -451,14 +451,14 @@ fn publish(
     batch: &Batch,
     sample: Sample,
     identity: &str,
-    control: &Control,
+    cancellation: &Cancellation,
     emit: &mut impl FnMut(&Event<'_>) -> io::Result<()>,
 ) -> Result<(), Error> {
-    validate(frame, &batch.masks, control)?;
+    validate(frame, &batch.masks, cancellation)?;
     let started = Instant::now();
     let mut cells = 0;
     for words in batch.masks.chunks(frame.words()) {
-        poll(control)?;
+        poll(cancellation)?;
         let selection = frame
             .relation
             .selection_from_mask(words, frame.decoding_limits())
@@ -501,12 +501,16 @@ fn publish(
     .map_err(Error::Output)
 }
 
-fn validate(frame: &Frame<'_, '_>, masks: &[u32], control: &Control) -> Result<(), Error> {
+fn validate(
+    frame: &Frame<'_, '_>,
+    masks: &[u32],
+    cancellation: &Cancellation,
+) -> Result<(), Error> {
     if masks.len() != frame.words() * frame.queries.len() {
         return Err(Error::Parity);
     }
     for (query, words) in masks.chunks(frame.words()).enumerate() {
-        poll(control)?;
+        poll(cancellation)?;
         let expected = frame
             .fixture
             .reference_positions(query, frame.configuration.rows)
@@ -570,8 +574,8 @@ fn vector<T>(count: usize) -> Result<Vec<T>, Error> {
     }
     Ok(values)
 }
-fn poll(control: &Control) -> Result<(), Error> {
-    control.poll().map_err(Error::Stopped)
+fn poll(cancellation: &Cancellation) -> Result<(), Error> {
+    cancellation.poll().map_err(Error::Stopped)
 }
 
 #[cfg(test)]

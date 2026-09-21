@@ -55,8 +55,9 @@ fn expected(value: i32) -> Model {
 #[test]
 fn repeated_candidates_reuse_empty_query_capacity() {
     let program = program();
-    let control = Control::default();
-    let prepared = PreparedQueries::new(&program, PreparationLimits::default(), &control).unwrap();
+    let cancellation = Cancellation::default();
+    let prepared =
+        PreparedQueries::new(&program, PreparationLimits::default(), &cancellation).unwrap();
     // Four templates and two positive occurrences; two passes of the bound
     // inference at sixteen each; three predicates offered a layout; the
     // block-step plan, a unit and a unit a term for each occurrence, four and
@@ -68,7 +69,7 @@ fn repeated_candidates_reuse_empty_query_capacity() {
             Seed::new(&program, [atom("s", 1)]).unwrap().view(),
             &mut workspace,
             Limits::default(),
-            &control,
+            &cancellation,
         )
         .unwrap();
     let cursor = workspace.buffers.cursors.as_ptr();
@@ -83,9 +84,14 @@ fn repeated_candidates_reuse_empty_query_capacity() {
             let value = if index % 2 == 0 { 2 } else { 1 };
             let seed = Seed::new(&program, [atom("s", value)]).unwrap();
             let reused = prepared
-                .check_view(seed.view(), &mut workspace, Limits::default(), &control)
+                .check_view(
+                    seed.view(),
+                    &mut workspace,
+                    Limits::default(),
+                    &cancellation,
+                )
                 .unwrap();
-            let fresh = crate::check(&program, &seed, Limits::default(), &control).unwrap();
+            let fresh = crate::check(&program, &seed, Limits::default(), &cancellation).unwrap();
             assert!(reused.accepted());
             assert_eq!(reused.closure(), &expected(value));
             assert_eq!(reused.closure(), fresh.closure());
@@ -111,8 +117,9 @@ fn repeated_candidates_reuse_empty_query_capacity() {
 #[test]
 fn failed_candidates_cannot_retain_truth() {
     let program = program();
-    let control = Control::default();
-    let prepared = PreparedQueries::new(&program, PreparationLimits::default(), &control).unwrap();
+    let cancellation = Cancellation::default();
+    let prepared =
+        PreparedQueries::new(&program, PreparationLimits::default(), &cancellation).unwrap();
     let first_seed = Seed::new(&program, [atom("s", 1)]).unwrap();
     let mut workspace = ClosureWorkspace::default();
     let reference = prepared
@@ -120,7 +127,7 @@ fn failed_candidates_cannot_retain_truth() {
             first_seed.view(),
             &mut workspace,
             Limits::default(),
-            &control,
+            &cancellation,
         )
         .unwrap();
     let ceiling = reference.statistics().work;
@@ -133,7 +140,7 @@ fn failed_candidates_cannot_retain_truth() {
                 max_work,
                 ..Limits::default()
             },
-            &control,
+            &cancellation,
         );
         if let Err(stop) = result {
             assert_eq!(stop, Stop::WorkLimit);
@@ -144,7 +151,7 @@ fn failed_candidates_cannot_retain_truth() {
                     Seed::new(&program, [atom("s", 2)]).unwrap().view(),
                     &mut workspace,
                     Limits::default(),
-                    &control,
+                    &cancellation,
                 )
                 .unwrap();
             assert!(next.accepted());
@@ -162,15 +169,16 @@ fn a_stopped_cube_closure_retires_the_workspace() {
     // workspace retired, and the next closure on that workspace is the
     // closure a fresh one computes.
     let program = program();
-    let control = Control::default();
-    let prepared = PreparedQueries::new(&program, PreparationLimits::default(), &control).unwrap();
+    let cancellation = Cancellation::default();
+    let prepared =
+        PreparedQueries::new(&program, PreparationLimits::default(), &cancellation).unwrap();
     let cube = super::super::Cube::all_open();
     let reference = prepared
         .closure_of(
             super::super::Gates::Definite((&cube).into()),
             &mut ClosureWorkspace::default(),
             Limits::default(),
-            &control,
+            &cancellation,
         )
         .unwrap();
     let empty = ClosureWorkspace::default().retained_bytes().unwrap();
@@ -184,7 +192,7 @@ fn a_stopped_cube_closure_retires_the_workspace() {
                 max_work,
                 ..Limits::default()
             },
-            &control,
+            &cancellation,
         );
         match result {
             Err(stop) => {
@@ -197,7 +205,7 @@ fn a_stopped_cube_closure_retires_the_workspace() {
                         super::super::Gates::Possible((&cube).into()),
                         &mut workspace,
                         Limits::default(),
-                        &control,
+                        &cancellation,
                     )
                     .unwrap();
                 assert!(next.atoms.atoms().len() >= reference.atoms.atoms().len());
@@ -211,12 +219,18 @@ fn a_stopped_cube_closure_retires_the_workspace() {
 #[test]
 fn changed_byte_limits_admit_retained_capacity_first() {
     let program = program();
-    let control = Control::default();
-    let prepared = PreparedQueries::new(&program, PreparationLimits::default(), &control).unwrap();
+    let cancellation = Cancellation::default();
+    let prepared =
+        PreparedQueries::new(&program, PreparationLimits::default(), &cancellation).unwrap();
     let seed = Seed::new(&program, [atom("s", 1)]).unwrap();
     let mut workspace = ClosureWorkspace::default();
     let original = prepared
-        .check_view(seed.view(), &mut workspace, Limits::default(), &control)
+        .check_view(
+            seed.view(),
+            &mut workspace,
+            Limits::default(),
+            &cancellation,
+        )
         .unwrap();
     let limit = usize::try_from(workspace.retained_bytes().unwrap()).unwrap()
         + prepared.statistics().retained_bytes
@@ -228,7 +242,7 @@ fn changed_byte_limits_admit_retained_capacity_first() {
             max_closure_bytes: limit,
             ..Limits::default()
         },
-        &control,
+        &cancellation,
     ) else {
         panic!("retained owners must be admitted before reuse");
     };
@@ -244,8 +258,9 @@ fn changed_byte_limits_admit_retained_capacity_first() {
 fn preparation_is_bound_to_the_exact_program() {
     let program = program();
     let other = self::program();
-    let control = Control::default();
-    let prepared = PreparedQueries::new(&program, PreparationLimits::default(), &control).unwrap();
+    let cancellation = Cancellation::default();
+    let prepared =
+        PreparedQueries::new(&program, PreparationLimits::default(), &cancellation).unwrap();
     assert!(prepared.program().same_instance(&program));
     let mut workspace = ClosureWorkspace::default();
     let first = prepared
@@ -253,18 +268,28 @@ fn preparation_is_bound_to_the_exact_program() {
             Seed::new(&program, [atom("s", 2)]).unwrap().view(),
             &mut workspace,
             Limits::default(),
-            &control,
+            &cancellation,
         )
         .unwrap();
     let seed = Seed::new(&other, [atom("s", 1)]).unwrap();
     assert!(matches!(
-        prepared.check_view(seed.view(), &mut workspace, Limits::default(), &control),
+        prepared.check_view(
+            seed.view(),
+            &mut workspace,
+            Limits::default(),
+            &cancellation
+        ),
         Err(Stop::WrongProgram)
     ));
     let other_prepared =
-        PreparedQueries::new(&other, PreparationLimits::default(), &control).unwrap();
+        PreparedQueries::new(&other, PreparationLimits::default(), &cancellation).unwrap();
     let completed = other_prepared
-        .check_view(seed.view(), &mut workspace, Limits::default(), &control)
+        .check_view(
+            seed.view(),
+            &mut workspace,
+            Limits::default(),
+            &cancellation,
+        )
         .unwrap();
     assert!(completed.program().same_instance(&other));
     assert_eq!(completed.closure(), &expected(1));
@@ -274,8 +299,9 @@ fn preparation_is_bound_to_the_exact_program() {
 #[test]
 fn preparation_refuses_its_own_work_boundary() {
     let program = program();
-    let control = Control::default();
-    let prepared = PreparedQueries::new(&program, PreparationLimits::default(), &control).unwrap();
+    let cancellation = Cancellation::default();
+    let prepared =
+        PreparedQueries::new(&program, PreparationLimits::default(), &cancellation).unwrap();
     assert!(matches!(
         PreparedQueries::new(
             &program,
@@ -283,7 +309,7 @@ fn preparation_refuses_its_own_work_boundary() {
                 max_work: prepared.statistics().work - 1,
                 ..PreparationLimits::default()
             },
-            &control
+            &cancellation
         ),
         Err(Stop::WorkLimit)
     ));
@@ -294,7 +320,7 @@ fn preparation_refuses_its_own_work_boundary() {
             max_bytes: prepared.statistics().retained_bytes,
             ..PreparationLimits::default()
         },
-        &control,
+        &cancellation,
     )
     .unwrap();
     assert_eq!(exact.statistics(), prepared.statistics());
@@ -303,8 +329,9 @@ fn preparation_refuses_its_own_work_boundary() {
 #[test]
 fn preparation_refuses_its_own_byte_boundary() {
     let program = program();
-    let control = Control::default();
-    let prepared = PreparedQueries::new(&program, PreparationLimits::default(), &control).unwrap();
+    let cancellation = Cancellation::default();
+    let prepared =
+        PreparedQueries::new(&program, PreparationLimits::default(), &cancellation).unwrap();
     assert!(matches!(
         PreparedQueries::new(
             &program,
@@ -312,7 +339,7 @@ fn preparation_refuses_its_own_byte_boundary() {
                 max_bytes: prepared.statistics().retained_bytes - 1,
                 ..PreparationLimits::default()
             },
-            &control
+            &cancellation
         ),
         Err(Stop::StorageLimit)
     ));
@@ -321,8 +348,9 @@ fn preparation_refuses_its_own_byte_boundary() {
 #[test]
 fn prepared_empty_checks_admit_their_retained_owners() {
     let program = Program::new(vec![], AdmissionLimits::default()).unwrap();
-    let control = Control::default();
-    let prepared = PreparedQueries::new(&program, PreparationLimits::default(), &control).unwrap();
+    let cancellation = Cancellation::default();
+    let prepared =
+        PreparedQueries::new(&program, PreparationLimits::default(), &cancellation).unwrap();
     let seed = Seed::new(&program, []).unwrap();
     let mut workspace = ClosureWorkspace::default();
     let named = usize::try_from(workspace.retained_bytes().unwrap()).unwrap()
@@ -335,7 +363,7 @@ fn prepared_empty_checks_admit_their_retained_owners() {
                 max_closure_bytes: 0,
                 ..Limits::default()
             },
-            &control
+            &cancellation
         ),
         Err(Stop::StorageLimit)
     ));
@@ -347,7 +375,7 @@ fn prepared_empty_checks_admit_their_retained_owners() {
                 max_closure_bytes: named,
                 ..Limits::default()
             },
-            &control,
+            &cancellation,
         )
         .unwrap();
     assert_eq!(exact.closure(), &Model::default());

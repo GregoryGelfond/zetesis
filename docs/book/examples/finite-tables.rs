@@ -3,7 +3,7 @@
 // ANCHOR: example
 use zetesis_core::{Atom, Predicate, Value, relation::Relation};
 use zetesis_cpu::{
-    Control,
+    Cancellation,
     table::{Domain, Limits, Table},
 };
 
@@ -19,19 +19,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .collect::<Result<Vec<_>, _>>()?;
     let relation = Relation::from_atoms(&pair, &atoms, zetesis_core::relation::Limits::default())?;
-    let control = Control::default();
-    let table = Table::prepare(&relation, &[0, 1], Limits::default(), &control)?;
+    let cancellation = Cancellation::default();
+    let table = Table::prepare(&relation, &[0, 1], Limits::default(), &cancellation)?;
     let departure = Value::Number(1);
     let selected = table.select(
         &[Domain::Singleton(&departure), Domain::Unrestricted],
         Limits::default(),
-        &control,
+        &cancellation,
     )?;
     assert_eq!(selected.rows().collect::<Vec<_>>(), vec![0, 1]);
 
     let departures = [Value::Number(1), Value::Number(2)];
     let arrivals = [Value::Number(3)];
-    let restricted = table.project(&[&departures, &arrivals], Limits::default(), &control)?;
+    let restricted = table.project(&[&departures, &arrivals], Limits::default(), &cancellation)?;
     assert_eq!(
         restricted.domain(0).unwrap().collect::<Vec<_>>(),
         vec![&Value::Number(1)]
@@ -40,7 +40,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert!(!restricted.contains(0));
 
     let arrivals = [Value::Number(2), Value::Number(3), Value::Number(4)];
-    let restored = table.project(&[&departures, &arrivals], Limits::default(), &control)?;
+    let restored = table.project(&[&departures, &arrivals], Limits::default(), &cancellation)?;
     assert_eq!(
         restored.domain(0).unwrap().collect::<Vec<_>>(),
         departures.iter().collect::<Vec<_>>()

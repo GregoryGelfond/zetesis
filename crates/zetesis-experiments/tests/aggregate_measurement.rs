@@ -1,7 +1,7 @@
 //! Matched aggregate measurements preserve exact values and failed prefixes.
 use clap::Parser;
 use std::{io, num::NonZeroUsize, time::Duration};
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_experiments::{
     Backend, CommandOptions, Experiment,
     aggregate_measurement::{
@@ -148,11 +148,11 @@ fn timed_route_rotation_is_independent_of_warmups() {
 
 #[test]
 fn interrupted_reductions_preserve_attempt_accounting() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut failed = false;
-    let error = measurement::measure_with_control(&configuration(), &control, |event| {
+    let error = measurement::measure_with_cancellation(&configuration(), &cancellation, |event| {
         if matches!(event, Event::Prepared { .. }) {
-            control.cancel();
+            cancellation.cancel();
         }
         if let Event::Failed { observation, .. } = event {
             failed = true;
@@ -242,16 +242,16 @@ fn every_refused_event_stops_the_publication_prefix() {
 fn cancelled_pool_callback_prevents_physical_setup() {
     let mut configuration = configuration();
     configuration.backend = Backend::Metal;
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut observed = 0;
-    let error = measurement::measure_with_control(&configuration, &control, |event| {
+    let error = measurement::measure_with_cancellation(&configuration, &cancellation, |event| {
         observed += 1;
         match event {
             Event::Configuration { .. } => {}
             Event::Setup {
                 route: Route::Rayon,
                 ..
-            } => control.cancel(),
+            } => cancellation.cancel(),
             _ => panic!("cancelled callback proceeded to device setup"),
         }
         Ok(())
@@ -263,13 +263,13 @@ fn cancelled_pool_callback_prevents_physical_setup() {
 
 #[test]
 fn final_sample_cancellation_omits_completion() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut samples = 0;
-    let error = measurement::measure_with_control(&configuration(), &control, |event| {
+    let error = measurement::measure_with_cancellation(&configuration(), &cancellation, |event| {
         if matches!(event, Event::Sample { .. }) {
             samples += 1;
             if samples == 4 {
-                control.cancel();
+                cancellation.cancel();
             }
         }
         assert!(!matches!(event, Event::Complete { .. }));

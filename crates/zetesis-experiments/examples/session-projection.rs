@@ -18,7 +18,7 @@ use std::{
 use clap::Parser;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     Backend, Completion, ExecutionObservation, ExecutionObserver, ExecutionResources, Grounder,
     Oracle, PreparedInput, Session, SolveConfig, WorldView, WorldViewLimits,
@@ -142,7 +142,11 @@ fn measure(
         parallel: false,
     };
     let started = Instant::now();
-    let builder = Session::builder(PreparedInput::formula(admitted), config, Control::default());
+    let builder = Session::builder(
+        PreparedInput::formula(admitted),
+        config,
+        Cancellation::default(),
+    );
     let builder = if let Some(resources) = &resources {
         builder.resources(resources)
     } else {

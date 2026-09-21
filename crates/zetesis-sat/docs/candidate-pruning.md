@@ -107,7 +107,7 @@ reservation or publication. A larger length is a typed shape refusal
 (`Incomplete::Admission(AdmissionError::Overflow)`), including when the caller
 raises the logical admission limits. Host arithmetic overflow is still reported
 as `CounterOverflow`, and a representable but failed reservation as `Allocation`.
-Control is checked before these bounds; prior prefix work remains charged.
+`Cancellation` is polled before these bounds; prior prefix work remains charged.
 
 The finite defaults are 1,000,000 keys, 12,582,913 nodes and 128 MiB of named
 history capacity. These constants are independent of `AdmissionLimits`.

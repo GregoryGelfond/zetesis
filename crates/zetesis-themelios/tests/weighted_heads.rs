@@ -12,7 +12,7 @@ use std::collections::BTreeSet;
 use cases::CASES;
 use reference::{Models, atom_text, exhaustive, external, holds, native, values};
 use themelios_base::source::SourceId;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, CountPlanLimits, CountPlanStatus, ExpansionFailure,
     ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource,
@@ -539,7 +539,7 @@ fn optional_planning_declines_weighted_aliases() {
             FormulaLimits::default(),
         )
         .unwrap()
-        .ground_with_count_plan(CountPlanLimits::default(), &Control::default(), None)
+        .ground_with_count_plan(CountPlanLimits::default(), &Cancellation::default(), None)
         .unwrap();
         assert!(
             matches!(planned.count_plan(), CountPlanStatus::NoPlan(_)),
@@ -564,7 +564,7 @@ fn weighted_aliases_preserve_other_count_certificates() {
         FormulaLimits::default(),
     )
     .unwrap()
-    .ground_with_count_plan(CountPlanLimits::default(), &Control::default(), None)
+    .ground_with_count_plan(CountPlanLimits::default(), &Cancellation::default(), None)
     .unwrap();
     let CountPlanStatus::Ready(plan) = planned.count_plan() else {
         panic!("the disjoint count partition remains applicable");

@@ -1,7 +1,7 @@
 //! Broken iterator size claims must refuse rather than index a missing world.
 
 use zetesis_core::{AdmissionLimits, Program, Seed, SeedView};
-use zetesis_cpu::{Control, Stop, lazy};
+use zetesis_cpu::{Cancellation, Stop, lazy};
 
 struct Views<'a> {
     seed: SeedView<'a>,
@@ -56,7 +56,7 @@ fn false_count_claims_refuse_before_source_work() {
             &program,
             views,
             lazy::Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
             |_| -> Result<Vec<u32>, Stop> { panic!("bad count must not execute") },
         )
         .unwrap_err();
@@ -84,7 +84,7 @@ fn changed_final_iteration_cannot_publish_missing_worlds() {
             &program,
             views,
             lazy::Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
             lazy::evaluate,
         )
         .unwrap_err();
@@ -112,7 +112,7 @@ fn changed_packing_count_refuses_before_evaluation() {
             &program,
             views,
             lazy::Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
             |_| -> Result<Vec<u32>, Stop> { panic!("packing count mismatch must not execute") },
         )
         .unwrap_err();

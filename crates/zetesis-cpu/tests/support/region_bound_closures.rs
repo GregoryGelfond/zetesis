@@ -21,7 +21,8 @@ fn cycle() -> Program {
 }
 
 fn bounded(program: &Program) -> Candidates<'_> {
-    let mut candidates = Candidates::new(program, CandidateLimits::default(), Control::default());
+    let mut candidates =
+        Candidates::new(program, CandidateLimits::default(), Cancellation::default());
     candidates.bounded(Limits::default());
     candidates.prepare_bounds().unwrap();
     assert!(matches!(candidates.narrowing, NarrowingState::Applied(_)));
@@ -67,7 +68,8 @@ fn closures<'a>(candidates: &'a mut Candidates<'_>) -> &'a mut Closures {
 fn borrowed_passes_match_materialized_passes() {
     let program = cycle();
     let mut candidates = bounded(&program);
-    let mut reference = Closures::new(&program, Limits::default(), Control::default()).unwrap();
+    let mut reference =
+        Closures::new(&program, Limits::default(), Cancellation::default()).unwrap();
     let root = candidates.root.clone();
     let held = candidates.root_must.clone();
     assert_eq!(root.len(), 3);
@@ -117,8 +119,10 @@ fn borrowed_passes_preserve_work_refusals() {
     // boundaries. Fresh, identically prepared workspaces prevent prior capacity
     // histories from changing either side's accounting premise.
     for max_work in 0..=256 {
-        let mut reference = Closures::new(&program, Limits::default(), Control::default()).unwrap();
-        let mut borrowed = Closures::new(&program, Limits::default(), Control::default()).unwrap();
+        let mut reference =
+            Closures::new(&program, Limits::default(), Cancellation::default()).unwrap();
+        let mut borrowed =
+            Closures::new(&program, Limits::default(), Cancellation::default()).unwrap();
         reference.limits.max_work = max_work;
         borrowed.limits.max_work = max_work;
         let mut cube = materialize(&candidates, &original);
@@ -185,7 +189,7 @@ fn a_stopped_upper_closure_commits_no_decisions() {
         &mut probe,
         bounds,
         closures.limits,
-        &closures.control,
+        &closures.cancellation,
     )
     .unwrap();
     assert_eq!(lower.atoms.atoms().len(), 1);
@@ -196,7 +200,7 @@ fn a_stopped_upper_closure_commits_no_decisions() {
             &mut probe,
             bounds,
             closures.limits,
-            &closures.control
+            &closures.cancellation
         ),
         Err(Stop::DerivedAtomLimit)
     ));
@@ -244,7 +248,7 @@ fn cancellation_keeps_the_completed_region() {
         Ok(Pass::Changed)
     );
     let completed = region.clone();
-    candidates.control.cancel();
+    candidates.cancellation.cancel();
     assert_eq!(candidates.narrow_region(&mut region), Err(Stop::Cancelled));
     assert_eq!(region, completed);
     assert_eq!(region.decisions(), completed.decisions());
@@ -271,7 +275,7 @@ fn an_upper_only_constraint_does_not_refute() {
         &mut ClosureWorkspace::default(),
         Bounds::Region(&RegionBounds::new(&held, &root, &region)),
         closures.limits,
-        &closures.control,
+        &closures.cancellation,
     )
     .unwrap();
     assert!(

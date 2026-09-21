@@ -17,7 +17,7 @@ use crate::oracle::{
     definite_closure, possible_closure,
 };
 use crate::regions::{Counting, Narrowing, Region, Traversal, Visit};
-use crate::{Control, Stop};
+use crate::{Cancellation, Stop};
 use std::collections::BTreeSet;
 
 /// Explicit limits for complete seed enumeration. Zero is a real ceiling.
@@ -162,7 +162,7 @@ struct Closures {
     prepared: PreparedQueries,
     workspace: ClosureWorkspace,
     limits: Limits,
-    control: Control,
+    cancellation: Cancellation,
 }
 
 impl Closures {
@@ -171,7 +171,7 @@ impl Closures {
     /// # Errors
     /// Returns the preparation's stop: cancellation, a deadline, or its work
     /// or storage ceiling.
-    fn new(program: &Program, limits: Limits, control: Control) -> Result<Self, Stop> {
+    fn new(program: &Program, limits: Limits, cancellation: Cancellation) -> Result<Self, Stop> {
         let prepared = PreparedQueries::new(
             program,
             PreparationLimits {
@@ -179,13 +179,13 @@ impl Closures {
                 max_bytes: limits.max_closure_bytes,
                 max_dense_atoms: PreparationLimits::default().max_dense_atoms,
             },
-            &control,
+            &cancellation,
         )?;
         Ok(Self {
             prepared,
             workspace: ClosureWorkspace::default(),
             limits,
-            control,
+            cancellation,
         })
     }
 
@@ -197,7 +197,7 @@ impl Closures {
             &mut self.workspace,
             bounds,
             self.limits,
-            &self.control,
+            &self.cancellation,
         )?;
         if lower.constraint_violated {
             return Ok(Enclosure::Refuted);
@@ -207,7 +207,7 @@ impl Closures {
             &mut self.workspace,
             bounds,
             self.limits,
-            &self.control,
+            &self.cancellation,
         )?;
         Ok(Enclosure::Complete {
             lower: lower.atoms,
@@ -346,7 +346,7 @@ pub struct Candidates<'a> {
     atoms: Vec<Arc<GateAtom>>,
     bits: Vec<bool>,
     limits: CandidateLimits,
-    control: Control,
+    cancellation: Cancellation,
     emitted: u64,
     started: bool,
     termination: Option<CandidateTermination>,
@@ -368,7 +368,7 @@ pub struct Candidates<'a> {
 impl<'a> Candidates<'a> {
     /// Create an unstarted iterator without expanding the gate carrier.
     #[must_use]
-    pub fn new(program: &'a Program, limits: CandidateLimits, control: Control) -> Self {
+    pub fn new(program: &'a Program, limits: CandidateLimits, cancellation: Cancellation) -> Self {
         Self {
             program,
             carrier: program.indexed_gate_atoms(),
@@ -378,7 +378,7 @@ impl<'a> Candidates<'a> {
             atoms: Vec::new(),
             bits: Vec::new(),
             limits,
-            control,
+            cancellation,
             emitted: 0,
             started: false,
             termination: None,
@@ -413,9 +413,9 @@ impl<'a> Candidates<'a> {
         program: &'a Program,
         limits: CandidateLimits,
         restrictions: CandidateRestrictionLimits,
-        control: Control,
+        cancellation: Cancellation,
     ) -> Self {
-        let mut candidates = Self::new(program, limits, control);
+        let mut candidates = Self::new(program, limits, cancellation);
         candidates.restrictions = RestrictionState::Pending(restrictions);
         candidates
     }
@@ -488,7 +488,7 @@ impl<'a> Candidates<'a> {
     }
 
     fn selection(&mut self) -> Result<Option<SeedSelection>, Stop> {
-        self.control.poll()?;
+        self.cancellation.poll()?;
         self.prepare_bounds()?;
         if self.refuted {
             return Ok(None);
@@ -569,7 +569,7 @@ impl<'a> Candidates<'a> {
             .try_reserve(held.len())
             .map_err(|_| Stop::Allocation)?;
         for atom in held {
-            self.control.poll()?;
+            self.cancellation.poll()?;
             self.must.push(Arc::new(atom.clone()));
         }
         self.atoms
@@ -646,7 +646,7 @@ impl<'a> Candidates<'a> {
                 return Ok(None);
             };
             let candidate = materialize(selection);
-            self.control.poll()?;
+            self.cancellation.poll()?;
             self.emitted += 1;
             Ok(Some(candidate))
         });
@@ -673,7 +673,7 @@ impl<'a> Candidates<'a> {
             self.narrowing = NarrowingState::Trivial;
             return Ok(());
         }
-        let mut closures = match Closures::new(self.program, limits, self.control.clone()) {
+        let mut closures = match Closures::new(self.program, limits, self.cancellation.clone()) {
             Ok(closures) => closures,
             Err(stop @ (Stop::Cancelled | Stop::Deadline)) => return Err(stop),
             Err(stop) => {
@@ -740,14 +740,14 @@ impl<'a> Candidates<'a> {
     /// Work depends on signatures and supported atoms, not Cartesian tuples.
     /// Existing carrier-position overflow and open-atom count limits still apply.
     fn materialize_root(&mut self, may: BTreeSet<Atom>) -> Result<(), Stop> {
-        self.control.poll()?;
+        self.cancellation.poll()?;
         let index = GateIndex::new(self.program).map_err(gate_index_stop)?;
         self.statistics.cut_gate_atoms = index
             .len()
             .checked_sub(may.len())
             .ok_or(Stop::InvalidProgram)?;
         for atom in may {
-            self.control.poll()?;
+            self.cancellation.poll()?;
             if !self.root_must.contains(&atom) {
                 if self.root.len() >= self.limits.max_carrier_atoms {
                     return Err(Stop::CarrierLimit);
@@ -762,7 +762,7 @@ impl<'a> Candidates<'a> {
 
     fn prepare_restrictions(&mut self) -> Result<(), Stop> {
         if let RestrictionState::Pending(limits) = self.restrictions {
-            let attempt = Restrictions::compile(self.program, limits, &self.control);
+            let attempt = Restrictions::compile(self.program, limits, &self.cancellation);
             self.statistics.restriction_work = attempt.work;
             let plan = attempt.result?;
             self.statistics.restriction_atoms = plan.atoms;
@@ -785,7 +785,7 @@ impl<'a> Candidates<'a> {
                 &self.atoms,
                 &self.bits,
                 remaining,
-                &self.control,
+                &self.cancellation,
             );
             self.statistics.restriction_work += work;
             let Some(conflict) = result? else {
@@ -797,7 +797,7 @@ impl<'a> Candidates<'a> {
                 Conflict::Unconditional => return Ok(false),
                 Conflict::Selected(first) => {
                     for bit in &mut self.bits[..=first] {
-                        self.control.poll()?;
+                        self.cancellation.poll()?;
                         *bit = false;
                     }
                     if !self.advance_from(first + 1)? {
@@ -814,7 +814,7 @@ impl<'a> Candidates<'a> {
 
     fn advance_from(&mut self, carry: usize) -> Result<bool, Stop> {
         for bit in &mut self.bits[carry..] {
-            self.control.poll()?;
+            self.cancellation.poll()?;
             if !*bit {
                 *bit = true;
                 return Ok(true);
@@ -830,7 +830,7 @@ impl<'a> Candidates<'a> {
             return Ok(false);
         }
         let atom = loop {
-            self.control.poll()?;
+            self.cancellation.poll()?;
             let Some(atom) = self.carrier.next() else {
                 return Ok(false);
             };

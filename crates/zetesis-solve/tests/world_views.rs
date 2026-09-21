@@ -3,7 +3,7 @@
 use std::{collections::BTreeSet, convert::Infallible, io, num::NonZeroUsize, sync::Arc};
 
 use zetesis_core::{GroundProgram, StaticLimits};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     AnswerSelection, AnswerSet, Backend, Completion, ExecutionObservation, ExecutionObserver,
     ExecutionResources, Grounder, Interruption, Oracle, PreparedInput, Session, SolveConfig,
@@ -61,7 +61,7 @@ fn collect(input: PreparedInput<'_>) -> WorldView {
         input,
         config(),
         WorldViewLimits::default(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap()
 }
@@ -70,11 +70,15 @@ fn collect(input: PreparedInput<'_>) -> WorldView {
 fn builder_collection_overrides_optimal_selection() {
     let owner = formula("1 {a;b} 1. #minimize {1@2,a:a; 2@2,b:b}.");
     let resources = ExecutionResources::default();
-    let world_view = Session::builder(PreparedInput::formula(&owner), config(), Control::default())
-        .selection(AnswerSelection::Optimal)
-        .resources(&resources)
-        .collect(WorldViewLimits::default())
-        .unwrap();
+    let world_view = Session::builder(
+        PreparedInput::formula(&owner),
+        config(),
+        Cancellation::default(),
+    )
+    .selection(AnswerSelection::Optimal)
+    .resources(&resources)
+    .collect(WorldViewLimits::default())
+    .unwrap();
     let answers: BTreeSet<_> = world_view
         .answer_sets()
         .iter()
@@ -99,8 +103,12 @@ fn builder_collection_overrides_optimal_selection() {
 #[test]
 fn unrestricted_enumeration_keeps_nonoptimal_answers() {
     let owner = formula("1 {a;b} 1. #minimize {1@2,a:a; 2@2,b:b}.");
-    let mut session =
-        Session::enumerate(PreparedInput::formula(&owner), config(), Control::default()).unwrap();
+    let mut session = Session::enumerate(
+        PreparedInput::formula(&owner),
+        config(),
+        Cancellation::default(),
+    )
+    .unwrap();
     let answers: BTreeSet<_> = session
         .by_ref()
         .map(|result| {
@@ -142,7 +150,7 @@ fn unrestricted_enumeration_does_not_retain_incumbents() {
         PreparedInput::formula(&owner),
         configured,
         WorldViewLimits::default(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     assert_eq!(
@@ -161,8 +169,12 @@ fn unrestricted_enumeration_does_not_retain_incumbents() {
 #[test]
 fn selected_optimum_is_distinct_from_original_family() {
     let owner = formula("1 {a;b} 1. #minimize {1,a:a; 2,b:b}.");
-    let mut selected =
-        Session::new(PreparedInput::formula(&owner), config(), Control::default()).unwrap();
+    let mut selected = Session::new(
+        PreparedInput::formula(&owner),
+        config(),
+        Cancellation::default(),
+    )
+    .unwrap();
     let answers: Vec<_> = selected
         .by_ref()
         .map(|result| names(&result.unwrap()))
@@ -183,7 +195,7 @@ fn capped_optimal_ties_do_not_describe_every_answer() {
             models: 1,
             ..config()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     assert_eq!(selected.by_ref().count(), 1);
@@ -230,7 +242,7 @@ fn full_identity_survives_identical_empty_displays() {
                 answer.interpretation(),
                 owner.metadata().output(),
                 zetesis_themelios::observation::Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
         assert!(display.text().is_empty());
@@ -269,7 +281,7 @@ fn inconsistent_program_has_an_empty_complete_family() {
                 max_atoms: 0,
                 max_bytes: 0,
             },
-            Control::default(),
+            Cancellation::default(),
         )
         .unwrap();
         assert!(world_view.is_empty());
@@ -376,7 +388,7 @@ fn exact_prepared_routes_enumerate_the_same_family() {
             ..config()
         };
         let mut routes = Routes::default();
-        let world_view = Session::builder(input, configured, Control::default())
+        let world_view = Session::builder(input, configured, Cancellation::default())
             .resources(&ExecutionResources::default())
             .collect_observed(WorldViewLimits::default(), &mut routes)
             .unwrap();
@@ -410,7 +422,7 @@ fn ground_collection_reuses_the_supplied_graph() {
         PreparedInput::ground(&graph),
         configured,
         WorldViewLimits::default(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     assert_eq!(
@@ -435,7 +447,7 @@ fn formula_completion_batches_preserve_the_original_family() {
         PreparedInput::formula(&owner),
         configured,
         WorldViewLimits::default(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     assert_eq!(world_view.len(), 4);
@@ -463,7 +475,7 @@ fn requested_model_limit_refuses_complete_collection() {
             models: 1,
             ..config()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .collect(WorldViewLimits::default())
     .unwrap_err();
@@ -483,8 +495,12 @@ fn requested_model_limit_refuses_complete_collection() {
 #[test]
 fn consumer_stop_does_not_establish_coverage() {
     let owner = formula("{a;b}. #minimize {1,k:a}.");
-    let mut session =
-        Session::enumerate(PreparedInput::formula(&owner), config(), Control::default()).unwrap();
+    let mut session = Session::enumerate(
+        PreparedInput::formula(&owner),
+        config(),
+        Cancellation::default(),
+    )
+    .unwrap();
     let answer = session.next().unwrap().unwrap();
     let outcome = session.stop();
     assert_eq!(outcome.completion(), None);
@@ -501,9 +517,9 @@ fn cancellation_cannot_produce_an_empty_world_view() {
         PreparedInput::admitted(&relational),
         PreparedInput::formula(&formulas),
     ] {
-        let control = Control::default();
-        let request = Session::builder(input, config(), control.clone());
-        control.cancel();
+        let cancellation = Cancellation::default();
+        let request = Session::builder(input, config(), cancellation.clone());
+        cancellation.cancel();
         let failure = request.collect(WorldViewLimits::default()).unwrap_err();
         assert!(matches!(failure.cause(), WorldViewError::NotExhausted));
         assert!(failure.answer_sets().is_empty());
@@ -523,7 +539,7 @@ fn search_budget_retains_only_a_checked_prefix() {
             ..config()
         },
         WorldViewLimits::default(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(failure.cause(), WorldViewError::NotExhausted));
@@ -551,7 +567,7 @@ fn score_refusal_preserves_verified_membership() {
             ..config()
         },
         WorldViewLimits::default(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(failure.cause(), WorldViewError::NotExhausted));
@@ -569,16 +585,20 @@ fn score_refusal_preserves_verified_membership() {
 #[test]
 fn unrestricted_scoring_spends_one_cumulative_budget() {
     let owner = formula("a. {b}. #minimize {1,k:a}.");
-    let first = Session::enumerate(PreparedInput::formula(&owner), config(), Control::default())
-        .unwrap()
-        .next()
-        .unwrap()
-        .unwrap();
+    let first = Session::enumerate(
+        PreparedInput::formula(&owner),
+        config(),
+        Cancellation::default(),
+    )
+    .unwrap()
+    .next()
+    .unwrap()
+    .unwrap();
     let evaluation = zetesis_objective::evaluate(
         owner.objectives(),
         first.interpretation(),
         zetesis_objective::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let failure = WorldView::collect(
@@ -588,7 +608,7 @@ fn unrestricted_scoring_spends_one_cumulative_budget() {
             ..config()
         },
         WorldViewLimits::default(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(failure.cause(), WorldViewError::NotExhausted));
@@ -606,13 +626,17 @@ fn unrestricted_scoring_spends_one_cumulative_budget() {
 #[test]
 fn answer_storage_limit_preserves_the_retained_prefix() {
     let owner = formula("a. {b}.");
-    let failure = Session::builder(PreparedInput::formula(&owner), config(), Control::default())
-        .resources(&ExecutionResources::default())
-        .collect(WorldViewLimits {
-            max_answer_sets: 1,
-            ..Default::default()
-        })
-        .unwrap_err();
+    let failure = Session::builder(
+        PreparedInput::formula(&owner),
+        config(),
+        Cancellation::default(),
+    )
+    .resources(&ExecutionResources::default())
+    .collect(WorldViewLimits {
+        max_answer_sets: 1,
+        ..Default::default()
+    })
+    .unwrap_err();
     assert!(matches!(failure.cause(), WorldViewError::AnswerSets));
     assert_eq!(failure.answer_sets().len(), 1);
     assert!(
@@ -642,7 +666,7 @@ fn collection_refusal_preserves_queued_cpu_membership() {
             max_answer_sets: 1,
             ..Default::default()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(failure.cause(), WorldViewError::AnswerSets));
@@ -675,7 +699,7 @@ fn atom_storage_limit_counts_hidden_atoms() {
             max_atoms: 1,
             ..Default::default()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(failure.cause(), WorldViewError::Atoms));
@@ -693,7 +717,7 @@ fn zero_payload_budget_refuses_even_an_empty_answer() {
             max_bytes: 0,
             ..Default::default()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(failure.cause(), WorldViewError::Bytes));
@@ -716,7 +740,7 @@ fn score_priorities_consume_collection_payload() {
         PreparedInput::formula(&absent),
         config(),
         limits,
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     assert_eq!(world_view.len(), 1);
@@ -724,7 +748,7 @@ fn score_priorities_consume_collection_payload() {
         PreparedInput::formula(&active),
         config(),
         limits,
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(failure.cause(), WorldViewError::Bytes));
@@ -740,7 +764,7 @@ fn setup_refusal_preserves_the_original_subject() {
             oracle: Oracle::Closure,
             ..config()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .collect(WorldViewLimits::default())
     .unwrap_err();
@@ -836,7 +860,7 @@ fn observer_failure(
             stats: true,
             ..config()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .resources(&ExecutionResources::default())
     .collect_observed(WorldViewLimits::default(), &mut observer)

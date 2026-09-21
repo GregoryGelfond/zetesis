@@ -12,7 +12,7 @@ use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 
 use zetesis_ferraris::{Node, TightPlanLimits};
-use zetesis_sat::{Control, Incomplete, Limits, SearchLimits, SearchMethod, StableModels};
+use zetesis_sat::{Cancellation, Incomplete, Limits, SearchLimits, SearchMethod, StableModels};
 
 use choice_theories::{choices, theory_over};
 use theories::mixed;
@@ -35,7 +35,7 @@ fn four_workers_return_the_scalar_family_once_each() {
             &theory,
             SearchMethod::Regions,
             Limits::default(),
-            Control::default(),
+            Cancellation::default(),
         )
         .unwrap();
         let expected: BTreeSet<Vec<usize>> = family(&mut scalar).into_iter().collect();
@@ -43,7 +43,7 @@ fn four_workers_return_the_scalar_family_once_each() {
             &theory,
             workers(4),
             Limits::default(),
-            Control::default(),
+            Cancellation::default(),
         )
         .unwrap();
         let found = family(&mut parallel);
@@ -68,7 +68,7 @@ fn a_restriction_reaches_the_workers_for_what_they_have_not_visited() {
         &theory,
         workers(4),
         Limits::default(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     let first: Vec<usize> = parallel.next().unwrap().unwrap().atoms().collect();
@@ -101,7 +101,7 @@ fn a_restriction_charges_its_indexing_to_the_shared_search_work() {
         &theory,
         workers(4),
         Limits::default(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     let before = parallel.statistics();
@@ -120,7 +120,7 @@ fn a_restriction_beyond_the_shared_search_work_is_refused() {
         &theory,
         workers(4),
         Limits::default(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap()
     .statistics()
@@ -134,7 +134,8 @@ fn a_restriction_beyond_the_shared_search_work_is_refused() {
         ..Limits::default()
     };
     let mut parallel =
-        StableModels::with_region_workers(&theory, workers(4), limits, Control::default()).unwrap();
+        StableModels::with_region_workers(&theory, workers(4), limits, Cancellation::default())
+            .unwrap();
     let restriction = theory_over(&theory, vec![Node::Atom(7)], vec![0]);
     assert!(matches!(
         parallel.restrict_candidates(&restriction),
@@ -150,7 +151,7 @@ fn a_shared_work_ceiling_stops_every_worker_without_exhaustion() {
         &theory,
         workers(4),
         Limits::default(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap()
     .statistics()
@@ -164,7 +165,8 @@ fn a_shared_work_ceiling_stops_every_worker_without_exhaustion() {
         ..Limits::default()
     };
     let mut parallel =
-        StableModels::with_region_workers(&theory, workers(4), limits, Control::default()).unwrap();
+        StableModels::with_region_workers(&theory, workers(4), limits, Cancellation::default())
+            .unwrap();
     let outcomes: Vec<_> = parallel.by_ref().collect();
     assert!(matches!(outcomes.last(), Some(Err(Incomplete::WorkLimit))));
     assert!(!parallel.exhausted());
@@ -183,9 +185,13 @@ fn a_candidate_ceiling_delivers_the_admitted_leaves_before_it_stops() {
         ..Limits::default()
     };
     for _ in 0..20 {
-        let mut parallel =
-            StableModels::with_region_workers(&theory, workers(16), limits, Control::default())
-                .unwrap();
+        let mut parallel = StableModels::with_region_workers(
+            &theory,
+            workers(16),
+            limits,
+            Cancellation::default(),
+        )
+        .unwrap();
         let outcomes: Vec<_> = parallel.by_ref().collect();
         assert_eq!(outcomes.len(), 2, "{outcomes:?}");
         assert!(outcomes[0].is_ok(), "{outcomes:?}");
@@ -204,7 +210,7 @@ fn a_tight_certificate_decides_the_workers_leaves() {
         &theory,
         workers(3),
         Limits::default(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     assert!(
@@ -232,7 +238,7 @@ fn phase_timings_sum_the_workers_narrowing_and_leaf_decisions() {
         &theory,
         workers(4),
         Limits::default(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     parallel.enable_phase_timing();
@@ -257,7 +263,7 @@ fn four_workers_report_the_scalar_walks_reading_work() {
             &theory,
             SearchMethod::Regions,
             Limits::default(),
-            Control::default(),
+            Cancellation::default(),
         )
         .unwrap();
         let models = family(&mut scalar).len();
@@ -265,7 +271,7 @@ fn four_workers_report_the_scalar_walks_reading_work() {
             &theory,
             workers(4),
             Limits::default(),
-            Control::default(),
+            Cancellation::default(),
         )
         .unwrap();
         assert_eq!(family(&mut parallel).len(), models);
@@ -287,14 +293,14 @@ fn one_worker_returns_the_scalar_walks_sequence() {
         &theory,
         workers(1),
         Limits::default(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     let mut scalar = StableModels::with_method(
         &theory,
         SearchMethod::Regions,
         Limits::default(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     assert_eq!(family(&mut one), family(&mut scalar));
@@ -334,7 +340,7 @@ fn dropping_a_full_model_channel_joins_the_workers() {
             &choices(10),
             workers(2),
             Limits::default(),
-            Control::default(),
+            Cancellation::default(),
         )
         .unwrap();
         assert!(search.next().unwrap().is_ok());
@@ -357,7 +363,7 @@ fn idle_workers_return_unused_work_permits() {
             &theory,
             workers(4),
             Limits::default(),
-            Control::default(),
+            Cancellation::default(),
         )
         .unwrap()
         .statistics()
@@ -373,12 +379,13 @@ fn idle_workers_return_unused_work_permits() {
                 },
                 ..Limits::default()
             };
-            let control = Control::with_deadline(
+            let cancellation = Cancellation::with_deadline(
                 std::time::Instant::now() + std::time::Duration::from_millis(500),
             )
             .unwrap();
             let mut search =
-                StableModels::with_region_workers(&theory, workers(4), limits, control).unwrap();
+                StableModels::with_region_workers(&theory, workers(4), limits, cancellation)
+                    .unwrap();
             for result in search.by_ref() {
                 assert!(
                     result.is_ok() || matches!(result, Err(Incomplete::WorkLimit)),
@@ -394,7 +401,7 @@ fn certified_family(worker_count: usize, limits: Limits) -> (usize, zetesis_sat:
         &choices(5),
         workers(worker_count),
         limits,
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     assert!(
@@ -445,7 +452,7 @@ fn certificate_work_cannot_exceed_the_shared_ceiling() {
         ..Limits::default()
     };
     let mut search =
-        StableModels::with_region_workers(&choices(5), workers(3), limits, Control::default())
+        StableModels::with_region_workers(&choices(5), workers(3), limits, Cancellation::default())
             .unwrap();
     assert!(
         search
@@ -481,7 +488,7 @@ fn a_certificate_retains_its_verification_work_refusal() {
             &choices(2),
             workers(worker_count),
             limits,
-            Control::default(),
+            Cancellation::default(),
         )
         .unwrap();
         assert!(
@@ -513,7 +520,7 @@ fn certificate_configuration_precedes_region_candidates() {
             &theory,
             workers(worker_count),
             Limits::default(),
-            Control::default(),
+            Cancellation::default(),
         )
         .unwrap();
         assert!(
@@ -527,7 +534,7 @@ fn certificate_configuration_precedes_region_candidates() {
             &theory,
             workers(worker_count),
             Limits::default(),
-            Control::default(),
+            Cancellation::default(),
         )
         .unwrap();
         assert!(after.next().unwrap().is_ok());
@@ -547,7 +554,7 @@ fn restrictions_after_certificate_setup_charge_the_shared_work() {
         &theory,
         workers(3),
         Limits::default(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     assert!(

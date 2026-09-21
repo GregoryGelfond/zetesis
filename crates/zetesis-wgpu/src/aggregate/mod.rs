@@ -7,7 +7,7 @@ mod transport;
 
 use crate::{GpuError, GpuErrorKind};
 use std::{fmt, time::Duration};
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 
 pub use device::GpuAggregateOracle;
 pub use preparation::AggregateGpuPlan;
@@ -245,8 +245,8 @@ pub struct AggregateGpuBatchStats {
     pub device_work: u64,
 }
 
-fn poll(control: &Control) -> Result<(), GpuError> {
-    control.poll().map_err(|stop| GpuError {
+fn poll(cancellation: &Cancellation) -> Result<(), GpuError> {
+    cancellation.poll().map_err(|stop| GpuError {
         kind: GpuErrorKind::Device,
         detail: "aggregate operation interrupted".to_owned(),
         interruption: Some(stop),

@@ -41,7 +41,7 @@ mod ternary_watch_tests;
 
 pub(crate) use cursor::Cursor;
 
-use crate::{Assignment, Cnf, Control, Incomplete, Literal};
+use crate::{Assignment, Cancellation, Cnf, Incomplete, Literal};
 
 /// Cumulative search ceilings. Zero permits no operation of that kind.
 #[derive(Clone, Copy, Debug)]
@@ -93,12 +93,12 @@ pub enum Solve {
 pub(crate) struct Budget<'a, Q = LocalQuota> {
     pub(crate) quota: Q,
     pub(crate) limits: SearchLimits,
-    pub(crate) control: &'a Control,
+    pub(crate) cancellation: &'a Cancellation,
     pub(crate) statistics: SearchStatistics,
 }
 impl<Q: Quota> Budget<'_, Q> {
     pub(crate) fn tick(&mut self) -> Result<(), Incomplete> {
-        self.control.poll()?;
+        self.cancellation.poll()?;
         self.quota
             .work(self.statistics.work, self.limits.max_work)?;
         self.statistics.work += 1;
@@ -119,7 +119,7 @@ impl<Q: Quota> Budget<'_, Q> {
     /// Charge work an operation already performed, one poll for the lot,
     /// reserved through the quota as ticks would be.
     pub(crate) fn charge(&mut self, work: u64) -> Result<(), Incomplete> {
-        self.control.poll()?;
+        self.cancellation.poll()?;
         self.quota
             .charge(self.statistics.work, self.limits.max_work, work)?;
         self.statistics.work = self
@@ -168,8 +168,8 @@ fn filled<T: Clone>(
 /// Search a finite CNF with deterministic false-first branching and no recursion.
 /// Limits bound all search work, while [`crate::AdmissionLimits`] bound shape.
 #[must_use]
-pub fn solve(cnf: &Cnf, limits: SearchLimits, control: &Control) -> Solve {
-    solve_with_statistics(cnf, limits, control).0
+pub fn solve(cnf: &Cnf, limits: SearchLimits, cancellation: &Cancellation) -> Solve {
+    solve_with_statistics(cnf, limits, cancellation).0
 }
 
 /// The same search as [`solve`], retaining accounting even when it is incomplete.
@@ -177,12 +177,12 @@ pub fn solve(cnf: &Cnf, limits: SearchLimits, control: &Control) -> Solve {
 pub fn solve_with_statistics(
     cnf: &Cnf,
     limits: SearchLimits,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> (Solve, SearchStatistics) {
     let mut budget = Budget {
         quota: crate::search::LocalQuota,
         limits,
-        control,
+        cancellation,
         statistics: SearchStatistics::default(),
     };
     let outcome = query(cnf, &mut budget);

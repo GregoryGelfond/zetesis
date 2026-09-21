@@ -6,7 +6,7 @@ use crate::{
     AdmissionLimits, AggregateComparison, AggregateElement, AggregateError, AggregateLimits, Node,
     Theory, append_aggregate,
 };
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 
 use super::Plan;
 
@@ -52,7 +52,7 @@ pub enum RestrictionErrorKind {
     Aggregate(AggregateError),
     /// Final theory admission refused the constructed shape.
     Theory(crate::AdmissionError),
-    /// Control or fallible allocation stopped emission.
+    /// Cancellation or fallible allocation stopped emission.
     Stopped(Stop),
 }
 
@@ -142,14 +142,14 @@ impl Plan {
     pub fn restriction(
         &self,
         limits: RestrictionLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Restriction, RestrictionError> {
         let mut builder = Builder {
             nodes: Vec::new(),
             roots: Vec::new(),
             work: 0,
             limits,
-            control,
+            cancellation,
         };
         let result = builder.build(self);
         result
@@ -169,7 +169,7 @@ struct Builder<'a> {
     roots: Vec<usize>,
     work: u64,
     limits: RestrictionLimits,
-    control: &'a Control,
+    cancellation: &'a Cancellation,
 }
 
 impl Builder<'_> {
@@ -227,7 +227,7 @@ impl Builder<'_> {
             AggregateComparison::Ge,
             bound,
             limits,
-            self.control,
+            self.cancellation,
         );
         let work = match result {
             Ok(build) => build.statistics().work,
@@ -243,7 +243,9 @@ impl Builder<'_> {
     }
 
     fn poll(&self) -> Result<(), RestrictionErrorKind> {
-        self.control.poll().map_err(RestrictionErrorKind::Stopped)
+        self.cancellation
+            .poll()
+            .map_err(RestrictionErrorKind::Stopped)
     }
 
     fn tick(&mut self) -> Result<(), RestrictionErrorKind> {

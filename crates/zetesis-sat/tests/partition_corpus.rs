@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use zetesis_ferraris::{Theory, TightPlanLimits};
 use zetesis_sat::{
-    Control, Limits, StableModels, Statistics,
+    Cancellation, Limits, StableModels, Statistics,
     partition::{Group, Plan, Premises, Restriction, RestrictionLimits},
 };
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
@@ -19,7 +19,7 @@ const SOURCES: [&str; 6] = [
 ];
 
 fn enumerate(theory: &Theory, restrictions: &[Restriction]) -> (BTreeSet<Vec<usize>>, Statistics) {
-    let mut search = StableModels::new(theory, Limits::default(), Control::default()).unwrap();
+    let mut search = StableModels::new(theory, Limits::default(), Cancellation::default()).unwrap();
     for restriction in restrictions {
         search.restrict_candidates(restriction.theory()).unwrap();
     }
@@ -109,11 +109,11 @@ fn report_queens_partition_work() {
                     groups: &groups,
                 },
                 zetesis_sat::partition::Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
             restrictions.push(
-                plan.restriction(RestrictionLimits::default(), &Control::default())
+                plan.restriction(RestrictionLimits::default(), &Cancellation::default())
                     .unwrap(),
             );
             plans.push(plan);

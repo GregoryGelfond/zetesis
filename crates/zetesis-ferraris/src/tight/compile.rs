@@ -5,7 +5,7 @@ use super::{
     TightProducerKind, TightResource, Work, bytes, filled, reserve,
 };
 use crate::{Node, Theory};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Body {
@@ -39,9 +39,9 @@ impl TightPlan {
     pub fn compile(
         theory: &Theory,
         limits: TightPlanLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Self, TightError> {
-        Self::compile_accounted(theory, limits, control).result
+        Self::compile_accounted(theory, limits, cancellation).result
     }
 
     /// Derive the same certificate as [`Self::compile`], retaining charged work
@@ -50,12 +50,12 @@ impl TightPlan {
     pub fn compile_accounted(
         theory: &Theory,
         limits: TightPlanLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> TightAttempt<Self> {
         let mut work = Work {
             used: 0,
             max: limits.max_work,
-            control,
+            cancellation,
         };
         let result = build(theory, None, limits, &mut work);
         TightAttempt {
@@ -74,12 +74,12 @@ impl TightPlan {
         theory: &Theory,
         ranks: &[usize],
         limits: TightPlanLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Self, TightError> {
         let mut work = Work {
             used: 0,
             max: limits.max_work,
-            control,
+            cancellation,
         };
         build(theory, Some(ranks), limits, &mut work)
     }
@@ -207,7 +207,7 @@ fn build(
     limits: TightPlanLimits,
     work: &mut Work<'_>,
 ) -> Result<TightPlan, TightError> {
-    work.control.poll()?;
+    work.cancellation.poll()?;
     bytes(
         theory.nodes().len() as u128 * size_of::<Body>() as u128,
         limits.max_bytes,

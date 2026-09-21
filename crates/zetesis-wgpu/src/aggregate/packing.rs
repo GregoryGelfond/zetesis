@@ -7,7 +7,7 @@ use super::{
 };
 use crate::{GpuError, GpuErrorKind};
 use std::cmp::Ordering;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::native_aggregate::{Eligibility, Function};
 
 pub(super) struct Plan {
@@ -31,7 +31,7 @@ impl Plan {
         limits: AggregateGpuLimits,
         device: &wgpu::Limits,
         epoch: u32,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Self, GpuError> {
         let numeric = &group.numeric;
         let failure = || capacity("aggregate batch dimensions or accounting overflow");
@@ -103,7 +103,7 @@ impl Plan {
             return Err(capacity("aggregate uniform exceeds granted device limits"));
         }
         for record in records {
-            poll(control)?;
+            poll(cancellation)?;
             if !std::ptr::eq(record.group(), group.group) {
                 return Err(GpuError::new(
                     GpuErrorKind::Seed,
@@ -129,7 +129,7 @@ impl Plan {
     pub(super) fn pack(
         &self,
         records: &[Eligibility<'_>],
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Vec<u32>, GpuError> {
         let mut packed = reserve(self.mask_words)?;
         packed.resize(self.mask_words, 0);
@@ -138,10 +138,10 @@ impl Plan {
             .iter()
             .zip(packed.chunks_exact_mut(self.stride as usize))
         {
-            poll(control)?;
+            poll(cancellation)?;
             row[0] = u32::from(record.frozen().is_some());
             for (index, selected) in record.original().iter().copied().enumerate() {
-                poll(control)?;
+                poll(cancellation)?;
                 if selected {
                     row[1 + index / 32] |= 1 << (index % 32);
                 }
@@ -184,14 +184,14 @@ pub(super) fn decode(
     numeric: &Numeric,
     plan: &Plan,
     masks: &[u32],
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<Vec<AggregateGpuReduction>, GpuError> {
     if bytes(words.len())? != plan.results {
         return Err(malformed());
     }
     let mut results = reserve(plan.worlds as usize)?;
     for (world, record) in words.chunks_exact(RESULT_WORDS).enumerate() {
-        poll(control)?;
+        poll(cancellation)?;
         let paired = masks[world * plan.stride as usize];
         if record[0] != plan.epoch
             || record[1] as usize != world
@@ -200,8 +200,8 @@ pub(super) fn decode(
         {
             return Err(malformed());
         }
-        let original = evaluation(numeric, record[3], record[4], record[5], control)?;
-        let frozen = evaluation(numeric, record[6], record[7], record[8], control)?;
+        let original = evaluation(numeric, record[3], record[4], record[5], cancellation)?;
+        let frozen = evaluation(numeric, record[6], record[7], record[8], cancellation)?;
         results.push(AggregateGpuReduction {
             original,
             frozen: (paired == 1).then_some(frozen),
@@ -215,7 +215,7 @@ fn evaluation(
     word: u32,
     present: u32,
     holds: u32,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<AggregateGpuEvaluation, GpuError> {
     if present > 1 || holds > 1 {
         return Err(malformed());
@@ -242,7 +242,7 @@ fn evaluation(
         .chunks_exact(2)
         .take(numeric.guard_count as usize)
     {
-        poll(control)?;
+        poll(cancellation)?;
         let ordering = match value {
             AggregateGpuValue::Integer(value) => value.cmp(&signed(guard[1])),
             AggregateGpuValue::Infimum => Ordering::Less,

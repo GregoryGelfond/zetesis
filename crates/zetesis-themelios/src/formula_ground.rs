@@ -1599,7 +1599,7 @@ impl Builder<'_> {
             elements,
             &guards,
             limits,
-            &zetesis_cpu::Control::default(),
+            &zetesis_cpu::Cancellation::default(),
         )
         .map_err(|error| FormulaFailure::Aggregate { error, location })?;
         self.counters.work += build.statistics().work;
@@ -1871,7 +1871,7 @@ impl Builder<'_> {
                 aggregate_comparison(guard.relation),
                 i64::from(bound),
                 limits,
-                &zetesis_cpu::Control::default(),
+                &zetesis_cpu::Cancellation::default(),
             )
             .map_err(|error| FormulaFailure::Aggregate { error, location })?;
             self.counters.work += build.statistics().work;
@@ -1949,7 +1949,7 @@ impl Builder<'_> {
             comparison,
             bound,
             limits,
-            &zetesis_cpu::Control::default(),
+            &zetesis_cpu::Cancellation::default(),
         )
         .map_err(|error| FormulaFailure::Aggregate { error, location })?;
         self.counters.work += build.statistics().work;

@@ -78,7 +78,11 @@ fn expected_choices(values: &[i32]) -> Vec<Vec<Atom>> {
 fn counted_regions_cover_each_open_root_seed_once() {
     let values = [0, 1, 2, 3, 4, 5];
     let program = independent_choices(&values, 0..6);
-    let mut candidates = Candidates::new(&program, CandidateLimits::default(), Control::default());
+    let mut candidates = Candidates::new(
+        &program,
+        CandidateLimits::default(),
+        Cancellation::default(),
+    );
     candidates.bounded(Limits::default());
     let actual: Vec<_> = candidates
         .by_ref()
@@ -99,7 +103,11 @@ fn counted_regions_cover_each_open_root_seed_once() {
 fn counted_regions_never_resume_the_symbolic_carrier() {
     let values = [0, 2, 4];
     let program = independent_choices(&values, 0..6);
-    let mut candidates = Candidates::new(&program, CandidateLimits::default(), Control::default());
+    let mut candidates = Candidates::new(
+        &program,
+        CandidateLimits::default(),
+        Cancellation::default(),
+    );
     candidates.bounded(Limits::default());
     let actual: Vec<_> = candidates
         .by_ref()
@@ -118,7 +126,11 @@ fn counted_regions_never_resume_the_symbolic_carrier() {
 #[test]
 fn completed_support_does_not_walk_the_cartesian_carrier() {
     let program = sparse();
-    let mut candidates = Candidates::new(&program, CandidateLimits::default(), Control::default());
+    let mut candidates = Candidates::new(
+        &program,
+        CandidateLimits::default(),
+        Cancellation::default(),
+    );
     candidates.bounded(Limits::default());
     assert!(candidates.next_selection().unwrap().is_ok());
     assert_eq!(candidates.discovered_atoms(), 2);
@@ -135,7 +147,11 @@ fn completed_support_does_not_walk_the_cartesian_carrier() {
 fn supported_root_tokens_pack_at_their_original_positions() {
     let program = sparse();
     let graph = GroundProgram::compile(&program, StaticLimits::default()).unwrap();
-    let mut candidates = Candidates::new(&program, CandidateLimits::default(), Control::default());
+    let mut candidates = Candidates::new(
+        &program,
+        CandidateLimits::default(),
+        Cancellation::default(),
+    );
     candidates.bounded(Limits::default());
     let mut count = 0;
     while let Some(selection) = candidates.next_selection() {
@@ -163,7 +179,7 @@ fn supported_root_still_enforces_the_open_atom_limit() {
             max_carrier_atoms: 1,
             ..CandidateLimits::default()
         },
-        Control::default(),
+        Cancellation::default(),
     );
     candidates.bounded(Limits::default());
     assert!(matches!(candidates.next(), Some(Err(Stop::CarrierLimit))));
@@ -177,7 +193,7 @@ fn supported_root_still_enforces_the_open_atom_limit() {
 #[test]
 fn a_failed_later_pass_keeps_only_completed_bounds() {
     let program = sparse();
-    let mut closures = Closures::new(&program, Limits::default(), Control::default()).unwrap();
+    let mut closures = Closures::new(&program, Limits::default(), Cancellation::default()).unwrap();
     let mut cube = Cube::all_open();
     assert!(matches!(closures.narrow(&mut cube), Ok(Pass::Changed)));
     let completed_may = cube.may.clone();
@@ -192,7 +208,7 @@ fn a_failed_later_pass_keeps_only_completed_bounds() {
 #[test]
 fn a_failed_first_pass_has_no_completed_upper_bound() {
     let program = sparse();
-    let mut closures = Closures::new(&program, Limits::default(), Control::default()).unwrap();
+    let mut closures = Closures::new(&program, Limits::default(), Cancellation::default()).unwrap();
     closures.limits.max_work = 0;
     let mut cube = Cube::all_open();
     assert!(matches!(closures.narrow(&mut cube), Err(Stop::WorkLimit)));

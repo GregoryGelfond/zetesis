@@ -1,7 +1,7 @@
 use super::Cursor;
 use crate::search::{Budget, query};
 use crate::{
-    AdmissionLimits, Cnf, Control, Incomplete, Literal, SearchLimits, SearchStatistics, Solve,
+    AdmissionLimits, Cancellation, Cnf, Incomplete, Literal, SearchLimits, SearchStatistics, Solve,
 };
 use std::collections::BTreeSet;
 
@@ -32,11 +32,11 @@ pub(super) fn exclude(
     cursor.exclude(cnf, &candidate, budget)
 }
 
-pub(super) fn budget(control: &Control) -> Budget<'_> {
+pub(super) fn budget(cancellation: &Cancellation) -> Budget<'_> {
     Budget {
         quota: crate::search::LocalQuota,
         limits: SearchLimits::default(),
-        control,
+        cancellation,
         statistics: SearchStatistics::default(),
     }
 }
@@ -82,7 +82,7 @@ fn enumerate_with_cursor(
 
 #[test]
 fn retained_traversal_matches_all_tiny_truth_tables_without_added_blocks() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     for variables in 0..=2 {
         let clauses = (0..3_usize.pow(u32::try_from(variables).unwrap()))
             .map(|mut code| {
@@ -107,11 +107,11 @@ fn retained_traversal_matches_all_tiny_truth_tables_without_added_blocks() {
                 AdmissionLimits::default(),
             )
             .unwrap();
-            let (actual, end) = enumerate(&cnf, &mut budget(&control));
+            let (actual, end) = enumerate(&cnf, &mut budget(&cancellation));
             assert!(matches!(end, Solve::Unsat));
             assert_eq!(actual, models(&cnf));
             let (refined, end) =
-                enumerate_with_cursor(&cnf, &mut budget(&control), refined_cursor(variables));
+                enumerate_with_cursor(&cnf, &mut budget(&cancellation), refined_cursor(variables));
             assert!(matches!(end, Solve::Unsat));
             assert_eq!(refined, actual);
         }
@@ -124,7 +124,7 @@ fn retained_traversal_matches_all_tiny_truth_tables_without_added_blocks() {
         AdmissionLimits::default(),
     )
     .unwrap();
-    let (actual, end) = enumerate(&cnf, &mut budget(&control));
+    let (actual, end) = enumerate(&cnf, &mut budget(&cancellation));
     assert!(matches!(end, Solve::Unsat));
     assert_eq!(actual, models(&cnf));
 }
@@ -132,8 +132,8 @@ fn retained_traversal_matches_all_tiny_truth_tables_without_added_blocks() {
 #[test]
 fn exact_projection_blocks_skip_multiple_free_auxiliary_extensions() {
     let cnf = Cnf::new(4, vec![], AdmissionLimits::default()).unwrap();
-    let control = Control::default();
-    let mut budget = budget(&control);
+    let cancellation = Cancellation::default();
+    let mut budget = budget(&cancellation);
     let mut cursor = Cursor::projected(2, crate::ProjectionLimits::default()).unwrap();
     let mut projections = BTreeSet::new();
     loop {
@@ -164,11 +164,11 @@ fn exact_projection_blocks_skip_multiple_free_auxiliary_extensions() {
 
 #[test]
 fn appended_constraints_filter_leaves_without_changing_the_base_watch_registry() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let p = Literal::new(0, true);
     let q = Literal::new(1, true);
     let mut cnf = Cnf::new(3, vec![vec![p, q]], AdmissionLimits::default()).unwrap();
-    let mut budget = budget(&control);
+    let mut budget = budget(&cancellation);
     let mut cursor = Cursor::default();
     let Solve::Sat(first) = cursor.query(&cnf, &mut budget) else {
         panic!("first model");
@@ -196,8 +196,8 @@ fn appended_constraints_filter_leaves_without_changing_the_base_watch_registry()
 
 #[test]
 fn shape_changes_and_resumption_cancellation_are_terminal_inconclusive() {
-    let control = Control::default();
-    let mut budget = budget(&control);
+    let cancellation = Cancellation::default();
+    let mut budget = budget(&cancellation);
     let mut cnf = Cnf::new(0, vec![], AdmissionLimits::default()).unwrap();
     let mut cursor = Cursor::default();
     assert!(matches!(cursor.query(&cnf, &mut budget), Solve::Sat(_)));
@@ -211,7 +211,7 @@ fn shape_changes_and_resumption_cancellation_are_terminal_inconclusive() {
     let cnf = Cnf::new(0, vec![], AdmissionLimits::default()).unwrap();
     let mut cursor = Cursor::default();
     assert!(matches!(cursor.query(&cnf, &mut budget), Solve::Sat(_)));
-    control.cancel();
+    cancellation.cancel();
     for _ in 0..2 {
         assert!(matches!(
             cursor.query(&cnf, &mut budget),
@@ -237,14 +237,14 @@ fn omitted_root_assignments_survive_resumption_and_refined_probe_backtracking() 
     .unwrap();
     let expected = models(&cnf);
     assert_eq!(expected.len(), 6);
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     for refined in [false, true] {
         let mut cursor = if refined {
             refined_cursor(6)
         } else {
             Cursor::projected(6, crate::ProjectionLimits::default()).unwrap()
         };
-        let mut budget = budget(&control);
+        let mut budget = budget(&cancellation);
         let mut actual = BTreeSet::new();
         loop {
             match cursor.query(&cnf, &mut budget) {
@@ -269,20 +269,20 @@ fn omitted_root_assignments_survive_resumption_and_refined_probe_backtracking() 
 
 #[test]
 fn exact_cumulative_work_and_decision_ceilings_include_final_exhaustion() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     for variables in [0, 3] {
         let cnf = Cnf::new(variables, vec![], AdmissionLimits::default()).unwrap();
-        let mut measured = budget(&control);
+        let mut measured = budget(&cancellation);
         let (expected, end) = enumerate(&cnf, &mut measured);
         assert!(matches!(end, Solve::Unsat));
-        let mut exact = budget(&control);
+        let mut exact = budget(&cancellation);
         exact.limits.max_work = measured.statistics.work;
         exact.limits.max_decisions = measured.statistics.decisions;
         let (actual, end) = enumerate(&cnf, &mut exact);
         assert!(matches!(end, Solve::Unsat));
         assert_eq!(actual, expected);
         assert_eq!(exact.statistics, measured.statistics);
-        let mut short = budget(&control);
+        let mut short = budget(&cancellation);
         short.limits.max_work = measured.statistics.work - 1;
         assert!(matches!(
             enumerate(&cnf, &mut short).1,
@@ -290,7 +290,7 @@ fn exact_cumulative_work_and_decision_ceilings_include_final_exhaustion() {
         ));
         assert_eq!(short.statistics.work, short.limits.max_work);
         if measured.statistics.decisions != 0 {
-            let mut short = budget(&control);
+            let mut short = budget(&cancellation);
             short.limits.max_decisions = measured.statistics.decisions - 1;
             assert!(matches!(
                 enumerate(&cnf, &mut short).1,
@@ -302,8 +302,8 @@ fn exact_cumulative_work_and_decision_ceilings_include_final_exhaustion() {
 
 fn blocked_run(retain: bool) -> (BTreeSet<Vec<bool>>, SearchStatistics) {
     let mut cnf = Cnf::new(6, vec![], AdmissionLimits::default()).unwrap();
-    let control = Control::default();
-    let mut budget = budget(&control);
+    let cancellation = Cancellation::default();
+    let mut budget = budget(&cancellation);
     let mut cursor = Cursor::default();
     let mut result = BTreeSet::new();
     loop {
@@ -343,14 +343,14 @@ fn retained_state_reduces_charged_work_for_complete_independent_choices() {
 
 #[test]
 fn projected_mode_refuses_nonexact_blocks_instead_of_silently_filtering_them() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     for clause in [
         vec![Literal::new(0, true)],
         vec![Literal::new(0, true), Literal::new(2, false)],
     ] {
         let mut cnf = Cnf::new(3, vec![], AdmissionLimits::default()).unwrap();
         let mut cursor = Cursor::projected(2, crate::ProjectionLimits::default()).unwrap();
-        let mut charged = budget(&control);
+        let mut charged = budget(&cancellation);
         assert!(matches!(cursor.query(&cnf, &mut charged), Solve::Sat(_)));
         cnf.append(clause).unwrap();
         assert!(matches!(
@@ -362,14 +362,14 @@ fn projected_mode_refuses_nonexact_blocks_instead_of_silently_filtering_them() {
 
 #[test]
 fn exact_projection_index_including_empty_key_agrees_with_linear_clause_filter() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     for width in 0..=4 {
         let mut cnf = Cnf::new(width + 2, vec![], AdmissionLimits::default()).unwrap();
         let indexed_cnf = Cnf::new(width + 2, vec![], AdmissionLimits::default()).unwrap();
         let mut linear = Cursor::default();
         let mut indexed = Cursor::projected(width, crate::ProjectionLimits::default()).unwrap();
-        let mut linear_work = budget(&control);
-        let mut indexed_work = budget(&control);
+        let mut linear_work = budget(&cancellation);
+        let mut indexed_work = budget(&cancellation);
         let mut seen = BTreeSet::new();
         loop {
             match (
@@ -403,7 +403,7 @@ fn exact_projection_index_including_empty_key_agrees_with_linear_clause_filter()
 
 #[test]
 fn interrupted_exclusions_preserve_history_capacity() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let first = [false; 4];
     let second = [true, false, false, false];
     for resource in [
@@ -429,15 +429,15 @@ fn interrupted_exclusions_preserve_history_capacity() {
         for ceiling in 0..7 {
             let cnf = Cnf::new(4, vec![], AdmissionLimits::default()).unwrap();
             let mut cursor = Cursor::projected(4, limits).unwrap();
-            exclude(&mut cursor, &cnf, &first, &mut budget(&control)).unwrap();
-            let mut bounded = budget(&control);
+            exclude(&mut cursor, &cnf, &first, &mut budget(&cancellation)).unwrap();
+            let mut bounded = budget(&cancellation);
             bounded.limits.max_work = ceiling;
             assert_eq!(
                 exclude(&mut cursor, &cnf, &second, &mut bounded),
                 Err(Incomplete::WorkLimit)
             );
             assert_eq!(bounded.statistics.work, ceiling);
-            exclude(&mut cursor, &cnf, &second, &mut budget(&control)).unwrap();
+            exclude(&mut cursor, &cnf, &second, &mut budget(&cancellation)).unwrap();
             let (required, limit) = if resource == crate::ProjectionResource::Entries {
                 (3, 2)
             } else {
@@ -448,7 +448,7 @@ fn interrupted_exclusions_preserve_history_capacity() {
                     &mut cursor,
                     &cnf,
                     &[false, true, false, false],
-                    &mut budget(&control)
+                    &mut budget(&cancellation)
                 ),
                 Err(Incomplete::ProjectionLimit {
                     resource,
@@ -459,7 +459,7 @@ fn interrupted_exclusions_preserve_history_capacity() {
             let mut expected = models(&cnf);
             expected.remove(first.as_slice());
             expected.remove(second.as_slice());
-            let (remaining, end) = enumerate_with_cursor(&cnf, &mut budget(&control), cursor);
+            let (remaining, end) = enumerate_with_cursor(&cnf, &mut budget(&cancellation), cursor);
             assert_eq!(remaining, expected);
             assert!(matches!(end, Solve::Unsat));
         }
@@ -468,7 +468,7 @@ fn interrupted_exclusions_preserve_history_capacity() {
 
 #[test]
 fn interrupted_probe_or_index_never_claims_exhaustion() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let cnf = Cnf::new(
         2,
         vec![
@@ -478,11 +478,11 @@ fn interrupted_probe_or_index_never_claims_exhaustion() {
         AdmissionLimits::default(),
     )
     .unwrap();
-    let mut measured = budget(&control);
+    let mut measured = budget(&cancellation);
     let (_, end) = enumerate_with_cursor(&cnf, &mut measured, refined_cursor(2));
     assert!(matches!(end, Solve::Unsat));
     for ceiling in 0..measured.statistics.work {
-        let mut bounded = budget(&control);
+        let mut bounded = budget(&cancellation);
         bounded.limits.max_work = ceiling;
         let (_, end) = enumerate_with_cursor(&cnf, &mut bounded, refined_cursor(2));
         assert!(matches!(end, Solve::Inconclusive(Incomplete::WorkLimit)));
@@ -490,7 +490,7 @@ fn interrupted_probe_or_index_never_claims_exhaustion() {
     }
     let cnf = Cnf::new(2, vec![], AdmissionLimits::default()).unwrap();
     let mut cursor = Cursor::projected(2, crate::ProjectionLimits::default()).unwrap();
-    let mut charged = budget(&control);
+    let mut charged = budget(&cancellation);
     let Solve::Sat(model) = cursor.query(&cnf, &mut charged) else {
         panic!("initial model")
     };
@@ -509,7 +509,7 @@ fn interrupted_probe_or_index_never_claims_exhaustion() {
 
 #[test]
 fn refined_regions_probe_while_initial_regions_keep_indexed_complete_search() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let p = Literal::new(0, true);
     let q = Literal::new(1, true);
     let cnf = Cnf::new(
@@ -518,8 +518,8 @@ fn refined_regions_probe_while_initial_regions_keep_indexed_complete_search() {
         AdmissionLimits::default(),
     )
     .unwrap();
-    let mut initial_budget = budget(&control);
-    let mut refined_budget = budget(&control);
+    let mut initial_budget = budget(&cancellation);
+    let mut refined_budget = budget(&cancellation);
     let (initial, initial_end) = enumerate_with_cursor(
         &cnf,
         &mut initial_budget,

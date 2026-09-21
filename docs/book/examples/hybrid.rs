@@ -3,7 +3,7 @@
 // ANCHOR: example
 use std::{collections::BTreeSet, num::NonZeroUsize};
 use zetesis_core::{Atom, Model, Predicate, Value};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_solve::{Backend, Completion, Grounder, Oracle, PreparedInput, Session, SolveConfig};
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, prepare_formula};
 
@@ -26,8 +26,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         models: 0,
         ..SolveConfig::default()
     };
-    let mut session =
-        Session::enumerate(PreparedInput::hybrid(&owner), config, Control::default())?;
+    let mut session = Session::enumerate(
+        PreparedInput::hybrid(&owner),
+        config,
+        Cancellation::default(),
+    )?;
     let mut family = BTreeSet::new();
     for answer in session.by_ref() {
         assert!(family.insert(answer?.interpretation().clone()));

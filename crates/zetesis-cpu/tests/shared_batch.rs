@@ -7,7 +7,7 @@ use zetesis_core::{
     AdmissionLimits, Atom, AtomPattern, Model, Predicate, Program, Seed, Template, Term, Value,
 };
 use zetesis_cpu::lazy::{SourceSelection, shared};
-use zetesis_cpu::{BatchError, BatchOracle, Control, Limits, Stop};
+use zetesis_cpu::{BatchError, BatchOracle, Cancellation, Limits, Stop};
 
 fn pattern(name: &str, terms: Vec<Term>) -> AtomPattern {
     AtomPattern::new(Predicate::new(name, terms.len()).unwrap(), terms).unwrap()
@@ -120,11 +120,22 @@ fn all_occurrences_match_independent_reduct_closure() {
     let (program, seeds) = fixture(&masks);
     let pool = pool(seeds.len());
     let independent = pool
-        .check_batch(&program, &seeds, Limits::default(), &Control::default())
+        .check_batch(
+            &program,
+            &seeds,
+            Limits::default(),
+            &Cancellation::default(),
+        )
         .unwrap();
     for selection in [SourceSelection::Union, SourceSelection::Worlds] {
         let batch = pool
-            .check_shared(&program, &seeds, limits(), selection, &Control::default())
+            .check_shared(
+                &program,
+                &seeds,
+                limits(),
+                selection,
+                &Cancellation::default(),
+            )
             .unwrap();
         assert_eq!(batch.checks.len(), masks.len());
         assert_eq!(batch.statistics.worlds.len(), masks.len());
@@ -160,7 +171,7 @@ fn sparse_worlds_omit_cross_world_source_instances() {
             &seeds,
             limits(),
             SourceSelection::Union,
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     let worlds = pool
@@ -169,7 +180,7 @@ fn sparse_worlds_omit_cross_world_source_instances() {
             &seeds,
             limits(),
             SourceSelection::Worlds,
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     assert!(worlds.statistics.source.pruned_prefixes > 0);
@@ -198,7 +209,7 @@ fn dense_worlds_preserve_the_complete_source_carrier() {
             &seeds,
             limits(),
             SourceSelection::Union,
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     let worlds = pool
@@ -207,7 +218,7 @@ fn dense_worlds_preserve_the_complete_source_carrier() {
             &seeds,
             limits(),
             SourceSelection::Worlds,
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     assert_eq!(worlds.statistics.source.pruned_prefixes, 0);
@@ -231,19 +242,30 @@ fn world_work_limits_are_inclusive() {
     let pool = pool(seeds.len());
     for selection in [SourceSelection::Union, SourceSelection::Worlds] {
         let complete = pool
-            .check_shared(&program, &seeds, limits(), selection, &Control::default())
+            .check_shared(
+                &program,
+                &seeds,
+                limits(),
+                selection,
+                &Cancellation::default(),
+            )
             .unwrap();
         let work = complete.statistics.worlds[0].work;
         assert!(work > 0);
         let mut exact = limits();
         exact.max_world_work = work;
         assert!(
-            pool.check_shared(&program, &seeds, exact, selection, &Control::default())
+            pool.check_shared(&program, &seeds, exact, selection, &Cancellation::default())
                 .is_ok()
         );
         exact.max_world_work -= 1;
-        let failure =
-            incomplete(pool.check_shared(&program, &seeds, exact, selection, &Control::default()));
+        let failure = incomplete(pool.check_shared(
+            &program,
+            &seeds,
+            exact,
+            selection,
+            &Cancellation::default(),
+        ));
         assert_eq!(
             failure.cause,
             shared::Cause::World {
@@ -265,18 +287,29 @@ fn source_work_limits_are_collective() {
     let pool = pool(seeds.len());
     for selection in [SourceSelection::Union, SourceSelection::Worlds] {
         let complete = pool
-            .check_shared(&program, &seeds, limits(), selection, &Control::default())
+            .check_shared(
+                &program,
+                &seeds,
+                limits(),
+                selection,
+                &Cancellation::default(),
+            )
             .unwrap();
         let work = complete.statistics.source.source_work;
         let mut exact = limits();
         exact.source.max_source_work = work;
         assert!(
-            pool.check_shared(&program, &seeds, exact, selection, &Control::default())
+            pool.check_shared(&program, &seeds, exact, selection, &Cancellation::default())
                 .is_ok()
         );
         exact.source.max_source_work -= 1;
-        let failure =
-            incomplete(pool.check_shared(&program, &seeds, exact, selection, &Control::default()));
+        let failure = incomplete(pool.check_shared(
+            &program,
+            &seeds,
+            exact,
+            selection,
+            &Cancellation::default(),
+        ));
         assert_eq!(failure.cause, shared::Cause::Source(Stop::WorkLimit));
         assert_eq!(failure.statistics.source.source_work, work - 1);
     }
@@ -288,17 +321,23 @@ fn shared_catalog_limits_count_distinct_batch_atoms() {
     let pool = pool(seeds.len());
     let selection = SourceSelection::Worlds;
     let complete = pool
-        .check_shared(&program, &seeds, limits(), selection, &Control::default())
+        .check_shared(
+            &program,
+            &seeds,
+            limits(),
+            selection,
+            &Cancellation::default(),
+        )
         .unwrap();
     let mut exact = limits();
     exact.source.max_atoms = complete.statistics.source.catalog_atoms;
     assert!(
-        pool.check_shared(&program, &seeds, exact, selection, &Control::default())
+        pool.check_shared(&program, &seeds, exact, selection, &Cancellation::default())
             .is_ok()
     );
     exact.source.max_atoms -= 1;
     let failure =
-        incomplete(pool.check_shared(&program, &seeds, exact, selection, &Control::default()));
+        incomplete(pool.check_shared(&program, &seeds, exact, selection, &Cancellation::default()));
     assert_eq!(failure.cause, shared::Cause::Source(Stop::CarrierLimit));
 }
 
@@ -312,7 +351,7 @@ fn progress_storage_is_charged_before_allocation() {
         &seeds,
         limited,
         SourceSelection::Union,
-        &Control::default(),
+        &Cancellation::default(),
     ));
     assert_eq!(failure.cause, shared::Cause::Source(Stop::Allocation));
     assert!(failure.statistics.worlds.is_empty());
@@ -326,14 +365,14 @@ fn progress_storage_is_charged_before_allocation() {
 #[test]
 fn cancelled_submission_retains_no_execution_work() {
     let (program, seeds) = fixture(&[1, 2]);
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     let failure = incomplete(pool(seeds.len()).check_shared(
         &program,
         &seeds,
         limits(),
         SourceSelection::Union,
-        &control,
+        &cancellation,
     ));
     assert_eq!(failure.cause, shared::Cause::Source(Stop::Cancelled));
     assert!(failure.statistics.worlds.is_empty());
@@ -346,13 +385,13 @@ fn cancelled_submission_retains_no_execution_work() {
 #[test]
 fn expired_deadline_remains_an_incomplete_batch() {
     let (program, seeds) = fixture(&[1, 2]);
-    let control = Control::with_deadline(Instant::now()).unwrap();
+    let cancellation = Cancellation::with_deadline(Instant::now()).unwrap();
     let failure = incomplete(pool(seeds.len()).check_shared(
         &program,
         &seeds,
         limits(),
         SourceSelection::Worlds,
-        &control,
+        &cancellation,
     ));
     assert_eq!(failure.cause, shared::Cause::Source(Stop::Deadline));
 }
@@ -366,7 +405,7 @@ fn foreign_seed_identity_precedes_execution() {
         &seeds,
         limits(),
         SourceSelection::Union,
-        &Control::default(),
+        &Cancellation::default(),
     ));
     assert_eq!(failure.cause, shared::Cause::Source(Stop::WrongProgram));
     assert!(failure.statistics.worlds.is_empty());
@@ -380,7 +419,7 @@ fn pool_capacity_refuses_the_whole_submission() {
         &seeds,
         limits(),
         SourceSelection::Union,
-        &Control::default(),
+        &Cancellation::default(),
     );
     assert!(matches!(
         result,
@@ -401,7 +440,7 @@ fn shared_admission_exposes_the_original_capacity_error() {
             &seeds,
             limits(),
             SourceSelection::Union,
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
     let shared::Error::Admission(original) = &error else {
@@ -454,10 +493,16 @@ fn incomplete_cause(error: &shared::Error) -> &shared::Failure {
 #[test]
 fn shared_cancellation_exposes_its_source_cause() {
     let (program, seeds) = fixture(&[1, 2]);
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     let error = pool(seeds.len())
-        .check_shared(&program, &seeds, limits(), SourceSelection::Union, &control)
+        .check_shared(
+            &program,
+            &seeds,
+            limits(),
+            SourceSelection::Union,
+            &cancellation,
+        )
         .unwrap_err();
     let failure = incomplete_cause(&error);
     assert_eq!(failure.cause, shared::Cause::Source(Stop::Cancelled));
@@ -481,7 +526,7 @@ fn shared_work_refusal_exposes_its_candidate_occurrence() {
             &seeds,
             request,
             SourceSelection::Worlds,
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
     let failure = incomplete_cause(&error);
@@ -515,7 +560,7 @@ fn empty_batches_have_no_source_or_world_work() {
             &[],
             limits(),
             SourceSelection::Union,
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     assert!(result.checks.is_empty());
@@ -538,7 +583,7 @@ fn source_candidate_cap_precedes_progress_allocation() {
             &seeds,
             limited,
             SourceSelection::Union,
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
     let shared::Error::Incomplete(failure) = error else {

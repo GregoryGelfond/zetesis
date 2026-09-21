@@ -85,7 +85,7 @@ pub fn run(options: &Options, output: &mut impl io::Write) -> Result<(), Error> 
     };
     measure(
         options.configuration()?,
-        &zetesis_cpu::Control::default(),
+        &zetesis_cpu::Cancellation::default(),
         |event| {
             serde_json::to_writer(&mut output, event).map_err(io::Error::other)?;
             writeln!(output)

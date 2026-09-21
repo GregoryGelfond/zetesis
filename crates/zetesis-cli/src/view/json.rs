@@ -2,7 +2,7 @@
 
 use std::io::Write;
 
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::observation::json::AtomTable;
 
 use crate::{AnswerRenderer, AnswerView, PublicationView, RunError, SummaryDelivery};
@@ -64,14 +64,18 @@ impl<W: Write> AnswerRenderer for JsonRenderer<W> {
         Ok(())
     }
 
-    fn answer(&mut self, view: AnswerView<'_>, control: &Control) -> Result<(), RunError> {
+    fn answer(
+        &mut self,
+        view: AnswerView<'_>,
+        cancellation: &Cancellation,
+    ) -> Result<(), RunError> {
         crate::output::write_model_record(
             &mut self.output,
             view.number,
             view.model,
             &mut self.atoms,
             self.max_record_bytes,
-            control,
+            cancellation,
         )
     }
 

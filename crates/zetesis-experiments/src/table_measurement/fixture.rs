@@ -2,7 +2,7 @@ use std::{collections::BTreeSet, mem::size_of};
 
 use serde::Serialize;
 use zetesis_core::{Atom, Predicate, Sign, Value, ValueLimits, ValueNode};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 use super::{Case, Configuration, Error, Output, config::DOMAIN_VALUES as VALUES};
 
@@ -57,8 +57,8 @@ pub enum TypedValue {
 }
 
 impl Fixture {
-    pub fn new(config: Configuration, control: &Control) -> Result<Self, Error> {
-        control.poll().map_err(Error::Stopped)?;
+    pub fn new(config: Configuration, cancellation: &Cancellation) -> Result<Self, Error> {
+        cancellation.poll().map_err(Error::Stopped)?;
         let scope = match config.case {
             Case::Correlated => vec![0, 1],
             Case::Independent => vec![0, 1, 2, 3],
@@ -89,7 +89,7 @@ impl Fixture {
         values.dedup();
         let mut atoms = Vec::with_capacity(config.rows);
         for row in 0..config.rows {
-            control.poll().map_err(Error::Stopped)?;
+            cancellation.poll().map_err(Error::Stopped)?;
             let cells = (0..scope.len())
                 .map(|column| {
                     let id = match config.case {
@@ -179,12 +179,12 @@ impl Fixture {
 
     /// Independent original-row reference: linear domain membership and pairwise
     /// alias equality. No prepared Table, relation IDs or binary domain lookup.
-    pub fn reference(&self, query: usize, control: &Control) -> Result<Output, Error> {
+    pub fn reference(&self, query: usize, cancellation: &Cancellation) -> Result<Output, Error> {
         let domains = &self.domains[query];
         let mut rows = Vec::new();
         let mut projected = vec![BTreeSet::new(); domains.len()];
         for (position, &original) in self.indices.iter().enumerate() {
-            control.poll().map_err(Error::Stopped)?;
+            cancellation.poll().map_err(Error::Stopped)?;
             let tuple = self.atoms[original].values();
             if !tuple
                 .iter()

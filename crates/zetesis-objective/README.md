@@ -40,7 +40,7 @@ The frontend must establish every expression input's safety independently and
 admit the resolved templates through `ObjectiveProgram::new`; scope validation
 alone does not establish source eligibility, numeric presence or a valid query.
 
-`evaluate(&program, &model, Limits, &Control)` returns an `Evaluation` with:
+`evaluate(&program, &model, Limits, &Cancellation)` returns an `Evaluation` with:
 
 - `score()`: signed costs at the program's distinct descending priority slots;
 - `contributions()`: canonical active keys sorted by `(priority, weight, tuple)`;

@@ -9,7 +9,7 @@ use zetesis_cli::{
     Options, PublicationFailure, RunError, run_bundle_finalized_with_diagnostics,
     run_finalized_with_diagnostics,
 };
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::base::source::{Source, SourceId};
 use zetesis_themelios::observation::{Error, ErrorKind, EvaluationError};
 use zetesis_themelios::{
@@ -37,7 +37,7 @@ fn fail_source(source: &str) -> (PublicationFailure, Vec<u8>) {
         &options(),
         &mut output,
         &mut Vec::new(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     (failure, output)
@@ -144,7 +144,7 @@ fn included_error_retains_loaded_bytes_after_disk_changes() {
         &options(),
         &mut Vec::new(),
         &mut Vec::new(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     let error = observation(&failure);
@@ -220,10 +220,14 @@ fn json_observation_failure_keeps_models_empty_and_diagnostics_separate() {
 fn unlocated_cancellation_never_acquires_an_invented_source() {
     use zetesis_themelios::observation::{Limits, ObservationProgram};
 
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     let mut error = ObservationProgram::default()
-        .evaluate(&zetesis_core::Model::default(), Limits::default(), &control)
+        .evaluate(
+            &zetesis_core::Model::default(),
+            Limits::default(),
+            &cancellation,
+        )
         .unwrap_err();
     let original = error.clone();
     error.retain_source(
@@ -255,7 +259,7 @@ fn source_attachment_preserves_the_library_refusal() {
         .evaluate(
             &zetesis_core::Model::default(),
             Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
     let original = error.clone();

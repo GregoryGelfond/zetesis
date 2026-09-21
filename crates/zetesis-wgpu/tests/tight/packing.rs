@@ -26,7 +26,12 @@ fn certificate() -> TightPlan {
         AdmissionLimits::default(),
     )
     .unwrap();
-    TightPlan::compile(&theory, TightPlanLimits::default(), &Control::default()).unwrap()
+    TightPlan::compile(
+        &theory,
+        TightPlanLimits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap()
 }
 fn graph() -> Graph {
     Graph::new(&certificate(), atomic(&wgpu::Limits::default())).unwrap()
@@ -76,17 +81,17 @@ fn decode_present(
     records: &[u32],
     graph: &Graph,
     plan: &Plan,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<Vec<TightGpuCheck>, GpuError> {
     let seeds = vec![7; usize::try_from(plan.seeds / 4).unwrap()];
-    super::decode(records, graph, plan, &seeds, control)
+    super::decode(records, graph, plan, &seeds, cancellation)
 }
 
 #[test]
 fn certificate_packing_retains_original_formula_structure() {
     let certificate = certificate();
     let graph = Graph::new(&certificate, atomic(&wgpu::Limits::default())).unwrap();
-    let packed = graph.pack(&certificate, &Control::default()).unwrap();
+    let packed = graph.pack(&certificate, &Cancellation::default()).unwrap();
     assert_eq!(
         packed.nodes,
         vec![
@@ -110,7 +115,7 @@ fn valid_rank_choices_do_not_change_cached_producers() {
         original.theory(),
         &[2, 1, 0],
         TightPlanLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_ne!(original.ranks(), alternate.ranks());
@@ -123,8 +128,8 @@ fn valid_rank_choices_do_not_change_cached_producers() {
             },
         )
         .unwrap();
-        let first = graph.pack(&original, &Control::default()).unwrap();
-        let second = graph.pack(&alternate, &Control::default()).unwrap();
+        let first = graph.pack(&original, &Cancellation::default()).unwrap();
+        let second = graph.pack(&alternate, &Cancellation::default()).unwrap();
         assert_eq!(first.producers, second.producers);
         assert_eq!(first.nodes, second.nodes);
         assert_eq!(first.roots, second.roots);
@@ -135,7 +140,7 @@ fn valid_rank_choices_do_not_change_cached_producers() {
 fn packing_refuses_an_independent_equal_certificate() {
     assert_eq!(
         graph()
-            .pack(&certificate(), &Control::default())
+            .pack(&certificate(), &Cancellation::default())
             .err()
             .unwrap()
             .kind(),
@@ -154,7 +159,7 @@ fn candidate_packing_preserves_repeated_occurrences() {
         .pack(
             &graph,
             &[input[0].clone(), input[1].clone(), input[0].clone()],
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     assert_eq!(packed, [5, 2, 5]);
@@ -166,7 +171,7 @@ fn candidate_identity_is_checked_before_encoding() {
     let foreign = Interpretation::new(certificate().theory(), []).unwrap();
     assert_eq!(
         plan(&graph, 1, true)
-            .pack(&graph, &[foreign], &Control::default())
+            .pack(&graph, &[foreign], &Cancellation::default())
             .unwrap_err()
             .kind(),
         GpuErrorKind::Seed
@@ -178,7 +183,7 @@ fn candidate_count_must_match_the_admitted_transport() {
     let graph = graph();
     assert_eq!(
         plan(&graph, 1, true)
-            .pack(&graph, &[], &Control::default())
+            .pack(&graph, &[], &Cancellation::default())
             .unwrap_err()
             .kind(),
         GpuErrorKind::Capacity
@@ -188,10 +193,14 @@ fn candidate_count_must_match_the_admitted_transport() {
 #[test]
 fn empty_carriers_keep_only_required_buffer_padding() {
     let theory = Theory::new(0, vec![], vec![], AdmissionLimits::default()).unwrap();
-    let certificate =
-        TightPlan::compile(&theory, TightPlanLimits::default(), &Control::default()).unwrap();
+    let certificate = TightPlan::compile(
+        &theory,
+        TightPlanLimits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
     let graph = Graph::new(&certificate, atomic(&wgpu::Limits::default())).unwrap();
-    let packed = graph.pack(&certificate, &Control::default()).unwrap();
+    let packed = graph.pack(&certificate, &Cancellation::default()).unwrap();
     assert_eq!(packed.nodes, [0; 4]);
     assert_eq!(packed.roots, [0]);
     assert_eq!(packed.producers, [0; 4]);
@@ -202,7 +211,7 @@ fn empty_carriers_keep_only_required_buffer_padding() {
             .pack(
                 &graph,
                 &[Interpretation::new(&theory, []).unwrap()],
-                &Control::default()
+                &Cancellation::default()
             )
             .unwrap(),
         [0]
@@ -213,15 +222,19 @@ fn empty_carriers_keep_only_required_buffer_padding() {
 fn candidate_word_tails_never_introduce_atoms() {
     for count in [1, 31, 32, 33, 63, 64, 65] {
         let theory = Theory::new(count, vec![], vec![], AdmissionLimits::default()).unwrap();
-        let certificate =
-            TightPlan::compile(&theory, TightPlanLimits::default(), &Control::default()).unwrap();
+        let certificate = TightPlan::compile(
+            &theory,
+            TightPlanLimits::default(),
+            &Cancellation::default(),
+        )
+        .unwrap();
         let graph = Graph::new(&certificate, atomic(&wgpu::Limits::default())).unwrap();
         let input = [
             Interpretation::new(&theory, 0..count).unwrap(),
             Interpretation::new(&theory, [count - 1]).unwrap(),
         ];
         let packed = plan(&graph, 2, true)
-            .pack(&graph, &input, &Control::default())
+            .pack(&graph, &input, &Cancellation::default())
             .unwrap();
         let width = count.div_ceil(32);
         assert_eq!(packed.len(), 2 * width);
@@ -244,8 +257,12 @@ fn support_storage_uses_packed_world_rows() {
         (65, 3),
     ] {
         let theory = Theory::new(atoms, vec![], vec![], AdmissionLimits::default()).unwrap();
-        let certificate =
-            TightPlan::compile(&theory, TightPlanLimits::default(), &Control::default()).unwrap();
+        let certificate = TightPlan::compile(
+            &theory,
+            TightPlanLimits::default(),
+            &Cancellation::default(),
+        )
+        .unwrap();
         let graph = Graph::new(&certificate, atomic(&wgpu::Limits::default())).unwrap();
         for worlds in [1, 3, 65] {
             let expected = u64::try_from((width * worlds).max(1)).unwrap() * 4;
@@ -267,8 +284,12 @@ fn support_work_charges_word_initialization() {
         (65, 68),
     ] {
         let theory = Theory::new(atoms, vec![], vec![], AdmissionLimits::default()).unwrap();
-        let certificate =
-            TightPlan::compile(&theory, TightPlanLimits::default(), &Control::default()).unwrap();
+        let certificate = TightPlan::compile(
+            &theory,
+            TightPlanLimits::default(),
+            &Cancellation::default(),
+        )
+        .unwrap();
         let graph = Graph::new(&certificate, atomic(&wgpu::Limits::default())).unwrap();
         assert_eq!(graph.work, expected);
     }
@@ -443,7 +464,7 @@ fn false_root_witnesses_use_assertion_order() {
     let graph = graph();
     let plan = plan(&graph, 2, false);
     let records = [7, 0, 1, 0, 20, RESULT_MAGIC, 7, 1, 1, 3, 20, RESULT_MAGIC];
-    let result = decode_present(&records, &graph, &plan, &Control::default()).unwrap();
+    let result = decode_present(&records, &graph, &plan, &Cancellation::default()).unwrap();
     assert_eq!(result[0].verdict(), TightVerdict::NotModel { root: 8 });
     assert_eq!(result[1].verdict(), TightVerdict::NotModel { root: 1 });
     assert_eq!(result[0].work(), 20);
@@ -473,7 +494,7 @@ fn all_verdict_kinds_decode_without_losing_witnesses() {
         20,
         RESULT_MAGIC,
     ];
-    let result = decode_present(&records, &graph, &plan, &Control::default()).unwrap();
+    let result = decode_present(&records, &graph, &plan, &Cancellation::default()).unwrap();
     assert_eq!(
         result
             .iter()
@@ -498,14 +519,14 @@ fn corrupt_records_never_produce_a_partial_batch() {
         let mut corrupt = valid;
         corrupt[index] = value;
         assert_eq!(
-            decode_present(&corrupt, &graph, &plan, &Control::default())
+            decode_present(&corrupt, &graph, &plan, &Cancellation::default())
                 .unwrap_err()
                 .kind(),
             GpuErrorKind::Readback
         );
     }
     assert_eq!(
-        decode_present(&valid[..11], &graph, &plan, &Control::default())
+        decode_present(&valid[..11], &graph, &plan, &Cancellation::default())
             .unwrap_err()
             .kind(),
         GpuErrorKind::Readback
@@ -521,7 +542,7 @@ fn out_of_range_root_ordinals_are_readback_failures() {
             &[7, 0, 1, 4, 20, RESULT_MAGIC],
             &graph,
             &plan,
-            &Control::default()
+            &Cancellation::default()
         )
         .unwrap_err()
         .kind(),
@@ -534,13 +555,19 @@ fn cancellation_prevents_completed_results() {
     let certificate = certificate();
     let graph = Graph::new(&certificate, atomic(&wgpu::Limits::default())).unwrap();
     let plan = plan(&graph, 1, true);
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     let input = [Interpretation::new(&graph.theory, []).unwrap()];
     for error in [
-        graph.pack(&certificate, &control).err().unwrap(),
-        plan.pack(&graph, &input, &control).unwrap_err(),
-        decode_present(&[7, 0, 0, 0, 20, RESULT_MAGIC], &graph, &plan, &control).unwrap_err(),
+        graph.pack(&certificate, &cancellation).err().unwrap(),
+        plan.pack(&graph, &input, &cancellation).unwrap_err(),
+        decode_present(
+            &[7, 0, 0, 0, 20, RESULT_MAGIC],
+            &graph,
+            &plan,
+            &cancellation,
+        )
+        .unwrap_err(),
     ] {
         assert_eq!(error.interruption, Some(zetesis_cpu::Stop::Cancelled));
     }
@@ -551,9 +578,10 @@ fn absent_residual_witnesses_are_readback_failures() {
     let graph = graph();
     let plan = plan(&graph, 2, false);
     let records = [7, 0, 2, 2, 20, RESULT_MAGIC, 7, 1, 2, 2, 20, RESULT_MAGIC];
-    let error = super::decode(&records, &graph, &plan, &[7, 3], &Control::default()).unwrap_err();
+    let error =
+        super::decode(&records, &graph, &plan, &[7, 3], &Cancellation::default()).unwrap_err();
     assert_eq!(error.kind(), GpuErrorKind::Readback);
-    assert!(super::decode(&records, &graph, &plan, &[7, 4], &Control::default()).is_ok());
+    assert!(super::decode(&records, &graph, &plan, &[7, 4], &Cancellation::default()).is_ok());
 }
 
 #[test]
@@ -566,7 +594,7 @@ fn malformed_candidate_storage_cannot_validate_receipts() {
             &graph,
             &plan,
             &[],
-            &Control::default()
+            &Cancellation::default()
         )
         .unwrap_err()
         .kind(),
@@ -576,8 +604,12 @@ fn malformed_candidate_storage_cannot_validate_receipts() {
 
 fn empty_graph() -> Graph {
     let theory = Theory::new(0, vec![], vec![], AdmissionLimits::default()).unwrap();
-    let certificate =
-        TightPlan::compile(&theory, TightPlanLimits::default(), &Control::default()).unwrap();
+    let certificate = TightPlan::compile(
+        &theory,
+        TightPlanLimits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
     Graph::new(&certificate, atomic(&wgpu::Limits::default())).unwrap()
 }
 
@@ -585,13 +617,13 @@ fn empty_graph() -> Graph {
 fn empty_storage_padding_never_becomes_a_witness() {
     let graph = empty_graph();
     let empty = plan(&graph, 1, false);
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let stable = super::decode(
         &[7, 0, STATUS_STABLE, 0, 0, RESULT_MAGIC],
         &graph,
         &empty,
         &[0],
-        &control,
+        &cancellation,
     )
     .unwrap();
     assert_eq!(stable[0].verdict(), TightVerdict::Stable);
@@ -602,7 +634,7 @@ fn empty_storage_padding_never_becomes_a_witness() {
             &graph,
             &empty,
             &[0],
-            &control,
+            &cancellation,
         )
         .unwrap_err();
         assert_eq!(error.kind(), GpuErrorKind::Readback);
@@ -610,7 +642,8 @@ fn empty_storage_padding_never_becomes_a_witness() {
 
     // Zero is a valid ordinal when an actual asserted root occupies it.
     let theory = Theory::new(0, vec![Node::False], vec![0], AdmissionLimits::default()).unwrap();
-    let certificate = TightPlan::compile(&theory, TightPlanLimits::default(), &control).unwrap();
+    let certificate =
+        TightPlan::compile(&theory, TightPlanLimits::default(), &cancellation).unwrap();
     let graph = Graph::new(&certificate, atomic(&wgpu::Limits::default())).unwrap();
     let asserted = plan(&graph, 1, false);
     let result = super::decode(
@@ -618,7 +651,7 @@ fn empty_storage_padding_never_becomes_a_witness() {
         &graph,
         &asserted,
         &[0],
-        &control,
+        &cancellation,
     )
     .unwrap();
     assert_eq!(result[0].verdict(), TightVerdict::NotModel { root: 0 });

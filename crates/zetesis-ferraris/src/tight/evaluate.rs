@@ -3,7 +3,7 @@ use super::{
     filled, reserve,
 };
 use crate::{Interpretation, Node};
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 
 impl TightPlan {
     /// Check original satisfaction and every present atom's producer support.
@@ -18,9 +18,9 @@ impl TightPlan {
         &self,
         candidate: &Interpretation,
         limits: TightCheckLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<TightCheck, TightError> {
-        self.check_accounted(candidate, limits, control).result
+        self.check_accounted(candidate, limits, cancellation).result
     }
 
     /// Check the same membership conditions as [`Self::check`], retaining all
@@ -30,12 +30,12 @@ impl TightPlan {
         &self,
         candidate: &Interpretation,
         limits: TightCheckLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> TightAttempt<TightCheck> {
         let mut work = Work {
             used: 0,
             max: limits.max_work,
-            control,
+            cancellation,
         };
         let result = self.evaluate(candidate, limits, &mut work);
         TightAttempt {
@@ -53,7 +53,7 @@ impl TightPlan {
         if !self.theory.same_instance(candidate.theory()) {
             return Err(Stop::WrongProgram.into());
         }
-        work.control.poll()?;
+        work.cancellation.poll()?;
         let logical_bytes = bytes(
             u128::from(self.statistics.resident_bytes)
                 + self.theory.nodes().len() as u128

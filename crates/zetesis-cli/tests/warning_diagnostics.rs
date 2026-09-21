@@ -11,7 +11,7 @@ use zetesis_cli::{
     ColorMode, Completion, Grounder, Options, Oracle, RunError, run_bundle_with_diagnostics,
     run_finalized_with_diagnostics, run_with_diagnostics,
 };
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::{BundleLimits, SourceBundle};
 
 const SOURCE: &str = "d(0..2).\np(X) :- d(X), 1/X=1.\n";
@@ -40,7 +40,7 @@ fn solve(source: &str, options: &Options) -> (Vec<u8>, String) {
         options,
         &mut output,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(report.completion, Completion::Exhausted);
@@ -125,7 +125,7 @@ fn warning_writer_failure_stops_before_semantic_search() {
                 &options,
                 &mut output,
                 &mut diagnostics,
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap_err();
             assert!(matches!(failure.cause.as_ref(), RunError::Output(error)
@@ -152,7 +152,7 @@ fn bundle_warnings_resolve_original_included_source() {
         &options(),
         &mut Vec::new(),
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(report.completion, Completion::Exhausted);

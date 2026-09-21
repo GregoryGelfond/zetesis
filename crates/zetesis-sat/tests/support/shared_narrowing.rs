@@ -6,7 +6,7 @@ use super::*;
 use crate::ferraris::Proposer;
 use crate::prepared_reduct::State;
 use crate::search::LocalQuota;
-use crate::{Control, Limits, SearchLimits, SearchStatistics, StableModels, Statistics};
+use crate::{Cancellation, Limits, SearchLimits, SearchStatistics, StableModels, Statistics};
 use zetesis_ferraris::{AdmissionLimits, Node};
 
 fn cycle() -> Theory {
@@ -24,14 +24,14 @@ fn cycle() -> Theory {
     .unwrap()
 }
 
-fn budget(control: &Control, work: u64) -> Budget<'_> {
+fn budget(cancellation: &Cancellation, work: u64) -> Budget<'_> {
     Budget {
         quota: LocalQuota,
         limits: SearchLimits {
             max_work: work,
             ..SearchLimits::default()
         },
-        control,
+        cancellation,
         statistics: SearchStatistics::default(),
     }
 }
@@ -46,14 +46,14 @@ fn enumeration_queries_share_the_candidate_index() {
                 &theory,
                 workers,
                 Limits::default(),
-                Control::default(),
+                Cancellation::default(),
             )
         } else {
             StableModels::with_region_workers(
                 &theory,
                 workers,
                 Limits::default(),
-                Control::default(),
+                Cancellation::default(),
             )
         }
         .unwrap();
@@ -67,7 +67,7 @@ fn enumeration_queries_share_the_candidate_index() {
         assert!(Arc::ptr_eq(index, &query.index));
         assert!(query.theory().same_instance(&theory));
         let extraction =
-            zetesis_ferraris::producers(&theory, RegionLimits::default(), &Control::default())
+            zetesis_ferraris::producers(&theory, RegionLimits::default(), &Cancellation::default())
                 .unwrap();
         let construction = extraction.work + u64::try_from(theory.nodes().len()).unwrap();
         assert_eq!(search.statistics().search.work, construction);
@@ -85,8 +85,8 @@ fn a_shared_index_rejects_an_independent_equal_theory() {
     let equal = cycle();
     let candidate = Interpretation::new(&equal, []).unwrap();
     let mut state = State::with_index(Arc::new(IndexedTheory::new(&theory)));
-    let control = Control::default();
-    let mut budget = budget(&control, 100);
+    let cancellation = Cancellation::default();
+    let mut budget = budget(&cancellation, 100);
     let mut statistics = Statistics::default();
     state
         .ensure(
@@ -131,8 +131,8 @@ fn a_shared_index_rejects_an_independent_equal_theory() {
 #[test]
 fn reused_index_needs_no_second_construction_grant() {
     let theory = cycle();
-    let control = Control::default();
-    let mut budget = budget(&control, u64::MAX);
+    let cancellation = Cancellation::default();
+    let mut budget = budget(&cancellation, u64::MAX);
     let opened = open(&theory, &mut budget).unwrap();
     let paid = budget.statistics;
     budget.limits.max_work = paid.work;
@@ -165,9 +165,9 @@ fn reused_index_needs_no_second_construction_grant() {
 #[test]
 fn standalone_membership_charges_its_one_index() {
     let theory = cycle();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let required = u64::try_from(theory.nodes().len()).unwrap();
-    let mut budget = budget(&control, required - 1);
+    let mut budget = budget(&cancellation, required - 1);
     let mut state = State::new(SearchMethod::Regions);
     let mut statistics = Statistics::default();
     assert_eq!(
@@ -195,10 +195,10 @@ fn cancelled_shared_membership_performs_no_query_work() {
     let theory = cycle();
     let candidate = Interpretation::new(&theory, []).unwrap();
     let mut state = State::with_index(Arc::new(IndexedTheory::new(&theory)));
-    let control = Control::default();
-    let mut budget = budget(&control, 100);
+    let cancellation = Cancellation::default();
+    let mut budget = budget(&cancellation, 100);
     let mut statistics = Statistics::default();
-    control.cancel();
+    cancellation.cancel();
     assert!(matches!(
         state.check(
             &theory,

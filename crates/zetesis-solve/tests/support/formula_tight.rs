@@ -17,20 +17,20 @@ fn support_decisions_agree_with_independent_reducts() {
             AdmissionLimits::default(),
         )
         .unwrap();
-        let control = zetesis_cpu::Control::default();
-        let plan = TightPlan::compile(&theory, TightPlanLimits::default(), &control).unwrap();
+        let cancellation = zetesis_cpu::Cancellation::default();
+        let plan = TightPlan::compile(&theory, TightPlanLimits::default(), &cancellation).unwrap();
         for mask in 0..8 {
             let candidate =
                 Interpretation::new(&theory, (0..3).filter(|atom| mask & (1 << atom) != 0))
                     .unwrap();
             let support = plan
-                .check(&candidate, TightCheckLimits::default(), &control)
+                .check(&candidate, TightCheckLimits::default(), &cancellation)
                 .unwrap();
             let exact = zetesis_ferraris::check(
                 &theory,
                 &candidate,
                 zetesis_ferraris::Limits::default(),
-                &control,
+                &cancellation,
             )
             .unwrap();
             match super::verdict(support.verdict) {

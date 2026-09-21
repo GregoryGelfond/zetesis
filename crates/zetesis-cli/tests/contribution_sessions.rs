@@ -12,7 +12,7 @@ use zetesis_cli::{
     Backend, Completion, Options, Oracle, PreparedInput, Session, SolveConfig, run_with_diagnostics,
 };
 use zetesis_core::{Atom, Predicate, Sign, Value, ValueLimits, ValueNode};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 use zetesis_validation::{answers, process};
 
@@ -114,8 +114,12 @@ fn composed_profiles_preserve_complete_optimum_answers() {
                 batch_size: NonZeroUsize::new(batch).unwrap(),
                 ..SolveConfig::default()
             };
-            let mut session =
-                Session::new(PreparedInput::formula(&input), config, Control::default()).unwrap();
+            let mut session = Session::new(
+                PreparedInput::formula(&input),
+                config,
+                Cancellation::default(),
+            )
+            .unwrap();
             let mut models = Vec::new();
             for answer in session.by_ref() {
                 let answer = answer.unwrap();
@@ -158,7 +162,7 @@ fn output(source: &str, json: bool) -> Vec<u8> {
         &options,
         &mut output,
         &mut Vec::new(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(report.completion, Completion::Exhausted);

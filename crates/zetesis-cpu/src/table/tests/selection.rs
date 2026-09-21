@@ -42,10 +42,10 @@ fn assert_domains(
 ) {
     let expected = expected_rows(source, indices, table.scope(), domains);
     let selected = table
-        .select(domains, Limits::default(), &Control::default())
+        .select(domains, Limits::default(), &Cancellation::default())
         .unwrap();
     let projected = table
-        .project_domains(domains, Limits::default(), &Control::default())
+        .project_domains(domains, Limits::default(), &Cancellation::default())
         .unwrap();
     assert_eq!(selected.rows().collect::<Vec<_>>(), expected);
     assert_eq!(selected.words(), projected.words());
@@ -97,10 +97,20 @@ fn borrowed_domains_match_complete_rows() {
         );
         let relation =
             Relation::from_atoms(&predicate, &source, RelationLimits::default()).unwrap();
-        let independent =
-            Table::prepare(&relation, &[0, 1], Limits::default(), &Control::default()).unwrap();
-        let aliased =
-            Table::prepare(&relation, &[0, 0], Limits::default(), &Control::default()).unwrap();
+        let independent = Table::prepare(
+            &relation,
+            &[0, 1],
+            Limits::default(),
+            &Cancellation::default(),
+        )
+        .unwrap();
+        let aliased = Table::prepare(
+            &relation,
+            &[0, 0],
+            Limits::default(),
+            &Cancellation::default(),
+        )
+        .unwrap();
         let indices: Vec<_> = (0..source.len()).collect();
         for &left in &domains {
             assert_domains(&aliased, &source, &indices, &[left]);
@@ -118,13 +128,13 @@ fn selection_outlives_its_prepared_index() {
     let relation = Relation::from_atoms(&predicate, &source, RelationLimits::default()).unwrap();
     let selected = {
         let table =
-            Table::prepare(&relation, &[0], Limits::default(), &Control::default()).unwrap();
+            Table::prepare(&relation, &[0], Limits::default(), &Cancellation::default()).unwrap();
         let value = Value::Number(2);
         table
             .select(
                 &[Domain::Singleton(&value)],
                 Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap()
     };
@@ -141,13 +151,14 @@ fn advancing_bindings_preserves_prior_selection() {
     let predicate = Predicate::new("table", 1).unwrap();
     let source = atoms(&predicate, &[numbers(&[0]), numbers(&[1])]);
     let relation = Relation::from_atoms(&predicate, &source, RelationLimits::default()).unwrap();
-    let table = Table::prepare(&relation, &[0], Limits::default(), &Control::default()).unwrap();
+    let table =
+        Table::prepare(&relation, &[0], Limits::default(), &Cancellation::default()).unwrap();
     let mut bound = Value::Number(0);
     let first = table
         .select(
             &[Domain::Singleton(&bound)],
             Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     bound = Value::Number(1);
@@ -155,14 +166,14 @@ fn advancing_bindings_preserves_prior_selection() {
         .select(
             &[Domain::Singleton(&bound)],
             Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     let restored = table
         .select(
             &[Domain::Unrestricted],
             Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     assert_eq!(first.words(), &[1]);
@@ -180,12 +191,18 @@ fn selection_preserves_catalog_occurrence_order() {
     let indices = [2, 0, 2, 1, 0];
     let relation =
         Relation::from_catalog(&predicate, &source, &indices, RelationLimits::default()).unwrap();
-    let table = Table::prepare(&relation, &[0, 0], Limits::default(), &Control::default()).unwrap();
+    let table = Table::prepare(
+        &relation,
+        &[0, 0],
+        Limits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
     let selected = table
         .select(
             &[Domain::Unrestricted],
             Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     assert_eq!(selected.rows().collect::<Vec<_>>(), vec![0, 1, 2, 4]);
@@ -208,12 +225,13 @@ fn selection_skips_empty_mask_words() {
             .collect::<Vec<_>>(),
     );
     let relation = Relation::from_atoms(&predicate, &source, RelationLimits::default()).unwrap();
-    let table = Table::prepare(&relation, &[0], Limits::default(), &Control::default()).unwrap();
+    let table =
+        Table::prepare(&relation, &[0], Limits::default(), &Cancellation::default()).unwrap();
     let selected = table
         .select(
             &[Domain::Singleton(&Value::Number(1))],
             Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     for (from, expected) in [
@@ -244,12 +262,13 @@ fn checked_scan_visits_each_inspected_word() {
             .collect::<Vec<_>>(),
     );
     let relation = Relation::from_atoms(&predicate, &source, RelationLimits::default()).unwrap();
-    let table = Table::prepare(&relation, &[0], Limits::default(), &Control::default()).unwrap();
+    let table =
+        Table::prepare(&relation, &[0], Limits::default(), &Cancellation::default()).unwrap();
     let selected = table
         .select(
             &[Domain::Singleton(&Value::Number(1))],
             Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     for (from, expected_row, expected_checks) in [
@@ -281,12 +300,13 @@ fn checked_scan_error_preserves_retry_position() {
             .collect::<Vec<_>>(),
     );
     let relation = Relation::from_atoms(&predicate, &source, RelationLimits::default()).unwrap();
-    let table = Table::prepare(&relation, &[0], Limits::default(), &Control::default()).unwrap();
+    let table =
+        Table::prepare(&relation, &[0], Limits::default(), &Cancellation::default()).unwrap();
     let selected = table
         .select(
             &[Domain::Singleton(&Value::Number(1))],
             Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     let mut completed_checks = 0;
@@ -309,9 +329,10 @@ fn checked_scan_error_preserves_retry_position() {
 fn empty_checked_scan_needs_no_word_visit() {
     let predicate = Predicate::new("table", 0).unwrap();
     let relation = Relation::from_atoms(&predicate, &[], RelationLimits::default()).unwrap();
-    let table = Table::prepare(&relation, &[], Limits::default(), &Control::default()).unwrap();
+    let table =
+        Table::prepare(&relation, &[], Limits::default(), &Cancellation::default()).unwrap();
     let selected = table
-        .select(&[], Limits::default(), &Control::default())
+        .select(&[], Limits::default(), &Cancellation::default())
         .unwrap();
     assert_eq!(
         selected.next_row_with(0, || Err("unexpected word")),
@@ -326,9 +347,10 @@ fn nullary_selection_preserves_every_occurrence() {
         let source = atoms(&predicate, &vec![vec![]; count]);
         let relation =
             Relation::from_atoms(&predicate, &source, RelationLimits::default()).unwrap();
-        let table = Table::prepare(&relation, &[], Limits::default(), &Control::default()).unwrap();
+        let table =
+            Table::prepare(&relation, &[], Limits::default(), &Cancellation::default()).unwrap();
         let selected = table
-            .select(&[], Limits::default(), &Control::default())
+            .select(&[], Limits::default(), &Cancellation::default())
             .unwrap();
         assert_eq!(
             selected.rows().collect::<Vec<_>>(),
@@ -346,13 +368,14 @@ fn row_selection_omits_projected_domain_storage() {
         &(0..65).map(|value| numbers(&[value])).collect::<Vec<_>>(),
     );
     let relation = Relation::from_atoms(&predicate, &source, RelationLimits::default()).unwrap();
-    let table = Table::prepare(&relation, &[0], Limits::default(), &Control::default()).unwrap();
+    let table =
+        Table::prepare(&relation, &[0], Limits::default(), &Cancellation::default()).unwrap();
     let domains = [Domain::Singleton(&Value::Number(1))];
     let selected = table
-        .select(&domains, Limits::default(), &Control::default())
+        .select(&domains, Limits::default(), &Cancellation::default())
         .unwrap();
     let projected = table
-        .project_domains(&domains, Limits::default(), &Control::default())
+        .project_domains(&domains, Limits::default(), &Cancellation::default())
         .unwrap();
     assert_eq!(selected.words(), projected.words());
     assert!(selected.statistics().retained_bytes < projected.statistics().retained_bytes);
@@ -363,13 +386,14 @@ fn singleton_selection_needs_no_union_capacity() {
     let predicate = Predicate::new("table", 1).unwrap();
     let source = atoms(&predicate, &vec![numbers(&[1]); 65]);
     let relation = Relation::from_atoms(&predicate, &source, RelationLimits::default()).unwrap();
-    let table = Table::prepare(&relation, &[0], Limits::default(), &Control::default()).unwrap();
+    let table =
+        Table::prepare(&relation, &[0], Limits::default(), &Cancellation::default()).unwrap();
     let value = Value::Number(1);
     let selected = table
         .select(
             &[Domain::Singleton(&value)],
             Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     let exact = Limits {
@@ -378,14 +402,18 @@ fn singleton_selection_needs_no_union_capacity() {
     };
     assert!(
         table
-            .select(&[Domain::Singleton(&value)], exact, &Control::default())
+            .select(
+                &[Domain::Singleton(&value)],
+                exact,
+                &Cancellation::default()
+            )
             .is_ok()
     );
     let failure = table
         .select(
             &[Domain::Finite(std::slice::from_ref(&value))],
             exact,
-            &Control::default(),
+            &Cancellation::default(),
         )
         .err()
         .unwrap();
@@ -403,12 +431,13 @@ fn selection_work_limits_are_inclusive() {
     let predicate = Predicate::new("table", 1).unwrap();
     let source = atoms(&predicate, &vec![numbers(&[1]); 65]);
     let relation = Relation::from_atoms(&predicate, &source, RelationLimits::default()).unwrap();
-    let table = Table::prepare(&relation, &[0], Limits::default(), &Control::default()).unwrap();
+    let table =
+        Table::prepare(&relation, &[0], Limits::default(), &Cancellation::default()).unwrap();
     let selected = table
         .select(
             &[Domain::Unrestricted],
             Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     // Three original-mask word copies and one unrestricted descriptor inspection.
@@ -419,7 +448,7 @@ fn selection_work_limits_are_inclusive() {
     };
     assert!(
         table
-            .select(&[Domain::Unrestricted], exact, &Control::default())
+            .select(&[Domain::Unrestricted], exact, &Cancellation::default())
             .is_ok()
     );
     let failure = table
@@ -429,7 +458,7 @@ fn selection_work_limits_are_inclusive() {
                 max_work: exact.max_work - 1,
                 ..exact
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
         .err()
         .unwrap();
@@ -445,12 +474,13 @@ fn selection_byte_limit_includes_prepared_inputs() {
     let predicate = Predicate::new("table", 1).unwrap();
     let source = atoms(&predicate, &[numbers(&[1]), numbers(&[2])]);
     let relation = Relation::from_atoms(&predicate, &source, RelationLimits::default()).unwrap();
-    let table = Table::prepare(&relation, &[0], Limits::default(), &Control::default()).unwrap();
+    let table =
+        Table::prepare(&relation, &[0], Limits::default(), &Cancellation::default()).unwrap();
     let selected = table
         .select(
             &[Domain::Unrestricted],
             Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     let peak = selected.statistics().peak_bytes;
@@ -463,7 +493,7 @@ fn selection_byte_limit_includes_prepared_inputs() {
                     max_bytes: peak,
                     ..Limits::default()
                 },
-                &Control::default()
+                &Cancellation::default()
             )
             .is_ok()
     );
@@ -474,7 +504,7 @@ fn selection_byte_limit_includes_prepared_inputs() {
                 max_bytes: peak - 1,
                 ..Limits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
         .err()
         .unwrap();
@@ -492,9 +522,10 @@ fn selection_byte_limit_includes_prepared_inputs() {
 fn cancelled_selection_precedes_zero_limits() {
     let predicate = Predicate::new("table", 0).unwrap();
     let relation = Relation::from_atoms(&predicate, &[], RelationLimits::default()).unwrap();
-    let table = Table::prepare(&relation, &[], Limits::default(), &Control::default()).unwrap();
-    let control = Control::with_deadline(Instant::now()).unwrap();
-    control.cancel();
+    let table =
+        Table::prepare(&relation, &[], Limits::default(), &Cancellation::default()).unwrap();
+    let cancellation = Cancellation::with_deadline(Instant::now()).unwrap();
+    cancellation.cancel();
     let failure = table
         .select(
             &[],
@@ -503,7 +534,7 @@ fn cancelled_selection_precedes_zero_limits() {
                 max_bytes: 0,
                 max_entries: 0,
             },
-            &control,
+            &cancellation,
         )
         .err()
         .unwrap();
@@ -515,9 +546,10 @@ fn cancelled_selection_precedes_zero_limits() {
 fn selection_rejects_wrong_domain_count() {
     let predicate = Predicate::new("table", 1).unwrap();
     let relation = Relation::from_atoms(&predicate, &[], RelationLimits::default()).unwrap();
-    let table = Table::prepare(&relation, &[0], Limits::default(), &Control::default()).unwrap();
+    let table =
+        Table::prepare(&relation, &[0], Limits::default(), &Cancellation::default()).unwrap();
     let failure = table
-        .select(&[], Limits::default(), &Control::default())
+        .select(&[], Limits::default(), &Cancellation::default())
         .err()
         .unwrap();
     assert_eq!(failure.cause, Cause::Domains);
@@ -528,7 +560,8 @@ fn selection_rechecks_the_support_entry_limit() {
     let predicate = Predicate::new("table", 1).unwrap();
     let source = atoms(&predicate, &[numbers(&[1])]);
     let relation = Relation::from_atoms(&predicate, &source, RelationLimits::default()).unwrap();
-    let table = Table::prepare(&relation, &[0], Limits::default(), &Control::default()).unwrap();
+    let table =
+        Table::prepare(&relation, &[0], Limits::default(), &Cancellation::default()).unwrap();
     let failure = table
         .select(
             &[Domain::Unrestricted],
@@ -536,7 +569,7 @@ fn selection_rechecks_the_support_entry_limit() {
                 max_entries: 0,
                 ..Limits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
         .err()
         .unwrap();
@@ -557,7 +590,8 @@ fn rayon_selection_preserves_query_order() {
     let predicate = Predicate::new("table", 1).unwrap();
     let source = atoms(&predicate, &[numbers(&[0]), numbers(&[1]), numbers(&[2])]);
     let relation = Relation::from_atoms(&predicate, &source, RelationLimits::default()).unwrap();
-    let table = Table::prepare(&relation, &[0], Limits::default(), &Control::default()).unwrap();
+    let table =
+        Table::prepare(&relation, &[0], Limits::default(), &Cancellation::default()).unwrap();
     let domains = [
         Domain::Finite(&[]),
         Domain::Unrestricted,
@@ -572,7 +606,7 @@ fn rayon_selection_preserves_query_order() {
             .par_iter()
             .map(|&domain| {
                 table
-                    .select(&[domain], Limits::default(), &Control::default())
+                    .select(&[domain], Limits::default(), &Cancellation::default())
                     .unwrap()
             })
             .collect()

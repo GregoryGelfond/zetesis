@@ -4,7 +4,7 @@ use std::error::Error;
 use std::io::{self, Write};
 
 use clap::Parser;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_experiments::{
     CommandOptions, Experiment, FormulaBenchmarkError, FormulaFamily, FormulaFixture,
     FormulaOptions, run_formula,
@@ -112,7 +112,7 @@ fn all_tiny_fixture_models_match_independent_frozen_formula_definitions() {
                     fixture.theory(),
                     &interpretation,
                     Limits::default(),
-                    &Control::default(),
+                    &Cancellation::default(),
                 )
                 .unwrap();
                 assert_eq!(actual.accepted(), stable, "{family:?}/{atoms}/{candidate}");

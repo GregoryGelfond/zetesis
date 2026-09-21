@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 
 use serde_json::Value as Json;
 use zetesis_core::{Atom, Model, Sign, Value};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
@@ -60,7 +60,7 @@ pub fn admit(source: &str, limits: &FormulaLimits) -> Result<AdmittedFormula, Fo
 pub fn exhaustive(input: &AdmittedFormula) -> Records {
     let count = input.atoms().len();
     assert!(count <= 12, "small independent subset enumeration");
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut records = Records::new();
     for bits in 0..(1_usize << count) {
         let candidate = Interpretation::new(
@@ -68,7 +68,7 @@ pub fn exhaustive(input: &AdmittedFormula) -> Records {
             (0..count).filter(|&atom| bits & (1 << atom) != 0),
         )
         .unwrap();
-        if !check(input.theory(), &candidate, Limits::default(), &control)
+        if !check(input.theory(), &candidate, Limits::default(), &cancellation)
             .unwrap()
             .accepted()
         {
@@ -82,7 +82,7 @@ pub fn exhaustive(input: &AdmittedFormula) -> Records {
             input.objectives(),
             &Model::new(atoms.iter().cloned()),
             zetesis_objective::Limits::default(),
-            &control,
+            &cancellation,
         )
         .unwrap();
         let score = evaluation.score();

@@ -8,7 +8,7 @@ use zetesis_core::{
     StaticLimits, Template, Term, Value,
 };
 use zetesis_cpu::{
-    BatchError, BatchOracle, CandidateLimits, Candidates, Control, Limits, StaticCheck, Stop,
+    BatchError, BatchOracle, Cancellation, CandidateLimits, Candidates, Limits, StaticCheck, Stop,
     check, check_static,
 };
 
@@ -29,7 +29,7 @@ fn empty(source: &Program) -> Seed {
 }
 
 fn run(graph: &GroundProgram, seed: &Seed) -> StaticCheck {
-    check_static(graph, seed, Limits::default(), &Control::default()).unwrap()
+    check_static(graph, seed, Limits::default(), &Cancellation::default()).unwrap()
 }
 
 fn compare(graph: &GroundProgram, seed: &Seed) {
@@ -38,7 +38,7 @@ fn compare(graph: &GroundProgram, seed: &Seed) {
         graph.program(),
         seed,
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(
@@ -83,7 +83,7 @@ fn tiny_rule(head: usize, body: u32, mut gates: u32) -> Template {
 
 fn compare_all(source: &Program) {
     let graph = compile(source);
-    for seed in Candidates::new(source, CandidateLimits::default(), Control::default()) {
+    for seed in Candidates::new(source, CandidateLimits::default(), Cancellation::default()) {
         compare(&graph, &seed.unwrap());
     }
 }
@@ -216,7 +216,7 @@ fn limits_identity_and_control_remain_incomplete_stops() {
         max_derived_atoms: 33,
         ..Limits::default()
     };
-    assert!(check_static(&graph, &seed, exact, &Control::default()).is_ok());
+    assert!(check_static(&graph, &seed, exact, &Cancellation::default()).is_ok());
     assert_eq!(
         check_static(
             &graph,
@@ -225,7 +225,7 @@ fn limits_identity_and_control_remain_incomplete_stops() {
                 max_work: exact.max_work - 1,
                 ..exact
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err(),
         Stop::WorkLimit
@@ -238,23 +238,23 @@ fn limits_identity_and_control_remain_incomplete_stops() {
                 max_derived_atoms: 32,
                 ..limits
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err(),
         Stop::DerivedAtomLimit
     );
     let foreign = empty(&choices(33));
     assert_eq!(
-        check_static(&graph, &foreign, limits, &Control::default()).unwrap_err(),
+        check_static(&graph, &foreign, limits, &Cancellation::default()).unwrap_err(),
         Stop::WrongProgram
     );
-    let cancelled = Control::default();
+    let cancelled = Cancellation::default();
     cancelled.cancel();
     assert_eq!(
         check_static(&graph, &seed, limits, &cancelled).unwrap_err(),
         Stop::Cancelled
     );
-    let expired = Control::with_deadline(Instant::now()).unwrap();
+    let expired = Cancellation::with_deadline(Instant::now()).unwrap();
     assert_eq!(
         check_static(&graph, &seed, limits, &expired).unwrap_err(),
         Stop::Deadline
@@ -269,7 +269,7 @@ fn limits_identity_and_control_remain_incomplete_stops() {
                 max_derived_atoms: 0,
                 ..Limits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap()
         .accepted()
@@ -289,7 +289,7 @@ fn batch_preserves_input_order_and_individual_stops() {
     let pool =
         BatchOracle::new(NonZeroUsize::new(2).unwrap(), NonZeroUsize::new(4).unwrap()).unwrap();
     let results = pool
-        .check_static_batch(&graph, &seeds, Limits::default(), &Control::default())
+        .check_static_batch(&graph, &seeds, Limits::default(), &Cancellation::default())
         .unwrap();
     assert_eq!(results.len(), seeds.len());
     for (index, result) in results.into_iter().enumerate() {
@@ -308,7 +308,7 @@ fn batch_preserves_input_order_and_individual_stops() {
             &graph,
             &over_capacity,
             Limits::default(),
-            &Control::default()
+            &Cancellation::default()
         ),
         Err(BatchError::Capacity {
             limit: 4,

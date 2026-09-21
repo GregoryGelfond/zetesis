@@ -4,12 +4,12 @@ use std::collections::HashSet;
 use std::num::NonZeroUsize;
 use std::time::Instant;
 
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{AdmissionLimits, Interpretation, Limits, Node, Theory, Verdict};
 use zetesis_sat::Incomplete;
 
 use super::FormulaPool;
-use crate::formula_completion::{Membership, native_with_control};
+use crate::formula_completion::{Membership, native_with_cancellation};
 use crate::{FormulaBenchmarkError, FormulaFamily, FormulaFixture};
 
 fn pool(workers: usize, candidates: usize) -> FormulaPool {
@@ -17,9 +17,14 @@ fn pool(workers: usize, candidates: usize) -> FormulaPool {
 }
 
 fn exhaustive(theory: &Theory, candidate: &Interpretation) -> Membership {
-    match zetesis_ferraris::check(theory, candidate, Limits::default(), &Control::default())
-        .unwrap()
-        .verdict()
+    match zetesis_ferraris::check(
+        theory,
+        candidate,
+        Limits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap()
+    .verdict()
     {
         Verdict::Stable => Membership::Stable,
         Verdict::NotModel { .. } => Membership::NotModel,
@@ -69,7 +74,7 @@ fn explicit_workers_check_all_tiny_worlds_against_exhaustive_ferraris() {
                     .map(|candidate| exhaustive(theory, candidate))
                     .collect();
                 assert_eq!(
-                    pool.check_batch(theory, &candidates, 100_000_000, &Control::default())
+                    pool.check_batch(theory, &candidates, 100_000_000, &Cancellation::default())
                         .unwrap(),
                     expected,
                     "{workers}/{family:?}/{atoms}"
@@ -95,12 +100,12 @@ fn zero_atoms_unused_atoms_and_empty_batches_have_exact_results() {
             .map(|candidate| exhaustive(&theory, candidate))
             .collect();
         assert_eq!(
-            pool.check_batch(&theory, &candidates, 100_000_000, &Control::default())
+            pool.check_batch(&theory, &candidates, 100_000_000, &Cancellation::default())
                 .unwrap(),
             expected
         );
         assert!(
-            pool.check_batch(&theory, &[], 0, &Control::default())
+            pool.check_batch(&theory, &[], 0, &Cancellation::default())
                 .unwrap()
                 .is_empty()
         );
@@ -124,14 +129,19 @@ fn dimension_and_foreign_theory_refusals_leave_the_pool_reusable() {
             fixture.theory(),
             &fixture.candidates(3, 0).unwrap(),
             100_000_000,
-            &Control::default()
+            &Cancellation::default()
         ),
         Err(FormulaBenchmarkError::Dimensions)
     ));
     let mut mixed = candidates.clone();
     mixed[1] = foreign.candidates(2, 0).unwrap().remove(1);
     assert!(matches!(
-        pool.check_batch(fixture.theory(), &mixed, 100_000_000, &Control::default()),
+        pool.check_batch(
+            fixture.theory(),
+            &mixed,
+            100_000_000,
+            &Cancellation::default()
+        ),
         Err(FormulaBenchmarkError::Incomplete(Incomplete::WrongTheory))
     ));
     assert_eq!(
@@ -139,7 +149,7 @@ fn dimension_and_foreign_theory_refusals_leave_the_pool_reusable() {
             fixture.theory(),
             &candidates,
             100_000_000,
-            &Control::default()
+            &Cancellation::default()
         )
         .unwrap(),
         [Membership::Stable, Membership::NonMinimal]
@@ -151,39 +161,39 @@ fn shared_cancellation_deadline_and_work_stops_never_return_partial_results() {
     let fixture = FormulaFixture::new(FormulaFamily::Cycle, 2).unwrap();
     let candidates = fixture.candidates(2, 0).unwrap();
     let pool = pool(2, 2);
-    let cancelled = Control::default();
+    let cancelled = Cancellation::default();
     cancelled.cancel();
-    for (control, expected) in [
+    for (cancellation, expected) in [
         (cancelled, Incomplete::Cancelled),
         (
-            Control::with_deadline(Instant::now()).unwrap(),
+            Cancellation::with_deadline(Instant::now()).unwrap(),
             Incomplete::Deadline,
         ),
     ] {
         for batch in [&candidates[..], &[]] {
             assert!(matches!(
-                pool.check_batch(fixture.theory(), batch, 100_000_000, &control),
+                pool.check_batch(fixture.theory(), batch, 100_000_000, &cancellation),
                 Err(FormulaBenchmarkError::Incomplete(actual)) if actual == expected
             ));
         }
         // The worker entry itself must use the caller's control, not silently
         // replace it with a fresh uncancelled control.
         assert!(matches!(
-            native_with_control(fixture.theory(), &candidates[1], 100_000_000, &control),
+            native_with_cancellation(fixture.theory(), &candidates[1], 100_000_000, &cancellation),
             Err(FormulaBenchmarkError::Incomplete(actual)) if actual == expected
         ));
     }
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     assert!(matches!(
-        pool.check_batch(fixture.theory(), &candidates, 0, &control),
+        pool.check_batch(fixture.theory(), &candidates, 0, &cancellation),
         Err(FormulaBenchmarkError::Incomplete(_))
     ));
     assert!(
-        control.poll().is_ok(),
+        cancellation.poll().is_ok(),
         "one failed job must not cancel its owner"
     );
     assert_eq!(
-        pool.check_batch(fixture.theory(), &candidates, 100_000_000, &control)
+        pool.check_batch(fixture.theory(), &candidates, 100_000_000, &cancellation)
             .unwrap(),
         [Membership::Stable, Membership::NonMinimal]
     );

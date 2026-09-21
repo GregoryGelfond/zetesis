@@ -1,7 +1,7 @@
 //! Predicate-local traversal preserves the whole-model observation relation.
 
 use zetesis_core::{Atom, Model, Predicate, Sign, Value};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::observation::{ErrorKind, Limits, Resource, Symbol};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
@@ -29,7 +29,7 @@ fn symbols(input: &AdmittedFormula, model: &Model) -> Vec<Symbol> {
     input
         .metadata()
         .observations()
-        .evaluate(model, Limits::default(), &Control::default())
+        .evaluate(model, Limits::default(), &Cancellation::default())
         .unwrap()
         .symbols()
         .to_vec()
@@ -151,7 +151,7 @@ fn sparse_query_work_excludes_unrelated_row_products() {
                 max_work: 1_000,
                 ..Limits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     assert_eq!(evaluation.symbols(), [tuple(1, 2)]);
@@ -168,7 +168,7 @@ fn query_work_refusals_publish_no_partial_terms() {
     ]);
     let program = input.metadata().observations();
     let complete = program
-        .evaluate(&model, Limits::default(), &Control::default())
+        .evaluate(&model, Limits::default(), &Cancellation::default())
         .unwrap();
     for ceiling in 0..complete.statistics().work {
         let failure = program
@@ -178,7 +178,7 @@ fn query_work_refusals_publish_no_partial_terms() {
                     max_work: ceiling,
                     ..Limits::default()
                 },
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap_err();
         assert!(matches!(
@@ -197,7 +197,7 @@ fn query_work_refusals_publish_no_partial_terms() {
                 max_work: complete.statistics().work,
                 ..Limits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     assert_eq!(exact.symbols(), complete.symbols());

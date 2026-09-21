@@ -46,14 +46,17 @@ fn checked_command_retains_all_eight_exact_sources() {
 
 #[test]
 fn supplied_cancellation_never_publishes_completion() {
-    let control = zetesis_cpu::Control::default();
-    control.cancel();
+    let cancellation = zetesis_cpu::Cancellation::default();
+    cancellation.cancel();
     let mut completed = false;
-    let result =
-        feedback_measurement::measure_with_control(&Configuration::default(), &control, |event| {
+    let result = feedback_measurement::measure_with_cancellation(
+        &Configuration::default(),
+        &cancellation,
+        |event| {
             completed |= matches!(event, Event::Complete { .. });
             Ok(())
-        });
+        },
+    );
     assert!(matches!(
         result,
         Err(feedback_measurement::Error::Control(

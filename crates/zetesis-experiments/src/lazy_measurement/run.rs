@@ -1,6 +1,6 @@
 use std::{io, num::NonZeroUsize, time::Instant};
 
-use zetesis_cpu::{BatchOracle, Check, Control, lazy};
+use zetesis_cpu::{BatchOracle, Cancellation, Check, lazy};
 use zetesis_wgpu::{GpuLazyOracle, GpuOptions};
 
 use super::{Configuration, Error, Event, Phase, Route, Sample, fixture, view};
@@ -221,7 +221,7 @@ impl Execution {
         expected: &[Check],
         route: Route,
     ) -> Result<Measured, Error> {
-        let control = Control::default();
+        let cancellation = Cancellation::default();
         let started = Instant::now();
         match route {
             Route::Scalar | Route::Rayon => {
@@ -233,7 +233,7 @@ impl Execution {
                             &fixture.program,
                             &fixture.seeds,
                             configuration.cpu_limits,
-                            &control,
+                            &cancellation,
                         )
                         .map_err(Error::Pool)?
                         .into_iter()
@@ -267,7 +267,7 @@ impl Execution {
                             configuration.source_limits,
                             configuration.gpu_limits,
                             selection,
-                            &control,
+                            &cancellation,
                         )
                         .map_err(Error::Gpu)?;
                     (batch, Some(oracle.statistics()))
@@ -278,7 +278,7 @@ impl Execution {
                             &fixture.seeds,
                             configuration.source_limits,
                             selection,
-                            &control,
+                            &cancellation,
                             lazy::evaluate,
                         )
                         .map_err(Error::Source)?,
@@ -340,13 +340,18 @@ impl Execution {
 }
 
 fn scalar(fixture: &fixture::Fixture, configuration: &Configuration) -> Result<Vec<Check>, Error> {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     fixture
         .seeds
         .iter()
         .map(|seed| {
-            zetesis_cpu::check(&fixture.program, seed, configuration.cpu_limits, &control)
-                .map_err(Error::Cpu)
+            zetesis_cpu::check(
+                &fixture.program,
+                seed,
+                configuration.cpu_limits,
+                &cancellation,
+            )
+            .map_err(Error::Cpu)
         })
         .collect()
 }

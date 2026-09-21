@@ -2,7 +2,7 @@
 
 use std::time::Instant;
 
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
     AdmissionLimits, EvaluationError, EvaluationLimits, EvaluationWorkspace, Interpretation, Node,
     Theory,
@@ -37,7 +37,7 @@ fn node_truth_describes_the_exact_interpretation() {
         let attempt = workspace.evaluate(
             &interpretation,
             EvaluationLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         );
         let truth = attempt.result.unwrap();
         let a = bits & 1 != 0;
@@ -80,7 +80,7 @@ fn root_scan_exhaustion_exposes_no_truth() {
                 max_work,
                 ..EvaluationLimits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         );
         assert_eq!(
             attempt.result.unwrap_err(),
@@ -94,7 +94,7 @@ fn root_scan_exhaustion_exposes_no_truth() {
             max_work: 9,
             ..EvaluationLimits::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
     );
     assert!(attempt.result.unwrap().is_model());
     assert_eq!(attempt.work, 9);
@@ -108,11 +108,12 @@ fn workspace_reuse_replaces_the_subject() {
     let two = Interpretation::new(&other, [1]).unwrap();
     let mut workspace = EvaluationWorkspace::default();
     let bytes = {
-        let attempt = workspace.evaluate(&one, EvaluationLimits::default(), &Control::default());
+        let attempt =
+            workspace.evaluate(&one, EvaluationLimits::default(), &Cancellation::default());
         assert!(attempt.result.unwrap().is_model());
         attempt.retained_bytes
     };
-    let attempt = workspace.evaluate(&two, EvaluationLimits::default(), &Control::default());
+    let attempt = workspace.evaluate(&two, EvaluationLimits::default(), &Cancellation::default());
     let truth = attempt.result.unwrap();
     assert!(truth.theory().same_instance(&other));
     assert!(!truth.theory().same_instance(&first));
@@ -126,7 +127,7 @@ fn reserved_capacity_does_not_supply_original_truth() {
     let program = theory(vec![5]);
     let mut workspace = EvaluationWorkspace::default();
     workspace
-        .reserve(&program, usize::MAX, &Control::default())
+        .reserve(&program, usize::MAX, &Cancellation::default())
         .unwrap();
     let bytes = workspace.retained_bytes();
     let candidate = Interpretation::new(&program, [1]).unwrap();
@@ -136,14 +137,18 @@ fn reserved_capacity_does_not_supply_original_truth() {
             max_work: 0,
             ..EvaluationLimits::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
     );
     assert_eq!(
         stopped.result.unwrap_err(),
         EvaluationError::Stopped(Stop::WorkLimit)
     );
     assert_eq!(stopped.retained_bytes, bytes);
-    let complete = workspace.evaluate(&candidate, EvaluationLimits::default(), &Control::default());
+    let complete = workspace.evaluate(
+        &candidate,
+        EvaluationLimits::default(),
+        &Cancellation::default(),
+    );
     assert!(complete.result.unwrap().is_model());
     assert_eq!(complete.work, 8);
     assert_eq!(complete.retained_bytes, bytes);
@@ -164,7 +169,7 @@ fn storage_ceiling_includes_existing_capacity() {
             max_bytes: required - 1,
             ..EvaluationLimits::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
     );
     assert_eq!(
         limited.result.unwrap_err(),
@@ -175,7 +180,11 @@ fn storage_ceiling_includes_existing_capacity() {
     );
     assert_eq!(limited.work, 0);
     assert_eq!(limited.retained_bytes, header as u128);
-    let admitted = workspace.evaluate(&candidate, EvaluationLimits::default(), &Control::default());
+    let admitted = workspace.evaluate(
+        &candidate,
+        EvaluationLimits::default(),
+        &Cancellation::default(),
+    );
     assert!(admitted.result.unwrap().is_model());
     let retained = usize::try_from(admitted.retained_bytes).unwrap();
     let lowered = workspace.evaluate(
@@ -184,7 +193,7 @@ fn storage_ceiling_includes_existing_capacity() {
             max_bytes: retained - 1,
             ..EvaluationLimits::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
     );
     assert_eq!(
         lowered.result.unwrap_err(),
@@ -200,7 +209,7 @@ fn storage_ceiling_includes_existing_capacity() {
             max_work: 0,
             max_bytes: retained,
         },
-        &Control::default(),
+        &Cancellation::default(),
     );
     assert!(exact.result.unwrap().is_model());
     assert_eq!(exact.work, 0);
@@ -210,13 +219,13 @@ fn storage_ceiling_includes_existing_capacity() {
 fn empty_evaluation_observes_control_before_storage() {
     let program = Theory::new(0, vec![], vec![], AdmissionLimits::default()).unwrap();
     let candidate = Interpretation::new(&program, []).unwrap();
-    let cancelled = Control::default();
+    let cancelled = Cancellation::default();
     cancelled.cancel();
     let mut workspace = EvaluationWorkspace::default();
-    for (control, stop) in [
+    for (cancellation, stop) in [
         (cancelled, Stop::Cancelled),
         (
-            Control::with_deadline(Instant::now()).unwrap(),
+            Cancellation::with_deadline(Instant::now()).unwrap(),
             Stop::Deadline,
         ),
     ] {
@@ -226,7 +235,7 @@ fn empty_evaluation_observes_control_before_storage() {
                 max_work: 0,
                 max_bytes: 0,
             },
-            &control,
+            &cancellation,
         );
         assert_eq!(attempt.result.unwrap_err(), EvaluationError::Stopped(stop));
         assert_eq!(attempt.work, 0);

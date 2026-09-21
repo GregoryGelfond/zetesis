@@ -4,7 +4,7 @@ use proptest::prelude::*;
 use zetesis_cpu::Stop;
 use zetesis_ferraris::{Interpretation, models};
 use zetesis_sat::{
-    Control,
+    Cancellation,
     partition::{
         ErrorKind, Group, Limits, Plan, Premises, Resource, RestrictionErrorKind, RestrictionLimits,
     },
@@ -19,7 +19,7 @@ fn plan(members: &[usize], groups: &[Group<'_>], lower: usize) -> Plan {
             groups,
         },
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap()
 }
@@ -81,7 +81,7 @@ fn contradictory_premises_emit_falsum() {
         let plan = plan(members, &groups, 1);
         assert!(plan.inconsistent());
         let restriction = plan
-            .restriction(RestrictionLimits::default(), &Control::default())
+            .restriction(RestrictionLimits::default(), &Cancellation::default())
             .unwrap();
         for selected in [vec![], vec![0]] {
             let candidate = Interpretation::new(restriction.theory(), selected).unwrap();
@@ -90,7 +90,7 @@ fn contradictory_premises_emit_falsum() {
                     restriction.theory(),
                     &candidate,
                     zetesis_ferraris::Limits::default(),
-                    &Control::default()
+                    &Cancellation::default()
                 )
                 .unwrap()
             );
@@ -112,7 +112,7 @@ fn incomplete_partitions_are_refused() {
             groups: &groups,
         },
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert_eq!(error.kind(), ErrorKind::MissingMember(1));
@@ -141,7 +141,7 @@ fn overlapping_partitions_are_refused() {
                 groups: &groups,
             },
             Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
         assert_eq!(error.kind(), ErrorKind::RepeatedMember(0));
@@ -162,7 +162,7 @@ fn undeclared_group_members_are_refused() {
             groups: &groups,
         },
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert_eq!(error.kind(), ErrorKind::ForeignMember(1));
@@ -178,7 +178,7 @@ fn duplicate_declarations_are_refused() {
             groups: &[],
         },
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert_eq!(error.kind(), ErrorKind::DuplicateMember(0));
@@ -204,7 +204,7 @@ fn out_of_universe_members_are_refused() {
                 groups: &groups,
             },
             Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
         assert_eq!(error.kind(), ErrorKind::Atom(2));
@@ -229,7 +229,7 @@ fn shape_admission_requires_the_complete_work_budget() {
         lower: 2,
         groups: &groups,
     };
-    let full = Plan::new(input, Limits::default(), &Control::default()).unwrap();
+    let full = Plan::new(input, Limits::default(), &Cancellation::default()).unwrap();
     // Two group passes, coverage initialization, declaration, grouping and coverage validation.
     assert_eq!(full.statistics().work, 16);
     for maximum in 0..=full.statistics().work {
@@ -237,7 +237,7 @@ fn shape_admission_requires_the_complete_work_budget() {
             max_work: maximum,
             ..Limits::default()
         };
-        match Plan::new(input, limits, &Control::default()) {
+        match Plan::new(input, limits, &Cancellation::default()) {
             Ok(_) => assert_eq!(maximum, full.statistics().work),
             Err(error) => {
                 assert_eq!(error.kind(), ErrorKind::Limit(Resource::Work));
@@ -259,19 +259,19 @@ fn storage_admission_includes_transient_coverage() {
         lower: 1,
         groups: &groups,
     };
-    let full = Plan::new(input, Limits::default(), &Control::default()).unwrap();
+    let full = Plan::new(input, Limits::default(), &Cancellation::default()).unwrap();
     let bytes = full.statistics().construction_bytes;
     assert!(bytes > full.statistics().resident_bytes);
     let exact = Limits {
         max_bytes: bytes,
         ..Limits::default()
     };
-    assert!(Plan::new(input, exact, &Control::default()).is_ok());
+    assert!(Plan::new(input, exact, &Cancellation::default()).is_ok());
     let short = Limits {
         max_bytes: bytes - 1,
         ..exact
     };
-    let error = Plan::new(input, short, &Control::default()).unwrap_err();
+    let error = Plan::new(input, short, &Cancellation::default()).unwrap_err();
     assert_eq!(error.kind(), ErrorKind::Limit(Resource::Bytes));
     assert_eq!(error.statistics().work, 1);
 }
@@ -294,7 +294,7 @@ fn membership_occurrences_have_an_independent_ceiling() {
             max_members: 1,
             ..Limits::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert_eq!(error.kind(), ErrorKind::Limit(Resource::Members));
@@ -335,7 +335,7 @@ fn shape_dimensions_are_checked_before_allocation() {
             Resource::Groups,
         ),
     ] {
-        let error = Plan::new(input, limits, &Control::default()).unwrap_err();
+        let error = Plan::new(input, limits, &Cancellation::default()).unwrap_err();
         assert_eq!(error.kind(), ErrorKind::Limit(resource));
         assert_eq!(
             error.statistics(),
@@ -353,7 +353,9 @@ fn emission_stops_before_allocating_an_oversized_group() {
     let plan = plan(&[0, 1], &groups, 1);
     let mut limits = RestrictionLimits::default();
     limits.aggregate.max_elements = 1;
-    let error = plan.restriction(limits, &Control::default()).unwrap_err();
+    let error = plan
+        .restriction(limits, &Cancellation::default())
+        .unwrap_err();
     assert_eq!(error.kind(), RestrictionErrorKind::Elements);
     assert_eq!(error.work(), 1);
 }
@@ -373,11 +375,13 @@ fn emission_refuses_partial_root_coverage() {
     let plan = plan(&[0, 1, 2, 3], &groups, 2);
     let mut limits = RestrictionLimits::default();
     limits.theory.max_roots = 1;
-    let error = plan.restriction(limits, &Control::default()).unwrap_err();
+    let error = plan
+        .restriction(limits, &Cancellation::default())
+        .unwrap_err();
     assert_eq!(error.kind(), RestrictionErrorKind::Roots);
     assert!(error.work() > 1);
     assert_eq!(
-        plan.restriction(RestrictionLimits::default(), &Control::default())
+        plan.restriction(RestrictionLimits::default(), &Cancellation::default())
             .unwrap()
             .theory()
             .roots()
@@ -394,13 +398,15 @@ fn emission_obeys_its_final_node_ceiling() {
     }];
     let plan = plan(&[0, 1], &groups, 1);
     let full = plan
-        .restriction(RestrictionLimits::default(), &Control::default())
+        .restriction(RestrictionLimits::default(), &Cancellation::default())
         .unwrap();
     let mut limits = RestrictionLimits::default();
     limits.theory.max_nodes = full.theory().nodes().len();
-    assert!(plan.restriction(limits, &Control::default()).is_ok());
+    assert!(plan.restriction(limits, &Cancellation::default()).is_ok());
     limits.theory.max_nodes -= 1;
-    let error = plan.restriction(limits, &Control::default()).unwrap_err();
+    let error = plan
+        .restriction(limits, &Cancellation::default())
+        .unwrap_err();
     let RestrictionErrorKind::Aggregate(error) = error.kind() else {
         panic!("expected cardinality construction to reach its node ceiling");
     };
@@ -415,15 +421,17 @@ fn emission_preserves_its_declared_atom_universe() {
     let plan = plan(&[], &[], 0);
     let mut limits = RestrictionLimits::default();
     limits.theory.max_atoms = 7;
-    let error = plan.restriction(limits, &Control::default()).unwrap_err();
+    let error = plan
+        .restriction(limits, &Cancellation::default())
+        .unwrap_err();
     assert_eq!(error.kind(), RestrictionErrorKind::Atoms);
     assert_eq!(error.work(), 0);
 }
 
 #[test]
 fn cancelled_empty_admission_does_not_succeed() {
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     let error = Plan::new(
         Premises {
             atom_count: 0,
@@ -432,7 +440,7 @@ fn cancelled_empty_admission_does_not_succeed() {
             groups: &[],
         },
         Limits::default(),
-        &control,
+        &cancellation,
     )
     .unwrap_err();
     assert_eq!(error.kind(), ErrorKind::Stopped(Stop::Cancelled));
@@ -442,10 +450,10 @@ fn cancelled_empty_admission_does_not_succeed() {
 #[test]
 fn cancelled_emission_exposes_no_restriction() {
     let plan = plan(&[], &[], 0);
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     let error = plan
-        .restriction(RestrictionLimits::default(), &control)
+        .restriction(RestrictionLimits::default(), &cancellation)
         .unwrap_err();
     assert_eq!(error.kind(), RestrictionErrorKind::Stopped(Stop::Cancelled));
     assert_eq!(error.work(), 0);
@@ -465,14 +473,14 @@ fn emission_requires_the_complete_cumulative_work_budget() {
     ];
     let plan = plan(&[0, 1, 2, 3], &groups, 2);
     let full = plan
-        .restriction(RestrictionLimits::default(), &Control::default())
+        .restriction(RestrictionLimits::default(), &Cancellation::default())
         .unwrap();
     for maximum in 0..=full.work() {
         let limits = RestrictionLimits {
             max_work: maximum,
             ..RestrictionLimits::default()
         };
-        match plan.restriction(limits, &Control::default()) {
+        match plan.restriction(limits, &Cancellation::default()) {
             Ok(_) => assert_eq!(maximum, full.work()),
             Err(error) => assert_eq!(error.work(), maximum),
         }
@@ -487,7 +495,7 @@ fn lower_bound_emission_does_not_assert_upper_premises() {
     }];
     let plan = plan(&[0, 1], &groups, 1);
     let restriction = plan
-        .restriction(RestrictionLimits::default(), &Control::default())
+        .restriction(RestrictionLimits::default(), &Cancellation::default())
         .unwrap();
     let candidate = Interpretation::new(restriction.theory(), [0, 1]).unwrap();
     assert!(
@@ -495,7 +503,7 @@ fn lower_bound_emission_does_not_assert_upper_premises() {
             restriction.theory(),
             &candidate,
             zetesis_ferraris::Limits::default(),
-            &Control::default()
+            &Cancellation::default()
         )
         .unwrap()
     );
@@ -534,7 +542,7 @@ proptest! {
         let groups: Vec<_> = rows.iter().zip(caps).map(|(row, upper)| Group { members: row, upper }).collect();
         let members: Vec<_> = (0..next).collect();
         let plan = plan(&members, &groups, lower);
-        let restriction = plan.restriction(RestrictionLimits::default(), &Control::default()).unwrap();
+        let restriction = plan.restriction(RestrictionLimits::default(), &Cancellation::default()).unwrap();
         for mask in 0_usize..(1 << next) {
             let selected: Vec<_> = members.iter().copied().filter(|atom| mask & (1 << atom) != 0).collect();
             let capacity: usize = groups.iter().map(|group| group.upper.min(group.members.len())).sum();
@@ -543,7 +551,7 @@ proptest! {
                 selected.iter().filter(|atom| group.members.contains(atom)).count() >= lower.saturating_sub(outside)
             });
             let candidate = Interpretation::new(restriction.theory(), selected).unwrap();
-            prop_assert_eq!(models(restriction.theory(), &candidate, zetesis_ferraris::Limits::default(), &Control::default()).unwrap(), expected);
+            prop_assert_eq!(models(restriction.theory(), &candidate, zetesis_ferraris::Limits::default(), &Cancellation::default()).unwrap(), expected);
         }
     }
 }

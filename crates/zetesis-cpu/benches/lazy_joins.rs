@@ -18,7 +18,7 @@ use criterion::{BenchmarkId, Criterion, Throughput};
 use zetesis_core::{
     AdmissionLimits, Atom, AtomPattern, Model, Predicate, Program, Seed, Template, Term, Value,
 };
-use zetesis_cpu::{BatchOracle, Control, Limits, check};
+use zetesis_cpu::{BatchOracle, Cancellation, Limits, check};
 
 struct Case {
     program: Program,
@@ -93,7 +93,12 @@ impl Case {
         }
     }
 
-    fn timed(&self, iterations: u64, pool: Option<&BatchOracle>, control: &Control) -> Duration {
+    fn timed(
+        &self,
+        iterations: u64,
+        pool: Option<&BatchOracle>,
+        cancellation: &Cancellation,
+    ) -> Duration {
         let mut elapsed = Duration::ZERO;
         for _ in 0..iterations {
             let started = Instant::now();
@@ -102,7 +107,7 @@ impl Case {
                     black_box(&self.program),
                     black_box(&self.seeds),
                     Limits::default(),
-                    control,
+                    cancellation,
                 )
                 .unwrap()
             } else {
@@ -113,7 +118,7 @@ impl Case {
                             black_box(&self.program),
                             black_box(seed),
                             Limits::default(),
-                            control,
+                            cancellation,
                         )
                     })
                     .collect()
@@ -132,7 +137,7 @@ impl Case {
 
 fn main() {
     let mut criterion = Criterion::default().configure_from_args();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let pool =
         BatchOracle::new(NonZeroUsize::new(4).unwrap(), NonZeroUsize::new(8).unwrap()).unwrap();
     for (name, distinct_keys) in [("sparse-keys", true), ("dense-key", false)] {
@@ -151,8 +156,9 @@ fn main() {
                         BenchmarkId::new(backend, &size),
                         &case,
                         |bencher, case| {
-                            bencher
-                                .iter_custom(|iterations| case.timed(iterations, pool, &control));
+                            bencher.iter_custom(|iterations| {
+                                case.timed(iterations, pool, &cancellation)
+                            });
                         },
                     );
                 }

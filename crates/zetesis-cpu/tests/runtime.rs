@@ -8,7 +8,7 @@ use zetesis_core::{
     AdmissionLimits, Atom, AtomPattern, Predicate, Program, Seed, Template, Term, Value,
 };
 use zetesis_cpu::{
-    BatchError, BatchOracle, CandidateLimits, Candidates, Control, Limits, Stop, check,
+    BatchError, BatchOracle, Cancellation, CandidateLimits, Candidates, Limits, Stop, check,
 };
 
 fn pattern(name: &str, terms: Vec<Term>) -> AtomPattern {
@@ -55,7 +55,7 @@ fn empty_program_completes_with_zero_work_and_storage() {
             max_derived_atoms: 0,
             ..Limits::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
     )
     .expect("vacuous coverage");
     assert!(result.accepted());
@@ -85,10 +85,10 @@ fn stops_never_return_a_partially_accepted_result() {
         ),
     ] {
         assert!(
-            matches!(check(&program, &seed, limits, &Control::default()), Err(stop) if stop == expected)
+            matches!(check(&program, &seed, limits, &Cancellation::default()), Err(stop) if stop == expected)
         );
     }
-    let cancelled = Control::default();
+    let cancelled = Cancellation::default();
     cancelled.clone().cancel();
     assert!(matches!(
         check(&program, &seed, Limits::default(), &cancelled),
@@ -99,7 +99,7 @@ fn stops_never_return_a_partially_accepted_result() {
             &program,
             &seed,
             Limits::default(),
-            &Control::with_deadline(Instant::now()).unwrap()
+            &Cancellation::with_deadline(Instant::now()).unwrap()
         ),
         Err(Stop::Deadline)
     ));
@@ -114,7 +114,7 @@ fn equal_syntax_does_not_authorize_a_foreign_seed() {
             &left,
             &empty_seed(&right),
             Limits::default(),
-            &Control::default()
+            &Cancellation::default()
         ),
         Err(Stop::WrongProgram)
     ));
@@ -129,7 +129,7 @@ fn candidate_enumeration_streams_the_binary_powerset_and_finishes_exactly() {
             max_candidates: 4,
             max_carrier_atoms: 2,
         },
-        Control::default(),
+        Cancellation::default(),
     );
     let first = candidates.next().expect("first").expect("empty candidate");
     assert!(first.atoms().is_empty());
@@ -176,15 +176,16 @@ fn candidate_limits_and_cancellation_are_terminal_once() {
             Stop::CarrierLimit,
         ),
     ] {
-        let mut candidates = Candidates::new(&program, limits, Control::default());
+        let mut candidates = Candidates::new(&program, limits, Cancellation::default());
         assert!(candidates.next().expect("empty").is_ok());
         assert!(matches!(candidates.next(), Some(Err(stop)) if stop == expected));
         assert!(candidates.next().is_none());
     }
-    let control = Control::default();
-    let mut candidates = Candidates::new(&program, CandidateLimits::default(), control.clone());
+    let cancellation = Cancellation::default();
+    let mut candidates =
+        Candidates::new(&program, CandidateLimits::default(), cancellation.clone());
     assert!(candidates.next().expect("empty").is_ok());
-    control.cancel();
+    cancellation.cancel();
     assert!(matches!(candidates.next(), Some(Err(Stop::Cancelled))));
     assert!(candidates.next().is_none());
 }
@@ -213,7 +214,7 @@ fn a_large_symbolic_carrier_does_not_delay_the_first_check() {
             max_candidates: 1,
             max_carrier_atoms: 0,
         },
-        Control::default(),
+        Cancellation::default(),
     );
     let seed = candidates
         .next()
@@ -232,7 +233,7 @@ fn a_large_symbolic_carrier_does_not_delay_the_first_check() {
             max_derived_atoms: 2,
             ..Limits::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
     )
     .expect("sparse check");
     assert!(result.accepted());
@@ -275,11 +276,11 @@ fn gates_prune_after_their_arguments_are_bound_before_a_cartesian_join() {
     .expect("carrier");
     // The candidate's work alone: the preparation, whose bound inference
     // visits every fact twice, has its own receipt.
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let prepared = zetesis_cpu::PreparedQueries::new(
         &program,
         zetesis_cpu::PreparationLimits::default(),
-        &control,
+        &cancellation,
     )
     .unwrap();
     let result = prepared
@@ -287,7 +288,7 @@ fn gates_prune_after_their_arguments_are_bound_before_a_cartesian_join() {
             seed.view(),
             &mut zetesis_cpu::ClosureWorkspace::default(),
             Limits::default(),
-            &control,
+            &cancellation,
         )
         .expect("complete check");
     assert!(result.accepted());
@@ -306,13 +307,22 @@ fn gates_prune_after_their_arguments_are_bound_before_a_cartesian_join() {
 #[test]
 fn rayon_batches_preserve_candidate_order() {
     let program = program(vec![choice("p")]);
-    let seeds: Vec<_> = Candidates::new(&program, CandidateLimits::default(), Control::default())
-        .collect::<Result<_, _>>()
-        .expect("two seeds");
+    let seeds: Vec<_> = Candidates::new(
+        &program,
+        CandidateLimits::default(),
+        Cancellation::default(),
+    )
+    .collect::<Result<_, _>>()
+    .expect("two seeds");
     let workers = NonZeroUsize::new(2).expect("nonzero");
     let batch = BatchOracle::new(workers, workers).expect("owned pool");
     let results = batch
-        .check_batch(&program, &seeds, Limits::default(), &Control::default())
+        .check_batch(
+            &program,
+            &seeds,
+            Limits::default(),
+            &Cancellation::default(),
+        )
         .expect("within batch bound");
     assert_eq!(
         results
@@ -326,14 +336,23 @@ fn rayon_batches_preserve_candidate_order() {
 #[test]
 fn batch_capacity_refuses_before_preparation() {
     let program = program(vec![choice("p")]);
-    let seeds: Vec<_> = Candidates::new(&program, CandidateLimits::default(), Control::default())
-        .collect::<Result<_, _>>()
-        .expect("two seeds");
+    let seeds: Vec<_> = Candidates::new(
+        &program,
+        CandidateLimits::default(),
+        Cancellation::default(),
+    )
+    .collect::<Result<_, _>>()
+    .expect("two seeds");
     let workers = NonZeroUsize::new(2).expect("nonzero");
     let too_small =
         BatchOracle::new(workers, NonZeroUsize::new(1).expect("nonzero")).expect("owned pool");
     assert!(matches!(
-        too_small.check_batch(&program, &seeds, Limits::default(), &Control::default()),
+        too_small.check_batch(
+            &program,
+            &seeds,
+            Limits::default(),
+            &Cancellation::default()
+        ),
         Err(BatchError::Capacity { .. })
     ));
     assert_eq!(too_small.query_statistics().unwrap().preparation_builds, 0);
@@ -344,10 +363,10 @@ fn initial_cancellation_refuses_batch_preparation() {
     let program = program(vec![choice("p")]);
     let seed = empty_seed(&program);
     let batch = BatchOracle::new(NonZeroUsize::MIN, NonZeroUsize::MIN).expect("owned pool");
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     assert!(matches!(
-        batch.check_batch(&program, &[seed], Limits::default(), &control),
+        batch.check_batch(&program, &[seed], Limits::default(), &cancellation),
         Err(BatchError::Preparation(Stop::Cancelled))
     ));
     assert_eq!(batch.query_statistics().unwrap().preparation_builds, 0);

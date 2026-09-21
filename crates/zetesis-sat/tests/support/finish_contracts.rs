@@ -4,29 +4,30 @@
 
 use super::{Budget, State};
 use crate::{
-    AdmissionLimits, Assignment, Cnf, Control, Incomplete, Literal, SearchLimits, SearchStatistics,
+    AdmissionLimits, Assignment, Cancellation, Cnf, Incomplete, Literal, SearchLimits,
+    SearchStatistics,
 };
 
 fn cnf(variables: usize, clauses: Vec<Vec<Literal>>) -> Cnf {
     Cnf::new(variables, clauses, AdmissionLimits::default()).unwrap()
 }
 
-fn budget(control: &Control, max_work: u64) -> Budget<'_> {
+fn budget(cancellation: &Cancellation, max_work: u64) -> Budget<'_> {
     Budget {
         quota: crate::search::LocalQuota,
         limits: SearchLimits {
             max_work,
             ..SearchLimits::default()
         },
-        control,
+        cancellation,
         statistics: SearchStatistics::default(),
     }
 }
 
 fn state(cnf: &Cnf, values: &[Option<bool>]) -> State {
     assert_eq!(cnf.variables(), values.len());
-    let control = Control::default();
-    let mut state = State::new(cnf, &mut budget(&control, u64::MAX)).unwrap();
+    let cancellation = Cancellation::default();
+    let mut state = State::new(cnf, &mut budget(&cancellation, u64::MAX)).unwrap();
     state.values.copy_from_slice(values);
     state
 }
@@ -37,8 +38,8 @@ fn assemble(
     max_work: u64,
 ) -> (Result<Assignment, Incomplete>, u64) {
     let state = state(cnf, values);
-    let control = Control::default();
-    let mut budget = budget(&control, max_work);
+    let cancellation = Cancellation::default();
+    let mut budget = budget(&cancellation, max_work);
     let result = state.finish(cnf, &mut budget);
     (result, budget.statistics.work)
 }
@@ -100,9 +101,9 @@ fn a_debug_build_asserts_the_watch_invariant_on_every_witness() {
 fn cancellation_is_polled_before_accepting_a_nonempty_witness() {
     let formula = cnf(2, vec![vec![Literal::new(0, true), Literal::new(1, true)]]);
     let state = state(&formula, &[Some(true), Some(false)]);
-    let control = Control::default();
-    control.cancel();
-    let mut budget = budget(&control, 3);
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
+    let mut budget = budget(&cancellation, 3);
     assert!(matches!(
         state.finish(&formula, &mut budget),
         Err(Incomplete::Cancelled)

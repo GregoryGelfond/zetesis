@@ -5,7 +5,7 @@ use std::{fmt, mem::size_of};
 mod index;
 
 use zetesis_core::Model;
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_themelios::PreparedProjection;
 
 /// Independent ceilings for distinct projected answer identities.
@@ -169,13 +169,13 @@ impl<'a> Projection<'a> {
     pub(crate) fn insert(
         &mut self,
         model: &Model,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<bool, ProjectionError> {
         let base = self.base_bytes();
         let mut work = Work {
             limits: self.limits,
             stats: &mut self.stats,
-            control,
+            cancellation,
         };
         for word in &mut self.current {
             work.charge(1)?;
@@ -209,12 +209,12 @@ impl<'a> Projection<'a> {
 struct Work<'a> {
     limits: ProjectionLimits,
     stats: &'a mut ProjectionStatistics,
-    control: &'a Control,
+    cancellation: &'a Cancellation,
 }
 
 impl Work<'_> {
     fn charge(&mut self, amount: u64) -> Result<(), ProjectionError> {
-        self.control.poll().map_err(ProjectionError::Control)?;
+        self.cancellation.poll().map_err(ProjectionError::Control)?;
         let observed = self
             .stats
             .work

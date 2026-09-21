@@ -84,7 +84,7 @@ impl Collector {
         Self {
             work: Work {
                 limits: request.limits,
-                control: request.control.clone(),
+                cancellation: request.cancellation.clone(),
                 statistics: super::CountPlanStatistics::default(),
                 location,
             },

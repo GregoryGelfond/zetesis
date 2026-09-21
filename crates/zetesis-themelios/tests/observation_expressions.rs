@@ -1,7 +1,7 @@
 //! Pure expression evaluation observes full models without extending logical grounding.
 
 use zetesis_core::Model;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::observation::{
     ConstructionLimits, ErrorKind, EvaluationError, Limits, Resource,
 };
@@ -28,7 +28,7 @@ fn terms(source: &str) -> Vec<String> {
             &model,
             input.metadata().output(),
             Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap()
         .text()
@@ -94,7 +94,11 @@ fn invalid_arithmetic_returns_the_pinned_cause() {
         let error = input
             .metadata()
             .observations()
-            .evaluate(&Model::default(), Limits::default(), &Control::default())
+            .evaluate(
+                &Model::default(),
+                Limits::default(),
+                &Cancellation::default(),
+            )
             .unwrap_err();
         assert_eq!(
             error.kind(),
@@ -117,7 +121,7 @@ fn comparison_operands_share_the_construction_ceiling() {
                 &Model::default(),
                 Limits::default(),
                 ConstructionLimits { max_bytes },
-                &Control::default(),
+                &Cancellation::default(),
             )
     };
     assert_eq!(run(construction).unwrap().symbols().len(), 1);
@@ -174,7 +178,7 @@ fn generated_bindings_obey_the_live_local_payload_limit() {
                 max_local_bytes,
                 ..Limits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
     };
     assert_eq!(run(16).unwrap().symbols().len(), 1);
@@ -200,7 +204,7 @@ fn completed_directives_release_their_owned_bindings() {
                 max_local_bytes: 16,
                 ..Limits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     assert_eq!(result.symbols().len(), 2);
@@ -270,7 +274,7 @@ fn failed_nested_matches_release_their_partial_bindings() {
                 max_local_bytes: 16,
                 ..Limits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     assert_eq!(
@@ -327,7 +331,7 @@ fn generated_alternatives_have_an_inclusive_payload_ceiling() {
                 max_local_bytes,
                 ..Limits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
     };
     assert_eq!(run(32).unwrap().symbols().len(), 2);
@@ -352,7 +356,7 @@ fn independent_directives_release_their_finite_alternatives() {
                 max_local_bytes: 32,
                 ..Limits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     assert_eq!(result.symbols().len(), 4);
@@ -436,7 +440,7 @@ fn negated_pool_expansions_release_their_owned_alternatives() {
                 max_local_bytes,
                 ..Limits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
     };
     assert_eq!(run(48).unwrap().symbols().len(), 1);
@@ -463,7 +467,7 @@ fn failed_pool_rows_release_nested_capture_ownership() {
                 max_local_bytes: 16,
                 ..Limits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     assert_eq!(full.text(), "2");
@@ -474,7 +478,11 @@ fn an_undefined_pool_branch_refuses_the_complete_observation() {
     let failure = input
         .metadata()
         .observations()
-        .evaluate(&Model::default(), Limits::default(), &Control::default())
+        .evaluate(
+            &Model::default(),
+            Limits::default(),
+            &Cancellation::default(),
+        )
         .unwrap_err();
     assert_eq!(
         failure.kind(),

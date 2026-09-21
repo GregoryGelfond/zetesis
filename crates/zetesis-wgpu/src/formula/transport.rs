@@ -43,7 +43,7 @@ impl Resident {
         seeds: &[u32],
         plan: &Plan,
         timeout: Duration,
-        control: &zetesis_cpu::Control,
+        cancellation: &zetesis_cpu::Cancellation,
         submitted_candidates: &mut Option<usize>,
     ) -> Result<runtime::Completion<Vec<FormulaCheck>>, GpuError> {
         let device = runtime.device();
@@ -82,7 +82,7 @@ impl Resident {
             &transport.readback,
             submission,
             timeout,
-            || control.poll().map_err(GpuError::interrupted),
+            || cancellation.poll().map_err(GpuError::interrupted),
             |words| packing::decode(words, plan),
         ))
     }

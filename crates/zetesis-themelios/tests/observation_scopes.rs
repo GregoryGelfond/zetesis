@@ -4,7 +4,7 @@
 mod observation_reference;
 
 use zetesis_core::Model;
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_themelios::observation::{AdmissionLimits, ErrorKind, Feature, Limits, Resource};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
@@ -30,7 +30,7 @@ fn rendered(source: &str) -> String {
             &model,
             input.metadata().output(),
             Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap()
         .text()
@@ -93,7 +93,7 @@ fn cardinality_keys_pay_their_complete_admission_cost() {
                 &model,
                 input.metadata().output(),
                 Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
         assert_eq!(shown.text(), expected, "{source}");
@@ -208,7 +208,7 @@ fn independent_aggregate_queries_release_their_keys() {
                 max_local_bytes: 32,
                 ..Limits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     assert_eq!(result.symbols().len(), 1);
@@ -224,7 +224,7 @@ fn aggregate_keys_obey_the_inclusive_local_payload_ceiling() {
                 max_local_bytes,
                 ..Limits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
     };
     assert_eq!(run(32).unwrap().symbols().len(), 1);
@@ -248,7 +248,7 @@ fn local_substitutions_share_the_binding_ceiling() {
                 max_bindings,
                 ..Limits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
     };
     assert_eq!(run(3).unwrap().statistics().bindings, 3);
@@ -264,12 +264,12 @@ fn local_substitutions_share_the_binding_ceiling() {
 #[test]
 fn cancellation_refuses_the_whole_observation() {
     let input = admit("p(1). #show. #show x:#count{X:p(X)}=1.");
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     let error = input
         .metadata()
         .observations()
-        .evaluate(&Model::default(), Limits::default(), &control)
+        .evaluate(&Model::default(), Limits::default(), &cancellation)
         .unwrap_err();
     assert_eq!(error.kind(), &ErrorKind::Stopped(Stop::Cancelled));
 }
@@ -338,7 +338,7 @@ fn wide_observation_measures_agree_with_original_formula_truth() {
         input.theory(),
         &candidate,
         zetesis_ferraris::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap()
     .accepted();
@@ -458,7 +458,11 @@ fn aggregate_bindings_check_the_pinned_scalar_width() {
     let error = input
         .metadata()
         .observations()
-        .evaluate(&Model::default(), Limits::default(), &Control::default())
+        .evaluate(
+            &Model::default(),
+            Limits::default(),
+            &Cancellation::default(),
+        )
         .unwrap_err();
     assert_eq!(
         error.kind(),
@@ -550,7 +554,7 @@ fn matched_atom_keys_share_the_live_scope_ceiling() {
                     max_local_bytes,
                     ..Limits::default()
                 },
-                &Control::default(),
+                &Cancellation::default(),
             )
         };
         assert_eq!(
@@ -580,7 +584,7 @@ fn matched_atom_key_construction_checks_child_depth() {
                 max_symbol_depth: 1,
                 ..Limits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
     assert!(matches!(

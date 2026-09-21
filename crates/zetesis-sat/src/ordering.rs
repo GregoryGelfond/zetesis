@@ -142,11 +142,11 @@ fn sort(
 #[cfg(test)]
 mod tests {
     use crate::search::Budget;
-    use crate::{Control, Incomplete, SearchLimits, SearchStatistics};
+    use crate::{Cancellation, Incomplete, SearchLimits, SearchStatistics};
 
     #[test]
     fn bounded_order_is_a_complete_permutation_matching_independent_sort() {
-        let control = Control::default();
+        let cancellation = Cancellation::default();
         for count in 0..129 {
             let scores: Vec<_> = (0..count).map(|n| (n * n + 7 * n + count) % 17).collect();
             let mut expected: Vec<_> = (0..scores.len()).collect();
@@ -154,7 +154,7 @@ mod tests {
             let mut budget = Budget {
                 quota: crate::search::LocalQuota,
                 limits: SearchLimits::default(),
-                control: &control,
+                cancellation: &cancellation,
                 statistics: SearchStatistics::default(),
             };
             let values = vec![None; scores.len()];
@@ -169,7 +169,7 @@ mod tests {
                         max_work: budget.statistics.work - 1,
                         ..Default::default()
                     },
-                    control: &control,
+                    cancellation: &cancellation,
                     statistics: SearchStatistics::default(),
                 };
                 assert_eq!(

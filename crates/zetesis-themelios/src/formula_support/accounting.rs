@@ -2,7 +2,7 @@
 
 use std::{collections::BTreeSet, mem};
 use zetesis_core::Value;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 use super::Counters;
 
@@ -27,12 +27,12 @@ impl Counters {
 }
 
 impl Accounting {
-    /// Run one synchronous check with fresh control and no grounding observer.
+    /// Run one synchronous check with supplied cancellation and no grounding observer.
     /// Move the complete history in and back; never clone or reset its values.
     /// The guard restores accepted charges on success, refusal and unwind.
-    pub(crate) fn with_control<T>(
+    pub(crate) fn with_cancellation<T>(
         &mut self,
-        control: &Control,
+        cancellation: &Cancellation,
         action: impl FnOnce(&mut Counters) -> T,
     ) -> T {
         let Self {
@@ -46,7 +46,7 @@ impl Accounting {
                 work,
                 substitutions,
                 generated_values,
-                control: Some(control.clone()),
+                cancellation: Some(cancellation.clone()),
                 ..Counters::default()
             },
         };

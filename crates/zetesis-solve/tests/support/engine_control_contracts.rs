@@ -5,7 +5,7 @@ use crate::execution_observation::Ignore;
 use crate::{Backend, Grounder, SolveConfig};
 use std::{num::NonZeroUsize, time::Instant};
 use zetesis_core::SeedSelection;
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_themelios::{AdmissionOptions, admit};
 
 #[test]
@@ -32,7 +32,7 @@ fn automatic_policy_retains_cpu_execution() {
                     &config,
                     admitted.program(),
                     &vec![seed.clone(); size],
-                    &Control::default(),
+                    &Cancellation::default(),
                     &crate::phase_timing::Recorder::new(false),
                 )
                 .unwrap();
@@ -78,12 +78,12 @@ fn stopped_seeds_never_enter_oracle_execution() {
         };
         let phases = crate::phase_timing::Recorder::new(false);
         let mut engine = Engine::new(&config, program, &mut Ignore, &phases).unwrap();
-        let cancelled = Control::default();
+        let cancelled = Cancellation::default();
         cancelled.cancel();
-        for (control, reason) in [
+        for (cancellation, reason) in [
             (cancelled, Stop::Cancelled),
             (
-                Control::with_deadline(Instant::now()).unwrap(),
+                Cancellation::with_deadline(Instant::now()).unwrap(),
                 Stop::Deadline,
             ),
         ] {
@@ -92,7 +92,7 @@ fn stopped_seeds_never_enter_oracle_execution() {
                     &config,
                     program,
                     &[seed.clone(), seed.clone()],
-                    &control,
+                    &cancellation,
                     &phases,
                 )
                 .unwrap();
@@ -103,7 +103,7 @@ fn stopped_seeds_never_enter_oracle_execution() {
                 &config,
                 program,
                 &[seed.clone(), seed.clone()],
-                &Control::default(),
+                &Cancellation::default(),
                 &phases,
             )
             .unwrap();

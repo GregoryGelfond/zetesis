@@ -5,7 +5,7 @@ use zetesis_core::{
     WordError,
 };
 
-use crate::{Control, Limits, Stop};
+use crate::{Cancellation, Limits, Stop};
 
 #[cfg(test)]
 #[path = "../tests/support/static_decode.rs"]
@@ -137,13 +137,13 @@ fn decoding_stop(error: &WordError) -> Stop {
 
 struct Work<'a> {
     limits: Limits,
-    control: &'a Control,
+    cancellation: &'a Cancellation,
     statistics: StaticStatistics,
 }
 
 impl Work<'_> {
     fn tick(&mut self) -> Result<(), Stop> {
-        self.control.poll()?;
+        self.cancellation.poll()?;
         if self.statistics.work >= self.limits.max_work {
             return Err(Stop::WorkLimit);
         }
@@ -214,9 +214,9 @@ pub fn check_static(
     graph: &GroundProgram,
     seed: &Seed,
     limits: Limits,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<StaticCheck, Stop> {
-    check_static_view(graph, seed.view(), limits, control)
+    check_static_view(graph, seed.view(), limits, cancellation)
 }
 
 /// Check an owned or shared selection through the same static reduct checker.
@@ -231,15 +231,15 @@ pub fn check_static_view(
     graph: &GroundProgram,
     seed: SeedView<'_>,
     limits: Limits,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<StaticCheck, Stop> {
-    control.poll()?;
+    cancellation.poll()?;
     if !graph.program().same_instance(seed.program()) {
         return Err(Stop::WrongProgram);
     }
     let mut work = Work {
         limits,
-        control,
+        cancellation,
         statistics: StaticStatistics::default(),
     };
     let mut frozen = work.words(graph.word_count())?;
@@ -285,7 +285,7 @@ pub fn check_static_view(
             break;
         }
     }
-    control.poll()?;
+    cancellation.poll()?;
     Ok(StaticCheck {
         program: graph.program().clone(),
         closure_words: closure,

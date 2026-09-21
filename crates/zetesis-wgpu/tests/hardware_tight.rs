@@ -4,7 +4,7 @@
 #[path = "support/physical.rs"]
 mod physical;
 
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
     AdmissionLimits, Interpretation, Limits, Node, Theory, TightCheckLimits, TightPlan,
     TightPlanLimits, TightVerdict, Verdict, check,
@@ -16,7 +16,12 @@ use zetesis_wgpu::{
 
 fn certificate(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> TightPlan {
     let theory = Theory::new(atoms, nodes, roots, AdmissionLimits::default()).unwrap();
-    TightPlan::compile(&theory, TightPlanLimits::default(), &Control::default()).unwrap()
+    TightPlan::compile(
+        &theory,
+        TightPlanLimits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap()
 }
 
 fn oracle(backend: physical::Backend, support: TightSupport) -> GpuTightOracle {
@@ -81,13 +86,17 @@ fn conditional_support_matches_exhaustive_reducts() {
     let certificate = conditional_support(4);
     for candidate in inputs(certificate.theory()) {
         let scalar = certificate
-            .check(&candidate, TightCheckLimits::default(), &Control::default())
+            .check(
+                &candidate,
+                TightCheckLimits::default(),
+                &Cancellation::default(),
+            )
             .unwrap();
         let exact = check(
             certificate.theory(),
             &candidate,
             Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         assert_eq!(
@@ -106,7 +115,7 @@ fn compare(oracle: &mut GpuTightOracle, certificate: &TightPlan) -> usize {
                 certificate,
                 &candidates,
                 TightGpuLimits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
         assert_eq!(results.len(), candidates.len());
@@ -129,7 +138,11 @@ fn compare(oracle: &mut GpuTightOracle, certificate: &TightPlan) -> usize {
         assert_eq!(activity.downloaded_bytes, stats.downloaded_bytes);
         for (candidate, result) in candidates.iter().zip(&results) {
             let scalar = certificate
-                .check(candidate, TightCheckLimits::default(), &Control::default())
+                .check(
+                    candidate,
+                    TightCheckLimits::default(),
+                    &Cancellation::default(),
+                )
                 .unwrap();
             assert_eq!(
                 result.verdict(),
@@ -137,7 +150,13 @@ fn compare(oracle: &mut GpuTightOracle, certificate: &TightPlan) -> usize {
                 "candidate {:?}",
                 candidate.atoms().collect::<Vec<_>>()
             );
-            let exact = check(theory, candidate, Limits::default(), &Control::default()).unwrap();
+            let exact = check(
+                theory,
+                candidate,
+                Limits::default(),
+                &Cancellation::default(),
+            )
+            .unwrap();
             match result.verdict() {
                 TightVerdict::Stable => assert!(exact.accepted()),
                 TightVerdict::NotModel { root } => {
@@ -202,13 +221,17 @@ fn tight_fixture_verdicts_match_exhaustive_reducts() {
     for certificate in fixtures() {
         for candidate in inputs(certificate.theory()) {
             let scalar = certificate
-                .check(&candidate, TightCheckLimits::default(), &Control::default())
+                .check(
+                    &candidate,
+                    TightCheckLimits::default(),
+                    &Cancellation::default(),
+                )
                 .unwrap();
             let exact = check(
                 certificate.theory(),
                 &candidate,
                 Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
             match scalar.verdict {
@@ -300,7 +323,7 @@ fn qualify_support_preserves_batch_isolation(backend: physical::Backend, support
                     &certificate,
                     &candidates,
                     TightGpuLimits::default(),
-                    &Control::default(),
+                    &Cancellation::default(),
                 )
                 .unwrap();
             assert_eq!(results.len(), worlds);
@@ -308,7 +331,11 @@ fn qualify_support_preserves_batch_isolation(backend: physical::Backend, support
                 assert_eq!(
                     result.verdict(),
                     certificate
-                        .check(candidate, TightCheckLimits::default(), &Control::default())
+                        .check(
+                            candidate,
+                            TightCheckLimits::default(),
+                            &Cancellation::default()
+                        )
                         .unwrap()
                         .verdict
                 );
@@ -341,7 +368,7 @@ fn compare_skewed_support(oracle: &mut GpuTightOracle) {
                 &certificate,
                 &candidates,
                 TightGpuLimits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
         assert_eq!(results.len(), candidates.len());
@@ -352,7 +379,11 @@ fn compare_skewed_support(oracle: &mut GpuTightOracle) {
         );
         for (candidate, result) in candidates.iter().zip(results) {
             let expected = certificate
-                .check(candidate, TightCheckLimits::default(), &Control::default())
+                .check(
+                    candidate,
+                    TightCheckLimits::default(),
+                    &Cancellation::default(),
+                )
                 .unwrap();
             assert_eq!(result.verdict(), expected.verdict);
         }
@@ -381,13 +412,17 @@ fn compare_conditional_support(oracle: &mut GpuTightOracle, atoms: usize) {
                     &certificate,
                     &candidates,
                     TightGpuLimits::default(),
-                    &Control::default(),
+                    &Cancellation::default(),
                 )
                 .unwrap();
             assert_eq!(results.len(), worlds);
             for (candidate, result) in candidates.iter().zip(results) {
                 let expected = certificate
-                    .check(candidate, TightCheckLimits::default(), &Control::default())
+                    .check(
+                        candidate,
+                        TightCheckLimits::default(),
+                        &Cancellation::default(),
+                    )
                     .unwrap();
                 assert_eq!(result.verdict(), expected.verdict);
             }
@@ -440,7 +475,7 @@ fn qualify_support_refusals_preserve_reusable_residency(
             &certificate,
             &input,
             TightGpuLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     oracle
@@ -448,7 +483,7 @@ fn qualify_support_refusals_preserve_reusable_residency(
             &certificate,
             &input,
             TightGpuLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     let bytes = oracle.last_batch_stats().unwrap().accounted_bytes;
@@ -471,7 +506,7 @@ fn qualify_support_refusals_preserve_reusable_residency(
         },
     ] {
         let error = oracle
-            .check_batch(&certificate, &input, limits, &Control::default())
+            .check_batch(&certificate, &input, limits, &Cancellation::default())
             .unwrap_err();
         assert!(
             matches!(error,TightGpuError::Gpu(ref error) if error.kind()==GpuErrorKind::Capacity)
@@ -479,7 +514,7 @@ fn qualify_support_refusals_preserve_reusable_residency(
         assert_eq!(oracle.activity(), TightGpuActivity::default());
         assert!(oracle.last_batch_stats().is_none());
     }
-    let cancelled = Control::default();
+    let cancelled = Cancellation::default();
     cancelled.cancel();
     assert_eq!(
         oracle
@@ -504,7 +539,7 @@ fn qualify_support_refusals_preserve_reusable_residency(
     };
     assert_eq!(
         oracle
-            .check_batch(&certificate, &input, tight, &Control::default())
+            .check_batch(&certificate, &input, tight, &Cancellation::default())
             .unwrap(),
         expected
     );
@@ -550,7 +585,7 @@ fn qualify_support_residency_tracks_theory_identity(
             &certificate,
             &input,
             TightGpuLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     let foreign = Theory::new(1, vec![Node::Atom(0)], vec![0], AdmissionLimits::default()).unwrap();
@@ -559,13 +594,17 @@ fn qualify_support_residency_tracks_theory_identity(
             &certificate,
             &[Interpretation::new(&foreign, [0]).unwrap()],
             TightGpuLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
     assert!(matches!(error,TightGpuError::Gpu(ref error) if error.kind()==GpuErrorKind::Seed));
     assert_eq!(oracle.activity(), TightGpuActivity::default());
-    let new_certificate =
-        TightPlan::compile(&foreign, TightPlanLimits::default(), &Control::default()).unwrap();
+    let new_certificate = TightPlan::compile(
+        &foreign,
+        TightPlanLimits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
     let new_input = [Interpretation::new(&foreign, [0]).unwrap()];
     assert_eq!(
         oracle
@@ -573,13 +612,13 @@ fn qualify_support_residency_tracks_theory_identity(
                 &new_certificate,
                 &new_input,
                 TightGpuLimits::default(),
-                &Control::default()
+                &Cancellation::default()
             )
             .unwrap(),
         expected
     );
     assert!(oracle.last_batch_stats().unwrap().theory_uploaded);
-    let cancelled = Control::default();
+    let cancelled = Cancellation::default();
     cancelled.cancel();
     assert_eq!(
         oracle
@@ -598,7 +637,7 @@ fn qualify_support_residency_tracks_theory_identity(
                     max_candidates: 0,
                     ..Default::default()
                 },
-                &Control::default()
+                &Cancellation::default()
             )
             .unwrap()
             .is_empty()
@@ -612,7 +651,7 @@ fn qualify_support_residency_tracks_theory_identity(
                 &certificate,
                 &input,
                 TightGpuLimits::default(),
-                &Control::default()
+                &Cancellation::default()
             )
             .unwrap(),
         expected

@@ -4,7 +4,7 @@
 use super::FormulaLimits;
 use super::packing::{Graph, Plan, Schedule, Shape, address, capacity, vector};
 use crate::{GpuError, GpuErrorKind};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Node, Theory};
 
 pub(super) struct Preparation {
@@ -40,9 +40,9 @@ impl Preparation {
     pub(super) fn finish(
         self,
         device: &wgpu::Limits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<(PreparedGraph, Plan), GpuError> {
-        self.finish_with(device, control, vector)
+        self.finish_with(device, cancellation, vector)
     }
 
     // The allocator seam is the real production reservation path. It returns
@@ -50,10 +50,10 @@ impl Preparation {
     fn finish_with(
         mut self,
         device: &wgpu::Limits,
-        control: &Control,
+        cancellation: &Cancellation,
         mut reserve: impl FnMut(usize) -> Result<Vec<u32>, GpuError>,
     ) -> Result<(PreparedGraph, Plan), GpuError> {
-        poll(control)?;
+        poll(cancellation)?;
         let mut nodes = reserve_words(&mut reserve, self.shape.node_bytes)?;
         let node_capacity = retained_bytes(&nodes)?;
         self.minimum.staging(
@@ -62,7 +62,7 @@ impl Preparation {
             0,
             self.limits.max_batch_bytes,
         )?;
-        let depth_count = pack_depths(&self.shape, &mut nodes, control)?;
+        let depth_count = pack_depths(&self.shape, &mut nodes, cancellation)?;
         // A pure chain has no independent node work. This structural choice is
         // not a measured crossover policy for other skinny/unbalanced DAGs.
         let levels = if depth_count == self.shape.nodes {
@@ -86,7 +86,7 @@ impl Preparation {
             0,
             self.limits.max_batch_bytes,
         )?;
-        poll(control)?;
+        poll(cancellation)?;
         let mut roots = reserve_words(&mut reserve, schedule.root_bytes)?;
         plan.staging(
             schedule.root_bytes,
@@ -94,9 +94,9 @@ impl Preparation {
             retained_bytes(&roots)?,
             self.limits.max_batch_bytes,
         )?;
-        pack_schedule(&self.shape, &schedule, &nodes, &mut roots, control)?;
-        finalize_outputs(&self.shape, &mut nodes, control)?;
-        poll(control)?;
+        pack_schedule(&self.shape, &schedule, &nodes, &mut roots, cancellation)?;
+        finalize_outputs(&self.shape, &mut nodes, cancellation)?;
+        poll(cancellation)?;
         Ok((
             PreparedGraph {
                 graph: Graph {
@@ -111,8 +111,8 @@ impl Preparation {
     }
 }
 
-fn poll(control: &Control) -> Result<(), GpuError> {
-    control.poll().map_err(GpuError::interrupted)
+fn poll(cancellation: &Cancellation) -> Result<(), GpuError> {
+    cancellation.poll().map_err(GpuError::interrupted)
 }
 
 fn retained_bytes(words: &Vec<u32>) -> Result<u64, GpuError> {
@@ -138,10 +138,14 @@ fn reserve_words(
     Ok(words)
 }
 
-fn pack_depths(shape: &Shape, nodes: &mut Vec<u32>, control: &Control) -> Result<u32, GpuError> {
+fn pack_depths(
+    shape: &Shape,
+    nodes: &mut Vec<u32>,
+    cancellation: &Cancellation,
+) -> Result<u32, GpuError> {
     let mut levels = 0;
     for node in shape.theory.nodes() {
-        poll(control)?;
+        poll(cancellation)?;
         let (tag, left, right) = match *node {
             Node::False => (0, 0, 0),
             Node::Atom(atom) => (1, address(atom)?, 0),
@@ -181,16 +185,16 @@ fn pack_schedule(
     schedule: &Schedule,
     nodes: &[u32],
     roots: &mut Vec<u32>,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<(), GpuError> {
-    poll(control)?;
+    poll(cancellation)?;
     roots.resize(
         usize::try_from(schedule.root_bytes / 4)
             .map_err(|_| capacity("formula roots exceed host"))?,
         0,
     );
     for (index, root) in shape.theory.roots().iter().enumerate() {
-        poll(control)?;
+        poll(cancellation)?;
         roots[index] = address(*root)?;
     }
     if schedule.levels == 0 {
@@ -201,7 +205,7 @@ fn pack_schedule(
     let order = prefix + levels + 1;
     // The offset segment changes from counts to prefix ends, then to starts.
     for node in nodes.chunks_exact(4).take(shape.nodes as usize) {
-        poll(control)?;
+        poll(cancellation)?;
         let count = roots
             .get_mut(prefix + node[3] as usize + 1)
             .filter(|_| node[3] < schedule.levels)
@@ -211,7 +215,7 @@ fn pack_schedule(
             .ok_or_else(|| capacity("formula level count overflows"))?;
     }
     for level in 1..=levels {
-        poll(control)?;
+        poll(cancellation)?;
         roots[prefix + level] = roots[prefix + level]
             .checked_add(roots[prefix + level - 1])
             .ok_or_else(|| capacity("formula level prefix overflows"))?;
@@ -220,7 +224,7 @@ fn pack_schedule(
         return Err(capacity("formula level coverage differs"));
     }
     for index in (0..shape.nodes as usize).rev() {
-        poll(control)?;
+        poll(cancellation)?;
         let end = &mut roots[prefix + nodes[index * 4 + 3] as usize + 1];
         let position = insert_position(end, shape.nodes)?;
         roots[order + position] = address(index)?;
@@ -239,10 +243,14 @@ fn insert_position(end: &mut u32, nodes: u32) -> Result<usize, GpuError> {
     Ok(position as usize)
 }
 
-fn finalize_outputs(shape: &Shape, nodes: &mut [u32], control: &Control) -> Result<(), GpuError> {
+fn finalize_outputs(
+    shape: &Shape,
+    nodes: &mut [u32],
+    cancellation: &Cancellation,
+) -> Result<(), GpuError> {
     let mut output = shape.atoms;
     for node in nodes.chunks_exact_mut(4).take(shape.nodes as usize) {
-        poll(control)?;
+        poll(cancellation)?;
         if node[0] == 1 {
             node[3] = node[1];
         } else {

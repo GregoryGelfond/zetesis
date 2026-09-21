@@ -1,5 +1,5 @@
 use rayon::prelude::*;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, TightPlan, TightVerdict, Verdict};
 
 use super::{
@@ -17,10 +17,10 @@ pub(super) struct Prepared {
 pub(super) fn prepare(
     case: super::Case,
     configuration: &Configuration,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<Prepared, Error> {
     let fixture = super::fixture::build(case)?;
-    let plan = TightPlan::compile(&fixture.theory, configuration.plan_limits, control)
+    let plan = TightPlan::compile(&fixture.theory, configuration.plan_limits, cancellation)
         .map_err(Error::Certificate)?;
     let mut reference = reserve(fixture.candidates.len())?;
     let mut certificates = reserve(fixture.candidates.len())?;
@@ -31,7 +31,7 @@ pub(super) fn prepare(
                     &fixture.theory,
                     candidate,
                     configuration.reference_limits,
-                    control,
+                    cancellation,
                 )
                 .map_err(Error::Cpu)?;
                 match exact.verdict() {
@@ -47,19 +47,19 @@ pub(super) fn prepare(
                 &fixture.theory,
                 candidate,
                 configuration.residual_limits,
-                control,
+                cancellation,
             ),
         };
-        validate_witness(candidate, &check, configuration, control)?;
+        validate_witness(candidate, &check, configuration, cancellation)?;
         let certificate = plan
-            .check_accounted(candidate, configuration.certificate_limits, control)
+            .check_accounted(candidate, configuration.certificate_limits, cancellation)
             .result
             .map_err(Error::Certificate)?
             .verdict;
         if !compatible(certificate, &check) {
             return Err(Error::Parity);
         }
-        validate_original_failure(candidate, certificate, configuration, control)?;
+        validate_original_failure(candidate, certificate, configuration, cancellation)?;
         reference.push(check);
         certificates.push(certificate);
     }
@@ -75,7 +75,7 @@ pub(super) fn classify(
     prepared: &Prepared,
     configuration: &Configuration,
     pool: Option<&rayon::ThreadPool>,
-    control: &Control,
+    cancellation: &Cancellation,
     activity: &mut Activity,
 ) -> Result<Vec<TightVerdict>, Error> {
     let candidates = &prepared.fixture.candidates;
@@ -83,7 +83,7 @@ pub(super) fn classify(
     let check = |candidate: &Interpretation| {
         prepared
             .plan
-            .check_accounted(candidate, configuration.certificate_limits, control)
+            .check_accounted(candidate, configuration.certificate_limits, cancellation)
     };
     if let Some(pool) = pool {
         pool.install(|| {
@@ -126,16 +126,16 @@ pub(super) fn complete(
     prepared: &Prepared,
     verdicts: &[TightVerdict],
     configuration: &Configuration,
-    control: &Control,
+    cancellation: &Cancellation,
     activity: &mut Activity,
 ) -> Result<Vec<zetesis_sat::Check>, Error> {
-    control.poll().map_err(Error::Cpu)?;
+    cancellation.poll().map_err(Error::Cpu)?;
     if verdicts.len() != prepared.fixture.candidates.len() {
         return Err(Error::Parity);
     }
     let mut checks = reserve(verdicts.len())?;
     for (verdict, candidate) in verdicts.iter().zip(&prepared.fixture.candidates) {
-        control.poll().map_err(Error::Cpu)?;
+        cancellation.poll().map_err(Error::Cpu)?;
         let check = match verdict {
             TightVerdict::Stable => zetesis_sat::Check::Stable,
             TightVerdict::NotModel { .. } => zetesis_sat::Check::NotModel,
@@ -145,7 +145,7 @@ pub(super) fn complete(
                     &prepared.fixture.theory,
                     candidate,
                     configuration.residual_limits,
-                    control,
+                    cancellation,
                 );
                 if let zetesis_sat::Check::Inconclusive(reason) = check {
                     return Err(Error::Residual(reason));
@@ -164,9 +164,9 @@ pub(super) fn validate(
     verdicts: &[TightVerdict],
     checks: &[zetesis_sat::Check],
     configuration: &Configuration,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<(), Error> {
-    control.poll().map_err(Error::Cpu)?;
+    cancellation.poll().map_err(Error::Cpu)?;
     if verdicts != prepared.certificates || checks.len() != prepared.reference.len() {
         return Err(Error::Parity);
     }
@@ -177,8 +177,8 @@ pub(super) fn validate(
         .zip(checks)
         .zip(&prepared.reference)
     {
-        control.poll().map_err(Error::Cpu)?;
-        validate_witness(candidate, check, configuration, control)?;
+        cancellation.poll().map_err(Error::Cpu)?;
+        validate_witness(candidate, check, configuration, cancellation)?;
         if !same_decision(check, reference) {
             return Err(Error::Parity);
         }
@@ -213,7 +213,7 @@ fn validate_witness(
     candidate: &Interpretation,
     check: &zetesis_sat::Check,
     configuration: &Configuration,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<(), Error> {
     match check {
         zetesis_sat::Check::Inconclusive(reason) => Err(Error::Residual(*reason)),
@@ -226,7 +226,7 @@ fn validate_witness(
                     candidate,
                     witness,
                     configuration.reference_limits,
-                    control,
+                    cancellation,
                 )
                 .map_err(Error::Cpu)?
             {
@@ -266,7 +266,7 @@ fn validate_original_failure(
     candidate: &Interpretation,
     certificate: TightVerdict,
     configuration: &Configuration,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<(), Error> {
     if let TightVerdict::NotModel { root } = certificate {
         // This instrument returns before subset enumeration on a nonmodel.
@@ -278,7 +278,7 @@ fn validate_original_failure(
                 max_subsets: 0,
                 ..configuration.reference_limits
             },
-            control,
+            cancellation,
         )
         .map_err(Error::Cpu)?;
         if !matches!(check.verdict(), Verdict::NotModel { root: actual } if *actual == root) {

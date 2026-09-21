@@ -3,7 +3,7 @@
 use zetesis_core::{
     AdmissionLimits, Atom, AtomPattern, Model, Predicate, Program, Seed, Template, Term, Value,
 };
-use zetesis_cpu::{Control, Limits, Stop, check, lazy};
+use zetesis_cpu::{Cancellation, Limits, Stop, check, lazy};
 
 fn pattern(name: &str, terms: Vec<Term>) -> AtomPattern {
     AtomPattern::new(Predicate::new(name, terms.len()).unwrap(), terms).unwrap()
@@ -67,7 +67,7 @@ fn run(program: &Program, seeds: &[Seed], selection: lazy::SourceSelection) -> l
         seeds,
         lazy::Limits::default(),
         selection,
-        &Control::default(),
+        &Cancellation::default(),
         lazy::evaluate,
     )
     .unwrap()
@@ -76,7 +76,7 @@ fn run(program: &Program, seeds: &[Seed], selection: lazy::SourceSelection) -> l
 fn assert_exact(program: &Program, seeds: &[Seed], batch: &lazy::Batch) {
     assert_eq!(batch.checks.len(), seeds.len());
     for (actual, seed) in batch.checks.iter().zip(seeds) {
-        let expected = check(program, seed, Limits::default(), &Control::default()).unwrap();
+        let expected = check(program, seed, Limits::default(), &Cancellation::default()).unwrap();
         assert_eq!(actual.closure(), expected.closure());
         assert_eq!(actual.accepted(), expected.accepted());
         assert_eq!(actual.seed_mismatch(), expected.seed_mismatch());
@@ -223,7 +223,7 @@ fn irregular_chunks_preserve_masked_closures() {
                 ..Default::default()
             },
             lazy::SourceSelection::Worlds,
-            &Control::default(),
+            &Cancellation::default(),
             lazy::evaluate,
         )
         .unwrap();
@@ -272,7 +272,7 @@ fn mask_work_uses_the_shared_source_quota() {
         &seeds,
         exact,
         lazy::SourceSelection::Worlds,
-        &Control::default(),
+        &Cancellation::default(),
         lazy::evaluate,
     )
     .unwrap();
@@ -286,7 +286,7 @@ fn mask_work_uses_the_shared_source_quota() {
         &seeds,
         below,
         lazy::SourceSelection::Worlds,
-        &Control::default(),
+        &Cancellation::default(),
         lazy::evaluate,
     )
     .unwrap_err();
@@ -309,7 +309,7 @@ fn mask_preparation_can_stop_without_offering_instances() {
             ..Default::default()
         },
         lazy::SourceSelection::Worlds,
-        &Control::default(),
+        &Cancellation::default(),
         lazy::evaluate,
     )
     .unwrap_err();
@@ -347,7 +347,7 @@ fn empty_catalog_preparation_has_an_inclusive_host_cap() {
         &seeds,
         limits,
         lazy::SourceSelection::Worlds,
-        &Control::default(),
+        &Cancellation::default(),
         lazy::evaluate,
     )
     .unwrap();
@@ -360,7 +360,7 @@ fn empty_catalog_preparation_has_an_inclusive_host_cap() {
             ..limits
         },
         lazy::SourceSelection::Worlds,
-        &Control::default(),
+        &Cancellation::default(),
         lazy::evaluate,
     )
     .unwrap_err();
@@ -385,7 +385,7 @@ fn execution_failure_discards_masked_pending_deltas() {
             ..Default::default()
         },
         lazy::SourceSelection::Worlds,
-        &Control::default(),
+        &Cancellation::default(),
         |chunk| {
             calls += 1;
             if calls == 3 {
@@ -409,7 +409,7 @@ fn execution_failure_discards_masked_pending_deltas() {
 fn cancellation_discards_masked_pending_deltas() {
     let program = cartesian(3);
     let seeds = seeds(&program, &[vec![0], vec![1]]);
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut calls = 0;
     let failure = lazy::check_with_source(
         &program,
@@ -419,11 +419,11 @@ fn cancellation_discards_masked_pending_deltas() {
             ..Default::default()
         },
         lazy::SourceSelection::Worlds,
-        &control,
+        &cancellation,
         |chunk| {
             calls += 1;
             let output = lazy::evaluate(chunk);
-            control.cancel();
+            cancellation.cancel();
             output
         },
     )
@@ -447,7 +447,7 @@ fn default_selection_matches_explicit_union() {
         &program,
         &seeds,
         lazy::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
         lazy::evaluate,
     )
     .unwrap();
@@ -553,7 +553,7 @@ fn catalog_refusal_retains_live_mask_progress() {
         &seeds,
         limits,
         lazy::SourceSelection::Worlds,
-        &Control::default(),
+        &Cancellation::default(),
         lazy::evaluate,
     )
     .unwrap_err();
@@ -567,7 +567,7 @@ fn catalog_refusal_retains_live_mask_progress() {
             ..limits
         },
         lazy::SourceSelection::Worlds,
-        &Control::default(),
+        &Cancellation::default(),
         lazy::evaluate,
     )
     .unwrap_err();

@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, Grounder, Oracle, PreparedInput, ProjectionError,
     ProjectionLimits, ProjectionResource, Session, SolveConfig, SolveError, WorldViewLimits,
@@ -38,16 +38,23 @@ fn config() -> SolveConfig {
 #[test]
 fn distinct_keys_retain_full_membership() {
     let owner = input("{p;q}. #project p/0.");
-    let full = Session::builder(PreparedInput::formula(&owner), config(), Control::default())
-        .collect(WorldViewLimits::default())
-        .unwrap();
+    let full = Session::builder(
+        PreparedInput::formula(&owner),
+        config(),
+        Cancellation::default(),
+    )
+    .collect(WorldViewLimits::default())
+    .unwrap();
     assert_eq!(full.len(), 4);
-    let mut session =
-        Session::builder(PreparedInput::formula(&owner), config(), Control::default())
-            .selection(AnswerSelection::All)
-            .projected(ProjectionLimits::default())
-            .start()
-            .unwrap();
+    let mut session = Session::builder(
+        PreparedInput::formula(&owner),
+        config(),
+        Cancellation::default(),
+    )
+    .selection(AnswerSelection::All)
+    .projected(ProjectionLimits::default())
+    .start()
+    .unwrap();
     let mut keys = BTreeSet::new();
     for answer in session.by_ref() {
         let answer = answer.unwrap();
@@ -78,13 +85,17 @@ fn distinct_keys_retain_full_membership() {
 #[test]
 fn world_view_collection_forces_full_identity() {
     let owner = input("{p;q}. #project p/0.");
-    let family = Session::builder(PreparedInput::formula(&owner), config(), Control::default())
-        .projected(ProjectionLimits {
-            max_keys: 0,
-            ..Default::default()
-        })
-        .collect(WorldViewLimits::default())
-        .unwrap();
+    let family = Session::builder(
+        PreparedInput::formula(&owner),
+        config(),
+        Cancellation::default(),
+    )
+    .projected(ProjectionLimits {
+        max_keys: 0,
+        ..Default::default()
+    })
+    .collect(WorldViewLimits::default())
+    .unwrap();
     assert_eq!(family.len(), 4);
     assert!(family.outcome().projection().is_none());
 }
@@ -93,14 +104,17 @@ fn world_view_collection_forces_full_identity() {
 fn empty_projection_has_one_complete_class() {
     let owner = input("{p;q}. #project absent/0.");
     assert!(owner.projection().atoms().is_empty());
-    let mut session =
-        Session::builder(PreparedInput::formula(&owner), config(), Control::default())
-            .projected(ProjectionLimits {
-                max_keys: 1,
-                ..Default::default()
-            })
-            .start()
-            .unwrap();
+    let mut session = Session::builder(
+        PreparedInput::formula(&owner),
+        config(),
+        Cancellation::default(),
+    )
+    .projected(ProjectionLimits {
+        max_keys: 1,
+        ..Default::default()
+    })
+    .start()
+    .unwrap();
     assert_eq!(session.by_ref().map(Result::unwrap).count(), 1);
     let outcome = session.outcome().unwrap();
     let projection = outcome.projection().unwrap();
@@ -111,11 +125,14 @@ fn empty_projection_has_one_complete_class() {
 #[test]
 fn objective_selection_precedes_projection() {
     let owner = input("{p;q}. #project absent/0. #minimize{1@1:not q}.");
-    let mut session =
-        Session::builder(PreparedInput::formula(&owner), config(), Control::default())
-            .projected(ProjectionLimits::default())
-            .start()
-            .unwrap();
+    let mut session = Session::builder(
+        PreparedInput::formula(&owner),
+        config(),
+        Cancellation::default(),
+    )
+    .projected(ProjectionLimits::default())
+    .start()
+    .unwrap();
     let answers: Vec<_> = session.by_ref().map(Result::unwrap).collect();
     assert_eq!(answers.len(), 1);
     assert_eq!(answers[0].score().unwrap().costs(), &[(1, 0)]);
@@ -141,7 +158,7 @@ fn requested_count_counts_representatives() {
             models: 1,
             ..config()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .projected(ProjectionLimits::default())
     .start()
@@ -159,7 +176,7 @@ fn projected_stops_preserve_established_optimum() {
         let mut session = Session::builder(
             PreparedInput::formula(&owner),
             SolveConfig { models, ..config() },
-            Control::default(),
+            Cancellation::default(),
         )
         .projected(ProjectionLimits {
             max_keys: keys,
@@ -204,14 +221,17 @@ fn projected_stops_preserve_established_optimum() {
 #[test]
 fn refused_key_preserves_verified_evidence() {
     let owner = input("{p;q}. #project p/0.");
-    let mut session =
-        Session::builder(PreparedInput::formula(&owner), config(), Control::default())
-            .projected(ProjectionLimits {
-                max_keys: 0,
-                ..Default::default()
-            })
-            .start()
-            .unwrap();
+    let mut session = Session::builder(
+        PreparedInput::formula(&owner),
+        config(),
+        Cancellation::default(),
+    )
+    .projected(ProjectionLimits {
+        max_keys: 0,
+        ..Default::default()
+    })
+    .start()
+    .unwrap();
     let error = session.next().unwrap().unwrap_err();
     assert!(matches!(
         *error.cause,
@@ -231,11 +251,15 @@ fn refused_key_preserves_verified_evidence() {
 #[test]
 fn projection_requires_an_explicit_domain() {
     let owner = input("{p}.");
-    let error = Session::builder(PreparedInput::formula(&owner), config(), Control::default())
-        .projected(ProjectionLimits::default())
-        .start()
-        .err()
-        .unwrap();
+    let error = Session::builder(
+        PreparedInput::formula(&owner),
+        config(),
+        Cancellation::default(),
+    )
+    .projected(ProjectionLimits::default())
+    .start()
+    .err()
+    .unwrap();
     assert!(matches!(
         *error.cause,
         SolveError::Projection(ProjectionError::MissingDeclaration)
@@ -251,7 +275,7 @@ fn refused_history_setup_retains_attempted_timing() {
             stats: true,
             ..config()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .projected(ProjectionLimits {
         max_bytes: 0,
@@ -283,13 +307,17 @@ fn refused_history_setup_retains_attempted_timing() {
 #[test]
 fn cancellation_keeps_the_delivered_projected_prefix() {
     let owner = input("{p;q}. #project p/0.");
-    let control = Control::default();
-    let mut session = Session::builder(PreparedInput::formula(&owner), config(), control.clone())
-        .projected(ProjectionLimits::default())
-        .start()
-        .unwrap();
+    let cancellation = Cancellation::default();
+    let mut session = Session::builder(
+        PreparedInput::formula(&owner),
+        config(),
+        cancellation.clone(),
+    )
+    .projected(ProjectionLimits::default())
+    .start()
+    .unwrap();
     let first = session.next().unwrap().unwrap();
-    control.cancel();
+    cancellation.cancel();
     // The engine may observe the stop before the history does. Either route
     // must finish without delivering another representative or claiming coverage.
     assert!(!matches!(session.next(), Some(Ok(_))));
@@ -305,11 +333,14 @@ fn cancellation_keeps_the_delivered_projected_prefix() {
 fn history_ceilings_are_inclusive() {
     let owner = input("{p;q}. #project p/0.");
     let run = |limits| {
-        let mut session =
-            Session::builder(PreparedInput::formula(&owner), config(), Control::default())
-                .projected(limits)
-                .start()
-                .unwrap();
+        let mut session = Session::builder(
+            PreparedInput::formula(&owner),
+            config(),
+            Cancellation::default(),
+        )
+        .projected(limits)
+        .start()
+        .unwrap();
         let answers: Result<Vec<_>, _> = session.by_ref().collect();
         (answers, session.outcome().unwrap())
     };

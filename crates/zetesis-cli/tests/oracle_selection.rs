@@ -8,7 +8,7 @@ use zetesis_cli::{
     Backend, Completion, Grounder, Interruption, Options, Oracle, Report, RunError,
     run_with_diagnostics,
 };
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_themelios::{
     AdmissionFailure, ExpansionFailure, FormulaFailure, FormulaResource, InputLimit,
 };
@@ -30,7 +30,7 @@ fn run(source: &str, options: &Options) -> (Result<Report, RunError>, String, St
         options,
         &mut output,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     );
     (
         result,

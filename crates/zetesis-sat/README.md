@@ -9,7 +9,7 @@ exhaustive formula reference and the normal-rule least-closure checker.
 
 ```rust
 use zetesis_ferraris::{AdmissionLimits, Node, Theory};
-use zetesis_sat::{Control, Limits, StableModels};
+use zetesis_sat::{Cancellation, Limits, StableModels};
 
 // a ∨ ¬a: an optional, supported atom.
 let theory = Theory::new(
@@ -18,7 +18,7 @@ let theory = Theory::new(
     vec![3],
     AdmissionLimits::default(),
 )?;
-let mut models = StableModels::new(&theory, Limits::default(), Control::default())?;
+let mut models = StableModels::new(&theory, Limits::default(), Cancellation::default())?;
 for model in models.by_ref() {
     println!("{:?}", model?.atoms().collect::<Vec<_>>());
 }
@@ -30,7 +30,7 @@ assert!(models.exhausted());
 
 `Literal::new(variable, positive)` and
 `Cnf::new(variable_count, clauses, AdmissionLimits)` admit classical CNF.
-`solve(&cnf, SearchLimits, &Control)` returns
+`solve(&cnf, SearchLimits, &Cancellation)` returns
 `Solve::Sat(Assignment)`, `Solve::Unsat`, or
 `Solve::Inconclusive(Incomplete)`. `Assignment::value(index)` returns `None`
 outside its declared universe. `solve_with_statistics` additionally returns
@@ -43,7 +43,7 @@ literal iteration. These views preserve empty clauses and canonical literal
 order without allocating. Public input `Literal` values retain their full
 index range until admission; packing introduces no additional admitted bound.
 
-`check(&Theory, &Interpretation, Limits, &Control)` returns
+`check(&Theory, &Interpretation, Limits, &Cancellation)` returns
 `Check::Stable`, `Check::NotModel`, `Check::NonMinimal(witness)` or
 `Check::Inconclusive(reason)`; a refutation by the support law under a
 complete tight certificate is the enumeration's own and never a check's
@@ -51,14 +51,14 @@ verdict. `Check::accepted()` is true only for `Stable`.
 This standalone call explicitly constructs a fresh candidate-simplified reduct,
 retaining a differential control for the persistent path.
 
-`PreparedReduct::prepare(&Theory, ReductPreparationLimits, &Control)` returns
+`PreparedReduct::prepare(&Theory, ReductPreparationLimits, &Cancellation)` returns
 `ReductPreparationAttempt { result, statistics }`. The result contains the
 immutable proper-subset query or its original typed refusal; the receipt retains
 actual work and capacity on either outcome. Clones share the completed owner.
 This replaces the provisional `new`/combined failure-receipt API: inspect
 `attempt.result` for the unchanged typed cause and `attempt.statistics` for its
 actual prefix. Failed preparation does not allocate an error wrapper.
-`prepared.check(&candidate, &mut ReductWorkspace, Limits, &Control)`
+`prepared.check(&candidate, &mut ReductWorkspace, Limits, &Cancellation)`
 reuses worker allocation capacity and returns the verdict with actual statistics.
 Original truth is authenticated by `EvaluationWorkspace`; callers cannot supply
 arbitrary truth bits. The prepared owner checks exact theory identity. Each
@@ -68,7 +68,7 @@ failure prefixes. The fixed CNF can be larger or search more slowly than a fresh
 candidate-simplified encoding; reuse does not promise a speedup.
 
 
-`StableModels::with_method(&Theory, SearchMethod, Limits, Control)`
+`StableModels::with_method(&Theory, SearchMethod, Limits, Cancellation)`
 returns an iterator of `Result<Interpretation, Incomplete>` whose candidates
 come from the chosen proposer; `StableModels::new` uses regions without building
 a candidate CNF. `SearchMethod::Clauses` selects the clause proposer.
@@ -188,9 +188,9 @@ Consumers of the former tight-only `plan`, `refusal` and
 attempts remain visible even when a later plan succeeds. Construction, exact-unit
 restriction and candidate-check work are disjoint subsets of cumulative SAT work;
 none receives a fresh run budget. Optional construction or unit-dimension
-refusal leaves fallback available. Control, allocation and cumulative work failures
-preserve the original stop and cannot establish exhaustion. A partially appended
-unit restriction is never installed. Repeated configuration retains its first
+refusal leaves fallback available. Cancellation, deadline, allocation and
+cumulative work failures preserve the original stop and cannot establish
+exhaustion. A partially appended unit restriction is never installed. Repeated configuration retains its first
 attempt, and configuration after candidate generation is refused.
 
 The positive construction receipt reports named retained and peak capacity,
@@ -385,7 +385,7 @@ incomplete. The regions proposer needs no exclusion: a leaf is visited once.
 
 ## Walking the tree with several workers
 
-`StableModels::with_region_workers(&Theory, workers, Limits, Control)` walks
+`StableModels::with_region_workers(&Theory, workers, Limits, Cancellation)` walks
 the region tree with that many workers at once. Each worker owns a stack of
 regions with their knowledge, a budget leased for each region from the enumeration's
 shared allowance, and a mutable reduct evaluation workspace. Workers share the

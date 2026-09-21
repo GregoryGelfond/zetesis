@@ -9,7 +9,7 @@ use std::{
     time::Duration,
 };
 use zetesis_core::relation::{self, Relation, Selection};
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 
 use crate::{GpuError, GpuErrorKind};
 pub use device::{GpuRelationExecutor, PreparedGpuRelation};
@@ -213,8 +213,8 @@ impl From<GpuError> for RelationGpuError {
 fn capacity(detail: &str) -> GpuError {
     GpuError::new(GpuErrorKind::Capacity, detail)
 }
-fn poll(control: &Control) -> Result<(), GpuError> {
-    control.poll().map_err(|stop| GpuError {
+fn poll(cancellation: &Cancellation) -> Result<(), GpuError> {
+    cancellation.poll().map_err(|stop| GpuError {
         kind: GpuErrorKind::Device,
         detail: "relation equality filtering interrupted".to_owned(),
         interruption: Some(stop),

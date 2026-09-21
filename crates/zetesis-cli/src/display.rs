@@ -5,7 +5,7 @@ pub(crate) mod record;
 use std::ops::ControlFlow;
 
 use zetesis_core::Model;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_objective::Score;
 use zetesis_themelios::{OutputSelection, observation::ObservationProgram};
 
@@ -15,7 +15,7 @@ pub(crate) struct Display<'a> {
     pub selection: &'a OutputSelection,
     pub observations: &'a ObservationProgram,
     pub limits: zetesis_themelios::observation::Limits,
-    pub control: &'a Control,
+    pub cancellation: &'a Cancellation,
 }
 impl Display<'_> {
     pub fn write(
@@ -40,9 +40,11 @@ impl Display<'_> {
     ) -> Result<(), RunError> {
         let view = self
             .observations
-            .view(model, self.selection, score, self.limits, self.control)
+            .view(model, self.selection, score, self.limits, self.cancellation)
             .map_err(RunError::Observation)?;
-        self.control.poll().map_err(RunError::PublicationStopped)?;
+        self.cancellation
+            .poll()
+            .map_err(RunError::PublicationStopped)?;
         renderer.answer(
             AnswerView {
                 number,
@@ -50,7 +52,7 @@ impl Display<'_> {
                 limits: self.limits,
                 observations: !self.observations.is_empty(),
             },
-            self.control,
+            self.cancellation,
         )
     }
 }

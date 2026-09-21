@@ -3,7 +3,7 @@
 use std::{collections::BTreeSet, convert::Infallible, num::NonZeroUsize};
 
 use zetesis_core::{Atom, Model, Predicate};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Node, PositiveError, PositiveResource, TightError, TightResource};
 use zetesis_sat::CertificatePlanStatistics;
 use zetesis_solve::{
@@ -29,7 +29,7 @@ enum Membership {
 struct Observations {
     membership: Vec<Membership>,
     completion_workers: Option<NonZeroUsize>,
-    cancel_after_positive: Option<Control>,
+    cancel_after_positive: Option<Cancellation>,
 }
 
 impl ExecutionObserver for Observations {
@@ -39,8 +39,8 @@ impl ExecutionObserver for Observations {
         match observation {
             ExecutionObservation::PositiveMembership => {
                 self.membership.push(Membership::Positive);
-                if let Some(control) = &self.cancel_after_positive {
-                    control.cancel();
+                if let Some(cancellation) = &self.cancel_after_positive {
+                    cancellation.cancel();
                 }
             }
             ExecutionObservation::TightMembership => self.membership.push(Membership::Tight),
@@ -83,9 +83,13 @@ fn config(workers: usize, oracle: Oracle) -> SolveConfig {
 
 fn collect(owner: &AdmittedFormula, config: SolveConfig) -> (WorldView, Observations) {
     let mut observations = Observations::default();
-    let view = Session::builder(PreparedInput::formula(owner), config, Control::default())
-        .collect_observed(WorldViewLimits::default(), &mut observations)
-        .unwrap();
+    let view = Session::builder(
+        PreparedInput::formula(owner),
+        config,
+        Cancellation::default(),
+    )
+    .collect_observed(WorldViewLimits::default(), &mut observations)
+    .unwrap();
     assert_eq!(view.outcome().selection(), Some(AnswerSelection::All));
     assert_eq!(view.outcome().completion(), Some(Completion::Exhausted));
     (view, observations)
@@ -324,15 +328,15 @@ fn disjunctive_source_declines_both_atomic_head_plans() {
 #[test]
 fn cancellation_after_positive_preparation_is_incomplete() {
     let owner = input("a. b:-a. a:-b.");
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut observations = Observations {
-        cancel_after_positive: Some(control.clone()),
+        cancel_after_positive: Some(cancellation.clone()),
         ..Observations::default()
     };
     let failure = Session::builder(
         PreparedInput::formula(&owner),
         config(1, Oracle::Auto),
-        control,
+        cancellation,
     )
     .collect_observed(WorldViewLimits::default(), &mut observations)
     .unwrap_err();

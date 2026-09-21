@@ -3,7 +3,7 @@
 use clap::Parser;
 use serde_json::Value;
 use zetesis_cli::{GroundingOutcome, GroundingPhase, Options, run_detailed_with_diagnostics};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 fn options(extra: &[&str]) -> Options {
     Options::try_parse_from(
@@ -33,7 +33,7 @@ fn json_attribution_preserves_typed_measurements() {
         &options(&[]),
         &mut output,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let typed = report.phase_timings.unwrap().grounding;
@@ -93,7 +93,7 @@ fn the_ordinary_command_requests_the_domain_analysis() {
         &options(&[]),
         &mut output,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let typed = report.phase_timings.unwrap().grounding;
@@ -116,7 +116,7 @@ fn the_ordinary_command_narrows_candidates_by_comparison() {
         &options(&[]),
         &mut output,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let typed = report.phase_timings.unwrap().grounding;
@@ -152,7 +152,7 @@ fn ordinary_formula_solving_uses_requested_table_joins() {
         &options(&["--formula-joins", "table"]),
         &mut output,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     ).unwrap();
     let grounding = report.phase_timings.unwrap().grounding;
     let work = GroundingPhase::ALL
@@ -194,7 +194,7 @@ fn relational_grounding_stays_unmeasured_in_formula_attribution() {
             &options(&["--grounder", grounder]),
             &mut output,
             &mut std::io::sink(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         let typed = report.phase_timings.unwrap().grounding;
@@ -219,7 +219,7 @@ fn a_grounding_failure_retains_its_phase_outcome() {
         &options,
         &mut output,
         &mut std::io::sink(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     let typed = failure.phase_timings.unwrap().grounding;

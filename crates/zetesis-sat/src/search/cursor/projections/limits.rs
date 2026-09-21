@@ -1,6 +1,6 @@
 use super::{NodeId, Projections};
 use crate::search::cursor::tests::budget;
-use crate::{Assignment, Control, Incomplete, ProjectionLimits, ProjectionResource};
+use crate::{Assignment, Cancellation, Incomplete, ProjectionLimits, ProjectionResource};
 
 fn limited(resource: ProjectionResource, required: u128, limit: u128) -> Incomplete {
     Incomplete::ProjectionLimit {
@@ -38,8 +38,8 @@ fn empty_history_admits_its_header() {
 
 #[test]
 fn zero_width_key_uses_one_entry_without_nodes() {
-    let control = Control::default();
-    let mut charged = budget(&control);
+    let cancellation = Cancellation::default();
+    let mut charged = budget(&cancellation);
     let mut index = Projections::new(
         0,
         ProjectionLimits {
@@ -68,7 +68,7 @@ fn zero_width_key_uses_one_entry_without_nodes() {
 
 #[test]
 fn full_entry_limit_still_admits_duplicate_keys() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut index = Projections::new(
         2,
         ProjectionLimits {
@@ -77,7 +77,7 @@ fn full_entry_limit_still_admits_duplicate_keys() {
         },
     )
     .unwrap();
-    let mut charged = budget(&control);
+    let mut charged = budget(&cancellation);
     index.insert(2, |_| false, &mut charged).unwrap();
     let before = index.statistics();
     let nodes = index.nodes.clone();
@@ -104,7 +104,7 @@ fn full_entry_limit_still_admits_duplicate_keys() {
 
 #[test]
 fn node_limit_counts_only_the_missing_suffix() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut index = Projections::new(
         4,
         ProjectionLimits {
@@ -113,7 +113,7 @@ fn node_limit_counts_only_the_missing_suffix() {
         },
     )
     .unwrap();
-    let mut charged = budget(&control);
+    let mut charged = budget(&cancellation);
     index.insert(4, |_| false, &mut charged).unwrap();
     // Four bits plus terminal use five nodes. Changing only the last bit
     // shares the prefix and needs exactly one more terminal, not a full key.
@@ -136,7 +136,7 @@ fn node_limit_counts_only_the_missing_suffix() {
 
 #[test]
 fn byte_refusal_preserves_the_previous_key_set() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let header = size_of::<Projections>();
     let mut index = Projections::new(
         2,
@@ -146,7 +146,7 @@ fn byte_refusal_preserves_the_previous_key_set() {
         },
     )
     .unwrap();
-    let mut charged = budget(&control);
+    let mut charged = budget(&cancellation);
     let required = header + 3 * size_of::<[Option<NodeId>; 2]>();
     for _ in 0..2 {
         assert_eq!(
@@ -174,12 +174,12 @@ fn byte_refusal_preserves_the_previous_key_set() {
 
 #[test]
 fn growth_peak_includes_both_vector_capacities() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut index = Projections::new(4, ProjectionLimits::default()).unwrap();
     let header = size_of::<Projections>() as u128;
     let node_bytes = size_of::<[Option<NodeId>; 2]>() as u128;
     let mut peak = header;
-    let mut charged = budget(&control);
+    let mut charged = budget(&cancellation);
     for key in 0..16 {
         let old = index.nodes.capacity();
         index
@@ -203,10 +203,10 @@ fn growth_peak_includes_both_vector_capacities() {
 
 #[test]
 fn stopped_suffix_receipts_count_only_committed_keys() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut index = Projections::new(4, ProjectionLimits::default()).unwrap();
     for attempt in 1..=2 {
-        let mut charged = budget(&control);
+        let mut charged = budget(&cancellation);
         charged.limits.max_work = 3;
         assert_eq!(
             index.insert(4, |_| false, &mut charged),
@@ -220,7 +220,9 @@ fn stopped_suffix_receipts_count_only_committed_keys() {
             index.statistics().retained_bytes
         );
     }
-    index.insert(4, |_| false, &mut budget(&control)).unwrap();
+    index
+        .insert(4, |_| false, &mut budget(&cancellation))
+        .unwrap();
     assert_eq!(index.statistics().entries, 1);
     assert_eq!(index.statistics().nodes, 5);
     assert_eq!(index.statistics().work, 12);

@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 
 use zetesis_core::{Predicate, Value};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_sat::Incomplete;
 use zetesis_solve::{
     AnswerSet, Backend, Completion, Interruption, Oracle, PreparedInput, SemanticOutcome, Session,
@@ -75,7 +75,7 @@ fn stream(vertices: u32, configuration: SolveConfig) -> Observed {
     let mut session = Session::builder(
         PreparedInput::formula(&owner),
         configuration,
-        Control::default(),
+        Cancellation::default(),
     )
     .start()
     .unwrap();

@@ -65,7 +65,9 @@ fn records(
     queries: &[relation::Query<'_, '_>],
     masks: &[Vec<u32>],
 ) -> Vec<u32> {
-    let packed = plan.pack(queries, &Control::default(), u64::MAX).unwrap();
+    let packed = plan
+        .pack(queries, &Cancellation::default(), u64::MAX)
+        .unwrap();
     masks
         .iter()
         .enumerate()
@@ -122,7 +124,7 @@ fn mask_reconstruction_preserves_catalog_occurrences() {
             &queries,
             &input,
             output(&plan),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     let selection = result.selection(0, relation::Limits::default()).unwrap();
@@ -150,7 +152,7 @@ fn decoding_requires_the_complete_query_population() {
                 &queries,
                 &input[..length],
                 output(&plan),
-                &Control::default()
+                &Cancellation::default()
             )
             .is_err()
         );
@@ -161,7 +163,7 @@ fn decoding_requires_the_complete_query_population() {
             &queries[..1],
             &input,
             output(&plan),
-            &Control::default()
+            &Cancellation::default()
         )
         .is_err()
     );
@@ -171,7 +173,7 @@ fn decoding_requires_the_complete_query_population() {
             &queries,
             &input,
             output(&plan),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     assert_eq!(result.query_count(), 2);
@@ -197,7 +199,7 @@ fn nonzero_mask_padding_is_refused() {
                 &queries,
                 &input,
                 output(&plan),
-                &Control::default()
+                &Cancellation::default()
             )
             .err()
             .unwrap()
@@ -248,7 +250,7 @@ fn mask_scans_consume_work_for_empty_selections() {
             &queries,
             &input,
             output(&plan),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     assert!(
@@ -333,7 +335,7 @@ fn reconstruction_budgets_include_live_row_capacity() {
             &queries,
             &input,
             output(&plan),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     let selected = 3;

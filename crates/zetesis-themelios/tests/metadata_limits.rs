@@ -5,7 +5,7 @@
 //! location and the exact independently selected resource.
 
 use zetesis_core::{Atom, Model, Predicate, Value};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::base::source::{Source, SourceId};
 use zetesis_themelios::base::span::Location;
 use zetesis_themelios::logical::program::Program;
@@ -62,7 +62,7 @@ fn bounded_metadata_preserves_nested_conditions() {
     ] {
         let observations = policy
             .observations()
-            .evaluate(&model, Limits::default(), &Control::default())
+            .evaluate(&model, Limits::default(), &Cancellation::default())
             .unwrap();
         assert_eq!(observations.symbols(), expected);
     }

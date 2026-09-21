@@ -2,7 +2,7 @@
 
 use themelios_base::source::SourceId;
 use themelios_base::span::{ByteOffset, Span};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, models, models_reduct};
 
 use super::*;
@@ -41,7 +41,7 @@ fn canonical_constants_obey_original_truth() {
                     &theory,
                     &interpretation,
                     Limits::default(),
-                    &Control::default()
+                    &Cancellation::default()
                 )
                 .unwrap(),
                 truth
@@ -64,7 +64,7 @@ fn canonical_constants_obey_frozen_truth() {
                         &candidate,
                         &tested,
                         Limits::default(),
-                        &Control::default()
+                        &Cancellation::default()
                     )
                     .unwrap(),
                     truth

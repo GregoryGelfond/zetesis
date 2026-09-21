@@ -1,7 +1,7 @@
 //! Native session capture for injected membership executors.
 
 use zetesis_core::{Atom, Model};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_objective::Score;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
@@ -67,16 +67,16 @@ pub(super) fn input(owner: &AdmittedFormula) -> super::Input<'_> {
 pub(super) fn run(
     owner: &AdmittedFormula,
     config: &SolveConfig,
-    control: &Control,
+    cancellation: &Cancellation,
     execution: &mut impl MembershipExecution,
 ) -> Capture {
-    run_consuming(owner, config, control, execution, |_| {})
+    run_consuming(owner, config, cancellation, execution, |_| {})
 }
 
 pub(super) fn run_consuming(
     owner: &AdmittedFormula,
     config: &SolveConfig,
-    control: &Control,
+    cancellation: &Cancellation,
     execution: &mut impl MembershipExecution,
     mut consume: impl FnMut(&Model),
 ) -> Capture {
@@ -86,13 +86,13 @@ pub(super) fn run_consuming(
         execution,
         config,
         &mut Ignore,
-        control,
+        cancellation,
         &phases,
         AnswerSelection::Optimal,
     );
     let mut answers = Vec::new();
     let mut error = None;
-    while let Some(next) = session.next(config, &mut Ignore, control, &phases) {
+    while let Some(next) = session.next(config, &mut Ignore, cancellation, &phases) {
         match next {
             Ok(answer) => {
                 consume(&answer.0);
@@ -102,7 +102,7 @@ pub(super) fn run_consuming(
                 error = Some(cause);
                 assert!(
                     session
-                        .next(config, &mut Ignore, control, &phases)
+                        .next(config, &mut Ignore, cancellation, &phases)
                         .is_none()
                 );
                 break;

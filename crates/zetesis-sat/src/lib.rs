@@ -40,6 +40,6 @@ pub use ferraris::{
 };
 pub use projection::{ProjectionLimits, ProjectionResource, ProjectionStatistics};
 pub use search::{SearchLimits, SearchStatistics, Solve, solve, solve_with_statistics};
-pub use zetesis_cpu::Control;
+pub use zetesis_cpu::Cancellation;
 
 pub use timing::{PhaseMeasurement, SearchPhaseTimings};

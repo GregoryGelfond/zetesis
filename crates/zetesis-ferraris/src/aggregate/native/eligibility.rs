@@ -1,6 +1,6 @@
 //! Actual occurrence masks acquired with the existing topological formula evaluator.
 
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 
 use super::{
     Error, ErrorKind, Group, Reduction, ReductionLimits, Resource, Statistics, add, bytes, storage,
@@ -83,10 +83,10 @@ impl<'a> Eligibility<'a> {
     pub fn reduce(
         &self,
         limits: ReductionLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Reduction<'a>, Error> {
         self.group
-            .reduce(&self.original, self.frozen.as_deref(), limits, control)
+            .reduce(&self.original, self.frozen.as_deref(), limits, cancellation)
     }
 }
 
@@ -109,10 +109,10 @@ impl Group {
         candidate: &'a Interpretation,
         tested: Option<&'a Interpretation>,
         limits: EligibilityLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Eligibility<'a>, Error> {
         let mut statistics = Statistics::default();
-        let result = self.acquire(candidate, tested, limits, control, &mut statistics);
+        let result = self.acquire(candidate, tested, limits, cancellation, &mut statistics);
         result
             .map(|(original, frozen)| Eligibility {
                 group: self,
@@ -130,10 +130,10 @@ impl Group {
         candidate: &Interpretation,
         tested: Option<&Interpretation>,
         limits: EligibilityLimits,
-        control: &Control,
+        cancellation: &Cancellation,
         statistics: &mut Statistics,
     ) -> Result<(Vec<bool>, Option<Vec<bool>>), ErrorKind> {
-        control.poll().map_err(ErrorKind::Stopped)?;
+        cancellation.poll().map_err(ErrorKind::Stopped)?;
         if !self.theory.same_instance(candidate.theory())
             || tested.is_some_and(|tested| !self.theory.same_instance(tested.theory()))
         {
@@ -157,13 +157,13 @@ impl Group {
                 max_work: limits.max_work,
                 max_subsets: 0,
             },
-            control,
+            cancellation,
             statistics: oracle::Statistics::default(),
         };
         let result = observations(self, candidate, tested, &mut work);
         statistics.work = work.statistics.work;
         let observations = result?;
-        control.poll().map_err(ErrorKind::Stopped)?;
+        cancellation.poll().map_err(ErrorKind::Stopped)?;
         Ok(observations)
     }
 }

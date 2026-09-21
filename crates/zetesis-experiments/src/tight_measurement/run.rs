@@ -1,6 +1,6 @@
 use std::{io, time::Instant};
 
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::TightVerdict;
 use zetesis_wgpu::{GpuOptions, GpuSelection, GpuTightOracle};
 
@@ -35,10 +35,10 @@ struct Resources {
 impl Resources {
     fn new(
         configuration: &Configuration,
-        control: &Control,
+        cancellation: &Cancellation,
         emit: &mut impl FnMut(&Event<'_>) -> io::Result<()>,
     ) -> Result<Self, Error> {
-        control.poll().map_err(Error::Cpu)?;
+        cancellation.poll().map_err(Error::Cpu)?;
         let start = Instant::now();
         let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(configuration.workers.get())
@@ -64,12 +64,18 @@ impl Resources {
         };
         if let Some((fresh_route, resident_route)) = physical_routes {
             let selection = configuration.backend.selection().ok_or(Error::DeviceWork)?;
-            let fresh = device(fresh_route, selection, configuration.support, control, emit)?;
+            let fresh = device(
+                fresh_route,
+                selection,
+                configuration.support,
+                cancellation,
+                emit,
+            )?;
             let resident = device(
                 resident_route,
                 selection,
                 configuration.support,
-                control,
+                cancellation,
                 emit,
             )?;
             if fresh.info().metadata() != resident.info().metadata() {
@@ -86,10 +92,10 @@ fn device(
     route: Route,
     selection: GpuSelection,
     support: Support,
-    control: &Control,
+    cancellation: &Cancellation,
     emit: &mut impl FnMut(&Event<'_>) -> io::Result<()>,
 ) -> Result<GpuTightOracle, Error> {
-    control.poll().map_err(Error::Cpu)?;
+    cancellation.poll().map_err(Error::Cpu)?;
     let start = Instant::now();
     let oracle = GpuTightOracle::new_with_support(GpuOptions::default(), selection, support.into())
         .map_err(Error::Device)?;
@@ -134,7 +140,7 @@ pub fn measure(
     configuration: &Configuration,
     emit: impl FnMut(&Event<'_>) -> io::Result<()>,
 ) -> Result<(), Error> {
-    measure_with_control(configuration, &Control::default(), emit)
+    measure_with_cancellation(configuration, &Cancellation::default(), emit)
 }
 
 /// Run the same finite experiment under caller-owned cooperative control.
@@ -142,9 +148,9 @@ pub fn measure(
 ///
 /// # Errors
 /// Returns the same typed failures as [`measure`], including cancellation.
-pub fn measure_with_control(
+pub fn measure_with_cancellation(
     configuration: &Configuration,
-    control: &Control,
+    cancellation: &Cancellation,
     mut emit: impl FnMut(&Event<'_>) -> io::Result<()>,
 ) -> Result<(), Error> {
     configuration.validate()?;
@@ -156,8 +162,8 @@ pub fn measure_with_control(
             scope: "complete immutable TightPlan and identical unfiltered ordered occurrences; host classification and serial general-reduct residual completion are directly measured inside whole-call elapsed, not additive; fixture/reference/witness validation, pool/two-device pipeline setup, fresh cache clearing, destruction and publication excluded; no grounding, outer search, shader timestamps, process RSS or ordinary solver claim",
         },
     )?;
-    control.poll().map_err(Error::Cpu)?;
-    let mut resources = Resources::new(configuration, control, &mut emit)?;
+    cancellation.poll().map_err(Error::Cpu)?;
+    let mut resources = Resources::new(configuration, cancellation, &mut emit)?;
     let routes = match configuration.backend {
         crate::Backend::Cpu => CPU_ROUTES,
         crate::Backend::Metal => METAL_ROUTES,
@@ -166,7 +172,7 @@ pub fn measure_with_control(
     let mut samples = 0;
     for (case_index, &case) in configuration.cases.iter().enumerate() {
         let preparation_start = Instant::now();
-        let prepared = checking::prepare(case, configuration, control)?;
+        let prepared = checking::prepare(case, configuration, cancellation)?;
         let preparation_ns = preparation_start.elapsed().as_nanos();
         prepared_event(case_index, case, &prepared, preparation_ns, &mut emit)?;
         for (phase, iterations) in [
@@ -192,7 +198,7 @@ pub fn measure_with_control(
                         &prepared,
                         configuration,
                         &mut resources,
-                        control,
+                        cancellation,
                         observation,
                         &mut emit,
                     )?;
@@ -204,7 +210,7 @@ pub fn measure_with_control(
     }
     // A Sample callback may cancel after that observation was committed. Keep
     // its prefix, but do not assert campaign completion under stopped control.
-    control.poll().map_err(Error::Cpu)?;
+    cancellation.poll().map_err(Error::Cpu)?;
     publish(&mut emit, &Event::Complete { samples })
 }
 
@@ -263,7 +269,7 @@ fn observe(
     prepared: &Prepared,
     configuration: &Configuration,
     resources: &mut Resources,
-    control: &Control,
+    cancellation: &Cancellation,
     mut observation: Observation,
     emit: &mut impl FnMut(&Event<'_>) -> io::Result<()>,
 ) -> Result<Sample, Error> {
@@ -281,7 +287,7 @@ fn observe(
         prepared,
         configuration,
         resources,
-        control,
+        cancellation,
         &mut observation,
     );
     observation.classification_ns = classification_start.elapsed().as_nanos();
@@ -291,7 +297,7 @@ fn observe(
             prepared,
             &verdicts,
             configuration,
-            control,
+            cancellation,
             &mut observation.activity,
         );
         observation.completion_ns = Some(completion_start.elapsed().as_nanos());
@@ -299,7 +305,7 @@ fn observe(
     });
     observation.elapsed_ns = start.elapsed().as_nanos();
     let validated = completed.and_then(|(verdicts, checks)| {
-        checking::validate(prepared, &verdicts, &checks, configuration, control)?;
+        checking::validate(prepared, &verdicts, &checks, configuration, cancellation)?;
         let per_candidate = scan_work(
             prepared.fixture.theory.nodes().len(),
             prepared.fixture.theory.roots().len(),
@@ -312,7 +318,7 @@ fn observe(
             per_candidate,
         )?;
         let outcomes = checking::outcomes(&verdicts, &checks)?;
-        control.poll().map_err(Error::Cpu)?;
+        cancellation.poll().map_err(Error::Cpu)?;
         Ok(outcomes)
     });
     match validated {
@@ -337,7 +343,7 @@ fn classify(
     prepared: &Prepared,
     configuration: &Configuration,
     resources: &mut Resources,
-    control: &Control,
+    cancellation: &Cancellation,
     observation: &mut Observation,
 ) -> Result<Vec<TightVerdict>, Error> {
     match observation.route {
@@ -345,14 +351,14 @@ fn classify(
             prepared,
             configuration,
             None,
-            control,
+            cancellation,
             &mut observation.activity,
         ),
         Route::Rayon => checking::classify(
             prepared,
             configuration,
             Some(&resources.pool),
-            control,
+            cancellation,
             &mut observation.activity,
         ),
         Route::MetalFresh | Route::MetalResident | Route::VulkanFresh | Route::VulkanResident => {
@@ -365,7 +371,7 @@ fn classify(
                 &prepared.plan,
                 &prepared.fixture.candidates,
                 configuration.gpu_limits,
-                control,
+                cancellation,
             );
             observation.activity.device = Some(device_work(oracle));
             let checks = result.map_err(Error::Gpu)?;

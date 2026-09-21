@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 
 use zetesis_core::Atom;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_sat::{Limits, StableModels};
 use zetesis_themelios::AdmittedFormula;
 
@@ -11,7 +11,7 @@ use zetesis_themelios::AdmittedFormula;
 /// exhaust the family and return each model once.
 pub fn stable(input: &AdmittedFormula) -> BTreeSet<BTreeSet<Atom>> {
     let mut search =
-        StableModels::new(input.theory(), Limits::default(), Control::default()).unwrap();
+        StableModels::new(input.theory(), Limits::default(), Cancellation::default()).unwrap();
     let mut result = BTreeSet::new();
     for model in search.by_ref() {
         let atoms = model

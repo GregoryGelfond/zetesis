@@ -3,7 +3,7 @@ use super::{
     Sample, checking, fixture, view::Preparation,
 };
 use std::{io, time::Instant};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::native_aggregate as native;
 use zetesis_wgpu::{AggregateGpuPlan, AggregateGpuPlanLimits, GpuAggregateOracle, GpuOptions};
 
@@ -29,10 +29,10 @@ struct Resources {
 impl Resources {
     fn new(
         configuration: &Configuration,
-        control: &Control,
+        cancellation: &Cancellation,
         emit: &mut impl FnMut(&Event<'_>) -> io::Result<()>,
     ) -> Result<Self, Error> {
-        control.poll().map_err(Error::Cpu)?;
+        cancellation.poll().map_err(Error::Cpu)?;
         let start = Instant::now();
         let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(configuration.workers.get())
@@ -56,7 +56,7 @@ impl Resources {
                 (Route::DeviceFresh, &mut resources.fresh),
                 (Route::DeviceResident, &mut resources.resident),
             ] {
-                control.poll().map_err(Error::Cpu)?;
+                cancellation.poll().map_err(Error::Cpu)?;
                 let start = Instant::now();
                 let oracle = GpuAggregateOracle::new_selected(GpuOptions::default(), selection)
                     .map_err(Error::Device)?;
@@ -112,7 +112,7 @@ impl<'a> Prepared<'a> {
         fixture: &'a fixture::Fixture,
         fixture_ns: u128,
         configuration: &Configuration,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Self, Error> {
         let mut preparation = Preparation {
             fixture_ns,
@@ -120,7 +120,7 @@ impl<'a> Prepared<'a> {
             ..Default::default()
         };
         let start = Instant::now();
-        let records = fixture::acquire(fixture, configuration, control)?;
+        let records = fixture::acquire(fixture, configuration, cancellation)?;
         preparation.acquisition_ns = start.elapsed().as_nanos();
         for record in &records {
             let statistics = record.statistics();
@@ -137,9 +137,12 @@ impl<'a> Prepared<'a> {
                 .max(statistics.peak_bytes);
         }
         let start = Instant::now();
-        let numeric =
-            AggregateGpuPlan::new(&fixture.group, AggregateGpuPlanLimits::default(), control)
-                .map_err(Error::Gpu)?;
+        let numeric = AggregateGpuPlan::new(
+            &fixture.group,
+            AggregateGpuPlanLimits::default(),
+            cancellation,
+        )
+        .map_err(Error::Gpu)?;
         preparation.numeric_ns = start.elapsed().as_nanos();
         preparation.numeric_work = numeric.work();
         preparation.numeric_bytes = numeric.bytes();
@@ -149,7 +152,7 @@ impl<'a> Prepared<'a> {
             &records,
             configuration.max_reference_work,
             None,
-            control,
+            cancellation,
             &mut activity,
         )?;
         preparation.reference_ns = start.elapsed().as_nanos();
@@ -182,16 +185,16 @@ pub fn measure(
     configuration: &Configuration,
     emit: impl FnMut(&Event<'_>) -> io::Result<()>,
 ) -> Result<(), Error> {
-    measure_with_control(configuration, &Control::default(), emit)
+    measure_with_cancellation(configuration, &Cancellation::default(), emit)
 }
 
 /// Run the same experiment under shared cooperative cancellation/deadline control.
 ///
 /// # Errors
 /// Returns the same failures as [`measure`], including native/device control.
-pub fn measure_with_control(
+pub fn measure_with_cancellation(
     configuration: &Configuration,
-    control: &Control,
+    cancellation: &Cancellation,
     mut emit: impl FnMut(&Event<'_>) -> io::Result<()>,
 ) -> Result<(), Error> {
     configuration.validate()?;
@@ -203,12 +206,17 @@ pub fn measure_with_control(
             scope: "one complete native Group; identical acquired original/frozen Eligibility occurrences; fixture, actual mask acquisition, numeric preparation and native reference have separate setup intervals; reduction clocks include result allocation/conversion, temporary result destruction and actual GPU upload/dispatch/readback; pool/two-device pipeline setup, fresh cache clearing, parity checks, returned sample destruction and publication excluded; CPU and GPU retain distinct work units; no grounding, outer search, stable-membership, shader timestamps, process RSS or ordinary solver speedup claim",
         },
     )?;
-    let mut resources = Resources::new(configuration, control, &mut emit)?;
+    let mut resources = Resources::new(configuration, cancellation, &mut emit)?;
     let mut samples = 0;
     for (index, &case) in configuration.cases.iter().enumerate() {
         let start = Instant::now();
-        let fixture = fixture::build(case, control)?;
-        let prepared = Prepared::new(&fixture, start.elapsed().as_nanos(), configuration, control)?;
+        let fixture = fixture::build(case, cancellation)?;
+        let prepared = Prepared::new(
+            &fixture,
+            start.elapsed().as_nanos(),
+            configuration,
+            cancellation,
+        )?;
         publish(
             &mut emit,
             &Event::Prepared {
@@ -225,12 +233,12 @@ pub fn measure_with_control(
             case,
             &prepared,
             configuration,
-            control,
+            cancellation,
             &mut resources,
             &mut emit,
         )?;
     }
-    control.poll().map_err(Error::Cpu)?;
+    cancellation.poll().map_err(Error::Cpu)?;
     publish(&mut emit, &Event::Complete { samples })
 }
 
@@ -239,7 +247,7 @@ fn run_case(
     case: Case,
     prepared: &Prepared<'_>,
     configuration: &Configuration,
-    control: &Control,
+    cancellation: &Cancellation,
     resources: &mut Resources,
     emit: &mut impl FnMut(&Event<'_>) -> io::Result<()>,
 ) -> Result<usize, Error> {
@@ -270,7 +278,7 @@ fn run_case(
                     case,
                     prepared,
                     configuration,
-                    control,
+                    cancellation,
                     resources,
                     observation,
                     emit,
@@ -287,7 +295,7 @@ fn observe(
     case: Case,
     prepared: &Prepared<'_>,
     configuration: &Configuration,
-    control: &Control,
+    cancellation: &Cancellation,
     resources: &mut Resources,
     mut observation: Observation,
     emit: &mut impl FnMut(&Event<'_>) -> io::Result<()>,
@@ -303,7 +311,7 @@ fn observe(
     let result = reduce(
         prepared,
         configuration,
-        control,
+        cancellation,
         resources,
         &mut observation,
     );
@@ -313,7 +321,7 @@ fn observe(
             return Err(Error::Parity);
         }
         validate_activity(case, prepared, &observation)?;
-        control.poll().map_err(Error::Cpu)?;
+        cancellation.poll().map_err(Error::Cpu)?;
         Ok(values)
     });
     match validated {
@@ -337,7 +345,7 @@ fn observe(
 fn reduce(
     prepared: &Prepared<'_>,
     configuration: &Configuration,
-    control: &Control,
+    cancellation: &Cancellation,
     resources: &mut Resources,
     observation: &mut Observation,
 ) -> Result<Vec<Outcome>, Error> {
@@ -346,7 +354,7 @@ fn reduce(
             &prepared.records,
             configuration.max_reduction_work,
             (observation.route == Route::Rayon).then_some(&resources.pool),
-            control,
+            cancellation,
             &mut observation.activity,
         ),
         Route::DeviceFresh | Route::DeviceResident => {
@@ -360,7 +368,7 @@ fn reduce(
                 &prepared.numeric,
                 &prepared.records,
                 configuration.gpu_limits(),
-                control,
+                cancellation,
             );
             observation.activity.device = Some(DeviceWork {
                 activity: oracle.activity(),

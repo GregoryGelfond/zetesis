@@ -6,7 +6,7 @@ use std::io::{self, Write};
 use std::num::NonZeroUsize;
 use std::time::{Duration, Instant};
 use zetesis_core::{GroundProgram, Seed};
-use zetesis_cpu::{BatchOracle, Control, Limits, StaticCheck, check_static};
+use zetesis_cpu::{BatchOracle, Cancellation, Limits, StaticCheck, check_static};
 use zetesis_wgpu::{GpuCheck, GpuLimits, GpuOptions, GpuOracle, MAX_ATOMS};
 
 /// Explicitly bounded experiment dimensions. All timings use a monotonic clock.
@@ -119,11 +119,11 @@ fn scalar(
     graph: &GroundProgram,
     seeds: &[Seed],
     limits: Limits,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<Vec<StaticCheck>, BenchmarkError> {
     seeds
         .iter()
-        .map(|seed| check_static(graph, seed, limits, control).map_err(BenchmarkError::Stop))
+        .map(|seed| check_static(graph, seed, limits, cancellation).map_err(BenchmarkError::Stop))
         .collect()
 }
 fn parallel(
@@ -131,9 +131,9 @@ fn parallel(
     graph: &GroundProgram,
     seeds: &[Seed],
     limits: Limits,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<Vec<StaticCheck>, BenchmarkError> {
-    pool.check_static_batch(graph, seeds, limits, control)
+    pool.check_static_batch(graph, seeds, limits, cancellation)
         .map_err(BenchmarkError::Batch)?
         .into_iter()
         .map(|result| result.map_err(BenchmarkError::Stop))
@@ -275,7 +275,7 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<(), BenchmarkEr
                 max_derived_atoms: graph.atom_count(),
                 ..Limits::default()
             };
-            let control = Control::default();
+            let cancellation = Cancellation::default();
             for batch in &options.batches {
                 Case {
                     options,
@@ -284,7 +284,7 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<(), BenchmarkEr
                     family: *family,
                     batch: batch.get(),
                     limits,
-                    control: &control,
+                    cancellation: &cancellation,
                 }
                 .measure(output, &mut gpu)?;
             }
@@ -304,7 +304,7 @@ struct Case<'a> {
     family: Family,
     batch: usize,
     limits: Limits,
-    control: &'a Control,
+    cancellation: &'a Cancellation,
 }
 
 impl Case<'_> {
@@ -320,10 +320,10 @@ impl Case<'_> {
             family,
             batch,
             limits,
-            control,
+            cancellation,
         } = *self;
         let seeds = fixtures::seeds(graph, batch, 0);
-        let expected = scalar(graph, &seeds, limits, control)?;
+        let expected = scalar(graph, &seeds, limits, cancellation)?;
         let mut row = Row {
             family,
             atoms: graph.atom_count(),
@@ -349,16 +349,25 @@ impl Case<'_> {
             }
         }
         // Warm all CPU paths before timing; the first frozen batch already warmed the selected device.
-        cpu_parity(&expected, &parallel(pool, graph, &seeds, limits, control)?)?;
+        cpu_parity(
+            &expected,
+            &parallel(pool, graph, &seeds, limits, cancellation)?,
+        )?;
         for repetition in 0..options.repetitions.get() {
             let seeds = fixtures::seeds(graph, batch, repetition + 1);
             let started = Instant::now();
-            let expected = scalar(black_box(graph), black_box(&seeds), limits, control)?;
+            let expected = scalar(black_box(graph), black_box(&seeds), limits, cancellation)?;
             let elapsed = started.elapsed();
             row.backend = "cpu-scalar";
             row.emit(output, "warm", repetition, elapsed)?;
             let started = Instant::now();
-            let actual = parallel(pool, black_box(graph), black_box(&seeds), limits, control)?;
+            let actual = parallel(
+                pool,
+                black_box(graph),
+                black_box(&seeds),
+                limits,
+                cancellation,
+            )?;
             let elapsed = started.elapsed();
             cpu_parity(&expected, &actual)?;
             row.backend = "cpu-rayon";

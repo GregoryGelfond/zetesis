@@ -8,7 +8,7 @@ use zetesis_core::{
     AdmissionLimits, Atom, AtomPattern, GroundProgram, Predicate, Program, Seed, SeedSelection,
     StaticLimits, Template, Term, Value,
 };
-use zetesis_cpu::{Control, Limits, check, lazy};
+use zetesis_cpu::{Cancellation, Limits, check, lazy};
 use zetesis_wgpu::{GpuLazyOracle, GpuLimits, GpuOptions};
 
 fn predicate(name: &str, arity: usize) -> Predicate {
@@ -31,12 +31,12 @@ fn compare(oracle: &mut GpuLazyOracle, program: &Program, seeds: &[Seed], limits
             seeds,
             limits,
             GpuLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     assert_eq!(batch.checks.len(), seeds.len());
     for (actual, seed) in batch.checks.iter().zip(seeds) {
-        let expected = check(program, seed, Limits::default(), &Control::default()).unwrap();
+        let expected = check(program, seed, Limits::default(), &Cancellation::default()).unwrap();
         assert_eq!(actual.closure(), expected.closure());
         assert_eq!(
             (
@@ -338,14 +338,14 @@ fn qualify_source_selections_preserve_each_frozen_closure(backend: physical::Bac
                     },
                     GpuLimits::default(),
                     selection,
-                    &Control::default(),
+                    &Cancellation::default(),
                 )
                 .unwrap();
             assert_eq!(batch.checks.len(), seeds.len());
             assert!(batch.progress.rounds >= 5);
             for (actual, seed) in batch.checks.iter().zip(&seeds) {
                 let expected =
-                    check(&program, seed, Limits::default(), &Control::default()).unwrap();
+                    check(&program, seed, Limits::default(), &Cancellation::default()).unwrap();
                 assert_eq!(actual.closure(), expected.closure());
                 assert_eq!(actual.accepted(), expected.accepted());
                 assert_eq!(actual.constraint_violated(), expected.constraint_violated());

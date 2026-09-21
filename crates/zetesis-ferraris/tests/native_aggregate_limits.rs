@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use proptest::prelude::*;
 use zetesis_core::Value as Term;
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
     AdmissionLimits, AggregateComparison as Comparison, Interpretation, Node, Theory,
     native_aggregate::{
@@ -61,7 +61,7 @@ fn group(theory: &Theory) -> Group {
         tuples(),
         guards(),
         native::AdmissionLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap()
 }
@@ -82,7 +82,7 @@ proptest! {
         }).collect();
         let result = Group::new(
             &theory(), Function::Count, tuples, vec![],
-            native::AdmissionLimits::default(), &Control::default(),
+            native::AdmissionLimits::default(), &Cancellation::default(),
         );
         match result {
             Ok(group) => {
@@ -124,7 +124,7 @@ fn duplicate_complete_keys_require_caller_coalescing() {
             tuples,
             vec![],
             native::AdmissionLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
         assert_eq!(
@@ -154,7 +154,7 @@ fn duplicate_empty_keys_are_refused() {
         ],
         vec![],
         native::AdmissionLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert_eq!(
@@ -184,7 +184,7 @@ fn equal_first_components_do_not_merge_distinct_keys() {
         ],
         vec![],
         native::AdmissionLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(group.tuples()[0].key, [Term::Number(3), Term::Number(2)]);
@@ -193,7 +193,7 @@ fn equal_first_components_do_not_merge_distinct_keys() {
             &[true, true],
             None,
             native::ReductionLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap()
         .original()
@@ -215,7 +215,7 @@ fn invalid_condition_ids_are_refused() {
         }],
         vec![],
         native::AdmissionLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert_eq!(error.kind(), ErrorKind::Condition { tuple: 0, node: 4 });
@@ -236,7 +236,7 @@ fn admission_requires_complete_shape_and_sort_work() {
             tuples(),
             guards(),
             limits,
-            &Control::default(),
+            &Cancellation::default(),
         ) {
             Ok(_) => assert_eq!(maximum, full),
             Err(error) => {
@@ -263,7 +263,7 @@ fn admission_bounds_transient_index_storage() {
             tuples(),
             guards(),
             limits,
-            &Control::default(),
+            &Cancellation::default(),
         ) {
             Ok(_) => assert_eq!(maximum, full.peak_bytes),
             Err(error) => assert_eq!(error.kind(), ErrorKind::Limit(Resource::Bytes)),
@@ -309,7 +309,7 @@ fn admission_bounds_each_owned_population() {
             tuples(),
             guards(),
             limits,
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
         assert_eq!(error.kind(), ErrorKind::Limit(resource));
@@ -329,7 +329,7 @@ fn mask_shape_failure_precedes_any_reduction() {
                 original,
                 frozen,
                 native::ReductionLimits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap_err();
         assert_eq!(
@@ -353,7 +353,7 @@ fn every_guard_is_charged_even_after_a_false_guard() {
             &[false, true, false],
             Some(&[false, false, false]),
             native::ReductionLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     assert!(!full.original().holds());
@@ -365,7 +365,7 @@ fn every_guard_is_charged_even_after_a_false_guard() {
             &[false, true, false],
             Some(&[false, false, false]),
             native::ReductionLimits { max_work: maximum },
-            &Control::default(),
+            &Cancellation::default(),
         );
         match result {
             Ok(_) => assert_eq!(maximum, full.statistics().work),
@@ -388,7 +388,7 @@ fn eligibility_uses_original_node_truth_before_freezing() {
             &candidate,
             Some(&tested),
             native::EligibilityLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     assert_eq!(observations.original(), [true, false, true]);
@@ -415,7 +415,7 @@ fn foreign_interpretations_cannot_acquire_eligibility() {
                 candidate,
                 tested,
                 native::EligibilityLimits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap_err();
         assert_eq!(error.kind(), ErrorKind::WrongTheory);
@@ -433,7 +433,12 @@ fn acquisition_refuses_incomplete_prefix_work() {
             max_work: maximum,
             ..native::EligibilityLimits::default()
         };
-        match group.eligibility(&candidate, Some(&candidate), limits, &Control::default()) {
+        match group.eligibility(
+            &candidate,
+            Some(&candidate),
+            limits,
+            &Cancellation::default(),
+        ) {
             Ok(_) => assert_eq!(maximum, 14),
             Err(error) => {
                 assert_eq!(error.kind(), ErrorKind::Limit(Resource::Work));
@@ -453,7 +458,7 @@ fn acquisition_bounds_simultaneous_node_and_mask_storage() {
             &candidate,
             Some(&candidate),
             native::EligibilityLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap()
         .statistics();
@@ -464,7 +469,12 @@ fn acquisition_bounds_simultaneous_node_and_mask_storage() {
         ..native::EligibilityLimits::default()
     };
     let error = group
-        .eligibility(&candidate, Some(&candidate), limits, &Control::default())
+        .eligibility(
+            &candidate,
+            Some(&candidate),
+            limits,
+            &Cancellation::default(),
+        )
         .unwrap_err();
     assert_eq!(error.kind(), ErrorKind::Limit(Resource::Bytes));
     assert_eq!(error.statistics().work, 0);
@@ -479,12 +489,12 @@ fn cancelled_empty_operations_never_commit_success() {
         vec![],
         vec![],
         native::AdmissionLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let candidate = Interpretation::new(&theory, []).unwrap();
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     for error in [
         Group::new(
             &theory,
@@ -492,18 +502,18 @@ fn cancelled_empty_operations_never_commit_success() {
             vec![],
             vec![],
             native::AdmissionLimits::default(),
-            &control,
+            &cancellation,
         )
         .unwrap_err(),
         group
-            .reduce(&[], None, native::ReductionLimits::default(), &control)
+            .reduce(&[], None, native::ReductionLimits::default(), &cancellation)
             .unwrap_err(),
         group
             .eligibility(
                 &candidate,
                 None,
                 native::EligibilityLimits::default(),
-                &control,
+                &cancellation,
             )
             .unwrap_err(),
     ] {
@@ -522,7 +532,7 @@ fn an_expired_deadline_prevents_eligibility_acquisition() {
             &candidate,
             None,
             native::EligibilityLimits::default(),
-            &Control::with_deadline(Instant::now()).unwrap(),
+            &Cancellation::with_deadline(Instant::now()).unwrap(),
         )
         .unwrap_err();
     assert_eq!(error.kind(), ErrorKind::Stopped(Stop::Deadline));

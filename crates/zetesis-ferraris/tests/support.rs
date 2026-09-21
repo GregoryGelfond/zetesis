@@ -1,6 +1,6 @@
 //! Candidate support restrictions retain the full reduct answer-set family.
 
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
     AdmissionLimits, Interpretation, Limits, Node, SupportError, SupportLimits, Theory, check,
     models, support_restriction,
@@ -18,7 +18,7 @@ fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
 }
 
 fn restrictions(original: &Theory) -> Theory {
-    support_restriction(original, limits(), &Control::default())
+    support_restriction(original, limits(), &Cancellation::default())
         .result
         .unwrap()
         .unwrap()
@@ -34,7 +34,7 @@ fn satisfies(theory: &Theory, mask: usize) -> bool {
         theory,
         &interpretation,
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap()
 }
@@ -115,7 +115,7 @@ fn rich_asserted_heads_decline_the_certificate() {
         ],
         vec![2, 3],
     );
-    let attempt = support_restriction(&original, limits(), &Control::default());
+    let attempt = support_restriction(&original, limits(), &Cancellation::default());
     assert!(attempt.result.unwrap().is_none());
     assert!(attempt.work > 0);
 }
@@ -124,7 +124,7 @@ fn rich_asserted_heads_decline_the_certificate() {
 fn ordinary_atoms_do_not_trigger_disjunctive_construction() {
     let original = theory(1, vec![Node::Atom(0)], vec![0]);
     assert!(
-        support_restriction(&original, limits(), &Control::default())
+        support_restriction(&original, limits(), &Cancellation::default())
             .result
             .unwrap()
             .is_none()
@@ -138,7 +138,7 @@ fn work_exhaustion_retains_charged_construction() {
         vec![Node::Atom(0), Node::Atom(1), Node::Or(0, 1)],
         vec![2],
     );
-    let completed = support_restriction(&original, limits(), &Control::default());
+    let completed = support_restriction(&original, limits(), &Cancellation::default());
     let boundary = completed.work;
     assert!(completed.result.unwrap().is_some());
     for max_work in 0..boundary {
@@ -148,7 +148,7 @@ fn work_exhaustion_retains_charged_construction() {
                 max_work,
                 ..limits()
             },
-            &Control::default(),
+            &Cancellation::default(),
         );
         assert!(matches!(
             attempt.result,
@@ -163,7 +163,7 @@ fn work_exhaustion_retains_charged_construction() {
                 max_work: boundary,
                 ..limits()
             },
-            &Control::default()
+            &Cancellation::default()
         )
         .result
         .unwrap()
@@ -178,9 +178,9 @@ fn cancelled_construction_returns_no_restriction() {
         vec![Node::Atom(0), Node::Atom(1), Node::Or(0, 1)],
         vec![2],
     );
-    let control = Control::default();
-    control.cancel();
-    let attempt = support_restriction(&original, limits(), &control);
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
+    let attempt = support_restriction(&original, limits(), &cancellation);
     assert!(matches!(
         attempt.result,
         Err(SupportError::Stopped(Stop::Cancelled))
@@ -225,7 +225,7 @@ fn support_preserves_every_small_reduct_answer_set() {
                 &original,
                 &candidate,
                 Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
             if checked.accepted() {
@@ -275,7 +275,7 @@ fn exact_choices_without_ordinary_disjunction_decline() {
         ],
         vec![3],
     );
-    let attempt = support_restriction(&original, limits(), &Control::default());
+    let attempt = support_restriction(&original, limits(), &Cancellation::default());
     assert!(attempt.result.unwrap().is_none());
     // Four node classifications and one complete root inspection. The bounded
     // atomic-choice shape read is part of that charged root operation.
@@ -337,7 +337,7 @@ fn opaque_choice_alternatives_decline_complete_extraction() {
     for opaque in [7, 9, 10, 11] {
         let original = theory(2, nodes.clone(), vec![3, opaque]);
         assert!(
-            support_restriction(&original, limits(), &Control::default())
+            support_restriction(&original, limits(), &Cancellation::default())
                 .result
                 .unwrap()
                 .is_none()
@@ -383,7 +383,7 @@ fn mixed_support_preserves_every_small_reduct_answer_set() {
                 &original,
                 &candidate,
                 Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap()
             .accepted()
@@ -418,7 +418,7 @@ fn support_admission_dimensions_are_inclusive() {
                 admission: exact,
                 ..limits()
             },
-            &Control::default()
+            &Cancellation::default()
         )
         .result
         .unwrap()
@@ -445,7 +445,7 @@ fn support_admission_dimensions_are_inclusive() {
                     admission,
                     ..limits()
                 },
-                &Control::default()
+                &Cancellation::default()
             )
             .result,
             Err(SupportError::Admission(AdmissionError::Limit))
@@ -468,7 +468,7 @@ fn mixed_work_refusals_publish_no_partial_restriction() {
         ],
         vec![4, 6],
     );
-    let complete = support_restriction(&original, limits(), &Control::default());
+    let complete = support_restriction(&original, limits(), &Cancellation::default());
     assert!(complete.result.unwrap().is_some());
     for max_work in 0..=complete.work {
         let attempt = support_restriction(
@@ -477,7 +477,7 @@ fn mixed_work_refusals_publish_no_partial_restriction() {
                 max_work,
                 ..limits()
             },
-            &Control::default(),
+            &Cancellation::default(),
         );
         assert_eq!(attempt.work, max_work);
         if max_work == complete.work {
@@ -510,7 +510,7 @@ fn mixed_node_limits_publish_no_partial_restriction() {
     for max_nodes in original.nodes().len()..=complete.nodes().len() {
         let mut bound = limits();
         bound.admission.max_nodes = max_nodes;
-        let attempt = support_restriction(&original, bound, &Control::default());
+        let attempt = support_restriction(&original, bound, &Cancellation::default());
         if max_nodes == complete.nodes().len() {
             let restriction = attempt.result.unwrap().unwrap();
             assert_eq!(restriction.nodes(), complete.nodes());
@@ -540,7 +540,7 @@ fn shared_head_dags_do_not_expand_into_occurrence_trees() {
             max_work: 1_000,
             ..limits()
         },
-        &Control::default(),
+        &Cancellation::default(),
     )
     .result
     .unwrap()

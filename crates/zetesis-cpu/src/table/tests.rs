@@ -65,7 +65,7 @@ fn assert_reference(
     domains: &[&[Value]],
 ) {
     let actual = table
-        .project(domains, Limits::default(), &Control::default())
+        .project(domains, Limits::default(), &Cancellation::default())
         .unwrap();
     let (positions, expected) = reference(source, indices, table.scope(), domains);
     let actual_positions: Vec<_> = (0..indices.len())
@@ -103,10 +103,20 @@ fn exhaustive_binary_tables_match_complete_rows() {
         let relation =
             Relation::from_atoms(&predicate, &source, RelationLimits::default()).unwrap();
         let indices: Vec<_> = (0..source.len()).collect();
-        let independent =
-            Table::prepare(&relation, &[0, 1], Limits::default(), &Control::default()).unwrap();
-        let aliased =
-            Table::prepare(&relation, &[0, 0], Limits::default(), &Control::default()).unwrap();
+        let independent = Table::prepare(
+            &relation,
+            &[0, 1],
+            Limits::default(),
+            &Cancellation::default(),
+        )
+        .unwrap();
+        let aliased = Table::prepare(
+            &relation,
+            &[0, 0],
+            Limits::default(),
+            &Cancellation::default(),
+        )
+        .unwrap();
         for left in &domains {
             assert_reference(&aliased, &source, &indices, &[left]);
             for right in &domains {
@@ -126,10 +136,16 @@ fn catalog_occurrences_retain_their_row_identity() {
     let indices = [2, 0, 2, 1, 0];
     let relation =
         Relation::from_catalog(&predicate, &source, &indices, RelationLimits::default()).unwrap();
-    let table = Table::prepare(&relation, &[0, 0], Limits::default(), &Control::default()).unwrap();
+    let table = Table::prepare(
+        &relation,
+        &[0, 0],
+        Limits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
     let domain = numbers(&[0, 1]);
     let projection = table
-        .project(&[&domain], Limits::default(), &Control::default())
+        .project(&[&domain], Limits::default(), &Cancellation::default())
         .unwrap();
     assert!(projection.table().relation().same_owner(&relation));
     assert_eq!(
@@ -172,13 +188,14 @@ fn typed_domains_do_not_conflate_equal_spellings() {
             .collect::<Vec<_>>(),
     );
     let relation = Relation::from_atoms(&predicate, &source, RelationLimits::default()).unwrap();
-    let table = Table::prepare(&relation, &[0], Limits::default(), &Control::default()).unwrap();
+    let table =
+        Table::prepare(&relation, &[0], Limits::default(), &Cancellation::default()).unwrap();
     for (index, value) in values.iter().enumerate() {
         let selected = table
             .select(
                 &[Domain::Singleton(value)],
                 Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
         assert_eq!(selected.rows().collect::<Vec<_>>(), vec![index]);
@@ -186,7 +203,7 @@ fn typed_domains_do_not_conflate_equal_spellings() {
             .project(
                 &[std::slice::from_ref(value)],
                 Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
         assert_eq!(
@@ -211,15 +228,25 @@ fn widening_restores_rows_excluded_by_an_earlier_call() {
         &[numbers(&[0, 1]), numbers(&[1, 0]), numbers(&[1, 1])],
     );
     let relation = Relation::from_atoms(&predicate, &source, RelationLimits::default()).unwrap();
-    let table = Table::prepare(&relation, &[0, 1], Limits::default(), &Control::default()).unwrap();
+    let table = Table::prepare(
+        &relation,
+        &[0, 1],
+        Limits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
     let small = numbers(&[0]);
     let wide = numbers(&[0, 1]);
     let narrow = table
-        .project(&[&small, &wide], Limits::default(), &Control::default())
+        .project(
+            &[&small, &wide],
+            Limits::default(),
+            &Cancellation::default(),
+        )
         .unwrap();
     assert_eq!(narrow.words(), &[1]);
     let restored = table
-        .project(&[&wide, &wide], Limits::default(), &Control::default())
+        .project(&[&wide, &wide], Limits::default(), &Cancellation::default())
         .unwrap();
     assert_eq!(restored.words(), &[7]);
     assert_eq!(narrow.words(), &[1]);
@@ -230,19 +257,20 @@ fn equal_domain_sizes_do_not_reuse_stale_rows() {
     let predicate = Predicate::new("table", 1).unwrap();
     let source = atoms(&predicate, &[numbers(&[0]), numbers(&[1])]);
     let relation = Relation::from_atoms(&predicate, &source, RelationLimits::default()).unwrap();
-    let table = Table::prepare(&relation, &[0], Limits::default(), &Control::default()).unwrap();
+    let table =
+        Table::prepare(&relation, &[0], Limits::default(), &Cancellation::default()).unwrap();
     let zero = numbers(&[0]);
     let one = numbers(&[1]);
     assert_eq!(
         table
-            .project(&[&zero], Limits::default(), &Control::default())
+            .project(&[&zero], Limits::default(), &Cancellation::default())
             .unwrap()
             .words(),
         &[1]
     );
     assert_eq!(
         table
-            .project(&[&one], Limits::default(), &Control::default())
+            .project(&[&one], Limits::default(), &Cancellation::default())
             .unwrap()
             .words(),
         &[2]
@@ -265,13 +293,17 @@ fn supported_domain_projection_preserves_surviving_rows() {
         &relation,
         &[0, 1, 0],
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let first = numbers(&[0, 1, 2]);
     let second = numbers(&[1, 2]);
     let projected = table
-        .project(&[&first, &second], Limits::default(), &Control::default())
+        .project(
+            &[&first, &second],
+            Limits::default(),
+            &Cancellation::default(),
+        )
         .unwrap();
     let narrowed: Vec<Vec<_>> = (0..2)
         .map(|variable| projected.domain(variable).unwrap().cloned().collect())
@@ -280,7 +312,7 @@ fn supported_domain_projection_preserves_surviving_rows() {
         .project(
             &narrowed.iter().map(Vec::as_slice).collect::<Vec<_>>(),
             Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     assert_eq!(again.words(), projected.words());
@@ -293,9 +325,10 @@ fn nullary_projection_preserves_every_occurrence() {
         let source = atoms(&predicate, &vec![vec![]; count]);
         let relation =
             Relation::from_atoms(&predicate, &source, RelationLimits::default()).unwrap();
-        let table = Table::prepare(&relation, &[], Limits::default(), &Control::default()).unwrap();
+        let table =
+            Table::prepare(&relation, &[], Limits::default(), &Cancellation::default()).unwrap();
         let projection = table
-            .project(&[], Limits::default(), &Control::default())
+            .project(&[], Limits::default(), &Cancellation::default())
             .unwrap();
         assert_eq!(
             projection
@@ -316,10 +349,11 @@ fn domain_duplicates_have_set_meaning() {
     let predicate = Predicate::new("table", 1).unwrap();
     let source = atoms(&predicate, &[numbers(&[1]), numbers(&[2])]);
     let relation = Relation::from_atoms(&predicate, &source, RelationLimits::default()).unwrap();
-    let table = Table::prepare(&relation, &[0], Limits::default(), &Control::default()).unwrap();
+    let table =
+        Table::prepare(&relation, &[0], Limits::default(), &Cancellation::default()).unwrap();
     let domain = numbers(&[1, 1, 7]);
     let projection = table
-        .project(&[&domain], Limits::default(), &Control::default())
+        .project(&[&domain], Limits::default(), &Cancellation::default())
         .unwrap();
     assert_eq!(projection.words(), &[1]);
     assert_eq!(
@@ -333,14 +367,15 @@ fn construction_limits_are_inclusive() {
     let predicate = Predicate::new("table", 1).unwrap();
     let source = atoms(&predicate, &[numbers(&[0]), numbers(&[1])]);
     let relation = Relation::from_atoms(&predicate, &source, RelationLimits::default()).unwrap();
-    let table = Table::prepare(&relation, &[0], Limits::default(), &Control::default()).unwrap();
+    let table =
+        Table::prepare(&relation, &[0], Limits::default(), &Cancellation::default()).unwrap();
     let stats = table.statistics();
     let exact = Limits {
         max_work: stats.work,
         max_bytes: stats.peak_bytes,
         max_entries: 2,
     };
-    assert!(Table::prepare(&relation, &[0], exact, &Control::default()).is_ok());
+    assert!(Table::prepare(&relation, &[0], exact, &Cancellation::default()).is_ok());
     for (limits, expected) in [
         (
             Limits {
@@ -364,7 +399,7 @@ fn construction_limits_are_inclusive() {
             Resource::Entries,
         ),
     ] {
-        let failure = Table::prepare(&relation, &[0], limits, &Control::default())
+        let failure = Table::prepare(&relation, &[0], limits, &Cancellation::default())
             .err()
             .unwrap();
         assert!(matches!(failure.cause, Cause::Limit { resource, .. } if resource == expected));
@@ -377,10 +412,11 @@ fn projection_limits_do_not_replace_an_existing_result() {
     let predicate = Predicate::new("table", 1).unwrap();
     let source = atoms(&predicate, &[numbers(&[0]), numbers(&[1])]);
     let relation = Relation::from_atoms(&predicate, &source, RelationLimits::default()).unwrap();
-    let table = Table::prepare(&relation, &[0], Limits::default(), &Control::default()).unwrap();
+    let table =
+        Table::prepare(&relation, &[0], Limits::default(), &Cancellation::default()).unwrap();
     let domain = numbers(&[1]);
     let first = table
-        .project(&[&domain], Limits::default(), &Control::default())
+        .project(&[&domain], Limits::default(), &Cancellation::default())
         .unwrap();
     let stats = first.statistics();
     let exact = Limits {
@@ -390,7 +426,7 @@ fn projection_limits_do_not_replace_an_existing_result() {
     };
     assert!(
         table
-            .project(&[&domain], exact, &Control::default())
+            .project(&[&domain], exact, &Cancellation::default())
             .is_ok()
     );
     let failure = table
@@ -400,7 +436,7 @@ fn projection_limits_do_not_replace_an_existing_result() {
                 max_work: stats.work - 1,
                 ..exact
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
         .err()
         .unwrap();
@@ -414,7 +450,7 @@ fn projection_limits_do_not_replace_an_existing_result() {
     assert_eq!(first.words(), &[2]);
     assert_eq!(
         table
-            .project(&[&domain], exact, &Control::default())
+            .project(&[&domain], exact, &Cancellation::default())
             .unwrap()
             .words(),
         first.words()
@@ -425,8 +461,8 @@ fn projection_limits_do_not_replace_an_existing_result() {
 fn cancellation_precedes_zero_resource_allowances() {
     let predicate = Predicate::new("table", 0).unwrap();
     let relation = Relation::from_atoms(&predicate, &[], RelationLimits::default()).unwrap();
-    let control = Control::with_deadline(Instant::now()).unwrap();
-    control.cancel();
+    let cancellation = Cancellation::with_deadline(Instant::now()).unwrap();
+    cancellation.cancel();
     let failure = Table::prepare(
         &relation,
         &[],
@@ -435,7 +471,7 @@ fn cancellation_precedes_zero_resource_allowances() {
             max_work: 0,
             max_entries: 0,
         },
-        &control,
+        &cancellation,
     )
     .err()
     .unwrap();
@@ -448,19 +484,20 @@ fn expired_deadlines_preserve_the_prepared_owner() {
     let predicate = Predicate::new("table", 0).unwrap();
     let source = atoms(&predicate, &[vec![]]);
     let relation = Relation::from_atoms(&predicate, &source, RelationLimits::default()).unwrap();
-    let table = Table::prepare(&relation, &[], Limits::default(), &Control::default()).unwrap();
+    let table =
+        Table::prepare(&relation, &[], Limits::default(), &Cancellation::default()).unwrap();
     let failure = table
         .project(
             &[],
             Limits::default(),
-            &Control::with_deadline(Instant::now()).unwrap(),
+            &Cancellation::with_deadline(Instant::now()).unwrap(),
         )
         .err()
         .unwrap();
     assert_eq!(failure.cause, Cause::Interrupted(Stop::Deadline));
     assert_eq!(
         table
-            .project(&[], Limits::default(), &Control::default())
+            .project(&[], Limits::default(), &Cancellation::default())
             .unwrap()
             .words(),
         &[1]
@@ -473,17 +510,28 @@ fn invalid_shapes_are_explicit_refusals() {
     let relation = Relation::from_atoms(&predicate, &[], RelationLimits::default()).unwrap();
     for scope in [&[][..], &[1, 0], &[0, 2]] {
         assert_eq!(
-            Table::prepare(&relation, scope, Limits::default(), &Control::default())
-                .err()
-                .unwrap()
-                .cause,
+            Table::prepare(
+                &relation,
+                scope,
+                Limits::default(),
+                &Cancellation::default()
+            )
+            .err()
+            .unwrap()
+            .cause,
             Cause::Scope
         );
     }
-    let table = Table::prepare(&relation, &[0, 1], Limits::default(), &Control::default()).unwrap();
+    let table = Table::prepare(
+        &relation,
+        &[0, 1],
+        Limits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
     assert_eq!(
         table
-            .project(&[], Limits::default(), &Control::default())
+            .project(&[], Limits::default(), &Cancellation::default())
             .err()
             .unwrap()
             .cause,
@@ -497,7 +545,8 @@ fn indexed_rayon_preserves_independent_projection_order() {
     let predicate = Predicate::new("table", 1).unwrap();
     let source = atoms(&predicate, &[numbers(&[0]), numbers(&[1]), numbers(&[2])]);
     let relation = Relation::from_atoms(&predicate, &source, RelationLimits::default()).unwrap();
-    let table = Table::prepare(&relation, &[0], Limits::default(), &Control::default()).unwrap();
+    let table =
+        Table::prepare(&relation, &[0], Limits::default(), &Cancellation::default()).unwrap();
     let domains = [numbers(&[2]), numbers(&[0, 1]), numbers(&[])];
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(2)
@@ -508,7 +557,7 @@ fn indexed_rayon_preserves_independent_projection_order() {
             .par_iter()
             .map(|domain| {
                 table
-                    .project(&[domain], Limits::default(), &Control::default())
+                    .project(&[domain], Limits::default(), &Cancellation::default())
                     .unwrap()
             })
             .collect()
@@ -535,7 +584,7 @@ fn multiword_supports_match_complete_rows() {
             &relation,
             &[0, 1, 0],
             Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         let first = numbers(&[0, 2, 4]);
@@ -554,10 +603,11 @@ fn projection_byte_ceiling_includes_prepared_inputs() {
     let predicate = Predicate::new("table", 1).unwrap();
     let source = atoms(&predicate, &[numbers(&[0]), numbers(&[1])]);
     let relation = Relation::from_atoms(&predicate, &source, RelationLimits::default()).unwrap();
-    let table = Table::prepare(&relation, &[0], Limits::default(), &Control::default()).unwrap();
+    let table =
+        Table::prepare(&relation, &[0], Limits::default(), &Cancellation::default()).unwrap();
     let domain = numbers(&[1]);
     let actual = table
-        .project(&[&domain], Limits::default(), &Control::default())
+        .project(&[&domain], Limits::default(), &Cancellation::default())
         .unwrap();
     let peak = actual.statistics().peak_bytes;
     assert!(peak > relation.storage().retained_bytes + table.statistics().retained_bytes);
@@ -568,7 +618,7 @@ fn projection_byte_ceiling_includes_prepared_inputs() {
                 max_bytes: peak - 1,
                 ..Limits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
         .err()
         .unwrap();
@@ -586,10 +636,20 @@ fn projection_byte_ceiling_includes_prepared_inputs() {
 fn empty_relations_remove_every_supplied_value() {
     let predicate = Predicate::new("table", 2).unwrap();
     let relation = Relation::from_atoms(&predicate, &[], RelationLimits::default()).unwrap();
-    let table = Table::prepare(&relation, &[0, 1], Limits::default(), &Control::default()).unwrap();
+    let table = Table::prepare(
+        &relation,
+        &[0, 1],
+        Limits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
     let domain = numbers(&[1, 2]);
     let actual = table
-        .project(&[&domain, &domain], Limits::default(), &Control::default())
+        .project(
+            &[&domain, &domain],
+            Limits::default(),
+            &Cancellation::default(),
+        )
         .unwrap();
     assert!(actual.words().is_empty());
     for variable in 0..2 {
@@ -607,7 +667,13 @@ fn singleton_domains_match_prepared_equality_queries() {
             .collect::<Vec<_>>(),
     );
     let relation = Relation::from_atoms(&predicate, &source, RelationLimits::default()).unwrap();
-    let table = Table::prepare(&relation, &[0, 1], Limits::default(), &Control::default()).unwrap();
+    let table = Table::prepare(
+        &relation,
+        &[0, 1],
+        Limits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
     let input = relation.all(RelationLimits::default()).unwrap();
     assert_eq!(table.support_entries(), 7);
     for left in 0..5 {
@@ -624,7 +690,7 @@ fn singleton_domains_match_prepared_equality_queries() {
                 .project(
                     &[std::slice::from_ref(&left), std::slice::from_ref(&right)],
                     Limits::default(),
-                    &Control::default(),
+                    &Cancellation::default(),
                 )
                 .unwrap();
             assert_eq!(actual.words(), expected.words());

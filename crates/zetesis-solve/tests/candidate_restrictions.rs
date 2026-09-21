@@ -1,6 +1,6 @@
 //! Ordinary sessions use source candidate restrictions while retaining reduct checks.
 use std::{collections::BTreeSet, fmt::Write, num::NonZeroUsize};
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_solve::{
     Backend, Completion, Grounder, Interruption, PreparedInput, Session, SolveConfig,
 };
@@ -40,7 +40,7 @@ fn ordinary_sessions_propose_only_path_answer_sets() {
         let mut session = Session::builder(
             PreparedInput::admitted(&owner),
             config(grounder),
-            Control::default(),
+            Cancellation::default(),
         )
         .start()
         .unwrap();
@@ -89,7 +89,7 @@ fn candidate_preparation_stop_is_not_an_empty_answer_family() {
                 max_candidate_bytes,
                 ..config(Grounder::Lazy)
             },
-            Control::default(),
+            Cancellation::default(),
         )
         .start()
         .unwrap();

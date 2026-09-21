@@ -102,7 +102,7 @@ fn qualify_failure(backend: GpuBackendPreference) {
     let plan = AggregateGpuPlan::new(
         &group,
         AggregateGpuPlanLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let error = oracle
@@ -110,7 +110,7 @@ fn qualify_failure(backend: GpuBackendPreference) {
             &plan,
             &records,
             AggregateGpuLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
     assert!(
@@ -129,7 +129,7 @@ fn qualify_failure(backend: GpuBackendPreference) {
     oracle.clear_residency();
     assert_eq!(oracle.activity(), submitted);
     assert!(
-        matches!(oracle.check_batch(&plan, &[], AggregateGpuLimits::default(), &Control::default()), Err(AggregateGpuError::Gpu(error)) if error.kind() == GpuErrorKind::Device)
+        matches!(oracle.check_batch(&plan, &[], AggregateGpuLimits::default(), &Cancellation::default()), Err(AggregateGpuError::Gpu(error)) if error.kind() == GpuErrorKind::Device)
     );
 }
 
@@ -152,7 +152,7 @@ fn invalidates_shared_primitive(backend: GpuBackendPreference) {
             &[],
             zetesis_cpu::lazy::Limits::default(),
             crate::GpuLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     assert!(empty_batch.checks.is_empty());
@@ -163,14 +163,14 @@ fn invalidates_shared_primitive(backend: GpuBackendPreference) {
     let plan = AggregateGpuPlan::new(
         &group,
         AggregateGpuPlanLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let outcome = aggregate.check_batch(
         &plan,
         &records,
         AggregateGpuLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     );
     assert!(
         matches!(outcome, Err(AggregateGpuError::Gpu(error)) if error.kind() == GpuErrorKind::Readback)
@@ -188,7 +188,7 @@ fn invalidates_shared_primitive(backend: GpuBackendPreference) {
             &[],
             zetesis_cpu::lazy::Limits::default(),
             crate::GpuLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
     assert!(matches!(failure.cause,
@@ -196,7 +196,7 @@ fn invalidates_shared_primitive(backend: GpuBackendPreference) {
     ));
     assert_eq!(failure.progress, zetesis_cpu::lazy::Progress::default());
     assert_eq!(lazy.statistics().dispatches, 0);
-    let cancelled = Control::default();
+    let cancelled = Cancellation::default();
     cancelled.cancel();
     let failure = lazy
         .check_batch(

@@ -2,12 +2,12 @@
 
 use super::*;
 use crate::search::LocalQuota;
-use crate::{AdmissionLimits, Control, SearchLimits, SearchStatistics};
+use crate::{AdmissionLimits, Cancellation, SearchLimits, SearchStatistics};
 
-pub(super) fn budget(control: &Control, max_work: u64) -> Budget<'_, LocalQuota> {
+pub(super) fn budget(cancellation: &Cancellation, max_work: u64) -> Budget<'_, LocalQuota> {
     Budget {
         quota: LocalQuota,
-        control,
+        cancellation,
         limits: SearchLimits {
             max_work,
             ..Default::default()
@@ -72,8 +72,8 @@ pub(super) fn query(
         .filter_map(|(i, c)| (c.len() == 1).then_some(i))
         .collect::<Vec<_>>();
     let empty = cnf.clauses().any(crate::Clause::is_empty);
-    let control = Control::default();
-    let mut meter = budget(&control, max_work);
+    let cancellation = Cancellation::default();
+    let mut meter = budget(&cancellation, max_work);
     let result = workspace.query(cnf, &units, empty, assumptions, &mut meter);
     (result, meter.statistics)
 }
@@ -119,8 +119,8 @@ fn warm_reset_preserves_moved_watches() {
         state.next.clone(),
     );
     let retained = workspace.retained_bytes();
-    let control = Control::default();
-    let mut meter = budget(&control, u64::MAX);
+    let cancellation = Cancellation::default();
+    let mut meter = budget(&cancellation, u64::MAX);
     workspace.reset(&cnf, &mut meter).unwrap();
     // One query reset plus four assigned-value undo operations; no index fill.
     assert_eq!(meter.statistics.work, 5);
@@ -138,19 +138,19 @@ fn warm_reset_preserves_moved_watches() {
 #[test]
 fn interrupted_indexing_is_never_reused() {
     let cnf = disjunction();
-    let control = Control::default();
-    let mut full = budget(&control, u64::MAX);
+    let cancellation = Cancellation::default();
+    let mut full = budget(&cancellation, u64::MAX);
     PreparedWorkspace::default().reset(&cnf, &mut full).unwrap();
     for limit in 0..full.statistics.work {
         let mut workspace = PreparedWorkspace::default();
-        let mut stopped = budget(&control, limit);
+        let mut stopped = budget(&cancellation, limit);
         assert_eq!(
             workspace.reset(&cnf, &mut stopped),
             Err(Incomplete::WorkLimit)
         );
         assert_eq!(stopped.statistics.work, limit);
         assert!(!workspace.indexed);
-        let mut retried = budget(&control, full.statistics.work);
+        let mut retried = budget(&cancellation, full.statistics.work);
         workspace.reset(&cnf, &mut retried).unwrap();
         assert_eq!(retried.statistics.work, full.statistics.work);
         verify_registry(&workspace, &cnf);
@@ -219,7 +219,7 @@ fn prepared_base_clauses_hold_in_every_query() {
             let expected = crate::solve(
                 &Cnf::new(2, explicit, AdmissionLimits::default()).unwrap(),
                 SearchLimits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             );
             let (actual, _) = query(&mut workspace, &cnf, &assumptions, u64::MAX);
             match expected {

@@ -10,7 +10,7 @@ use zetesis_cli::{
     ClosureRoute, Completion, Interruption, Options, run_detailed_with_diagnostics,
     run_with_diagnostics,
 };
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 
 const SOURCE: &str = "{a}. {b}. {c}.";
 
@@ -46,7 +46,7 @@ fn solve_source(
         options,
         &mut output,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     (
@@ -114,7 +114,7 @@ fn candidate_storage_refusal_follows_admitted_preparation() {
     let prepared = zetesis_cpu::PreparedQueries::new(
         owner.program(),
         zetesis_cpu::PreparationLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let mut bounded = options(&[]);
@@ -174,7 +174,7 @@ fn publication_failure_retains_query_ownership_evidence() {
         &options(&[]),
         &mut output,
         &mut RefuseQueryStatistics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     let partial = failure.partial_report.as_ref().unwrap();

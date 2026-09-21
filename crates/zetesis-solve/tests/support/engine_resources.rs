@@ -2,7 +2,7 @@
 
 use super::{Engine, Executor, selection};
 use crate::{Backend, ExecutionResources, Grounder, SolveConfig};
-use zetesis_cpu::{CandidateLimits, Candidates, Control};
+use zetesis_cpu::{Cancellation, CandidateLimits, Candidates};
 use zetesis_wgpu::{GpuContext, GpuOptions};
 
 fn supplied_context(backend: Backend, expected_api: &str) {
@@ -74,12 +74,15 @@ fn automatic_cpu(context: &GpuContext, grounder: Grounder) {
         .unwrap()
     };
     assert!(!engine.executor.is_gpu());
-    let control = Control::default();
-    let mut candidates =
-        Candidates::new(owner.program(), CandidateLimits::default(), control.clone());
+    let cancellation = Cancellation::default();
+    let mut candidates = Candidates::new(
+        owner.program(),
+        CandidateLimits::default(),
+        cancellation.clone(),
+    );
     let first = candidates.next_selection().unwrap().unwrap();
     engine
-        .check(&config, owner.program(), &[first], &control, &phases)
+        .check(&config, owner.program(), &[first], &cancellation, &phases)
         .unwrap();
     assert!(!engine.executor.is_gpu());
     let batch = std::iter::from_fn(|| candidates.next_selection())
@@ -88,7 +91,7 @@ fn automatic_cpu(context: &GpuContext, grounder: Grounder) {
         .unwrap();
     assert_eq!(batch.len(), 32);
     engine
-        .check(&config, owner.program(), &batch, &control, &phases)
+        .check(&config, owner.program(), &batch, &cancellation, &phases)
         .unwrap();
     assert!(!engine.executor.is_gpu());
     assert!(engine.lazy_statistics(32).is_none());

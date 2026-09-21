@@ -19,15 +19,15 @@ use themelios_program::term::UnaryOp;
 use zetesis_core::Atom;
 
 use super::{
-    Binder, Condition, ConstructionLimits, Control, DefaultNegation, Error, ErrorKind, Evaluation,
-    EvaluationError, Limits, Model, ObservationProgram, Operand, Pattern, Query, Relation,
-    Resource, Statistics, Symbol, Template, Value,
+    Binder, Cancellation, Condition, ConstructionLimits, DefaultNegation, Error, ErrorKind,
+    Evaluation, EvaluationError, Limits, Model, ObservationProgram, Operand, Pattern, Query,
+    Relation, Resource, Statistics, Symbol, Template, Value,
 };
 
 pub(super) struct Work<'a> {
     pub limits: Limits,
     pub construction: ConstructionLimits,
-    pub control: &'a Control,
+    pub cancellation: &'a Cancellation,
     pub statistics: Statistics,
     pub location: Option<Location>,
     pub local_bytes: u128,
@@ -52,7 +52,7 @@ impl Work<'_> {
         Ok(())
     }
     pub fn step(&mut self, count: u128) -> Result<(), Error> {
-        self.control
+        self.cancellation
             .poll()
             .map_err(|stop| self.error(ErrorKind::Stopped(stop)))?;
         let observed = u128::from(self.statistics.work) + count;
@@ -746,12 +746,12 @@ pub(super) fn evaluate(
     model: &Model,
     limits: Limits,
     construction: ConstructionLimits,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<Evaluation, Error> {
     let mut work = Work {
         limits,
         construction,
-        control,
+        cancellation,
         statistics: Statistics::default(),
         local_bytes: 0,
         location: None,

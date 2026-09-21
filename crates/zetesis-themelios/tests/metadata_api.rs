@@ -1,7 +1,7 @@
 //! Native metadata consumers use canonical vocabulary through the frontend alone.
 
 use zetesis_core::{Atom, Model, Predicate, Sign, Value};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::base::source::{Source, SourceId};
 use zetesis_themelios::base::span::{ByteOffset, Location, Span};
 use zetesis_themelios::logical::program::{Const, Program, Show, Statement};
@@ -191,13 +191,13 @@ fn native_metadata_matches_source_admission() {
     assert_eq!(
         native
             .observations()
-            .evaluate(&model(), Limits::default(), &Control::default())
+            .evaluate(&model(), Limits::default(), &Cancellation::default())
             .unwrap()
             .symbols(),
         admitted
             .metadata()
             .observations()
-            .evaluate(&model(), Limits::default(), &Control::default())
+            .evaluate(&model(), Limits::default(), &Cancellation::default())
             .unwrap()
             .symbols()
     );
@@ -233,7 +233,7 @@ fn constructed_metadata_invents_no_parsed_origin() {
     assert_eq!(
         native
             .observations()
-            .evaluate(&model(), Limits::default(), &Control::default())
+            .evaluate(&model(), Limits::default(), &Cancellation::default())
             .unwrap()
             .symbols(),
         &[Symbol::Number(7)]
@@ -416,7 +416,7 @@ fn metadata_compilation_does_not_admit_rules() {
     assert_eq!(
         native
             .observations()
-            .evaluate(&Model::new([]), Limits::default(), &Control::default())
+            .evaluate(&Model::new([]), Limits::default(), &Cancellation::default())
             .unwrap()
             .symbols(),
         &[Symbol::Number(1)]
@@ -483,7 +483,7 @@ fn native_metadata_preserves_structured_expression_values() {
     );
     let evaluated = native
         .observations()
-        .evaluate(&model(), Limits::default(), &Control::default())
+        .evaluate(&model(), Limits::default(), &Cancellation::default())
         .unwrap();
     assert_eq!(
         evaluated.symbols(),
@@ -543,7 +543,11 @@ fn constructed_tuple_limits_count_the_borrowed_nodes() {
     assert_eq!(
         native
             .observations()
-            .evaluate(&Model::default(), Limits::default(), &Control::default())
+            .evaluate(
+                &Model::default(),
+                Limits::default(),
+                &Cancellation::default()
+            )
             .unwrap()
             .symbols(),
         &[Symbol::Tuple(vec![

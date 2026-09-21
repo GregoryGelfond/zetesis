@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
 use zetesis_core::{Model, Term, Value};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, models};
 use zetesis_objective::{ObjectiveProgram, ObjectiveTemplate, Score, WeightPolarity, evaluate};
 use zetesis_sat::StableModels;
@@ -34,7 +34,7 @@ fn score(input: &AdmittedFormula, selected: impl IntoIterator<Item = usize>) -> 
         input.objectives(),
         &model,
         zetesis_objective::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap()
     .score()
@@ -46,7 +46,7 @@ fn plan(input: &AdmittedFormula) -> ObjectivePlan {
         input.atoms(),
         input.objectives(),
         ObjectivePlanLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap()
 }
@@ -79,7 +79,7 @@ fn every_candidate_guard_matches_full_normalized_scores_and_keeps_ties() {
                 .bound(
                     incumbent,
                     ObjectiveBoundLimits::default(),
-                    &Control::default(),
+                    &Cancellation::default(),
                 )
                 .unwrap();
             assert!(bound.original().same_instance(input.theory()));
@@ -94,7 +94,7 @@ fn every_candidate_guard_matches_full_normalized_scores_and_keeps_ties() {
                         bound.theory(),
                         &candidate,
                         zetesis_ferraris::Limits::default(),
-                        &Control::default()
+                        &Cancellation::default()
                     )
                     .unwrap(),
                     score.compare_costs(incumbent) != Ordering::Greater,
@@ -111,7 +111,7 @@ fn search(input: &AdmittedFormula, pruning: bool) -> Optima {
     let mut search = StableModels::new(
         input.theory(),
         zetesis_sat::Limits::default(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     let mut best: Option<Score> = None;
@@ -129,7 +129,11 @@ fn search(input: &AdmittedFormula, pruning: bool) -> Optima {
                 ties.insert(atoms);
                 if pruning {
                     let bound = plan
-                        .bound(&score, ObjectiveBoundLimits::default(), &Control::default())
+                        .bound(
+                            &score,
+                            ObjectiveBoundLimits::default(),
+                            &Cancellation::default(),
+                        )
                         .unwrap();
                     search.restrict_candidates(bound.theory()).unwrap();
                 }
@@ -175,7 +179,7 @@ fn optional_plan_refusal_is_typed_and_preserves_work_and_original_theory() {
         input.atoms(),
         input.objectives(),
         limits,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert_eq!(
@@ -202,7 +206,7 @@ fn optional_plan_refusal_is_typed_and_preserves_work_and_original_theory() {
         input.atoms(),
         &invalid,
         ObjectivePlanLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert_eq!(
@@ -215,7 +219,7 @@ fn optional_plan_refusal_is_typed_and_preserves_work_and_original_theory() {
         plan.bound(
             &incumbent,
             ObjectiveBoundLimits::default(),
-            &Control::default()
+            &Cancellation::default()
         )
         .is_ok()
     );

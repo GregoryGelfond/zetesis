@@ -18,7 +18,7 @@ use std::process::{Command, Stdio};
 
 use serde_json::Value as Json;
 use zetesis_core::{Atom, Model, Term};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{AggregateErrorKind, AggregateLimits, Interpretation, Limits, check};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
@@ -96,7 +96,7 @@ fn atom(source: &str) -> Atom {
 fn exhaustive(input: &AdmittedFormula) -> (BTreeSet<BTreeSet<Atom>>, Option<Vec<i64>>) {
     let count = input.atoms().len();
     assert!(count <= 16, "small independent exhaustive carrier");
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut best: Option<Vec<i64>> = None;
     let mut models = BTreeSet::new();
     for bits in 0..(1_usize << count) {
@@ -105,7 +105,7 @@ fn exhaustive(input: &AdmittedFormula) -> (BTreeSet<BTreeSet<Atom>>, Option<Vec<
             (0..count).filter(|&atom| bits & (1 << atom) != 0),
         )
         .expect("same-theory candidate");
-        if !check(input.theory(), &candidate, Limits::default(), &control)
+        if !check(input.theory(), &candidate, Limits::default(), &cancellation)
             .expect("complete independent reduct subset enumeration")
             .accepted()
         {
@@ -120,7 +120,7 @@ fn exhaustive(input: &AdmittedFormula) -> (BTreeSet<BTreeSet<Atom>>, Option<Vec<
             input.objectives(),
             &model,
             zetesis_objective::Limits::default(),
-            &control,
+            &cancellation,
         )
         .expect("bounded objective evaluation of a verified model");
         let costs = evaluation.score().is_present().then(|| {

@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 use clap::Parser;
 use serde_json::Value;
 use zetesis_cli::{Completion, Options, run_detailed_with_diagnostics};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 #[test]
 fn automatic_and_explicit_reduct_routes_preserve_complete_comparison_models() {
@@ -62,7 +62,7 @@ fn automatic_and_explicit_reduct_routes_preserve_complete_comparison_models() {
                 &options,
                 &mut output,
                 &mut diagnostics,
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap_or_else(|error| panic!("{} via {oracle}: {error}", case["name"]));
             assert_eq!(report.completion, Completion::Exhausted);

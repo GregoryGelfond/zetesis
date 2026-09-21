@@ -3,7 +3,7 @@
 
 use std::num::NonZeroUsize;
 
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Interpretation;
 use zetesis_sat::{BatchStatistics, BatchVerdict, Incomplete, StableModels, Statistics};
 
@@ -29,10 +29,10 @@ impl MembershipExecution for NativeBatch {
         &mut self,
         models: &mut StableModels,
         options: &crate::SolveConfig,
-        control: &Control,
+        cancellation: &Cancellation,
         _: &crate::phase_timing::Recorder,
     ) -> Option<Result<Interpretation, Failure>> {
-        let result = self.queue.next(models, options, control, |batch| {
+        let result = self.queue.next(models, options, cancellation, |batch| {
             let theory = batch.theory();
             let candidates = batch.candidates();
             self.proposed.push(
@@ -53,7 +53,7 @@ impl MembershipExecution for NativeBatch {
                     ..Default::default()
                 };
                 if let zetesis_sat::Check::Inconclusive(error) =
-                    zetesis_sat::check(theory, &candidates[0], limits, control)
+                    zetesis_sat::check(theory, &candidates[0], limits, cancellation)
                 {
                     return Err(Failure::Search(error));
                 }
@@ -109,8 +109,12 @@ fn native_batches_preserve_complete_full_answers() {
     ] {
         let owner = admitted(source);
         let config = config();
-        let mut scalar =
-            Session::new(PreparedInput::formula(&owner), config, Control::default()).unwrap();
+        let mut scalar = Session::new(
+            PreparedInput::formula(&owner),
+            config,
+            Cancellation::default(),
+        )
+        .unwrap();
         let mut expected: Vec<Record> = scalar
             .by_ref()
             .map(|answer| {
@@ -123,7 +127,7 @@ fn native_batches_preserve_complete_full_answers() {
             .collect();
         expected.sort();
         let mut execution = NativeBatch::default();
-        let actual = run(&owner, &config, &Control::default(), &mut execution);
+        let actual = run(&owner, &config, &Cancellation::default(), &mut execution);
         assert!(actual.error.is_none(), "{source}: {:?}", actual.error);
         assert_eq!(actual.outcome.completion(), Some(Completion::Exhausted));
         assert_eq!(actual.records(), expected, "{source}");
@@ -147,7 +151,7 @@ fn requested_model_limit_preserves_queued_membership() {
             models: 1,
             ..config()
         },
-        &Control::default(),
+        &Cancellation::default(),
         &mut execution,
     );
     assert!(capture.error.is_none());
@@ -172,7 +176,7 @@ fn proposal_limit_delivers_the_committed_prefix() {
             max_candidates: 2,
             ..config()
         },
-        &Control::default(),
+        &Cancellation::default(),
         &mut execution,
     );
     assert!(capture.error.is_none());
@@ -204,10 +208,10 @@ fn proposal_limit_delivers_the_committed_prefix() {
 #[test]
 fn cancellation_preserves_unconsumed_verified_answers() {
     let owner = admitted("{a;b;c}. #show x.");
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut execution = NativeBatch::default();
-    let capture = run_consuming(&owner, &config(), &control, &mut execution, |_| {
-        control.cancel();
+    let capture = run_consuming(&owner, &config(), &cancellation, &mut execution, |_| {
+        cancellation.cancel();
     });
     assert!(capture.error.is_none());
     assert_eq!(capture.outcome.completion(), Some(Completion::Interrupted));
@@ -247,7 +251,7 @@ fn objective_bounds_preserve_queued_optimal_ties() {
             config.max_objective_bound_work = 0;
         }
         let mut execution = NativeBatch::default();
-        let capture = run(&owner, &config, &Control::default(), &mut execution);
+        let capture = run(&owner, &config, &Cancellation::default(), &mut execution);
         assert!(capture.error.is_none());
         assert_eq!(capture.outcome.completion(), Some(Completion::Exhausted));
         let optimum = capture.outcome.incumbent().unwrap();
@@ -276,7 +280,7 @@ fn bounded_execution_cannot_prove_optimality() {
             2 => config.max_batch_bytes = 0,
             _ => execution.fail_work = true,
         }
-        let capture = run(&owner, &config, &Control::default(), &mut execution);
+        let capture = run(&owner, &config, &Cancellation::default(), &mut execution);
         assert!(capture.error.is_none());
         assert_eq!(capture.outcome.completion(), Some(Completion::Interrupted));
         assert!(!capture.outcome.optimum_proved());
@@ -300,7 +304,7 @@ fn stopped_checker_preserves_uncommitted_proposals() {
             stop: Some(stop),
             ..Default::default()
         };
-        let capture = run(&owner, &config(), &Control::default(), &mut execution);
+        let capture = run(&owner, &config(), &Cancellation::default(), &mut execution);
         assert!(capture.error.is_none());
         assert!(capture.answers.is_empty());
         assert_eq!(capture.outcome.verified_models(), 0);
@@ -323,7 +327,7 @@ fn malformed_checker_shape_prevents_answer_delivery() {
         omit_verdict: true,
         ..Default::default()
     };
-    let capture = run(&owner, &config(), &Control::default(), &mut execution);
+    let capture = run(&owner, &config(), &Cancellation::default(), &mut execution);
     assert!(matches!(
         capture.error,
         Some(SolveError::FormulaBatchShape {

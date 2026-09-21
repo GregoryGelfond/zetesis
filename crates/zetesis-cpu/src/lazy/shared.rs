@@ -11,7 +11,7 @@ use rayon::prelude::*;
 use zetesis_core::{Program, SeedView};
 
 use super::{Chunk, EvaluationStep, Progress, SourceSelection};
-use crate::{BatchError, Control, Stop};
+use crate::{BatchError, Cancellation, Stop};
 
 /// Shared source limits and a separate per-world evaluation limit.
 #[derive(Clone, Copy, Debug)]
@@ -113,7 +113,7 @@ pub(crate) fn check<'seed>(
     seeds: impl ExactSizeIterator<Item = SeedView<'seed>> + Clone,
     limits: Limits,
     selection: SourceSelection,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<Batch, Error> {
     let mut statistics = Statistics {
         selection,
@@ -121,7 +121,7 @@ pub(crate) fn check<'seed>(
         source: Progress::default(),
         worlds: Vec::new(),
     };
-    match run(pool, program, seeds, limits, control, &mut statistics) {
+    match run(pool, program, seeds, limits, cancellation, &mut statistics) {
         Ok(checks) => Ok(Batch { checks, statistics }),
         Err(cause) => Err(Error::Incomplete(Failure { cause, statistics })),
     }
@@ -132,10 +132,10 @@ fn run<'seed>(
     program: &Program,
     seeds: impl ExactSizeIterator<Item = SeedView<'seed>> + Clone,
     limits: Limits,
-    control: &Control,
+    cancellation: &Cancellation,
     statistics: &mut Statistics,
 ) -> Result<Vec<super::Check>, Cause> {
-    control.poll().map_err(Cause::Source)?;
+    cancellation.poll().map_err(Cause::Source)?;
     super::validate_seeds(program, seeds.clone(), seeds.len()).map_err(Cause::Source)?;
     if seeds.len() > limits.source.max_candidates {
         return Err(Cause::Source(Stop::CarrierLimit));
@@ -157,14 +157,14 @@ fn run<'seed>(
         seeds,
         source_limits,
         statistics.selection,
-        control,
+        cancellation,
         |chunk| {
             evaluate(
                 pool,
                 chunk,
                 &mut statistics.worlds,
                 limits.max_world_work,
-                control,
+                cancellation,
             )
         },
     );
@@ -189,9 +189,9 @@ fn evaluate(
     chunk: &Chunk<'_>,
     progress: &mut [WorldProgress],
     limit: u64,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<Vec<u32>, Cause> {
-    control.poll().map_err(Cause::Source)?;
+    cancellation.poll().map_err(Cause::Source)?;
     // Chunk construction already bounds this exact output payload as part of
     // source.max_host_bytes. Workers write disjoint slices without private copies.
     let mut output = super::zeros(chunk.worlds() * chunk.result_words()).map_err(Cause::Source)?;
@@ -202,7 +202,7 @@ fn evaluate(
             .enumerate()
             .for_each(|(world, (result, progress))| {
                 let outcome = super::evaluate_world(chunk, world, result, &mut |step| {
-                    control.poll()?;
+                    cancellation.poll()?;
                     if progress.work >= limit {
                         return Err(Stop::WorkLimit);
                     }
@@ -224,7 +224,7 @@ fn evaluate(
     {
         return Err(Cause::World { index, stop });
     }
-    control.poll().map_err(Cause::Source)?;
+    cancellation.poll().map_err(Cause::Source)?;
     Ok(output)
 }
 

@@ -427,7 +427,7 @@ mod classification {
     use zetesis_core::{
         AdmissionLimits, Atom, AtomPattern, Model, Predicate, Program, Seed, Template, Term, Value,
     };
-    use zetesis_cpu::{Control, Stop, lazy};
+    use zetesis_cpu::{Cancellation, Stop, lazy};
     use zetesis_wgpu::GpuError;
 
     fn atom(name: &str) -> Atom {
@@ -498,7 +498,7 @@ mod classification {
             &program,
             &seeds,
             lazy::Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
             |chunk| Ok::<_, GpuError>(lazy::evaluate(chunk).unwrap()),
         );
         let actual = crate::lazy_execution::batch_results(batch).unwrap();
@@ -538,7 +538,7 @@ mod classification {
             &program,
             &[Seed::new(&program, []).unwrap()],
             lazy::Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
             |chunk| Ok::<_, GpuError>(lazy::evaluate(chunk).unwrap()),
         )
         .unwrap();
@@ -562,7 +562,7 @@ mod classification {
                 max_source_work: 0,
                 ..Default::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
             |chunk| Ok::<_, GpuError>(lazy::evaluate(chunk).unwrap()),
         );
         assert_eq!(
@@ -579,7 +579,7 @@ mod classification {
             &program,
             &seeds,
             lazy::Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
             |_| Ok::<_, GpuError>(vec![]),
         );
         let error = crate::lazy_execution::batch_results(batch).unwrap_err();

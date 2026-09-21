@@ -13,13 +13,13 @@ use std::time::Instant;
 /// never the clock. The timer retires at the deadline or when the last clone
 /// drops, whichever comes first.
 #[derive(Clone, Debug, Default)]
-pub struct Control {
+pub struct Cancellation {
     cancelled: Arc<AtomicBool>,
     deadline: Option<Arc<DeadlineOwner>>,
 }
 
-impl Control {
-    /// A fresh control with the specified absolute deadline. A deadline that
+impl Cancellation {
+    /// A fresh cancellation handle with the specified absolute deadline. A deadline that
     /// has already passed is expired at once and starts no thread.
     ///
     /// # Errors
@@ -31,13 +31,13 @@ impl Control {
         })
     }
 
-    /// Cancel this control and every clone of it.
+    /// Request cancellation through this handle and every clone of it.
     pub fn cancel(&self) {
         self.cancelled.store(true, Ordering::Relaxed);
     }
 
     /// Observe cancellation and the deadline at a bounded work boundary.
-    /// Two relaxed loads; no clock is read.
+    /// At most two relaxed loads; no clock is read.
     ///
     /// # Errors
     /// Returns cancellation first, otherwise an expired deadline.
@@ -62,12 +62,12 @@ impl Control {
 struct Deadline {
     at: Instant,
     expired: AtomicBool,
-    /// True once every control clone has dropped; the timer then exits early.
+    /// True once every cancellation handle has dropped; the timer then exits early.
     retired: Mutex<bool>,
     wake: Condvar,
 }
 
-/// Held by the control clones, not by the timer, so that dropping the last
+/// Held by the cancellation handles, not by the timer, so that dropping the last
 /// clone is observable as the owner's drop.
 #[derive(Debug)]
 struct DeadlineOwner {

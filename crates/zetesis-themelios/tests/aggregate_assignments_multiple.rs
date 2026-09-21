@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
 use zetesis_core::{Atom, Sign, Value};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Node, Theory};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
@@ -147,7 +147,7 @@ fn native(input: &AdmittedFormula) -> Models {
     let mut search = zetesis_sat::StableModels::new(
         input.theory(),
         zetesis_sat::Limits::default(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     let mut result = BTreeSet::new();

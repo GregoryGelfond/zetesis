@@ -7,7 +7,7 @@ use crate::{
     AnswerSelection, Backend, ExecutionResources, Oracle, SolveConfig, SolveMeasurements,
     SolvePhase,
 };
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_sat::{PhaseMeasurement, SearchPhaseTimings};
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
@@ -45,7 +45,7 @@ fn interleaved_sessions_preserve_all_phase_attempts() {
         workers: std::num::NonZeroUsize::MIN,
         ..SolveConfig::default()
     };
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut observations = Ignore;
     let input = Input {
         theory: admitted.theory(),
@@ -68,7 +68,7 @@ fn interleaved_sessions_preserve_all_phase_attempts() {
             .unwrap(),
             &config,
             &mut observations,
-            &control,
+            &cancellation,
             recorder,
             AnswerSelection::All,
         )
@@ -76,7 +76,8 @@ fn interleaved_sessions_preserve_all_phase_attempts() {
     let mut answers = [0; 2];
     while sessions.iter().any(|session| !session.finished()) {
         for (session, answers) in sessions.iter_mut().zip(&mut answers) {
-            if let Some(answer) = session.next(&config, &mut observations, &control, recorder) {
+            if let Some(answer) = session.next(&config, &mut observations, &cancellation, recorder)
+            {
                 answer.unwrap();
                 *answers += 1;
             }

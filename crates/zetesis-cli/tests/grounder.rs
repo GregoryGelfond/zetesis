@@ -6,7 +6,7 @@ use std::fmt::Write as _;
 use clap::Parser;
 use zetesis_cli::{Backend, Completion, Grounder, Options, Report, RunError, run_with_diagnostics};
 use zetesis_core::StaticError;
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 
 fn options(arguments: &[&str]) -> Options {
     Options::try_parse_from(["zetesis"].into_iter().chain(arguments.iter().copied())).unwrap()
@@ -20,7 +20,7 @@ fn solve(source: &str, arguments: &[&str]) -> (Report, String, String) {
         &options(arguments),
         &mut output,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     (
@@ -131,7 +131,7 @@ fn eager_cpu_enforces_every_static_lowering_cap() {
             &options(&["--backend", "cpu", "--grounder", "eager", flag, "0"]),
             &mut output,
             &mut Vec::new(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
         assert!(
@@ -149,7 +149,7 @@ fn eager_auto_never_silently_substitutes_lazy_when_lowering_is_refused() {
         &options(&["--grounder", "eager", "--max-ground-rules", "0"]),
         &mut output,
         &mut Vec::new(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(error, RunError::Static(_)));
@@ -163,7 +163,7 @@ fn lazy_device_selection_preserves_source_diagnostics() {
         &options(&["--backend", "cpu", "--grounder", "lazy"]),
         &mut Vec::new(),
         &mut Vec::new(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     for name in ["gpu", "metal", "vulkan", "dx12", "gl", "nvidia"] {
@@ -175,7 +175,7 @@ fn lazy_device_selection_preserves_source_diagnostics() {
             &selected,
             &mut output,
             &mut diagnostics,
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
         assert_eq!(

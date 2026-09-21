@@ -10,7 +10,7 @@ use zetesis_core::{
     AdmissionLimits, Atom, AtomPattern, Filter, GroundProgram, GroundRule, Model, Predicate,
     Program, Seed, StaticLimits, Template, Term, Value,
 };
-use zetesis_cpu::{CandidateLimits, Candidates, Control, Limits, check};
+use zetesis_cpu::{Cancellation, CandidateLimits, Candidates, Limits, check};
 
 fn pattern(name: &str, terms: Vec<Term>) -> AtomPattern {
     let predicate = Predicate::new(name, terms.len()).expect("nonempty test name");
@@ -125,7 +125,7 @@ fn direct_closure(graph: &GroundProgram, seed: u32) -> (u32, bool, bool) {
 
 fn assert_seed_matches_static(program: &Program, graph: &GroundProgram, seed: &Seed) -> bool {
     let expected = direct_closure(graph, encode_seed(graph, seed));
-    let actual = check(program, seed, Limits::default(), &Control::default())
+    let actual = check(program, seed, Limits::default(), &Cancellation::default())
         .expect("small program finishes within budget");
     assert_eq!(
         actual.closure(),
@@ -169,7 +169,7 @@ fn assert_all_small_models(program: &Program) {
         .collect();
     let mut actual = BTreeSet::new();
     let mut seen_seeds = BTreeSet::new();
-    for candidate in Candidates::new(program, CandidateLimits::default(), Control::default()) {
+    for candidate in Candidates::new(program, CandidateLimits::default(), Cancellation::default()) {
         let candidate = candidate.expect("tiny carrier exhausts within budget");
         let key: Vec<_> = candidate.atoms().iter().cloned().collect();
         assert!(
@@ -202,7 +202,8 @@ fn assert_all_small_models(program: &Program) {
     // to every answer set.
     let mut bounded_models = BTreeSet::new();
     let mut bounded_seeds = 0usize;
-    let mut candidates = Candidates::new(program, CandidateLimits::default(), Control::default());
+    let mut candidates =
+        Candidates::new(program, CandidateLimits::default(), Cancellation::default());
     candidates.bounded(Limits::default());
     for candidate in candidates {
         let candidate = candidate.expect("tiny carrier exhausts within budget");
@@ -280,7 +281,7 @@ fn positive_cycles_cannot_be_seeded_by_frozen_candidate_bits() {
     assert_all_small_models(&program);
     let seed = Seed::new(&program, [atom("a", vec![])]).expect("candidate is syntactically valid");
     let checked =
-        check(&program, &seed, Limits::default(), &Control::default()).expect("terminates");
+        check(&program, &seed, Limits::default(), &Cancellation::default()).expect("terminates");
     assert!(checked.closure().atoms().is_empty());
     assert!(checked.seed_mismatch());
     assert!(
@@ -294,7 +295,7 @@ fn zero_atom_programs_still_check_unconditional_constraints() {
     let program = program(vec![Template::new(None, vec![], vec![], vec![], vec![])]);
     assert_all_small_models(&program);
     let seed = Seed::new(&program, []).expect("empty seed");
-    let checked = check(&program, &seed, Limits::default(), &Control::default())
+    let checked = check(&program, &seed, Limits::default(), &Cancellation::default())
         .expect("constraint check completes");
     assert!(checked.constraint_violated());
     assert!(!checked.accepted());
@@ -319,7 +320,7 @@ fn sparse_first_candidate_precedes_carrier_expansion() {
             max_candidates: 1,
             max_carrier_atoms: 0,
         },
-        Control::default(),
+        Cancellation::default(),
     );
     assert_eq!(candidates.discovered_atoms(), 0);
     let first = candidates
@@ -338,7 +339,7 @@ fn sparse_first_candidate_precedes_carrier_expansion() {
             max_derived_atoms: 2,
             ..Limits::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
     )
     .expect("sparse check ignores the 2^32 false carrier tuples");
     assert!(checked.accepted());
@@ -357,8 +358,8 @@ fn unsupported_but_carrier_valid_gate_atoms_are_logically_rejected() {
     assert_all_small_models(&program);
     let seed = Seed::new(&program, [atom("g", vec![Value::Number(1)])])
         .expect("symbolic gate tuple is valid");
-    let checked =
-        check(&program, &seed, Limits::default(), &Control::default()).expect("no backend error");
+    let checked = check(&program, &seed, Limits::default(), &Cancellation::default())
+        .expect("no backend error");
     assert!(!checked.accepted());
     assert!(checked.seed_mismatch());
     assert!(checked.closure().atoms().is_empty());
@@ -396,8 +397,8 @@ fn relational_backtracking_restores_bindings_and_defers_unbound_gates() {
         .expect("small static relational graph");
     let seed = Seed::new(&program, []).expect("empty seed");
     assert!(assert_seed_matches_static(&program, &graph, &seed));
-    let checked =
-        check(&program, &seed, Limits::default(), &Control::default()).expect("finite closure");
+    let checked = check(&program, &seed, Limits::default(), &Cancellation::default())
+        .expect("finite closure");
     assert!(
         checked
             .closure()
@@ -446,8 +447,8 @@ fn positive_gate_becomes_ready_only_after_later_join_input() {
     let seed = Seed::new(&program, [atom("pick", vec![Value::Number(1)])])
         .expect("positive candidate gate");
     assert!(assert_seed_matches_static(&program, &graph, &seed));
-    let checked =
-        check(&program, &seed, Limits::default(), &Control::default()).expect("finite closure");
+    let checked = check(&program, &seed, Limits::default(), &Cancellation::default())
+        .expect("finite closure");
     assert!(
         checked
             .closure()

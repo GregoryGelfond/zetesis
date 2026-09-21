@@ -5,7 +5,7 @@ mod observation_reference;
 
 use serde_json::Value as Json;
 use zetesis_core::Model;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, check};
 use zetesis_themelios::observation::{ErrorKind, Limits, Resource};
 use zetesis_themelios::{
@@ -69,7 +69,7 @@ fn basis() -> (AdmittedFormula, Vec<Model>) {
             input.theory(),
             &candidate,
             zetesis_ferraris::Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap()
         .accepted()
@@ -136,7 +136,7 @@ fn complete_observation_multisets_preserve_hidden_family_multiplicity() {
                         model,
                         input.metadata().output(),
                         Limits::default(),
-                        &Control::default(),
+                        &Cancellation::default(),
                     )
                     .unwrap();
                 let mut symbols: Vec<_> = rendered
@@ -173,7 +173,7 @@ fn complete_family_evaluations_obey_their_exact_work_boundary() {
                         max_work,
                         ..Limits::default()
                     },
-                    &Control::default(),
+                    &Cancellation::default(),
                 )
             };
             let full = run(Limits::default().max_work).unwrap();

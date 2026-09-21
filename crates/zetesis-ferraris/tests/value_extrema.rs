@@ -1,6 +1,6 @@
 //! Ordered values are checked against independent complete failing-subset formulas.
 use zetesis_core::{Sign, Value, ValueLimits, ValueNode};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AggregateComparison as Comparison, AggregateErrorKind as Error, AggregateExtremum as Extremum,
     AggregateLimits, Node, ValueExtremumElement as Element, append_value_extremum,
@@ -155,7 +155,7 @@ fn verify(elements: &[Element], extremum: Extremum, comparison: Comparison, boun
         comparison,
         bound,
         AggregateLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let (mut specified, expected) = reference(elements, extremum, comparison, bound);
@@ -253,7 +253,7 @@ fn exact_limits_restore_the_existing_prefix() {
         Comparison::Eq,
         &value,
         AggregateLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let exact = AggregateLimits {
@@ -272,7 +272,7 @@ fn exact_limits_restore_the_existing_prefix() {
             Comparison::Eq,
             &value,
             exact,
-            &Control::default()
+            &Cancellation::default()
         )
         .unwrap(),
         built
@@ -309,7 +309,7 @@ fn exact_limits_restore_the_existing_prefix() {
             Comparison::Eq,
             &value,
             limits,
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
         assert_eq!(error.kind(), expected);
@@ -331,7 +331,7 @@ fn bad_inputs_and_cancellation_restore_the_existing_prefix() {
         Comparison::Eq,
         &value,
         AggregateLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert_eq!(error.kind(), Error::InvalidCondition { element: 0 });
@@ -346,15 +346,15 @@ fn bad_inputs_and_cancellation_restore_the_existing_prefix() {
             Comparison::Eq,
             &value,
             AggregateLimits::default(),
-            &Control::default()
+            &Cancellation::default()
         )
         .unwrap_err()
         .kind(),
         Error::InvalidPrefix { .. }
     ));
     assert_eq!(nodes, bad);
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     let mut nodes = prefix();
     assert!(matches!(
         append_value_extremum(
@@ -364,7 +364,7 @@ fn bad_inputs_and_cancellation_restore_the_existing_prefix() {
             Comparison::Eq,
             &value,
             AggregateLimits::default(),
-            &control
+            &cancellation
         )
         .unwrap_err()
         .kind(),

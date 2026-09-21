@@ -8,7 +8,7 @@ use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use zetesis_core::{Atom, Sign, Value};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Node, Theory};
 use zetesis_themelios::AdmittedFormula;
 
@@ -99,7 +99,7 @@ pub(super) fn native(input: &AdmittedFormula) -> Models {
     let mut search = zetesis_sat::StableModels::new(
         input.theory(),
         zetesis_sat::Limits::default(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     let mut result = BTreeSet::new();

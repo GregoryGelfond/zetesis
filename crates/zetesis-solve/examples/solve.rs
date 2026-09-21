@@ -6,7 +6,7 @@ use std::{
     io::{self, Write},
     num::NonZeroUsize,
 };
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_solve::{Backend, Completion, Grounder, PreparedInput, Session, SolveConfig};
 use zetesis_themelios::{
     AdmissionOptions, ExpansionLimits, FormulaLimits, OutputSelection, observation, prepare_formula,
@@ -35,8 +35,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         models: 0, // Request the complete family, rather than one answer.
         ..SolveConfig::default()
     };
-    let control = Control::default();
-    let mut session = Session::enumerate(PreparedInput::formula(&input), config, control.clone())?;
+    let cancellation = Cancellation::default();
+    let mut session =
+        Session::enumerate(PreparedInput::formula(&input), config, cancellation.clone())?;
     let mut output = io::stdout().lock();
     for answer in session.by_ref() {
         let answer = answer?; // Preserve a failed pull instead of dropping it.
@@ -46,13 +47,13 @@ fn main() -> Result<(), Box<dyn Error>> {
             interpretation,
             &OutputSelection::default(),
             observation::Limits::default(),
-            &control,
+            &cancellation,
         )?;
         let shown = input.metadata().observations().render(
             interpretation,
             input.metadata().output(),
             observation::Limits::default(),
-            &control,
+            &cancellation,
         )?;
         writeln!(
             output,
@@ -102,7 +103,7 @@ mod tests {
                 workers: NonZeroUsize::MIN,
                 ..Default::default()
             },
-            Control::default(),
+            Cancellation::default(),
         )?;
         let mut displays = BTreeSet::new();
         for answer in session.by_ref() {
@@ -125,7 +126,7 @@ mod tests {
                 model,
                 input.metadata().output(),
                 observation::Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )?;
             assert!(displays.insert(shown.text().to_owned()));
         }

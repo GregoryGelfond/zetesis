@@ -2,7 +2,7 @@
 
 use std::io::Write;
 
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::{OutputSelection, observation::ObservationProgram};
 
 use crate::SolvePhase;
@@ -20,7 +20,7 @@ pub(crate) fn solve(
     config: &PublicationConfig,
     renderer: &mut impl AnswerRenderer,
     diagnostics: &mut Diagnostics<impl Write>,
-    control: &Control,
+    cancellation: &Cancellation,
     phases: &Recorder,
 ) -> Result<Progress, PublicationFailure> {
     let selection = OutputSelection::default();
@@ -33,9 +33,10 @@ pub(crate) fn solve(
             zetesis_themelios::SourceMetadata::observations,
         ),
         limits: config.observations,
-        control,
+        cancellation,
     };
-    let mut request = Session::builder(input, config.solve, control.clone()).measurements(phases);
+    let mut request =
+        Session::builder(input, config.solve, cancellation.clone()).measurements(phases);
     if input
         .projection()
         .is_some_and(zetesis_themelios::PreparedProjection::is_explicit)
@@ -122,13 +123,13 @@ fn complete(
     }
 }
 
-pub(crate) fn check_control(
+pub(crate) fn check_cancellation(
     renderer: &mut impl AnswerRenderer,
     diagnostics: &mut impl Write,
-    control: &Control,
+    cancellation: &Cancellation,
     phases: &Recorder,
 ) -> Result<Option<Progress>, PublicationFailure> {
-    match control.poll() {
+    match cancellation.poll() {
         Ok(()) => Ok(None),
         Err(stop) => {
             let mut progress = Progress::new();

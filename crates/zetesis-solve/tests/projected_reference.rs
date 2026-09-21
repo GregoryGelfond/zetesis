@@ -13,7 +13,7 @@ use std::{
 };
 
 use zetesis_core::Model;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, Grounder, Oracle, PreparedInput, ProjectionLimits,
     Session, SolveConfig,
@@ -165,7 +165,7 @@ fn model_symbols(model: &Model) -> Vec<String> {
                 max_output_bytes: REPORT_BYTES,
                 ..observation::Limits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     let mut symbols = answers::split_display(
@@ -327,11 +327,15 @@ fn check_native(case: &Case, selected: &Family, expected: &Family) {
     } else {
         AnswerSelection::All
     };
-    let mut session = Session::builder(PreparedInput::formula(&owner), config, Control::default())
-        .selection(selection)
-        .projected(ProjectionLimits::default())
-        .start()
-        .unwrap();
+    let mut session = Session::builder(
+        PreparedInput::formula(&owner),
+        config,
+        Cancellation::default(),
+    )
+    .selection(selection)
+    .projected(ProjectionLimits::default())
+    .start()
+    .unwrap();
     let mut native = Family::new();
     for answer in session.by_ref() {
         let answer = answer.unwrap();

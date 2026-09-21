@@ -3,7 +3,7 @@
 use std::num::NonZeroUsize;
 
 use zetesis_core::{AdmissionLimits, AtomPattern, Predicate, Program, Seed, Template};
-use zetesis_cpu::{BatchError, BatchOracle, Control, Limits, PreparationLimits, Stop};
+use zetesis_cpu::{BatchError, BatchOracle, Cancellation, Limits, PreparationLimits, Stop};
 
 fn program() -> Program {
     let head = AtomPattern::new(Predicate::new("a", 0).unwrap(), vec![]).unwrap();
@@ -25,7 +25,7 @@ fn worker_reservations_obey_the_collective_ceiling() {
     let pool =
         BatchOracle::new(NonZeroUsize::new(2).unwrap(), NonZeroUsize::new(2).unwrap()).unwrap();
     let initial = pool
-        .check_batch(&program, &seeds, limits, &Control::default())
+        .check_batch(&program, &seeds, limits, &Cancellation::default())
         .unwrap();
     assert!(
         initial
@@ -36,14 +36,14 @@ fn worker_reservations_obey_the_collective_ceiling() {
     assert!(required > usize::try_from(pool.query_statistics().unwrap().retained_bytes).unwrap());
     let pool = pool.with_closure_storage_limit(required - 1);
     assert!(matches!(
-        pool.check_batch(&program, &seeds, limits, &Control::default()),
+        pool.check_batch(&program, &seeds, limits, &Cancellation::default()),
         Err(BatchError::ClosureStorage { required: observed, limit })
             if observed == required as u128 && limit == (required - 1) as u128
     ));
     // Refusal releases the pool's admission slot, with no published candidate.
     let pool = pool.with_closure_storage_limit(required);
     let results = pool
-        .check_batch(&program, &seeds, limits, &Control::default())
+        .check_batch(&program, &seeds, limits, &Cancellation::default())
         .unwrap();
     assert_eq!(results.len(), seeds.len());
     for result in results {
@@ -61,7 +61,7 @@ fn small_batches_account_for_their_retained_owner() {
     let pool =
         BatchOracle::new(NonZeroUsize::new(4).unwrap(), NonZeroUsize::new(4).unwrap()).unwrap();
     let results = pool
-        .check_batch(&program, &[seed], limits, &Control::default())
+        .check_batch(&program, &[seed], limits, &Cancellation::default())
         .unwrap();
     assert_eq!(results.len(), 1);
     assert!(results[0].as_ref().unwrap().accepted());
@@ -71,7 +71,7 @@ fn small_batches_account_for_their_retained_owner() {
     assert!(statistics.reserved_bytes < 4 * limits.max_closure_bytes as u128);
     let retained = statistics.retained_bytes;
     assert!(matches!(pool.with_closure_storage_limit(0)
-        .check_batch(&program, &[], limits, &Control::default()),
+        .check_batch(&program, &[], limits, &Cancellation::default()),
         Err(BatchError::ClosureStorage { required, limit: 0 }) if required == retained));
 }
 
@@ -79,14 +79,14 @@ fn small_batches_account_for_their_retained_owner() {
 fn empty_batches_admit_only_retained_storage() {
     let program = program();
     let seed = Seed::new(&program, []).unwrap();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let pool = BatchOracle::new(NonZeroUsize::MIN, NonZeroUsize::MIN).unwrap();
     let first = pool
         .check_batch(
             &program,
             std::slice::from_ref(&seed),
             Limits::default(),
-            &control,
+            &cancellation,
         )
         .unwrap();
     let before = pool.query_statistics().unwrap();
@@ -101,7 +101,7 @@ fn empty_batches_admit_only_retained_storage() {
                 max_derived_atoms: 0,
                 max_closure_bytes: 0,
             },
-            &control,
+            &cancellation,
         )
         .unwrap();
     assert!(empty.is_empty());
@@ -121,7 +121,7 @@ fn empty_batches_admit_only_retained_storage() {
             ..Default::default()
         });
     let next = pool
-        .check_batch(&program, &[seed], Limits::default(), &control)
+        .check_batch(&program, &[seed], Limits::default(), &cancellation)
         .unwrap();
     assert_eq!(
         next[0].as_ref().unwrap().closure(),
@@ -134,14 +134,14 @@ fn empty_batches_admit_only_retained_storage() {
 fn preparation_refusals_clear_submission_activity() {
     let program = program();
     let seed = Seed::new(&program, []).unwrap();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let pool = BatchOracle::new(NonZeroUsize::MIN, NonZeroUsize::MIN).unwrap();
     let first = pool
         .check_batch(
             &program,
             std::slice::from_ref(&seed),
             Limits::default(),
-            &control,
+            &cancellation,
         )
         .unwrap();
     let before = pool.query_statistics().unwrap();
@@ -152,7 +152,7 @@ fn preparation_refusals_clear_submission_activity() {
         ..Default::default()
     });
     assert!(matches!(
-        pool.check_batch(&program, &[seed], Limits::default(), &control),
+        pool.check_batch(&program, &[seed], Limits::default(), &cancellation),
         Err(BatchError::Preparation(Stop::StorageLimit))
     ));
     let after = pool.query_statistics().unwrap();
@@ -178,7 +178,7 @@ fn the_worker_product_is_the_collective_ceiling_a_batch_needs() {
         .with_closure_storage_limit(3 * limits.max_closure_bytes);
     for _ in 0..2 {
         let results = pool
-            .check_batch(&program, &seeds, limits, &Control::default())
+            .check_batch(&program, &seeds, limits, &Cancellation::default())
             .unwrap();
         assert!(
             results

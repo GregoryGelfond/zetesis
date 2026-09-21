@@ -1,6 +1,6 @@
 //! Native records bind decisions to their immutable input interpretation.
 
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
     AdmissionLimits, Interpretation, Limits, Node, Theory, Verdict, check_interpretation,
 };
@@ -15,7 +15,7 @@ fn accepted_receipt_retains_the_checked_subject() {
     let decision = check_interpretation(
         Interpretation::new(&theory, [0]).unwrap(),
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert!(decision.accepted());
@@ -37,7 +37,7 @@ fn original_rejection_cannot_yield_a_stable_receipt() {
     let decision = check_interpretation(
         Interpretation::new(&theory, []).unwrap(),
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap()
     .into_stable_interpretation()
@@ -53,7 +53,7 @@ fn nonminimality_cannot_yield_a_stable_receipt() {
     let decision = check_interpretation(
         Interpretation::new(&theory, [0]).unwrap(),
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap()
     .into_stable_interpretation()
@@ -75,7 +75,7 @@ fn work_refusal_cannot_yield_a_completed_decision() {
             max_work: 0,
             ..Limits::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
     );
     assert!(matches!(result, Err(Stop::WorkLimit)));
 }

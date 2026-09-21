@@ -256,11 +256,11 @@ pub struct TightAttempt<T> {
 struct Work<'a> {
     used: u64,
     max: u64,
-    control: &'a zetesis_cpu::Control,
+    cancellation: &'a zetesis_cpu::Cancellation,
 }
 impl Work<'_> {
     fn tick(&mut self) -> Result<(), TightError> {
-        self.control.poll()?;
+        self.cancellation.poll()?;
         if self.used == self.max {
             return Err(TightError::Limit(TightResource::Work));
         }

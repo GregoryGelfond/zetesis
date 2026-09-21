@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::Value as Json;
 use zetesis_core::Model;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, check};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
@@ -82,7 +82,7 @@ fn basis() -> (AdmittedFormula, Vec<Model>) {
             input.theory(),
             &candidate,
             zetesis_ferraris::Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap()
         .accepted()
@@ -163,7 +163,7 @@ fn native(input: &AdmittedFormula, models: &[Model]) -> Vec<Record> {
                 model,
                 input.metadata().output(),
                 zetesis_themelios::observation::Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
         assert!(!rendered.text().contains(['"', '\\', '\n']));
@@ -177,7 +177,7 @@ fn native(input: &AdmittedFormula, models: &[Model]) -> Vec<Record> {
             input.objectives(),
             model,
             zetesis_objective::Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         let score = objective.score();

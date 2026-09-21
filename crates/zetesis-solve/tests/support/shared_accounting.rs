@@ -5,7 +5,7 @@ use zetesis_core::{
     AdmissionLimits, AtomPattern, Model, Predicate, Program, Seed, Template, Term, Value,
 };
 use zetesis_cpu::lazy::{SourceSelection, shared};
-use zetesis_cpu::{BatchOracle, Control};
+use zetesis_cpu::{BatchOracle, Cancellation};
 
 #[test]
 fn accumulation_overflow_preserves_prior_evidence() {
@@ -23,7 +23,7 @@ fn accumulation_overflow_preserves_prior_evidence() {
             &[seed],
             shared::Limits::default(),
             SourceSelection::Union,
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     assert!(batch.statistics.source.source_work > 0);
@@ -65,7 +65,7 @@ fn batch_results_transfer_payload_storage() {
             &[Seed::new(&program, []).unwrap()],
             shared::Limits::default(),
             SourceSelection::Union,
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     assert!(batch.checks[0].accepted());

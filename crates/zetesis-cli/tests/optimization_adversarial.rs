@@ -5,7 +5,7 @@ use clap::Parser;
 use zetesis_cli::{
     Completion, Interruption, OptimizationStop, Options, Report, run_with_diagnostics,
 };
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 /// One worker: the exact charges these tests compare are the scalar walk's,
 /// whose first leaf is the same on every run.
@@ -29,7 +29,7 @@ fn solve(source: &str, options: &Options) -> (Report, String) {
         options,
         &mut output,
         &mut Vec::new(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .expect("supported objective input");
     (report, String::from_utf8(output).expect("UTF-8 output"))

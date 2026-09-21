@@ -1,9 +1,9 @@
 use super::{NodeId, Projections, suffix_size};
 use crate::search::cursor::tests::budget;
-use crate::{AdmissionError, Assignment, Control, Incomplete};
+use crate::{AdmissionError, Assignment, Cancellation, Incomplete};
 
 fn blocked(index: &mut Projections) -> Vec<usize> {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     (0..1_usize << index.width)
         .filter(|bits| {
             let assignment = Assignment(
@@ -11,7 +11,9 @@ fn blocked(index: &mut Projections) -> Vec<usize> {
                     .map(|variable| bits & (1 << variable) != 0)
                     .collect(),
             );
-            !index.permits(&assignment, &mut budget(&control)).unwrap()
+            !index
+                .permits(&assignment, &mut budget(&cancellation))
+                .unwrap()
         })
         .collect()
 }
@@ -19,7 +21,7 @@ fn blocked(index: &mut Projections) -> Vec<usize> {
 fn first_key() -> Projections {
     let mut index = Projections::new(4, crate::ProjectionLimits::default()).unwrap();
     index
-        .insert(4, |_| false, &mut budget(&Control::default()))
+        .insert(4, |_| false, &mut budget(&Cancellation::default()))
         .unwrap();
     index
 }
@@ -53,8 +55,8 @@ fn the_last_representable_suffix_is_admitted() {
 
 #[test]
 fn host_length_overflow_precedes_key_reads() {
-    let control = Control::default();
-    let mut charged = budget(&control);
+    let cancellation = Cancellation::default();
+    let mut charged = budget(&cancellation);
     let mut index = Projections::new(usize::MAX, crate::ProjectionLimits::default()).unwrap();
     assert_eq!(
         index.insert(usize::MAX, |_| panic!("no suffix read"), &mut charged),
@@ -68,8 +70,8 @@ fn host_length_overflow_precedes_key_reads() {
 #[test]
 #[cfg(target_pointer_width = "64")]
 fn compact_index_overflow_precedes_allocation() {
-    let control = Control::default();
-    let mut charged = budget(&control);
+    let cancellation = Cancellation::default();
+    let mut charged = budget(&cancellation);
     let width = usize::try_from(u32::MAX).unwrap();
     let mut index = Projections::new(width, crate::ProjectionLimits::default()).unwrap();
     // Host arithmetic fits, but width + the root exceeds compact node IDs.
@@ -84,9 +86,9 @@ fn compact_index_overflow_precedes_allocation() {
 
 #[test]
 fn cancellation_precedes_suffix_shape_refusal() {
-    let control = Control::default();
-    control.cancel();
-    let mut charged = budget(&control);
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
+    let mut charged = budget(&cancellation);
     let mut index = Projections::new(usize::MAX, crate::ProjectionLimits::default()).unwrap();
     assert_eq!(
         index.insert(usize::MAX, |_| panic!("no key read"), &mut charged),
@@ -98,14 +100,14 @@ fn cancellation_precedes_suffix_shape_refusal() {
 
 #[test]
 fn every_interrupted_suffix_preserves_the_old_key_set() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     // Diverge at the root and at the last bit of the existing all-false key.
     for key in [1, 8] {
         // One insertion tick, four bit visits and one terminal-node tick.
         for ceiling in 0..=6 {
             let mut index = first_key();
             let before = index.nodes.clone();
-            let mut charged = budget(&control);
+            let mut charged = budget(&cancellation);
             charged.limits.max_work = ceiling;
             let result = index.insert(4, |bit| key & (1 << bit) != 0, &mut charged);
             assert_eq!(charged.statistics.work, ceiling);
@@ -123,16 +125,16 @@ fn every_interrupted_suffix_preserves_the_old_key_set() {
 
 #[test]
 fn cancellation_discards_a_partially_built_suffix() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut index = first_key();
     let before = index.nodes.clone();
-    let mut charged = budget(&control);
+    let mut charged = budget(&cancellation);
     assert_eq!(
         index.insert(
             4,
             |bit| {
                 if bit == 2 {
-                    control.cancel();
+                    cancellation.cancel();
                 }
                 true
             },
@@ -148,10 +150,10 @@ fn cancellation_discards_a_partially_built_suffix() {
 
 #[test]
 fn duplicate_keys_do_not_grow_the_arena() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut index = first_key();
     let before = index.nodes.clone();
-    let mut charged = budget(&control);
+    let mut charged = budget(&cancellation);
     index.insert(4, |_| false, &mut charged).unwrap();
     assert_eq!(charged.statistics.work, 5);
     assert_eq!(index.nodes, before);

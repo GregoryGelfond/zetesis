@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use themelios_base::source::SourceId;
 use themelios_program::program::Statement;
 use zetesis_core::Model;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits,
     ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, InputLimit,
@@ -235,7 +235,7 @@ fn weak_and_minimize_keys_coalesce_across_original_include_sources() {
         input.objectives(),
         &model,
         zetesis_objective::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .expect("global tuple identity");
     assert_eq!(evaluation.score().costs(), &[(1, 2)]);

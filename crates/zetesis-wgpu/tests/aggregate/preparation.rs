@@ -6,7 +6,7 @@ use super::{
     fixtures,
 };
 use zetesis_core::Value;
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::native_aggregate::{Bound, Function, Guard};
 
 #[test]
@@ -31,7 +31,7 @@ fn numerical_preparation_preserves_neutral_keys() {
         let plan = AggregateGpuPlan::new(
             &group,
             AggregateGpuPlanLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         assert_eq!(plan.numeric.tuple_count, 4);
@@ -66,7 +66,7 @@ fn cancellation_cannot_hide_an_overflowing_positive_carrier() {
     let error = AggregateGpuPlan::new(
         &group,
         AggregateGpuPlanLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert_eq!(
@@ -91,7 +91,7 @@ fn cancellation_cannot_hide_an_overflowing_negative_carrier() {
     let error = AggregateGpuPlan::new(
         &group,
         AggregateGpuPlanLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert_eq!(
@@ -118,7 +118,7 @@ fn exact_signed_endpoints_are_admitted() {
             AggregateGpuPlan::new(
                 &group,
                 AggregateGpuPlanLimits::default(),
-                &Control::default()
+                &Cancellation::default()
             )
             .is_ok()
         );
@@ -139,7 +139,7 @@ fn extrema_refuse_nonnumeric_contributions_explicitly() {
             AggregateGpuPlan::new(
                 &group,
                 AggregateGpuPlanLimits::default(),
-                &Control::default()
+                &Cancellation::default()
             )
             .unwrap_err(),
             Error::Capability(Capability::NonNumericExtremum { tuple: 0 })
@@ -173,7 +173,7 @@ fn numerical_guard_views_have_the_same_wire_representation() {
             AggregateGpuPlan::new(
                 group,
                 AggregateGpuPlanLimits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap()
         };
@@ -210,7 +210,7 @@ fn unsupported_guards_remain_typed_capability_failures() {
             AggregateGpuPlan::new(
                 &group,
                 AggregateGpuPlanLimits::default(),
-                &Control::default()
+                &Cancellation::default()
             )
             .unwrap_err(),
             Error::Capability(expected)
@@ -225,7 +225,7 @@ fn preparation_ceilings_are_inclusive() {
     let prepared = AggregateGpuPlan::new(
         &group,
         AggregateGpuPlanLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let exact = AggregateGpuPlanLimits {
@@ -234,7 +234,7 @@ fn preparation_ceilings_are_inclusive() {
         max_bytes: prepared.bytes(),
         max_work: prepared.work(),
     };
-    assert!(AggregateGpuPlan::new(&group, exact, &Control::default()).is_ok());
+    assert!(AggregateGpuPlan::new(&group, exact, &Cancellation::default()).is_ok());
     for below in [
         AggregateGpuPlanLimits {
             max_tuples: 3,
@@ -254,7 +254,7 @@ fn preparation_ceilings_are_inclusive() {
         },
     ] {
         assert!(
-            matches!(AggregateGpuPlan::new(&group, below, &Control::default()), Err(Error::Gpu(error)) if error.kind() == crate::GpuErrorKind::Capacity)
+            matches!(AggregateGpuPlan::new(&group, below, &Cancellation::default()), Err(Error::Gpu(error)) if error.kind() == crate::GpuErrorKind::Capacity)
         );
     }
 }
@@ -263,10 +263,11 @@ fn preparation_ceilings_are_inclusive() {
 fn preparation_observes_caller_cancellation() {
     let theory = fixtures::theory();
     let group = fixtures::group(&theory, Function::Sum, 0);
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     assert_eq!(
-        AggregateGpuPlan::new(&group, AggregateGpuPlanLimits::default(), &control).unwrap_err(),
+        AggregateGpuPlan::new(&group, AggregateGpuPlanLimits::default(), &cancellation)
+            .unwrap_err(),
         Error::Stopped(Stop::Cancelled)
     );
 }

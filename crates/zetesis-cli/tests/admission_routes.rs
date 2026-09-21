@@ -4,7 +4,7 @@ use clap::Parser;
 use zetesis_cli::{
     Completion, Options, RunError, run_bundle_with_diagnostics, run_with_diagnostics,
 };
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::{AdmissionFailure, BundleLimits, ExpansionFailure, SourceBundle};
 use zetesis_validation::answers::native_json;
 
@@ -53,7 +53,7 @@ fn automatic_formula_routing_preserves_complete_answers() {
                     &options,
                     &mut output,
                     &mut diagnostics,
-                    &Control::default(),
+                    &Cancellation::default(),
                 )
             } else {
                 run_with_diagnostics(
@@ -61,7 +61,7 @@ fn automatic_formula_routing_preserves_complete_answers() {
                     &options,
                     &mut output,
                     &mut diagnostics,
-                    &Control::default(),
+                    &Cancellation::default(),
                 )
             }
             .unwrap_or_else(|error| panic!("{source} (bundle={bundled}): {error}"));
@@ -84,7 +84,7 @@ fn automatic_admission_retains_named_variable_safety() {
         &options(),
         &mut Vec::new(),
         &mut Vec::new(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(

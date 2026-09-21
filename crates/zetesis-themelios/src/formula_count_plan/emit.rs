@@ -122,7 +122,7 @@ fn lower(
         AggregateComparison::Ge,
         i64::try_from(consequence.lower).map_err(|_| Fault::Overflow)?,
         limits,
-        &work.control,
+        &work.cancellation,
     );
     let statistics = match &build {
         Ok(build) => build.statistics(),

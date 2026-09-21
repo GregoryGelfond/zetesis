@@ -22,19 +22,19 @@ fn search(workers: usize) -> ParallelRegions {
         zetesis_ferraris::AdmissionLimits::default(),
     )
     .unwrap();
-    let control = Control::with_deadline(Instant::now() + 3 * WAIT).unwrap();
+    let cancellation = Cancellation::with_deadline(Instant::now() + 3 * WAIT).unwrap();
     let limits = Limits::default();
     let mut budget = Budget {
         quota: crate::search::LocalQuota,
         limits: limits.search,
-        control: &control,
+        cancellation: &cancellation,
         statistics: SearchStatistics::default(),
     };
     ParallelRegions::new(
         &theory,
         NonZeroUsize::new(workers).unwrap(),
         limits,
-        control.clone(),
+        cancellation.clone(),
         &mut budget,
     )
     .unwrap()
@@ -152,9 +152,9 @@ fn a_split_donates_its_held_child_to_an_idle_worker() {
         statistics: Statistics::default(),
     };
     let mut budget = Budget {
-        quota: search.shared.budget.lease(&search.shared.control),
+        quota: search.shared.budget.lease(&search.shared.cancellation),
         limits: search.shared.limits.search,
-        control: &search.shared.control,
+        cancellation: &search.shared.cancellation,
         statistics: SearchStatistics::default(),
     };
     let result = if idle {
@@ -215,7 +215,7 @@ fn cancellation_releases_idle_registration() {
     let waiting = Arc::clone(&search.shared);
     let waiter = thread::spawn(move || take(&waiting, &mut Vec::new()));
     let idle = observe_idle(&search.shared);
-    search.shared.control.cancel();
+    search.shared.cancellation.cancel();
     let result = waiter.join().unwrap();
     assert!(idle, "the peer never registered its wait");
     assert!(result.is_none());
@@ -223,7 +223,7 @@ fn cancellation_releases_idle_registration() {
     assert_eq!(search.shared.lock().idle, 0);
     // Cancellation remains an incomplete outcome at the consumer boundary.
     assert_eq!(
-        search.shared.control.poll().map_err(Incomplete::from),
+        search.shared.cancellation.poll().map_err(Incomplete::from),
         Err(Incomplete::Cancelled)
     );
 }
@@ -235,7 +235,7 @@ fn idle_cancellation_preserves_unfinished_coverage() {
     let waiting = Arc::clone(&search.shared);
     let waiter = thread::spawn(move || take(&waiting, &mut Vec::new()));
     let idle = observe_idle(&search.shared);
-    search.shared.control.cancel();
+    search.shared.cancellation.cancel();
     let result = waiter.join().unwrap();
     assert!(idle, "the peer never registered its wait");
     assert!(result.is_none());
@@ -254,8 +254,8 @@ fn idle_deadline_preserves_unfinished_coverage() {
     // An already expired deadline has no timer-thread or scheduling race.
     // The two-worker pool still requires this empty worker to enter its
     // normal timed idle wait before it observes that deadline.
-    Arc::get_mut(&mut search.shared).unwrap().control =
-        Control::with_deadline(Instant::now()).unwrap();
+    Arc::get_mut(&mut search.shared).unwrap().cancellation =
+        Cancellation::with_deadline(Instant::now()).unwrap();
     let waiting = Arc::clone(&search.shared);
     let waiter = thread::spawn(move || take(&waiting, &mut Vec::new()));
     let result = waiter.join().unwrap();

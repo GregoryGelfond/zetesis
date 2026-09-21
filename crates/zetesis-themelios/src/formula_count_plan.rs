@@ -7,7 +7,7 @@
 use std::fmt;
 
 use themelios_base::span::Location;
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{AggregateLimits, Theory, partition};
 
 mod capture;
@@ -240,18 +240,20 @@ impl Outcome {
 #[derive(Clone, Copy)]
 pub(crate) struct Request<'a> {
     pub limits: CountPlanLimits,
-    pub control: &'a Control,
+    pub cancellation: &'a Cancellation,
 }
 
 struct Work {
     limits: CountPlanLimits,
-    control: Control,
+    cancellation: Cancellation,
     statistics: CountPlanStatistics,
     location: Location,
 }
 impl Work {
     fn poll(&self) -> Result<(), CountPlanFailureKind> {
-        self.control.poll().map_err(CountPlanFailureKind::Stopped)
+        self.cancellation
+            .poll()
+            .map_err(CountPlanFailureKind::Stopped)
     }
     fn charge(&mut self, count: u64) -> Result<(), CountPlanFailureKind> {
         self.poll()?;

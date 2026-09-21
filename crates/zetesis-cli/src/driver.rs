@@ -4,7 +4,7 @@ use crate::presentation::Diagnostics;
 use crate::{Backend, Completion, Grounder, Interruption, Options, RunFailure};
 use std::fmt;
 use std::io::{self, Write};
-use zetesis_cpu::{BatchError, Control, Stop};
+use zetesis_cpu::{BatchError, Cancellation, Stop};
 use zetesis_themelios::{
     AdmissionFailure, BundleAdmissionFailure, BundleError, ExpansionFailure, SourceBundle,
 };
@@ -395,9 +395,9 @@ pub fn run(
     source: String,
     options: &Options,
     output: &mut impl Write,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<Report, RunError> {
-    run_with_diagnostics(source, options, output, &mut io::sink(), control)
+    run_with_diagnostics(source, options, output, &mut io::sink(), cancellation)
 }
 
 /// Admit and stream models with a separate injected backend-diagnostics sink.
@@ -416,9 +416,9 @@ pub fn run_with_diagnostics(
     options: &Options,
     output: &mut impl Write,
     diagnostics: &mut impl Write,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<Report, RunError> {
-    run_detailed_with_diagnostics(source, options, output, diagnostics, control)
+    run_detailed_with_diagnostics(source, options, output, diagnostics, cancellation)
         .map_err(RunFailure::into_cause)
 }
 
@@ -434,9 +434,9 @@ pub fn run_detailed(
     source: String,
     options: &Options,
     output: &mut impl Write,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<Report, RunFailure> {
-    run_detailed_with_diagnostics(source, options, output, &mut io::sink(), control)
+    run_detailed_with_diagnostics(source, options, output, &mut io::sink(), cancellation)
 }
 
 /// Stream models with separate diagnostics and retain structured failure evidence.
@@ -454,9 +454,9 @@ pub fn run_detailed_with_diagnostics(
     options: &Options,
     output: &mut impl Write,
     diagnostics: &mut impl Write,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<Report, RunFailure> {
-    run_finalized_with_diagnostics(source, options, output, diagnostics, control)
+    run_finalized_with_diagnostics(source, options, output, diagnostics, cancellation)
         .and_then(crate::PublicationOutcome::into_legacy)
         .map(crate::PublicationReport::into_report)
         .map_err(crate::PublicationFailure::into_legacy)
@@ -473,9 +473,9 @@ pub fn run_finalized(
     source: String,
     options: &Options,
     output: &mut impl Write,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
-    run_finalized_with_diagnostics(source, options, output, &mut io::sink(), control)
+    run_finalized_with_diagnostics(source, options, output, &mut io::sink(), cancellation)
 }
 
 /// Run with finalized semantic evidence independent of publication.
@@ -488,10 +488,10 @@ pub fn run_finalized_with_diagnostics(
     options: &Options,
     output: &mut impl Write,
     diagnostics: &mut impl Write,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
     let mut diagnostics = Diagnostics::new(diagnostics, options.color.human(options.json));
-    run_source_with_writer(source, options, output, &mut diagnostics, control)
+    run_source_with_writer(source, options, output, &mut diagnostics, cancellation)
 }
 
 pub(crate) fn run_source_with_writer(
@@ -499,10 +499,10 @@ pub(crate) fn run_source_with_writer(
     options: &Options,
     output: &mut impl Write,
     diagnostics: &mut Diagnostics<impl Write>,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
     let mut renderer = crate::view::builtin::Builtin::new(output, options);
-    run_source_with_renderer(source, options, &mut renderer, diagnostics, control)
+    run_source_with_renderer(source, options, &mut renderer, diagnostics, cancellation)
 }
 
 /// Admit an original include graph through the extended source profile, then
@@ -524,9 +524,9 @@ pub fn run_bundle_with_diagnostics(
     options: &Options,
     output: &mut impl Write,
     diagnostics: &mut impl Write,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<Report, RunError> {
-    run_bundle_detailed_with_diagnostics(bundle, options, output, diagnostics, control)
+    run_bundle_detailed_with_diagnostics(bundle, options, output, diagnostics, cancellation)
         .map_err(RunFailure::into_cause)
 }
 
@@ -543,9 +543,9 @@ pub fn run_bundle_detailed_with_diagnostics(
     options: &Options,
     output: &mut impl Write,
     diagnostics: &mut impl Write,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<Report, RunFailure> {
-    run_bundle_finalized_with_diagnostics(bundle, options, output, diagnostics, control)
+    run_bundle_finalized_with_diagnostics(bundle, options, output, diagnostics, cancellation)
         .and_then(crate::PublicationOutcome::into_legacy)
         .map(crate::PublicationReport::into_report)
         .map_err(crate::PublicationFailure::into_legacy)
@@ -561,10 +561,10 @@ pub fn run_bundle_finalized_with_diagnostics(
     options: &Options,
     output: &mut impl Write,
     diagnostics: &mut impl Write,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
     let mut diagnostics = Diagnostics::new(diagnostics, options.color.human(options.json));
-    run_bundle_with_writer(bundle, options, output, &mut diagnostics, control)
+    run_bundle_with_writer(bundle, options, output, &mut diagnostics, cancellation)
 }
 
 pub(crate) fn run_bundle_with_writer(
@@ -572,10 +572,10 @@ pub(crate) fn run_bundle_with_writer(
     options: &Options,
     output: &mut impl Write,
     diagnostics: &mut Diagnostics<impl Write>,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
     let mut renderer = crate::view::builtin::Builtin::new(output, options);
-    run_bundle_renderer_inner(bundle, options, &mut renderer, diagnostics, control)
+    run_bundle_renderer_inner(bundle, options, &mut renderer, diagnostics, cancellation)
 }
 
 /// Admit source and stream typed views into a caller-supplied renderer.
@@ -592,10 +592,10 @@ pub fn run_with_renderer(
     options: &Options,
     renderer: &mut impl crate::AnswerRenderer,
     diagnostics: &mut impl Write,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
     let mut diagnostics = Diagnostics::new(diagnostics, options.color.human(options.json));
-    run_source_with_renderer(source, options, renderer, &mut diagnostics, control)
+    run_source_with_renderer(source, options, renderer, &mut diagnostics, cancellation)
 }
 
 fn run_source_with_renderer(
@@ -603,12 +603,19 @@ fn run_source_with_renderer(
     options: &Options,
     renderer: &mut impl crate::AnswerRenderer,
     diagnostics: &mut Diagnostics<impl Write>,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
     let mut invocation = crate::view::session::Session::start(renderer)?;
     let renderer = &mut invocation;
     let phases = Recorder::new(options.stats);
-    let result = crate::admission::source(source, options, renderer, diagnostics, control, &phases);
+    let result = crate::admission::source(
+        source,
+        options,
+        renderer,
+        diagnostics,
+        cancellation,
+        &phases,
+    );
     let result = report_progress_statistics(result, diagnostics, options, &phases);
     crate::publication::finalize(renderer, result)
 }
@@ -623,10 +630,10 @@ pub fn run_bundle_with_renderer(
     options: &Options,
     renderer: &mut impl crate::AnswerRenderer,
     diagnostics: &mut impl Write,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
     let mut diagnostics = Diagnostics::new(diagnostics, options.color.human(options.json));
-    run_bundle_renderer_inner(bundle, options, renderer, &mut diagnostics, control)
+    run_bundle_renderer_inner(bundle, options, renderer, &mut diagnostics, cancellation)
 }
 
 fn run_bundle_renderer_inner(
@@ -634,12 +641,19 @@ fn run_bundle_renderer_inner(
     options: &Options,
     renderer: &mut impl crate::AnswerRenderer,
     diagnostics: &mut Diagnostics<impl Write>,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
     let mut invocation = crate::view::session::Session::start(renderer)?;
     let renderer = &mut invocation;
     let phases = Recorder::new(options.stats);
-    let result = crate::admission::bundle(bundle, options, renderer, diagnostics, control, &phases);
+    let result = crate::admission::bundle(
+        bundle,
+        options,
+        renderer,
+        diagnostics,
+        cancellation,
+        &phases,
+    );
     let result = report_progress_statistics(result, diagnostics, options, &phases);
     crate::publication::finalize(renderer, result)
 }
@@ -656,7 +670,7 @@ pub fn publish_prepared(
     config: &crate::PublicationConfig,
     renderer: &mut impl crate::AnswerRenderer,
     diagnostics: &mut impl Write,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
     let mut diagnostics = Diagnostics::new(diagnostics, crate::ColorMode::Never);
     let mut invocation = crate::view::session::Session::start(renderer)?;
@@ -668,7 +682,7 @@ pub fn publish_prepared(
         config,
         renderer,
         &mut diagnostics,
-        control,
+        cancellation,
         &phases,
     );
     if let Some(timings) = phases.snapshot() {

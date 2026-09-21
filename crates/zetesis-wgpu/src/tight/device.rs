@@ -9,7 +9,7 @@ use super::{
 };
 use crate::runtime::{DeviceProfile, ErrorScopes, Runtime};
 use crate::{GpuBackendPreference, GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, TightPlan};
 
 /// Real-device original satisfaction and ranked producer support checking.
@@ -186,17 +186,17 @@ impl GpuTightOracle {
     /// Host preparation refusals leave the oracle reusable. Failures after device
     /// allocation/submission invalidate the entire context; a fresh context is
     /// required before retrying. Busy contention submits no work and permits retry.
-    /// Control is polled during packing, waiting, decoding and before returning.
+    /// Cancellation is polled during packing, waiting, decoding and before returning.
     pub fn check_batch(
         &mut self,
         certificate: &TightPlan,
         candidates: &[Interpretation],
         limits: TightGpuLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Vec<TightGpuCheck>, TightGpuError> {
         self.last = None;
         self.activity = TightGpuActivity::default();
-        self.check(certificate, candidates, limits, control)
+        self.check(certificate, candidates, limits, cancellation)
             .map_err(Into::into)
     }
 
@@ -205,11 +205,11 @@ impl GpuTightOracle {
         certificate: &TightPlan,
         candidates: &[Interpretation],
         limits: TightGpuLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Vec<TightGpuCheck>, GpuError> {
         let context = self.runtime.context.clone();
         let _lease = context.lease()?;
-        poll(control)?;
+        poll(cancellation)?;
         self.runtime.check_health()?;
         if candidates.is_empty() {
             return Ok(Vec::new());
@@ -226,7 +226,7 @@ impl GpuTightOracle {
                 .as_ref()
                 .map(|resident| (&resident.graph, resident.matches_count(candidates.len()))),
             self.epoch,
-            control,
+            cancellation,
         )?;
         // Evict authored buffers before replacing them; deferred driver retirement
         // is explicitly outside the logical payload budget.
@@ -241,12 +241,12 @@ impl GpuTightOracle {
             .as_ref()
             .or_else(|| self.resident.as_ref().map(|r| &r.graph))
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing tight packing graph"))?;
-        let seeds = plan.pack(graph, candidates, control)?;
+        let seeds = plan.pack(graph, candidates, cancellation)?;
         let packed = fresh
             .as_ref()
-            .map(|g| g.pack(certificate, control))
+            .map(|g| g.pack(certificate, cancellation))
             .transpose()?;
-        poll(control)?;
+        poll(cancellation)?;
         let scopes = ErrorScopes::new(self.runtime.device());
         if let Some((graph, packed)) = fresh.zip(packed) {
             self.activity.uploaded_bytes = graph.bytes;
@@ -264,7 +264,7 @@ impl GpuTightOracle {
                         queue: self.runtime.queue(),
                         pipeline: &self.runtime.pipeline,
                         timeout: limits.timeout,
-                        control,
+                        cancellation,
                     },
                     &seeds,
                     &plan,
@@ -272,7 +272,7 @@ impl GpuTightOracle {
                 )
             });
         let result = self.runtime.complete(scopes, outcome).and_then(|checks| {
-            poll(control)?;
+            poll(cancellation)?;
             Ok(checks)
         });
         if result.is_ok() {

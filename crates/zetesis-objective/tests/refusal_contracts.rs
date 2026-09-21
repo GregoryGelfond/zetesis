@@ -4,7 +4,7 @@ use std::error::Error as _;
 use std::time::Instant;
 
 use zetesis_core::{Atom, AtomPattern, Filter, Model, Predicate, Term, Value};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_objective::{
     AdmissionError, AdmissionLimits, AdmissionResource, ErrorKind, Limits, ObjectiveProgram,
     ObjectiveTemplate, Stop, WeightPolarity, evaluate,
@@ -140,10 +140,15 @@ fn every_admission_dimension_reports_template_scope_before_a_successful_retry() 
         let program =
             ObjectiveProgram::new(vec![valid.clone()], AdmissionLimits::default()).unwrap();
         assert_eq!(
-            evaluate(&program, &model(), Limits::default(), &Control::default())
-                .unwrap()
-                .score()
-                .costs(),
+            evaluate(
+                &program,
+                &model(),
+                Limits::default(),
+                &Cancellation::default()
+            )
+            .unwrap()
+            .score()
+            .costs(),
             &[(7, 3)]
         );
     }
@@ -183,7 +188,13 @@ fn evaluation_limits_keep_downcastable_causes_and_reusable_model_and_program() {
     let model = model();
     let original_templates = program.templates().to_vec();
     let original_model = model.clone();
-    let exact = evaluate(&program, &model, Limits::default(), &Control::default()).unwrap();
+    let exact = evaluate(
+        &program,
+        &model,
+        Limits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
     for (limits, reason) in [
         (
             Limits {
@@ -214,7 +225,7 @@ fn evaluation_limits_keep_downcastable_causes_and_reusable_model_and_program() {
             Stop::KeyBytesLimit,
         ),
     ] {
-        let error = evaluate(&program, &model, limits, &Control::default()).unwrap_err();
+        let error = evaluate(&program, &model, limits, &Cancellation::default()).unwrap_err();
         assert_eq!(error.kind(), ErrorKind::Stopped(reason));
         assert_eq!(
             error.source().unwrap().downcast_ref::<Stop>(),
@@ -224,7 +235,13 @@ fn evaluation_limits_keep_downcastable_causes_and_reusable_model_and_program() {
         assert!(error.statistics().keys <= exact.statistics().keys);
         assert_eq!(program.templates(), original_templates);
         assert_eq!(model, original_model);
-        let retry = evaluate(&program, &model, Limits::default(), &Control::default()).unwrap();
+        let retry = evaluate(
+            &program,
+            &model,
+            Limits::default(),
+            &Cancellation::default(),
+        )
+        .unwrap();
         assert_eq!(retry.score(), exact.score());
         assert_eq!(retry.statistics(), exact.statistics());
     }
@@ -232,18 +249,18 @@ fn evaluation_limits_keep_downcastable_causes_and_reusable_model_and_program() {
 
 #[test]
 fn cancelled_and_expired_scores_have_control_causes_and_zero_work() {
-    let cancelled = Control::default();
+    let cancelled = Cancellation::default();
     cancelled.cancel();
     let program = ObjectiveProgram::new(vec![template(0)], AdmissionLimits::default()).unwrap();
-    for (control, reason, phrase) in [
+    for (cancellation, reason, phrase) in [
         (cancelled, Stop::Cancelled, "cancelled"),
         (
-            Control::with_deadline(Instant::now()).unwrap(),
+            Cancellation::with_deadline(Instant::now()).unwrap(),
             Stop::Deadline,
             "deadline expired",
         ),
     ] {
-        let error = evaluate(&program, &model(), Limits::default(), &control).unwrap_err();
+        let error = evaluate(&program, &model(), Limits::default(), &cancellation).unwrap_err();
         assert_eq!(error.kind(), ErrorKind::Stopped(reason));
         assert_eq!(
             error.source().unwrap().downcast_ref::<Stop>(),
@@ -264,7 +281,13 @@ fn an_active_unrepresentable_maximize_weight_is_distinct_from_a_missing_binding(
         vec![Value::Number(i32::MIN)],
     )
     .unwrap()]);
-    let error = evaluate(&program, &extreme, Limits::default(), &Control::default()).unwrap_err();
+    let error = evaluate(
+        &program,
+        &extreme,
+        Limits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap_err();
     assert_eq!(error.kind(), ErrorKind::WeightNormalizationOverflow);
     assert_eq!(error.template_index(), Some(0));
     assert_eq!(error.statistics().keys, 0);
@@ -280,7 +303,7 @@ fn an_active_unrepresentable_maximize_weight_is_distinct_from_a_missing_binding(
             &program,
             &Model::default(),
             Limits::default(),
-            &Control::default()
+            &Cancellation::default()
         )
         .unwrap()
         .score()

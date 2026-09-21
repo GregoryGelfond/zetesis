@@ -7,7 +7,7 @@ use std::{num::NonZeroU32, time::Duration};
 use zetesis_core::{
     AdmissionLimits, AtomPattern, GroundProgram, Predicate, Program, Seed, StaticLimits, Template,
 };
-use zetesis_cpu::{Control, Limits, check_static};
+use zetesis_cpu::{Cancellation, Limits, check_static};
 
 fn fixture() -> GroundProgram {
     let atom = |name| AtomPattern::new(Predicate::new(name, 0).unwrap(), vec![]).unwrap();
@@ -79,7 +79,7 @@ fn assert_same_plan_and_semantics(
     assert!(after[1].constraint_violated());
     assert!(!after[1].seed_mismatch());
     for (seed, decoded) in seeds.iter().zip(&after) {
-        let cpu = check_static(program, seed, Limits::default(), &Control::default()).unwrap();
+        let cpu = check_static(program, seed, Limits::default(), &Cancellation::default()).unwrap();
         assert_eq!(decoded.closure_words(), cpu.closure_words());
         assert_eq!(decoded.accepted(), cpu.accepted());
         assert_eq!(decoded.constraint_violated(), cpu.constraint_violated());

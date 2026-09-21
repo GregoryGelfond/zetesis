@@ -8,7 +8,7 @@ use std::{
 };
 
 use zetesis_core::Model;
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{Theory, TightPlan, TightVerdict, Verdict};
 use zetesis_solve::{
     AnswerSelection, Backend, BatchExecutor, BatchResult, BatchVerdict, CandidateBatch, Completion,
@@ -72,9 +72,9 @@ impl BatchExecutor for ReferenceExecutor {
     fn prepare(
         &mut self,
         plan: MembershipPlan<'_>,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<(), ExecutorFailure<Self::Error>> {
-        control.poll()?;
+        cancellation.poll()?;
         self.theory = Some(plan.theory().clone());
         self.activity.lock().unwrap().prepared = Some(plan.operation());
         if matches!(self.behavior, Behavior::Refused) {
@@ -89,7 +89,7 @@ impl BatchExecutor for ReferenceExecutor {
     fn check<'a>(
         &mut self,
         batch: CandidateBatch<'a>,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<BatchResult<'a>, ExecutorFailure<Self::Error>> {
         assert!(self.theory.as_ref().unwrap().same_instance(batch.theory()));
         let ordinal = {
@@ -114,12 +114,12 @@ impl BatchExecutor for ReferenceExecutor {
             .try_reserve_exact(batch.candidates().len())
             .map_err(|_| Stop::Allocation)?;
         for candidate in batch.candidates() {
-            control.poll()?;
+            cancellation.poll()?;
             assert!(zetesis_ferraris::models(
                 batch.theory(),
                 candidate,
                 zetesis_ferraris::Limits::default(),
-                control
+                cancellation
             )?);
             let verdict = if matches!(self.behavior, Behavior::NotModel) {
                 BatchVerdict::NotModel
@@ -132,7 +132,7 @@ impl BatchExecutor for ReferenceExecutor {
                     .check(
                         candidate,
                         zetesis_ferraris::TightCheckLimits::default(),
-                        control,
+                        cancellation,
                     )
                     .unwrap()
                     .verdict
@@ -146,7 +146,7 @@ impl BatchExecutor for ReferenceExecutor {
                     batch.theory(),
                     candidate,
                     zetesis_ferraris::Limits::default(),
-                    control,
+                    cancellation,
                 )?
                 .verdict()
                 {
@@ -158,7 +158,7 @@ impl BatchExecutor for ReferenceExecutor {
             verdicts.push(verdict);
         }
         if matches!(self.behavior, Behavior::Cancel | Behavior::CancelDecisive) {
-            control.cancel();
+            cancellation.cancel();
         }
         Ok(batch.finish(verdicts)?)
     }
@@ -214,18 +214,21 @@ fn external_reference_preserves_complete_families() {
                 backend: Backend::Cpu,
                 ..config()
             },
-            Control::default(),
+            Cancellation::default(),
         )
         .unwrap();
         let expected = family(&mut native);
         for behavior in [Behavior::Reference, Behavior::Residual] {
             let executor = ReferenceExecutor::new(ExecutorCapabilities::General, behavior);
             let activity = Arc::clone(&executor.activity);
-            let mut session =
-                Session::builder(PreparedInput::formula(&owner), config(), Control::default())
-                    .executor(executor)
-                    .start()
-                    .unwrap();
+            let mut session = Session::builder(
+                PreparedInput::formula(&owner),
+                config(),
+                Cancellation::default(),
+            )
+            .executor(executor)
+            .start()
+            .unwrap();
             assert_eq!(family(&mut session), expected, "{source}");
             let outcome = session.outcome().unwrap();
             assert_eq!(outcome.completion(), Some(Completion::Exhausted));
@@ -255,7 +258,7 @@ fn external_formula_execution_ignores_closure_reservations() {
             backend: Backend::Cpu,
             ..config()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .start()
     .unwrap();
@@ -270,7 +273,7 @@ fn external_formula_execution_ignores_closure_reservations() {
             max_closure_batch_bytes: 0,
             ..config()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .executor(executor)
     .start()
@@ -293,21 +296,24 @@ fn external_execution_preserves_objective_selection() {
                 backend: Backend::Cpu,
                 ..config()
             },
-            Control::default(),
+            Cancellation::default(),
         )
         .selection(selection)
         .start()
         .unwrap();
         let expected = family(&mut native);
-        let mut session =
-            Session::builder(PreparedInput::formula(&owner), config(), Control::default())
-                .selection(selection)
-                .executor(ReferenceExecutor::new(
-                    ExecutorCapabilities::General,
-                    Behavior::Reference,
-                ))
-                .start()
-                .unwrap();
+        let mut session = Session::builder(
+            PreparedInput::formula(&owner),
+            config(),
+            Cancellation::default(),
+        )
+        .selection(selection)
+        .executor(ReferenceExecutor::new(
+            ExecutorCapabilities::General,
+            Behavior::Reference,
+        ))
+        .start()
+        .unwrap();
         assert_eq!(family(&mut session), expected);
         assert_eq!(
             session.outcome().unwrap().optimum_proved(),
@@ -326,11 +332,14 @@ fn tight_executor_uses_the_shared_complete_plan() {
     let executor =
         ReferenceExecutor::new(ExecutorCapabilities::GeneralAndTight, Behavior::Reference);
     let activity = Arc::clone(&executor.activity);
-    let mut session =
-        Session::builder(PreparedInput::formula(&owner), config(), Control::default())
-            .executor(executor)
-            .start()
-            .unwrap();
+    let mut session = Session::builder(
+        PreparedInput::formula(&owner),
+        config(),
+        Cancellation::default(),
+    )
+    .executor(executor)
+    .start()
+    .unwrap();
     assert_eq!(family(&mut session).len(), 4);
     let outcome = session.outcome().unwrap();
     let receipt = outcome.batch_execution().unwrap();
@@ -357,11 +366,15 @@ fn unsupported_plan_never_prepares_the_executor() {
     let owner = input("{seed}. p :- seed. p :- p.");
     let executor = ReferenceExecutor::new(ExecutorCapabilities::Tight, Behavior::Reference);
     let activity = Arc::clone(&executor.activity);
-    let failure = Session::builder(PreparedInput::formula(&owner), config(), Control::default())
-        .executor(executor)
-        .start()
-        .err()
-        .expect("positive cycle has no tight plan");
+    let failure = Session::builder(
+        PreparedInput::formula(&owner),
+        config(),
+        Cancellation::default(),
+    )
+    .executor(executor)
+    .start()
+    .err()
+    .expect("positive cycle has no tight plan");
     assert!(matches!(
         *failure.cause,
         SolveError::Executor(ExecutorError::Capability(ExecutorCapabilities::Tight))
@@ -379,7 +392,7 @@ fn explicit_general_request_does_not_use_tight_support() {
             oracle: Oracle::Countermodel,
             ..config()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .executor(ReferenceExecutor::new(
         ExecutorCapabilities::GeneralAndTight,
@@ -403,13 +416,17 @@ fn explicit_general_request_does_not_use_tight_support() {
 }
 
 fn failing_session(owner: &AdmittedFormula) -> Session<'_> {
-    Session::builder(PreparedInput::formula(owner), config(), Control::default())
-        .executor(ReferenceExecutor::new(
-            ExecutorCapabilities::General,
-            Behavior::Failed,
-        ))
-        .start()
-        .unwrap()
+    Session::builder(
+        PreparedInput::formula(owner),
+        config(),
+        Cancellation::default(),
+    )
+    .executor(ReferenceExecutor::new(
+        ExecutorCapabilities::General,
+        Behavior::Failed,
+    ))
+    .start()
+    .unwrap()
 }
 
 #[test]
@@ -441,14 +458,17 @@ fn external_fault_preserves_pending_coverage() {
 #[test]
 fn malformed_receipt_never_commits_a_candidate() {
     let owner = input("{a;b}.");
-    let mut session =
-        Session::builder(PreparedInput::formula(&owner), config(), Control::default())
-            .executor(ReferenceExecutor::new(
-                ExecutorCapabilities::General,
-                Behavior::WrongShape,
-            ))
-            .start()
-            .unwrap();
+    let mut session = Session::builder(
+        PreparedInput::formula(&owner),
+        config(),
+        Cancellation::default(),
+    )
+    .executor(ReferenceExecutor::new(
+        ExecutorCapabilities::General,
+        Behavior::WrongShape,
+    ))
+    .start()
+    .unwrap();
     let failure = session.next().unwrap().unwrap_err();
     assert!(matches!(
         *failure.cause,
@@ -466,14 +486,17 @@ fn malformed_receipt_never_commits_a_candidate() {
 #[test]
 fn cancellation_after_check_keeps_pending_coverage() {
     let owner = input("{a;b}.");
-    let mut session =
-        Session::builder(PreparedInput::formula(&owner), config(), Control::default())
-            .executor(ReferenceExecutor::new(
-                ExecutorCapabilities::General,
-                Behavior::Cancel,
-            ))
-            .start()
-            .unwrap();
+    let mut session = Session::builder(
+        PreparedInput::formula(&owner),
+        config(),
+        Cancellation::default(),
+    )
+    .executor(ReferenceExecutor::new(
+        ExecutorCapabilities::General,
+        Behavior::Cancel,
+    ))
+    .start()
+    .unwrap();
     assert!(session.next().is_none());
     let outcome = session.outcome().unwrap();
     assert_eq!(outcome.completion(), Some(Completion::Interrupted));
@@ -492,9 +515,9 @@ fn cancellation_before_setup_never_calls_the_executor() {
     let owner = input("{a}.");
     let executor = ReferenceExecutor::new(ExecutorCapabilities::General, Behavior::Reference);
     let activity = Arc::clone(&executor.activity);
-    let control = Control::default();
-    control.cancel();
-    let mut session = Session::builder(PreparedInput::formula(&owner), config(), control)
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
+    let mut session = Session::builder(PreparedInput::formula(&owner), config(), cancellation)
         .executor(executor)
         .start()
         .unwrap();
@@ -516,7 +539,7 @@ fn builtin_backend_requests_conflict_with_injection() {
             backend: Backend::Cpu,
             ..config()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .executor(ReferenceExecutor::new(
         ExecutorCapabilities::General,
@@ -537,7 +560,7 @@ fn relational_inputs_are_not_silently_materialized() {
     let failure = Session::builder(
         PreparedInput::admitted(&owner),
         config(),
-        Control::default(),
+        Cancellation::default(),
     )
     .executor(ReferenceExecutor::new(
         ExecutorCapabilities::General,
@@ -557,14 +580,17 @@ fn relational_inputs_are_not_silently_materialized() {
 #[test]
 fn failed_later_batch_retains_the_verified_prefix() {
     let owner = input("{a;b}.");
-    let mut session =
-        Session::builder(PreparedInput::formula(&owner), config(), Control::default())
-            .executor(ReferenceExecutor::new(
-                ExecutorCapabilities::General,
-                Behavior::FailedAfterFirst,
-            ))
-            .start()
-            .unwrap();
+    let mut session = Session::builder(
+        PreparedInput::formula(&owner),
+        config(),
+        Cancellation::default(),
+    )
+    .executor(ReferenceExecutor::new(
+        ExecutorCapabilities::General,
+        Behavior::FailedAfterFirst,
+    ))
+    .start()
+    .unwrap();
     for _ in 0..3 {
         session.next().unwrap().unwrap();
     }
@@ -584,11 +610,15 @@ fn preparation_refusal_does_not_choose_another_executor() {
     let owner = input("{a}.");
     let executor = ReferenceExecutor::new(ExecutorCapabilities::General, Behavior::Refused);
     let activity = Arc::clone(&executor.activity);
-    let failure = Session::builder(PreparedInput::formula(&owner), config(), Control::default())
-        .executor(executor)
-        .start()
-        .err()
-        .expect("explicit implementation refused preparation");
+    let failure = Session::builder(
+        PreparedInput::formula(&owner),
+        config(),
+        Cancellation::default(),
+    )
+    .executor(executor)
+    .start()
+    .err()
+    .expect("explicit implementation refused preparation");
     assert!(failure.subject().is_some());
     assert!(matches!(
         *failure.cause,
@@ -600,14 +630,17 @@ fn preparation_refusal_does_not_choose_another_executor() {
 #[test]
 fn cancellation_after_decisive_verdicts_commits_nothing() {
     let owner = input("{a;b}.");
-    let mut session =
-        Session::builder(PreparedInput::formula(&owner), config(), Control::default())
-            .executor(ReferenceExecutor::new(
-                ExecutorCapabilities::General,
-                Behavior::CancelDecisive,
-            ))
-            .start()
-            .unwrap();
+    let mut session = Session::builder(
+        PreparedInput::formula(&owner),
+        config(),
+        Cancellation::default(),
+    )
+    .executor(ReferenceExecutor::new(
+        ExecutorCapabilities::General,
+        Behavior::CancelDecisive,
+    ))
+    .start()
+    .unwrap();
     assert!(session.next().is_none());
     let outcome = session.outcome().unwrap();
     assert_eq!(outcome.completion(), Some(Completion::Interrupted));
@@ -621,14 +654,17 @@ fn cancellation_after_decisive_verdicts_commits_nothing() {
 #[test]
 fn conflicting_original_model_receipt_is_incomplete() {
     let owner = input("{a}.");
-    let mut session =
-        Session::builder(PreparedInput::formula(&owner), config(), Control::default())
-            .executor(ReferenceExecutor::new(
-                ExecutorCapabilities::General,
-                Behavior::NotModel,
-            ))
-            .start()
-            .unwrap();
+    let mut session = Session::builder(
+        PreparedInput::formula(&owner),
+        config(),
+        Cancellation::default(),
+    )
+    .executor(ReferenceExecutor::new(
+        ExecutorCapabilities::General,
+        Behavior::NotModel,
+    ))
+    .start()
+    .unwrap();
     assert!(session.next().is_none());
     let outcome = session.outcome().unwrap();
     assert_eq!(
@@ -644,14 +680,17 @@ fn conflicting_original_model_receipt_is_incomplete() {
 #[test]
 fn mixed_decisions_and_residuals_share_one_commit() {
     let owner = input("{a;b}.");
-    let mut session =
-        Session::builder(PreparedInput::formula(&owner), config(), Control::default())
-            .executor(ReferenceExecutor::new(
-                ExecutorCapabilities::General,
-                Behavior::Mixed,
-            ))
-            .start()
-            .unwrap();
+    let mut session = Session::builder(
+        PreparedInput::formula(&owner),
+        config(),
+        Cancellation::default(),
+    )
+    .executor(ReferenceExecutor::new(
+        ExecutorCapabilities::General,
+        Behavior::Mixed,
+    ))
+    .start()
+    .unwrap();
     assert_eq!(family(&mut session).len(), 4);
     let outcome = session.outcome().unwrap();
     assert_eq!(outcome.completion(), Some(Completion::Exhausted));

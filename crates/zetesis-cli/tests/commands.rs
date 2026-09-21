@@ -4,7 +4,7 @@ use std::process::{Command as ProcessCommand, Stdio};
 
 use clap::Parser;
 use zetesis_cli::{Backend, Command, Completion, Options, Report, RunError, run_with_diagnostics};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 fn options(arguments: &[&str]) -> Options {
     Options::try_parse_from(["zetesis"].into_iter().chain(arguments.iter().copied())).unwrap()
@@ -41,7 +41,7 @@ fn tiny_auto_run() -> (Report, String, String) {
         &options(&[]),
         &mut models,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     (
@@ -92,7 +92,7 @@ fn diagnostics_failure_is_propagated_before_model_output() {
         &options(&["--backend", "cpu"]),
         &mut models,
         &mut Broken,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(error, RunError::Output(_)));
@@ -109,7 +109,7 @@ fn finite_expansion_is_automatic_and_respects_its_own_limits() {
         &options(&["--backend", "cpu"]),
         &mut models,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(report.models, 1);
@@ -128,7 +128,7 @@ fn finite_expansion_is_automatic_and_respects_its_own_limits() {
         &options(&["--max-expanded-templates", "2"]),
         &mut Vec::new(),
         &mut Vec::new(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(error, RunError::Expansion(_)));
@@ -193,7 +193,7 @@ fn cpu_only_devices_and_explicit_gpu_refusal_are_truthful() {
             &options(&["--backend", backend]),
             &mut output,
             &mut Vec::new(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
         assert!(matches!(error, RunError::BackendUnavailable));
@@ -220,7 +220,7 @@ fn automatic_execution_ignores_device_transport_limits() {
         ]),
         &mut models,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(report.completion, Completion::Exhausted);
@@ -268,7 +268,7 @@ fn explicit_gpu_failure_cannot_publish_a_cpu_model() {
         ]),
         &mut models,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(error, RunError::Gpu(_)));

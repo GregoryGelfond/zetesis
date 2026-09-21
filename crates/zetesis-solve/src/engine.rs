@@ -8,7 +8,7 @@ use rayon::prelude::*;
 use zetesis_core::{
     GroundProgram, Model, ModelError, Program, SeedSelection, StaticLimits, WordError,
 };
-use zetesis_cpu::{BatchOracle, Control, Limits, PreparationLimits, Stop};
+use zetesis_cpu::{BatchOracle, Cancellation, Limits, PreparationLimits, Stop};
 
 use crate::phase_timing::{Recorder, SolvePhase};
 use crate::{
@@ -143,13 +143,13 @@ impl Engine {
         options: &SolveConfig,
         program: &Program,
         seeds: &[SeedSelection],
-        control: &Control,
+        cancellation: &Cancellation,
         phases: &Recorder,
     ) -> Result<Vec<Result<Option<Model>, Stop>>, SolveError> {
         if seeds.is_empty() {
             return Ok(Vec::new());
         }
-        if let Err(error) = control.poll() {
+        if let Err(error) = cancellation.poll() {
             return Ok(vec![Err(error)]);
         }
         let phase = if self.executor.is_gpu() {
@@ -158,7 +158,7 @@ impl Engine {
             SolvePhase::ClosureMembership
         };
         phases.measure(phase, || {
-            self.executor.check(options, program, seeds, control)
+            self.executor.check(options, program, seeds, cancellation)
         })
     }
 }
@@ -195,13 +195,13 @@ impl IndependentCpu {
         program: &Program,
         seeds: &[SeedSelection],
         limits: Limits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Vec<Result<Option<Model>, Stop>>, SolveError> {
         let result = self.oracle.check_batch_views(
             program,
             seeds.par_iter().map(SeedSelection::view),
             limits,
-            control,
+            cancellation,
         );
         self.observation.capture(self.oracle.query_statistics());
         // A snapshot fault is retained separately and delivered by the session
@@ -242,7 +242,7 @@ impl LazyGpu {
         options: &SolveConfig,
         program: &Program,
         seeds: &[SeedSelection],
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Vec<Result<Option<Model>, Stop>>, SolveError> {
         let bytes = usize::try_from(options.max_batch_bytes / 2).unwrap_or(usize::MAX);
         let source_limits = zetesis_cpu::lazy::Limits {
@@ -265,7 +265,7 @@ impl LazyGpu {
             seeds.iter().map(SeedSelection::view),
             source_limits,
             device_limits,
-            control,
+            cancellation,
         );
         let progress = match &result {
             Ok(batch) => batch.progress,
@@ -453,7 +453,7 @@ impl Executor {
         options: &SolveConfig,
         program: &Program,
         seeds: &[SeedSelection],
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Vec<Result<Option<Model>, Stop>>, SolveError> {
         let limits = Limits {
             max_work: options.max_work,
@@ -480,13 +480,13 @@ impl Executor {
                         max_world_work: options.max_work,
                     },
                     statistics.selection,
-                    control,
+                    cancellation,
                 );
                 crate::shared_execution::batch_results(result, statistics)
             }
             #[cfg(feature = "gpu")]
-            Self::LazyGpu(executor) => executor.check(options, program, seeds, control),
-            Self::Cpu(executor) => executor.check(program, seeds, limits, control),
+            Self::LazyGpu(executor) => executor.check(options, program, seeds, cancellation),
+            Self::Cpu(executor) => executor.check(program, seeds, limits, cancellation),
             Self::StaticCpu {
                 oracle,
                 ground,
@@ -496,7 +496,7 @@ impl Executor {
                     ground,
                     seeds.par_iter().map(SeedSelection::view),
                     limits,
-                    control,
+                    cancellation,
                 )
                 .map_err(SolveError::Batch)?
                 .into_iter()
@@ -518,11 +518,11 @@ impl Executor {
                     max_batch_bytes: options.max_batch_bytes,
                     ..Default::default()
                 };
-                let checks = match oracle.check_batch_views_with_control(
+                let checks = match oracle.check_batch_views_with_cancellation(
                     ground,
                     seeds.iter().map(SeedSelection::view),
                     limits,
-                    control,
+                    cancellation,
                 ) {
                     Ok(checks) => checks,
                     Err(error) => {
@@ -532,7 +532,7 @@ impl Executor {
                         };
                     }
                 };
-                if let Err(error) = control.poll() {
+                if let Err(error) = cancellation.poll() {
                     return Ok(vec![Err(error)]);
                 }
                 checks

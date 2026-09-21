@@ -6,7 +6,7 @@ mod physical;
 mod fixtures;
 
 use zetesis_core::Value;
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::native_aggregate::{self as native, Function};
 use zetesis_wgpu::{
     AggregateGpuActivity, AggregateGpuError, AggregateGpuEvaluation, AggregateGpuLimits,
@@ -39,12 +39,12 @@ fn compare(
     limits: AggregateGpuLimits,
 ) {
     let actual = oracle
-        .check_batch(plan, records, limits, &Control::default())
+        .check_batch(plan, records, limits, &Cancellation::default())
         .unwrap();
     assert_eq!(actual.len(), records.len());
     for (actual, record) in actual.iter().zip(records) {
         let expected = record
-            .reduce(native::ReductionLimits::default(), &Control::default())
+            .reduce(native::ReductionLimits::default(), &Cancellation::default())
             .unwrap();
         assert_evaluation(actual.original(), expected.original());
         assert_eq!(actual.frozen().is_some(), expected.frozen().is_some());
@@ -93,7 +93,7 @@ fn qualify_reductions(backend: physical::Backend) {
             let plan = AggregateGpuPlan::new(
                 &group,
                 AggregateGpuPlanLimits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
             for batch in [1, 3, 31, 32, 33, 65] {
@@ -166,7 +166,7 @@ fn qualify_guards(backend: physical::Backend) {
                 let plan = AggregateGpuPlan::new(
                     &group,
                     AggregateGpuPlanLimits::default(),
-                    &Control::default(),
+                    &Cancellation::default(),
                 )
                 .unwrap();
                 compare(
@@ -200,7 +200,7 @@ fn qualify_admission(backend: physical::Backend) {
     let plan = AggregateGpuPlan::new(
         &group,
         AggregateGpuPlanLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let records = fixtures::observations(&group, &worlds, 3);
@@ -217,7 +217,7 @@ fn qualify_admission(backend: physical::Backend) {
     let equal = fixtures::group(&theory, Function::Sum, 4);
     let foreign = fixtures::observations(&equal, &worlds, 3);
     assert!(
-        matches!(oracle.check_batch(&plan, &foreign, exact, &Control::default()), Err(AggregateGpuError::Gpu(error)) if error.kind() == GpuErrorKind::Seed)
+        matches!(oracle.check_batch(&plan, &foreign, exact, &Cancellation::default()), Err(AggregateGpuError::Gpu(error)) if error.kind() == GpuErrorKind::Seed)
     );
     compare(&mut oracle, &plan, &records, exact);
     assert!(!oracle.last_batch_stats().unwrap().group_uploaded);
@@ -251,12 +251,12 @@ fn refuse_preflight(
         },
     ] {
         assert!(
-            matches!(oracle.check_batch(plan, records, limit, &Control::default()), Err(AggregateGpuError::Gpu(error)) if error.kind() == GpuErrorKind::Capacity)
+            matches!(oracle.check_batch(plan, records, limit, &Cancellation::default()), Err(AggregateGpuError::Gpu(error)) if error.kind() == GpuErrorKind::Capacity)
         );
         assert_eq!(oracle.activity(), AggregateGpuActivity::default());
         assert!(oracle.last_batch_stats().is_none());
     }
-    let cancelled = Control::default();
+    let cancelled = Cancellation::default();
     cancelled.cancel();
     assert_eq!(
         oracle
@@ -279,7 +279,7 @@ fn replace_exact(
     let large_plan = AggregateGpuPlan::new(
         &large,
         AggregateGpuPlanLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     compare(
@@ -308,7 +308,7 @@ fn replace_exact(
     let independent = AggregateGpuPlan::new(
         group,
         AggregateGpuPlanLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     compare(oracle, &independent, records, exact);
@@ -332,7 +332,7 @@ fn replace_exact(
                     max_device_work: 0,
                     ..Default::default()
                 },
-                &Control::default()
+                &Cancellation::default()
             )
             .unwrap()
             .is_empty()

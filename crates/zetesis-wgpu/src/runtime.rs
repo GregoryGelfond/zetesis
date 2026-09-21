@@ -196,7 +196,7 @@ pub(crate) fn read_polled<T>(
     readback: &wgpu::Buffer,
     submission: wgpu::SubmissionIndex,
     timeout: Duration,
-    mut control: impl FnMut() -> Result<(), GpuError>,
+    mut cancellation: impl FnMut() -> Result<(), GpuError>,
     decode: impl FnOnce(&[u32]) -> Result<T, GpuError>,
 ) -> Completion<T> {
     let (sender, receiver) = mpsc::sync_channel(1);
@@ -209,7 +209,7 @@ pub(crate) fn read_polled<T>(
     let submission = Some(submission);
     let wait = wait_for_submission(
         timeout,
-        &mut control,
+        &mut cancellation,
         |wait| {
             device.poll(wgpu::PollType::Wait {
                 submission_index: submission.clone(),
@@ -245,7 +245,7 @@ pub(crate) fn read_polled<T>(
         // Also terminate a pending map after an interrupted wait. Unmapping
         // alone does not establish queue completion or permit context reuse.
         || readback.unmap(),
-        &mut control,
+        &mut cancellation,
     )
 }
 
@@ -261,7 +261,7 @@ fn finish_read<T>(
     mapping: impl FnOnce() -> Result<(), GpuError>,
     decode: impl FnOnce() -> Result<T, GpuError>,
     release: impl FnOnce(),
-    mut control: impl FnMut() -> Result<(), GpuError>,
+    mut cancellation: impl FnMut() -> Result<(), GpuError>,
 ) -> Completion<T> {
     // A completed wait can have returned a late control stop. Inspect its map
     // callback for health evidence, but preserve that original stop and skip
@@ -273,7 +273,7 @@ fn finish_read<T>(
         .and(mapped)
         .and_then(|()| decode())
         .and_then(|value| {
-            control()?;
+            cancellation()?;
             Ok(value)
         });
     release(); // Every mapped view has left the decode closure before this call.
@@ -291,12 +291,12 @@ fn finish_read<T>(
 // timing boundaries deterministically without invoking a driver or sleeping.
 fn wait_for_submission(
     timeout: Duration,
-    mut control: impl FnMut() -> Result<(), GpuError>,
+    mut cancellation: impl FnMut() -> Result<(), GpuError>,
     mut poll: impl FnMut(Duration) -> Result<wgpu::PollStatus, wgpu::PollError>,
     mut elapsed: impl FnMut() -> Duration,
 ) -> SubmissionWait {
     loop {
-        if let Err(error) = control() {
+        if let Err(error) = cancellation() {
             return SubmissionWait {
                 outcome: Err(error),
                 completed: false,
@@ -306,7 +306,7 @@ fn wait_for_submission(
         match poll(remaining.min(Duration::from_millis(50))) {
             Ok(status) if status.wait_finished() => {
                 return SubmissionWait {
-                    outcome: control(),
+                    outcome: cancellation(),
                     completed: true,
                 };
             }

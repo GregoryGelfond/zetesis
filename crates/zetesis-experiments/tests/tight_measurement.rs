@@ -166,20 +166,23 @@ fn timed_routes_rotate_independently_of_warmups() {
 
 #[test]
 fn cancelled_classification_retains_its_attempts() {
-    let control = zetesis_cpu::Control::default();
+    let cancellation = zetesis_cpu::Cancellation::default();
     let mut failure = None;
-    let error =
-        measurement::measure_with_control(&configuration(Family::Normal), &control, |event| {
+    let error = measurement::measure_with_cancellation(
+        &configuration(Family::Normal),
+        &cancellation,
+        |event| {
             if matches!(event, Event::Prepared { .. }) {
-                control.cancel();
+                cancellation.cancel();
             }
             if let Event::Failed { observation, .. } = event {
                 failure = Some(*observation);
             }
             assert!(!matches!(event, Event::Complete { .. }));
             Ok(())
-        })
-        .unwrap_err();
+        },
+    )
+    .unwrap_err();
     assert!(matches!(
         error,
         Error::Certificate(zetesis_ferraris::TightError::Stopped(
@@ -417,14 +420,14 @@ fn declared_physical_fixtures_qualify_on_cpu() {
 
 #[test]
 fn cancellation_before_setup_creates_no_resources() {
-    let control = zetesis_cpu::Control::default();
+    let cancellation = zetesis_cpu::Cancellation::default();
     let mut observed = 0;
     let mut configuration = configuration(Family::Normal);
     configuration.backend = Backend::Metal;
-    let error = measurement::measure_with_control(&configuration, &control, |event| {
+    let error = measurement::measure_with_cancellation(&configuration, &cancellation, |event| {
         observed += 1;
         assert!(matches!(event, Event::Configuration { .. }));
-        control.cancel();
+        cancellation.cancel();
         Ok(())
     })
     .unwrap_err();
@@ -434,18 +437,18 @@ fn cancellation_before_setup_creates_no_resources() {
 
 #[test]
 fn pool_callback_cancellation_prevents_device_setup() {
-    let control = zetesis_cpu::Control::default();
+    let cancellation = zetesis_cpu::Cancellation::default();
     let mut observed = 0;
     let mut configuration = configuration(Family::Normal);
     configuration.backend = Backend::Metal;
-    let error = measurement::measure_with_control(&configuration, &control, |event| {
+    let error = measurement::measure_with_cancellation(&configuration, &cancellation, |event| {
         observed += 1;
         match event {
             Event::Configuration { .. } => {}
             Event::Setup {
                 resource: Route::Rayon,
                 ..
-            } => control.cancel(),
+            } => cancellation.cancel(),
             _ => panic!("cancelled pool callback proceeded to device setup"),
         }
         Ok(())
@@ -457,35 +460,42 @@ fn pool_callback_cancellation_prevents_device_setup() {
 
 #[test]
 fn last_sample_cancellation_omits_campaign_completion() {
-    let control = zetesis_cpu::Control::default();
+    let cancellation = zetesis_cpu::Cancellation::default();
     let mut samples = 0;
-    let error =
-        measurement::measure_with_control(&configuration(Family::Normal), &control, |event| {
+    let error = measurement::measure_with_cancellation(
+        &configuration(Family::Normal),
+        &cancellation,
+        |event| {
             if matches!(event, Event::Sample { .. }) {
                 samples += 1;
                 if samples == 4 {
-                    control.cancel();
+                    cancellation.cancel();
                 }
             }
             assert!(!matches!(event, Event::Complete { .. }));
             Ok(())
-        })
-        .unwrap_err();
+        },
+    )
+    .unwrap_err();
     assert!(matches!(error, Error::Cpu(zetesis_cpu::Stop::Cancelled)));
     assert_eq!(samples, 4);
 }
 
 #[test]
 fn cancellation_after_committed_completion_is_not_retroactive() {
-    let control = zetesis_cpu::Control::default();
+    let cancellation = zetesis_cpu::Cancellation::default();
     let mut complete = false;
-    measurement::measure_with_control(&configuration(Family::Normal), &control, |event| {
-        if matches!(event, Event::Complete { .. }) {
-            complete = true;
-            control.cancel();
-        }
-        Ok(())
-    })
+    measurement::measure_with_cancellation(
+        &configuration(Family::Normal),
+        &cancellation,
+        |event| {
+            if matches!(event, Event::Complete { .. }) {
+                complete = true;
+                cancellation.cancel();
+            }
+            Ok(())
+        },
+    )
     .unwrap();
     assert!(complete);
 }

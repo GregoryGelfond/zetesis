@@ -1,7 +1,7 @@
 //! Prepare zetesis input, inspect its analysis contract and collect its answers.
 
 // ANCHOR: example
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_solve::{Backend, PreparedInput, SolveConfig, WorldView, WorldViewLimits};
 use zetesis_themelios::{
     AdmissionOptions, AnalysisBasis, ExpansionLimits, FormulaFailure, FormulaLimits,
@@ -59,7 +59,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ..SolveConfig::default()
             },
             WorldViewLimits::default(),
-            Control::default(),
+            Cancellation::default(),
         )?;
         assert_eq!(family.len(), answer_count);
         assert!(

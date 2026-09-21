@@ -2,7 +2,7 @@
 
 use super::{TightGpuCheck, TightGpuLimits, TightSupport, poll};
 use crate::{GpuError, GpuErrorKind};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Node, Theory, TightPlan, TightVerdict};
 
 pub(super) const PARAM_BYTES: u64 = 32;
@@ -150,7 +150,7 @@ impl Graph {
     pub(super) fn pack(
         &self,
         certificate: &TightPlan,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Packed, GpuError> {
         if !self.theory.same_instance(certificate.theory()) {
             return Err(GpuError::new(
@@ -160,7 +160,7 @@ impl Graph {
         }
         let mut nodes = words(self.node_bytes)?;
         for node in self.theory.nodes() {
-            poll(control)?;
+            poll(cancellation)?;
             nodes.extend(match *node {
                 Node::False => [NODE_FALSE, 0, 0, 0],
                 Node::Atom(atom) => [NODE_ATOM, address(atom)?, 0, 0],
@@ -174,13 +174,13 @@ impl Graph {
         }
         let mut roots = words(self.root_bytes)?;
         for &root in self.theory.roots() {
-            poll(control)?;
+            poll(cancellation)?;
             roots.push(address(root)?);
         }
         if roots.is_empty() {
             roots.push(0);
         }
-        let producers = self.pack_producers(certificate, control)?;
+        let producers = self.pack_producers(certificate, cancellation)?;
         Ok(Packed {
             nodes,
             roots,
@@ -191,12 +191,12 @@ impl Graph {
     fn pack_producers(
         &self,
         certificate: &TightPlan,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Vec<u32>, GpuError> {
         let mut output = words(self.producer_bytes)?;
         if self.support == TightSupport::Atomic {
             for producer in certificate.producers() {
-                poll(control)?;
+                poll(cancellation)?;
                 output.extend(producer_record(producer)?);
             }
             if output.is_empty() {
@@ -211,11 +211,11 @@ impl Graph {
         // Counts occupy the next group's slot. Prefix summation produces W+1
         // half-open offsets, including zero-length groups and the final bound P.
         for producer in certificate.producers() {
-            poll(control)?;
+            poll(cancellation)?;
             output[offsets + producer.head() / 32 + 1] += 1;
         }
         for word in 0..self.words as usize {
-            poll(control)?;
+            poll(cancellation)?;
             let prefix = output[offsets + word];
             output[offsets + word + 1] += prefix;
         }
@@ -224,7 +224,7 @@ impl Graph {
         // Each canonical occurrence advances precisely its word's cursor once.
         // Thus all occurrences are retained, in original order within a group.
         for producer in certificate.producers() {
-            poll(control)?;
+            poll(cancellation)?;
             let cursor = &mut cursors[producer.head() / 32];
             let start = *cursor as usize * 4;
             output[start..start + 4].copy_from_slice(&producer_record(producer)?);
@@ -334,7 +334,7 @@ impl Plan {
         &self,
         graph: &Graph,
         candidates: &[Interpretation],
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Vec<u32>, GpuError> {
         if candidates.len() != self.worlds as usize {
             return Err(capacity("tight candidate count differs from plan"));
@@ -345,7 +345,7 @@ impl Plan {
             0,
         );
         for (world, candidate) in candidates.iter().enumerate() {
-            poll(control)?;
+            poll(cancellation)?;
             if !graph.theory.same_instance(candidate.theory()) {
                 return Err(GpuError::new(
                     GpuErrorKind::Seed,
@@ -353,7 +353,7 @@ impl Plan {
                 ));
             }
             for atom in candidate.atoms() {
-                poll(control)?;
+                poll(cancellation)?;
                 output[world * graph.words as usize + atom / 32] |= 1 << (atom % 32);
             }
         }
@@ -366,7 +366,7 @@ pub(super) fn decode(
     graph: &Graph,
     plan: &Plan,
     seeds: &[u32],
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<Vec<TightGpuCheck>, GpuError> {
     let fail = || GpuError::new(GpuErrorKind::Readback, "invalid tight result record");
     if words.len() != plan.worlds as usize * RESULT_WORDS
@@ -379,7 +379,7 @@ pub(super) fn decode(
     }
     let mut output = vector(plan.worlds as usize)?;
     for (world, row) in words.chunks_exact(RESULT_WORDS).enumerate() {
-        poll(control)?;
+        poll(cancellation)?;
         if row[0] != plan.epoch
             || row[1] as usize != world
             || row[4] != plan.work

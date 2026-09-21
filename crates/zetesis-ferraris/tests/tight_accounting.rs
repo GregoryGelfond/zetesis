@@ -1,5 +1,5 @@
 //! Every stopped prefix retains charged work for cumulative caller budgets.
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
     AdmissionLimits, Interpretation, Node, Theory, TightCheckLimits, TightError, TightPlan,
     TightPlanLimits, TightResource,
@@ -11,7 +11,7 @@ fn theory() -> Theory {
 #[test]
 fn construction_and_candidate_prefixes_retain_exact_work_on_failure() {
     let t = theory();
-    let c = Control::default();
+    let c = Cancellation::default();
     let full = TightPlan::compile_accounted(&t, TightPlanLimits::default(), &c);
     let work = full.work;
     let plan = full.result.unwrap();

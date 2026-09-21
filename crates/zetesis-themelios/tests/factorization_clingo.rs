@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::Value as Json;
 use zetesis_core::{Atom, Model, Value};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
 use zetesis_sat::{Limits as SearchLimits, StableModels};
 use zetesis_themelios::{
@@ -93,7 +93,7 @@ fn record(input: &AdmittedFormula, model: &Interpretation) -> Record {
         input.objectives(),
         &model,
         zetesis_objective::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .expect("exact objective observation of a verified stable model");
     let score = evaluation.score();
@@ -119,7 +119,7 @@ fn exhaustive(input: &AdmittedFormula) -> Records {
             input.theory(),
             &candidate,
             Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .expect("complete original Ferraris reduct check")
         .accepted()
@@ -134,8 +134,12 @@ fn exhaustive(input: &AdmittedFormula) -> Records {
 }
 
 fn native(input: &AdmittedFormula) -> Records {
-    let mut models =
-        StableModels::new(input.theory(), SearchLimits::default(), Control::default()).unwrap();
+    let mut models = StableModels::new(
+        input.theory(),
+        SearchLimits::default(),
+        Cancellation::default(),
+    )
+    .unwrap();
     let mut records = Records::new();
     for model in models.by_ref() {
         assert!(

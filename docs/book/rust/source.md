@@ -36,7 +36,7 @@ original program. A core certificate applies to the core. It does not establish
 membership in the original program on its own.
 
 For direct composition, `owner.checker(ConstraintCheckLimits { .. })` creates a
-mutable checker borrowing the owner. `check(&model, &control)` requires the
+mutable checker borrowing the owner. `check(&model, &cancellation)` requires the
 model's exact atom-catalog owner. It returns `Satisfied` after the required scan
 completes, or `Violated { location }` when an admitted constraint body is true.
 Neither result establishes reduct minimality. Wrong-owner, cancellation,

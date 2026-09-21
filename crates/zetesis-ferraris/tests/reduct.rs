@@ -1,7 +1,7 @@
 //! Independent syntax-tree reduct and finite model enumeration.
 
 use std::time::Instant;
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
     AdmissionError, AdmissionLimits, EvaluationLimits, EvaluationWorkspace, FrozenReduct,
     Interpretation, Limits, Node, Theory, Verdict, check, models, models_reduct,
@@ -58,17 +58,17 @@ fn interpretation(theory: &Theory, world: u8) -> Interpretation {
 }
 fn compare(formulas: &[Expr]) {
     let program = theory(formulas);
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut workspace = EvaluationWorkspace::default();
     for candidate in 0..4 {
         let model = interpretation(&program, candidate);
         let classical = formulas.iter().all(|expr| expr.eval(candidate));
         assert_eq!(
-            models(&program, &model, Limits::default(), &control).unwrap(),
+            models(&program, &model, Limits::default(), &cancellation).unwrap(),
             classical
         );
         let truth = workspace
-            .evaluate(&model, EvaluationLimits::default(), &control)
+            .evaluate(&model, EvaluationLimits::default(), &cancellation)
             .result
             .unwrap();
         for (root, formula) in program.roots().iter().zip(formulas) {
@@ -76,14 +76,14 @@ fn compare(formulas: &[Expr]) {
         }
         assert_eq!(truth.is_model(), classical);
         let reduct: Vec<_> = formulas.iter().map(|expr| expr.reduct(candidate)).collect();
-        let frozen = FrozenReduct::new(&model, Limits::default(), &control).unwrap();
+        let frozen = FrozenReduct::new(&model, Limits::default(), &cancellation).unwrap();
         for tested in 0..4 {
             let actual = models_reduct(
                 &program,
                 &model,
                 &interpretation(&program, tested),
                 Limits::default(),
-                &control,
+                &cancellation,
             )
             .unwrap();
             assert_eq!(
@@ -96,7 +96,7 @@ fn compare(formulas: &[Expr]) {
                     .is_satisfied_by(
                         &interpretation(&program, tested),
                         Limits::default(),
-                        &control,
+                        &cancellation,
                     )
                     .unwrap(),
                 actual,
@@ -109,7 +109,7 @@ fn compare(formulas: &[Expr]) {
                     && tested & !candidate == 0
                     && reduct.iter().all(|expr| expr.eval(tested))
             });
-        let result = check(&program, &model, Limits::default(), &control).unwrap();
+        let result = check(&program, &model, Limits::default(), &cancellation).unwrap();
         assert_eq!(result.accepted(), stable, "M={candidate}, {formulas:?}");
         if let Verdict::NonMinimal { witness } = result.verdict() {
             let tested = witness.atoms().fold(0u8, |bits, atom| bits | (1 << atom));
@@ -146,13 +146,13 @@ fn formula_transform_matches_independent_materialized_reduct() {
 #[test]
 fn disjunctive_reduct_has_incomparable_minimal_models() {
     let program = theory(&[Expr::Or(Box::new(Expr::Atom(0)), Box::new(Expr::Atom(1)))]);
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     assert!(
         check(
             &program,
             &interpretation(&program, 1),
             Limits::default(),
-            &control
+            &cancellation
         )
         .unwrap()
         .accepted()
@@ -162,7 +162,7 @@ fn disjunctive_reduct_has_incomparable_minimal_models() {
             &program,
             &interpretation(&program, 2),
             Limits::default(),
-            &control
+            &cancellation
         )
         .unwrap()
         .accepted()
@@ -171,7 +171,7 @@ fn disjunctive_reduct_has_incomparable_minimal_models() {
         &program,
         &interpretation(&program, 3),
         Limits::default(),
-        &control,
+        &cancellation,
     )
     .unwrap();
     let Verdict::NonMinimal { witness } = result.verdict() else {
@@ -183,18 +183,29 @@ fn disjunctive_reduct_has_incomparable_minimal_models() {
 #[test]
 fn empty_theory_and_empty_candidate_have_exact_boundary() {
     let program = theory(&[]);
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let limits = Limits {
         max_subsets: 0,
         ..Limits::default()
     };
     assert!(
-        check(&program, &interpretation(&program, 0), limits, &control)
-            .unwrap()
-            .accepted()
+        check(
+            &program,
+            &interpretation(&program, 0),
+            limits,
+            &cancellation
+        )
+        .unwrap()
+        .accepted()
     );
     assert_eq!(
-        check(&program, &interpretation(&program, 1), limits, &control).unwrap_err(),
+        check(
+            &program,
+            &interpretation(&program, 1),
+            limits,
+            &cancellation
+        )
+        .unwrap_err(),
         Stop::CandidateLimit
     );
     assert!(matches!(
@@ -202,7 +213,7 @@ fn empty_theory_and_empty_candidate_have_exact_boundary() {
             &program,
             &interpretation(&program, 1),
             Limits::default(),
-            &control
+            &cancellation
         )
         .unwrap()
         .verdict(),
@@ -214,15 +225,19 @@ fn empty_theory_and_empty_candidate_have_exact_boundary() {
 fn work_and_subset_limits_do_not_certify_partial_search() {
     let program = theory(&[Expr::And(Box::new(Expr::Atom(0)), Box::new(Expr::Atom(1)))]);
     let model = interpretation(&program, 3);
-    let control = Control::default();
-    let complete = check(&program, &model, Limits::default(), &control).unwrap();
+    let cancellation = Cancellation::default();
+    let complete = check(&program, &model, Limits::default(), &cancellation).unwrap();
     assert!(complete.accepted());
     assert_eq!(complete.statistics().subsets, 3);
     let exact = Limits {
         max_work: complete.statistics().work,
         max_subsets: 3,
     };
-    assert!(check(&program, &model, exact, &control).unwrap().accepted());
+    assert!(
+        check(&program, &model, exact, &cancellation)
+            .unwrap()
+            .accepted()
+    );
     assert_eq!(
         check(
             &program,
@@ -231,7 +246,7 @@ fn work_and_subset_limits_do_not_certify_partial_search() {
                 max_work: exact.max_work - 1,
                 ..exact
             },
-            &control
+            &cancellation
         )
         .unwrap_err(),
         Stop::WorkLimit
@@ -244,14 +259,14 @@ fn work_and_subset_limits_do_not_certify_partial_search() {
                 max_subsets: 2,
                 ..exact
             },
-            &control
+            &cancellation
         )
         .unwrap_err(),
         Stop::CandidateLimit
     );
-    control.cancel();
+    cancellation.cancel();
     assert_eq!(
-        check(&program, &model, exact, &control).unwrap_err(),
+        check(&program, &model, exact, &cancellation).unwrap_err(),
         Stop::Cancelled
     );
     assert_eq!(
@@ -259,7 +274,7 @@ fn work_and_subset_limits_do_not_certify_partial_search() {
             &program,
             &model,
             exact,
-            &Control::with_deadline(Instant::now()).unwrap()
+            &Cancellation::with_deadline(Instant::now()).unwrap()
         )
         .unwrap_err(),
         Stop::Deadline
@@ -276,7 +291,7 @@ fn identity_admission_and_word_boundaries() {
         &program.clone(),
         &model,
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert!(
@@ -284,7 +299,13 @@ fn identity_admission_and_word_boundaries() {
     );
     let foreign = Theory::new(65, vec![], vec![], AdmissionLimits::default()).unwrap();
     assert_eq!(
-        check(&foreign, &model, Limits::default(), &Control::default()).unwrap_err(),
+        check(
+            &foreign,
+            &model,
+            Limits::default(),
+            &Cancellation::default()
+        )
+        .unwrap_err(),
         Stop::WrongProgram
     );
     assert_eq!(
@@ -334,7 +355,7 @@ fn shared_dag_nodes_preserve_frozen_truth_under_multiple_roots() {
         choice,
         guarded,
     ];
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     for candidate in 0..4 {
         let model = interpretation(&program, candidate);
         for tested in 0..4 {
@@ -347,7 +368,7 @@ fn shared_dag_nodes_preserve_frozen_truth_under_multiple_roots() {
                     &model,
                     &interpretation(&program, tested),
                     Limits::default(),
-                    &control
+                    &cancellation
                 )
                 .unwrap(),
                 expected
@@ -355,7 +376,7 @@ fn shared_dag_nodes_preserve_frozen_truth_under_multiple_roots() {
         }
         // Atom 1 is unsupported. Choices admit precisely the two subsets of {0}.
         assert_eq!(
-            check(&program, &model, Limits::default(), &control)
+            check(&program, &model, Limits::default(), &cancellation)
                 .unwrap()
                 .accepted(),
             candidate < 2
@@ -381,8 +402,8 @@ fn exhaustive_subset_carries_cross_sparse_machine_word_boundaries() {
     )
     .unwrap();
     let model = Interpretation::new(&program, [0, 63, 64, 129]).unwrap();
-    let control = Control::default();
-    let complete = check(&program, &model, Limits::default(), &control).unwrap();
+    let cancellation = Cancellation::default();
+    let complete = check(&program, &model, Limits::default(), &cancellation).unwrap();
     assert!(complete.accepted());
     // All fifteen proper subsets fail the conjunction. Four selected bits
     // require 26 bit flips to advance the binary counter from 0 to 15.
@@ -392,7 +413,11 @@ fn exhaustive_subset_carries_cross_sparse_machine_word_boundaries() {
         max_work: complete.statistics().work,
         max_subsets: 15,
     };
-    assert!(check(&program, &model, exact, &control).unwrap().accepted());
+    assert!(
+        check(&program, &model, exact, &cancellation)
+            .unwrap()
+            .accepted()
+    );
     assert_eq!(
         check(
             &program,
@@ -401,7 +426,7 @@ fn exhaustive_subset_carries_cross_sparse_machine_word_boundaries() {
                 max_subsets: 14,
                 ..exact
             },
-            &control
+            &cancellation
         )
         .unwrap_err(),
         Stop::CandidateLimit
@@ -414,7 +439,7 @@ fn exhaustive_subset_carries_cross_sparse_machine_word_boundaries() {
                 max_work: exact.max_work - 1,
                 ..exact
             },
-            &control
+            &cancellation
         )
         .unwrap_err(),
         Stop::WorkLimit
@@ -428,17 +453,17 @@ fn classical_and_reduct_entrypoints_reject_foreign_interpretations() {
     let own = interpretation(&program, 1);
     let other = interpretation(&foreign, 1);
     let limits = Limits::default();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     assert_eq!(
-        models(&program, &other, limits, &control).unwrap_err(),
+        models(&program, &other, limits, &cancellation).unwrap_err(),
         Stop::WrongProgram
     );
     assert_eq!(
-        models_reduct(&program, &other, &own, limits, &control).unwrap_err(),
+        models_reduct(&program, &other, &own, limits, &cancellation).unwrap_err(),
         Stop::WrongProgram
     );
     assert_eq!(
-        models_reduct(&program, &own, &other, limits, &control).unwrap_err(),
+        models_reduct(&program, &own, &other, limits, &cancellation).unwrap_err(),
         Stop::WrongProgram
     );
 }

@@ -35,7 +35,7 @@ fn retained_capacity_uses_the_inclusive_total_limit() {
         let mut reservations = 0;
         let result = plan.pack_with(
             &queries,
-            &Control::default(),
+            &Cancellation::default(),
             expected - deficit,
             |length| {
                 let buffer = std::mem::take(&mut buffers[reservations]);
@@ -66,7 +66,7 @@ fn excess_capacity_stops_remaining_reservations() {
     let minimum = plan.accounted_bytes;
     let mut reservations = 0;
     let error = plan
-        .pack_with(&queries, &Control::default(), minimum, |length| {
+        .pack_with(&queries, &Cancellation::default(), minimum, |length| {
             reservations += 1;
             packing::vector(length + 1)
         })
@@ -87,7 +87,7 @@ fn host_reservation_failure_remains_allocation() {
         let minimum = plan.accounted_bytes;
         let mut reservations = 0;
         let error = plan
-            .pack_with(&queries, &Control::default(), u64::MAX, |length| {
+            .pack_with(&queries, &Cancellation::default(), u64::MAX, |length| {
                 let requested = if reservations == failed {
                     usize::MAX
                 } else {
@@ -164,7 +164,7 @@ fn decode_preserves_the_preallocated_mask_storage() {
         0b0010,
     ];
     let packed = plan
-        .pack_with(&queries, &Control::default(), u64::MAX, |length| {
+        .pack_with(&queries, &Cancellation::default(), u64::MAX, |length| {
             packing::vector(length + 7)
         })
         .unwrap();
@@ -176,7 +176,7 @@ fn decode_preserves_the_preallocated_mask_storage() {
             &queries,
             &input,
             packed.masks,
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     assert!(std::ptr::eq(masks.relation(), &raw const relation));
@@ -205,7 +205,9 @@ fn decode_refuses_an_incomplete_output_allocation() {
     let queries = [relation.query(&[], relation::Limits::default()).unwrap()];
     let mut plan = plan(&relation, &queries);
     let input = records(&mut plan, &queries, &[vec![u32::MAX, 1]]);
-    let mut packed = plan.pack(&queries, &Control::default(), u64::MAX).unwrap();
+    let mut packed = plan
+        .pack(&queries, &Cancellation::default(), u64::MAX)
+        .unwrap();
     packed.masks.pop();
     let error = plan
         .decode(
@@ -213,7 +215,7 @@ fn decode_refuses_an_incomplete_output_allocation() {
             &queries,
             &input,
             packed.masks,
-            &Control::default(),
+            &Cancellation::default(),
         )
         .err()
         .unwrap();
@@ -226,11 +228,11 @@ fn cancelled_preparation_reserves_nothing() {
     let relation = Relation::from_atoms(&predicate, &atoms, relation::Limits::default()).unwrap();
     let queries = [relation.query(&[], relation::Limits::default()).unwrap()];
     let mut plan = plan(&relation, &queries);
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     let mut reservations = 0;
     let error = plan
-        .pack_with(&queries, &control, u64::MAX, |length| {
+        .pack_with(&queries, &cancellation, u64::MAX, |length| {
             reservations += 1;
             packing::vector(length)
         })
@@ -249,13 +251,13 @@ fn cancellation_after_reservation_stops_preparation() {
     let relation = Relation::from_atoms(&predicate, &atoms, relation::Limits::default()).unwrap();
     let queries = [relation.query(&[], relation::Limits::default()).unwrap()];
     let mut plan = plan(&relation, &queries);
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut reservations = 0;
     let error = plan
-        .pack_with(&queries, &control, u64::MAX, |length| {
+        .pack_with(&queries, &cancellation, u64::MAX, |length| {
             reservations += 1;
             let vector = packing::vector(length)?;
-            control.cancel();
+            cancellation.cancel();
             Ok(vector)
         })
         .err()

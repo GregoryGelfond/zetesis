@@ -111,7 +111,7 @@ impl State {
         budget: &mut Budget<'_, impl Quota>,
         statistics: &mut Statistics,
     ) -> Result<Check, Incomplete> {
-        budget.control.poll()?;
+        budget.cancellation.poll()?;
         if !theory.same_instance(candidate.theory()) {
             return Err(Incomplete::WrongTheory);
         }
@@ -119,7 +119,7 @@ impl State {
         if let Some(query) = &self.query {
             let (truth, _) =
                 self.workspace
-                    .evaluate(candidate, limits, budget.control, statistics)?;
+                    .evaluate(candidate, limits, budget.cancellation, statistics)?;
             if !truth.is_model() {
                 return Ok(Check::NotModel);
             }

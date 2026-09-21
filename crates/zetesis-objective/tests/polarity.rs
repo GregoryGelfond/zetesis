@@ -1,6 +1,6 @@
 //! Signed normalization precedes global tuple identity and checked accumulation.
 use zetesis_core::{Atom, AtomPattern, Model, Predicate, Term, Value};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_objective::{
     AdmissionLimits, ErrorKind, Limits, ObjectiveProgram, ObjectiveTemplate, Stop, WeightPolarity,
     evaluate,
@@ -62,7 +62,13 @@ fn signed_lifted_keys_coalesce_across_directions_before_adding_costs() {
         atom("p", vec![Value::String("ignored".into())]),
         atom("q", vec![]),
     ]);
-    let result = evaluate(&objectives, &model, Limits::default(), &Control::default()).unwrap();
+    let result = evaluate(
+        &objectives,
+        &model,
+        Limits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
     assert_eq!(result.score().costs(), [(7, 0), (2, 1)]);
     assert_eq!(result.contributions().len(), 3);
     let keys: Vec<_> = result
@@ -80,7 +86,7 @@ fn signed_lifted_keys_coalesce_across_directions_before_adding_costs() {
                 max_work: work,
                 ..Limits::default()
             },
-            &Control::default()
+            &Cancellation::default()
         )
         .is_ok()
     );
@@ -91,7 +97,7 @@ fn signed_lifted_keys_coalesce_across_directions_before_adding_costs() {
             max_work: work - 1,
             ..Limits::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert_eq!(stopped.kind(), ErrorKind::Stopped(Stop::WorkLimit));
@@ -109,7 +115,7 @@ fn normalized_signed_costs_use_wide_accumulation_and_preserve_minimize_min() {
         &objectives,
         &Model::new([]),
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(
@@ -134,7 +140,7 @@ fn an_eligible_unrepresentable_negation_has_typed_template_evidence() {
         &objectives,
         &Model::new([atom("p", vec![Value::Number(i32::MIN)])]),
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert_eq!(error.kind(), ErrorKind::WeightNormalizationOverflow);
@@ -144,12 +150,18 @@ fn an_eligible_unrepresentable_negation_has_typed_template_evidence() {
         &objectives,
         &Model::new([]),
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(empty.score().costs(), [(0, 1)]);
-    let control = Control::default();
-    control.cancel();
-    let error = evaluate(&objectives, &Model::new([]), Limits::default(), &control).unwrap_err();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
+    let error = evaluate(
+        &objectives,
+        &Model::new([]),
+        Limits::default(),
+        &cancellation,
+    )
+    .unwrap_err();
     assert!(matches!(error.kind(), ErrorKind::Stopped(Stop::Cancelled)));
 }

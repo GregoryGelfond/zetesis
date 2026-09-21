@@ -62,10 +62,13 @@ fn residual_counter_overflow_preserves_its_receipt() {
 fn decoded_reasons_survive_exact_completion_refusal() {
     use zetesis_ferraris::{AdmissionLimits, Node, Theory};
     let theory = Theory::new(1, vec![Node::Atom(0)], vec![0], AdmissionLimits::default()).unwrap();
-    let control = zetesis_cpu::Control::default();
-    let mut models =
-        zetesis_sat::StableModels::new(&theory, zetesis_sat::Limits::default(), control.clone())
-            .unwrap();
+    let cancellation = zetesis_cpu::Cancellation::default();
+    let mut models = zetesis_sat::StableModels::new(
+        &theory,
+        zetesis_sat::Limits::default(),
+        cancellation.clone(),
+    )
+    .unwrap();
     let options = crate::SolveConfig {
         max_completion_scratch_bytes: 0,
         completion_workers: std::num::NonZeroUsize::MIN,
@@ -74,7 +77,7 @@ fn decoded_reasons_survive_exact_completion_refusal() {
     let mut queue = crate::formula_queue::BatchQueue::new(&options).unwrap();
     let mut counts = FormulaResidualStatistics::default();
     // An injected decoded result exercises host accounting, not GPU execution.
-    let next = queue.next(&mut models, &options, &control, |batch| {
+    let next = queue.next(&mut models, &options, &cancellation, |batch| {
         let verdicts = batch
             .candidates()
             .iter()

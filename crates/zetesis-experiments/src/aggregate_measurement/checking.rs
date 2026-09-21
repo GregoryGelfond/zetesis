@@ -1,7 +1,7 @@
 use super::{Activity, Error, Outcome, Value, reserve, view::Evaluation};
 use rayon::prelude::*;
 use zetesis_core::Value as Term;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::native_aggregate as native;
 use zetesis_wgpu::{AggregateGpuEvaluation, AggregateGpuReduction, AggregateGpuValue};
 
@@ -9,7 +9,7 @@ pub(super) fn cpu(
     records: &[native::Eligibility<'_>],
     max_work: u64,
     pool: Option<&rayon::ThreadPool>,
-    control: &Control,
+    cancellation: &Cancellation,
     activity: &mut Activity,
 ) -> Result<Vec<Outcome>, Error> {
     let mut results = reserve(records.len())?;
@@ -21,11 +21,11 @@ pub(super) fn cpu(
             results
                 .par_iter_mut()
                 .zip(records.par_iter())
-                .for_each(|(slot, record)| *slot = Some(record.reduce(limits, control)));
+                .for_each(|(slot, record)| *slot = Some(record.reduce(limits, cancellation)));
         });
     } else {
         for (slot, record) in results.iter_mut().zip(records) {
-            *slot = Some(record.reduce(limits, control));
+            *slot = Some(record.reduce(limits, cancellation));
         }
     }
     let mut failure = None;

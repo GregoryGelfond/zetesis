@@ -40,7 +40,11 @@ fn the_narrowing_keeps_the_capacity_its_closures_reserved() {
     // which retains the capacity the closures reserved instead of freeing it
     // after each.
     let program = independent(3);
-    let mut candidates = Candidates::new(&program, CandidateLimits::default(), Control::default());
+    let mut candidates = Candidates::new(
+        &program,
+        CandidateLimits::default(),
+        Cancellation::default(),
+    );
     candidates.bounded(Limits::default());
     assert_eq!(candidates.by_ref().map(Result::unwrap).count(), 8);
     assert_eq!(candidates.statistics().regions, 15);
@@ -56,7 +60,11 @@ fn a_stopped_preparation_is_the_narrowings_stop() {
     // No unit of work prepares a program with gate atoms: the narrowing
     // reports the preparation's stop and offers the whole symbolic carrier.
     let program = independent(2);
-    let mut candidates = Candidates::new(&program, CandidateLimits::default(), Control::default());
+    let mut candidates = Candidates::new(
+        &program,
+        CandidateLimits::default(),
+        Cancellation::default(),
+    );
     candidates.bounded(Limits {
         max_work: 0,
         ..Limits::default()

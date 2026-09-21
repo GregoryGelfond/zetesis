@@ -214,10 +214,13 @@ impl PreparedFormula {
     pub fn ground_with_count_plan(
         self,
         limits: crate::CountPlanLimits,
-        control: &zetesis_cpu::Control,
+        cancellation: &zetesis_cpu::Cancellation,
         observer: Option<&dyn GroundingObserver>,
     ) -> Result<AdmittedFormula, FormulaFailure> {
-        let request = crate::formula_count_plan::Request { limits, control };
+        let request = crate::formula_count_plan::Request {
+            limits,
+            cancellation,
+        };
         let compiled = self.preparation.ground(observer, Some(request))?;
         Ok(AdmittedFormula {
             compiled,
@@ -376,10 +379,13 @@ impl PreparedFormulaBundle {
     pub fn ground_with_count_plan(
         self,
         limits: crate::CountPlanLimits,
-        control: &zetesis_cpu::Control,
+        cancellation: &zetesis_cpu::Cancellation,
         observer: Option<&dyn GroundingObserver>,
     ) -> Result<AdmittedFormulaBundle, FormulaBundleFailure> {
-        let request = crate::formula_count_plan::Request { limits, control };
+        let request = crate::formula_count_plan::Request {
+            limits,
+            cancellation,
+        };
         match self.preparation.ground(observer, Some(request)) {
             Ok(compiled) => Ok(AdmittedFormulaBundle {
                 compiled,

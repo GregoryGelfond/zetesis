@@ -14,7 +14,7 @@ use std::collections::BTreeSet;
 
 use zetesis_ferraris::{Node, Theory, TightPlanLimits};
 use zetesis_sat::{
-    BatchLimits, BatchVerdict, Control, Incomplete, Limits, SearchLimits, SearchMethod,
+    BatchLimits, BatchVerdict, Cancellation, Incomplete, Limits, SearchLimits, SearchMethod,
     StableModels,
 };
 
@@ -22,7 +22,13 @@ use choice_theories::{choices, theory_over};
 use theories::mixed;
 
 fn regions(theory: &Theory, limits: Limits) -> StableModels {
-    StableModels::with_method(theory, SearchMethod::Regions, limits, Control::default()).unwrap()
+    StableModels::with_method(
+        theory,
+        SearchMethod::Regions,
+        limits,
+        Cancellation::default(),
+    )
+    .unwrap()
 }
 
 fn models(search: &mut StableModels) -> Vec<Vec<usize>> {
@@ -39,7 +45,7 @@ fn regions_and_clauses_return_the_same_stable_models() {
             &theory,
             SearchMethod::Clauses,
             Limits::default(),
-            Control::default(),
+            Cancellation::default(),
         )
         .unwrap();
         let expected: BTreeSet<Vec<usize>> = models(&mut clauses).into_iter().collect();
@@ -302,7 +308,7 @@ fn the_default_entry_enumerates_by_regions() {
     // `new` follows the type's default: the regions proposer's counts are
     // present and no clause form was built.
     let theory = mixed();
-    let search = StableModels::new(&theory, Limits::default(), Control::default()).unwrap();
+    let search = StableModels::new(&theory, Limits::default(), Cancellation::default()).unwrap();
     assert!(search.statistics().regions.is_some());
     assert!(search.statistics().support.is_none());
 }

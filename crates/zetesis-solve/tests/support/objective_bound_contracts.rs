@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 
 use zetesis_core::Model;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_objective::Score;
 use zetesis_sat::{Limits, StableModels};
 use zetesis_themelios::{
@@ -19,13 +19,13 @@ use crate::{ExecutionObservation, ExecutionObserver, SolveConfig};
 fn by_clauses(
     theory: &zetesis_ferraris::Theory,
     limits: zetesis_sat::Limits,
-    control: zetesis_sat::Control,
+    cancellation: zetesis_sat::Cancellation,
 ) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
     zetesis_sat::StableModels::with_method(
         theory,
         zetesis_sat::SearchMethod::Clauses,
         limits,
-        control,
+        cancellation,
     )
 }
 
@@ -63,7 +63,7 @@ fn score(admitted: &AdmittedFormula, names: &[&str]) -> Score {
         admitted.objectives(),
         &model,
         zetesis_objective::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap()
     .score()
@@ -100,20 +100,24 @@ fn equal_atom_counts_do_not_authorize_a_bound_from_a_different_theory() {
         input(&planned),
         &options,
         &mut Observer(&mut observations),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert!(bounds.plan.is_some());
     let nodes = original.theory().nodes().to_vec();
-    let mut models =
-        StableModels::new(original.theory(), Limits::default(), Control::default()).unwrap();
+    let mut models = StableModels::new(
+        original.theory(),
+        Limits::default(),
+        Cancellation::default(),
+    )
+    .unwrap();
     bounds
         .improve(
             &score(&planned, &["a"]),
             &mut models,
             &options,
             &mut Observer(&mut observations),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     assert!(bounds.plan.is_none());
@@ -127,7 +131,7 @@ fn equal_atom_counts_do_not_authorize_a_bound_from_a_different_theory() {
             &mut models,
             &options,
             &mut Observer(&mut observations),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     assert_eq!(
@@ -135,8 +139,12 @@ fn equal_atom_counts_do_not_authorize_a_bound_from_a_different_theory() {
         "a rejected plan must remain disabled"
     );
     let actual = complete(&mut models);
-    let mut baseline =
-        StableModels::new(original.theory(), Limits::default(), Control::default()).unwrap();
+    let mut baseline = StableModels::new(
+        original.theory(),
+        Limits::default(),
+        Cancellation::default(),
+    )
+    .unwrap();
     assert_eq!(actual, complete(&mut baseline));
     assert_eq!(
         actual,
@@ -153,7 +161,7 @@ fn bound_capacity_failure_restores_exact_search_and_disables_only_pruning() {
         input(&admitted),
         &options,
         &mut Observer(&mut observations),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert!(bounds.plan.is_some());
@@ -167,7 +175,7 @@ fn bound_capacity_failure_restores_exact_search_and_disables_only_pruning() {
         },
         ..Default::default()
     };
-    let mut models = by_clauses(admitted.theory(), limits, Control::default()).unwrap();
+    let mut models = by_clauses(admitted.theory(), limits, Cancellation::default()).unwrap();
     let original_nodes = models.theory().nodes().to_vec();
     bounds
         .improve(
@@ -175,7 +183,7 @@ fn bound_capacity_failure_restores_exact_search_and_disables_only_pruning() {
             &mut models,
             &options,
             &mut Observer(&mut observations),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     assert!(bounds.plan.is_none());
@@ -193,7 +201,7 @@ fn bound_capacity_failure_restores_exact_search_and_disables_only_pruning() {
         )]
     ));
     let actual = complete(&mut models);
-    let mut baseline = by_clauses(admitted.theory(), limits, Control::default()).unwrap();
+    let mut baseline = by_clauses(admitted.theory(), limits, Cancellation::default()).unwrap();
     assert_eq!(actual, complete(&mut baseline));
     assert_eq!(
         actual,

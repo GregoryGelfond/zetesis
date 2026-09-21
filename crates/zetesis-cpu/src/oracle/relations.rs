@@ -1,6 +1,6 @@
 //! Ordered tuple access over borrowed source snapshots or retained catalogs.
 //!
-//! Catalog calls receive the remaining work quota. Control is observed before
+//! Catalog calls receive the remaining work quota. Cancellation is observed before
 //! and after each whole catalog operation, rather than within its comparisons,
 //! reservations and index planning. A stopped operation never returns a closure.
 
@@ -353,7 +353,7 @@ impl Catalogs {
             let Relation::Tree { catalog, .. } = relation else {
                 continue;
             };
-            work.control.poll()?;
+            work.cancellation.poll()?;
             let old = catalog.retained_bytes() as u128;
             let other = self.bytes.checked_sub(old).ok_or(Stop::InvalidProgram)?;
             let result = catalog
@@ -422,7 +422,7 @@ impl Catalogs {
         pending: u128,
         work: &mut Work<'_>,
     ) -> Result<bool, Stop> {
-        work.control.poll()?;
+        work.cancellation.poll()?;
         let Ok(handle) = self.find(key.predicate()) else {
             return Ok(false);
         };
@@ -464,7 +464,7 @@ impl Catalogs {
         pending: u128,
         work: &mut Work<'_>,
     ) -> Result<(), Stop> {
-        work.control.poll()?;
+        work.cancellation.poll()?;
         let input = atom_bytes(&atom, work)?;
         let held = pending.checked_add(input).ok_or(Stop::StorageLimit)?;
         storage::admit(
@@ -595,7 +595,7 @@ impl Catalogs {
             return Ok(());
         }
         for (slot, layout) in layouts.iter().enumerate() {
-            work.control.poll()?;
+            work.cancellation.poll()?;
             let handle = self
                 .find(layout.predicate())
                 .map_err(|_| Stop::InvalidProgram)?;
@@ -766,7 +766,7 @@ fn account(work: &mut Work<'_>, amount: u128) -> Result<(), Stop> {
         .catalog_work
         .checked_add(amount)
         .ok_or(Stop::InvalidProgram)?;
-    work.control.poll()
+    work.cancellation.poll()
 }
 
 fn completed<T>(
@@ -807,7 +807,7 @@ fn completed<T>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Control;
+    use crate::Cancellation;
     use zetesis_core::Value;
 
     fn atom(value: Value) -> Atom {
@@ -817,8 +817,8 @@ mod tests {
     #[test]
     fn retained_views_preserve_complete_tuple_order() {
         let predicate = Predicate::new("p", 1).unwrap();
-        let control = Control::default();
-        let mut work = Work::source(&control, u64::MAX);
+        let cancellation = Cancellation::default();
+        let mut work = Work::source(&cancellation, u64::MAX);
         work.limits.max_derived_atoms = 3;
         let mut catalogs = Catalogs::default();
         let mut expected = [
@@ -846,8 +846,8 @@ mod tests {
     #[test]
     fn ordered_rows_borrow_the_owning_tuple() {
         let predicate = Predicate::new("p", 1).unwrap();
-        let control = Control::default();
-        let mut work = Work::source(&control, u64::MAX);
+        let cancellation = Cancellation::default();
+        let mut work = Work::source(&cancellation, u64::MAX);
         work.limits.max_derived_atoms = 1;
         let mut catalogs = Catalogs::default();
         catalogs
@@ -860,8 +860,8 @@ mod tests {
     }
 
     /// The work of the dense-relation propositions: a generous ceiling.
-    fn dense_work(control: &Control) -> Work<'_> {
-        let mut work = Work::source(control, u64::MAX);
+    fn dense_work(cancellation: &Cancellation) -> Work<'_> {
+        let mut work = Work::source(cancellation, u64::MAX);
         work.limits.max_derived_atoms = 8;
         work.limits.max_closure_bytes = 1 << 20;
         work
@@ -901,8 +901,8 @@ mod tests {
 
     #[test]
     fn a_laid_out_predicate_is_a_dense_relation() {
-        let control = Control::default();
-        let mut work = dense_work(&control);
+        let cancellation = Cancellation::default();
+        let mut work = dense_work(&cancellation);
         let (predicate, _, catalogs, _) = laid_out(&mut work);
         assert!(catalogs.relation(&predicate).is_dense());
         assert_eq!(catalogs.len(), 2);
@@ -910,8 +910,8 @@ mod tests {
 
     #[test]
     fn a_dense_relation_takes_no_atom() {
-        let control = Control::default();
-        let mut work = dense_work(&control);
+        let cancellation = Cancellation::default();
+        let mut work = dense_work(&cancellation);
         let (_, _, mut catalogs, _) = laid_out(&mut work);
         assert_eq!(
             catalogs.insert(atom(Value::Number(2)), 0, &mut work),
@@ -921,8 +921,8 @@ mod tests {
 
     #[test]
     fn a_dense_relation_answers_membership_by_position() {
-        let control = Control::default();
-        let mut work = dense_work(&control);
+        let cancellation = Cancellation::default();
+        let mut work = dense_work(&cancellation);
         let (predicate, _, mut catalogs, _) = laid_out(&mut work);
         catalogs.prepare_delta(&mut work).unwrap();
         let Relation::Dense(dense) = catalogs.relation(&predicate) else {
@@ -950,8 +950,8 @@ mod tests {
     fn the_catalogs_answer_membership_for_trees_alone() {
         // A dense relation asked through the catalogs is an invariant
         // violation: the round asks it through its layout.
-        let control = Control::default();
-        let mut work = dense_work(&control);
+        let cancellation = Cancellation::default();
+        let mut work = dense_work(&cancellation);
         let (predicate, _, mut catalogs, _) = laid_out(&mut work);
         catalogs.prepare_delta(&mut work).unwrap();
         let value = Value::Number(3);
@@ -970,8 +970,8 @@ mod tests {
 
     #[test]
     fn a_dense_relations_rows_are_its_positions_new_until_advanced() {
-        let control = Control::default();
-        let mut work = dense_work(&control);
+        let cancellation = Cancellation::default();
+        let mut work = dense_work(&cancellation);
         let (predicate, _, mut catalogs, _) = laid_out(&mut work);
         catalogs.prepare_delta(&mut work).unwrap();
         let positions: Vec<usize> = catalogs
@@ -991,8 +991,8 @@ mod tests {
 
     #[test]
     fn the_model_of_a_dense_relation_is_its_atoms_in_order() {
-        let control = Control::default();
-        let mut work = dense_work(&control);
+        let cancellation = Cancellation::default();
+        let mut work = dense_work(&cancellation);
         let (_, _, mut catalogs, _) = laid_out(&mut work);
         catalogs.prepare_delta(&mut work).unwrap();
         catalogs.advance(&mut work).unwrap();
@@ -1005,8 +1005,8 @@ mod tests {
 
     #[test]
     fn an_emptied_dense_relation_is_reused_as_a_dense_one() {
-        let control = Control::default();
-        let mut work = dense_work(&control);
+        let cancellation = Cancellation::default();
+        let mut work = dense_work(&cancellation);
         let (predicate, layouts, mut catalogs, mut pending) = laid_out(&mut work);
         catalogs.prepare_delta(&mut work).unwrap();
         catalogs.advance(&mut work).unwrap();
@@ -1019,8 +1019,8 @@ mod tests {
 
     #[test]
     fn cancelled_receipt_preserves_catalog_count() {
-        let control = Control::default();
-        let mut work = Work::source(&control, u64::MAX);
+        let cancellation = Cancellation::default();
+        let mut work = Work::source(&cancellation, u64::MAX);
         work.limits.max_derived_atoms = 1;
         let mut catalogs = Catalogs::default();
         let tuple = atom(Value::Number(1));
@@ -1034,7 +1034,7 @@ mod tests {
                 partition: Partition::default(),
             },
         );
-        control.cancel();
+        cancellation.cancel();
         assert_eq!(catalogs.publish(receipt, &mut work), Err(Stop::Cancelled));
         assert_eq!(
             catalogs.len(),

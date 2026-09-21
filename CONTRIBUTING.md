@@ -82,7 +82,9 @@ the name alone afterwards; the manual's [Vocabulary](docs/book/vocabulary.md)
 page is the registry of the chosen names. A consumer-facing name, a serialized
 key or a table column, changes only with its older spelling recorded beside the
 retained records that use it, so that a record written before the change stays
-readable.
+readable. The [cancellation API migration](docs/book/rust/outcomes.md#cancellation-and-deadlines)
+distinguishes the shared token from broader interruption variants and retained
+record vocabulary.
 
 Design an algorithm with its correctness argument: preconditions, postconditions,
 maintained invariants and a decreasing measure or finite bound for termination.

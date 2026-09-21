@@ -1,13 +1,15 @@
 //! A ternary replacement inspects exactly the one unwatched occurrence.
 
 use super::{Budget, LocalQuota, State};
-use crate::{AdmissionLimits, Cnf, Control, Incomplete, Literal, SearchLimits, SearchStatistics};
+use crate::{
+    AdmissionLimits, Cancellation, Cnf, Incomplete, Literal, SearchLimits, SearchStatistics,
+};
 
-fn budget(control: &Control) -> Budget<'_> {
+fn budget(cancellation: &Cancellation) -> Budget<'_> {
     Budget {
         quota: LocalQuota,
         limits: SearchLimits::default(),
-        control,
+        cancellation,
         statistics: SearchStatistics::default(),
     }
 }
@@ -27,11 +29,11 @@ fn ternary(signs: usize) -> Cnf {
 
 #[test]
 fn ternary_replacement_matches_the_complete_scan() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut checked = 0;
     for signs in 0..8 {
         let cnf = ternary(signs);
-        let mut charged = budget(&control);
+        let mut charged = budget(&cancellation);
         let mut state = State::new(&cnf, &mut charged).unwrap();
         for first in 0..3 {
             for second in 0..3 {
@@ -71,9 +73,9 @@ fn ternary_replacement_matches_the_complete_scan() {
 #[test]
 fn ternary_replacement_requires_one_paid_inspection() {
     let cnf = ternary(7);
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     for remaining in [None, Some(false), Some(true)] {
-        let mut charged = budget(&control);
+        let mut charged = budget(&cancellation);
         let mut state = State::new(&cnf, &mut charged).unwrap();
         state.positions[0] = [2, 1];
         state.values = vec![remaining, Some(false), Some(false)];
@@ -96,12 +98,12 @@ fn ternary_replacement_requires_one_paid_inspection() {
 #[test]
 fn cancellation_precedes_ternary_inspection() {
     let cnf = ternary(7);
-    let control = Control::default();
-    let mut charged = budget(&control);
+    let cancellation = Cancellation::default();
+    let mut charged = budget(&cancellation);
     let mut state = State::new(&cnf, &mut charged).unwrap();
     assert!(state.initialize(&cnf, &mut charged).unwrap());
     let before = charged.statistics;
-    control.cancel();
+    cancellation.cancel();
     assert_eq!(
         state.replacement(&cnf, 0, 0, &mut charged),
         Err(Incomplete::Cancelled)
@@ -112,8 +114,8 @@ fn cancellation_precedes_ternary_inspection() {
 #[test]
 fn unpaid_ternary_inspection_cannot_move_a_watch() {
     let cnf = ternary(7);
-    let control = Control::default();
-    let mut charged = budget(&control);
+    let cancellation = Cancellation::default();
+    let mut charged = budget(&cancellation);
     let mut state = State::new(&cnf, &mut charged).unwrap();
     assert!(state.initialize(&cnf, &mut charged).unwrap());
     assert!(state.assign(Literal::new(0, false)));
@@ -134,8 +136,8 @@ fn unpaid_ternary_inspection_cannot_move_a_watch() {
 #[test]
 fn ternary_watch_motion_fits_three_operations() {
     let cnf = ternary(7);
-    let control = Control::default();
-    let mut charged = budget(&control);
+    let cancellation = Cancellation::default();
+    let mut charged = budget(&cancellation);
     let mut state = State::new(&cnf, &mut charged).unwrap();
     assert!(state.initialize(&cnf, &mut charged).unwrap());
     assert!(state.assign(Literal::new(0, false)));
@@ -159,8 +161,8 @@ fn longer_clauses_keep_their_complete_replacement_scan() {
         AdmissionLimits::default(),
     )
     .unwrap();
-    let control = Control::default();
-    let mut charged = budget(&control);
+    let cancellation = Cancellation::default();
+    let mut charged = budget(&cancellation);
     let mut state = State::new(&cnf, &mut charged).unwrap();
     assert!(state.initialize(&cnf, &mut charged).unwrap());
     state.values = vec![Some(false), Some(false), Some(false), None];

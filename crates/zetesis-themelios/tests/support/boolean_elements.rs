@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 
 use super::{Models, native};
 use themelios_base::source::SourceId;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, AnalysisBasis, CountPlanLimits, CountPlanStatus,
     ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
@@ -218,7 +218,7 @@ fn boolean_elements_preserve_other_count_certificates() {
         FormulaLimits::default(),
     )
     .unwrap()
-    .ground_with_count_plan(CountPlanLimits::default(), &Control::default(), None)
+    .ground_with_count_plan(CountPlanLimits::default(), &Cancellation::default(), None)
     .unwrap();
     let CountPlanStatus::Ready(plan) = planned.count_plan() else {
         panic!("the independent atom partition remains applicable");

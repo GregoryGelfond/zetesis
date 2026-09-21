@@ -9,7 +9,7 @@ fn collection_refusal(limits: WorldViewLimits) -> WorldViewFailure {
         PreparedInput::admitted(&owner),
         config(),
         limits,
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap_err()
 }
@@ -71,7 +71,7 @@ fn search_refusal_transfers_the_original_checked_prefix() {
             ..config()
         },
         WorldViewLimits::default(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(failure.cause(), WorldViewError::NotExhausted));
@@ -189,7 +189,7 @@ fn decomposition_transfers_the_original_collection_evidence() {
             ..config()
         },
         WorldViewLimits::default(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap_err();
     let subject = failure.subject().clone();

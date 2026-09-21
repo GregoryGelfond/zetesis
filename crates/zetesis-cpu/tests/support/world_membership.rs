@@ -3,7 +3,7 @@
 use zetesis_core::{AdmissionLimits, AtomPattern, Sign, Value};
 
 use super::*;
-use crate::Control;
+use crate::Cancellation;
 
 struct Catalog {
     atoms: Vec<Atom>,
@@ -116,11 +116,11 @@ fn assert_conjunctions(
 fn masks_equal_independent_world_conjunctions() {
     let program = program();
     let catalog = catalog();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     // Every assignment of three atoms to three worlds, including empty rows.
     for assignment in 0u32..512 {
         let input = [assignment & 7, (assignment >> 3) & 7, (assignment >> 6) & 7];
-        let mut work = Work::source(&control, u64::MAX);
+        let mut work = Work::source(&cancellation, u64::MAX);
         let mut snapshot =
             snapshot(&program, &catalog, &input, 1, 3, usize::MAX, &mut work).unwrap();
         assert_conjunctions(&program, &catalog, &input, &mut snapshot, &mut work);
@@ -131,8 +131,8 @@ fn masks_equal_independent_world_conjunctions() {
 fn reused_join_storage_ignores_previous_truth() {
     let program = program();
     let catalog = catalog();
-    let control = Control::default();
-    let mut work = Work::source(&control, u64::MAX);
+    let cancellation = Cancellation::default();
+    let mut work = Work::source(&cancellation, u64::MAX);
     let mut workspace = Workspace::new(&program, 3, usize::MAX, &mut work).unwrap();
     // Truth is allowed to shrink here too: reuse must depend solely on the
     // supplied round, not on the monotonicity of normal closure execution.
@@ -154,8 +154,8 @@ fn reused_join_storage_ignores_previous_truth() {
 fn successive_snapshots_retain_join_allocations() {
     let program = program();
     let catalog = catalog();
-    let control = Control::default();
-    let mut work = Work::source(&control, u64::MAX);
+    let cancellation = Cancellation::default();
+    let mut work = Work::source(&cancellation, u64::MAX);
     let mut workspace = Workspace::new(&program, 65, usize::MAX, &mut work).unwrap();
     let frames = (workspace.frames.as_ptr(), workspace.frames.capacity());
     let starts = (workspace.starts.as_ptr(), workspace.starts.capacity());
@@ -179,10 +179,10 @@ fn successive_snapshots_retain_join_allocations() {
 fn reused_join_storage_skips_initialization_work() {
     let program = program();
     let catalog = catalog();
-    let control = Control::default();
-    let mut first = Work::source(&control, u64::MAX);
+    let cancellation = Cancellation::default();
+    let mut first = Work::source(&cancellation, u64::MAX);
     let original = snapshot(&program, &catalog, &[7; 33], 1, 33, usize::MAX, &mut first).unwrap();
-    let mut repeated = Work::source(&control, u64::MAX);
+    let mut repeated = Work::source(&cancellation, u64::MAX);
     catalog
         .snapshot(
             original.into_workspace(),
@@ -203,8 +203,8 @@ fn reused_join_storage_skips_initialization_work() {
 fn reused_join_storage_remains_in_the_live_budget() {
     let program = program();
     let catalog = catalog();
-    let control = Control::default();
-    let mut work = Work::source(&control, u64::MAX);
+    let cancellation = Cancellation::default();
+    let mut work = Work::source(&cancellation, u64::MAX);
     let workspace = Workspace::new(&program, 3, usize::MAX, &mut work).unwrap();
     let retained = workspace.bytes();
     let indices = 3 * size_of::<usize>();
@@ -213,7 +213,7 @@ fn reused_join_storage_remains_in_the_live_budget() {
         .snapshot(workspace, &[7; 3], 1, exact, &mut work)
         .unwrap();
     assert_eq!(snapshot.bytes(), exact);
-    let mut next = Work::source(&control, u64::MAX);
+    let mut next = Work::source(&cancellation, u64::MAX);
     let refused = catalog.snapshot(snapshot.into_workspace(), &[7; 3], 1, exact - 1, &mut next);
     assert!(matches!(refused, Err(Stop::Allocation)));
     assert_eq!(next.mask_bytes, retained + indices);
@@ -223,8 +223,8 @@ fn reused_join_storage_remains_in_the_live_budget() {
 fn pairwise_overlap_does_not_establish_a_common_world() {
     let program = program();
     let catalog = catalog();
-    let control = Control::default();
-    let mut work = Work::source(&control, u64::MAX);
+    let cancellation = Cancellation::default();
+    let mut work = Work::source(&cancellation, u64::MAX);
     // a={0,2}, b={1,2}, c={0,1}: each pair intersects, but all three do not.
     let mut snapshot =
         snapshot(&program, &catalog, &[6, 3, 5], 1, 3, usize::MAX, &mut work).unwrap();
@@ -240,10 +240,10 @@ fn pairwise_overlap_does_not_establish_a_common_world() {
 fn catalog_identity_does_not_make_an_old_mask_fresh() {
     let program = program();
     let catalog = catalog();
-    let control = Control::default();
-    let mut old_work = Work::source(&control, u64::MAX);
+    let cancellation = Cancellation::default();
+    let mut old_work = Work::source(&cancellation, u64::MAX);
     let old = snapshot(&program, &catalog, &[4, 1], 1, 2, usize::MAX, &mut old_work).unwrap();
-    let mut new_work = Work::source(&control, u64::MAX);
+    let mut new_work = Work::source(&cancellation, u64::MAX);
     let fresh = snapshot(&program, &catalog, &[4, 5], 1, 2, usize::MAX, &mut new_work).unwrap();
     assert!(old.rows.iter().eq(fresh.rows.iter()));
     assert_eq!(old.membership, [1, 2]);
@@ -274,8 +274,8 @@ fn predicate_signs_have_distinct_membership_rows() {
         vec![],
     );
     let program = Program::new(vec![rule], AdmissionLimits::default()).unwrap();
-    let control = Control::default();
-    let mut work = Work::source(&control, u64::MAX);
+    let cancellation = Cancellation::default();
+    let mut work = Work::source(&cancellation, u64::MAX);
     let mut snapshot = snapshot(&program, &catalog, &[1, 2], 1, 2, usize::MAX, &mut work).unwrap();
     let (_, mut join) = snapshot.parts();
     join.reset(&program.templates()[0], &mut work).unwrap();
@@ -287,9 +287,9 @@ fn predicate_signs_have_distinct_membership_rows() {
 fn unused_world_tail_bits_are_never_members() {
     let program = program();
     let catalog = catalog();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     for count in [31usize, 32, 33, 63, 64, 65] {
-        let mut work = Work::source(&control, u64::MAX);
+        let mut work = Work::source(&cancellation, u64::MAX);
         let mut snapshot = snapshot(
             &program,
             &catalog,
@@ -311,14 +311,14 @@ fn unused_world_tail_bits_are_never_members() {
 #[test]
 fn malformed_snapshot_dimensions_are_refused() {
     let program = program();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     for (input, stride, worlds) in [
         (&[][..], 1, 0),
         (&[0][..], 0, 1),
         (&[0][..], 1, 2),
         (&[0][..], usize::MAX, 2),
     ] {
-        let mut work = Work::source(&control, u64::MAX);
+        let mut work = Work::source(&cancellation, u64::MAX);
         assert!(matches!(
             snapshot(
                 &program,
@@ -341,8 +341,8 @@ fn catalog_ids_must_fit_the_snapshot_stride() {
         atoms: (0..33).map(|id| atom(&format!("a{id}"))).collect(),
         positions: vec![32],
     };
-    let control = Control::default();
-    let mut work = Work::source(&control, u64::MAX);
+    let cancellation = Cancellation::default();
+    let mut work = Work::source(&cancellation, u64::MAX);
     assert!(matches!(
         snapshot(&program, &catalog, &[0], 1, 1, usize::MAX, &mut work),
         Err(Stop::InvalidProgram)
@@ -352,8 +352,8 @@ fn catalog_ids_must_fit_the_snapshot_stride() {
 #[test]
 fn mask_preflight_refuses_before_payload_allocation() {
     let program = program();
-    let control = Control::default();
-    let mut work = Work::source(&control, u64::MAX);
+    let cancellation = Cancellation::default();
+    let mut work = Work::source(&cancellation, u64::MAX);
     assert!(matches!(
         snapshot(&program, &catalog(), &[7], 1, 1, 0, &mut work),
         Err(Stop::Allocation)
@@ -364,9 +364,9 @@ fn mask_preflight_refuses_before_payload_allocation() {
 #[test]
 fn membership_preparation_observes_cancellation() {
     let program = program();
-    let control = Control::default();
-    control.cancel();
-    let mut work = Work::source(&control, u64::MAX);
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
+    let mut work = Work::source(&cancellation, u64::MAX);
     assert!(matches!(
         snapshot(&program, &catalog(), &[7], 1, 1, usize::MAX, &mut work),
         Err(Stop::Cancelled)
@@ -383,8 +383,8 @@ fn selected_rows_borrow_the_authoritative_typed_payload() {
         Atom::new(predicate, vec![Value::Symbol("payload".repeat(32))]).unwrap(),
     ]);
     let program = program();
-    let control = Control::default();
-    let mut work = Work::source(&control, u64::MAX);
+    let cancellation = Cancellation::default();
+    let mut work = Work::source(&cancellation, u64::MAX);
     let selected = snapshot(&program, &catalog, &[5], 1, 1, usize::MAX, &mut work).unwrap();
     let expected: Vec<_> = catalog
         .positions

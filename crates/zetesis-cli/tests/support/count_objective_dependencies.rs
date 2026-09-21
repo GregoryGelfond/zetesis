@@ -3,7 +3,7 @@
 use std::{collections::BTreeSet, num::NonZeroUsize};
 
 use zetesis_core::Value;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     AnswerSelection, AnswerSet, Backend, Completion, Oracle, PreparedInput, SearchMethod,
     SemanticOutcome, Session, SolveConfig, Subject, WorldView, WorldViewLimits,
@@ -141,7 +141,7 @@ fn count_dependencies_preserve_complete_scored_families() {
                     PreparedInput::formula(&input),
                     config(workers, batch),
                     WorldViewLimits::default(),
-                    Control::default(),
+                    Cancellation::default(),
                 )
                 .unwrap();
                 assert!(family.subject().same_instance(&subject));
@@ -187,7 +187,7 @@ fn count_dependencies_preserve_every_optimal_answer() {
                 let mut session = Session::new(
                     PreparedInput::formula(&input),
                     config(workers, batch),
-                    Control::default(),
+                    Cancellation::default(),
                 )
                 .unwrap();
                 let actual: Vec<_> = session

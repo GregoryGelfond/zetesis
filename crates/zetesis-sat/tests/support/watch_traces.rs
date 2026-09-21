@@ -6,7 +6,7 @@
 use std::fmt::Write as _;
 
 use super::{Budget, Cursor, LocalQuota};
-use crate::{AdmissionLimits, Control, SearchLimits, SearchStatistics, Solve, encoding};
+use crate::{AdmissionLimits, Cancellation, SearchLimits, SearchStatistics, Solve, encoding};
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 const QUEENS: [&str; 6] = [
@@ -68,11 +68,11 @@ fn report_queens_watch_storage() {
             FormulaLimits::default(),
         )
         .unwrap();
-        let control = Control::default();
+        let cancellation = Cancellation::default();
         let mut charged = Budget {
             quota: LocalQuota,
             limits: SearchLimits::default(),
-            control: &control,
+            cancellation: &cancellation,
             statistics: SearchStatistics::default(),
         };
         let cnf = encoding::encode(
@@ -146,11 +146,11 @@ fn trace(source: &str, refined: bool, limits: SearchLimits) -> Trace {
     )
     .unwrap();
     let theory = admitted.theory();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut charged = Budget {
         quota: LocalQuota,
         limits,
-        control: &control,
+        cancellation: &cancellation,
         statistics: SearchStatistics::default(),
     };
     let cnf = encoding::encode(theory, None, AdmissionLimits::default(), &mut charged).unwrap();

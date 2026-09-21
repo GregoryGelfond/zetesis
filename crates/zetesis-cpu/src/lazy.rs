@@ -18,7 +18,7 @@ use zetesis_core::atom_interner::{
 use zetesis_core::{Atom, AtomCatalog, Model, ModelError, Program, Seed, SeedView};
 
 use crate::oracle::{Work, worlds};
-use crate::{Control, Stop, source};
+use crate::{Cancellation, Stop, source};
 
 pub mod shared;
 
@@ -408,14 +408,14 @@ pub fn check_with<E>(
     program: &Program,
     seeds: &[Seed],
     limits: Limits,
-    control: &Control,
+    cancellation: &Cancellation,
     execute: impl FnMut(&Chunk<'_>) -> Result<Vec<u32>, E>,
 ) -> Result<Batch, Failure<E>> {
     check_with_views(
         program,
         seeds.iter().map(Seed::view),
         limits,
-        control,
+        cancellation,
         execute,
     )
 }
@@ -435,7 +435,7 @@ pub fn check_with_views<'seed, E>(
     program: &Program,
     seeds: impl ExactSizeIterator<Item = SeedView<'seed>> + Clone,
     limits: Limits,
-    control: &Control,
+    cancellation: &Cancellation,
     execute: impl FnMut(&Chunk<'_>) -> Result<Vec<u32>, E>,
 ) -> Result<Batch, Failure<E>> {
     check_with_source_views(
@@ -443,7 +443,7 @@ pub fn check_with_views<'seed, E>(
         seeds,
         limits,
         SourceSelection::Union,
-        control,
+        cancellation,
         execute,
     )
 }
@@ -468,7 +468,7 @@ pub fn check_with_source<E>(
     seeds: &[Seed],
     limits: Limits,
     selection: SourceSelection,
-    control: &Control,
+    cancellation: &Cancellation,
     execute: impl FnMut(&Chunk<'_>) -> Result<Vec<u32>, E>,
 ) -> Result<Batch, Failure<E>> {
     check_with_source_views(
@@ -476,7 +476,7 @@ pub fn check_with_source<E>(
         seeds.iter().map(Seed::view),
         limits,
         selection,
-        control,
+        cancellation,
         execute,
     )
 }
@@ -493,7 +493,7 @@ pub fn check_with_source_views<'seed, E>(
     seeds: impl ExactSizeIterator<Item = SeedView<'seed>> + Clone,
     limits: Limits,
     selection: SourceSelection,
-    control: &Control,
+    cancellation: &Cancellation,
     mut execute: impl FnMut(&Chunk<'_>) -> Result<Vec<u32>, E>,
 ) -> Result<Batch, Failure<E>> {
     let mut progress = Progress::default();
@@ -502,7 +502,7 @@ pub fn check_with_source_views<'seed, E>(
         seeds,
         limits,
         selection,
-        control,
+        cancellation,
         &mut progress,
         &mut execute,
     )
@@ -533,7 +533,7 @@ struct Transport {
 
 /// The injected evaluator and its batch-local progress share one control door.
 struct Evaluation<'a, F> {
-    control: &'a Control,
+    cancellation: &'a Cancellation,
     progress: &'a mut Progress,
     execute: &'a mut F,
 }
@@ -654,26 +654,26 @@ fn run<'seed, E>(
     seeds: impl ExactSizeIterator<Item = SeedView<'seed>> + Clone,
     limits: Limits,
     selection: SourceSelection,
-    control: &Control,
+    cancellation: &Cancellation,
     progress: &mut Progress,
     execute: &mut impl FnMut(&Chunk<'_>) -> Result<Vec<u32>, E>,
 ) -> Result<Vec<Check>, Cause<E>> {
-    control.poll()?;
+    cancellation.poll()?;
     let candidates = seeds.len();
     validate_seeds(program, seeds.clone(), candidates)?;
     if candidates == 0 {
         return Ok(Vec::new());
     }
     let mut state = State::new(candidates, limits)?;
-    state.initialize(seeds.clone(), candidates, limits, control, progress)?;
+    state.initialize(seeds.clone(), candidates, limits, cancellation, progress)?;
     loop {
         progress.catalog_atoms = state.catalog.len();
         if progress.rounds >= limits.max_rounds {
             return Err(Stop::RoundLimit.into());
         }
-        control.poll()?;
+        cancellation.poll()?;
         state.transport.pending.fill(0);
-        let scanned = state.scan(program, selection, limits, control, progress, execute);
+        let scanned = state.scan(program, selection, limits, cancellation, progress, execute);
         let source_statistics = match scanned {
             Ok(statistics) => statistics,
             Err(failure) => {
@@ -690,15 +690,15 @@ fn run<'seed, E>(
         state.transport.flush(
             state.catalog.len(),
             &mut Evaluation {
-                control,
+                cancellation,
                 progress,
                 execute,
             },
         )?;
         // Identity may grow even when no consequence does. Freeze every offered
         // identity before testing convergence, including a final zero-delta round.
-        state.commit(limits, control, progress)?;
-        control.poll()?;
+        state.commit(limits, cancellation, progress)?;
+        cancellation.poll()?;
         progress.rounds += 1;
         let mut grew = false;
         for (old, delta) in state
@@ -716,7 +716,7 @@ fn run<'seed, E>(
     }
     progress.catalog_atoms = state.catalog.len();
     state
-        .conclusions(program, seeds, limits, control, progress)
+        .conclusions(program, seeds, limits, cancellation, progress)
         .map_err(Cause::Source)
 }
 
@@ -743,11 +743,11 @@ impl State {
         seeds: impl Iterator<Item = SeedView<'seed>>,
         candidates: usize,
         limits: Limits,
-        control: &Control,
+        cancellation: &Cancellation,
         progress: &mut Progress,
     ) -> Result<(), Stop> {
         let mut work = Work::source(
-            control,
+            cancellation,
             limits.max_source_work.saturating_sub(progress.source_work),
         );
         let result = (|| {
@@ -774,17 +774,17 @@ impl State {
         progress.record_source(work.source_statistics(0));
         progress.catalog_atoms = self.catalog.len();
         result?;
-        self.commit(limits, control, progress)
+        self.commit(limits, cancellation, progress)
     }
 
     fn commit(
         &mut self,
         limits: Limits,
-        control: &Control,
+        cancellation: &Cancellation,
         progress: &mut Progress,
     ) -> Result<(), Stop> {
         let mut work = Work::source(
-            control,
+            cancellation,
             limits.max_source_work.saturating_sub(progress.source_work),
         );
         let result = self
@@ -807,7 +807,7 @@ impl State {
         program: &Program,
         selection: SourceSelection,
         limits: Limits,
-        control: &Control,
+        cancellation: &Cancellation,
         progress: &mut Progress,
         execute: &mut impl FnMut(&Chunk<'_>) -> Result<Vec<u32>, E>,
     ) -> Result<source::ScanStatistics, source::ScanFailure<Cause<E>>> {
@@ -818,7 +818,7 @@ impl State {
                 .saturating_sub(RECORD_HEADER_WORDS - 1),
             max_instance_bytes: limits.max_instance_bytes,
         };
-        let mut work = Work::source(control, scan_limits.max_work);
+        let mut work = Work::source(cancellation, scan_limits.max_work);
         let prepared = prepare_snapshot(
             &mut self.catalog,
             &self.transport,
@@ -831,7 +831,7 @@ impl State {
         let transport = &mut self.transport;
         let workspace = &mut self.world_workspace;
         let mut evaluation = Evaluation {
-            control,
+            cancellation,
             progress,
             execute,
         };
@@ -865,7 +865,7 @@ impl State {
         program: &Program,
         seeds: impl ExactSizeIterator<Item = SeedView<'seed>>,
         limits: Limits,
-        control: &Control,
+        cancellation: &Cancellation,
         progress: &mut Progress,
     ) -> Result<Vec<Check>, Stop> {
         // Source rounds are complete. Transfer the sole dense Atom vector;
@@ -876,7 +876,7 @@ impl State {
             self.transport.payload_bytes,
         )?;
         let mut work = Work::source(
-            control,
+            cancellation,
             limits.max_source_work.saturating_sub(progress.source_work),
         );
         let atoms = self
@@ -891,7 +891,7 @@ impl State {
             .try_reserve_exact(transport.violated.len())
             .map_err(|_| Stop::Allocation)?;
         for (world, seed) in seeds.enumerate() {
-            control.poll()?;
+            cancellation.poll()?;
             if world >= transport.violated.len() {
                 return Err(Stop::InvalidProgram);
             }
@@ -919,7 +919,7 @@ impl State {
         if checks.len() != transport.violated.len() {
             return Err(Stop::InvalidProgram);
         }
-        control.poll()?;
+        cancellation.poll()?;
         Ok(checks)
     }
 }
@@ -1176,7 +1176,7 @@ impl Transport {
         if self.offsets.is_empty() {
             return Ok(());
         }
-        evaluation.control.poll()?;
+        evaluation.cancellation.poll()?;
         let worlds = self.violated.len();
         let chunk = Chunk {
             round_index: evaluation.progress.rounds,
@@ -1189,7 +1189,7 @@ impl Transport {
             records: &self.records,
         };
         let result = (evaluation.execute)(&chunk).map_err(Cause::Execution)?;
-        evaluation.control.poll()?;
+        evaluation.cancellation.poll()?;
         if result.len() != worlds * (self.words + 1) {
             return Err(Cause::InvalidOutput);
         }

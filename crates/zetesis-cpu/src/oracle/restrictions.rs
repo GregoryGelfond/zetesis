@@ -1,7 +1,7 @@
 //! Source-certified positive gate conjunctions forbidden in every answer set.
 
 use super::{Relations, Work, source::copy_atom, visit};
-use crate::{CandidateRestrictionLimits, Control, Stop};
+use crate::{Cancellation, CandidateRestrictionLimits, Stop};
 
 use std::sync::Arc;
 use zetesis_core::{Atom, AtomPattern, GateAtom, Model, Program, Template, Term};
@@ -34,9 +34,9 @@ impl Restrictions {
     pub(crate) fn compile(
         program: &Program,
         limits: CandidateRestrictionLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Attempt {
-        let mut work = Work::source(control, limits.max_work);
+        let mut work = Work::source(cancellation, limits.max_work);
         let result = compile(program, limits, &mut work);
         Attempt {
             result,
@@ -53,9 +53,9 @@ impl Restrictions {
         atoms: &[Arc<GateAtom>],
         bits: &[bool],
         max_work: u64,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> (Result<Option<Conflict>, Stop>, u64) {
-        let mut work = Work::source(control, max_work);
+        let mut work = Work::source(cancellation, max_work);
         let result = self.find_conflict(necessary, atoms, bits, &mut work);
         (result, work.statistics.work)
     }
@@ -168,9 +168,9 @@ fn compile(
     // actual unconditional facts enter this snapshot. Model::new's ordering,
     // deduplication and allocation are not metered by restriction_work; copied
     // input size is bounded above, and this existing operation is indivisible.
-    work.control.poll()?;
+    work.cancellation.poll()?;
     let facts = Model::new(facts);
-    work.control.poll()?;
+    work.cancellation.poll()?;
     let mut relations = Relations::new();
     for atom in facts.atoms() {
         work.tick()?;

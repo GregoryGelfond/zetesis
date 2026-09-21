@@ -1,13 +1,15 @@
 //! Watch moves preserve the registry independently of its optional-link layout.
 
 use super::{Budget, Decision, LocalQuota, State, WatchNode, scratch_bytes, storage};
-use crate::{AdmissionLimits, Cnf, Control, Incomplete, Literal, SearchLimits, SearchStatistics};
+use crate::{
+    AdmissionLimits, Cancellation, Cnf, Incomplete, Literal, SearchLimits, SearchStatistics,
+};
 
-fn budget(control: &Control) -> Budget<'_> {
+fn budget(cancellation: &Cancellation) -> Budget<'_> {
     Budget {
         quota: LocalQuota,
         limits: SearchLimits::default(),
-        control,
+        cancellation,
         statistics: SearchStatistics::default(),
     }
 }
@@ -50,10 +52,10 @@ fn relocating_a_watch_preserves_every_other_link() {
         AdmissionLimits::default(),
     )
     .unwrap();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     // Every position in a three-node list moves once: head, interior and tail.
     for moved_clause in 0..3 {
-        let mut charged = budget(&control);
+        let mut charged = budget(&cancellation);
         let mut state = State::new(&cnf, &mut charged).unwrap();
         assert!(state.initialize(&cnf, &mut charged).unwrap());
         let mut expected = registry(&state, &cnf);
@@ -82,8 +84,8 @@ fn trial_undo_retains_valid_relocated_watches() {
         AdmissionLimits::default(),
     )
     .unwrap();
-    let control = Control::default();
-    let mut charged = budget(&control);
+    let cancellation = Cancellation::default();
+    let mut charged = budget(&cancellation);
     let mut state = State::new(&cnf, &mut charged).unwrap();
     assert!(state.initialize(&cnf, &mut charged).unwrap());
     assert!(state.probe(&cnf, 1, &mut charged).unwrap());
@@ -110,14 +112,14 @@ fn optional_link_reservation_failure_is_inconclusive() {
 fn scratch_reservation_counts_the_stored_link_type() {
     let variables = 7;
     let clauses = 3;
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let cnf = Cnf::new(
         variables,
         vec![vec![Literal::new(0, true)]; clauses],
         AdmissionLimits::default(),
     )
     .unwrap();
-    let mut charged = budget(&control);
+    let mut charged = budget(&cancellation);
     let state = State::new(&cnf, &mut charged).unwrap();
     let links = std::mem::size_of_val(state.heads.as_slice())
         + std::mem::size_of_val(state.next.as_slice());

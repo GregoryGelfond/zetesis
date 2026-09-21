@@ -4,7 +4,7 @@ use rayon::prelude::*;
 use std::num::NonZeroUsize;
 
 use super::{BatchError, BatchOracle, prepared::Cache};
-use crate::{Control, Limits, PreparationLimits, Stop};
+use crate::{Cancellation, Limits, PreparationLimits, Stop};
 
 #[test]
 fn growing_batches_reuse_their_assigned_workspaces() {
@@ -23,7 +23,7 @@ fn growing_batches_reuse_their_assigned_workspaces() {
                     .into_par_iter()
                     .map(|index| seeds[index % seeds.len()].view()),
                 Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
         for (index, result) in results.iter().enumerate() {
@@ -31,7 +31,7 @@ fn growing_batches_reuse_their_assigned_workspaces() {
                 graph.program(),
                 &seeds[index % seeds.len()],
                 Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
             let actual = result.as_ref().unwrap();
@@ -77,7 +77,7 @@ fn growing_batches_reuse_their_assigned_workspaces() {
             graph.program(),
             &seeds,
             Limits::default(),
-            &Control::default()
+            &Cancellation::default()
         ),
         Err(BatchError::Preparation(Stop::WorkLimit))
     ));
@@ -93,7 +93,7 @@ fn collective_reservation_includes_idle_cache() {
             3,
             PreparationLimits::default(),
             usize::MAX,
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     let limits = Limits::default();

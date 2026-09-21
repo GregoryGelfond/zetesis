@@ -3,7 +3,7 @@
 use std::time::Instant;
 
 use proptest::prelude::*;
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
     AdmissionLimits, AggregateComparison as Comparison, AggregateElement as Element,
     AggregateErrorKind as Error, AggregateFamilyLimits as FamilyLimits, AggregateGuard as Guard,
@@ -108,7 +108,7 @@ fn verify(elements: &[Element], guards: &[Guard]) {
         elements,
         guards,
         FamilyLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(family.roots().len(), guards.len());
@@ -125,7 +125,13 @@ fn verify(elements: &[Element], guards: &[Guard]) {
             let candidate = world(&theory, outer);
             assert_eq!(eval(&reference, reference_root, outer, None), classical);
             assert_eq!(
-                models(&theory, &candidate, Limits::default(), &Control::default()).unwrap(),
+                models(
+                    &theory,
+                    &candidate,
+                    Limits::default(),
+                    &Cancellation::default()
+                )
+                .unwrap(),
                 classical
             );
             for inner in 0..4 {
@@ -145,7 +151,7 @@ fn verify(elements: &[Element], guards: &[Guard]) {
                         &candidate,
                         &world(&theory, inner),
                         Limits::default(),
-                        &Control::default()
+                        &Cancellation::default()
                     )
                     .unwrap(),
                     expected,
@@ -249,7 +255,7 @@ fn empty_zero_signed_and_extreme_guards_have_no_numeric_wraparound() {
             },
             max_guards: 2,
         },
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(family.statistics().states, 4);
@@ -284,7 +290,7 @@ fn ordered_duplicate_guards_use_one_threshold_table_without_subsets() {
             },
             max_guards: guards.len(),
         },
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(family.profile(), AggregateProfile::Threshold);
@@ -300,7 +306,7 @@ fn ordered_duplicate_guards_use_one_threshold_table_without_subsets() {
                 guard.comparison,
                 guard.bound,
                 AggregateLimits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap()
             .statistics()
@@ -318,7 +324,13 @@ fn ordered_duplicate_guards_use_one_threshold_table_without_subsets() {
         for count in [0, 7, 8, 9, 16] {
             let candidate = Interpretation::new(&theory, 0..count).unwrap();
             assert_eq!(
-                models(&theory, &candidate, Limits::default(), &Control::default()).unwrap(),
+                models(
+                    &theory,
+                    &candidate,
+                    Limits::default(),
+                    &Cancellation::default()
+                )
+                .unwrap(),
                 i64::try_from(count).unwrap() == guard.bound
             );
         }
@@ -328,8 +340,14 @@ fn ordered_duplicate_guards_use_one_threshold_table_without_subsets() {
 fn limited(elements: &[Element], guards: &[Guard], limits: FamilyLimits) -> Error {
     let original = prefix();
     let mut nodes = original.clone();
-    let error = append_aggregate_family(&mut nodes, elements, guards, limits, &Control::default())
-        .unwrap_err();
+    let error = append_aggregate_family(
+        &mut nodes,
+        elements,
+        guards,
+        limits,
+        &Cancellation::default(),
+    )
+    .unwrap_err();
     assert_eq!(
         nodes, original,
         "an incomplete family must roll back every appended node"
@@ -365,7 +383,7 @@ fn family_guard_node_work_state_and_element_ceilings_are_inclusive() {
         &elements,
         &guards,
         FamilyLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let exact = FamilyLimits {
@@ -385,7 +403,7 @@ fn family_guard_node_work_state_and_element_ceilings_are_inclusive() {
             &elements,
             &guards,
             exact,
-            &Control::default()
+            &Cancellation::default()
         )
         .unwrap(),
         family
@@ -474,9 +492,14 @@ fn signed_subset_budget_is_cumulative_and_late_refusal_is_atomic() {
         max_guards: 3,
     };
     let mut nodes = prefix();
-    let family =
-        append_aggregate_family(&mut nodes, &elements, &guards, exact, &Control::default())
-            .unwrap();
+    let family = append_aggregate_family(
+        &mut nodes,
+        &elements,
+        &guards,
+        exact,
+        &Cancellation::default(),
+    )
+    .unwrap();
     assert_eq!(family.profile(), AggregateProfile::SubsetImplications);
     assert_eq!(family.statistics().subsets, 12);
     assert_eq!(family.statistics().states, 2);
@@ -506,7 +529,7 @@ fn signed_subset_budget_is_cumulative_and_late_refusal_is_atomic() {
             },
             ..exact
         },
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert_eq!(error.statistics().subsets, 8);
@@ -534,7 +557,7 @@ fn empty_family_still_validates_and_appends_nothing() {
             },
             max_guards: 0,
         },
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert!(family.roots().is_empty());
@@ -558,7 +581,7 @@ fn empty_family_still_validates_and_appends_nothing() {
             &[],
             &[],
             FamilyLimits::default(),
-            &Control::default()
+            &Cancellation::default()
         )
         .unwrap_err()
         .kind(),
@@ -569,12 +592,12 @@ fn empty_family_still_validates_and_appends_nothing() {
 
 #[test]
 fn cancellation_and_deadlines_do_not_produce_empty_success() {
-    let cancelled = Control::default();
+    let cancelled = Cancellation::default();
     cancelled.cancel();
-    for (control, expected) in [
+    for (cancellation, expected) in [
         (cancelled, Stop::Cancelled),
         (
-            Control::with_deadline(Instant::now()).unwrap(),
+            Cancellation::with_deadline(Instant::now()).unwrap(),
             Stop::Deadline,
         ),
     ] {
@@ -590,7 +613,7 @@ fn cancellation_and_deadlines_do_not_produce_empty_success() {
                 },
                 max_guards: 0,
             },
-            &control,
+            &cancellation,
         )
         .unwrap_err();
         assert_eq!(error.kind(), Error::Control(expected));

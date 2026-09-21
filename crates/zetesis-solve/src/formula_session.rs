@@ -5,7 +5,7 @@ use crate::execution_observation::ExecutionSink;
 use std::cell::Cell;
 
 use zetesis_core::Model;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_objective::Score;
 use zetesis_sat::StableModels;
 
@@ -39,7 +39,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         execution: E,
         config: &SolveConfig,
         observations: &mut impl ExecutionSink,
-        control: &Control,
+        cancellation: &Cancellation,
         phases: &Recorder,
         selection: AnswerSelection,
     ) -> Self {
@@ -48,7 +48,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         if let Err(error) = session.initialize(
             config,
             observations,
-            control,
+            cancellation,
             phases,
             crate::batch_executor::Mode::Builtin,
         ) {
@@ -81,7 +81,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         &mut self,
         config: &SolveConfig,
         observations: &mut impl ExecutionSink,
-        control: &Control,
+        cancellation: &Cancellation,
         phases: &Recorder,
         mode: crate::batch_executor::Mode,
     ) -> Result<(), SolveError> {
@@ -103,21 +103,21 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
                     self.input.theory,
                     workers,
                     crate::countermodel::search_limits(config),
-                    control.clone(),
+                    cancellation.clone(),
                 )
             } else if config.search == crate::SearchMethod::Regions && config.workers.get() > 1 {
                 StableModels::with_region_producers(
                     self.input.theory,
                     config.workers,
                     crate::countermodel::search_limits(config),
-                    control.clone(),
+                    cancellation.clone(),
                 )
             } else {
                 StableModels::with_method(
                     self.input.theory,
                     config.search,
                     crate::countermodel::search_limits(config),
-                    control.clone(),
+                    cancellation.clone(),
                 )
             }
         });
@@ -164,10 +164,10 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             self.bounds = Some(
                 if self.input.objectives.is_present() && config.max_objective_bound_work != 0 {
                     phases.measure(SolvePhase::ObjectiveFeedback, || {
-                        Bounds::new(self.input, config, observations, control)
+                        Bounds::new(self.input, config, observations, cancellation)
                     })?
                 } else {
-                    Bounds::new(self.input, config, observations, control)?
+                    Bounds::new(self.input, config, observations, cancellation)?
                 },
             );
         }
@@ -178,10 +178,10 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         &mut self,
         config: &SolveConfig,
         observations: &mut impl ExecutionSink,
-        control: &Control,
+        cancellation: &Cancellation,
         phases: &Recorder,
     ) -> Option<Result<(Model, Option<Score>), SolveError>> {
-        let next = self.next_result(config, observations, control, phases);
+        let next = self.next_result(config, observations, cancellation, phases);
         self.import_timings(
             phases,
             self.models
@@ -195,7 +195,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         &mut self,
         config: &SolveConfig,
         observations: &mut impl ExecutionSink,
-        control: &Control,
+        cancellation: &Cancellation,
         phases: &Recorder,
     ) -> Option<Result<(Model, Option<Score>), SolveError>> {
         if let Some(error) = self.pending_error.take() {
@@ -222,7 +222,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
                 .execution
                 .as_mut()
                 .expect("unfinished session has a membership executor")
-                .next(models, config, control, phases);
+                .next(models, config, cancellation, phases);
             let interpretation = match next {
                 Some(Ok(model)) => model,
                 Some(Err(Failure::Search(error))) => {
@@ -252,7 +252,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             if self.selection == AnswerSelection::All {
                 let score = phases.measure(SolvePhase::ObjectiveScoringRetention, || {
                     self.incumbents
-                        .evaluate(self.input.objectives, &model, config, control)
+                        .evaluate(self.input.objectives, &model, config, cancellation)
                 });
                 return match score {
                     Ok(score) => {
@@ -267,7 +267,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             }
             let scored = phases.measure(SolvePhase::ObjectiveScoringRetention, || {
                 self.incumbents
-                    .consider(self.input.objectives, model, config, control)
+                    .consider(self.input.objectives, model, config, cancellation)
             });
             match scored {
                 Ok(true) => {
@@ -284,7 +284,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
                             self.models.as_mut().expect("owned candidate stream"),
                             config,
                             observations,
-                            control,
+                            cancellation,
                         );
                     if let Err(error) = improved {
                         self.fail(error, phases);
@@ -405,7 +405,7 @@ impl<'a> FormulaSession<'a, crate::formula_execution::Execution> {
         config: &SolveConfig,
         resources: crate::session::Executors<'_>,
         observations: &mut impl ExecutionSink,
-        control: &Control,
+        cancellation: &Cancellation,
         phases: &Recorder,
         selection: AnswerSelection,
     ) -> Result<Self, SolveError> {
@@ -416,7 +416,7 @@ impl<'a> FormulaSession<'a, crate::formula_execution::Execution> {
             .map_or(crate::batch_executor::Mode::Builtin, |executor| {
                 crate::batch_executor::Mode::External(executor.capabilities())
             });
-        if let Err(error) = session.initialize(config, observations, control, phases, mode) {
+        if let Err(error) = session.initialize(config, observations, cancellation, phases, mode) {
             session.fail(error, phases);
         }
         if session.final_outcome.is_none() {
@@ -436,7 +436,7 @@ impl<'a> FormulaSession<'a, crate::formula_execution::Execution> {
                         capabilities,
                         selected,
                         config,
-                        control,
+                        cancellation,
                         observations,
                     )
                 }) {

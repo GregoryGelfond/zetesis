@@ -4,7 +4,7 @@ use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
 use zetesis_core::{Model, Term, Value};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, models};
 use zetesis_objective::{ObjectiveProgram, ObjectiveTemplate, Score, evaluate};
 use zetesis_sat::StableModels;
@@ -38,7 +38,7 @@ fn score(input: &AdmittedFormula, mask: usize) -> Score {
         input.objectives(),
         &model,
         zetesis_objective::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .expect("independent score")
     .score()
@@ -50,7 +50,7 @@ fn plan(input: &AdmittedFormula) -> ObjectivePlan {
         input.atoms(),
         input.objectives(),
         ObjectivePlanLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .expect("complete eligibility plan")
 }
@@ -72,7 +72,7 @@ fn compare_all(source: &str) {
             .bound(
                 incumbent,
                 ObjectiveBoundLimits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .expect("exact optional bound");
         assert!(bound.original().same_instance(input.theory()));
@@ -87,7 +87,7 @@ fn compare_all(source: &str) {
                 bound.theory(),
                 &candidate,
                 zetesis_ferraris::Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .expect("complete truth evaluation");
             assert_eq!(
@@ -134,7 +134,7 @@ fn constant_score(priority: i32, weight: i32) -> Score {
         &objectives,
         &Model::new([]),
         zetesis_objective::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .expect("fixed score")
     .score()
@@ -155,7 +155,7 @@ fn foreign_priority_slots_obey_missing_zero_comparison() {
             .bound(
                 &incumbent,
                 ObjectiveBoundLimits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .expect("priority union");
         for mask in 0..2 {
@@ -169,7 +169,7 @@ fn foreign_priority_slots_obey_missing_zero_comparison() {
                     bound.theory(),
                     &candidate,
                     zetesis_ferraris::Limits::default(),
-                    &Control::default()
+                    &Cancellation::default()
                 )
                 .expect("truth"),
                 score(&input, mask).compare_costs(&incumbent) != Ordering::Greater
@@ -185,7 +185,7 @@ fn candidate_restriction_preserves_original_reduct_and_every_optimal_tie() {
     let mut baseline = StableModels::new(
         input.theory(),
         zetesis_sat::Limits::default(),
-        Control::default(),
+        Cancellation::default(),
     )
     .expect("original search");
     let expected: BTreeSet<_> = baseline
@@ -205,20 +205,20 @@ fn candidate_restriction_preserves_original_reduct_and_every_optimal_tie() {
         input.objectives(),
         &model,
         zetesis_objective::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .expect("verified incumbent score");
     let bound = plan(&input)
         .bound(
             incumbent.score(),
             ObjectiveBoundLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .expect("candidate bound");
     let mut restricted = StableModels::new(
         input.theory(),
         zetesis_sat::Limits::default(),
-        Control::default(),
+        Cancellation::default(),
     )
     .expect("original search");
     restricted
@@ -310,7 +310,7 @@ fn optional_plan_limits_are_typed() {
             input.atoms(),
             input.objectives(),
             limits,
-            &Control::default(),
+            &Cancellation::default(),
         )
         .expect_err("bounded optional refusal");
         assert_eq!(error.kind(), ObjectiveBoundErrorKind::Limit(resource));
@@ -330,7 +330,7 @@ fn optional_bound_failures_do_not_poison_the_plan_or_theory() {
         ..ObjectiveBoundLimits::default()
     };
     assert!(matches!(
-        plan.bound(&incumbent, limits, &Control::default())
+        plan.bound(&incumbent, limits, &Cancellation::default())
             .expect_err("both exact representations exceed the state ceiling")
             .kind(),
         ObjectiveBoundErrorKind::Aggregate(_)
@@ -339,14 +339,14 @@ fn optional_bound_failures_do_not_poison_the_plan_or_theory() {
         plan.bound(
             &incumbent,
             ObjectiveBoundLimits::default(),
-            &Control::default()
+            &Cancellation::default()
         )
         .is_ok()
     );
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     assert!(matches!(
-        plan.bound(&incumbent, ObjectiveBoundLimits::default(), &control)
+        plan.bound(&incumbent, ObjectiveBoundLimits::default(), &cancellation)
             .expect_err("cancelled optional work")
             .kind(),
         ObjectiveBoundErrorKind::Control(_)
@@ -358,7 +358,7 @@ fn optional_bound_failures_do_not_poison_the_plan_or_theory() {
             &duplicates,
             input.objectives(),
             ObjectivePlanLimits::default(),
-            &Control::default()
+            &Cancellation::default()
         )
         .expect_err("duplicate identity")
         .kind(),
@@ -380,7 +380,7 @@ fn cumulative_accounting_respects_inclusive_work_limits_on_every_return() {
                 max_work: ceiling,
                 ..ObjectivePlanLimits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         );
         if ceiling == plan_work {
             assert_eq!(
@@ -401,7 +401,7 @@ fn cumulative_accounting_respects_inclusive_work_limits_on_every_return() {
         .bound(
             &incumbent,
             ObjectiveBoundLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .expect("complete bound");
     let bound_work = complete_bound.statistics().work;
@@ -412,7 +412,7 @@ fn cumulative_accounting_respects_inclusive_work_limits_on_every_return() {
                 max_work: ceiling,
                 ..ObjectiveBoundLimits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         );
         if ceiling == bound_work {
             assert_eq!(

@@ -3,7 +3,7 @@
 // ANCHOR: example
 use std::convert::Infallible;
 
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{Limits, Theory, Verdict};
 use zetesis_solve::{
     BatchExecutor, BatchResult, BatchVerdict, CandidateBatch, ExecutorCapabilities, ExecutorError,
@@ -25,9 +25,9 @@ impl BatchExecutor for ReferenceExecutor {
     fn prepare(
         &mut self,
         plan: MembershipPlan<'_>,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<(), ExecutorFailure<Self::Error>> {
-        control.poll()?;
+        cancellation.poll()?;
         let MembershipPlan::General(theory) = plan else {
             return Err(ExecutorFailure::Unsupported);
         };
@@ -38,7 +38,7 @@ impl BatchExecutor for ReferenceExecutor {
     fn check<'a>(
         &mut self,
         batch: CandidateBatch<'a>,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<BatchResult<'a>, ExecutorFailure<Self::Error>> {
         if !self
             .theory
@@ -52,7 +52,8 @@ impl BatchExecutor for ReferenceExecutor {
             .try_reserve_exact(batch.candidates().len())
             .map_err(|_| Stop::Allocation)?;
         for candidate in batch.candidates() {
-            let check = zetesis_ferraris::check(batch.theory(), candidate, self.limits, control)?;
+            let check =
+                zetesis_ferraris::check(batch.theory(), candidate, self.limits, cancellation)?;
             verdicts.push(match check.verdict() {
                 Verdict::Stable => BatchVerdict::NoProperSubset,
                 Verdict::NonMinimal { .. } => BatchVerdict::Refuted,
@@ -86,7 +87,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             models: 0,
             ..Default::default()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .executor(executor)
     .collect(WorldViewLimits::default())?;

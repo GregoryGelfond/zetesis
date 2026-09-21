@@ -3,7 +3,7 @@
 use std::{io, num::NonZeroUsize};
 
 use clap::Parser;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
     AdmissionOptions, Admitted, ExpansionLimits, FormulaLimits, admit_extended, admit_formula,
 };
@@ -57,7 +57,7 @@ fn unclassified_membership_cannot_make_a_success_report() {
     let mut session = Session::new(
         PreparedInput::admitted(&admitted),
         config(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     assert!(session.next().unwrap().is_ok());
@@ -85,7 +85,7 @@ fn report_mutation_cannot_rewrite_later_failure() {
     let mut session = Session::new(
         PreparedInput::admitted(&admitted),
         config(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     assert!(session.next().unwrap().is_ok());
@@ -128,7 +128,7 @@ fn scoring_stop_remains_distinct_from_publication() {
             max_objective_work: 0,
             ..config()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     assert!(session.next().is_none());
@@ -186,7 +186,7 @@ fn completion_fault_has_an_unavailable_json_outcome() {
 }
 
 fn unpublished_session(input: PreparedInput<'_>, config: SolveConfig) -> Progress {
-    let mut session = Session::new(input, config, Control::default()).unwrap();
+    let mut session = Session::new(input, config, Cancellation::default()).unwrap();
     for answer in session.by_ref() {
         answer.unwrap();
     }
@@ -314,7 +314,7 @@ fn missing_completion_prevents_a_human_summary() {
     let mut session = Session::new(
         PreparedInput::admitted(&admitted),
         config(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     assert!(session.next().unwrap().is_ok());

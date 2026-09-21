@@ -2,7 +2,7 @@
 
 use super::tests::{assert_sat, budget, query, verify_registry};
 use super::*;
-use crate::{AdmissionLimits, Control};
+use crate::{AdmissionLimits, Cancellation};
 
 fn p(variable: usize) -> Literal {
     Literal::new(variable, true)
@@ -32,8 +32,8 @@ fn closed_prefix_is_not_undone_or_repropagated() {
         &[p(3)],
     );
     assert_eq!(workspace.base, BaseClosure::Closed { trail_len: 3 });
-    let control = Control::default();
-    let mut reset = budget(&control, u64::MAX);
+    let cancellation = Cancellation::default();
+    let mut reset = budget(&cancellation, u64::MAX);
     workspace.reset(&cnf, &mut reset).unwrap();
     // One reset plus two candidate-suffix values; the three derived base values
     // remain assigned and their already-processed events are not replayed.
@@ -116,7 +116,7 @@ fn unconditional_conflict_is_reused_for_new_parameters() {
 fn indexed(cnf: &Cnf) -> PreparedWorkspace {
     let mut workspace = PreparedWorkspace::default();
     workspace
-        .reset(cnf, &mut budget(&Control::default(), u64::MAX))
+        .reset(cnf, &mut budget(&Cancellation::default(), u64::MAX))
         .unwrap();
     assert!(workspace.indexed);
     assert_eq!(workspace.base, BaseClosure::Unprepared);
@@ -129,8 +129,8 @@ fn interrupted_base_propagation_never_publishes_a_result() {
         (chain(), vec![0], true),
         (contradiction(), vec![0, 2], false),
     ] {
-        let control = Control::default();
-        let mut completed = budget(&control, u64::MAX);
+        let cancellation = Cancellation::default();
+        let mut completed = budget(&cancellation, u64::MAX);
         assert_eq!(
             indexed(&cnf)
                 .prepare_base(&cnf, &units, false, &mut completed)
@@ -143,7 +143,7 @@ fn interrupted_base_propagation_never_publishes_a_result() {
         );
         for limit in 0..completed.statistics.work {
             let mut workspace = indexed(&cnf);
-            let mut stopped = budget(&control, limit);
+            let mut stopped = budget(&cancellation, limit);
             assert_eq!(
                 workspace.prepare_base(&cnf, &units, false, &mut stopped),
                 Err(Incomplete::WorkLimit)
@@ -160,7 +160,7 @@ fn interrupted_base_propagation_never_publishes_a_result() {
             verify_registry(&workspace, &cnf);
         }
         let mut workspace = indexed(&cnf);
-        let mut exact = budget(&control, completed.statistics.work);
+        let mut exact = budget(&cancellation, completed.statistics.work);
         assert_eq!(
             workspace
                 .prepare_base(&cnf, &units, false, &mut exact)
@@ -230,7 +230,12 @@ fn moved_nonempty_base(cnf: &Cnf) -> PreparedWorkspace {
     let mut workspace = indexed(cnf);
     assert!(
         workspace
-            .prepare_base(cnf, &[0], false, &mut budget(&Control::default(), u64::MAX))
+            .prepare_base(
+                cnf,
+                &[0],
+                false,
+                &mut budget(&Cancellation::default(), u64::MAX)
+            )
             .unwrap()
     );
     let base_positions = workspace.workspace.0.positions[2];

@@ -2,7 +2,7 @@
 
 use std::io::Write;
 
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 use crate::display::record::{Contents, Record};
 use crate::{
@@ -41,12 +41,16 @@ impl<W: Write> AnswerRenderer for HumanRenderer<W> {
         SummaryStage::SearchFinished
     }
 
-    fn answer(&mut self, view: AnswerView<'_>, control: &Control) -> Result<(), RunError> {
+    fn answer(
+        &mut self,
+        view: AnswerView<'_>,
+        cancellation: &Cancellation,
+    ) -> Result<(), RunError> {
         let rendered;
         let contents = if view.observations {
             rendered = view
                 .model
-                .render(view.limits, control)
+                .render(view.limits, cancellation)
                 .map_err(RunError::Observation)?;
             Contents::Observed(rendered.text())
         } else {
@@ -60,9 +64,9 @@ impl<W: Write> AnswerRenderer for HumanRenderer<W> {
             view.model.score(),
             self.color,
             self.max_record_bytes,
-            control,
+            cancellation,
         )?;
-        control.poll().map_err(RunError::PublicationStopped)?;
+        cancellation.poll().map_err(RunError::PublicationStopped)?;
         self.output.write_all(record.bytes())?;
         Ok(())
     }

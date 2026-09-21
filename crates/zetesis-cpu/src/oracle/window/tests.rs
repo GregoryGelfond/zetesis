@@ -3,7 +3,7 @@
 use zetesis_core::{Atom, Predicate, Sign, Term, ValueLimits, ValueNode};
 
 use super::*;
-use crate::Control;
+use crate::Cancellation;
 
 fn tuple(values: Vec<Value>) -> Atom {
     Atom::new(Predicate::new("row", values.len()).unwrap(), values).unwrap()
@@ -46,8 +46,8 @@ fn lookup(
     assignment: &[Option<&Value>],
     limit: u64,
 ) -> Result<(Range<usize>, u64), Stop> {
-    let control = Control::default();
-    let mut work = Work::source(&control, limit);
+    let cancellation = Cancellation::default();
+    let mut work = Work::source(&cancellation, limit);
     let range = matching_prefix(pattern, Rows::Borrowed(rows), 0, assignment, &mut work)?;
     Ok((range, work.statistics.work))
 }
@@ -160,8 +160,8 @@ fn a_bound_prefix_of_a_dense_relation_is_its_block_of_positions() {
     let axis = |values: &[i32]| Bound::Finite(values.iter().map(|&n| Value::Number(n)).collect());
     let mut layouts = Layouts::default();
     layouts.push(Layout::new(&predicate, &[axis(&[1, 2, 3]), axis(&[10, 20])], 64).unwrap());
-    let control = Control::default();
-    let mut work = Work::source(&control, 1_000);
+    let cancellation = Cancellation::default();
+    let mut work = Work::source(&cancellation, 1_000);
     work.limits.max_closure_bytes = 1 << 20;
     let mut catalogs = Catalogs::default();
     catalogs

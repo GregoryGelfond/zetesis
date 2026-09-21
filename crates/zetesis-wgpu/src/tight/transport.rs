@@ -5,7 +5,7 @@ use super::{TightGpuActivity, TightGpuCheck, poll};
 use crate::runtime::{self, Dispatch, buffer, entry, initialized};
 use crate::{GpuError, GpuErrorKind};
 use std::time::Duration;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 pub(super) struct Resident {
     pub(super) graph: Graph,
@@ -57,7 +57,7 @@ impl Resident {
             queue,
             pipeline,
             timeout,
-            control,
+            cancellation,
         } = *execution;
         if self.transport.is_none() {
             self.transport = Some(Transport::new(device, pipeline, self, plan));
@@ -66,7 +66,7 @@ impl Resident {
             .transport
             .as_ref()
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing tight transport"))?;
-        poll(control)?;
+        poll(cancellation)?;
         queue.write_buffer(
             &transport.params,
             0,
@@ -96,8 +96,8 @@ impl Resident {
             &transport.readback,
             submission,
             timeout,
-            || poll(control),
-            |words| packing::decode(words, &self.graph, plan, seeds, control),
+            || poll(cancellation),
+            |words| packing::decode(words, &self.graph, plan, seeds, cancellation),
         );
         if result.is_ok() {
             activity.completed_candidates = u64::from(plan.worlds);
@@ -113,7 +113,7 @@ pub(super) struct Execution<'a> {
     pub(super) queue: &'a wgpu::Queue,
     pub(super) pipeline: &'a wgpu::ComputePipeline,
     pub(super) timeout: Duration,
-    pub(super) control: &'a Control,
+    pub(super) cancellation: &'a Cancellation,
 }
 
 pub(super) struct Transport {

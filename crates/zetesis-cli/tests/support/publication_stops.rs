@@ -9,7 +9,7 @@ use std::{
     io::{self, Write},
     ops::ControlFlow,
 };
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_themelios::{
     AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula,
     observation::{ErrorKind, ViewError},
@@ -39,7 +39,7 @@ fn options(json: bool) -> Options {
 
 struct CancelAfterRecord {
     bytes: Vec<u8>,
-    control: Control,
+    cancellation: Cancellation,
     json: bool,
     fail_footer: bool,
 }
@@ -59,7 +59,7 @@ impl Write for CancelAfterRecord {
         } else {
             bytes.starts_with(b"Answer:")
         } {
-            self.control.cancel();
+            self.cancellation.cancel();
         }
         Ok(bytes.len())
     }
@@ -164,10 +164,10 @@ fn replay_json_footer(stopped: &crate::StoppedPublication, original: &[u8]) {
 #[test]
 fn stopped_optimum_footer_preserves_every_publication_boundary() {
     for json in [false, true] {
-        let control = Control::default();
+        let cancellation = Cancellation::default();
         let mut output = CancelAfterRecord {
             bytes: Vec::new(),
-            control: control.clone(),
+            cancellation: cancellation.clone(),
             json,
             fail_footer: false,
         };
@@ -176,7 +176,7 @@ fn stopped_optimum_footer_preserves_every_publication_boundary() {
             &options(json),
             &mut output,
             &mut io::sink(),
-            &control,
+            &cancellation,
         )
         .unwrap();
         let PublicationOutcome::Stopped(stopped) = outcome else {
@@ -197,10 +197,10 @@ fn stopped_optimum_footer_preserves_every_publication_boundary() {
 #[test]
 fn cancellation_between_optimal_ties_preserves_exhaustion_and_framing() {
     for json in [false, true] {
-        let control = Control::default();
+        let cancellation = Cancellation::default();
         let mut output = CancelAfterRecord {
             bytes: Vec::new(),
-            control: control.clone(),
+            cancellation: cancellation.clone(),
             json,
             fail_footer: false,
         };
@@ -210,7 +210,7 @@ fn cancellation_between_optimal_ties_preserves_exhaustion_and_framing() {
             &options(json),
             &mut output,
             &mut diagnostics,
-            &control,
+            &cancellation,
         )
         .unwrap();
         let PublicationOutcome::Stopped(stopped) = &outcome else {
@@ -260,9 +260,9 @@ fn publication_stop_before_first_record_keeps_unclassified_search() {
         )
         .unwrap();
         let options = options(json);
-        let control = Control::default();
+        let cancellation = Cancellation::default();
         let input = crate::PreparedInput::formula(&owner);
-        let mut session = Session::builder(input, (&options).into(), control.clone())
+        let mut session = Session::builder(input, (&options).into(), cancellation.clone())
             .selection(AnswerSelection::All)
             .start()
             .unwrap();
@@ -270,13 +270,13 @@ fn publication_stop_before_first_record_keeps_unclassified_search() {
         let mut progress = super::Progress::new();
         progress.apply(session.progress());
         assert_eq!(progress.semantic().unwrap().completion(), None);
-        control.cancel();
+        cancellation.cancel();
         let metadata = input.metadata().unwrap();
         let mut display = crate::display::Display {
             selection: metadata.output(),
             observations: metadata.observations(),
             limits: crate::PublicationConfig::from(&options).observations,
-            control: &control,
+            cancellation: &cancellation,
         };
         let mut output = Vec::new();
         let mut renderer = crate::view::builtin::Builtin::new(&mut output, &options);
@@ -320,10 +320,10 @@ fn publication_stop_before_first_record_keeps_unclassified_search() {
 
 #[test]
 fn final_writer_failure_preserves_the_prior_publication_stop() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut output = CancelAfterRecord {
         bytes: Vec::new(),
-        control: control.clone(),
+        cancellation: cancellation.clone(),
         json: true,
         fail_footer: true,
     };
@@ -331,7 +331,7 @@ fn final_writer_failure_preserves_the_prior_publication_stop() {
         "1 {a;b} 1. #minimize{1,a:a;1,b:b}.".into(),
         &options(true),
         &mut output,
-        &control,
+        &cancellation,
     )
     .unwrap_err();
     assert!(

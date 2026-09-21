@@ -10,7 +10,7 @@ use clap::Parser;
 use zetesis_cli::{
     Completion, Options, RunError, run_bundle_with_diagnostics, run_with_diagnostics,
 };
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::{BundleLimits, SourceBundle};
 
 static NEXT_DIRECTORY: AtomicU64 = AtomicU64::new(0);
@@ -229,7 +229,7 @@ fn bundle_and_string_paths_share_exhaustive_solver_results() {
         &options,
         &mut original,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let mut explicit = Vec::new();
@@ -238,7 +238,7 @@ fn bundle_and_string_paths_share_exhaustive_solver_results() {
         &options,
         &mut explicit,
         &mut Vec::new(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(original, explicit);
@@ -290,7 +290,7 @@ fn unsafe_included_rule_keeps_original_file_and_span_in_typed_failure() {
         &options(&["--backend", "cpu"]),
         &mut models,
         &mut Vec::new(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(models.is_empty());
@@ -322,7 +322,7 @@ fn combined_expansion_budget_applies_across_original_files() {
         &options(&["--backend", "cpu", "--max-expanded-templates", "3"]),
         &mut models,
         &mut Vec::new(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(error, RunError::BundleAdmission(_)));
@@ -360,7 +360,7 @@ fn files_resolve_original_includes_but_strings_have_no_implicit_base_path() {
         &options(&["--backend", "cpu"]),
         &mut Vec::new(),
         &mut Vec::new(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(error, RunError::FormulaAdmission(_)));
@@ -375,7 +375,7 @@ fn lazy_formula_bundle_is_refused_before_device_discovery() {
         &options(&["--backend", "metal", "--grounder", "lazy"]),
         &mut Vec::new(),
         &mut Vec::new(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(

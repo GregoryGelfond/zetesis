@@ -8,7 +8,7 @@ use std::process::Command;
 fn every_queens_variant_accepts_the_same_board_parameter() {
     use clap::Parser;
     use zetesis_cli::{Completion, Options, run_with_diagnostics};
-    use zetesis_cpu::Control;
+    use zetesis_cpu::Cancellation;
 
     let options = Options::try_parse_from([
         "zetesis",
@@ -33,7 +33,7 @@ fn every_queens_variant_accepts_the_same_board_parameter() {
             &options,
             &mut output,
             &mut Vec::new(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         assert_eq!(report.completion, Completion::Exhausted);

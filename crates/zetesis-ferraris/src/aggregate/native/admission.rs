@@ -3,7 +3,7 @@
 use std::cmp::Ordering;
 
 use zetesis_core::Value as Term;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 use super::{
     AdmissionLimits, Bound, Error, ErrorKind, Function, Group, Guard, Resource, Statistics, Tuple,
@@ -17,11 +17,11 @@ pub(super) fn build(
     tuples: Vec<Tuple>,
     guards: Vec<Guard>,
     limits: AdmissionLimits,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<Group, Error> {
     let mut work = Work {
         maximum: limits.max_work,
-        control,
+        cancellation,
         statistics: Statistics::default(),
     };
     let result = prepare(theory, &tuples, &guards, limits, &mut work);

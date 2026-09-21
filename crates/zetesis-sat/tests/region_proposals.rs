@@ -10,7 +10,7 @@ use std::num::NonZeroUsize;
 
 use zetesis_ferraris::{Interpretation, Node, Theory};
 use zetesis_sat::{
-    BatchError, BatchLimits, BatchVerdict, CompletionExecutor, Control, Incomplete, Limits,
+    BatchError, BatchLimits, BatchVerdict, Cancellation, CompletionExecutor, Incomplete, Limits,
     SearchLimits, SearchMethod, StableModels,
 };
 
@@ -36,7 +36,8 @@ fn residual(
 }
 
 fn proposed(theory: &Theory, limits: Limits) -> StableModels {
-    StableModels::with_region_producers(theory, nonzero(4), limits, Control::default()).unwrap()
+    StableModels::with_region_producers(theory, nonzero(4), limits, Cancellation::default())
+        .unwrap()
 }
 
 fn expected(theory: &Theory) -> BTreeSet<Vec<usize>> {
@@ -51,7 +52,7 @@ fn expected(theory: &Theory) -> BTreeSet<Vec<usize>> {
                 theory,
                 &candidate,
                 zetesis_ferraris::Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap()
             .accepted()
@@ -78,13 +79,14 @@ fn shared_indexes_preserve_non_tight_answer_families() {
         zetesis_ferraris::TightPlan::compile(
             &theory,
             zetesis_ferraris::TightPlanLimits::default(),
-            &Control::default()
+            &Cancellation::default()
         ),
         Err(zetesis_ferraris::TightError::PositiveCycle { .. })
     ));
     let expected = expected(&theory);
     assert_eq!(expected.len(), 8);
-    let mut scalar = StableModels::new(&theory, Limits::default(), Control::default()).unwrap();
+    let mut scalar =
+        StableModels::new(&theory, Limits::default(), Cancellation::default()).unwrap();
     let actual: BTreeSet<Vec<_>> = scalar
         .by_ref()
         .map(|answer| answer.unwrap().atoms().collect())
@@ -102,7 +104,7 @@ fn shared_indexes_preserve_non_tight_answer_families() {
             &theory,
             nonzero(workers),
             Limits::default(),
-            Control::default(),
+            Cancellation::default(),
         )
         .unwrap();
         let answers: Vec<Vec<_>> = native
@@ -124,7 +126,7 @@ fn shared_indexes_preserve_non_tight_answer_families() {
                     &theory,
                     nonzero(workers),
                     Limits::default(),
-                    Control::default(),
+                    Cancellation::default(),
                 )
                 .unwrap();
                 let mut completion = CompletionExecutor::new(nonzero(completion_workers)).unwrap();
@@ -156,7 +158,7 @@ fn frontier_peaks_survive_complete_enumeration() {
             &theory,
             nonzero(workers),
             Limits::default(),
-            Control::default(),
+            Cancellation::default(),
         )
         .unwrap();
         let mut prior = search.statistics().regions.unwrap().frontier.unwrap();
@@ -224,14 +226,14 @@ fn an_unmeasured_frontier_is_absent() {
             &theory,
             SearchMethod::Regions,
             Limits::default(),
-            Control::default(),
+            Cancellation::default(),
         )
         .unwrap(),
         StableModels::with_region_producers(
             &theory,
             nonzero(1),
             Limits::default(),
-            Control::default(),
+            Cancellation::default(),
         )
         .unwrap(),
     ];

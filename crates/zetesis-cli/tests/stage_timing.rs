@@ -5,7 +5,7 @@ use zetesis_cli::{
     Completion, GroundingMode, Options, PhaseTimings, SolvePhase, SolveStage,
     run_detailed_with_diagnostics,
 };
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 fn options(args: &[&str], enabled: bool) -> Options {
     let mut options = Options::try_parse_from(
@@ -70,7 +70,7 @@ fn eager_lazy_formula_certified_and_parallel_routes_preserve_results() {
                 &options(&args, enabled),
                 &mut output,
                 &mut diagnostics,
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
             assert_eq!(report.completion, Completion::Exhausted);
@@ -146,7 +146,7 @@ fn source_grounding_and_setup_failures_keep_only_entered_stages() {
             &options(&args, true),
             &mut output,
             &mut Vec::new(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
         assert!(!String::from_utf8(output).unwrap().contains("Answer:"));
@@ -165,7 +165,7 @@ fn source_grounding_and_setup_failures_keep_only_entered_stages() {
         &options(&["--max-search-work", "0"], true),
         &mut Vec::new(),
         &mut Vec::new(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(report.completion, Completion::Interrupted);
@@ -186,14 +186,14 @@ impl io::Write for Closed {
 }
 #[test]
 fn early_cancellation_and_output_failure_retain_typed_attempts() {
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     let report = run_detailed_with_diagnostics(
         "invalid input never admitted".into(),
         &options(&["--oracle", "countermodel"], true),
         &mut Vec::new(),
         &mut Vec::new(),
-        &control,
+        &cancellation,
     )
     .unwrap();
     assert_eq!(report.completion, Completion::Interrupted);
@@ -213,7 +213,7 @@ fn early_cancellation_and_output_failure_retain_typed_attempts() {
         &options(&[], true),
         &mut Closed,
         &mut Vec::new(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(*failure.cause, zetesis_cli::RunError::Output(_)));
@@ -241,7 +241,7 @@ fn original_bundle_formula_grounding_has_the_same_host_boundaries() {
         &options(&["--oracle", "countermodel"], true),
         &mut Vec::new(),
         &mut Vec::new(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(report.completion, Completion::Exhausted);

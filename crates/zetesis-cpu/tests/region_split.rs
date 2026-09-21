@@ -3,7 +3,7 @@
 //! counted when its narrowing decided nothing beyond the split.
 
 use zetesis_core::{Atom, Program, Seed, Template, Term};
-use zetesis_cpu::{CandidateLimits, Candidates, Control, Limits, Stop, check};
+use zetesis_cpu::{Cancellation, CandidateLimits, Candidates, Limits, Stop, check};
 
 #[path = "support/programs.rs"]
 mod programs;
@@ -58,13 +58,15 @@ fn spelled(seed: &Seed) -> Vec<String> {
 
 /// Every seed the bounded counter offers, with its verdict.
 fn offered(program: &Program) -> (Vec<(Vec<String>, bool)>, zetesis_cpu::CandidateStatistics) {
-    let mut candidates = Candidates::new(program, CandidateLimits::default(), Control::default());
+    let mut candidates =
+        Candidates::new(program, CandidateLimits::default(), Cancellation::default());
     candidates.bounded(Limits::default());
     let seeds = candidates
         .by_ref()
         .map(|seed| {
             let seed = seed.unwrap();
-            let checked = check(program, &seed, Limits::default(), &Control::default()).unwrap();
+            let checked =
+                check(program, &seed, Limits::default(), &Cancellation::default()).unwrap();
             (spelled(&seed), checked.accepted())
         })
         .collect();
@@ -105,16 +107,19 @@ fn leaves_come_in_the_counters_order() {
     // order in which the plain counter reaches the same accepted seeds.
     let program = independent(4, true);
     let (offered, _) = offered(&program);
-    let counted: Vec<Vec<String>> =
-        Candidates::new(&program, CandidateLimits::default(), Control::default())
-            .map(|seed| seed.unwrap())
-            .filter(|seed| {
-                check(&program, seed, Limits::default(), &Control::default())
-                    .unwrap()
-                    .accepted()
-            })
-            .map(|seed| spelled(&seed))
-            .collect();
+    let counted: Vec<Vec<String>> = Candidates::new(
+        &program,
+        CandidateLimits::default(),
+        Cancellation::default(),
+    )
+    .map(|seed| seed.unwrap())
+    .filter(|seed| {
+        check(&program, seed, Limits::default(), &Cancellation::default())
+            .unwrap()
+            .accepted()
+    })
+    .map(|seed| spelled(&seed))
+    .collect();
     let leaves: Vec<Vec<String>> = offered.into_iter().map(|(seed, _)| seed).collect();
     assert_eq!(leaves, counted);
 }
@@ -168,7 +173,7 @@ fn the_candidate_limit_counts_leaves_and_counted_seeds_alike() {
         max_candidates: 5,
         ..CandidateLimits::default()
     };
-    let mut candidates = Candidates::new(&program, limits, Control::default());
+    let mut candidates = Candidates::new(&program, limits, Cancellation::default());
     candidates.bounded(Limits::default());
     let outcomes: Vec<_> = candidates.by_ref().map(|seed| seed.map(|_| ())).collect();
     assert_eq!(outcomes.len(), 6);

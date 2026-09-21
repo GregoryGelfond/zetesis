@@ -2,7 +2,7 @@
 
 use std::{error::Error, fmt, sync::Arc};
 
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Theory, TightPlan};
 use zetesis_sat::{BatchVerdict, Incomplete};
 
@@ -193,7 +193,7 @@ impl BatchResult<'_> {
 /// decision is available. Resource exhaustion and lost device completion cannot
 /// become a decisive verdict. Panics are not caught and effects cannot be undone.
 ///
-/// Implementations must poll `Control` cooperatively and bound their own driver,
+/// Implementations must poll `Cancellation` cooperatively and bound their own driver,
 /// compilation and execution allocations. Solver quotas cover host orchestration,
 /// not arbitrary callback work, device memory, or process RSS. Preparation and
 /// check failures terminate this session without another executor or fallback.
@@ -212,7 +212,7 @@ pub trait BatchExecutor: Send {
     fn prepare(
         &mut self,
         plan: MembershipPlan<'_>,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<(), ExecutorFailure<Self::Error>>;
 
     /// Check every candidate, preserving request order and exact subject identity.
@@ -223,7 +223,7 @@ pub trait BatchExecutor: Send {
     fn check<'a>(
         &mut self,
         batch: CandidateBatch<'a>,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<BatchResult<'a>, ExecutorFailure<Self::Error>>;
 }
 
@@ -347,12 +347,12 @@ pub(crate) trait ErasedExecutor: Send {
     fn prepare(
         &mut self,
         plan: MembershipPlan<'_>,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<(), crate::formula_execution::Failure>;
     fn check<'a>(
         &mut self,
         batch: CandidateBatch<'a>,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<BatchResult<'a>, crate::formula_execution::Failure>;
 }
 
@@ -366,17 +366,17 @@ impl<E: BatchExecutor> ErasedExecutor for Adapter<E> {
     fn prepare(
         &mut self,
         plan: MembershipPlan<'_>,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<(), crate::formula_execution::Failure> {
-        self.0.prepare(plan, control).map_err(failure)
+        self.0.prepare(plan, cancellation).map_err(failure)
     }
 
     fn check<'a>(
         &mut self,
         batch: CandidateBatch<'a>,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<BatchResult<'a>, crate::formula_execution::Failure> {
-        self.0.check(batch, control).map_err(failure)
+        self.0.check(batch, cancellation).map_err(failure)
     }
 }
 

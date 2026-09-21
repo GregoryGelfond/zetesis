@@ -1,5 +1,5 @@
 use zetesis_core::Value;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 use super::extremum::comparison_root;
 use super::lower::{transaction, validate_elements};
@@ -39,9 +39,9 @@ pub fn append_value_extremum(
     comparison: AggregateComparison,
     bound: &Value,
     limits: AggregateLimits,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<AggregateBuild, AggregateError> {
-    transaction(nodes, limits, control, |builder| {
+    transaction(nodes, limits, cancellation, |builder| {
         validate_elements(
             builder,
             elements.iter().map(|element| (element.condition, 0)),

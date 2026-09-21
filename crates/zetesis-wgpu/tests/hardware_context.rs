@@ -7,7 +7,7 @@ use zetesis_core::{
     Atom, Predicate, Value,
     relation::{Limits, Relation},
 };
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{AdmissionLimits, Interpretation, Node, Theory};
 use zetesis_wgpu::{
     FormulaLimits, FormulaVerdict, GpuContext, GpuFormulaOracle, GpuOptions, GpuRelationExecutor,
@@ -38,7 +38,11 @@ fn compose(backend: physical::Backend) {
     let value = Value::Number(7);
     let queries = [relation.query(&[(0, &value)], Limits::default()).unwrap()];
     let mut prepared = relation_executor
-        .prepare(&relation, RelationGpuLimits::default(), &Control::default())
+        .prepare(
+            &relation,
+            RelationGpuLimits::default(),
+            &Cancellation::default(),
+        )
         .unwrap();
     // These are two different subjects on the same device. Equal bit widths are
     // not used to reinterpret row masks as candidate or aggregate membership.
@@ -57,7 +61,11 @@ fn compose(backend: physical::Backend) {
         assert_eq!(stats.theory_uploaded, repetition == 0);
         assert_eq!(stats.transport_allocated, repetition == 0);
         let masks = prepared
-            .filter(&queries, RelationGpuLimits::default(), &Control::default())
+            .filter(
+                &queries,
+                RelationGpuLimits::default(),
+                &Cancellation::default(),
+            )
             .unwrap();
         assert!(relation.same_owner(masks.relation()));
         let selected = masks.selection(0, Limits::default()).unwrap();

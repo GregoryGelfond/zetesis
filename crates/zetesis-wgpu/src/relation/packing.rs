@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{GpuError, GpuErrorKind};
 use zetesis_core::relation::{Query, Relation};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 const CONTROL_INTERVAL: usize = 1024;
 
@@ -253,10 +253,10 @@ impl Plan {
     pub(super) fn pack(
         &mut self,
         queries: &[Query<'_, '_>],
-        control: &Control,
+        cancellation: &Cancellation,
         max_bytes: u64,
     ) -> Result<Packed, GpuError> {
-        self.pack_with(queries, control, max_bytes, vector)
+        self.pack_with(queries, cancellation, max_bytes, vector)
     }
 
     // The reservation operation returns an empty vector with at least the
@@ -264,7 +264,7 @@ impl Plan {
     pub(super) fn pack_with(
         &mut self,
         queries: &[Query<'_, '_>],
-        control: &Control,
+        cancellation: &Cancellation,
         max_bytes: u64,
         mut reserve: impl FnMut(usize) -> Result<Vec<u32>, GpuError>,
     ) -> Result<Packed, GpuError> {
@@ -274,7 +274,7 @@ impl Plan {
         let minimum = [self.query_bytes, self.equality_bytes, self.mask_bytes];
         let mut host = minimum;
         let mut allocate = |index| {
-            poll(control)?;
+            poll(cancellation)?;
             let length = host_words(minimum[index])?;
             let mut values = reserve(length)?;
             if !values.is_empty() || values.capacity() < length {
@@ -282,7 +282,7 @@ impl Plan {
             }
             host[index] = retained_bytes(&values)?;
             accounted_bytes(self.column_bytes, self.transport_bytes, host, max_bytes)?;
-            poll(control)?;
+            poll(cancellation)?;
             values.resize(length, 0);
             Ok(values)
         };
@@ -293,7 +293,7 @@ impl Plan {
             accounted_bytes(self.column_bytes, self.transport_bytes, host, max_bytes)?;
         let mut offset = 0;
         for (record, query) in records.chunks_exact_mut(4).zip(queries) {
-            poll(control)?;
+            poll(cancellation)?;
             record.copy_from_slice(&[
                 address(offset / 2)?,
                 address(query.equalities().len())?,
@@ -315,7 +315,7 @@ impl Plan {
                 .enumerate()
             {
                 if index % CONTROL_INTERVAL == 0 {
-                    poll(control)?;
+                    poll(cancellation)?;
                 }
                 target.copy_from_slice(&[address(equality.column())?, equality.value_id()]);
             }
@@ -334,7 +334,7 @@ impl Plan {
         queries: &[Query<'_, '_>],
         input: &[u32],
         mut words: Vec<u32>,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<RelationGpuMasks<'owner, 'source>, GpuError> {
         if queries.len() != self.queries as usize
             || input.len() != host_words(self.result_bytes)?
@@ -345,7 +345,7 @@ impl Plan {
             ));
         }
         if self.result_bytes != 0 {
-            self.decode_records(queries, input, &mut words, control)?;
+            self.decode_records(queries, input, &mut words, cancellation)?;
         }
         Ok(RelationGpuMasks {
             relation,
@@ -360,7 +360,7 @@ impl Plan {
         queries: &[Query<'_, '_>],
         input: &[u32],
         words: &mut [u32],
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<(), GpuError> {
         let stride = self.result_stride as usize;
         // The checked layout established this prefix and the complete input
@@ -372,7 +372,7 @@ impl Plan {
                 .chunks_exact(RECEIPT_WORDS as usize)
                 .enumerate()
             {
-                poll(control)?;
+                poll(cancellation)?;
                 if receipt
                     != [
                         RECEIPT_MARKER,

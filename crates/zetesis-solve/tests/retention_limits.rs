@@ -3,7 +3,7 @@
 use std::{collections::BTreeSet, num::NonZeroUsize};
 
 use zetesis_core::{Atom, Model, Predicate};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     AnswerSet, Backend, Completion, Grounder, Interruption, OptimizationStop, Oracle,
     PreparedInput, Session, SolveConfig, WorldView, WorldViewError, WorldViewLimits,
@@ -76,7 +76,7 @@ fn complete_world_view_charges_one_shared_catalog() {
         PreparedInput::formula(&owner),
         config(),
         limits(CATALOG_BYTES + SELECTION_BYTES + 4 * SCORE_BYTES),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     assert_eq!(
@@ -106,7 +106,7 @@ fn world_view_byte_refusal_preserves_the_checked_prefix() {
         PreparedInput::formula(&owner),
         config(),
         WorldViewLimits::default(),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     let prefix = &complete.answer_sets()[..2];
@@ -118,7 +118,7 @@ fn world_view_byte_refusal_preserves_the_checked_prefix() {
         PreparedInput::formula(&owner),
         config(),
         limits(CATALOG_BYTES + selected + 2 * SCORE_BYTES),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(failure.cause(), WorldViewError::Bytes));
@@ -139,7 +139,7 @@ fn optimum_ties_share_one_catalog_and_one_score() {
             max_optimal_bytes: CATALOG_BYTES + SELECTION_BYTES + SCORE_BYTES,
             ..config()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     let answers = session.by_ref().collect::<Result<Vec<_>, _>>().unwrap();
@@ -168,17 +168,21 @@ fn optimum_ties_share_one_catalog_and_one_score() {
 #[test]
 fn short_optimum_budget_preserves_verified_ties() {
     let owner = fixture();
-    let complete = Session::new(PreparedInput::formula(&owner), config(), Control::default())
-        .unwrap()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
+    let complete = Session::new(
+        PreparedInput::formula(&owner),
+        config(),
+        Cancellation::default(),
+    )
+    .unwrap()
+    .collect::<Result<Vec<_>, _>>()
+    .unwrap();
     let mut session = Session::new(
         PreparedInput::formula(&owner),
         SolveConfig {
             max_optimal_bytes: CATALOG_BYTES + SELECTION_BYTES + SCORE_BYTES - 1,
             ..config()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     let answers = session.by_ref().collect::<Result<Vec<_>, _>>().unwrap();
@@ -215,7 +219,7 @@ fn independent_closure_catalogs_are_all_charged() {
         PreparedInput::admitted(&owner),
         config,
         limits(required),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     assert_eq!(
@@ -240,7 +244,7 @@ fn independent_closure_catalogs_are_all_charged() {
         PreparedInput::admitted(&owner),
         config,
         limits(required - 1),
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(failure.cause(), WorldViewError::Bytes));

@@ -4,7 +4,7 @@ use std::io;
 
 use clap::Parser;
 use zetesis_cli::{Completion, Options, RunError, run_with_diagnostics};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::{FormulaFailure, FormulaResource};
 
 fn formula(source: &str, arguments: &[&str]) -> Result<Completion, RunError> {
@@ -28,7 +28,7 @@ fn formula(source: &str, arguments: &[&str]) -> Result<Completion, RunError> {
         &options,
         &mut output,
         &mut io::sink(),
-        &Control::default(),
+        &Cancellation::default(),
     );
     if result.is_err() {
         assert!(

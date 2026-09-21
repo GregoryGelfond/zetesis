@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde_json::Value as Json;
 use zetesis_core::Atom;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Theory;
 use zetesis_sat::{Limits, StableModels};
 use zetesis_themelios::{
@@ -34,8 +34,8 @@ fn input(source: &str) -> AdmittedFormula {
     .unwrap_or_else(|error| panic!("{source}: {error}"))
 }
 fn models(theory: &Theory, atoms: &[Atom]) -> Models {
-    let mut search =
-        StableModels::new(theory, Limits::default(), Control::default()).expect("bounded search");
+    let mut search = StableModels::new(theory, Limits::default(), Cancellation::default())
+        .expect("bounded search");
     let models = search
         .by_ref()
         .map(|model| {
@@ -165,18 +165,18 @@ fn existing_scalar_fact_and_normal_rule_profile_keeps_its_models() {
             ExpansionLimits::default(),
         )
         .expect("existing extended profile");
-        let control = Control::default();
+        let cancellation = Cancellation::default();
         let expected: Models = zetesis_cpu::Candidates::new(
             plain.program(),
             zetesis_cpu::CandidateLimits::default(),
-            control.clone(),
+            cancellation.clone(),
         )
         .filter_map(|seed| {
             let checked = zetesis_cpu::check(
                 plain.program(),
                 &seed.expect("candidate"),
                 zetesis_cpu::Limits::default(),
-                &control,
+                &cancellation,
             )
             .expect("closure");
             checked.accepted().then(|| {

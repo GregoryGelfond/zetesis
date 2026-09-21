@@ -4,7 +4,7 @@ use std::fmt;
 
 use themelios_program::symbol::{Sign as SymbolSign, Symbol};
 use zetesis_core::{Atom, Model, Sign, Value, ValueNode};
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_objective::Score;
 
 use super::json::AtomTable;
@@ -41,7 +41,7 @@ impl ObservationProgram {
         selection: &'a OutputSelection,
         score: Option<&'a Score>,
         limits: Limits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<ModelView<'a>, Error> {
         self.view_with_construction_limits(
             model,
@@ -49,7 +49,7 @@ impl ObservationProgram {
             score,
             limits,
             ConstructionLimits::default(),
-            control,
+            cancellation,
         )
     }
 
@@ -65,7 +65,7 @@ impl ObservationProgram {
         score: Option<&'a Score>,
         limits: Limits,
         construction: ConstructionLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<ModelView<'a>, Error> {
         let terms = if self.is_empty() {
             Evaluation {
@@ -73,7 +73,7 @@ impl ObservationProgram {
                 statistics: Statistics::default(),
             }
         } else {
-            self.evaluate_with_construction_limits(model, limits, construction, control)?
+            self.evaluate_with_construction_limits(model, limits, construction, cancellation)?
         };
         Ok(ModelView {
             model,
@@ -95,7 +95,11 @@ impl ModelView<'_> {
     /// # Errors
     /// Returns the same spelling, resource and control refusals as
     /// [`ObservationProgram::render`], without exposing a partial line.
-    pub fn render(&self, limits: Limits, control: &Control) -> Result<super::Rendered, Error> {
+    pub fn render(
+        &self,
+        limits: Limits,
+        cancellation: &Cancellation,
+    ) -> Result<super::Rendered, Error> {
         super::render::render_evaluated(
             self.model,
             self.selection,
@@ -103,7 +107,7 @@ impl ModelView<'_> {
             super::evaluate::Work {
                 limits,
                 construction: ConstructionLimits::default(),
-                control,
+                cancellation,
                 statistics: self.terms.statistics(),
                 local_bytes: 0,
                 location: None,
@@ -192,9 +196,9 @@ impl ModelView<'_> {
         &self,
         table: &mut AtomTable,
         limits: ViewLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<String, ViewError> {
-        self.encode_record(table, limits, control)
+        self.encode_record(table, limits, cancellation)
             .map(super::json::Encoded::into_text)
             .map_err(|failure| failure.cause())
     }
@@ -211,9 +215,9 @@ impl ModelView<'_> {
         &self,
         table: &mut AtomTable,
         limits: super::json::Limits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<super::json::Encoded, super::json::Failure> {
-        let mut out = Buffer::new(limits, control);
+        let mut out = Buffer::new(limits, cancellation);
         // The atoms this record spells are entered as it spells them, so a
         // lookup is one hash probe; a refused record withdraws its entries.
         let mut added = Vec::new();
@@ -385,20 +389,20 @@ fn sign(value: Sign) -> &'static str {
 struct Buffer<'a> {
     text: String,
     limits: ViewLimits,
-    control: &'a Control,
+    cancellation: &'a Cancellation,
     work: u64,
 }
 impl<'a> Buffer<'a> {
-    fn new(limits: ViewLimits, control: &'a Control) -> Self {
+    fn new(limits: ViewLimits, cancellation: &'a Cancellation) -> Self {
         Self {
             text: String::new(),
             limits,
-            control,
+            cancellation,
             work: 0,
         }
     }
     fn step(&mut self, count: u128) -> Result<(), ViewError> {
-        self.control.poll().map_err(ViewError::Stopped)?;
+        self.cancellation.poll().map_err(ViewError::Stopped)?;
         let work = u128::from(self.work) + count;
         if work > u128::from(self.limits.max_work) {
             return Err(ViewError::Work);

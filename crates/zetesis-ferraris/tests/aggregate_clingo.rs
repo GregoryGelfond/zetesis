@@ -6,7 +6,7 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use serde_json::Value;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, AggregateComparison as Comparison, AggregateElement as Element,
     AggregateLimits, Interpretation, Limits, Node, Theory, append_aggregate, check,
@@ -106,7 +106,7 @@ fn compare(
         comparison,
         bound,
         AggregateLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let mut body = aggregate.root();
@@ -126,9 +126,14 @@ fn compare(
     for mask in 0u8..4 {
         let candidate =
             Interpretation::new(&theory, (0..2).filter(|atom| mask & (1 << atom) != 0)).unwrap();
-        if check(&theory, &candidate, Limits::default(), &Control::default())
-            .unwrap()
-            .accepted()
+        if check(
+            &theory,
+            &candidate,
+            Limits::default(),
+            &Cancellation::default(),
+        )
+        .unwrap()
+        .accepted()
         {
             result.insert(
                 candidate

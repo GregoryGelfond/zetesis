@@ -18,7 +18,7 @@ fn prepare(theory: &Theory) -> PreparedReduct {
     PreparedReduct::prepare(
         theory,
         ReductPreparationLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .result
     .unwrap()
@@ -32,7 +32,7 @@ fn check(
         &Interpretation::new(owner.theory(), [0, 1]).unwrap(),
         workspace,
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
 }
 
@@ -101,7 +101,7 @@ fn lowered_capacity_refusal_preserves_owner_for_retry() {
             max_reduct_bytes: limit,
             ..Default::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
     );
     assert!(
         matches!(result, Check::Inconclusive(Incomplete::ReductStorage { required, limit: observed }) if required == retained && observed == u128::from(limit))

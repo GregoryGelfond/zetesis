@@ -5,7 +5,7 @@ use std::hint::black_box;
 use std::num::NonZeroUsize;
 use std::time::{Duration, Instant};
 use zetesis_core::Seed;
-use zetesis_cpu::{BatchOracle, Control, Limits, StaticCheck, check_static};
+use zetesis_cpu::{BatchOracle, Cancellation, Limits, StaticCheck, check_static};
 use zetesis_experiments::{BenchmarkFixture, Family};
 use zetesis_wgpu::{GpuLimits, GpuOptions, GpuOracle};
 
@@ -15,7 +15,7 @@ struct Case {
     expected: Vec<Vec<StaticCheck>>,
 }
 impl Case {
-    fn new(family: Family, atoms: usize, batch: usize, control: &Control) -> Self {
+    fn new(family: Family, atoms: usize, batch: usize, cancellation: &Cancellation) -> Self {
         let fixture = BenchmarkFixture::new(family, atoms).unwrap();
         let worlds: Vec<_> = (0..4)
             .map(|salt| fixture.seeds(batch, salt).unwrap())
@@ -26,7 +26,8 @@ impl Case {
                 seeds
                     .iter()
                     .map(|seed| {
-                        check_static(fixture.graph(), seed, Limits::default(), control).unwrap()
+                        check_static(fixture.graph(), seed, Limits::default(), cancellation)
+                            .unwrap()
                     })
                     .collect()
             })
@@ -41,7 +42,7 @@ impl Case {
         &self,
         iterations: u64,
         pool: Option<&BatchOracle>,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Duration {
         let mut elapsed = Duration::ZERO;
         for index in (0..self.worlds.len())
@@ -54,7 +55,7 @@ impl Case {
                     black_box(self.fixture.graph()),
                     black_box(&self.worlds[index]),
                     Limits::default(),
-                    control,
+                    cancellation,
                 )
                 .unwrap()
                 .into_iter()
@@ -68,7 +69,7 @@ impl Case {
                             black_box(self.fixture.graph()),
                             black_box(seed),
                             Limits::default(),
-                            control,
+                            cancellation,
                         )
                         .unwrap()
                     })
@@ -113,7 +114,7 @@ impl Case {
 }
 
 fn oracles(criterion: &mut Criterion) {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let pool = BatchOracle::new(
         NonZeroUsize::new(4).unwrap(),
         NonZeroUsize::new(64).unwrap(),
@@ -140,15 +141,16 @@ fn oracles(criterion: &mut Criterion) {
             .measurement_time(Duration::from_secs(3));
         for atoms in [64, 256] {
             for batch in [1, 64] {
-                let case = Case::new(family, atoms, batch, &control);
+                let case = Case::new(family, atoms, batch, &cancellation);
                 group.throughput(Throughput::Elements(u64::try_from(batch).unwrap()));
                 let dimension = format!("{atoms}-consequences-{batch}-worlds");
                 group.bench_with_input(
                     BenchmarkId::new("cpu-scalar", &dimension),
                     &case,
                     |bencher, case| {
-                        bencher
-                            .iter_custom(|iterations| case.timed_cpu(iterations, None, &control));
+                        bencher.iter_custom(|iterations| {
+                            case.timed_cpu(iterations, None, &cancellation)
+                        });
                     },
                 );
                 group.bench_with_input(
@@ -156,7 +158,7 @@ fn oracles(criterion: &mut Criterion) {
                     &case,
                     |bencher, case| {
                         bencher.iter_custom(|iterations| {
-                            case.timed_cpu(iterations, Some(&pool), &control)
+                            case.timed_cpu(iterations, Some(&pool), &cancellation)
                         });
                     },
                 );

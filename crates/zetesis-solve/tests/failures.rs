@@ -2,7 +2,7 @@
 
 use std::{error::Error as _, fmt, sync::Arc};
 
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     Backend, ExecutionObservation, ExecutionObserver, PreparedInput, Session, SolveConfig,
     SolveError, SolveFailure, Subject,
@@ -81,7 +81,7 @@ fn setup_failure_decomposition_preserves_evidence() {
     let failure = Session::builder(
         PreparedInput::admitted(&owner),
         config(),
-        Control::default(),
+        Cancellation::default(),
     )
     .start_observed(&mut Refuse(Arc::clone(&token)))
     .err()
@@ -100,8 +100,12 @@ fn execution_failure_decomposition_preserves_evidence() {
         FormulaLimits::default(),
     )
     .unwrap();
-    let mut session =
-        Session::new(PreparedInput::formula(&owner), config(), Control::default()).unwrap();
+    let mut session = Session::new(
+        PreparedInput::formula(&owner),
+        config(),
+        Cancellation::default(),
+    )
+    .unwrap();
     assert!(session.outcome().is_none());
     let token = Arc::new(());
     let failure = session

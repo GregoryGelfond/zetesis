@@ -5,21 +5,22 @@ use std::convert::Infallible;
 use std::num::NonZeroUsize;
 use zetesis_ferraris::{AdmissionLimits, Interpretation, Node, PositivePlanLimits, Theory};
 use zetesis_sat::{
-    BatchError, BatchLimits, BatchVerdict, CertificateError, CertificateLimits, CertificateOrder,
-    CertificatePlanStatistics, CompletionExecutor, Control, Incomplete, Limits, StableModels,
+    BatchError, BatchLimits, BatchVerdict, Cancellation, CertificateError, CertificateLimits,
+    CertificateOrder, CertificatePlanStatistics, CompletionExecutor, Incomplete, Limits,
+    StableModels,
 };
 
 /// Enumerate by the clause forms, the subject of the tests below.
 fn by_clauses(
     theory: &zetesis_ferraris::Theory,
     limits: zetesis_sat::Limits,
-    control: zetesis_sat::Control,
+    cancellation: zetesis_sat::Cancellation,
 ) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
     zetesis_sat::StableModels::with_method(
         theory,
         zetesis_sat::SearchMethod::Clauses,
         limits,
-        control,
+        cancellation,
     )
 }
 
@@ -61,7 +62,7 @@ fn independent(original: &Theory) -> BTreeSet<Vec<usize>> {
                 original,
                 &candidate,
                 zetesis_ferraris::Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap()
             .accepted()
@@ -102,7 +103,7 @@ fn positive_plans_preserve_every_small_atomic_rule_family() {
                 .collect(),
         );
         let expected = independent(&original);
-        let mut stream = by_clauses(&original, Limits::default(), Control::default()).unwrap();
+        let mut stream = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
         assert!(
             stream
                 .enable_class_checking(
@@ -135,7 +136,7 @@ fn region_positive_cycles_preserve_the_clause_family() {
         ],
         vec![2, 3],
     );
-    let mut clauses = by_clauses(&original, Limits::default(), Control::default()).unwrap();
+    let mut clauses = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
     assert!(
         clauses
             .enable_class_checking(
@@ -152,7 +153,7 @@ fn region_positive_cycles_preserve_the_clause_family() {
             &original,
             NonZeroUsize::new(workers).unwrap(),
             Limits::default(),
-            Control::default(),
+            Cancellation::default(),
         )
         .unwrap();
         assert!(
@@ -191,7 +192,7 @@ fn region_positive_constraints_refute_larger_models() {
     );
     let expected = independent(&original);
     assert!(expected.is_empty());
-    let mut clauses = by_clauses(&original, Limits::default(), Control::default()).unwrap();
+    let mut clauses = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
     assert!(
         clauses
             .enable_class_checking(
@@ -207,7 +208,7 @@ fn region_positive_constraints_refute_larger_models() {
             &original,
             NonZeroUsize::new(workers).unwrap(),
             Limits::default(),
-            Control::default(),
+            Cancellation::default(),
         )
         .unwrap();
         assert!(
@@ -233,7 +234,8 @@ fn region_positive_constraints_refute_larger_models() {
 fn positive_batches_preserve_the_unique_family() {
     for original in [cycle(false, false), cycle(true, false), cycle(true, true)] {
         for workers in [1, 4] {
-            let mut stream = by_clauses(&original, Limits::default(), Control::default()).unwrap();
+            let mut stream =
+                by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
             assert!(
                 stream
                     .enable_class_checking(
@@ -276,7 +278,7 @@ fn positive_batches_preserve_the_unique_family() {
 #[test]
 fn positive_cycle_refusal_preserves_the_tight_only_door() {
     let original = cycle(true, false);
-    let mut tight = by_clauses(&original, Limits::default(), Control::default()).unwrap();
+    let mut tight = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
     assert!(
         !tight
             .enable_certified_checking(zetesis_ferraris::TightPlanLimits::default())
@@ -290,7 +292,7 @@ fn positive_cycle_refusal_preserves_the_tight_only_door() {
     ));
     assert_eq!(collect(&mut tight), independent(&original));
     assert!(tight.statistics().reduct.preparation.is_some());
-    let mut both = by_clauses(&original, Limits::default(), Control::default()).unwrap();
+    let mut both = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
     assert!(
         both.enable_class_checking(CertificateLimits::default(), CertificateOrder::TightFirst)
             .unwrap()
@@ -316,7 +318,8 @@ fn positive_grammar_refusal_can_select_the_tight_plan() {
         ],
         vec![3],
     );
-    let mut stream = StableModels::new(&original, Limits::default(), Control::default()).unwrap();
+    let mut stream =
+        StableModels::new(&original, Limits::default(), Cancellation::default()).unwrap();
     assert!(
         stream
             .enable_class_checking(
@@ -340,7 +343,7 @@ fn positive_grammar_refusal_can_select_the_tight_plan() {
 #[test]
 fn optional_positive_bytes_refusal_keeps_general_completion() {
     let original = cycle(true, false);
-    let mut stream = by_clauses(&original, Limits::default(), Control::default()).unwrap();
+    let mut stream = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
     assert!(
         !stream
             .enable_class_checking(
@@ -373,7 +376,7 @@ fn optional_positive_bytes_refusal_keeps_general_completion() {
 #[test]
 fn positive_setup_work_has_an_inclusive_boundary() {
     let original = cycle(true, false);
-    let mut probe = by_clauses(&original, Limits::default(), Control::default()).unwrap();
+    let mut probe = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
     let initial = probe.statistics().search.work;
     assert!(
         probe
@@ -393,7 +396,7 @@ fn positive_setup_work_has_an_inclusive_boundary() {
     for ceiling in initial..=required {
         let mut limits = Limits::default();
         limits.search.max_work = ceiling;
-        let mut stream = by_clauses(&original, limits, Control::default()).unwrap();
+        let mut stream = by_clauses(&original, limits, Cancellation::default()).unwrap();
         let result = stream.enable_class_checking(
             CertificateLimits::default(),
             CertificateOrder::PositiveFirst,
@@ -419,7 +422,8 @@ fn positive_setup_work_has_an_inclusive_boundary() {
 #[test]
 fn repeated_class_configuration_keeps_the_original_receipt() {
     let original = cycle(true, false);
-    let mut stream = StableModels::new(&original, Limits::default(), Control::default()).unwrap();
+    let mut stream =
+        StableModels::new(&original, Limits::default(), Cancellation::default()).unwrap();
     assert!(
         stream
             .enable_class_checking(
@@ -453,7 +457,7 @@ fn a_positive_check_failure_keeps_the_pending_subject() {
             max_verification_work: (original.nodes().len() + original.roots().len()) as u64,
             ..Default::default()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     assert!(
@@ -499,7 +503,7 @@ fn refused_positive_units_leave_the_full_candidate_region() {
     // The original candidate CNF is empty. Exactly one of the three least-model
     // units fits, so a later refusal detects whether that prefix was rolled back.
     limits.admission.max_clauses = 1;
-    let mut stream = by_clauses(&original, limits, Control::default()).unwrap();
+    let mut stream = by_clauses(&original, limits, Cancellation::default()).unwrap();
     assert!(
         stream
             .enable_class_checking(
@@ -558,12 +562,12 @@ fn a_failed_constraint_preserves_the_empty_answer_family() {
             &original,
             &classical,
             zetesis_ferraris::Limits::default(),
-            &Control::default()
+            &Cancellation::default()
         )
         .unwrap()
     );
     assert!(independent(&original).is_empty());
-    let mut stream = by_clauses(&original, Limits::default(), Control::default()).unwrap();
+    let mut stream = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
     assert!(
         stream
             .enable_class_checking(
@@ -588,7 +592,7 @@ fn a_failed_constraint_preserves_the_empty_answer_family() {
             stream.theory(),
             &classical,
             zetesis_ferraris::Limits::default(),
-            &Control::default()
+            &Cancellation::default()
         )
         .unwrap()
     );

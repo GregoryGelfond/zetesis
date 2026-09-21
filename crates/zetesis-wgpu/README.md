@@ -110,8 +110,8 @@ it is not a certificate against an arbitrary faulty driver.
 Every primitive requires a positive wait timeout before dispatch. A zero timeout
 is a Capacity refusal before transport allocation or submission, preserving
 healthy residency. Existing empty operations perform no wait and keep their
-control/health checks; relation preparation uploads columns without dispatch and
-does not consume a wait allowance. Control and device-health precedence are
+cancellation/health checks; relation preparation uploads columns without dispatch
+and does not consume a wait allowance. Cancellation and device-health precedence are
 unchanged. This policy does not turn a positive timeout into hard preemption.
 
 Within one lazy batch, retained seed buffers need another upload only when their
@@ -137,11 +137,12 @@ but each new call or explicit residency clear resets it. It is not completion
 evidence. Formula propagation work and round limits are per candidate; ordinary
 solving exposes both directly, independently of CPU quotas.
 
-Static `check_batch_with_control` / `check_batch_views_with_control` and formula
-`propagate_batch_with_control` accept the same cooperative `Control` used by CPU
-execution. Existing calls delegate with default control. A busy context takes
-precedence; otherwise control is checked before admission, including empty calls,
-after host packing and between device waits of at most 50 milliseconds. Driver
+Static `check_batch_with_cancellation` / `check_batch_views_with_cancellation`
+and formula `propagate_batch_with_cancellation` accept the same cooperative
+`Cancellation` used by CPU execution. Existing calls delegate with
+`Cancellation::default()`. A busy context takes precedence; otherwise cancellation
+is checked before admission, including empty calls, after host packing and
+between device waits of at most 50 milliseconds. Driver
 calls and shader execution are not preempted: this is not a hard deadline.
 `GpuErrorKind::Interrupted` and `GpuError::interruption()` expose the exact stop
 without interpreting display text. Consumers with exhaustive error-kind matches

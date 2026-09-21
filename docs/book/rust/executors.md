@@ -104,7 +104,7 @@ An executor setup fault returns from `start` with the original subject and
 available attempted timing. A setup interruption returns a stopped session.
 After checking begins, a fault leaves already verified answers valid and retains
 pending-candidate accounting without claiming coverage. Ordinary sessions
-terminate on that fault; they do not retry the callback. `Control` must be polled
+terminate on that fault; they do not retry the callback. `Cancellation` must be polled
 cooperatively by the executor as well as by the host.
 
 `SemanticOutcome::batch_execution()` records declared capabilities, the selected

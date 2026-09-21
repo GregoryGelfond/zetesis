@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::path::Path;
 
 use zetesis_core::Atom;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_sat::{Limits, StableModels};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
@@ -23,7 +23,7 @@ fn input(source: &str) -> AdmittedFormula {
     .unwrap_or_else(|error| panic!("{source}: {error}"))
 }
 fn models(input: &AdmittedFormula) -> Models {
-    let mut search = StableModels::new(input.theory(), Limits::default(), Control::default())
+    let mut search = StableModels::new(input.theory(), Limits::default(), Cancellation::default())
         .expect("search admission");
     let result = search
         .by_ref()

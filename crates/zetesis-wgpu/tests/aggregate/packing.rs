@@ -10,7 +10,7 @@ use super::{
 use crate::GpuErrorKind;
 use std::time::Duration;
 use zetesis_core::Value;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::native_aggregate::{self as native, Function};
 
 #[test]
@@ -22,7 +22,7 @@ fn packed_eligibility_preserves_each_occurrence() {
         let prepared = AggregateGpuPlan::new(
             &group,
             AggregateGpuPlanLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         let records = fixtures::observations(&group, &worlds, 33);
@@ -32,10 +32,10 @@ fn packed_eligibility_preserves_each_occurrence() {
             AggregateGpuLimits::default(),
             &wgpu::Limits::default(),
             1,
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
-        let packed = plan.pack(&records, &Control::default()).unwrap();
+        let packed = plan.pack(&records, &Cancellation::default()).unwrap();
         let width = count.div_ceil(32);
         assert_eq!(plan.stride as usize, 1 + 2 * width);
         for (record, row) in records
@@ -79,7 +79,7 @@ fn wire(plan: &Plan, group: &native::Group, records: &[native::Eligibility<'_>])
             &empty,
             None,
             native::ReductionLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap()
         .original();
@@ -88,7 +88,7 @@ fn wire(plan: &Plan, group: &native::Group, records: &[native::Eligibility<'_>])
         .enumerate()
         .flat_map(|(index, record)| {
             let value = record
-                .reduce(native::ReductionLimits::default(), &Control::default())
+                .reduce(native::ReductionLimits::default(), &Cancellation::default())
                 .unwrap();
             let original = encoded(value.original());
             let frozen = encoded(value.frozen().unwrap_or(absent));
@@ -138,7 +138,7 @@ fn readback_preserves_native_reduction_observations() {
                 let prepared = AggregateGpuPlan::new(
                     &group,
                     AggregateGpuPlanLimits::default(),
-                    &Control::default(),
+                    &Cancellation::default(),
                 )
                 .unwrap();
                 let mut records = fixtures::observations(&group, &worlds, 41);
@@ -149,22 +149,22 @@ fn readback_preserves_native_reduction_observations() {
                     AggregateGpuLimits::default(),
                     &wgpu::Limits::default(),
                     9,
-                    &Control::default(),
+                    &Cancellation::default(),
                 )
                 .unwrap();
-                let packed = plan.pack(&records, &Control::default()).unwrap();
+                let packed = plan.pack(&records, &Cancellation::default()).unwrap();
                 let decoded = decode(
                     &wire(&plan, &group, &records),
                     &prepared.numeric,
                     &plan,
                     &packed,
-                    &Control::default(),
+                    &Cancellation::default(),
                 )
                 .unwrap();
                 assert_eq!(decoded.len(), records.len());
                 for (actual, record) in decoded.iter().zip(&records) {
                     let expected = record
-                        .reduce(native::ReductionLimits::default(), &Control::default())
+                        .reduce(native::ReductionLimits::default(), &Cancellation::default())
                         .unwrap();
                     assert_eq!(
                         actual.original().value(),
@@ -194,7 +194,7 @@ fn malformed_readback_returns_no_partial_verdicts() {
     let prepared = AggregateGpuPlan::new(
         &group,
         AggregateGpuPlanLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let records = fixtures::observations(&group, &worlds, 3);
@@ -204,10 +204,10 @@ fn malformed_readback_returns_no_partial_verdicts() {
         AggregateGpuLimits::default(),
         &wgpu::Limits::default(),
         7,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
-    let masks = plan.pack(&records, &Control::default()).unwrap();
+    let masks = plan.pack(&records, &Cancellation::default()).unwrap();
     let valid = wire(&plan, &group, &records);
     for offset in 0..10 {
         let mut malformed = valid.clone();
@@ -222,7 +222,7 @@ fn malformed_readback_returns_no_partial_verdicts() {
                 &prepared.numeric,
                 &plan,
                 &masks,
-                &Control::default()
+                &Cancellation::default()
             )
             .unwrap_err()
             .kind(),
@@ -235,7 +235,7 @@ fn malformed_readback_returns_no_partial_verdicts() {
             &prepared.numeric,
             &plan,
             &masks,
-            &Control::default()
+            &Cancellation::default()
         )
         .unwrap_err()
         .kind(),
@@ -249,7 +249,7 @@ fn malformed_readback_returns_no_partial_verdicts() {
             &prepared.numeric,
             &plan,
             &masks,
-            &Control::default()
+            &Cancellation::default()
         )
         .unwrap_err()
         .kind(),
@@ -266,7 +266,7 @@ fn empty_extrema_require_canonical_absence() {
         let prepared = AggregateGpuPlan::new(
             &group,
             AggregateGpuPlanLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         let records = fixtures::observations(&group, &worlds, 1);
@@ -276,10 +276,10 @@ fn empty_extrema_require_canonical_absence() {
             AggregateGpuLimits::default(),
             &wgpu::Limits::default(),
             1,
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
-        let masks = plan.pack(&records, &Control::default()).unwrap();
+        let masks = plan.pack(&records, &Cancellation::default()).unwrap();
         assert_eq!(plan.stride, 1);
         assert_eq!(prepared.numeric.tuples, [0, 0]);
         let mut malformed = wire(&plan, &group, &records);
@@ -290,7 +290,7 @@ fn empty_extrema_require_canonical_absence() {
                 &prepared.numeric,
                 &plan,
                 &masks,
-                &Control::default()
+                &Cancellation::default()
             )
             .unwrap_err()
             .kind(),
@@ -307,7 +307,7 @@ fn batch_ceilings_are_inclusive() {
     let prepared = AggregateGpuPlan::new(
         &group,
         AggregateGpuPlanLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let records = fixtures::observations(&group, &worlds, 33);
@@ -318,7 +318,7 @@ fn batch_ceilings_are_inclusive() {
         AggregateGpuLimits::default(),
         &device,
         1,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let exact = AggregateGpuLimits {
@@ -328,7 +328,17 @@ fn batch_ceilings_are_inclusive() {
         max_device_work: plan.total_work,
         ..Default::default()
     };
-    assert!(Plan::new(&prepared, &records, exact, &device, 1, &Control::default()).is_ok());
+    assert!(
+        Plan::new(
+            &prepared,
+            &records,
+            exact,
+            &device,
+            1,
+            &Cancellation::default()
+        )
+        .is_ok()
+    );
     for below in [
         AggregateGpuLimits {
             max_occurrences: records.len() - 1,
@@ -352,10 +362,17 @@ fn batch_ceilings_are_inclusive() {
         },
     ] {
         assert_eq!(
-            Plan::new(&prepared, &records, below, &device, 1, &Control::default())
-                .err()
-                .unwrap()
-                .kind(),
+            Plan::new(
+                &prepared,
+                &records,
+                below,
+                &device,
+                1,
+                &Cancellation::default()
+            )
+            .err()
+            .unwrap()
+            .kind(),
             GpuErrorKind::Capacity
         );
     }
@@ -378,10 +395,17 @@ fn batch_ceilings_are_inclusive() {
         },
     ] {
         assert_eq!(
-            Plan::new(&prepared, &records, exact, &limited, 1, &Control::default())
-                .err()
-                .unwrap()
-                .kind(),
+            Plan::new(
+                &prepared,
+                &records,
+                exact,
+                &limited,
+                1,
+                &Cancellation::default()
+            )
+            .err()
+            .unwrap()
+            .kind(),
             GpuErrorKind::Capacity
         );
     }
@@ -396,7 +420,7 @@ fn equal_group_contents_do_not_forge_eligibility_identity() {
     let prepared = AggregateGpuPlan::new(
         &group,
         AggregateGpuPlanLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let records = fixtures::observations(&other, &worlds, 1);
@@ -407,7 +431,7 @@ fn equal_group_contents_do_not_forge_eligibility_identity() {
             AggregateGpuLimits::default(),
             &wgpu::Limits::default(),
             1,
-            &Control::default()
+            &Cancellation::default()
         )
         .err()
         .unwrap()
@@ -424,7 +448,7 @@ fn cancellation_interrupts_host_batch_work() {
     let prepared = AggregateGpuPlan::new(
         &group,
         AggregateGpuPlanLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let records = fixtures::observations(&group, &worlds, 1);
@@ -434,12 +458,12 @@ fn cancellation_interrupts_host_batch_work() {
         AggregateGpuLimits::default(),
         &wgpu::Limits::default(),
         1,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
-    let masks = plan.pack(&records, &Control::default()).unwrap();
-    let control = Control::default();
-    control.cancel();
+    let masks = plan.pack(&records, &Cancellation::default()).unwrap();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     assert!(
         Plan::new(
             &prepared,
@@ -447,18 +471,18 @@ fn cancellation_interrupts_host_batch_work() {
             AggregateGpuLimits::default(),
             &wgpu::Limits::default(),
             1,
-            &control
+            &cancellation
         )
         .is_err()
     );
-    assert!(plan.pack(&records, &control).is_err());
+    assert!(plan.pack(&records, &cancellation).is_err());
     assert!(
         decode(
             &wire(&plan, &group, &records),
             &prepared.numeric,
             &plan,
             &masks,
-            &control
+            &cancellation
         )
         .is_err()
     );

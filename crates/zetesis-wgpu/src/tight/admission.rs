@@ -3,7 +3,7 @@
 use super::packing::{Graph, PARAM_BYTES, Packing, Plan};
 use super::{TightGpuBatchStats, TightGpuLimits, poll};
 use crate::{GpuError, GpuErrorKind};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, TightPlan};
 
 pub(super) struct Admission {
@@ -22,9 +22,9 @@ impl Admission {
         packing: Packing<'_>,
         cached: Option<(&Graph, bool)>,
         prior_epoch: u32,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Self, GpuError> {
-        poll(control)?;
+        poll(cancellation)?;
         let epoch = prior_epoch
             .checked_add(1)
             .ok_or_else(|| GpuError::new(GpuErrorKind::Capacity, "tight epoch exhausted"))?;
@@ -47,7 +47,7 @@ impl Admission {
             epoch,
         )?;
         for candidate in candidates {
-            poll(control)?;
+            poll(cancellation)?;
             if !certificate.theory().same_instance(candidate.theory()) {
                 return Err(GpuError::new(
                     GpuErrorKind::Seed,

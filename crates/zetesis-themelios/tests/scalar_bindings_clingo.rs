@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use serde_json::Value as Json;
 use themelios_program::term::EvalError;
 use zetesis_core::{Atom, Value};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
@@ -87,7 +87,7 @@ fn exhaustive(input: &AdmittedFormula) -> Models {
         count <= 16,
         "bounded independent exhaustive candidate carrier"
     );
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut models = Models::new();
     for bits in 0..(1_usize << count) {
         let candidate = Interpretation::new(
@@ -95,7 +95,7 @@ fn exhaustive(input: &AdmittedFormula) -> Models {
             (0..count).filter(|&atom| bits & (1 << atom) != 0),
         )
         .expect("same-theory candidate");
-        if check(input.theory(), &candidate, Limits::default(), &control)
+        if check(input.theory(), &candidate, Limits::default(), &cancellation)
             .expect("complete independent reduct check")
             .accepted()
         {

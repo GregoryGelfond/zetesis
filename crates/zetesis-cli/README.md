@@ -46,7 +46,7 @@ full answer sets.
 `--time-limit DURATION` requests a cooperative deadline after input loading.
 Whole nonnegative seconds, or a whole number with `s`, `m` or `h`, are accepted;
 zero requests an immediate stop and
-omission imposes no deadline. Search polls the same `Control` used by library
+omission imposes no deadline. Search polls the same `Cancellation` used by library
 consumers; a timer thread marks the deadline and each poll reads that mark
 beside the cancellation flag, so an unreached deadline does not slow the run. A deadline during search leaves coverage incomplete. A later deadline
 during publication preserves the already established search coverage. Either

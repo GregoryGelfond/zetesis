@@ -2,7 +2,8 @@
 
 use zetesis_core::{AdmissionLimits, AtomPattern, Predicate, Program, Template, Term, Value};
 use zetesis_cpu::{
-    CandidateLimits, CandidateRestrictionLimits, CandidateTermination, Candidates, Control, Stop,
+    Cancellation, CandidateLimits, CandidateRestrictionLimits, CandidateTermination, Candidates,
+    Stop,
 };
 
 fn program() -> Program {
@@ -30,7 +31,7 @@ fn candidates(source: &Program, limits: CandidateLimits) -> Candidates<'_> {
         source,
         limits,
         CandidateRestrictionLimits::default(),
-        Control::default(),
+        Cancellation::default(),
     )
 }
 
@@ -167,12 +168,12 @@ fn discovered_positions_preserve_static_checks_across_batches() {
     for selection in retained.iter().rev().chain(&retained) {
         let owned = selection.to_seed();
         let reference =
-            check_static(&graph, &owned, Limits::default(), &Control::default()).unwrap();
+            check_static(&graph, &owned, Limits::default(), &Cancellation::default()).unwrap();
         let actual = check_static_view(
             &graph,
             selection.view(),
             Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         assert!(actual.accepted());

@@ -10,7 +10,7 @@ use crate::{
     Backend, Completion, Options, PublicationFailure, Report, RunError,
     run_finalized_with_diagnostics,
 };
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 fn options(arguments: &[&str]) -> Options {
     Options::try_parse_from(
@@ -32,7 +32,7 @@ fn options(arguments: &[&str]) -> Options {
 fn actual(
     source: &str,
     options: &Options,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<Report, PublicationFailure> {
     assert!(
         !options.stats,
@@ -43,7 +43,7 @@ fn actual(
         options,
         &mut io::sink(),
         &mut io::sink(),
-        control,
+        cancellation,
     )
     .and_then(crate::PublicationOutcome::into_legacy)
     .map(crate::PublicationReport::into_report)
@@ -86,7 +86,7 @@ fn every_completed_cpu_statistics_prefix_is_fallible_without_losing_bytes() {
         ("1 {a;b} 1. #minimize{1,a:a;2,b:b}.", vec![], true, true),
     ] {
         let options = options(&arguments);
-        let outcome = actual(source, &options, &Control::default());
+        let outcome = actual(source, &options, &Cancellation::default());
         let report = outcome.as_ref().unwrap();
         assert_eq!(report.completion, Completion::Exhausted);
         assert_eq!(report.countermodel_statistics.is_some(), formula);
@@ -96,7 +96,7 @@ fn every_completed_cpu_statistics_prefix_is_fallible_without_losing_bytes() {
     }
     let mut options = options(&["--grounder", "eager"]);
     options.backend = Backend::Auto;
-    let outcome = actual("p.", &options, &Control::default());
+    let outcome = actual("p.", &options, &Cancellation::default());
     let report = outcome.as_ref().unwrap();
     assert_eq!((report.checked, report.models), (1, 1));
     assert_eq!(report.completion, Completion::Exhausted);
@@ -114,7 +114,7 @@ fn shared_cpu_statistics_preserve_every_writer_prefix() {
                 arguments.extend([limit, "0"]);
             }
             let options = options(&arguments);
-            let outcome = actual("a.", &options, &Control::default());
+            let outcome = actual("a.", &options, &Cancellation::default());
             let report = outcome.as_ref().unwrap();
             let stats = report.shared_execution.as_ref().unwrap();
             assert_eq!(stats.submitted_candidates, 1);
@@ -145,7 +145,7 @@ fn shared_cpu_statistics_preserve_every_writer_prefix() {
 #[test]
 fn lazy_metadata_rendering_preserves_every_writer_failure() {
     let options = options(&["--grounder", "lazy"]);
-    let mut report = actual("p.", &options, &Control::default()).unwrap();
+    let mut report = actual("p.", &options, &Cancellation::default()).unwrap();
     report.lazy_execution = Some(crate::output::fixtures::lazy_statistics());
     let text = every_prefix(&options, &Ok(report));
     assert!(text.contains("requested=metal; observed=Metal"));
@@ -160,7 +160,7 @@ fn lazy_metadata_rendering_preserves_every_writer_failure() {
 fn lazy_gpu_statistics_name_the_observed_grounder() {
     // This tests the view of an explicit device report, not physical execution.
     let mut options = options(&["--grounder", "lazy"]);
-    let mut report = actual("p.", &options, &Control::default()).unwrap();
+    let mut report = actual("p.", &options, &Cancellation::default()).unwrap();
     options.backend = Backend::Metal;
     report.lazy_execution = Some(crate::output::fixtures::lazy_statistics());
     let text = every_prefix(&options, &Ok(report));
@@ -174,7 +174,7 @@ fn lazy_gpu_statistics_name_the_observed_grounder() {
 fn static_gpu_statistics_retain_eager_grounding() {
     // No physical device is invoked by this formatting control.
     let mut options = options(&["--grounder", "eager"]);
-    let report = actual("p.", &options, &Control::default()).unwrap();
+    let report = actual("p.", &options, &Cancellation::default()).unwrap();
     options.backend = Backend::Metal;
     let text = every_prefix(&options, &Ok(report));
     assert!(text.contains(
@@ -186,7 +186,7 @@ fn static_gpu_statistics_retain_eager_grounding() {
 fn every_partial_or_cancelled_statistics_prefix_preserves_incomplete_qualification() {
     let mut requested = options(&[]);
     requested.models = 1;
-    let outcome = actual("{a}.", &requested, &Control::default());
+    let outcome = actual("{a}.", &requested, &Cancellation::default());
     assert_eq!(
         outcome.as_ref().unwrap().completion,
         Completion::RequestedModels
@@ -201,7 +201,7 @@ fn every_partial_or_cancelled_statistics_prefix_preserves_incomplete_qualificati
         let outcome = actual(
             "1 {a;b} 1. #minimize{1,a:a;2,b:b}.",
             &bounded,
-            &Control::default(),
+            &Cancellation::default(),
         );
         let report = outcome.as_ref().unwrap();
         assert_eq!(report.completion, Completion::Interrupted);
@@ -211,9 +211,9 @@ fn every_partial_or_cancelled_statistics_prefix_preserves_incomplete_qualificati
         assert!(!text.contains("objective: optimal"));
     }
     let cancelled = options(&["--oracle", "countermodel"]);
-    let control = Control::default();
-    control.cancel();
-    let outcome = actual("p(.", &cancelled, &control);
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
+    let outcome = actual("p(.", &cancelled, &cancellation);
     let report = outcome.as_ref().unwrap();
     assert_eq!(report.completion, Completion::Interrupted);
     assert!(report.countermodel_statistics.is_none());
@@ -225,7 +225,7 @@ fn every_partial_or_cancelled_statistics_prefix_preserves_incomplete_qualificati
 #[test]
 fn every_real_source_refusal_statistics_prefix_propagates_its_writer_failure() {
     let options = options(&["--oracle", "countermodel"]);
-    let outcome = actual("p(.", &options, &Control::default());
+    let outcome = actual("p(.", &options, &Cancellation::default());
     assert!(
         matches!(outcome, Err(ref failure) if matches!(*failure.cause, RunError::FormulaAdmission(_)))
     );
@@ -241,7 +241,7 @@ fn hybrid_statistics_preserve_reported_fields() {
     // these authored values as synthetic; no GPU execution/parity is claimed.
     for (pending, queued, completed) in [(0, 0, true), (3, 2, false)] {
         let options = options(&["--oracle", "countermodel"]);
-        let mut report = actual("a | b.", &options, &Control::default()).unwrap();
+        let mut report = actual("a | b.", &options, &Cancellation::default()).unwrap();
         report.formula_execution = Some(crate::FormulaExecutionStatistics {
             completion: crate::CompletionAccounting::default(),
             gpu_residuals: None,
@@ -296,7 +296,7 @@ fn failed_statistics_preserve_missing_completion() {
         &options,
         &mut BoundedWriter::new(0),
         &mut io::sink(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     let partial = failure.partial_report.as_deref().unwrap();
@@ -317,7 +317,7 @@ fn exhausted_coverage_alone_cannot_label_an_incumbent_optimal() {
     let mut report = actual(
         "1 {a;b} 1. #minimize{1,a:a;1,b:b}.",
         &options,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(report.completion, Completion::Exhausted);

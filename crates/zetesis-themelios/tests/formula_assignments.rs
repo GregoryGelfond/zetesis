@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 
 use zetesis_core::{Atom, Model};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_sat::{Limits, StableModels};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, FormulaFailure,
@@ -23,7 +23,7 @@ fn input(source: &str) -> AdmittedFormula {
     admit(source).unwrap_or_else(|error| panic!("{source}: {error}"))
 }
 fn models(input: &AdmittedFormula) -> Models {
-    let mut search = StableModels::new(input.theory(), Limits::default(), Control::default())
+    let mut search = StableModels::new(input.theory(), Limits::default(), Cancellation::default())
         .expect("search admission");
     let result = search
         .by_ref()
@@ -183,7 +183,7 @@ fn direct_observers_use_structural_positions_and_score_verified_models() {
             input.objectives(),
             &model,
             zetesis_objective::Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .expect("verified model objective");
         assert_eq!(evaluation.score().costs(), &[(3, 2), (1, 0)]);
@@ -231,7 +231,7 @@ fn generated_positions_union_across_producers_without_changing_full_model_identi
                 input.objectives(),
                 &Model::new(model),
                 zetesis_objective::Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .expect("verified model objective")
             .score()
@@ -267,7 +267,7 @@ fn unchanged_layered_dag_shares_sum_thresholds_within_original_default_budgets()
 }
 
 fn bundle_optimum(input: &zetesis_themelios::AdmittedFormulaBundle) -> (Vec<i64>, usize) {
-    let mut search = StableModels::new(input.theory(), Limits::default(), Control::default())
+    let mut search = StableModels::new(input.theory(), Limits::default(), Cancellation::default())
         .expect("search admission");
     let mut best: Option<Vec<i64>> = None;
     let mut optimal = 0;
@@ -278,7 +278,7 @@ fn bundle_optimum(input: &zetesis_themelios::AdmittedFormulaBundle) -> (Vec<i64>
             input.objectives(),
             &atoms,
             zetesis_objective::Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .expect("verified model objective");
         let costs: Vec<_> = evaluation

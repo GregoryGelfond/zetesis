@@ -1,4 +1,4 @@
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 
 use super::{History, Slot, first_slot, hash};
 use crate::projection::{
@@ -27,7 +27,7 @@ fn insert(
         &mut Work {
             limits,
             stats,
-            control: &Control::default(),
+            cancellation: &Cancellation::default(),
         },
     )
 }
@@ -43,11 +43,11 @@ fn seeded() -> (History, ProjectionStatistics) {
 
 fn contains(history: &History, key: &[u64]) -> bool {
     let mut stats = statistics();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut work = Work {
         limits: ProjectionLimits::default(),
         stats: &mut stats,
-        control: &control,
+        cancellation: &cancellation,
     };
     let hash = hash(key, &mut work).unwrap();
     history.contains(key, hash, &mut work).unwrap()
@@ -57,7 +57,7 @@ fn contains(history: &History, key: &[u64]) -> bool {
 fn colliding_slots_preserve_complete_key_equality() {
     let mut history = History::new(2);
     let mut stats = statistics();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut colliding = Vec::new();
     let mut buckets: [Vec<[u64; 2]>; 16] = std::array::from_fn(|_| Vec::new());
     let mut first = 0;
@@ -67,7 +67,7 @@ fn colliding_slots_preserve_complete_key_equality() {
         let mut work = Work {
             limits: ProjectionLimits::default(),
             stats: &mut stats,
-            control: &control,
+            cancellation: &cancellation,
         };
         let key = [u64::MAX, last];
         let slot = first_slot(hash(&key, &mut work).unwrap(), 16).unwrap();
@@ -268,15 +268,15 @@ fn zero_width_keys_need_no_word_or_index_allocation() {
 fn cancellation_precedes_duplicate_lookup_and_work_refusal() {
     let (mut history, mut stats) = seeded();
     let old_work = stats.work;
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     let mut work = Work {
         limits: ProjectionLimits {
             max_work: 0,
             ..ProjectionLimits::default()
         },
         stats: &mut stats,
-        control: &control,
+        cancellation: &cancellation,
     };
     assert_eq!(
         history.insert(&[7, 0], BASE, &mut work),

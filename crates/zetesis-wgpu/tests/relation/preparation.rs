@@ -53,10 +53,18 @@ fn interrupted_copy(backend: GpuBackendPreference) {
             context.check_health().unwrap();
             drop(context.lease().unwrap());
             let mut prepared = executor
-                .prepare(&relation, RelationGpuLimits::default(), &Control::default())
+                .prepare(
+                    &relation,
+                    RelationGpuLimits::default(),
+                    &Cancellation::default(),
+                )
                 .unwrap();
             let masks = prepared
-                .filter(&queries, RelationGpuLimits::default(), &Control::default())
+                .filter(
+                    &queries,
+                    RelationGpuLimits::default(),
+                    &Cancellation::default(),
+                )
                 .unwrap();
             assert_eq!(
                 masks.selection(0, Limits::default()).unwrap().positions(),

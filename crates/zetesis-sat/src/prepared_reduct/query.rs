@@ -12,7 +12,8 @@ use zetesis_ferraris::{
 use super::{PreparedReduct, bound};
 use crate::timing::{self, Phase};
 use crate::{
-    Check, Control, Incomplete, Limits, Literal, SearchStatistics, Statistics, ferraris, search,
+    Cancellation, Check, Incomplete, Limits, Literal, SearchStatistics, Statistics, ferraris,
+    search,
 };
 use search::{Budget, LocalQuota, Quota, increment};
 
@@ -73,7 +74,7 @@ impl ReductWorkspace {
         &'a mut self,
         candidate: &'a Interpretation,
         limits: Limits,
-        control: &Control,
+        cancellation: &Cancellation,
         statistics: &mut Statistics,
     ) -> Result<(FormulaEvaluation<'a>, u128), Incomplete> {
         let max_bytes = limits.max_reduct_bytes;
@@ -85,7 +86,7 @@ impl ReductWorkspace {
             max_bytes,
             candidate,
             limits,
-            control,
+            cancellation,
             statistics,
         )
     }
@@ -94,9 +95,9 @@ impl ReductWorkspace {
         &mut self,
         prepared: &PreparedReduct,
         max_bytes: u64,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<(), Incomplete> {
-        control.poll()?;
+        cancellation.poll()?;
         let (variables, clauses) = prepared.cnf_shape();
         let count = prepared.parameter_count();
         let evaluation = self.evaluation.retained_bytes().max(
@@ -109,7 +110,7 @@ impl ReductWorkspace {
         bound(other + evaluation, max_bytes)?;
         let available = usize::try_from(u128::from(max_bytes) - other).unwrap_or(usize::MAX);
         self.evaluation
-            .reserve(prepared.theory(), available, control)
+            .reserve(prepared.theory(), available, cancellation)
             .map_err(|error| match error {
                 EvaluationError::Stopped(stop) => Incomplete::from(stop),
                 EvaluationError::Storage { required, .. } => Incomplete::ReductStorage {
@@ -160,12 +161,12 @@ impl PreparedReduct {
         candidate: &Interpretation,
         workspace: &mut ReductWorkspace,
         limits: Limits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> (Check, ReductQueryStatistics) {
         let mut budget = Budget {
             quota: LocalQuota,
             limits: limits.search,
-            control,
+            cancellation,
             statistics: SearchStatistics::default(),
         };
         let mut receipt = ReductQueryStatistics::default();
@@ -205,7 +206,7 @@ impl PreparedReduct {
         budget: &mut Budget<'_, impl Quota>,
         statistics: &mut Statistics,
     ) -> Result<Check, Incomplete> {
-        budget.control.poll()?;
+        budget.cancellation.poll()?;
         let max_bytes = limits.max_reduct_bytes;
         if !self.theory().same_instance(candidate.theory()) {
             return Err(Incomplete::WrongTheory);
@@ -218,7 +219,7 @@ impl PreparedReduct {
             max_bytes,
             candidate,
             limits,
-            budget.control,
+            budget.cancellation,
             statistics,
         )?;
         if !truth.is_model() {
@@ -308,7 +309,7 @@ fn evaluate_truth<'a>(
     max_bytes: u64,
     candidate: &'a Interpretation,
     limits: Limits,
-    control: &Control,
+    cancellation: &Cancellation,
     statistics: &mut Statistics,
 ) -> Result<(FormulaEvaluation<'a>, u128), Incomplete> {
     let evaluation_limit =
@@ -320,7 +321,7 @@ fn evaluate_truth<'a>(
             max_work: limits.max_verification_work,
             max_bytes: evaluation_limit,
         },
-        control,
+        cancellation,
     );
     timing::finish(
         &mut statistics.phase_timings,

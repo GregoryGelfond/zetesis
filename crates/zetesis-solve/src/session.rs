@@ -11,7 +11,7 @@ use crate::execution_observation::{ExecutionSink, Ignore, Observer};
 use std::sync::Arc;
 
 use zetesis_core::{GroundProgram, Model, Program};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Theory;
 use zetesis_objective::Score;
 use zetesis_themelios::{
@@ -317,7 +317,7 @@ enum State<'a> {
 pub struct SessionBuilder<'a> {
     input: PreparedInput<'a>,
     config: SolveConfig,
-    control: Control,
+    cancellation: Cancellation,
     selection: AnswerSelection,
     resources: ExecutionResources,
     executor: Option<Box<dyn crate::batch_executor::ErasedExecutor>>,
@@ -473,7 +473,7 @@ impl<'a> SessionBuilder<'a> {
             .projection
             .map(|limits| {
                 let _solving = phases.stage(crate::SolveStage::Solving);
-                self.control
+                self.cancellation
                     .poll()
                     .map_err(crate::ProjectionError::Control)?;
                 let domain = self
@@ -495,7 +495,7 @@ impl<'a> SessionBuilder<'a> {
         let result = Session::initialize(
             self.input,
             self.config,
-            &self.control,
+            &self.cancellation,
             phases.recorder(),
             self.input.selection(self.selection),
             Executors {
@@ -508,7 +508,7 @@ impl<'a> SessionBuilder<'a> {
             Ok((state, config)) => Ok(Session {
                 state,
                 config,
-                control: self.control,
+                cancellation: self.cancellation,
                 phases,
                 subject: self.input.subject(),
                 projection,
@@ -541,12 +541,12 @@ impl<'a> SessionBuilder<'a> {
 ///
 /// ```
 /// use zetesis_solve::{Backend, PreparedInput, Session, SolveConfig};
-/// use zetesis_cpu::Control;
+/// use zetesis_cpu::Cancellation;
 /// use zetesis_themelios::{admit, AdmissionOptions};
 ///
 /// let admitted = admit("a.".into(), AdmissionOptions::default())?;
 /// let config = SolveConfig { backend: Backend::Cpu, models: 0, ..Default::default() };
-/// let mut session = Session::new(PreparedInput::admitted(&admitted), config, Control::default())?;
+/// let mut session = Session::new(PreparedInput::admitted(&admitted), config, Cancellation::default())?;
 /// let model = session.next().unwrap()?;
 /// assert_eq!(model.interpretation().atoms().len(), 1);
 /// assert!(session.next().is_none());
@@ -556,7 +556,7 @@ impl<'a> SessionBuilder<'a> {
 pub struct Session<'a> {
     state: State<'a>,
     config: SolveConfig,
-    control: Control,
+    cancellation: Cancellation,
     phases: crate::SolveMeasurements,
     subject: Subject,
     projection: Option<crate::projection::Projection<'a>>,
@@ -577,12 +577,12 @@ impl<'a> Session<'a> {
     pub fn builder(
         input: PreparedInput<'a>,
         config: SolveConfig,
-        control: Control,
+        cancellation: Cancellation,
     ) -> SessionBuilder<'a> {
         SessionBuilder {
             input,
             config,
-            control,
+            cancellation,
             selection: AnswerSelection::Optimal,
             resources: ExecutionResources::default(),
             executor: None,
@@ -603,9 +603,9 @@ impl<'a> Session<'a> {
     pub fn new(
         input: PreparedInput<'a>,
         config: SolveConfig,
-        control: Control,
+        cancellation: Cancellation,
     ) -> Result<Self, SolveFailure> {
-        Self::builder(input, config, control).start()
+        Self::builder(input, config, cancellation).start()
     }
     /// Stream the original program's answer sets, including nonoptimal answers.
     ///
@@ -625,9 +625,9 @@ impl<'a> Session<'a> {
     pub fn enumerate(
         input: PreparedInput<'a>,
         config: SolveConfig,
-        control: Control,
+        cancellation: Cancellation,
     ) -> Result<Self, SolveFailure> {
-        Self::builder(input, config, control)
+        Self::builder(input, config, cancellation)
             .selection(AnswerSelection::All)
             .start()
     }
@@ -647,10 +647,10 @@ impl<'a> Session<'a> {
     pub fn new_observed(
         input: PreparedInput<'a>,
         config: SolveConfig,
-        control: Control,
+        cancellation: Cancellation,
         observer: &mut impl ExecutionObserver,
     ) -> Result<Self, SolveFailure> {
-        Self::builder(input, config, control).start_observed(observer)
+        Self::builder(input, config, cancellation).start_observed(observer)
     }
 
     /// Enumerate all answer sets with typed preparation observations.
@@ -663,17 +663,17 @@ impl<'a> Session<'a> {
     pub fn enumerate_observed(
         input: PreparedInput<'a>,
         config: SolveConfig,
-        control: Control,
+        cancellation: Cancellation,
         observer: &mut impl ExecutionObserver,
     ) -> Result<Self, SolveFailure> {
-        Self::builder(input, config, control)
+        Self::builder(input, config, cancellation)
             .selection(AnswerSelection::All)
             .start_observed(observer)
     }
     fn initialize(
         input: PreparedInput<'a>,
         config: SolveConfig,
-        control: &Control,
+        cancellation: &Cancellation,
         phases: &Recorder,
         selection: AnswerSelection,
         resources: Executors<'_>,
@@ -693,7 +693,7 @@ impl<'a> Session<'a> {
         }
         let config = input.configure(config)?;
         let _solving = phases.stage(crate::SolveStage::Solving);
-        if let Err(stop) = control.poll() {
+        if let Err(stop) = cancellation.poll() {
             let interruption = Interruption::Preparation(stop);
             return Ok((
                 State::Stopped(Box::new(SemanticOutcome {
@@ -728,7 +728,7 @@ impl<'a> Session<'a> {
                     &config,
                     resources.resources,
                     observations,
-                    control,
+                    cancellation,
                     phases,
                 )?))
             }
@@ -738,7 +738,7 @@ impl<'a> Session<'a> {
                 &config,
                 resources.resources,
                 observations,
-                control,
+                cancellation,
                 phases,
             )?)),
             Prepared::Formula(input) => State::Formula(Box::new(FormulaSession::with_resources(
@@ -746,7 +746,7 @@ impl<'a> Session<'a> {
                 &config,
                 resources,
                 observations,
-                control,
+                cancellation,
                 phases,
                 selection,
             )?)),
@@ -755,7 +755,7 @@ impl<'a> Session<'a> {
                 &config,
                 resources,
                 observations,
-                control,
+                cancellation,
                 phases,
                 selection,
             )?)),
@@ -860,7 +860,7 @@ impl<'a> Session<'a> {
             match next {
                 Some(Ok(answer)) => {
                     let solving = self.phases.stage(crate::SolveStage::Solving);
-                    let inserted = projection.insert(answer.interpretation(), &self.control);
+                    let inserted = projection.insert(answer.interpretation(), &self.cancellation);
                     drop(solving);
                     match inserted {
                         Ok(false) => {}
@@ -904,18 +904,18 @@ impl<'a> Session<'a> {
         let solving = self.phases.stage(crate::SolveStage::Solving);
         let next = match &mut self.state {
             State::Closure(state) => state
-                .next(&self.config, &self.control, self.phases.recorder())
+                .next(&self.config, &self.cancellation, self.phases.recorder())
                 .map(|result| result.map(|model| (model, None))),
             State::Formula(state) => state.next(
                 &self.config,
                 observations,
-                &self.control,
+                &self.cancellation,
                 self.phases.recorder(),
             ),
             State::Hybrid(state) => state.next(
                 &self.config,
                 observations,
-                &self.control,
+                &self.cancellation,
                 self.phases.recorder(),
             ),
             State::Stopped(_) => None,

@@ -17,7 +17,7 @@ mod tests;
 
 pub use config::{Configuration, ConstructionLimits, Options};
 pub use fixtures::Case;
-pub use run::{measure, measure_with_control};
+pub use run::{measure, measure_with_cancellation};
 use std::{fmt, io};
 pub use view::{Construction, Event, Native, NativeLimits, Progress, Route, Sample, StageTimes};
 

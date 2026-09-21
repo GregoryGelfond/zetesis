@@ -2,7 +2,8 @@
 
 use zetesis_ferraris::{AdmissionLimits, Interpretation, Node, Theory};
 use zetesis_sat::{
-    BatchError, BatchLimits, Check, Control, Incomplete, Limits, StableModels, check_interpretation,
+    BatchError, BatchLimits, Cancellation, Check, Incomplete, Limits, StableModels,
+    check_interpretation,
 };
 
 fn fact() -> Theory {
@@ -15,7 +16,7 @@ fn accepted_receipt_retains_the_checked_subject() {
     let decision = check_interpretation(
         Interpretation::new(&theory, [0]).unwrap(),
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     );
     assert!(decision.accepted());
     assert!(decision.candidate().theory().same_instance(&theory));
@@ -35,7 +36,7 @@ fn original_rejection_cannot_yield_a_stable_receipt() {
     let decision = check_interpretation(
         Interpretation::new(&theory, []).unwrap(),
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .into_stable_interpretation()
     .unwrap_err();
@@ -49,7 +50,7 @@ fn nonminimality_cannot_yield_a_stable_receipt() {
     let decision = check_interpretation(
         Interpretation::new(&theory, [0]).unwrap(),
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .into_stable_interpretation()
     .unwrap_err();
@@ -64,12 +65,12 @@ fn nonminimality_cannot_yield_a_stable_receipt() {
 #[test]
 fn inconclusive_attempt_cannot_yield_a_stable_receipt() {
     let theory = fact();
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     let decision = check_interpretation(
         Interpretation::new(&theory, [0]).unwrap(),
         Limits::default(),
-        &control,
+        &cancellation,
     )
     .into_stable_interpretation()
     .unwrap_err();
@@ -83,8 +84,9 @@ fn inconclusive_attempt_cannot_yield_a_stable_receipt() {
 #[test]
 fn verified_scalar_step_preserves_native_work() {
     let theory = fact();
-    let mut raw = StableModels::new(&theory, Limits::default(), Control::default()).unwrap();
-    let mut verified = StableModels::new(&theory, Limits::default(), Control::default()).unwrap();
+    let mut raw = StableModels::new(&theory, Limits::default(), Cancellation::default()).unwrap();
+    let mut verified =
+        StableModels::new(&theory, Limits::default(), Cancellation::default()).unwrap();
     let interpretation = raw.next().unwrap().unwrap();
     let receipt = verified.next_verified().unwrap().unwrap();
     assert!(receipt.theory().same_instance(&theory));
@@ -109,7 +111,7 @@ fn verified_scalar_refusal_does_not_claim_exhaustion() {
             max_candidates: 0,
             ..Limits::default()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     assert!(matches!(
@@ -124,7 +126,8 @@ fn verified_scalar_refusal_does_not_claim_exhaustion() {
 #[test]
 fn verified_scalar_step_refuses_unresolved_batch_proposals() {
     let theory = fact();
-    let mut models = StableModels::new(&theory, Limits::default(), Control::default()).unwrap();
+    let mut models =
+        StableModels::new(&theory, Limits::default(), Cancellation::default()).unwrap();
     let result = models.next_batch(
         BatchLimits {
             max_candidates: std::num::NonZeroUsize::new(1).unwrap(),

@@ -52,7 +52,7 @@ use super::regions::{IndexedTheory, RegionCounts, RegionSearchStatistics};
 use super::timing::{self, Phase, PhaseMeasurement};
 use crate::ferraris::Decision;
 use crate::search::{Budget, SharedBudget, WorkLease};
-use crate::{Control, Incomplete, Limits, SearchPhaseTimings, SearchStatistics, Statistics};
+use crate::{Cancellation, Incomplete, Limits, SearchPhaseTimings, SearchStatistics, Statistics};
 
 /// A waiting worker rechecks cooperative control at least once per timed wait.
 const POOL_WAIT: Duration = Duration::from_millis(1);
@@ -80,7 +80,7 @@ struct Shared {
     pool_changed: Condvar,
     budget: SharedBudget,
     limits: Limits,
-    control: Control,
+    cancellation: Cancellation,
     workers: usize,
     /// Whether the enumeration had phase timing enabled when the workers
     /// started; the workers then time their own phases.
@@ -258,7 +258,7 @@ impl ParallelRegions {
         theory: &Theory,
         workers: NonZeroUsize,
         limits: Limits,
-        control: Control,
+        cancellation: Cancellation,
         budget: &mut Budget<'_>,
     ) -> Result<Self, Incomplete> {
         let super::regions::Opened {
@@ -288,7 +288,7 @@ impl ParallelRegions {
                 pool_changed: Condvar::new(),
                 budget: SharedBudget::new(limits.search, budget.statistics),
                 limits,
-                control,
+                cancellation,
                 workers: workers.get(),
                 timed: false,
                 candidates: AtomicU64::new(0),
@@ -395,7 +395,7 @@ impl ParallelRegions {
             self.start(certificate, timed)?;
         }
         loop {
-            budget.control.poll()?;
+            budget.cancellation.poll()?;
             match self
                 .receiver
                 .as_ref()
@@ -562,9 +562,9 @@ fn worker(shared: &Shared, sender: &SyncSender<Interpretation>) -> WorkerReport 
         // region or sending a model, so other workers can use unused permits.
         let stepped = {
             let mut budget = Budget {
-                quota: shared.budget.lease(&shared.control),
+                quota: shared.budget.lease(&shared.cancellation),
                 limits: shared.limits.search,
-                control: &shared.control,
+                cancellation: &shared.cancellation,
                 statistics: search,
             };
             let result = step(
@@ -641,7 +641,7 @@ fn take(
             .unwrap_or_else(PoisonError::into_inner);
         pool = guard;
         pool.idle -= 1;
-        if let Err(error) = shared.control.poll() {
+        if let Err(error) = shared.cancellation.poll() {
             // The coordinator may already be waiting for a model after its
             // own control poll. Preserve this stop before the last sender
             // disconnects, so an unfinished frontier cannot look exhausted.
@@ -775,7 +775,7 @@ fn leaf<'a>(
             certificate,
             &candidate,
             limits,
-            budget.control,
+            budget.cancellation,
             &mut report.statistics,
             &mut search,
         );

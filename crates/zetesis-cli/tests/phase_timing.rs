@@ -6,7 +6,7 @@ use clap::Parser;
 use zetesis_cli::{
     Completion, Options, PhaseTimings, Report, RunError, SolvePhase, run_with_diagnostics,
 };
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 fn options(arguments: &[&str], stats: bool) -> Options {
     let mut options = Options::try_parse_from(
@@ -35,7 +35,7 @@ fn solve(source: &str, options: &Options) -> (Report, String, String) {
         options,
         &mut output,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     (
@@ -166,7 +166,7 @@ fn admission_and_candidate_setup_failures_retain_attempts_not_false_work() {
             &options(&[], true),
             &mut Vec::new(),
             &mut diagnostics,
-            &Control::default(),
+            &Cancellation::default(),
         )
         .is_err()
     );
@@ -200,7 +200,7 @@ fn retention_stop_and_failed_answer_write_never_claim_complete_output() {
         &options(&[], true),
         &mut ClosedOutput,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(error, RunError::Output(_)));
@@ -243,7 +243,7 @@ fn already_loaded_original_bundle_receives_driver_phases_on_both_oracles() {
             &options,
             &mut output,
             &mut diagnostics,
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         let (direct, direct_output, _) = solve(&source, &options);

@@ -8,7 +8,7 @@ use std::{fmt, sync::Arc};
 use themelios_base::{source::Source, span::Location};
 use themelios_program::program::{DefaultNegation, Program};
 use zetesis_core::{AtomCatalog, Model};
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::Theory;
 
 use crate::expansion::Budget;
@@ -428,20 +428,20 @@ impl ConstraintChecker<'_> {
     pub fn check(
         &mut self,
         model: &Model,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<ConstraintVerdict, ConstraintCheckFailure> {
         let result = if !model.catalog().same_owner(self.owner.atom_catalog()) {
             Err(ConstraintCheckCause::WrongProgram)
-        } else if let Err(stop) = control.poll() {
+        } else if let Err(stop) = cancellation.poll() {
             Err(ConstraintCheckCause::Stopped(stop))
         } else {
             self.accounting
-                .with_control(control, |counters| {
+                .with_cancellation(cancellation, |counters| {
                     Self::scan(self.prepared.as_ref(), &mut self.budget, counters, model)
                 })
                 .map_err(|error| ConstraintCheckCause::Source(Box::new(error)))
                 .and_then(|verdict| {
-                    control.poll().map_err(ConstraintCheckCause::Stopped)?;
+                    cancellation.poll().map_err(ConstraintCheckCause::Stopped)?;
                     Ok(verdict)
                 })
         };

@@ -1,18 +1,18 @@
 use super::*;
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_sat::{Check, CheckedInterpretation};
 
 /// Enumerate by the clause forms, the subject of the tests below.
 fn by_clauses(
     theory: &zetesis_ferraris::Theory,
     limits: zetesis_sat::Limits,
-    control: zetesis_sat::Control,
+    cancellation: zetesis_sat::Cancellation,
 ) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
     zetesis_sat::StableModels::with_method(
         theory,
         zetesis_sat::SearchMethod::Clauses,
         limits,
-        control,
+        cancellation,
     )
 }
 
@@ -20,18 +20,18 @@ fn checked(source: &zetesis_ferraris::Theory, bits: u64) -> CheckedInterpretatio
     zetesis_sat::check_interpretation(
         fixtures::interpretation(source, bits).unwrap(),
         Configuration::default().native(),
-        &Control::default(),
+        &Cancellation::default(),
     )
 }
 
 #[test]
 fn every_guard_matches_its_original_conditional_reduct() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut interpretations = 0;
     let mut pairs = 0;
     for case in Case::ALL {
         let theory = case.theory().unwrap();
-        let (_, checked) = run::qualify(&theory, 1_000_000, &control).unwrap();
+        let (_, checked) = run::qualify(&theory, 1_000_000, &cancellation).unwrap();
         interpretations += 1 << theory.atom_count();
         pairs += checked;
     }
@@ -42,31 +42,36 @@ fn every_guard_matches_its_original_conditional_reduct() {
 #[test]
 fn conditional_guard_preserves_a_stable_choice_extension() {
     let source = Case::Mixed.theory().unwrap();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let witness = fixtures::interpretation(&source, 1).unwrap();
-    let mut budget = guard::Budget::new(ConstructionLimits::default(), &control);
+    let mut budget = guard::Budget::new(ConstructionLimits::default(), &cancellation);
     let guard = guard::compile(&source, &witness, &mut budget).unwrap();
     let candidate = fixtures::interpretation(&source, 5).unwrap();
     assert!(
-        zetesis_ferraris::check(&source, &candidate, reference_limits(1_000_000), &control)
-            .unwrap()
-            .accepted()
+        zetesis_ferraris::check(
+            &source,
+            &candidate,
+            reference_limits(1_000_000),
+            &cancellation
+        )
+        .unwrap()
+        .accepted()
     );
-    assert!(guard.allows(&candidate, 1_000_000, &control).unwrap());
+    assert!(guard.allows(&candidate, 1_000_000, &cancellation).unwrap());
 }
 
 #[test]
 fn checked_countermodel_excludes_its_actual_subject() {
     let source = Case::Mixed.theory().unwrap();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let checked = checked(&source, 3);
     assert!(matches!(checked.verdict(), Check::NonMinimal(_)));
-    let mut budget = guard::Budget::new(ConstructionLimits::default(), &control);
+    let mut budget = guard::Budget::new(ConstructionLimits::default(), &cancellation);
     let mut store = guard::Store::new(&mut budget).unwrap();
     assert!(store.learn(&checked, &mut budget).unwrap());
     assert!(
         !store.guards[0]
-            .allows(checked.candidate(), 1_000_000, &control)
+            .allows(checked.candidate(), 1_000_000, &cancellation)
             .unwrap()
     );
 }
@@ -74,10 +79,10 @@ fn checked_countermodel_excludes_its_actual_subject() {
 #[test]
 fn learning_requires_a_native_countermodel() {
     let source = Case::Choice.theory().unwrap();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let checked = checked(&source, 1);
     assert!(matches!(checked.verdict(), Check::Stable));
-    let mut budget = guard::Budget::new(ConstructionLimits::default(), &control);
+    let mut budget = guard::Budget::new(ConstructionLimits::default(), &cancellation);
     let mut store = guard::Store::new(&mut budget).unwrap();
     assert!(matches!(
         store.learn(&checked, &mut budget),
@@ -91,13 +96,13 @@ fn equal_foreign_theory_cannot_rebind_a_guard() {
     let source = Case::Mixed.theory().unwrap();
     let other = Case::Mixed.theory().unwrap();
     assert_eq!(source.nodes(), other.nodes());
-    let control = Control::default();
-    let mut budget = guard::Budget::new(ConstructionLimits::default(), &control);
+    let cancellation = Cancellation::default();
+    let mut budget = guard::Budget::new(ConstructionLimits::default(), &cancellation);
     let witness = fixtures::interpretation(&source, 1).unwrap();
     let guard = guard::compile(&source, &witness, &mut budget).unwrap();
     let foreign = fixtures::interpretation(&other, 3).unwrap();
     assert!(matches!(
-        guard.allows(&foreign, 1_000_000, &control),
+        guard.allows(&foreign, 1_000_000, &cancellation),
         Err(Error::Owner)
     ));
 }
@@ -107,8 +112,8 @@ fn compilation_rejects_a_foreign_witness() {
     let source = Case::Loops.theory().unwrap();
     let other = Case::Loops.theory().unwrap();
     let witness = fixtures::interpretation(&other, 0).unwrap();
-    let control = Control::default();
-    let mut budget = guard::Budget::new(ConstructionLimits::default(), &control);
+    let cancellation = Cancellation::default();
+    let mut budget = guard::Budget::new(ConstructionLimits::default(), &cancellation);
     assert!(matches!(
         guard::compile(&source, &witness, &mut budget),
         Err(Error::Owner)
@@ -119,10 +124,10 @@ fn compilation_rejects_a_foreign_witness() {
 #[test]
 fn duplicate_witness_reuses_the_published_guard() {
     let source = Case::Loops.theory().unwrap();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let first = checked(&source, 1);
     let second = checked(&source, 2);
-    let mut budget = guard::Budget::new(ConstructionLimits::default(), &control);
+    let mut budget = guard::Budget::new(ConstructionLimits::default(), &cancellation);
     let mut store = guard::Store::new(&mut budget).unwrap();
     assert!(store.learn(&first, &mut budget).unwrap());
     let nodes = budget.retained_nodes;
@@ -139,8 +144,8 @@ fn duplicate_witness_reuses_the_published_guard() {
 fn every_construction_work_refusal_keeps_the_store_empty() {
     let source = Case::Mixed.theory().unwrap();
     let checked = checked(&source, 3);
-    let control = Control::default();
-    let mut full = guard::Budget::new(ConstructionLimits::default(), &control);
+    let cancellation = Cancellation::default();
+    let mut full = guard::Budget::new(ConstructionLimits::default(), &cancellation);
     let mut store = guard::Store::new(&mut full).unwrap();
     let setup = full.work;
     store.learn(&checked, &mut full).unwrap();
@@ -150,7 +155,7 @@ fn every_construction_work_refusal_keeps_the_store_empty() {
             max_work: maximum,
             ..ConstructionLimits::default()
         };
-        let mut budget = guard::Budget::new(limits, &control);
+        let mut budget = guard::Budget::new(limits, &cancellation);
         let mut refused = guard::Store::new(&mut budget).unwrap();
         assert!(matches!(
             refused.learn(&checked, &mut budget),
@@ -165,7 +170,7 @@ fn every_construction_work_refusal_keeps_the_store_empty() {
             max_work: complete,
             ..ConstructionLimits::default()
         },
-        &control,
+        &cancellation,
     );
     assert!(
         guard::Store::new(&mut budget)
@@ -179,8 +184,8 @@ fn every_construction_work_refusal_keeps_the_store_empty() {
 fn every_node_refusal_publishes_no_guard() {
     let source = Case::Mixed.theory().unwrap();
     let checked = checked(&source, 3);
-    let control = Control::default();
-    let mut budget = guard::Budget::new(ConstructionLimits::default(), &control);
+    let cancellation = Cancellation::default();
+    let mut budget = guard::Budget::new(ConstructionLimits::default(), &cancellation);
     let mut store = guard::Store::new(&mut budget).unwrap();
     store.learn(&checked, &mut budget).unwrap();
     let complete = store.guards[0].restriction.nodes().len();
@@ -190,7 +195,7 @@ fn every_node_refusal_publishes_no_guard() {
                 max_nodes,
                 ..ConstructionLimits::default()
             },
-            &control,
+            &cancellation,
         );
         let mut store = guard::Store::new(&mut budget).unwrap();
         assert!(matches!(
@@ -205,7 +210,7 @@ fn every_node_refusal_publishes_no_guard() {
             max_nodes: complete,
             ..ConstructionLimits::default()
         },
-        &control,
+        &cancellation,
     );
     assert!(
         guard::Store::new(&mut budget)
@@ -218,9 +223,9 @@ fn every_node_refusal_publishes_no_guard() {
 #[test]
 fn failed_learning_preserves_the_previous_guard() {
     let source = Case::Mixed.theory().unwrap();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let first = checked(&source, 3);
-    let mut budget = guard::Budget::new(ConstructionLimits::default(), &control);
+    let mut budget = guard::Budget::new(ConstructionLimits::default(), &cancellation);
     let mut store = guard::Store::new(&mut budget).unwrap();
     store.learn(&first, &mut budget).unwrap();
     let bytes = budget.retained_bytes;
@@ -235,7 +240,7 @@ fn failed_learning_preserves_the_previous_guard() {
     assert_eq!(budget.retained_nodes, nodes);
     assert!(
         !store.guards[0]
-            .allows(first.candidate(), 1_000_000, &control)
+            .allows(first.candidate(), 1_000_000, &cancellation)
             .unwrap()
     );
 }
@@ -244,10 +249,10 @@ fn failed_learning_preserves_the_previous_guard() {
 fn cancelled_learning_preserves_the_original_stop() {
     let source = Case::Loops.theory().unwrap();
     let checked = checked(&source, 1);
-    let control = Control::default();
-    let mut budget = guard::Budget::new(ConstructionLimits::default(), &control);
+    let cancellation = Cancellation::default();
+    let mut budget = guard::Budget::new(ConstructionLimits::default(), &cancellation);
     let mut store = guard::Store::new(&mut budget).unwrap();
-    control.cancel();
+    cancellation.cancel();
     assert!(matches!(
         store.learn(&checked, &mut budget),
         Err(Error::Control(Stop::Cancelled))
@@ -258,14 +263,14 @@ fn cancelled_learning_preserves_the_original_stop() {
 #[test]
 fn feedback_saves_calls_without_skipping_candidates() {
     let source = Case::Loops.theory().unwrap();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut progress = Progress::default();
     let mut elapsed = StageTimes::default();
     replay::fixed(
         &source,
         true,
         Configuration::default(),
-        &control,
+        &cancellation,
         &mut progress,
         &mut elapsed,
     )
@@ -295,7 +300,7 @@ fn refused_learning_retains_completed_membership() {
         &source,
         true,
         configuration,
-        &Control::default(),
+        &Cancellation::default(),
         &mut progress,
         &mut StageTimes::default(),
     );
@@ -311,14 +316,14 @@ fn refused_learning_retains_completed_membership() {
 #[test]
 fn actual_restart_preserves_already_delivered_models() {
     let source = Case::Mixed.theory().unwrap();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let config = Configuration::default();
     let mut fixed = Progress::default();
     let store = replay::fixed(
         &source,
         true,
         config,
-        &control,
+        &cancellation,
         &mut fixed,
         &mut StageTimes::default(),
     )
@@ -329,7 +334,7 @@ fn actual_restart_preserves_already_delivered_models() {
         &source,
         Some(&store),
         config,
-        &control,
+        &cancellation,
         &mut search,
         &mut StageTimes::default(),
     )
@@ -374,7 +379,7 @@ fn all_routes_preserve_the_complete_reference_families() {
 fn empty_guard_has_a_five_node_fifteen_step_boundary() {
     let source = Case::Empty.theory().unwrap();
     let witness = fixtures::interpretation(&source, 0).unwrap();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     // Four reservations; falsum, verum, proper, excluded, implication;
     // then five node and one root admission visits. No universe/map/root fold.
     let limits = ConstructionLimits {
@@ -382,17 +387,17 @@ fn empty_guard_has_a_five_node_fifteen_step_boundary() {
         max_work: 15,
         ..ConstructionLimits::default()
     };
-    let mut budget = guard::Budget::new(limits, &control);
+    let mut budget = guard::Budget::new(limits, &cancellation);
     let guard = guard::compile(&source, &witness, &mut budget).unwrap();
     assert_eq!(budget.work, 15);
     assert_eq!(guard.restriction.nodes().len(), 5);
-    assert!(guard.allows(&witness, 1_000_000, &control).unwrap());
+    assert!(guard.allows(&witness, 1_000_000, &cancellation).unwrap());
     let mut budget = guard::Budget::new(
         ConstructionLimits {
             max_work: 14,
             ..limits
         },
-        &control,
+        &cancellation,
     );
     assert!(matches!(
         guard::compile(&source, &witness, &mut budget),
@@ -404,9 +409,9 @@ fn empty_guard_has_a_five_node_fifteen_step_boundary() {
 fn guard_bytes_are_admitted_before_publication() {
     let source = Case::Loops.theory().unwrap();
     let checked = checked(&source, 1);
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     for resource in [Resource::BuildBytes, Resource::LiveBytes] {
-        let mut budget = guard::Budget::new(ConstructionLimits::default(), &control);
+        let mut budget = guard::Budget::new(ConstructionLimits::default(), &cancellation);
         let mut store = guard::Store::new(&mut budget).unwrap();
         let retained = budget.retained_bytes;
         match resource {
@@ -464,13 +469,13 @@ fn failed_event_preserves_the_original_writer_cause_pair() {
 fn retained_node_refusal_publishes_no_guard() {
     let source = Case::Loops.theory().unwrap();
     let checked = checked(&source, 1);
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut budget = guard::Budget::new(
         ConstructionLimits {
             max_total_nodes: 0,
             ..ConstructionLimits::default()
         },
-        &control,
+        &cancellation,
     );
     let mut store = guard::Store::new(&mut budget).unwrap();
     let retained = budget.retained_bytes;
@@ -486,19 +491,19 @@ fn retained_node_refusal_publishes_no_guard() {
 #[test]
 fn refused_installation_retains_the_first_answer() {
     let source = Case::Mixed.theory().unwrap();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let configuration = Configuration::default();
     let store = replay::fixed(
         &source,
         true,
         configuration,
-        &control,
+        &cancellation,
         &mut Progress::default(),
         &mut StageTimes::default(),
     )
     .unwrap();
     assert!(!store.guards.is_empty());
-    let mut reference = by_clauses(&source, configuration.native(), control.clone()).unwrap();
+    let mut reference = by_clauses(&source, configuration.native(), cancellation.clone()).unwrap();
     let first = fixtures::bits(&reference.next().unwrap().unwrap());
     // An actually observed native work boundary, not a guessed timeout or quota.
     // The identical setup and first next call fit; the first extra restriction
@@ -512,7 +517,7 @@ fn refused_installation_retains_the_first_answer() {
         &source,
         Some(&store),
         configuration,
-        &control,
+        &cancellation,
         &mut progress,
         &mut StageTimes::default(),
     );
@@ -531,8 +536,8 @@ fn refused_installation_retains_the_first_answer() {
 fn refused_capacity_proposal_does_not_raise_a_peak() {
     let source = Case::Loops.theory().unwrap();
     let checked = checked(&source, 1);
-    let control = Control::default();
-    let mut budget = guard::Budget::new(ConstructionLimits::default(), &control);
+    let cancellation = Cancellation::default();
+    let mut budget = guard::Budget::new(ConstructionLimits::default(), &cancellation);
     let mut store = guard::Store::new(&mut budget).unwrap();
     let peak_build = budget.peak_build_bytes;
     let peak_live = budget.peak_live_bytes;

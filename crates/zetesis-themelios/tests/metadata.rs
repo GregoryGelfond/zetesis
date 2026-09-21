@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
 use zetesis_core::{Atom, Program, Term};
-use zetesis_cpu::{CandidateLimits, Candidates, Control, Limits, check};
+use zetesis_cpu::{Cancellation, CandidateLimits, Candidates, Limits, check};
 use zetesis_themelios::{
     AdmissionOptions, Admitted, BundleAdmissionError, BundleAdmissionOptions, BundleLimits,
     ExpansionFailure, ExpansionLimits, ExpansionResource, OutputSelection, SourceBundle,
@@ -31,14 +31,14 @@ fn input(source: &str) -> Admitted {
 }
 
 fn models(program: &Program) -> Models {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut models = BTreeSet::new();
-    for seed in Candidates::new(program, CandidateLimits::default(), control.clone()) {
+    for seed in Candidates::new(program, CandidateLimits::default(), cancellation.clone()) {
         let result = check(
             program,
             &seed.expect("full candidate enumeration"),
             Limits::default(),
-            &control,
+            &cancellation,
         )
         .expect("complete reduct");
         if result.accepted() {

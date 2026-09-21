@@ -3,7 +3,7 @@
 use std::collections::VecDeque;
 use std::num::NonZeroUsize;
 
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Interpretation;
 use zetesis_sat::{BatchError, BatchLimits, CompletionExecutor, StableModels};
 
@@ -66,11 +66,11 @@ impl BatchQueue {
         &mut self,
         models: &mut StableModels,
         options: &SolveConfig,
-        control: &Control,
+        cancellation: &Cancellation,
         mut checker: impl for<'a> FnMut(CandidateBatch<'a>) -> Result<BatchResult<'a>, Failure>,
     ) -> Option<Result<Interpretation, Failure>> {
         loop {
-            if let Err(error) = control.poll() {
+            if let Err(error) = cancellation.poll() {
                 return Some(Err(Failure::Search(error.into())));
             }
             if let Some(model) = self.ready.pop_front() {

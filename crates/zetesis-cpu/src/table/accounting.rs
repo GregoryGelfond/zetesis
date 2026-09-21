@@ -4,13 +4,13 @@ use std::{cmp::Ordering, mem::size_of};
 
 use zetesis_core::Value;
 
-use crate::Control;
+use crate::Cancellation;
 
 use super::{Cause, Failure, Limits, Resource, Statistics};
 
 pub(super) struct Work<'a> {
     limits: Limits,
-    control: &'a Control,
+    cancellation: &'a Cancellation,
     used: u64,
     live: usize,
     peak: usize,
@@ -19,19 +19,19 @@ pub(super) struct Work<'a> {
 impl<'a> Work<'a> {
     pub(super) fn new(
         limits: Limits,
-        control: &'a Control,
+        cancellation: &'a Cancellation,
         external: usize,
         frame: usize,
     ) -> Result<Self, Failure> {
         let mut work = Self {
             limits,
-            control,
+            cancellation,
             used: 0,
             live: 0,
             peak: 0,
         };
         let result = (|| {
-            control.poll().map_err(Cause::Interrupted)?;
+            cancellation.poll().map_err(Cause::Interrupted)?;
             let bytes = external.checked_add(frame).ok_or(Cause::Overflow)?;
             work.admit(bytes)?;
             work.live = bytes;
@@ -69,7 +69,7 @@ impl<'a> Work<'a> {
         if amount == 0 {
             return Ok(());
         }
-        self.control.poll().map_err(Cause::Interrupted)?;
+        self.cancellation.poll().map_err(Cause::Interrupted)?;
         let next = u128::from(self.used) + amount as u128;
         ceiling(Resource::Work, next, u128::from(self.limits.max_work))?;
         self.used = u64::try_from(next).map_err(|_| Cause::Overflow)?;
@@ -97,7 +97,7 @@ impl<'a> Work<'a> {
     }
 
     pub(super) fn reserve<T>(&mut self, count: usize) -> Result<Vec<T>, Cause> {
-        self.control.poll().map_err(Cause::Interrupted)?;
+        self.cancellation.poll().map_err(Cause::Interrupted)?;
         let proposed = bytes::<T>(count)?
             .checked_add(self.live)
             .ok_or(Cause::Overflow)?;
@@ -125,7 +125,7 @@ impl<'a> Work<'a> {
     }
 
     pub(super) fn grow<T>(&mut self, values: &mut Vec<T>, additional: usize) -> Result<(), Cause> {
-        self.control.poll().map_err(Cause::Interrupted)?;
+        self.cancellation.poll().map_err(Cause::Interrupted)?;
         let needed = values
             .len()
             .checked_add(additional)
@@ -185,10 +185,10 @@ mod tests {
 
     #[test]
     fn interrupted_charge_preserves_the_completed_prefix() {
-        let control = Control::default();
-        let mut work = Work::new(Limits::default(), &control, 0, 0).unwrap();
+        let cancellation = Cancellation::default();
+        let mut work = Work::new(Limits::default(), &cancellation, 0, 0).unwrap();
         work.tick(3).unwrap();
-        control.cancel();
+        cancellation.cancel();
         work.tick(0).unwrap();
         let cause = work.tick(1).unwrap_err();
         assert_eq!(cause, Cause::Interrupted(Stop::Cancelled));
@@ -197,13 +197,13 @@ mod tests {
 
     #[test]
     fn rejected_charge_does_not_increment_work() {
-        let control = Control::default();
+        let cancellation = Cancellation::default();
         let mut work = Work::new(
             Limits {
                 max_work: 3,
                 ..Limits::default()
             },
-            &control,
+            &cancellation,
             0,
             0,
         )
@@ -223,8 +223,8 @@ mod tests {
 
     #[test]
     fn refused_growth_preserves_the_original_buffer() {
-        let control = Control::default();
-        let mut work = Work::new(Limits::default(), &control, 0, 0).unwrap();
+        let cancellation = Cancellation::default();
+        let mut work = Work::new(Limits::default(), &cancellation, 0, 0).unwrap();
         let mut values = work.reserve::<u32>(2).unwrap();
         let capacity = values.capacity();
         values.resize(capacity, 7);
@@ -247,8 +247,8 @@ mod tests {
 
     #[test]
     fn growth_accounts_for_coexisting_buffers() {
-        let control = Control::default();
-        let mut work = Work::new(Limits::default(), &control, 0, 0).unwrap();
+        let cancellation = Cancellation::default();
+        let mut work = Work::new(Limits::default(), &cancellation, 0, 0).unwrap();
         let mut values = work.reserve::<u32>(2).unwrap();
         let initial = values.capacity();
         values.resize(initial, 7);

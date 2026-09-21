@@ -3,7 +3,7 @@
 use crate::presentation::{Diagnostics, Label};
 use std::io::Write;
 
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
     AdmissionOptions, BundleAdmissionError, BundleAdmissionOptions, ExpansionLimits, ParsedSource,
     SourceBundle, SourceFailure, admit_bundle_extended,
@@ -70,7 +70,7 @@ impl FormulaInput {
         options: &Options,
         renderer: &mut impl crate::AnswerRenderer,
         diagnostics: &mut Diagnostics<impl Write>,
-        control: &Control,
+        cancellation: &Cancellation,
         phases: &Recorder,
     ) -> Result<Progress, PublicationFailure> {
         self.warnings(diagnostics)?;
@@ -80,7 +80,7 @@ impl FormulaInput {
             &crate::PublicationConfig::from(options),
             renderer,
             diagnostics,
-            control,
+            cancellation,
             phases,
         )
         .map_err(|failure| self.retain_source(failure))
@@ -101,13 +101,13 @@ pub(crate) fn source(
     options: &Options,
     renderer: &mut impl crate::AnswerRenderer,
     diagnostics: &mut Diagnostics<impl Write>,
-    control: &Control,
+    cancellation: &Cancellation,
     phases: &Recorder,
 ) -> Result<Progress, PublicationFailure> {
     crate::SolveConfig::from(options).validate()?;
     if options.oracle == Oracle::Countermodel
         && let Some(report) =
-            crate::publication::check_control(renderer, diagnostics, control, phases)?
+            crate::publication::check_cancellation(renderer, diagnostics, cancellation, phases)?
     {
         return Ok(report);
     }
@@ -135,7 +135,7 @@ pub(crate) fn source(
                     &crate::PublicationConfig::from(options),
                     renderer,
                     diagnostics,
-                    control,
+                    cancellation,
                     phases,
                 )
                 .map_err(|failure| source_failure(failure, "<input>", admitted.source()));
@@ -149,7 +149,8 @@ pub(crate) fn source(
         }
     };
     validate_formula(options)?;
-    if let Some(report) = crate::publication::check_control(renderer, diagnostics, control, phases)?
+    if let Some(report) =
+        crate::publication::check_cancellation(renderer, diagnostics, cancellation, phases)?
     {
         return Ok(report);
     }
@@ -179,7 +180,7 @@ pub(crate) fn source(
             }
         })
         .map_err(RunError::FormulaAdmission)?;
-    admitted.solve(options, renderer, diagnostics, control, phases)
+    admitted.solve(options, renderer, diagnostics, cancellation, phases)
 }
 
 pub(crate) fn bundle(
@@ -187,13 +188,13 @@ pub(crate) fn bundle(
     options: &Options,
     renderer: &mut impl crate::AnswerRenderer,
     diagnostics: &mut Diagnostics<impl Write>,
-    control: &Control,
+    cancellation: &Cancellation,
     phases: &Recorder,
 ) -> Result<Progress, PublicationFailure> {
     crate::SolveConfig::from(options).validate()?;
     if options.oracle == Oracle::Countermodel
         && let Some(report) =
-            crate::publication::check_control(renderer, diagnostics, control, phases)?
+            crate::publication::check_cancellation(renderer, diagnostics, cancellation, phases)?
     {
         return Ok(report);
     }
@@ -224,7 +225,7 @@ pub(crate) fn bundle(
                     &crate::PublicationConfig::from(options),
                     renderer,
                     diagnostics,
-                    control,
+                    cancellation,
                     phases,
                 )
                 .map_err(|failure| bundle_failure(failure, admitted.bundle()));
@@ -240,7 +241,8 @@ pub(crate) fn bundle(
         }
     };
     validate_formula(options)?;
-    if let Some(report) = crate::publication::check_control(renderer, diagnostics, control, phases)?
+    if let Some(report) =
+        crate::publication::check_cancellation(renderer, diagnostics, cancellation, phases)?
     {
         return Ok(report);
     }
@@ -269,7 +271,7 @@ pub(crate) fn bundle(
             }
         })
         .map_err(RunError::FormulaBundleAdmission)?;
-    admitted.solve(options, renderer, diagnostics, control, phases)
+    admitted.solve(options, renderer, diagnostics, cancellation, phases)
 }
 
 fn source_failure(

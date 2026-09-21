@@ -9,7 +9,7 @@
 use std::hint::black_box;
 
 use criterion::{BenchmarkId, Criterion, Throughput};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, FrozenReduct, Interpretation, Limits, Node, Theory, models_reduct,
 };
@@ -19,7 +19,7 @@ const ATOMS: usize = 6;
 struct Fixture {
     candidate: Interpretation,
     tested: Vec<Interpretation>,
-    control: Control,
+    cancellation: Cancellation,
 }
 
 impl Fixture {
@@ -38,7 +38,7 @@ impl Fixture {
                         .unwrap()
                 })
                 .collect(),
-            control: Control::default(),
+            cancellation: Cancellation::default(),
         }
     }
 
@@ -51,7 +51,7 @@ impl Fixture {
                     &self.candidate,
                     tested,
                     Limits::default(),
-                    &self.control,
+                    &self.cancellation,
                 )
                 .unwrap()
             })
@@ -59,7 +59,8 @@ impl Fixture {
     }
 
     fn freeze_then_test(&self) -> usize {
-        let reduct = FrozenReduct::new(&self.candidate, Limits::default(), &self.control).unwrap();
+        let reduct =
+            FrozenReduct::new(&self.candidate, Limits::default(), &self.cancellation).unwrap();
         self.retained_freeze(&reduct)
     }
 
@@ -68,7 +69,7 @@ impl Fixture {
             .iter()
             .filter(|tested| {
                 reduct
-                    .is_satisfied_by(tested, Limits::default(), &self.control)
+                    .is_satisfied_by(tested, Limits::default(), &self.cancellation)
                     .unwrap()
             })
             .count()
@@ -78,14 +79,14 @@ impl Fixture {
         for tested in &self.tested {
             assert_eq!(
                 reduct
-                    .is_satisfied_by(tested, Limits::default(), &self.control)
+                    .is_satisfied_by(tested, Limits::default(), &self.cancellation)
                     .unwrap(),
                 models_reduct(
                     self.candidate.theory(),
                     &self.candidate,
                     tested,
                     Limits::default(),
-                    &self.control,
+                    &self.cancellation,
                 )
                 .unwrap()
             );
@@ -100,7 +101,8 @@ fn main() {
         for queries in [1, 8, 32, 128] {
             let fixture = Fixture::new(depth, queries);
             let reduct =
-                FrozenReduct::new(&fixture.candidate, Limits::default(), &fixture.control).unwrap();
+                FrozenReduct::new(&fixture.candidate, Limits::default(), &fixture.cancellation)
+                    .unwrap();
             fixture.verify(&reduct);
             assert_eq!(fixture.one_shot(), fixture.freeze_then_test());
             assert_eq!(fixture.one_shot(), fixture.retained_freeze(&reduct));

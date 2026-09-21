@@ -325,7 +325,7 @@ fn constants_do_not_certify_atom_count_plans() {
         .unwrap()
         .ground_with_count_plan(
             CountPlanLimits::default(),
-            &zetesis_cpu::Control::default(),
+            &zetesis_cpu::Cancellation::default(),
             None,
         )
         .unwrap();
@@ -387,7 +387,7 @@ fn bundle_origins_do_not_multiply_activity() {
         let mut search = zetesis_sat::StableModels::new(
             admitted.theory(),
             zetesis_sat::Limits::default(),
-            zetesis_cpu::Control::default(),
+            zetesis_cpu::Cancellation::default(),
         )
         .unwrap();
         let complete: Vec<_> = search
@@ -453,7 +453,7 @@ fn reordered_bundle_rules_preserve_occurrences() {
     let mut search = zetesis_sat::StableModels::new(
         admitted.theory(),
         zetesis_sat::Limits::default(),
-        zetesis_cpu::Control::default(),
+        zetesis_cpu::Cancellation::default(),
     )
     .unwrap();
     let complete: Vec<_> = search
@@ -512,7 +512,7 @@ fn merged_bundle_rules_keep_original_multiplicity() {
         let mut search = zetesis_sat::StableModels::new(
             admitted.theory(),
             zetesis_sat::Limits::default(),
-            zetesis_cpu::Control::default(),
+            zetesis_cpu::Cancellation::default(),
         )
         .unwrap();
         assert!(search.next().is_none(), "{rules:?}");

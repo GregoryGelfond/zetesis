@@ -8,7 +8,7 @@ use zetesis_ferraris::{
     AdmissionLimits, Interpretation, Node, Theory, TightError, TightPlanLimits, TightResource,
 };
 use zetesis_sat::{
-    BatchError, BatchLimits, BatchVerdict, CertificateError, CompletionExecutor, Control,
+    BatchError, BatchLimits, BatchVerdict, Cancellation, CertificateError, CompletionExecutor,
     Incomplete, Limits, StableModels,
 };
 
@@ -16,13 +16,13 @@ use zetesis_sat::{
 fn by_clauses(
     theory: &zetesis_ferraris::Theory,
     limits: zetesis_sat::Limits,
-    control: zetesis_sat::Control,
+    cancellation: zetesis_sat::Cancellation,
 ) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
     zetesis_sat::StableModels::with_method(
         theory,
         zetesis_sat::SearchMethod::Clauses,
         limits,
-        control,
+        cancellation,
     )
 }
 
@@ -62,7 +62,7 @@ fn expected(theory: &Theory) -> BTreeSet<Vec<usize>> {
                 theory,
                 &m,
                 zetesis_ferraris::Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap()
             .accepted()
@@ -80,7 +80,7 @@ fn batch_limits(n: usize) -> BatchLimits {
 #[test]
 fn external_preparation_does_not_activate_cpu_checking() {
     let original = choices();
-    let mut stream = by_clauses(&original, Limits::default(), Control::default()).unwrap();
+    let mut stream = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
     let plan = stream
         .prepare_tight_certificate(TightPlanLimits::default())
         .unwrap()
@@ -102,7 +102,7 @@ fn external_preparation_does_not_activate_cpu_checking() {
 #[test]
 fn cpu_activation_reuses_external_preparation() {
     let original = choices();
-    let mut stream = by_clauses(&original, Limits::default(), Control::default()).unwrap();
+    let mut stream = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
     let plan = stream
         .prepare_tight_certificate(TightPlanLimits::default())
         .unwrap()
@@ -126,7 +126,7 @@ fn cpu_activation_reuses_external_preparation() {
 #[test]
 fn external_preparation_retains_optional_refusal() {
     let original = choices();
-    let mut stream = by_clauses(&original, Limits::default(), Control::default()).unwrap();
+    let mut stream = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
     assert!(
         stream
             .prepare_tight_certificate(TightPlanLimits {
@@ -152,14 +152,14 @@ fn external_preparation_retains_optional_refusal() {
 #[test]
 fn external_preparation_obeys_cumulative_work() {
     let original = choices();
-    let initial = by_clauses(&original, Limits::default(), Control::default())
+    let initial = by_clauses(&original, Limits::default(), Cancellation::default())
         .unwrap()
         .statistics()
         .search
         .work;
     let mut limits = Limits::default();
     limits.search.max_work = initial + 1;
-    let mut stream = by_clauses(&original, limits, Control::default()).unwrap();
+    let mut stream = by_clauses(&original, limits, Cancellation::default()).unwrap();
     assert!(matches!(
         stream.prepare_tight_certificate(TightPlanLimits::default()),
         Err(Incomplete::WorkLimit)
@@ -172,7 +172,7 @@ fn external_preparation_obeys_cumulative_work() {
 #[test]
 fn cpu_activation_refuses_pending_external_candidates() {
     let original = choices();
-    let mut stream = by_clauses(&original, Limits::default(), Control::default()).unwrap();
+    let mut stream = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
     stream
         .prepare_tight_certificate(TightPlanLimits::default())
         .unwrap()
@@ -226,7 +226,7 @@ fn scalar_and_rayon_batches_match_independent_reduct_with_support_refutations_an
     ];
     for (index, theory) in cases.iter().enumerate() {
         let wanted = expected(theory);
-        let mut scalar = by_clauses(theory, Limits::default(), Control::default()).unwrap();
+        let mut scalar = by_clauses(theory, Limits::default(), Cancellation::default()).unwrap();
         let eligible = scalar
             .enable_certified_checking(TightPlanLimits::default())
             .unwrap();
@@ -247,7 +247,8 @@ fn scalar_and_rayon_batches_match_independent_reduct_with_support_refutations_an
         }
         for workers in [1, 4] {
             for size in [1, 2, 5] {
-                let mut stream = by_clauses(theory, Limits::default(), Control::default()).unwrap();
+                let mut stream =
+                    by_clauses(theory, Limits::default(), Cancellation::default()).unwrap();
                 stream.enable_phase_timing();
                 assert_eq!(
                     stream
@@ -293,7 +294,8 @@ fn scalar_and_rayon_batches_match_independent_reduct_with_support_refutations_an
 #[test]
 fn failed_construction_is_charged_and_cannot_restart_or_reset_search_limits() {
     let original = choices();
-    let mut baseline = StableModels::new(&original, Limits::default(), Control::default()).unwrap();
+    let mut baseline =
+        StableModels::new(&original, Limits::default(), Cancellation::default()).unwrap();
     let before = baseline.statistics().search.work;
     let local = TightPlanLimits {
         max_work: 3,
@@ -318,7 +320,7 @@ fn failed_construction_is_charged_and_cannot_restart_or_reset_search_limits() {
 
     let mut limits = Limits::default();
     limits.search.max_work = before + 3;
-    let mut stopped = StableModels::new(&original, limits, Control::default()).unwrap();
+    let mut stopped = StableModels::new(&original, limits, Cancellation::default()).unwrap();
     assert_eq!(
         stopped.enable_certified_checking(TightPlanLimits::default()),
         Err(Incomplete::WorkLimit)
@@ -334,7 +336,7 @@ fn exact_scalar_work_boundary_includes_certification_and_residual_completion() {
         let run = |ceiling| {
             let mut limits = Limits::default();
             limits.search.max_work = ceiling;
-            let mut stream = StableModels::new(&original, limits, Control::default()).unwrap();
+            let mut stream = StableModels::new(&original, limits, Cancellation::default()).unwrap();
             stream
                 .enable_certified_checking(TightPlanLimits::default())
                 .unwrap();
@@ -363,7 +365,7 @@ fn certificate_failure_retains_pending_candidates_without_reentering_completion(
     let probe = zetesis_ferraris::TightPlan::compile(
         &original,
         TightPlanLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let plan_bytes = probe.statistics().construction_bytes;
@@ -373,7 +375,7 @@ fn certificate_failure_retains_pending_candidates_without_reentering_completion(
         ..Default::default()
     };
     // Initial proposal validation fits this exact amount; ranked support needs more.
-    let mut stream = StableModels::new(&original, limits, Control::default()).unwrap();
+    let mut stream = StableModels::new(&original, limits, Cancellation::default()).unwrap();
     assert!(
         stream
             .enable_certified_checking(TightPlanLimits {
@@ -404,7 +406,7 @@ fn certificate_failure_retains_pending_candidates_without_reentering_completion(
 fn restrictions_keep_original_certificate_and_late_configuration_is_explicit() {
     let original = choices();
     let restriction = theory(3, vec![Node::Atom(0)], vec![0]);
-    let mut stream = by_clauses(&original, Limits::default(), Control::default()).unwrap();
+    let mut stream = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
     stream
         .enable_certified_checking(TightPlanLimits::default())
         .unwrap();
@@ -414,7 +416,7 @@ fn restrictions_keep_original_certificate_and_late_configuration_is_explicit() {
     assert!(results.iter().all(|m| m.contains(&0)));
     assert_eq!(stream.statistics().countermodel_queries, 0);
     assert_eq!(stream.statistics().candidate_restrictions, 1);
-    let mut late = by_clauses(&original, Limits::default(), Control::default()).unwrap();
+    let mut late = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
     late.next().unwrap().unwrap();
     assert_eq!(
         late.enable_certified_checking(TightPlanLimits::default()),

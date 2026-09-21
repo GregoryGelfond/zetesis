@@ -3,8 +3,8 @@
 use proptest::prelude::*;
 use zetesis_ferraris::{Interpretation, Node, Theory, Verdict};
 use zetesis_sat::{
-    Check, Control, Incomplete, Limits, PreparedReduct, ReductPreparationLimits, ReductWorkspace,
-    SearchLimits,
+    Cancellation, Check, Incomplete, Limits, PreparedReduct, ReductPreparationLimits,
+    ReductWorkspace, SearchLimits,
 };
 
 const BYTES: u64 = 4 * 1024 * 1024;
@@ -31,7 +31,7 @@ fn prepare(theory: &Theory) -> PreparedReduct {
     PreparedReduct::prepare(
         theory,
         ReductPreparationLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .result
     .unwrap()
@@ -40,7 +40,7 @@ fn prepare(theory: &Theory) -> PreparedReduct {
 fn compare(input: &Theory) {
     let prepared = prepare(input);
     let retained = prepared.statistics();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut workspace = ReductWorkspace::default();
     // Descending then ascending candidates forces previously true/false
     // implication parameters and subset units to be replaced in both directions.
@@ -56,20 +56,20 @@ fn compare(input: &Theory) {
                 max_reduct_bytes: BYTES,
                 ..Limits::default()
             },
-            &control,
+            &cancellation,
         );
         let fresh = zetesis_sat::check_with(
             input,
             &current,
             zetesis_sat::SearchMethod::Clauses,
             Limits::default(),
-            &control,
+            &cancellation,
         );
         let exhaustive = zetesis_ferraris::check(
             input,
             &current,
             zetesis_ferraris::Limits::default(),
-            &control,
+            &cancellation,
         )
         .unwrap();
         assert_eq!(
@@ -101,7 +101,7 @@ fn compare(input: &Theory) {
                         &current,
                         &witness,
                         zetesis_ferraris::Limits::default(),
-                        &control
+                        &cancellation
                     )
                     .unwrap()
                 );
@@ -141,7 +141,7 @@ fn false_original_implication_does_not_retain_classical_equivalence() {
             max_reduct_bytes: BYTES,
             ..Limits::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
     );
     let Check::NonMinimal(witness) = result else {
         panic!("expected empty witness: {result:?}")
@@ -190,7 +190,7 @@ fn foreign_equal_theory_is_refused_without_changing_workspace() {
             max_reduct_bytes: BYTES,
             ..Limits::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
     );
     assert!(matches!(
         result,
@@ -216,7 +216,7 @@ fn every_preparation_work_refusal_preserves_the_exact_prefix() {
                 max_work,
                 ..Default::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         );
         assert_eq!(failure.result.unwrap_err(), Incomplete::WorkLimit);
         assert_eq!(failure.statistics.work, max_work);
@@ -228,7 +228,7 @@ fn every_preparation_work_refusal_preserves_the_exact_prefix() {
             max_work: required,
             ..Default::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
     );
     let receipt = complete.statistics;
     let prepared = complete.result.unwrap();
@@ -246,7 +246,7 @@ fn refused_preparation_capacity_is_not_reported_as_allocated_peak() {
             max_bytes: 0,
             ..Default::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
     );
     let Incomplete::ReductStorage { required, limit: 0 } = *failure.result.as_ref().unwrap_err()
     else {
@@ -267,7 +267,7 @@ fn every_cold_query_work_stop_allows_a_complete_retry() {
     let prepared = prepare(&input);
     let current = candidate(&input, 3);
     let mut workspace = ReductWorkspace::default();
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let (complete, full) = prepared.check(
         &current,
         &mut workspace,
@@ -275,7 +275,7 @@ fn every_cold_query_work_stop_allows_a_complete_retry() {
             max_reduct_bytes: BYTES,
             ..Limits::default()
         },
-        &control,
+        &cancellation,
     );
     assert!(matches!(complete, Check::NonMinimal(_)));
     let retained = workspace.retained_bytes();
@@ -293,7 +293,7 @@ fn every_cold_query_work_stop_allows_a_complete_retry() {
                 },
                 ..Default::default()
             },
-            &control,
+            &cancellation,
         );
         assert!(
             matches!(result, Check::Inconclusive(Incomplete::WorkLimit)),
@@ -308,7 +308,7 @@ fn every_cold_query_work_stop_allows_a_complete_retry() {
                 max_reduct_bytes: BYTES,
                 ..Limits::default()
             },
-            &control,
+            &cancellation,
         );
         assert!(matches!(retried, Check::Stable));
     }
@@ -322,7 +322,7 @@ fn every_cold_query_work_stop_allows_a_complete_retry() {
             },
             ..Default::default()
         },
-        &control,
+        &cancellation,
     );
     assert!(matches!(exact, Check::NonMinimal(_)));
     assert_eq!(receipt.statistics.search.work, full.statistics.search.work);
@@ -338,7 +338,7 @@ fn original_evaluation_stop_never_enters_subset_search() {
             max_verification_work: 1,
             ..Default::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
     );
     assert!(matches!(
         result,
@@ -352,8 +352,8 @@ fn original_evaluation_stop_never_enters_subset_search() {
 fn cancellation_precedes_query_storage_admission() {
     let input = theory(1, vec![Node::Atom(0)], vec![0]);
     let prepared = prepare(&input);
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     let mut workspace = ReductWorkspace::default();
     let before = workspace.retained_bytes();
     let (result, receipt) = prepared.check(
@@ -363,7 +363,7 @@ fn cancellation_precedes_query_storage_admission() {
             max_reduct_bytes: 0,
             ..Limits::default()
         },
-        &control,
+        &cancellation,
     );
     assert!(matches!(result, Check::Inconclusive(Incomplete::Cancelled)));
     assert_eq!(receipt.retained_bytes, before);
@@ -376,7 +376,7 @@ fn lowered_query_storage_limit_charges_retained_capacity() {
     let prepared = prepare(&input);
     let mut workspace = ReductWorkspace::default();
     let current = candidate(&input, 3);
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     assert!(matches!(
         prepared
             .check(
@@ -386,7 +386,7 @@ fn lowered_query_storage_limit_charges_retained_capacity() {
                     max_reduct_bytes: BYTES,
                     ..Limits::default()
                 },
-                &control
+                &cancellation
             )
             .0,
         Check::NonMinimal(_)
@@ -400,7 +400,7 @@ fn lowered_query_storage_limit_charges_retained_capacity() {
             max_reduct_bytes: limit,
             ..Limits::default()
         },
-        &control,
+        &cancellation,
     );
     assert!(
         matches!(result, Check::Inconclusive(Incomplete::ReductStorage { required, limit: observed }) if required == retained && observed == u128::from(limit))
@@ -416,7 +416,7 @@ fn lowered_query_storage_limit_charges_retained_capacity() {
                     max_reduct_bytes: limit + 1,
                     ..Limits::default()
                 },
-                &control
+                &cancellation
             )
             .0,
         Check::NonMinimal(_)

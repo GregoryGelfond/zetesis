@@ -7,7 +7,7 @@
 //! frozen seed membership and derived truth remain separate authorities.
 #![forbid(unsafe_code)]
 
-mod control;
+mod cancellation;
 mod oracle;
 mod static_oracle;
 mod candidates;
@@ -18,11 +18,11 @@ pub mod regions;
 pub mod table;
 
 pub use batch::{BatchError, BatchOracle, QueryStatistics};
+pub use cancellation::{Cancellation, Stop};
 pub use candidates::{
     CandidateLimits, CandidateRestrictionLimits, CandidateStatistics, CandidateTermination,
     Candidates,
 };
-pub use control::{Control, Stop};
 pub use oracle::source;
 pub use oracle::{
     Check, ClosureWorkspace, Limits, PreparationLimits, PreparationStatistics, PreparedQueries,

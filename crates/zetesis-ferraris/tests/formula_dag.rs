@@ -2,7 +2,7 @@
 
 use proptest::prelude::*;
 use proptest::test_runner::FileFailurePersistence;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, FrozenReduct, Interpretation, Limits, Node, Theory, Verdict, check, models,
     models_reduct,
@@ -174,16 +174,16 @@ proptest! {
             .expect("generator preserves topological admission");
         let candidate = interpretation(&theory, case.candidate);
         let tested = interpretation(&theory, case.tested);
-        let control = Control::default();
+        let cancellation = Cancellation::default();
         let limits = Limits::default();
         let classical = roots.iter().all(|root| root.eval(case.candidate));
-        prop_assert_eq!(models(&theory, &candidate, limits, &control).unwrap(), classical);
-        prop_assert_eq!(models_reduct(&theory, &candidate, &tested, limits, &control).unwrap(),
+        prop_assert_eq!(models(&theory, &candidate, limits, &cancellation).unwrap(), classical);
+        prop_assert_eq!(models_reduct(&theory, &candidate, &tested, limits, &cancellation).unwrap(),
             reduct.iter().all(|root| root.eval(case.tested)));
-        let frozen = FrozenReduct::new(&candidate, limits, &control).unwrap();
+        let frozen = FrozenReduct::new(&candidate, limits, &cancellation).unwrap();
         for world in 0..1u8 << case.atoms {
             prop_assert_eq!(
-                frozen.is_satisfied_by(&interpretation(&theory, world), limits, &control).unwrap(),
+                frozen.is_satisfied_by(&interpretation(&theory, world), limits, &cancellation).unwrap(),
                 reduct.iter().all(|root| root.eval(world))
             );
         }
@@ -191,7 +191,7 @@ proptest! {
             subset != case.candidate && subset & !case.candidate == 0
                 && reduct.iter().all(|root| root.eval(subset))
         });
-        let actual = check(&theory, &candidate, limits, &control).unwrap();
+        let actual = check(&theory, &candidate, limits, &cancellation).unwrap();
         prop_assert_eq!(actual.accepted(), stable);
         if let Verdict::NonMinimal { witness } = actual.verdict() {
             let subset = witness.atoms().fold(0u8, |bits, atom| bits | (1 << atom));
@@ -216,20 +216,20 @@ proptest! {
         let node_work = u64::try_from(theory.nodes().len()).unwrap();
         let tested_work = node_work + u64::try_from(root_tests).unwrap();
         let limits = |max_work| Limits { max_work, max_subsets: 0 };
-        let control = Control::default();
-        let frozen = FrozenReduct::new(&candidate, limits(node_work), &control).unwrap();
+        let cancellation = Cancellation::default();
+        let frozen = FrozenReduct::new(&candidate, limits(node_work), &cancellation).unwrap();
         let expected = reduct.iter().all(|root| root.eval(case.tested));
-        prop_assert_eq!(frozen.is_satisfied_by(&tested, limits(tested_work), &control).unwrap(), expected);
+        prop_assert_eq!(frozen.is_satisfied_by(&tested, limits(tested_work), &cancellation).unwrap(), expected);
         prop_assert_eq!(
-            frozen.is_satisfied_by(&tested, limits(tested_work - 1), &control).unwrap_err(),
+            frozen.is_satisfied_by(&tested, limits(tested_work - 1), &cancellation).unwrap_err(),
             zetesis_cpu::Stop::WorkLimit
         );
         prop_assert_eq!(
-            models_reduct(&theory, &candidate, &tested, limits(node_work + tested_work), &control).unwrap(),
+            models_reduct(&theory, &candidate, &tested, limits(node_work + tested_work), &cancellation).unwrap(),
             expected
         );
         prop_assert_eq!(
-            models_reduct(&theory, &candidate, &tested, limits(node_work + tested_work - 1), &control).unwrap_err(),
+            models_reduct(&theory, &candidate, &tested, limits(node_work + tested_work - 1), &cancellation).unwrap_err(),
             zetesis_cpu::Stop::WorkLimit
         );
     }

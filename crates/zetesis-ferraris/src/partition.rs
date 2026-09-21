@@ -9,7 +9,7 @@
 
 use std::fmt;
 
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 
 mod restriction;
 pub use restriction::{Restriction, RestrictionError, RestrictionErrorKind, RestrictionLimits};
@@ -96,7 +96,7 @@ pub enum ErrorKind {
     MissingMember(usize),
     /// A dimension or accounting operation cannot be represented.
     Overflow,
-    /// Control or fallible allocation stopped construction.
+    /// Cancellation or fallible allocation stopped construction.
     Stopped(Stop),
 }
 
@@ -204,10 +204,14 @@ impl Plan {
     ///
     /// # Errors
     /// Refuses malformed partitions, dimensions, storage, work or control.
-    pub fn new(premises: Premises<'_>, limits: Limits, control: &Control) -> Result<Self, Error> {
+    pub fn new(
+        premises: Premises<'_>,
+        limits: Limits,
+        cancellation: &Cancellation,
+    ) -> Result<Self, Error> {
         let mut budget = Budget {
             limits,
-            control,
+            cancellation,
             statistics: Statistics::default(),
         };
         let result = build(premises, &mut budget);
@@ -268,13 +272,13 @@ enum Coverage {
 
 struct Budget<'a> {
     limits: Limits,
-    control: &'a Control,
+    cancellation: &'a Cancellation,
     statistics: Statistics,
 }
 
 impl Budget<'_> {
     fn poll(&self) -> Result<(), ErrorKind> {
-        self.control.poll().map_err(ErrorKind::Stopped)
+        self.cancellation.poll().map_err(ErrorKind::Stopped)
     }
 
     fn tick(&mut self) -> Result<(), ErrorKind> {

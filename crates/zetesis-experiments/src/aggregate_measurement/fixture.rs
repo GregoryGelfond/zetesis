@@ -1,6 +1,6 @@
 use super::{Case, Configuration, Error, reserve};
 use zetesis_core::Value;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, AggregateComparison, Interpretation, Node, Theory,
     native_aggregate::{self as native, Bound, Group, Guard, Tuple},
@@ -18,8 +18,8 @@ pub(super) struct Fixture {
     pub(super) interpretations: Vec<(u8, Option<u8>)>,
 }
 
-pub(super) fn build(case: Case, control: &Control) -> Result<Fixture, Error> {
-    control.poll().map_err(Error::Cpu)?;
+pub(super) fn build(case: Case, cancellation: &Cancellation) -> Result<Fixture, Error> {
+    cancellation.poll().map_err(Error::Cpu)?;
     let theory = Theory::new(
         2,
         vec![
@@ -40,7 +40,7 @@ pub(super) fn build(case: Case, control: &Control) -> Result<Fixture, Error> {
     .map_err(Error::Admission)?;
     let mut tuples = reserve(case.tuples)?;
     for index in 0..case.tuples {
-        control.poll().map_err(Error::Cpu)?;
+        cancellation.poll().map_err(Error::Cpu)?;
         let mut key = reserve(2)?;
         if index != 0 {
             let index_value = i32::try_from(index).map_err(|_| Error::Accounting)?;
@@ -63,7 +63,7 @@ pub(super) fn build(case: Case, control: &Control) -> Result<Fixture, Error> {
             bound: Bound::Integer(0),
         }],
         native::AdmissionLimits::default(),
-        control,
+        cancellation,
     )
     .map_err(Error::Native)?;
     let mut worlds = reserve(INTERPRETATIONS)?;
@@ -92,7 +92,7 @@ pub(super) fn build(case: Case, control: &Control) -> Result<Fixture, Error> {
 pub(super) fn acquire<'a>(
     fixture: &'a Fixture,
     configuration: &Configuration,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<Vec<native::Eligibility<'a>>, Error> {
     let mut records = reserve(fixture.interpretations.len())?;
     for &(original, frozen) in &fixture.interpretations {
@@ -106,7 +106,7 @@ pub(super) fn acquire<'a>(
                         max_work: configuration.max_acquisition_work,
                         max_bytes: configuration.max_acquisition_bytes,
                     },
-                    control,
+                    cancellation,
                 )
                 .map_err(Error::Native)?,
         );

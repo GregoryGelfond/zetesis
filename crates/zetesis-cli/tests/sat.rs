@@ -5,9 +5,13 @@ use std::fmt::Write as _;
 
 use clap::Parser;
 use zetesis_cli::{Completion, Interruption, Options, Report, RunError, run_with_diagnostics};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
-fn solve(source: &str, arguments: &[&str], control: &Control) -> (Report, String, String) {
+fn solve(
+    source: &str,
+    arguments: &[&str],
+    cancellation: &Cancellation,
+) -> (Report, String, String) {
     let options = Options::try_parse_from(
         ["zetesis", "--oracle", "countermodel", "--models", "0"]
             .into_iter()
@@ -21,7 +25,7 @@ fn solve(source: &str, arguments: &[&str], control: &Control) -> (Report, String
         &options,
         &mut output,
         &mut diagnostics,
-        control,
+        cancellation,
     )
     .unwrap();
     (
@@ -55,13 +59,18 @@ fn sat_models_match_exhaustive_normal_search() {
         ":-.",
         "node(1). node(2). {pick(X)} :- node(X). :- pick(1), pick(2).",
     ] {
-        let (sat, text, diagnostics) = solve(source, &[], &Control::default());
+        let (sat, text, diagnostics) = solve(source, &[], &Cancellation::default());
         assert_eq!(sat.completion, Completion::Exhausted, "{source}");
         let mut bytes = Vec::new();
         let options =
             Options::try_parse_from(["zetesis", "--backend", "cpu", "--models", "0"]).unwrap();
-        let reference =
-            zetesis_cli::run(source.into(), &options, &mut bytes, &Control::default()).unwrap();
+        let reference = zetesis_cli::run(
+            source.into(),
+            &options,
+            &mut bytes,
+            &Cancellation::default(),
+        )
+        .unwrap();
         let expected = String::from_utf8(bytes).unwrap();
         assert_eq!(reference.models, sat.models);
         assert_eq!(
@@ -82,7 +91,7 @@ fn search_limits_are_incomplete_and_hidden_models_remain_distinct() {
         vec!["--max-candidates", "0"],
         vec!["--max-work", "0"],
     ] {
-        let (report, output, _) = solve("{a}.", &arguments, &Control::default());
+        let (report, output, _) = solve("{a}.", &arguments, &Cancellation::default());
         assert_eq!(report.completion, Completion::Interrupted);
         assert!(matches!(
             report.interruption,
@@ -94,12 +103,16 @@ fn search_limits_are_incomplete_and_hidden_models_remain_distinct() {
     let (report, output, _) = solve(
         "{hidden}. visible. #show visible/0.",
         &[],
-        &Control::default(),
+        &Cancellation::default(),
     );
     assert_eq!(report.completion, Completion::Exhausted);
     assert_eq!(report.models, 2);
     assert_eq!(answers(&output), vec![BTreeSet::from(["visible"]); 2]);
-    let (limited, output, _) = solve("{a}. {b}.", &["--max-candidates", "1"], &Control::default());
+    let (limited, output, _) = solve(
+        "{a}. {b}.",
+        &["--max-candidates", "1"],
+        &Cancellation::default(),
+    );
     assert_eq!(limited.models, 1);
     assert_eq!(limited.completion, Completion::Interrupted);
     assert!(output.contains("Answer: 1"));
@@ -107,9 +120,9 @@ fn search_limits_are_incomplete_and_hidden_models_remain_distinct() {
 
 #[test]
 fn cancellation_precedes_eager_materialization() {
-    let control = Control::default();
-    control.cancel();
-    let (report, _, _) = solve("a.", &["--max-atoms", "0"], &control);
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
+    let (report, _, _) = solve("a.", &["--max-atoms", "0"], &cancellation);
     assert_eq!(
         report.interruption,
         Some(Interruption::Preparation(zetesis_cpu::Stop::Cancelled))
@@ -141,7 +154,7 @@ fn hybrid_device_requests_are_refused_before_source() {
             &options,
             &mut output,
             &mut Vec::new(),
-            &Control::default(),
+            &Cancellation::default(),
         );
         assert!(matches!(result, Err(RunError::HybridBackend { backend })
             if backend == options.backend));
@@ -189,7 +202,7 @@ fn synthetic_eight_queens_source_has_all_92_models() {
     let (report, output, _) = solve(
         &queens(8),
         &["--max-search-work", "1000000000"],
-        &Control::default(),
+        &Cancellation::default(),
     );
     assert_eq!(report.completion, Completion::Exhausted, "{report:?}");
     assert_eq!(report.models, 92);

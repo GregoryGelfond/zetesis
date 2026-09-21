@@ -10,7 +10,7 @@ use std::{collections::HashMap, mem::size_of, sync::Arc};
 use zetesis_ferraris::{Node, Theory};
 
 use crate::{
-    AdmissionLimits, Cnf, Control, Incomplete, Literal, SearchLimits, SearchStatistics,
+    AdmissionLimits, Cancellation, Cnf, Incomplete, Literal, SearchLimits, SearchStatistics,
     encoding::{self, Encoded},
     search::{Budget, LocalQuota, Quota},
 };
@@ -120,7 +120,7 @@ impl PreparedReduct {
     pub fn prepare(
         theory: &Theory,
         limits: ReductPreparationLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> ReductPreparationAttempt {
         let mut budget = Budget {
             quota: LocalQuota,
@@ -128,7 +128,7 @@ impl PreparedReduct {
                 max_work: limits.max_work,
                 max_decisions: 0,
             },
-            control,
+            cancellation,
             statistics: SearchStatistics::default(),
         };
         Self::with_budget(theory, limits.admission, limits.max_bytes, &mut budget)

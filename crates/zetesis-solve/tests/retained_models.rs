@@ -3,7 +3,7 @@
 use std::{collections::BTreeSet, num::NonZeroUsize};
 
 use zetesis_core::{Atom, Model, Predicate, Sign, Value};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     Backend, Completion, Interruption, OptimizationStop, Oracle, PreparedInput, Session,
     SolveConfig,
@@ -45,9 +45,12 @@ fn formula_answers_retain_the_original_catalog() {
     let (answers, original_catalog) = {
         let owner = admitted("tag(\"shared\").{p(1);p(\"1\");-q(1)}.");
         let original = owner.atoms().as_ptr();
-        let mut session =
-            Session::enumerate(PreparedInput::formula(&owner), config(), Control::default())
-                .unwrap();
+        let mut session = Session::enumerate(
+            PreparedInput::formula(&owner),
+            config(),
+            Cancellation::default(),
+        )
+        .unwrap();
         let answers = session.by_ref().collect::<Result<Vec<_>, _>>().unwrap();
         assert_eq!(
             session.outcome().unwrap().completion(),
@@ -122,7 +125,7 @@ fn optimum_bytes_include_unselected_catalog_payload() {
             max_optimal_bytes: required,
             ..config()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     let answers = exact.by_ref().collect::<Result<Vec<_>, _>>().unwrap();
@@ -136,7 +139,7 @@ fn optimum_bytes_include_unselected_catalog_payload() {
             max_optimal_bytes: required - 1,
             ..config()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     assert!(short.next().is_none());

@@ -77,23 +77,24 @@ fn scheduled(
     workspace: &mut ClosureWorkspace,
     schedule: Schedule,
     limits: Limits,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<Check, Stop> {
-    let mut work = Work::source(control, limits.max_work);
+    let mut work = Work::source(cancellation, limits.max_work);
     work.limits = limits;
     prepared.check_scheduled(seed, workspace, schedule, &mut work)
 }
 
 fn complete(program: &Program, schedule: Schedule) -> Check {
-    let control = Control::default();
-    let prepared = PreparedQueries::new(program, PreparationLimits::default(), &control).unwrap();
+    let cancellation = Cancellation::default();
+    let prepared =
+        PreparedQueries::new(program, PreparationLimits::default(), &cancellation).unwrap();
     scheduled(
         &prepared,
         Seed::new(program, []).unwrap().view(),
         &mut ClosureWorkspace::default(),
         schedule,
         Limits::default(),
-        &control,
+        &cancellation,
     )
     .unwrap()
 }
@@ -236,13 +237,14 @@ fn every_incomplete_delta_prefix_is_retired_before_reuse() {
             .cloned()
             .chain([atom("enabled", &[])]),
     );
-    let control = Control::default();
-    let prepared = PreparedQueries::new(&program, PreparationLimits::default(), &control).unwrap();
+    let cancellation = Cancellation::default();
+    let prepared =
+        PreparedQueries::new(&program, PreparationLimits::default(), &cancellation).unwrap();
     let seed = Seed::new(&program, [atom("enabled", &[])]).unwrap();
     let other_seed = Seed::new(&program, []).unwrap();
     let mut original = ClosureWorkspace::default();
     let complete = prepared
-        .check_view(seed.view(), &mut original, Limits::default(), &control)
+        .check_view(seed.view(), &mut original, Limits::default(), &cancellation)
         .unwrap();
     let reference = scheduled(
         &prepared,
@@ -250,7 +252,7 @@ fn every_incomplete_delta_prefix_is_retired_before_reuse() {
         &mut ClosureWorkspace::default(),
         Schedule::Full,
         Limits::default(),
-        &control,
+        &cancellation,
     )
     .unwrap();
     for max_work in 0..complete.statistics().work {
@@ -262,7 +264,7 @@ fn every_incomplete_delta_prefix_is_retired_before_reuse() {
                 max_work,
                 ..Limits::default()
             },
-            &control,
+            &cancellation,
         ) else {
             panic!("a strict prefix cannot establish completed source coverage");
         };
@@ -276,7 +278,7 @@ fn every_incomplete_delta_prefix_is_retired_before_reuse() {
                 other_seed.view(),
                 &mut workspace,
                 Limits::default(),
-                &control,
+                &cancellation,
             )
             .unwrap();
         assert_eq!(retry.closure(), reference.closure());
@@ -290,10 +292,10 @@ fn every_incomplete_delta_prefix_is_retired_before_reuse() {
 #[test]
 fn complete_delta_work_limit_is_inclusive() {
     let (program, expected) = path(4, 3);
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let seed = Seed::new(&program, []).unwrap();
     // One-shot work includes the same source preparation as the actual API.
-    let reference = crate::check(&program, &seed, Limits::default(), &control).unwrap();
+    let reference = crate::check(&program, &seed, Limits::default(), &cancellation).unwrap();
     let exact = crate::check(
         &program,
         &seed,
@@ -301,7 +303,7 @@ fn complete_delta_work_limit_is_inclusive() {
             max_work: reference.statistics().work,
             ..Limits::default()
         },
-        &control,
+        &cancellation,
     )
     .unwrap();
     assert_eq!(exact.closure(), &expected);
@@ -313,7 +315,7 @@ fn complete_delta_work_limit_is_inclusive() {
             max_work: reference.statistics().work - 1,
             ..Limits::default()
         },
-        &control,
+        &cancellation,
     ) else {
         panic!("final completion work is required");
     };
@@ -323,9 +325,9 @@ fn complete_delta_work_limit_is_inclusive() {
 #[test]
 fn delta_capacity_admits_the_complete_named_envelope() {
     let (program, expected) = path(4, 3);
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let seed = Seed::new(&program, []).unwrap();
-    let reference = crate::check(&program, &seed, Limits::default(), &control).unwrap();
+    let reference = crate::check(&program, &seed, Limits::default(), &cancellation).unwrap();
     let exact = crate::check(
         &program,
         &seed,
@@ -333,7 +335,7 @@ fn delta_capacity_admits_the_complete_named_envelope() {
             max_closure_bytes: reference.statistics().peak_closure_bytes,
             ..Limits::default()
         },
-        &control,
+        &cancellation,
     )
     .unwrap();
     assert_eq!(exact.closure(), &expected);
@@ -345,7 +347,7 @@ fn delta_capacity_admits_the_complete_named_envelope() {
             max_closure_bytes: reference.statistics().peak_closure_bytes - 1,
             ..Limits::default()
         },
-        &control,
+        &cancellation,
     ) else {
         panic!("complete view and publication capacity is required");
     };
@@ -393,8 +395,9 @@ fn bootstrap_gates_and_latched_constraints_preserve_rejection() {
     }
     // The second seed enables the zero-positive rule only at bootstrap. This
     // preserves its consequence even though it is not revisited in later rounds.
-    let control = Control::default();
-    let prepared = PreparedQueries::new(&program, PreparationLimits::default(), &control).unwrap();
+    let cancellation = Cancellation::default();
+    let prepared =
+        PreparedQueries::new(&program, PreparationLimits::default(), &cancellation).unwrap();
     let seed = Seed::new(&program, [atom("enabled", &[])]).unwrap();
     let expected = Model::new(expected.atoms().iter().cloned().chain([atom("gated", &[])]));
     for schedule in [Schedule::Full, Schedule::Delta] {
@@ -404,7 +407,7 @@ fn bootstrap_gates_and_latched_constraints_preserve_rejection() {
             &mut ClosureWorkspace::default(),
             schedule,
             Limits::default(),
-            &control,
+            &cancellation,
         )
         .unwrap();
         assert_eq!(check.closure(), &expected);

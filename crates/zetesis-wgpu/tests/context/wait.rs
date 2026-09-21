@@ -2,7 +2,7 @@
 
 use super::{Effects, GpuError, GpuErrorKind, SubmissionWait, finish_read, wait_for_submission};
 use std::{cell::Cell, time::Duration};
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 
 #[test]
 fn wait_quanta_respect_the_remaining_timeout() {
@@ -27,18 +27,18 @@ fn wait_quanta_respect_the_remaining_timeout() {
 
 #[test]
 fn control_refusal_prevents_a_device_wait() {
-    for control in [
-        Control::with_deadline(std::time::Instant::now()).unwrap(),
+    for cancellation in [
+        Cancellation::with_deadline(std::time::Instant::now()).unwrap(),
         {
-            let control = Control::default();
-            control.cancel();
-            control
+            let cancellation = Cancellation::default();
+            cancellation.cancel();
+            cancellation
         },
     ] {
-        let stop = control.poll().unwrap_err();
+        let stop = cancellation.poll().unwrap_err();
         let error = wait_for_submission(
             Duration::from_secs(1),
-            || control.poll().map_err(GpuError::interrupted),
+            || cancellation.poll().map_err(GpuError::interrupted),
             |_| panic!("stopped control must precede device polling"),
             || Duration::ZERO,
         )
@@ -51,15 +51,15 @@ fn control_refusal_prevents_a_device_wait() {
 
 #[test]
 fn cancellation_is_observed_between_pending_waits() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut polls = 0;
     let error = wait_for_submission(
         Duration::from_secs(1),
-        || control.poll().map_err(GpuError::interrupted),
+        || cancellation.poll().map_err(GpuError::interrupted),
         |wait| {
             assert_eq!(wait, Duration::from_millis(50));
             polls += 1;
-            control.cancel();
+            cancellation.cancel();
             Err(wgpu::PollError::Timeout)
         },
         || Duration::ZERO,
@@ -72,12 +72,12 @@ fn cancellation_is_observed_between_pending_waits() {
 
 #[test]
 fn a_completed_poll_does_not_hide_new_cancellation() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let error = wait_for_submission(
         Duration::from_secs(1),
-        || control.poll().map_err(GpuError::interrupted),
+        || cancellation.poll().map_err(GpuError::interrupted),
         |_| {
-            control.cancel();
+            cancellation.cancel();
             Ok(wgpu::PollStatus::WaitSucceeded)
         },
         || Duration::ZERO,
@@ -89,12 +89,12 @@ fn a_completed_poll_does_not_hide_new_cancellation() {
 
 #[test]
 fn a_device_poll_failure_precedes_later_control_refusal() {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let error = wait_for_submission(
         Duration::from_secs(1),
-        || control.poll().map_err(GpuError::interrupted),
+        || cancellation.poll().map_err(GpuError::interrupted),
         |_| {
-            control.cancel();
+            cancellation.cancel();
             Err(wgpu::PollError::WrongSubmissionIndex(2, 1))
         },
         || Duration::ZERO,

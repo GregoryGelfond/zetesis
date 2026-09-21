@@ -3,7 +3,7 @@
 use clap::Parser;
 use serde_json::Value;
 use zetesis_cli::{Completion, Options, Report, SolvePhase, run_detailed_with_diagnostics};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_sat::CertificatePlanStatistics;
 use zetesis_validation::{
     performance::matrix::{DeviceWork, Observation, Procedure},
@@ -38,7 +38,7 @@ fn capture(source: &str, oracle: &str, workers: &str) -> (Report, Value, Vec<u8>
         &options,
         &mut output,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(report.completion, Completion::Exhausted);

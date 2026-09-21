@@ -4,7 +4,7 @@ use std::num::NonZeroUsize;
 
 use zetesis_ferraris::{AdmissionLimits, Node, Theory};
 use zetesis_sat::{
-    BatchError, BatchLimits, BatchVerdict, Control, Incomplete, Limits, ProjectionLimits,
+    BatchError, BatchLimits, BatchVerdict, Cancellation, Incomplete, Limits, ProjectionLimits,
     ProjectionResource,
 };
 
@@ -12,13 +12,13 @@ use zetesis_sat::{
 fn by_clauses(
     theory: &zetesis_ferraris::Theory,
     limits: zetesis_sat::Limits,
-    control: zetesis_sat::Control,
+    cancellation: zetesis_sat::Cancellation,
 ) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
     zetesis_sat::StableModels::with_method(
         theory,
         zetesis_sat::SearchMethod::Clauses,
         limits,
-        control,
+        cancellation,
     )
 }
 
@@ -44,7 +44,7 @@ fn choices() -> Theory {
 #[test]
 fn history_refusals_preserve_the_checked_answer() {
     let input = choices();
-    let mut reference = by_clauses(&input, Limits::default(), Control::default()).unwrap();
+    let mut reference = by_clauses(&input, Limits::default(), Cancellation::default()).unwrap();
     let header = usize::try_from(reference.statistics().projections.retained_bytes).unwrap();
     let expected: Vec<_> = reference.next().unwrap().unwrap().atoms().collect();
     for (resource, projections, required, limit) in [
@@ -82,7 +82,7 @@ fn history_refusals_preserve_the_checked_answer() {
                 projections,
                 ..Limits::default()
             },
-            Control::default(),
+            Cancellation::default(),
         )
         .unwrap();
         let model = search.next().unwrap().unwrap();
@@ -93,7 +93,7 @@ fn history_refusals_preserve_the_checked_answer() {
                 &input,
                 &model,
                 zetesis_ferraris::Limits::default(),
-                &Control::default()
+                &Cancellation::default()
             )
             .unwrap()
             .accepted()
@@ -130,7 +130,7 @@ fn checker_retry_keeps_the_original_history_stop() {
             },
             ..Limits::default()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     let batch = BatchLimits {

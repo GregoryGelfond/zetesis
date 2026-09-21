@@ -7,7 +7,7 @@ use zetesis_cli::{
     Backend, ColorMode, Options, PublicationOutcome, SemanticOutcome, SolveConfig,
     SolveMeasurements, run_finalized_with_diagnostics, statistics_view::Statistics,
 };
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_presentation::Layout;
 
 #[path = "support/bounded_writer.rs"]
@@ -26,7 +26,7 @@ fn solve(source: &str, arguments: &[&str], stats: bool) -> (Options, Publication
         &options,
         &mut io::sink(),
         &mut io::sink(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     (options, outcome)

@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 
 use zetesis_core::{Atom, Predicate, Value};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_sat::{Limits, StableModels};
 use zetesis_themelios::{
     AdmissionOptions, ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits,
@@ -18,8 +18,12 @@ fn models(source: &str) -> BTreeSet<BTreeSet<Atom>> {
         FormulaLimits::default(),
     )
     .unwrap_or_else(|error| panic!("{source}: {error}"));
-    let mut search = StableModels::new(admitted.theory(), Limits::default(), Control::default())
-        .expect("theory admitted");
+    let mut search = StableModels::new(
+        admitted.theory(),
+        Limits::default(),
+        Cancellation::default(),
+    )
+    .expect("theory admitted");
     let result = search
         .by_ref()
         .map(|result| {

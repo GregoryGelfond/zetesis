@@ -7,7 +7,7 @@ use std::{
     io::{self, Write},
     num::NonZeroUsize,
 };
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 fn options() -> Options {
     let mut options = Options::try_parse_from([
@@ -72,7 +72,7 @@ fn run(
         options,
         output,
         diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err()
 }

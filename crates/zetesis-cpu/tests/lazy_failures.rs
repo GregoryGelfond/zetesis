@@ -3,7 +3,7 @@
 use std::error::Error;
 
 use zetesis_core::{AdmissionLimits, AtomPattern, Model, Predicate, Program, Seed, Template};
-use zetesis_cpu::{Control, Stop, lazy, source};
+use zetesis_cpu::{Cancellation, Stop, lazy, source};
 
 fn atom(name: &str) -> AtomPattern {
     AtomPattern::new(Predicate::new(name, 0).unwrap(), vec![]).unwrap()
@@ -29,7 +29,7 @@ fn source_consumer_failure_preserves_its_external_cause() {
         &program(),
         &Model::default(),
         source::ScanLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
         |_| Err(std::io::Error::other("consumer disconnected")),
     )
     .unwrap_err();
@@ -51,7 +51,7 @@ fn source_interruption_preserves_its_typed_cause() {
             max_work: 0,
             ..Default::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
         |_| Ok::<_, std::io::Error>(()),
     )
     .unwrap_err();
@@ -75,7 +75,7 @@ fn round_execution_failure_preserves_its_external_cause() {
         &program,
         &[Seed::new(&program, []).unwrap()],
         lazy::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
         |_| Err(std::io::Error::other("execution disconnected")),
     )
     .unwrap_err();
@@ -104,7 +104,7 @@ fn round_limit_does_not_establish_a_final_closure() {
             max_rounds: 1,
             ..Default::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
         lazy::evaluate,
     )
     .unwrap_err();
@@ -131,7 +131,7 @@ fn a_final_unchanged_round_establishes_closure() {
             max_rounds: 2,
             ..Default::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
         lazy::evaluate,
     )
     .unwrap();
@@ -147,7 +147,7 @@ fn invalid_violation_flags_never_complete_a_batch() {
         &program,
         &[Seed::new(&program, []).unwrap()],
         lazy::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
         |chunk| {
             let mut output = lazy::evaluate(chunk)?;
             output[chunk.violation_offset()] = 2;
@@ -171,7 +171,7 @@ fn an_unoffered_head_never_becomes_a_consequence() {
         &program,
         &[Seed::new(&program, []).unwrap()],
         lazy::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
         |chunk| {
             let mut output = lazy::evaluate(chunk)?;
             let gate = chunk.records()[lazy::RECORD_HEADER_WORDS] as usize;
@@ -191,7 +191,7 @@ fn a_repeated_old_head_is_not_a_new_delta() {
         &program,
         &[Seed::new(&program, []).unwrap()],
         lazy::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
         |chunk| {
             let mut output = lazy::evaluate(chunk)?;
             let head = chunk.records()[0] as usize - 1;
@@ -213,7 +213,7 @@ fn empty_batches_perform_no_source_work() {
             max_atoms: 0,
             ..Default::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
         |_| panic!("empty batch dispatched"),
     )
     .unwrap_or_else(|failure: lazy::Failure<Stop>| panic!("{failure}"));
@@ -228,7 +228,7 @@ fn completed_checks_retain_the_original_program() {
         &program,
         &[Seed::new(&program, []).unwrap()],
         lazy::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
         lazy::evaluate,
     )
     .unwrap();
@@ -261,7 +261,7 @@ fn invalid_batch_dimensions_fail_before_execution() {
             ..Default::default()
         },
     ] {
-        let failure = lazy::check_with(&program, &seeds, limits, &Control::default(), |_| {
+        let failure = lazy::check_with(&program, &seeds, limits, &Cancellation::default(), |_| {
             panic!("invalid dimensions dispatched")
         })
         .unwrap_err();

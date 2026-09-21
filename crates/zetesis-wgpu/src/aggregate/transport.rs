@@ -11,7 +11,7 @@ use crate::{
     runtime::{self, Runtime},
 };
 use std::{sync::Arc, time::Duration};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 pub(super) struct Resident {
     pub(super) numeric: Arc<Numeric>,
@@ -59,7 +59,7 @@ impl Resident {
         masks: &[u32],
         plan: &Plan,
         timeout: Duration,
-        control: &Control,
+        cancellation: &Cancellation,
         activity: &mut AggregateGpuActivity,
     ) -> Result<runtime::Completion<Vec<AggregateGpuReduction>>, GpuError> {
         let uploaded = activity
@@ -70,7 +70,7 @@ impl Resident {
         let transport = self
             .transport
             .get_or_insert_with(|| Transport::new(runtime, &self.tuples, &self.guards, plan));
-        poll(control)?;
+        poll(cancellation)?;
         runtime.queue().write_buffer(
             &transport.params,
             0,
@@ -102,8 +102,8 @@ impl Resident {
             &transport.readback,
             submission,
             timeout,
-            || poll(control),
-            |words| packing::decode(words, &self.numeric, plan, masks, control),
+            || poll(cancellation),
+            |words| packing::decode(words, &self.numeric, plan, masks, cancellation),
         );
         if result.is_ok() {
             activity.completed_occurrences = u64::from(plan.worlds);

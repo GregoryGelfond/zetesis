@@ -1,6 +1,6 @@
 //! Exact completion and qualification boundaries, independent of device access.
 
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Theory};
 use zetesis_wgpu::{FormulaBatchStats, FormulaVerdict};
 
@@ -21,14 +21,14 @@ pub(super) fn native(
     candidate: &Interpretation,
     work: u64,
 ) -> Result<Membership, FormulaBenchmarkError> {
-    native_with_control(theory, candidate, work, &Control::default())
+    native_with_cancellation(theory, candidate, work, &Cancellation::default())
 }
 
-pub(super) fn native_with_control(
+pub(super) fn native_with_cancellation(
     theory: &Theory,
     candidate: &Interpretation,
     work: u64,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Result<Membership, FormulaBenchmarkError> {
     let limits = zetesis_sat::Limits {
         search: zetesis_sat::SearchLimits {
@@ -38,7 +38,7 @@ pub(super) fn native_with_control(
         max_verification_work: work,
         ..Default::default()
     };
-    match zetesis_sat::check(theory, candidate, limits, control) {
+    match zetesis_sat::check(theory, candidate, limits, cancellation) {
         zetesis_sat::Check::Stable => Ok(Membership::Stable),
         zetesis_sat::Check::NotModel => Ok(Membership::NotModel),
         zetesis_sat::Check::NonMinimal(_) => Ok(Membership::NonMinimal),

@@ -8,7 +8,7 @@ mod transport;
 use crate::GpuError;
 pub use device::GpuTightOracle;
 use std::{fmt, time::Duration};
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::TightVerdict;
 
 const SHADER: &str = include_str!("check.wgsl");
@@ -166,8 +166,8 @@ impl From<GpuError> for TightGpuError {
     }
 }
 
-fn poll(control: &Control) -> Result<(), GpuError> {
-    control.poll().map_err(|stop| GpuError {
+fn poll(cancellation: &Cancellation) -> Result<(), GpuError> {
+    cancellation.poll().map_err(|stop| GpuError {
         kind: crate::GpuErrorKind::Device,
         detail: "tight-support operation interrupted".to_owned(),
         interruption: Some(stop),

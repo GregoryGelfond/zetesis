@@ -11,7 +11,7 @@ use zetesis_cli::{
     Completion, Grounder, Options, PublicationOutcome, RunError, SolveConfig, StatisticsView,
     run_bundle_finalized_with_diagnostics, run_finalized_with_diagnostics,
 };
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::{BundleLimits, FormulaFailure, HybridFeature, SourceBundle};
 use zetesis_validation::answers::native_json;
 
@@ -42,7 +42,7 @@ fn solve(source: &str, options: &Options) -> (PublicationOutcome, Vec<u8>, Strin
         options,
         &mut output,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     (result, output, String::from_utf8(diagnostics).unwrap())
@@ -253,7 +253,7 @@ fn hybrid_retains_all_undefined_admission_refusal() {
         &options(&["--grounder", "lazy", "--oracle", "countermodel"]),
         &mut Vec::new(),
         &mut io::sink(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(
@@ -282,7 +282,7 @@ fn hybrid_bundle_uses_original_include_sources() {
         &options(&["--grounder", "lazy"]),
         &mut output,
         &mut io::sink(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert!(outcome.semantic().hybrid_execution().is_some());
@@ -307,7 +307,7 @@ fn hybrid_refuses_unsupported_admission_features() {
             &config,
             &mut output,
             &mut io::sink(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
         assert!(matches!(failure.cause.as_ref(), RunError::FormulaAdmission(

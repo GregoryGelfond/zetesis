@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::Value as Json;
 use zetesis_core::{Atom, Model, Sign, Value};
-use zetesis_cpu::{CandidateLimits, Candidates, Control};
+use zetesis_cpu::{Cancellation, CandidateLimits, Candidates};
 use zetesis_ferraris::{Node, Theory};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits,
@@ -136,7 +136,7 @@ fn record(input: &AdmittedFormula, model: &Model, display: bool) -> Record {
                 model,
                 input.metadata().output(),
                 zetesis_themelios::observation::Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
         // Display fixtures contain no quoted/compound terms. The quoted scalar
@@ -155,7 +155,7 @@ fn record(input: &AdmittedFormula, model: &Model, display: bool) -> Record {
         input.objectives(),
         model,
         zetesis_objective::Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let score = evaluated.score();
@@ -353,13 +353,13 @@ fn ordinary_and_extended_closure_routes_enforce_the_same_signed_coherence() {
             for seed in Candidates::new(
                 admitted.program(),
                 CandidateLimits::default(),
-                Control::default(),
+                Cancellation::default(),
             ) {
                 let checked = zetesis_cpu::check(
                     admitted.program(),
                     &seed.unwrap(),
                     zetesis_cpu::Limits::default(),
-                    &Control::default(),
+                    &Cancellation::default(),
                 )
                 .unwrap();
                 if checked.accepted() {

@@ -11,7 +11,7 @@ use serde_json::{Value as Json, json};
 use zetesis_cli::{
     Completion, Options, Report, RunError, RunFailure, run_detailed_with_diagnostics,
 };
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 fn options(extra: &[&str]) -> Options {
     Options::try_parse_from(
@@ -37,7 +37,7 @@ fn solve(source: &str, options: &Options) -> (Result<Report, RunFailure>, Json) 
         options,
         &mut output,
         &mut io::sink(),
-        &Control::default(),
+        &Cancellation::default(),
     );
     let value = serde_json::from_slice(&output)
         .unwrap_or_else(|error| panic!("{error}: {}", String::from_utf8_lossy(&output)));
@@ -506,7 +506,7 @@ fn write_failure_preserves_the_committed_prefix() {
         &options,
         &mut reference,
         &mut io::sink(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let model_end = reference.iter().position(|byte| *byte == b'\n').unwrap() + 1;
@@ -520,7 +520,7 @@ fn write_failure_preserves_the_committed_prefix() {
             &options,
             &mut output,
             &mut io::sink(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
         assert!(
@@ -561,7 +561,7 @@ fn zero_ceiling_prevents_document_completion() {
         &options(&["--max-json-record-bytes", "0"]),
         &mut output,
         &mut io::sink(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(*failure.cause, RunError::JsonRecord(_)));
@@ -599,7 +599,7 @@ fn human_output_remains_the_default() {
         &human,
         &mut output,
         &mut io::sink(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert!(
@@ -637,7 +637,7 @@ fn interrupted_writes_remain_retryable() {
         &options(&[]),
         &mut output,
         &mut io::sink(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(
@@ -657,7 +657,7 @@ fn tie_write_failure_preserves_semantic_coverage() {
         &options,
         &mut reference,
         &mut io::sink(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let endings: Vec<_> = reference
@@ -681,7 +681,7 @@ fn tie_write_failure_preserves_semantic_coverage() {
             &options,
             &mut output,
             &mut io::sink(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
         let partial = failure.partial_report.unwrap();
@@ -972,12 +972,12 @@ fn unretained_ties_remain_in_score_counts() {
 fn stopped_requests_publish_no_models() {
     for oracle in ["closure", "countermodel", "auto"] {
         for expired in [false, true] {
-            let control = if expired {
-                Control::with_deadline(std::time::Instant::now()).unwrap()
+            let cancellation = if expired {
+                Cancellation::with_deadline(std::time::Instant::now()).unwrap()
             } else {
-                let control = Control::default();
-                control.cancel();
-                control
+                let cancellation = Cancellation::default();
+                cancellation.cancel();
+                cancellation
             };
             // Auto must retry the formula route before observing this control;
             // closure and explicit countermodel exercise their own boundaries.
@@ -988,7 +988,7 @@ fn stopped_requests_publish_no_models() {
                 &options(&["--oracle", oracle, "--stats"]),
                 &mut bytes,
                 &mut io::sink(),
-                &control,
+                &cancellation,
             )
             .unwrap();
             let value: Json = serde_json::from_slice(&bytes).unwrap();
@@ -1058,7 +1058,7 @@ fn statistics_write_failure(source: String, configured: &Options) -> (RunFailure
         configured,
         &mut io::sink(),
         &mut reference,
-        &Control::default(),
+        &Cancellation::default(),
     );
     let text = std::str::from_utf8(&reference).unwrap();
     let capacity = text.find("Statistics:").unwrap();
@@ -1072,7 +1072,7 @@ fn statistics_write_failure(source: String, configured: &Options) -> (RunFailure
         configured,
         &mut bytes,
         &mut diagnostics,
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     let value = serde_json::from_slice(&bytes).unwrap();
@@ -1132,7 +1132,7 @@ fn footer_write_failure_is_secondary() {
         &configured,
         &mut reference,
         &mut io::sink(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(*failure.cause, RunError::Expansion(_)));
@@ -1147,7 +1147,7 @@ fn footer_write_failure_is_secondary() {
             &configured,
             &mut output,
             &mut io::sink(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
         assert!(
@@ -1171,7 +1171,7 @@ fn empty_model_document() -> (Vec<u8>, usize) {
         &options(&[]),
         &mut reference,
         &mut io::sink(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let model_end = reference.iter().position(|byte| *byte == b'\n').unwrap() + 1;
@@ -1192,7 +1192,7 @@ fn terminal_ceiling_is_inclusive() {
             &configured,
             &mut bytes,
             &mut io::sink(),
-            &Control::default(),
+            &Cancellation::default(),
         );
         if maximum < footer_bytes {
             assert!(matches!(
@@ -1221,7 +1221,7 @@ fn terminal_refusal_preserves_published_models() {
         &configured,
         &mut bytes,
         &mut io::sink(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(

@@ -28,7 +28,7 @@ fn completed_scans_retain_the_join_reservation() {
             &program,
             SourceSelection::Worlds,
             limits,
-            &Control::default(),
+            &Cancellation::default(),
             &mut Progress::default(),
             &mut evaluate,
         )
@@ -36,8 +36,8 @@ fn completed_scans_retain_the_join_reservation() {
     let retained = state.world_workspace.as_ref().unwrap().bytes();
     assert_eq!(state.transport.source_mask_bytes, retained);
     let atom = Atom::new(Predicate::new("a", 0).unwrap(), vec![]).unwrap();
-    let control = Control::default();
-    let mut work = Work::source(&control, u64::MAX);
+    let cancellation = Cancellation::default();
+    let mut work = Work::source(&cancellation, u64::MAX);
     state.intern(&atom, limits, &mut work).unwrap();
     // Establish the lookup path once; the next probe retains exactly these
     // owners, including the workspace from the completed source scan.
@@ -81,7 +81,7 @@ fn failed_scans_retain_the_join_reservation() {
         &program,
         SourceSelection::Worlds,
         limits,
-        &Control::default(),
+        &Cancellation::default(),
         &mut Progress::default(),
         &mut |_| Err::<Vec<u32>, _>(Stop::Cancelled),
     );
@@ -98,14 +98,14 @@ fn failed_scans_retain_the_join_reservation() {
 fn growing_transport_reserves_live_identity_and_source_storage() {
     let limits = Limits::default();
     let mut state = State::new(1, limits).unwrap();
-    let control = Control::default();
-    let mut work = Work::source(&control, u64::MAX);
+    let cancellation = Cancellation::default();
+    let mut work = Work::source(&cancellation, u64::MAX);
     for id in 0..32 {
         let atom = Atom::new(Predicate::new(format!("a{id:02}"), 0).unwrap(), vec![]).unwrap();
         state.intern(&atom, limits, &mut work).unwrap();
     }
     state
-        .commit(limits, &control, &mut Progress::default())
+        .commit(limits, &cancellation, &mut Progress::default())
         .unwrap();
     state.transport.snapshots[0] = 0x8000_0001;
     state.transport.seeds[0] = 0x0000_0002;
@@ -167,15 +167,15 @@ fn growing_transport_reserves_live_identity_and_source_storage() {
 fn interrupted_commit_retains_discovered_identity_progress() {
     let limits = Limits::default();
     let mut state = State::new(1, limits).unwrap();
-    let control = Control::default();
-    let mut work = Work::source(&control, u64::MAX);
+    let cancellation = Cancellation::default();
+    let mut work = Work::source(&cancellation, u64::MAX);
     let atom = Atom::new(Predicate::new("pending", 0).unwrap(), vec![]).unwrap();
     state.intern(&atom, limits, &mut work).unwrap();
     let mut progress = Progress::default();
     progress.record_source(work.source_statistics(0));
-    control.cancel();
+    cancellation.cancel();
     assert!(matches!(
-        state.commit(limits, &control, &mut progress),
+        state.commit(limits, &cancellation, &mut progress),
         Err(Stop::Cancelled)
     ));
     assert_eq!(progress.catalog_atoms, 1);

@@ -1,6 +1,6 @@
 //! Injected quotas admit each original or frozen read and retain failed prefixes.
 
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
     AdmissionLimits, EvaluationLimits, EvaluationWorkspace, Interpretation, Narrower,
     NarrowingAttempt, Node, Region, RegionLimits, Theory, producers,
@@ -45,7 +45,7 @@ fn run(
     theory: &Theory,
     narrower: &Narrower,
     frozen: Option<&[bool]>,
-    control: &Control,
+    cancellation: &Cancellation,
     charge: impl FnMut() -> Result<(), Refusal>,
 ) -> (NarrowingAttempt<Refusal>, Region) {
     let mut region = Region::all_open(theory.atom_count());
@@ -56,17 +56,18 @@ fn run(
             truth,
             &mut region,
             &mut knowledge,
-            control,
+            cancellation,
             charge,
         )
     } else {
-        let extracted = producers(theory, RegionLimits::default(), &Control::default()).unwrap();
+        let extracted =
+            producers(theory, RegionLimits::default(), &Cancellation::default()).unwrap();
         narrower.narrow_known_metered(
             theory,
             extracted.producers.as_ref(),
             &mut region,
             &mut knowledge,
-            control,
+            cancellation,
             charge,
         )
     };
@@ -79,13 +80,13 @@ fn metered_narrowing_matches_local_wrappers() {
     let narrower = Narrower::new(&theory);
     let candidate = Interpretation::new(&theory, [0, 1]).unwrap();
     let mut workspace = EvaluationWorkspace::default();
-    let control = Control::default();
-    let evaluated = workspace.evaluate(&candidate, EvaluationLimits::default(), &control);
+    let cancellation = Cancellation::default();
+    let evaluated = workspace.evaluate(&candidate, EvaluationLimits::default(), &cancellation);
     let truth = evaluated.result.unwrap();
     assert!(truth.is_model());
     for frozen in [None, Some(truth.truth())] {
         let mut permits = 0;
-        let (attempt, region) = run(&theory, &narrower, frozen, &control, || {
+        let (attempt, region) = run(&theory, &narrower, frozen, &cancellation, || {
             permits += 1;
             Ok(())
         });
@@ -98,17 +99,17 @@ fn metered_narrowing_matches_local_wrappers() {
                 &mut local_region,
                 &mut knowledge,
                 RegionLimits::default(),
-                &control,
+                &cancellation,
             )
         } else {
-            let extracted = producers(&theory, RegionLimits::default(), &control).unwrap();
+            let extracted = producers(&theory, RegionLimits::default(), &cancellation).unwrap();
             narrower.narrow_known(
                 &theory,
                 extracted.producers.as_ref(),
                 &mut local_region,
                 &mut knowledge,
                 RegionLimits::default(),
-                &control,
+                &cancellation,
             )
         }
         .unwrap();
@@ -125,16 +126,16 @@ fn every_refused_prefix_stops_before_the_next_read() {
     let narrower = Narrower::new(&theory);
     let candidate = Interpretation::new(&theory, [0, 1]).unwrap();
     let mut workspace = EvaluationWorkspace::default();
-    let control = Control::default();
-    let evaluated = workspace.evaluate(&candidate, EvaluationLimits::default(), &control);
+    let cancellation = Cancellation::default();
+    let evaluated = workspace.evaluate(&candidate, EvaluationLimits::default(), &cancellation);
     let truth = evaluated.result.unwrap();
     for frozen in [None, Some(truth.truth())] {
-        let (complete, _) = run(&theory, &narrower, frozen, &control, || Ok(()));
+        let (complete, _) = run(&theory, &narrower, frozen, &cancellation, || Ok(()));
         assert!(complete.result.is_ok());
         assert!(complete.statistics.work > 2);
         for allowance in 0..complete.statistics.work {
             let mut permits = 0;
-            let (attempt, _) = run(&theory, &narrower, frozen, &control, || {
+            let (attempt, _) = run(&theory, &narrower, frozen, &cancellation, || {
                 if permits == allowance {
                     return Err(Refusal::Quota);
                 }
@@ -154,24 +155,27 @@ fn cancellation_retains_the_admitted_prefix() {
     let narrower = Narrower::new(&theory);
     let candidate = Interpretation::new(&theory, [0, 1]).unwrap();
     let mut workspace = EvaluationWorkspace::default();
-    let evaluated =
-        workspace.evaluate(&candidate, EvaluationLimits::default(), &Control::default());
+    let evaluated = workspace.evaluate(
+        &candidate,
+        EvaluationLimits::default(),
+        &Cancellation::default(),
+    );
     let truth = evaluated.result.unwrap();
     for frozen in [None, Some(truth.truth())] {
-        let control = Control::default();
+        let cancellation = Cancellation::default();
         let mut permits = 0;
-        let (attempt, _) = run(&theory, &narrower, frozen, &control, || {
-            control.poll()?;
+        let (attempt, _) = run(&theory, &narrower, frozen, &cancellation, || {
+            cancellation.poll()?;
             permits += 1;
             if permits == 2 {
-                control.cancel();
+                cancellation.cancel();
             }
             Ok(())
         });
         assert_eq!(attempt.result, Err(Refusal::Stopped(Stop::Cancelled)));
         assert_eq!(attempt.statistics.work, 2);
         assert_eq!(permits, 2);
-        let (stopped, _) = run(&theory, &narrower, frozen, &control, || {
+        let (stopped, _) = run(&theory, &narrower, frozen, &cancellation, || {
             panic!("entry cancellation must precede any quota acquisition");
         });
         assert_eq!(stopped.result, Err(Refusal::Stopped(Stop::Cancelled)));

@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use themelios_base::source::{FromBytesRefusal, SourceId};
 use zetesis_core::{Atom, AtomPattern, ConstructionError, Model, Predicate, Value};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, BundleAdmissionError, BundleAdmissionOptions, BundleError,
     BundleLimits, ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits, InputLimit,
@@ -575,7 +575,7 @@ fn observation_bindings_preserve_symbol_string_and_infinite_value_identity() {
                     max_symbol_nodes: 2,
                     ..Default::default()
                 },
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
         assert_eq!(rendered.text(), expected);
@@ -587,7 +587,7 @@ fn observation_bindings_preserve_symbol_string_and_infinite_value_identity() {
                     max_symbol_nodes: 1,
                     ..Default::default()
                 },
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap_err();
         assert!(matches!(
@@ -605,7 +605,7 @@ fn observation_bindings_preserve_symbol_string_and_infinite_value_identity() {
                     &model,
                     input.metadata().output(),
                     observation::Limits::default(),
-                    &Control::default()
+                    &Cancellation::default()
                 )
                 .unwrap()
                 .text(),
@@ -621,7 +621,7 @@ fn observation_bindings_preserve_symbol_string_and_infinite_value_identity() {
         .evaluate(
             &malformed,
             observation::Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
     assert_eq!(error.kind(), &observation::ErrorKind::InvalidSymbol);

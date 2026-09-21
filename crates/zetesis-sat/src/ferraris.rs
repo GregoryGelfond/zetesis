@@ -4,7 +4,7 @@ use crate::encoding;
 use crate::search::{Budget, Cursor, Quota, increment};
 use crate::timing::{self, Phase};
 use crate::{
-    AdmissionLimits, Cnf, Control, Incomplete, ProjectionLimits, ProjectionStatistics,
+    AdmissionLimits, Cancellation, Cnf, Incomplete, ProjectionLimits, ProjectionStatistics,
     SearchLimits, SearchStatistics, Solve,
 };
 
@@ -159,9 +159,15 @@ pub fn check(
     theory: &Theory,
     candidate: &Interpretation,
     limits: Limits,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Check {
-    check_with(theory, candidate, SearchMethod::default(), limits, control)
+    check_with(
+        theory,
+        candidate,
+        SearchMethod::default(),
+        limits,
+        cancellation,
+    )
 }
 
 /// Check stability by the chosen method: the proper-subset query of the
@@ -174,12 +180,12 @@ pub fn check_with(
     candidate: &Interpretation,
     method: SearchMethod,
     limits: Limits,
-    control: &Control,
+    cancellation: &Cancellation,
 ) -> Check {
     let mut budget = Budget {
         quota: crate::search::LocalQuota,
         limits: limits.search,
-        control,
+        cancellation,
         statistics: SearchStatistics::default(),
     };
     let mut statistics = Statistics::default();
@@ -233,11 +239,12 @@ pub(crate) fn original_model(
 ) -> Result<bool, Incomplete> {
     let started = timing::start(statistics.phase_timings.as_ref());
     let original = (|| {
-        budget.control.poll()?;
+        budget.cancellation.poll()?;
         if !theory.same_instance(candidate.theory()) {
             return Err(Incomplete::WrongTheory);
         }
-        models(theory, candidate, verification(limits), budget.control).map_err(Incomplete::from)
+        models(theory, candidate, verification(limits), budget.cancellation)
+            .map_err(Incomplete::from)
     })();
     timing::finish(
         &mut statistics.phase_timings,
@@ -304,7 +311,7 @@ pub(crate) fn checked_countermodel(
             candidate,
             &subset,
             verification(limits),
-            budget.control,
+            budget.cancellation,
         )?
     {
         return Err(Incomplete::InvalidWitness);
@@ -326,7 +333,7 @@ pub struct StableModels {
     theory: Theory,
     proposer: Proposer,
     limits: Limits,
-    control: Control,
+    cancellation: Cancellation,
     statistics: Statistics,
     terminal: bool,
     exhausted: bool,
@@ -347,8 +354,12 @@ impl StableModels {
     ///
     /// # Errors
     /// Refuses admission, work limits, cancellation or allocation.
-    pub fn new(theory: &Theory, limits: Limits, control: Control) -> Result<Self, Incomplete> {
-        Self::with_method(theory, SearchMethod::default(), limits, control)
+    pub fn new(
+        theory: &Theory,
+        limits: Limits,
+        cancellation: Cancellation,
+    ) -> Result<Self, Incomplete> {
+        Self::with_method(theory, SearchMethod::default(), limits, cancellation)
     }
 
     /// Enumerate by regions with several workers walking the tree at once,
@@ -364,18 +375,19 @@ impl StableModels {
         theory: &Theory,
         workers: std::num::NonZeroUsize,
         limits: Limits,
-        control: Control,
+        cancellation: Cancellation,
     ) -> Result<Self, Incomplete> {
         if workers.get() == 1 {
-            return Self::with_method(theory, SearchMethod::Regions, limits, control);
+            return Self::with_method(theory, SearchMethod::Regions, limits, cancellation);
         }
         let mut budget = Budget {
             quota: crate::search::LocalQuota,
             limits: limits.search,
-            control: &control,
+            cancellation: &cancellation,
             statistics: SearchStatistics::default(),
         };
-        let parallel = ParallelRegions::new(theory, workers, limits, control.clone(), &mut budget)?;
+        let parallel =
+            ParallelRegions::new(theory, workers, limits, cancellation.clone(), &mut budget)?;
         let reduct =
             crate::prepared_reduct::State::with_index(std::sync::Arc::clone(parallel.index()));
         let statistics = Statistics {
@@ -386,7 +398,7 @@ impl StableModels {
             theory: theory.clone(),
             proposer: Proposer::Parallel(Box::new(parallel)),
             limits,
-            control,
+            cancellation,
             statistics,
             terminal: false,
             exhausted: false,
@@ -414,15 +426,15 @@ impl StableModels {
         theory: &Theory,
         workers: std::num::NonZeroUsize,
         limits: Limits,
-        control: Control,
+        cancellation: Cancellation,
     ) -> Result<Self, Incomplete> {
         if workers.get() == 1 {
-            return Self::with_method(theory, SearchMethod::Regions, limits, control);
+            return Self::with_method(theory, SearchMethod::Regions, limits, cancellation);
         }
         let mut budget = Budget {
             quota: crate::search::LocalQuota,
             limits: limits.search,
-            control: &control,
+            cancellation: &cancellation,
             statistics: SearchStatistics::default(),
         };
         let proposals = RegionProposals::new(theory, workers, &mut budget)?;
@@ -436,7 +448,7 @@ impl StableModels {
             theory: theory.clone(),
             proposer: Proposer::Proposals(Box::new(proposals)),
             limits,
-            control,
+            cancellation,
             statistics,
             terminal: false,
             exhausted: false,
@@ -460,12 +472,12 @@ impl StableModels {
         theory: &Theory,
         method: SearchMethod,
         limits: Limits,
-        control: Control,
+        cancellation: Cancellation,
     ) -> Result<Self, Incomplete> {
         let mut budget = Budget {
             quota: crate::search::LocalQuota,
             limits: limits.search,
-            control: &control,
+            cancellation: &cancellation,
             statistics: SearchStatistics::default(),
         };
         let (proposer, support, reduct) = match method {
@@ -496,7 +508,7 @@ impl StableModels {
             theory: theory.clone(),
             proposer,
             limits,
-            control,
+            cancellation,
             statistics,
             terminal: false,
             exhausted: false,
@@ -557,7 +569,7 @@ impl StableModels {
         let mut budget = Budget {
             quota: crate::search::LocalQuota,
             limits: self.limits.search,
-            control: &self.control,
+            cancellation: &self.cancellation,
             statistics: self.statistics.search,
         };
         let result = self.proposer.restrict(restriction, &mut budget);
@@ -624,7 +636,7 @@ impl StableModels {
         let mut budget = Budget {
             quota: crate::search::LocalQuota,
             limits: self.limits.search,
-            control: &self.control,
+            cancellation: &self.cancellation,
             statistics: self.statistics.search,
         };
         let result = advance(
@@ -865,7 +877,7 @@ fn advance(
                 certificate,
                 &candidate,
                 limits,
-                budget.control,
+                budget.cancellation,
                 statistics,
                 &mut budget.statistics,
             )?

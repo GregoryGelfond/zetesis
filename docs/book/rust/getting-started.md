@@ -80,7 +80,7 @@ claim; answers printed before it remain a partial prefix.
    representation. Keep that owner alive while `PreparedInput::formula` borrows
    it. The application does not use themelios's parser directly.
 2. **Configure execution.** `SolveConfig` selects CPU execution and eager
-   grounding. `models: 0` requests every answer. `Control` can supply cooperative
+   grounding. `models: 0` requests every answer. `Cancellation` can supply cooperative
    cancellation and deadlines without changing the program's semantics.
 3. **Consume typed answers.** `Session::enumerate` yields
    `Result<AnswerSet, SolveFailure>`. `AnswerSet::interpretation` exposes the full

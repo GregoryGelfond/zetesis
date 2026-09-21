@@ -6,7 +6,7 @@ use std::time::Instant;
 
 use zetesis_ferraris::{Interpretation, Node, Theory};
 use zetesis_sat::{
-    AdmissionError, AdmissionLimits, Cnf, Control, Incomplete, Limits, Literal, Resource,
+    AdmissionError, AdmissionLimits, Cancellation, Cnf, Incomplete, Limits, Literal, Resource,
     SearchLimits, Solve, StableModels, solve, solve_with_statistics,
 };
 
@@ -14,13 +14,13 @@ use zetesis_sat::{
 fn by_clauses(
     theory: &zetesis_ferraris::Theory,
     limits: zetesis_sat::Limits,
-    control: zetesis_sat::Control,
+    cancellation: zetesis_sat::Cancellation,
 ) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
     zetesis_sat::StableModels::with_method(
         theory,
         zetesis_sat::SearchMethod::Clauses,
         limits,
-        control,
+        cancellation,
     )
 }
 
@@ -74,7 +74,7 @@ fn enumerate_renamed(clauses: &[Vec<Literal>], order: [usize; 4], flips: usize) 
     loop {
         let cnf = Cnf::new(4, pending.clone(), AdmissionLimits::default())
             .expect("bounded independent clauses and exact model blocks");
-        match solve(&cnf, SearchLimits::default(), &Control::default()) {
+        match solve(&cnf, SearchLimits::default(), &Cancellation::default()) {
             Solve::Sat(assignment) => {
                 let mut original = 0;
                 for (variable, &renamed) in order.iter().enumerate() {
@@ -134,7 +134,7 @@ fn complete_truth_tables_survive_variable_permutations_and_polarity_renaming() {
 }
 
 fn stable_models(theory: &Theory) -> BTreeSet<Vec<usize>> {
-    let mut search = StableModels::new(theory, Limits::default(), Control::default())
+    let mut search = StableModels::new(theory, Limits::default(), Cancellation::default())
         .expect("bounded formula encoding");
     let mut result = BTreeSet::new();
     for model in search.by_ref() {
@@ -191,7 +191,7 @@ fn renamed_ferraris_models_match_independent_subset_enumeration() {
                     &theory,
                     &candidate,
                     zetesis_ferraris::Limits::default(),
-                    &Control::default(),
+                    &Cancellation::default(),
                 )
                 .expect("complete independent reduct enumeration")
                 .accepted()
@@ -216,7 +216,7 @@ fn work_decision_and_control_stops_remain_inconclusive_with_exact_accounting() {
     for length in [3, 4] {
         let cnf = Cnf::new(8, clauses[..length].to_vec(), AdmissionLimits::default()).unwrap();
         let (outcome, statistics) =
-            solve_with_statistics(&cnf, SearchLimits::default(), &Control::default());
+            solve_with_statistics(&cnf, SearchLimits::default(), &Cancellation::default());
         assert_eq!(matches!(outcome, Solve::Sat(_)), length == 3);
         assert_eq!(matches!(outcome, Solve::Unsat), length == 4);
         assert!(statistics.decisions > 0);
@@ -224,14 +224,15 @@ fn work_decision_and_control_stops_remain_inconclusive_with_exact_accounting() {
             max_work: statistics.work,
             max_decisions: statistics.decisions,
         };
-        let (complete, exact_statistics) = solve_with_statistics(&cnf, exact, &Control::default());
+        let (complete, exact_statistics) =
+            solve_with_statistics(&cnf, exact, &Cancellation::default());
         assert!(!matches!(complete, Solve::Inconclusive(_)));
         assert_eq!(exact_statistics, statistics);
         for max_work in [0, 1, statistics.work / 2, statistics.work - 1] {
             let (limited, accounting) = solve_with_statistics(
                 &cnf,
                 SearchLimits { max_work, ..exact },
-                &Control::default(),
+                &Cancellation::default(),
             );
             assert!(matches!(
                 limited,
@@ -245,23 +246,23 @@ fn work_decision_and_control_stops_remain_inconclusive_with_exact_accounting() {
                 max_decisions: statistics.decisions - 1,
                 ..exact
             },
-            &Control::default(),
+            &Cancellation::default(),
         );
         assert!(matches!(
             limited,
             Solve::Inconclusive(Incomplete::DecisionLimit)
         ));
         assert_eq!(accounting.decisions, statistics.decisions - 1);
-        let cancelled = Control::default();
+        let cancelled = Cancellation::default();
         cancelled.cancel();
-        for (control, expected) in [
+        for (cancellation, expected) in [
             (cancelled, Incomplete::Cancelled),
             (
-                Control::with_deadline(Instant::now()).unwrap(),
+                Cancellation::with_deadline(Instant::now()).unwrap(),
                 Incomplete::Deadline,
             ),
         ] {
-            let (limited, accounting) = solve_with_statistics(&cnf, exact, &control);
+            let (limited, accounting) = solve_with_statistics(&cnf, exact, &cancellation);
             assert!(matches!(limited, Solve::Inconclusive(reason) if reason == expected));
             assert_eq!(accounting.work, 0);
         }
@@ -292,7 +293,7 @@ fn compacted_aliases_need_no_auxiliary_but_remaining_gate_needs_fresh_capacity()
         },
         ..Limits::default()
     };
-    let mut search = by_clauses(&aliases, limits, Control::default()).unwrap();
+    let mut search = by_clauses(&aliases, limits, Cancellation::default()).unwrap();
     let models: BTreeSet<Vec<_>> = search
         .by_ref()
         .map(|model| model.unwrap().atoms().collect())
@@ -310,7 +311,7 @@ fn compacted_aliases_need_no_auxiliary_but_remaining_gate_needs_fresh_capacity()
     )
     .unwrap();
     assert!(matches!(
-        by_clauses(&gate, limits, Control::default()),
+        by_clauses(&gate, limits, Cancellation::default()),
         Err(Incomplete::Admission(AdmissionError::Limit {
             resource: Resource::Variables,
             observed: 3,
@@ -326,7 +327,7 @@ fn compacted_aliases_need_no_auxiliary_but_remaining_gate_needs_fresh_capacity()
             },
             ..Limits::default()
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .unwrap();
     assert_eq!(

@@ -4,7 +4,7 @@ use std::{convert::Infallible, mem::size_of};
 
 use zetesis_core::{Value, relation::Relation};
 
-use crate::Control;
+use crate::Cancellation;
 
 use super::{Cause, Failure, Limits, Statistics, Table, WORD_BITS, Work};
 
@@ -58,13 +58,13 @@ impl<'owner, 'source> Table<'owner, 'source> {
         &self,
         domains: &[Domain<'_>],
         limits: Limits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Selection<'owner, 'source>, Failure> {
         let external = self.retained_inputs()?;
         let scratch_header = size_of::<Vec<u32>>();
         let mut work = Work::new(
             limits,
-            control,
+            cancellation,
             external,
             size_of::<Selection<'_, '_>>() + scratch_header,
         )?;

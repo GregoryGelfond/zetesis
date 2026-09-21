@@ -3,7 +3,7 @@
 use std::error::Error as _;
 use std::time::Instant;
 
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
     AdmissionLimits, AggregateComparison as Comparison, AggregateElement as Element,
     AggregateErrorKind, AggregateFamilyLimits, AggregateGuard, AggregateLimits, Interpretation,
@@ -17,7 +17,7 @@ fn retry_and_verify(nodes: &mut Vec<Node>, elements: &[Element]) {
         Comparison::Eq,
         1,
         AggregateLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let theory = Theory::new(
@@ -38,7 +38,13 @@ fn retry_and_verify(nodes: &mut Vec<Node>, elements: &[Element]) {
                 .sum::<i64>()
         };
         assert_eq!(
-            models(&theory, &candidate, Limits::default(), &Control::default()).unwrap(),
+            models(
+                &theory,
+                &candidate,
+                Limits::default(),
+                &Cancellation::default()
+            )
+            .unwrap(),
             sum(outer) == 1
         );
         for inner in 0_u8..4 {
@@ -51,7 +57,7 @@ fn retry_and_verify(nodes: &mut Vec<Node>, elements: &[Element]) {
                     &candidate,
                     &tested,
                     Limits::default(),
-                    &Control::default()
+                    &Cancellation::default()
                 )
                 .unwrap(),
                 sum(outer) == 1 && sum(inner & outer) == 1
@@ -127,7 +133,7 @@ fn refused_aggregate_resources_keep_a_reusable_prefix_and_named_reason() {
             Comparison::Eq,
             1,
             limits,
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
         assert_eq!(error.kind(), kind);
@@ -148,7 +154,7 @@ fn invalid_indices_and_guard_capacity_have_actionable_local_evidence() {
         Comparison::Eq,
         0,
         AggregateLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert_eq!(error.kind(), AggregateErrorKind::InvalidPrefix { node: 0 });
@@ -166,7 +172,7 @@ fn invalid_indices_and_guard_capacity_have_actionable_local_evidence() {
         Comparison::Eq,
         1,
         AggregateLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert_eq!(
@@ -191,7 +197,7 @@ fn invalid_indices_and_guard_capacity_have_actionable_local_evidence() {
             max_guards: 0,
             ..Default::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert_eq!(error.kind(), AggregateErrorKind::GuardLimit);
@@ -202,12 +208,12 @@ fn invalid_indices_and_guard_capacity_have_actionable_local_evidence() {
 
 #[test]
 fn aggregate_control_causes_remain_downcastable_and_do_not_poison_retry() {
-    let cancelled = Control::default();
+    let cancelled = Cancellation::default();
     cancelled.cancel();
-    for (control, expected) in [
+    for (cancellation, expected) in [
         (cancelled, Stop::Cancelled),
         (
-            Control::with_deadline(Instant::now()).unwrap(),
+            Cancellation::with_deadline(Instant::now()).unwrap(),
             Stop::Deadline,
         ),
     ] {
@@ -223,7 +229,7 @@ fn aggregate_control_causes_remain_downcastable_and_do_not_poison_retry() {
             Comparison::Eq,
             1,
             AggregateLimits::default(),
-            &control,
+            &cancellation,
         )
         .unwrap_err();
         assert_eq!(error.kind(), AggregateErrorKind::Control(expected));

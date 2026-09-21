@@ -6,7 +6,7 @@ use super::transport::Resident;
 use super::{FormulaBatchStats, FormulaCheck, FormulaLimits, GateProjection, GpuFormulaProfile};
 use crate::runtime::ErrorScopes;
 use crate::{GpuBackendPreference, GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Theory};
 
 /// GPU original-truth evaluation and sound frozen-query propagation.
@@ -215,7 +215,7 @@ impl GpuFormulaOracle {
         candidates: &[Interpretation],
         limits: FormulaLimits,
     ) -> Result<Vec<FormulaCheck>, GpuError> {
-        self.propagate_batch_with_control(theory, candidates, limits, &Control::default())
+        self.propagate_batch_with_cancellation(theory, candidates, limits, &Cancellation::default())
     }
 
     /// Propagate with cooperative caller cancellation and deadline observation.
@@ -228,18 +228,18 @@ impl GpuFormulaOracle {
     /// exact stop and no partial checks. Pre-submission control refusal leaves
     /// health reusable; an interrupted submitted operation invalidates it.
     /// Scope/device faults retain priority. This is not a hard wall-clock deadline.
-    pub fn propagate_batch_with_control(
+    pub fn propagate_batch_with_cancellation(
         &mut self,
         theory: &Theory,
         candidates: &[Interpretation],
         limits: FormulaLimits,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Result<Vec<FormulaCheck>, GpuError> {
         self.last = None;
         self.last_submission_candidates = None;
         let context = self.profile.runtime.context.clone();
         let _lease = context.lease()?;
-        control.poll().map_err(GpuError::interrupted)?;
+        cancellation.poll().map_err(GpuError::interrupted)?;
         self.profile.runtime.check_health()?;
         if candidates.is_empty() {
             return Ok(Vec::new());
@@ -252,8 +252,8 @@ impl GpuFormulaOracle {
             plan,
             seeds,
             stats,
-        } = self.prepare(theory, candidates, limits, control, epoch)?;
-        control.poll().map_err(GpuError::interrupted)?;
+        } = self.prepare(theory, candidates, limits, cancellation, epoch)?;
+        cancellation.poll().map_err(GpuError::interrupted)?;
         let scopes = ErrorScopes::new(self.profile.runtime.device());
         if let Some(prepared) = fresh {
             self.resident = Some(Resident::new(self.profile.runtime.device(), prepared));
@@ -269,7 +269,7 @@ impl GpuFormulaOracle {
                     &seeds,
                     &plan,
                     limits.timeout,
-                    control,
+                    cancellation,
                     &mut self.last_submission_candidates,
                 )
             });
@@ -288,7 +288,7 @@ impl GpuFormulaOracle {
         theory: &Theory,
         candidates: &[Interpretation],
         limits: FormulaLimits,
-        control: &Control,
+        cancellation: &Cancellation,
         epoch: u32,
     ) -> Result<PreparedCall, GpuError> {
         let (fresh, plan) = if self
@@ -319,7 +319,8 @@ impl GpuFormulaOracle {
             )?;
             identities(theory, candidates)?;
             self.resident = None;
-            let (prepared, plan) = preparation.finish(self.profile.runtime.limits(), control)?;
+            let (prepared, plan) =
+                preparation.finish(self.profile.runtime.limits(), cancellation)?;
             (Some(prepared), plan)
         };
         let graph = fresh

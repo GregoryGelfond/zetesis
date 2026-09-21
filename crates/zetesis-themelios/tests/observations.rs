@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
 use zetesis_core::Model;
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{Interpretation, check};
 use zetesis_themelios::observation::{ErrorKind, Feature, Limits, Resource};
 use zetesis_themelios::{
@@ -124,7 +124,7 @@ fn complete(input: &AdmittedFormula) -> Vec<Record> {
             input.theory(),
             &candidate,
             zetesis_ferraris::Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap()
         .accepted()
@@ -139,14 +139,14 @@ fn complete(input: &AdmittedFormula) -> Vec<Record> {
                 &model,
                 input.metadata().output(),
                 Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
         let objective = zetesis_objective::evaluate(
             input.objectives(),
             &model,
             zetesis_objective::Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
         let score = objective.score();
@@ -196,7 +196,7 @@ fn every_outside_profile_source_has_an_explicit_typed_refusal() {
             let error = input
                 .metadata()
                 .observations()
-                .evaluate(&model, Limits::default(), &Control::default())
+                .evaluate(&model, Limits::default(), &Cancellation::default())
                 .unwrap_err();
             assert_eq!(
                 error.kind(),
@@ -285,14 +285,18 @@ fn source_and_runtime_limits_are_independent_inclusive_and_never_partial() {
     let model = Model::new(input.atoms().iter().cloned());
     let program = input.metadata().observations();
     let evaluation = program
-        .evaluate(&model, Limits::default(), &Control::default())
+        .evaluate(&model, Limits::default(), &Cancellation::default())
         .unwrap();
     assert_eq!(evaluation.symbols().len(), 2);
     let exact = Limits {
         max_work: evaluation.statistics().work,
         ..Default::default()
     };
-    assert!(program.evaluate(&model, exact, &Control::default()).is_ok());
+    assert!(
+        program
+            .evaluate(&model, exact, &Cancellation::default())
+            .is_ok()
+    );
     let error = program
         .evaluate(
             &model,
@@ -300,7 +304,7 @@ fn source_and_runtime_limits_are_independent_inclusive_and_never_partial() {
                 max_work: exact.max_work - 1,
                 ..exact
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
     assert!(matches!(
@@ -355,10 +359,10 @@ fn source_and_runtime_limits_are_independent_inclusive_and_never_partial() {
         ),
     ] {
         assert!(
-            matches!(program.evaluate(&model, limits, &Control::default()).unwrap_err().kind(), ErrorKind::Limit { resource: actual, .. } if *actual == resource)
+            matches!(program.evaluate(&model, limits, &Cancellation::default()).unwrap_err().kind(), ErrorKind::Limit { resource: actual, .. } if *actual == resource)
         );
     }
-    let cancelled = Control::default();
+    let cancelled = Cancellation::default();
     cancelled.cancel();
     assert_eq!(
         program
@@ -372,7 +376,7 @@ fn source_and_runtime_limits_are_independent_inclusive_and_never_partial() {
             .kind(),
         &ErrorKind::Stopped(Stop::Cancelled)
     );
-    let deadline = Control::with_deadline(Instant::now()).unwrap();
+    let deadline = Cancellation::with_deadline(Instant::now()).unwrap();
     assert_eq!(
         program
             .evaluate(&model, Limits::default(), &deadline)
@@ -402,7 +406,12 @@ fn public_model_spelling_is_validated_before_output() {
     ] {
         assert_eq!(
             program
-                .render(&model, &selection, Limits::default(), &Control::default())
+                .render(
+                    &model,
+                    &selection,
+                    Limits::default(),
+                    &Cancellation::default()
+                )
                 .unwrap_err()
                 .kind(),
             &ErrorKind::InvalidSymbol
@@ -530,7 +539,7 @@ fn original_bundle_constants_and_duplicate_locations_remain_separate_from_terms(
                 &model,
                 input.metadata().output(),
                 Limits::default(),
-                &Control::default()
+                &Cancellation::default()
             )
             .unwrap()
             .text(),
@@ -571,7 +580,7 @@ fn show_traversal_preserves_closed_logical_values_and_raw_body_limits() {
                 &model,
                 program.metadata().output(),
                 Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
         assert_eq!(rendered.text(), "p(f(1)) f(1)");
@@ -612,7 +621,7 @@ fn shared_prefix_signature_lookups_charge_each_compared_name() {
             &model,
             input.metadata().output(),
             limits,
-            &Control::default(),
+            &Cancellation::default(),
         )
     };
     let before = render(&base, Limits::default()).unwrap();

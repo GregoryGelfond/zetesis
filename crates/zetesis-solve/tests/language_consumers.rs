@@ -8,7 +8,7 @@ use std::{
 };
 
 use zetesis_core::{Atom, Predicate, Value};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     AnswerSelection, AnswerSet, Backend, Completion, ExecutionResources, Grounder, Oracle,
     PreparedInput, Session, SolveConfig, WorldViewLimits,
@@ -310,7 +310,7 @@ fn capture(owner: &AdmittedFormula, answer: &AnswerSet) -> Record {
             model,
             owner.metadata().output(),
             observation::Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap();
     Record {
@@ -331,11 +331,14 @@ fn families(config: SolveConfig, resources: &ExecutionResources) {
     projected_families::check(AnswerSelection::All, config, resources);
     for case in cases() {
         let owner = admit(&case);
-        let world_view =
-            Session::builder(PreparedInput::formula(&owner), config, Control::default())
-                .resources(resources)
-                .collect(WorldViewLimits::default())
-                .unwrap();
+        let world_view = Session::builder(
+            PreparedInput::formula(&owner),
+            config,
+            Cancellation::default(),
+        )
+        .resources(resources)
+        .collect(WorldViewLimits::default())
+        .unwrap();
         assert_eq!(world_view.len(), case.answers.len(), "{}", case.source);
         let actual: BTreeSet<_> = world_view
             .answer_sets()
@@ -373,12 +376,15 @@ fn optimum(config: SolveConfig, resources: &ExecutionResources) {
             .iter()
             .filter(|answer| &answer.costs == best)
             .collect();
-        let mut session =
-            Session::builder(PreparedInput::formula(&owner), config, Control::default())
-                .resources(resources)
-                .selection(AnswerSelection::Optimal)
-                .start()
-                .unwrap();
+        let mut session = Session::builder(
+            PreparedInput::formula(&owner),
+            config,
+            Cancellation::default(),
+        )
+        .resources(resources)
+        .selection(AnswerSelection::Optimal)
+        .start()
+        .unwrap();
         let answers: Vec<_> = session
             .by_ref()
             .map(|answer| capture(&owner, &answer.unwrap()))
@@ -440,7 +446,7 @@ fn observation_failure_preserves_the_complete_family() {
     let family = Session::builder(
         PreparedInput::formula(&owner),
         config(4, 3),
-        Control::default(),
+        Cancellation::default(),
     )
     .collect(WorldViewLimits::default())
     .unwrap();
@@ -464,7 +470,7 @@ fn observation_failure_preserves_the_complete_family() {
                     model,
                     owner.metadata().output(),
                     observation::Limits::default(),
-                    &Control::default(),
+                    &Cancellation::default(),
                 )
                 .unwrap_err();
             assert_eq!(

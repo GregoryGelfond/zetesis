@@ -4,19 +4,19 @@ use std::collections::BTreeSet;
 
 use proptest::prelude::*;
 use zetesis_ferraris::{AdmissionLimits, Interpretation, Node, Theory};
-use zetesis_sat::{Control, Incomplete, Limits, StableModels};
+use zetesis_sat::{Cancellation, Incomplete, Limits, StableModels};
 
 /// Enumerate by the clause forms, the subject of the tests below.
 fn by_clauses(
     theory: &zetesis_ferraris::Theory,
     limits: zetesis_sat::Limits,
-    control: zetesis_sat::Control,
+    cancellation: zetesis_sat::Cancellation,
 ) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
     zetesis_sat::StableModels::with_method(
         theory,
         zetesis_sat::SearchMethod::Clauses,
         limits,
-        control,
+        cancellation,
     )
 }
 
@@ -62,7 +62,8 @@ fn restrictions_keep_the_original_reduct_and_semantic_instance() {
         vec![2, 3],
     );
     let guard = theory(2, vec![Node::Atom(0)], vec![0]);
-    let mut search = StableModels::new(&original, Limits::default(), Control::default()).unwrap();
+    let mut search =
+        StableModels::new(&original, Limits::default(), Cancellation::default()).unwrap();
     assert!(search.theory().same_instance(&original));
     search.restrict_candidates(&guard).unwrap();
     // Treating this guard as an original fact would incorrectly support {a,b}.
@@ -74,7 +75,8 @@ fn restrictions_keep_the_original_reduct_and_semantic_instance() {
 #[test]
 fn refinements_accumulate_and_restarts_preserve_exact_previous_blocks() {
     let original = choices(2);
-    let mut search = StableModels::new(&original, Limits::default(), Control::default()).unwrap();
+    let mut search =
+        StableModels::new(&original, Limits::default(), Cancellation::default()).unwrap();
     let first = search.next().unwrap().unwrap();
     assert!(key(&first).is_empty());
     let tautology = theory(2, vec![Node::False, Node::Implies(0, 0)], vec![1]);
@@ -91,7 +93,8 @@ fn refinements_accumulate_and_restarts_preserve_exact_previous_blocks() {
         Err(Incomplete::ClosedEnumerator)
     );
 
-    let mut search = StableModels::new(&original, Limits::default(), Control::default()).unwrap();
+    let mut search =
+        StableModels::new(&original, Limits::default(), Cancellation::default()).unwrap();
     search.restrict_candidates(&positive).unwrap();
     let negative = theory(
         2,
@@ -108,7 +111,7 @@ fn a_late_capacity_failure_restores_auxiliary_ids_clauses_and_live_cursor() {
     let mut limits = Limits::default();
     // The actual disjunction restriction needs four clauses; history is separate.
     limits.admission.max_clauses = 3;
-    let mut search = by_clauses(&original, limits, Control::default()).unwrap();
+    let mut search = by_clauses(&original, limits, Cancellation::default()).unwrap();
     assert!(key(&search.next().unwrap().unwrap()).is_empty());
     let before = search.statistics();
     let guard = theory(
@@ -136,8 +139,8 @@ fn carrier_control_and_encoding_work_failures_never_claim_completion() {
         vec![Node::Atom(0), Node::Atom(1), Node::Or(0, 1)],
         vec![2],
     );
-    let control = Control::default();
-    let mut search = by_clauses(&original, Limits::default(), control.clone()).unwrap();
+    let cancellation = Cancellation::default();
+    let mut search = by_clauses(&original, Limits::default(), cancellation.clone()).unwrap();
     assert_eq!(
         search.restrict_candidates(&choices(3)),
         Err(Incomplete::RestrictionUniverse {
@@ -146,7 +149,7 @@ fn carrier_control_and_encoding_work_failures_never_claim_completion() {
         })
     );
     assert_eq!(search.statistics().candidate_restrictions, 0);
-    control.cancel();
+    cancellation.cancel();
     assert_eq!(
         search.restrict_candidates(&guard),
         Err(Incomplete::Cancelled)
@@ -155,13 +158,13 @@ fn carrier_control_and_encoding_work_failures_never_claim_completion() {
     assert!(matches!(search.next(), Some(Err(Incomplete::Cancelled))));
     assert!(!search.exhausted());
 
-    let mut measured = by_clauses(&original, Limits::default(), Control::default()).unwrap();
+    let mut measured = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
     measured.restrict_candidates(&guard).unwrap();
     let exact = measured.statistics().search.work;
     for ceiling in [exact - 1, exact] {
         let mut limits = Limits::default();
         limits.search.max_work = ceiling;
-        let mut search = by_clauses(&original, limits, Control::default()).unwrap();
+        let mut search = by_clauses(&original, limits, Cancellation::default()).unwrap();
         let result = search.restrict_candidates(&guard);
         assert_eq!(result.is_ok(), ceiling == exact);
         assert_eq!(
@@ -173,7 +176,7 @@ fn carrier_control_and_encoding_work_failures_never_claim_completion() {
         assert!(matches!(search.next(), Some(Err(Incomplete::WorkLimit))));
     }
     let zero = choices(0);
-    let mut search = by_clauses(&zero, Limits::default(), Control::default()).unwrap();
+    let mut search = by_clauses(&zero, Limits::default(), Cancellation::default()).unwrap();
     search
         .restrict_candidates(&theory(0, vec![Node::False], vec![0]))
         .unwrap();
@@ -198,18 +201,18 @@ proptest! {
         }
         let roots=assert_roots.into_iter().enumerate().filter_map(|(index, selected)| selected.then_some(index % nodes.len())).collect();
         let guard=theory(3,nodes,roots);
-        let control=Control::default();
+        let cancellation=Cancellation::default();
         let mut expected=BTreeSet::new();
         for mask in 0..8 {
             let selected:Vec<_>=(0..3).filter(|atom| mask & (1<<atom)!=0).collect();
             let candidate=Interpretation::new(&original,selected.clone()).unwrap();
             let tested=Interpretation::new(&guard,selected).unwrap();
-            if zetesis_ferraris::check(&original,&candidate,zetesis_ferraris::Limits::default(),&control).unwrap().accepted()
-                && zetesis_ferraris::models(&guard,&tested,zetesis_ferraris::Limits::default(),&control).unwrap() {
+            if zetesis_ferraris::check(&original,&candidate,zetesis_ferraris::Limits::default(),&cancellation).unwrap().accepted()
+                && zetesis_ferraris::models(&guard,&tested,zetesis_ferraris::Limits::default(),&cancellation).unwrap() {
                 expected.insert(key(&candidate));
             }
         }
-        let mut search=StableModels::new(&original,Limits::default(),control).unwrap();
+        let mut search=StableModels::new(&original,Limits::default(),cancellation).unwrap();
         search.restrict_candidates(&guard).unwrap();
         prop_assert_eq!(remaining(&mut search),expected);
     }

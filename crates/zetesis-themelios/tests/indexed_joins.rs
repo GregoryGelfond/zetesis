@@ -6,7 +6,7 @@ use std::fmt::Write;
 use themelios_base::span::Location;
 
 use zetesis_core::Value;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_sat::{Limits, StableModels};
 use zetesis_themelios::{
     AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
@@ -88,7 +88,7 @@ fn shared_arguments_select_only_matching_rows() {
         visits.support.get(),
         visits.instantiation.get()
     );
-    let mut search = StableModels::new(input.theory(), Limits::default(), Control::default())
+    let mut search = StableModels::new(input.theory(), Limits::default(), Cancellation::default())
         .expect("finite theory");
     let model = search.next().expect("one model").expect("verified model");
     let joined: Vec<_> = model
@@ -170,7 +170,7 @@ fn indexed_candidates_still_validate_repeated_variables_and_every_constant() {
         FormulaLimits::default(),
     )
     .expect("full row match");
-    let mut search = StableModels::new(input.theory(), Limits::default(), Control::default())
+    let mut search = StableModels::new(input.theory(), Limits::default(), Cancellation::default())
         .expect("finite theory");
     let model = search.next().expect("one model").expect("verified model");
     let joined: Vec<_> = model
@@ -235,8 +235,8 @@ fn ready_filters_prune_before_later_relations_without_reading_generated_slots() 
         },
     )
     .expect("ready equality removes incompatible partial rows before tail expansion");
-    let mut search =
-        StableModels::new(input.theory(), Limits::default(), Control::default()).expect("theory");
+    let mut search = StableModels::new(input.theory(), Limits::default(), Cancellation::default())
+        .expect("theory");
     let model = search.next().expect("one model").expect("verified model");
     assert_eq!(
         model
@@ -256,8 +256,8 @@ fn ready_filters_prune_before_later_relations_without_reading_generated_slots() 
         FormulaLimits::default(),
     )
     .expect("generated comparison waits for binding");
-    let mut search =
-        StableModels::new(input.theory(), Limits::default(), Control::default()).expect("theory");
+    let mut search = StableModels::new(input.theory(), Limits::default(), Cancellation::default())
+        .expect("theory");
     let model = search.next().expect("one model").expect("verified model");
     assert!(
         model
@@ -282,8 +282,9 @@ fn invalid_arithmetic_on_unextendable_prefixes_does_not_refuse_the_source() {
             FormulaLimits::default(),
         )
         .expect("dead relational prefix cannot justify scalar refusal");
-        let mut search = StableModels::new(input.theory(), Limits::default(), Control::default())
-            .expect("theory");
+        let mut search =
+            StableModels::new(input.theory(), Limits::default(), Cancellation::default())
+                .expect("theory");
         let model = search.next().expect("one model").expect("verified model");
         let outputs: Vec<_> = model
             .atoms()
@@ -306,8 +307,8 @@ fn duplicate_support_heads_do_not_remove_alternative_final_reduct_witnesses() {
         FormulaLimits::default(),
     )
     .expect("support projection preserves full final body disjunction");
-    let mut search =
-        StableModels::new(input.theory(), Limits::default(), Control::default()).expect("theory");
+    let mut search = StableModels::new(input.theory(), Limits::default(), Cancellation::default())
+        .expect("theory");
     let mut count = 0;
     for model in search.by_ref() {
         let model = model.expect("verified model");
@@ -335,8 +336,8 @@ fn a_false_filter_excludes_the_body_assignment() {
         FormulaLimits::default(),
     )
     .expect("the excluded substitution reaches no assignment");
-    let mut search =
-        StableModels::new(input.theory(), Limits::default(), Control::default()).expect("theory");
+    let mut search = StableModels::new(input.theory(), Limits::default(), Cancellation::default())
+        .expect("theory");
     let mut families = Vec::new();
     for model in search.by_ref() {
         let mut names: Vec<_> = model

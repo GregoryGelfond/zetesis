@@ -12,7 +12,7 @@ pub use types::{
 use super::{StableModels, Statistics};
 use crate::search::{Budget, LocalQuota, increment};
 use crate::timing::{self, Phase};
-use crate::{AdmissionError, Control, Incomplete, Limits, SearchStatistics};
+use crate::{AdmissionError, Cancellation, Incomplete, Limits, SearchStatistics};
 use std::sync::Arc;
 use zetesis_ferraris::{
     Interpretation, PositiveError, PositivePlan, PositivePlanLimits, PositiveResource,
@@ -270,7 +270,7 @@ impl StableModels {
         stats: &mut CertifiedStatistics,
     ) -> Result<Option<Certification>, Incomplete> {
         limits.max_work = limits.max_work.min(self.remaining_certificate_work());
-        let attempt = TightPlan::compile_accounted(&self.theory, limits, &self.control);
+        let attempt = TightPlan::compile_accounted(&self.theory, limits, &self.cancellation);
         self.statistics.search.work += attempt.work;
         stats.construction_work += attempt.work;
         match attempt.result {
@@ -300,7 +300,7 @@ impl StableModels {
         stats: &mut CertifiedStatistics,
     ) -> Result<Option<Certification>, Incomplete> {
         limits.max_work = limits.max_work.min(self.remaining_certificate_work());
-        let attempt = PositivePlan::compile_accounted(&self.theory, limits, &self.control);
+        let attempt = PositivePlan::compile_accounted(&self.theory, limits, &self.cancellation);
         self.statistics.search.work += attempt.statistics.work;
         stats.construction_work += attempt.statistics.work;
         stats.positive_attempt = Some(attempt.statistics);
@@ -323,7 +323,7 @@ impl StableModels {
         let mut budget = Budget {
             quota: LocalQuota,
             limits: self.limits.search,
-            control: &self.control,
+            cancellation: &self.cancellation,
             statistics: self.statistics.search,
         };
         // Units restrict only clause candidates. Regions retain their general
@@ -366,12 +366,19 @@ pub(super) fn classify(
     certificate: &Certification,
     candidate: &Interpretation,
     limits: Limits,
-    control: &Control,
+    cancellation: &Cancellation,
     statistics: &mut Statistics,
     search: &mut SearchStatistics,
 ) -> Result<Verdict, Incomplete> {
     let started = timing::start(statistics.phase_timings.as_ref());
-    let result = evaluate(certificate, candidate, limits, control, statistics, search);
+    let result = evaluate(
+        certificate,
+        candidate,
+        limits,
+        cancellation,
+        statistics,
+        search,
+    );
     timing::finish(&mut statistics.phase_timings, Phase::Certified, started);
     result
 }
@@ -380,7 +387,7 @@ fn evaluate(
     certificate: &Certification,
     candidate: &Interpretation,
     limits: Limits,
-    control: &Control,
+    cancellation: &Cancellation,
     statistics: &mut Statistics,
     search: &mut SearchStatistics,
 ) -> Result<Verdict, Incomplete> {
@@ -392,11 +399,11 @@ fn evaluate(
     let before = search.work;
     let result = match certificate {
         Certification::Tight { plan, max_bytes } => {
-            check_tight(plan, candidate, *max_bytes, limits, control, search)
+            check_tight(plan, candidate, *max_bytes, limits, cancellation, search)
         }
         Certification::Positive { plan, max_bytes } => {
             let (result, peak) =
-                positive::check(plan, candidate, *max_bytes, limits, control, search);
+                positive::check(plan, candidate, *max_bytes, limits, cancellation, search);
             stats.positive_check_peak_bytes =
                 Some(stats.positive_check_peak_bytes.unwrap_or(0).max(peak));
             result
@@ -420,7 +427,7 @@ fn check_tight(
     candidate: &Interpretation,
     max_bytes: u64,
     limits: Limits,
-    control: &Control,
+    cancellation: &Cancellation,
     search: &mut SearchStatistics,
 ) -> Result<Verdict, Incomplete> {
     let remaining = limits.search.max_work.saturating_sub(search.work);
@@ -430,7 +437,7 @@ fn check_tight(
             max_bytes,
             max_work: remaining.min(limits.max_verification_work),
         },
-        control,
+        cancellation,
     );
     search.work += attempt.work;
     match attempt.result {

@@ -114,7 +114,7 @@ pub(crate) trait MembershipExecution {
         &mut self,
         models: &mut StableModels,
         options: &SolveConfig,
-        control: &zetesis_cpu::Control,
+        cancellation: &zetesis_cpu::Cancellation,
         phases: &Recorder,
     ) -> Option<Result<Interpretation, Failure>>;
     fn statistics(&self, models: &StableModels) -> Option<FormulaExecutionStatistics>;
@@ -156,14 +156,14 @@ impl Execution {
         capabilities: crate::ExecutorCapabilities,
         plan: crate::MembershipPlan<'_>,
         options: &SolveConfig,
-        control: &zetesis_cpu::Control,
+        cancellation: &zetesis_cpu::Cancellation,
         observations: &mut impl ExecutionSink,
     ) -> Result<Self, Failure> {
-        control
+        cancellation
             .poll()
             .map_err(|stop| Failure::Search(stop.into()))?;
-        executor.prepare(plan, control)?;
-        control
+        executor.prepare(plan, cancellation)?;
+        cancellation
             .poll()
             .map_err(|stop| Failure::Search(stop.into()))?;
         observations
@@ -322,22 +322,22 @@ impl MembershipExecution for Execution {
         &mut self,
         models: &mut StableModels,
         options: &SolveConfig,
-        control: &zetesis_cpu::Control,
+        cancellation: &zetesis_cpu::Cancellation,
         phases: &Recorder,
     ) -> Option<Result<Interpretation, Failure>> {
         match self {
             Self::External {
                 executor, queue, ..
-            } => queue.next(models, options, control, |batch| {
-                executor.check(batch, control)
+            } => queue.next(models, options, cancellation, |batch| {
+                executor.check(batch, cancellation)
             }),
             Self::Cpu => {
                 let _ = options;
-                let _ = control;
+                let _ = cancellation;
                 let _ = phases;
                 models.next().map(|result| result.map_err(Failure::Search))
             }
-            Self::Batched { queue } => queue.next(models, options, control, |batch| {
+            Self::Batched { queue } => queue.next(models, options, cancellation, |batch| {
                 let candidates = batch.candidates();
                 let mut verdicts = Vec::new();
                 verdicts
@@ -351,14 +351,14 @@ impl MembershipExecution for Execution {
                 oracle,
                 queue,
                 statistics,
-            } => queue.next(models, options, control, |batch| {
+            } => queue.next(models, options, cancellation, |batch| {
                 let verdicts = propagate(
                     oracle,
                     statistics,
                     batch.theory(),
                     batch.candidates(),
                     options,
-                    control,
+                    cancellation,
                     phases,
                 )?;
                 batch.finish(verdicts).map_err(Failure::from)
@@ -369,14 +369,14 @@ impl MembershipExecution for Execution {
                 plan,
                 queue,
                 statistics,
-            } => queue.next(models, options, control, |batch| {
+            } => queue.next(models, options, cancellation, |batch| {
                 let verdicts = super::formula_tight::check(
                     oracle,
                     plan,
                     statistics,
                     batch.candidates(),
                     options,
-                    control,
+                    cancellation,
                     phases,
                 )?;
                 batch.finish(verdicts).map_err(Failure::from)
@@ -392,7 +392,7 @@ fn propagate(
     theory: &zetesis_ferraris::Theory,
     candidates: &[Interpretation],
     options: &SolveConfig,
-    control: &zetesis_cpu::Control,
+    cancellation: &zetesis_cpu::Cancellation,
     phases: &Recorder,
 ) -> Result<Vec<zetesis_sat::BatchVerdict>, Failure> {
     let limits = device_limits(options);
@@ -404,7 +404,7 @@ fn propagate(
         .try_reserve_exact(candidates.len())
         .map_err(|_| Failure::Search(Incomplete::Allocation))?;
     let result = phases.measure(SolvePhase::GpuHostOracle, || {
-        oracle.propagate_batch_with_control(theory, candidates, limits, control)
+        oracle.propagate_batch_with_cancellation(theory, candidates, limits, cancellation)
     });
     // Submission is observable even when mapping or decoding fails. Preserve
     // that operation's original error over a secondary accounting overflow.
@@ -518,10 +518,10 @@ impl<E: MembershipExecution + ?Sized> MembershipExecution for &mut E {
         &mut self,
         models: &mut StableModels,
         config: &SolveConfig,
-        control: &zetesis_cpu::Control,
+        cancellation: &zetesis_cpu::Cancellation,
         phases: &Recorder,
     ) -> Option<Result<Interpretation, Failure>> {
-        (**self).next(models, config, control, phases)
+        (**self).next(models, config, cancellation, phases)
     }
     fn statistics(&self, models: &StableModels) -> Option<FormulaExecutionStatistics> {
         (**self).statistics(models)

@@ -8,7 +8,7 @@ use zetesis_cli::{
     SemanticOutcome, SummaryDelivery, publish_prepared,
 };
 use zetesis_core::{Atom, Model};
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_themelios::observation::Symbol;
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
@@ -36,7 +36,7 @@ struct Inspect {
 }
 
 impl AnswerRenderer for Inspect {
-    fn answer(&mut self, view: AnswerView<'_>, _: &Control) -> Result<(), RunError> {
+    fn answer(&mut self, view: AnswerView<'_>, _: &Cancellation) -> Result<(), RunError> {
         self.answers.push(Seen {
             number: view.number(),
             model: view.model().model().clone(),
@@ -69,7 +69,7 @@ fn publish(
         &config(),
         renderer,
         &mut io::sink(),
-        &Control::default(),
+        &Cancellation::default(),
     )
 }
 
@@ -137,10 +137,14 @@ impl<R: AnswerRenderer> AnswerRenderer for InspectRenderer<R> {
     fn summary_stage(&self) -> zetesis_cli::SummaryStage {
         self.renderer.summary_stage()
     }
-    fn answer(&mut self, view: AnswerView<'_>, control: &Control) -> Result<(), RunError> {
+    fn answer(
+        &mut self,
+        view: AnswerView<'_>,
+        cancellation: &Cancellation,
+    ) -> Result<(), RunError> {
         // The same borrowed view is observed and rendered; no second evaluation.
-        self.observed.answer(view, control)?;
-        self.renderer.answer(view, control)
+        self.observed.answer(view, cancellation)?;
+        self.renderer.answer(view, cancellation)
     }
     fn finish(&mut self, view: PublicationView<'_>) -> Result<SummaryDelivery, RunError> {
         self.renderer.finish(view)
@@ -168,7 +172,7 @@ fn default_renderers_consume_the_same_typed_views() {
 
 struct RefuseAnswer(Stop);
 impl AnswerRenderer for RefuseAnswer {
-    fn answer(&mut self, _: AnswerView<'_>, _: &Control) -> Result<(), RunError> {
+    fn answer(&mut self, _: AnswerView<'_>, _: &Cancellation) -> Result<(), RunError> {
         Err(RunError::PublicationStopped(self.0))
     }
     fn finish(&mut self, _: PublicationView<'_>) -> Result<SummaryDelivery, RunError> {
@@ -187,7 +191,7 @@ fn custom_publication_stop_retains_the_proved_optimum() {
 
 struct FailAfterOne(usize);
 impl AnswerRenderer for FailAfterOne {
-    fn answer(&mut self, _: AnswerView<'_>, _: &Control) -> Result<(), RunError> {
+    fn answer(&mut self, _: AnswerView<'_>, _: &Cancellation) -> Result<(), RunError> {
         self.0 += 1;
         if self.0 == 2 {
             return Err(io::Error::new(io::ErrorKind::BrokenPipe, "custom sink closed").into());
@@ -253,7 +257,7 @@ fn atom_only_human_view_needs_no_observation_work() {
         &configured,
         &mut renderer,
         &mut io::sink(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(outcome.publication().models(), 1);
@@ -273,7 +277,7 @@ fn renderer_state_cannot_reschedule_terminal_publication() {
                 zetesis_cli::SummaryStage::Finalized
             }
         }
-        fn answer(&mut self, _: AnswerView<'_>, _: &Control) -> Result<(), RunError> {
+        fn answer(&mut self, _: AnswerView<'_>, _: &Cancellation) -> Result<(), RunError> {
             Ok(())
         }
         fn finish(&mut self, _: PublicationView<'_>) -> Result<SummaryDelivery, RunError> {

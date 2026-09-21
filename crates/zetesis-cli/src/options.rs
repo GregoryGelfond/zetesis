@@ -102,7 +102,7 @@ pub struct Options {
     /// the mark as they observe cancellation, without reading the clock, so
     /// an unreached deadline costs nothing measurable. Blocking source I/O,
     /// frontend operations and a running GPU kernel cannot be preempted.
-    /// Library callers supply their own Control instead of this process option.
+    /// Library callers supply their own Cancellation instead of this process option.
     #[arg(long, value_name = "DURATION", value_parser = values::seconds)]
     pub time_limit: Option<u64>,
     /// Memory allowance in bytes, or a whole number with KiB, MiB, GiB or TiB.

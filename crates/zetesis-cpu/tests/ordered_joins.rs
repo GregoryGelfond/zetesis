@@ -4,7 +4,7 @@ use zetesis_core::{
     AdmissionLimits, Atom, AtomPattern, Filter, GroundProgram, Predicate, Program, Seed,
     StaticLimits, Template, Term, Value,
 };
-use zetesis_cpu::{Control, Limits, Stop, check, check_static};
+use zetesis_cpu::{Cancellation, Limits, Stop, check, check_static};
 
 fn pattern(name: &str, terms: Vec<Term>) -> AtomPattern {
     AtomPattern::new(Predicate::new(name, terms.len()).unwrap(), terms).unwrap()
@@ -98,9 +98,11 @@ fn ordered_joins_preserve_frozen_closures() {
             let graph = GroundProgram::compile(&source, StaticLimits::default()).unwrap();
             for bits in 0..4 {
                 let seed = seed(&source, bits);
-                let lazy = check(&source, &seed, Limits::default(), &Control::default()).unwrap();
+                let lazy =
+                    check(&source, &seed, Limits::default(), &Cancellation::default()).unwrap();
                 let dense =
-                    check_static(&graph, &seed, Limits::default(), &Control::default()).unwrap();
+                    check_static(&graph, &seed, Limits::default(), &Cancellation::default())
+                        .unwrap();
                 assert_eq!(
                     lazy.closure(),
                     &graph.model_from_words(dense.closure_words()).unwrap(),
@@ -120,7 +122,7 @@ fn ordered_joins_preserve_frozen_closures() {
 fn lookup_stops_do_not_publish_partial_closures() {
     let source = source(15, 3);
     let seed = seed(&source, 2);
-    let checked = check(&source, &seed, Limits::default(), &Control::default()).unwrap();
+    let checked = check(&source, &seed, Limits::default(), &Cancellation::default()).unwrap();
     let work = checked.statistics().work;
     for max_work in [0, 1, work / 2, work - 1] {
         let result = check(
@@ -130,7 +132,7 @@ fn lookup_stops_do_not_publish_partial_closures() {
                 max_work,
                 ..Limits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         );
         assert!(matches!(result, Err(Stop::WorkLimit)));
     }
@@ -141,7 +143,7 @@ fn lookup_stops_do_not_publish_partial_closures() {
             max_work: work,
             ..Limits::default()
         },
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(exact.closure(), checked.closure());
@@ -177,7 +179,7 @@ fn a_failed_suffix_cannot_poison_later_prefixes() {
         &source,
         &Seed::new(&source, []).unwrap(),
         Limits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let actual: Vec<_> = checked

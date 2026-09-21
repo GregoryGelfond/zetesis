@@ -12,7 +12,7 @@ use zetesis_core::{
     AdmissionLimits, Atom, AtomPattern, Model, Predicate, Program, Seed, Template, Term, Value,
 };
 use zetesis_cpu::lazy::{SourceSelection, shared};
-use zetesis_cpu::{BatchOracle, Control, Limits};
+use zetesis_cpu::{BatchOracle, Cancellation, Limits};
 
 fn pattern(name: &str, terms: Vec<Term>) -> AtomPattern {
     AtomPattern::new(Predicate::new(name, terms.len()).unwrap(), terms).unwrap()
@@ -100,14 +100,14 @@ impl Case {
         }
     }
 
-    fn check(&self, pool: &BatchOracle, route: Route, control: &Control) -> Results {
+    fn check(&self, pool: &BatchOracle, route: Route, cancellation: &Cancellation) -> Results {
         match route {
             Route::Independent => Results::Independent(
                 pool.check_batch(
                     black_box(&self.program),
                     black_box(&self.seeds),
                     Limits::default(),
-                    control,
+                    cancellation,
                 )
                 .unwrap(),
             ),
@@ -117,7 +117,7 @@ impl Case {
                     black_box(&self.seeds),
                     shared::Limits::default(),
                     selection,
-                    control,
+                    cancellation,
                 )
                 .unwrap(),
             ),
@@ -155,12 +155,12 @@ impl Case {
         iterations: u64,
         pool: &BatchOracle,
         route: Route,
-        control: &Control,
+        cancellation: &Cancellation,
     ) -> Duration {
         let mut elapsed = Duration::ZERO;
         for _ in 0..iterations {
             let start = Instant::now();
-            let results = self.check(pool, route, control);
+            let results = self.check(pool, route, cancellation);
             elapsed += start.elapsed();
             self.validate(&results);
         }
@@ -179,7 +179,7 @@ enum Results {
 }
 
 pub(super) fn benchmarks(criterion: &mut Criterion) {
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let pool = BatchOracle::new(
         NonZeroUsize::new(4).unwrap(),
         NonZeroUsize::new(32).unwrap(),
@@ -203,7 +203,7 @@ pub(super) fn benchmarks(criterion: &mut Criterion) {
                 u64::try_from(case.seeds.len()).unwrap(),
             ));
             for (name, route) in routes {
-                let qualified = case.check(&pool, route, &control);
+                let qualified = case.check(&pool, route, &cancellation);
                 case.validate(&qualified);
                 if let Results::Independent(checks) = &qualified {
                     // At most 32 complete checks, each bounded by 10 million
@@ -244,8 +244,9 @@ pub(super) fn benchmarks(criterion: &mut Criterion) {
             // Establish all three concrete routes before timing this fixture.
             for (name, route) in routes {
                 group.bench_with_input(BenchmarkId::new(name, &size), &case, |bencher, case| {
-                    bencher
-                        .iter_custom(|iterations| case.timed(iterations, &pool, route, &control));
+                    bencher.iter_custom(|iterations| {
+                        case.timed(iterations, &pool, route, &cancellation)
+                    });
                 });
             }
         }

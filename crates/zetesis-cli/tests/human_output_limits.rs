@@ -4,7 +4,7 @@ use std::io::{self, Write};
 
 use clap::Parser;
 use zetesis_cli::{Options, Report, RunError, RunFailure, run_detailed_with_diagnostics};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 
 fn options(maximum: usize) -> Options {
     let mut options = Options::try_parse_from([
@@ -27,7 +27,7 @@ fn solve(source: &str, options: &Options, output: &mut impl Write) -> Result<Rep
         options,
         output,
         &mut io::sink(),
-        &Control::default(),
+        &Cancellation::default(),
     )
 }
 

@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     Interpretation, TightCheckLimits, TightError, TightPlan, TightPlanLimits, TightVerdict,
 };
@@ -31,7 +31,7 @@ fn source_normal_choice_and_frozen_aggregate_guards_are_certified() {
         )
         .unwrap();
         let theory = admitted.theory();
-        let plan = TightPlan::compile(theory, TightPlanLimits::default(), &Control::default())
+        let plan = TightPlan::compile(theory, TightPlanLimits::default(), &Cancellation::default())
             .unwrap_or_else(|error| panic!("{source}: {error}"));
         let mut accepted = 0;
         for mask in 0..1usize << theory.atom_count() {
@@ -41,13 +41,17 @@ fn source_normal_choice_and_frozen_aggregate_guards_are_certified() {
             )
             .unwrap();
             let checked = plan
-                .check(&candidate, TightCheckLimits::default(), &Control::default())
+                .check(
+                    &candidate,
+                    TightCheckLimits::default(),
+                    &Cancellation::default(),
+                )
                 .unwrap();
             let reference = zetesis_ferraris::check(
                 theory,
                 &candidate,
                 zetesis_ferraris::Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
             assert_eq!(
@@ -78,7 +82,7 @@ fn source_class_labels_cannot_hide_positive_aggregate_or_conditional_dependencie
         let result = TightPlan::compile(
             admitted.theory(),
             TightPlanLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         );
         assert!(
             matches!(
@@ -126,7 +130,7 @@ fn original_corpus_eligibility() {
             "source": path.strip_prefix(&root).unwrap().to_str().unwrap(),
             "atoms": theory.atom_count(), "nodes": theory.nodes().len(), "roots": theory.roots().len(),
         });
-        match TightPlan::compile(theory, TightPlanLimits::default(), &Control::default()) {
+        match TightPlan::compile(theory, TightPlanLimits::default(), &Cancellation::default()) {
             Ok(plan) => {
                 let stats = plan.statistics();
                 record["certified"] = true.into();

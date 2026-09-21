@@ -3,7 +3,7 @@
 use std::{collections::BTreeSet, convert::Infallible, num::NonZeroUsize};
 
 use zetesis_core::{AdmissionLimits, AtomPattern, Predicate, Program, Template};
-use zetesis_cpu::{Control, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_solve::{
     Backend, Completion, ExecutionObservation, ExecutionObserver, Grounder, Interruption,
     PreparedInput, Session, SolveConfig, SolveError, SolveMeasurements, SolvePhase, SourceBatching,
@@ -65,7 +65,7 @@ fn a_worker_product_above_the_collective_ceiling_is_refused_by_name() {
                 max_work: 0,
                 ..with_workers(5)
             },
-            Control::default(),
+            Cancellation::default(),
         )
         .measurements(&measurements)
         .start_observed(&mut observations)
@@ -105,7 +105,7 @@ fn overflowing_cpu_reservations_are_refused() {
             max_closure_batch_bytes: usize::MAX,
             ..with_workers(2)
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .start()
     .err()
@@ -124,14 +124,18 @@ fn overflowing_cpu_reservations_are_refused() {
 #[test]
 fn pre_cancelled_sessions_skip_cpu_resource_setup() {
     let program = program();
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     let measurements = SolveMeasurements::new(true);
     let mut observations = Observations::default();
-    let mut session = Session::builder(PreparedInput::program(&program), with_workers(5), control)
-        .measurements(&measurements)
-        .start_observed(&mut observations)
-        .unwrap();
+    let mut session = Session::builder(
+        PreparedInput::program(&program),
+        with_workers(5),
+        cancellation,
+    )
+    .measurements(&measurements)
+    .start_observed(&mut observations)
+    .unwrap();
     assert!(session.next().is_none());
     let outcome = session.outcome().unwrap();
     assert_eq!(outcome.completion(), Some(Completion::Interrupted));
@@ -157,8 +161,8 @@ fn pre_cancelled_sessions_skip_cpu_resource_setup() {
 #[test]
 fn policy_incompatibility_precedes_cancellation() {
     let program = program();
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     let failure = Session::builder(
         PreparedInput::program(&program),
         SolveConfig {
@@ -166,7 +170,7 @@ fn policy_incompatibility_precedes_cancellation() {
             source_batching: SourceBatching::Union,
             ..with_workers(5)
         },
-        control,
+        cancellation,
     )
     .start()
     .err()
@@ -193,7 +197,7 @@ fn formula_execution_does_not_reserve_closure_storage() {
             max_closure_batch_bytes: 0,
             ..with_workers(5)
         },
-        Control::default(),
+        Cancellation::default(),
     )
     .start()
     .unwrap();
@@ -216,7 +220,7 @@ fn a_product_at_the_ceiling_is_admitted() {
         Session::builder(
             PreparedInput::program(&program),
             with_workers(4),
-            Control::default(),
+            Cancellation::default(),
         )
         .start()
         .is_ok()
@@ -231,10 +235,13 @@ fn eight_workers_complete_the_family_at_their_collective_share() {
         ..SolveConfig::for_allowance(SolveConfig::REFERENCE_MEMORY, NonZeroUsize::new(8).unwrap())
     };
     let program = program();
-    let mut session =
-        Session::builder(PreparedInput::program(&program), config, Control::default())
-            .start()
-            .unwrap();
+    let mut session = Session::builder(
+        PreparedInput::program(&program),
+        config,
+        Cancellation::default(),
+    )
+    .start()
+    .unwrap();
     let mut answers = 0;
     for answer in session.by_ref() {
         answer.unwrap();

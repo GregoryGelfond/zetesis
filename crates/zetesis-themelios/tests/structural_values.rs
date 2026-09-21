@@ -4,7 +4,7 @@ mod reference;
 use reference::{Models, exhaustive, native};
 use std::collections::BTreeSet;
 use zetesis_core::Model;
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
 };
@@ -113,7 +113,7 @@ fn full_structural_objective_keys_and_candidate_bounds_agree_for_every_model() {
         p.atoms(),
         p.objectives(),
         zetesis_themelios::objective_bound::ObjectivePlanLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap();
     let scores: Vec<_> = (0..1usize << p.atoms().len())
@@ -129,7 +129,7 @@ fn full_structural_objective_keys_and_candidate_bounds_agree_for_every_model() {
                 p.objectives(),
                 &model,
                 zetesis_objective::Limits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap()
             .score()
@@ -141,7 +141,7 @@ fn full_structural_objective_keys_and_candidate_bounds_agree_for_every_model() {
             .bound(
                 incumbent,
                 zetesis_themelios::objective_bound::ObjectiveBoundLimits::default(),
-                &Control::default(),
+                &Cancellation::default(),
             )
             .unwrap();
         assert!(bound.original().same_instance(p.theory()));
@@ -156,7 +156,7 @@ fn full_structural_objective_keys_and_candidate_bounds_agree_for_every_model() {
                     bound.theory(),
                     &m,
                     zetesis_ferraris::Limits::default(),
-                    &Control::default()
+                    &Cancellation::default()
                 )
                 .unwrap(),
                 score.compare_costs(incumbent) != std::cmp::Ordering::Greater
@@ -258,7 +258,7 @@ fn arbitrary_public_structures_are_bounded_before_observation_and_retry_is_exact
             &model,
             p.metadata().output(),
             Limits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
     assert!(matches!(
@@ -274,17 +274,22 @@ fn arbitrary_public_structures_are_bounded_before_observation_and_retry_is_exact
         ..Limits::default()
     };
     let result = observation
-        .render(&model, p.metadata().output(), limits, &Control::default())
+        .render(
+            &model,
+            p.metadata().output(),
+            limits,
+            &Cancellation::default(),
+        )
         .unwrap();
     let Value::Structured(value) = value else {
         panic!("structure")
     };
     assert_eq!(result.text(), format!("seen({value})"));
-    let control = Control::default();
-    control.cancel();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
     assert!(matches!(
         observation
-            .render(&model, p.metadata().output(), limits, &control)
+            .render(&model, p.metadata().output(), limits, &cancellation)
             .unwrap_err()
             .kind(),
         ErrorKind::Stopped(_)
@@ -295,7 +300,12 @@ fn arbitrary_public_structures_are_bounded_before_observation_and_retry_is_exact
     };
     assert_eq!(
         observation
-            .render(&model, p.metadata().output(), exact, &Control::default())
+            .render(
+                &model,
+                p.metadata().output(),
+                exact,
+                &Cancellation::default()
+            )
             .unwrap()
             .text(),
         result.text()
@@ -309,7 +319,7 @@ fn arbitrary_public_structures_are_bounded_before_observation_and_retry_is_exact
                     max_work: exact.max_work - 1,
                     ..exact
                 },
-                &Control::default()
+                &Cancellation::default()
             )
             .unwrap_err()
             .kind(),

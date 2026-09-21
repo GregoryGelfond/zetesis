@@ -4,7 +4,7 @@
 use zetesis_core::{
     Atom, AtomPattern, Filter, Model, Predicate, Sign, Term, Value, ValueLimits, ValueNode,
 };
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Node, Theory, models};
 use zetesis_objective::{Condition, ConditionNode, ObjectiveProgram, ObjectiveTemplate, evaluate};
 use zetesis_themelios::objective_bound::{
@@ -102,13 +102,13 @@ fn shuffled_catalog_bounds_match_independent_mask_costs() {
         ),
     ]);
     let objectives = program(templates);
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let plan = ObjectivePlan::new(
         &original,
         &atoms,
         &objectives,
         ObjectivePlanLimits::default(),
-        &control,
+        &cancellation,
     )
     .unwrap();
     let expected: Vec<i64> = (0_usize..32)
@@ -136,12 +136,16 @@ fn shuffled_catalog_bounds_match_independent_mask_costs() {
             &objectives,
             &incumbent_model,
             zetesis_objective::Limits::default(),
-            &control,
+            &cancellation,
         )
         .unwrap();
         assert_eq!(incumbent.score().costs(), &[(0, incumbent_cost)]);
         let bound = plan
-            .bound(incumbent.score(), ObjectiveBoundLimits::default(), &control)
+            .bound(
+                incumbent.score(),
+                ObjectiveBoundLimits::default(),
+                &cancellation,
+            )
             .unwrap();
         assert!(bound.original().same_instance(&original));
         assert_eq!(bound.theory().atom_count(), atoms.len());
@@ -156,7 +160,7 @@ fn shuffled_catalog_bounds_match_independent_mask_costs() {
                     bound.theory(),
                     &candidate,
                     zetesis_ferraris::Limits::default(),
-                    &control
+                    &cancellation
                 )
                 .unwrap(),
                 cost <= incumbent_cost,
@@ -181,7 +185,7 @@ fn prepared_work(noise: i32) -> (u64, u64) {
             &atoms,
             objectives,
             ObjectivePlanLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap()
         .statistics()
@@ -219,9 +223,10 @@ fn every_plan_work_cutoff_preserves_its_failure_prefix() {
         ),
         1,
     )]);
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let limits = ObjectivePlanLimits::default();
-    let complete = ObjectivePlan::new(&original, &atoms, &objectives, limits, &control).unwrap();
+    let complete =
+        ObjectivePlan::new(&original, &atoms, &objectives, limits, &cancellation).unwrap();
     for limit in 0..complete.statistics().work {
         let error = ObjectivePlan::new(
             &original,
@@ -231,7 +236,7 @@ fn every_plan_work_cutoff_preserves_its_failure_prefix() {
                 max_work: limit,
                 ..limits
             },
-            &control,
+            &cancellation,
         )
         .unwrap_err();
         assert_eq!(
@@ -248,7 +253,7 @@ fn every_plan_work_cutoff_preserves_its_failure_prefix() {
             max_work: complete.statistics().work,
             ..limits
         },
-        &control,
+        &cancellation,
     )
     .unwrap();
     assert_eq!(complete.statistics(), repeated.statistics());
@@ -263,7 +268,7 @@ fn duplicate_catalog_atoms_refuse_planning() {
         &duplicate,
         &program(Vec::new()),
         ObjectivePlanLimits::default(),
-        &Control::default(),
+        &Cancellation::default(),
     )
     .unwrap_err();
     assert_eq!(error.kind(), ObjectiveBoundErrorKind::AtomCatalog);
@@ -350,13 +355,13 @@ fn joined_cost(mask: usize) -> i64 {
 fn joined_conditions_preserve_exact_bound_costs() {
     let (atoms, objectives) = joined_condition();
     let original = theory(atoms.len());
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let plan = ObjectivePlan::new(
         &original,
         &atoms,
         &objectives,
         ObjectivePlanLimits::default(),
-        &control,
+        &cancellation,
     )
     .unwrap();
     let scores: Vec<_> = (0..32)
@@ -372,7 +377,7 @@ fn joined_conditions_preserve_exact_bound_costs() {
                 &objectives,
                 &model,
                 zetesis_objective::Limits::default(),
-                &control,
+                &cancellation,
             )
             .unwrap();
             assert_eq!(evaluated.score().costs(), &[(0, joined_cost(mask))]);
@@ -386,7 +391,7 @@ fn joined_conditions_preserve_exact_bound_costs() {
             .bound(
                 &scores[incumbent_mask],
                 ObjectiveBoundLimits::default(),
-                &control,
+                &cancellation,
             )
             .unwrap();
         assert!(bound.original().same_instance(&original));
@@ -402,7 +407,7 @@ fn joined_conditions_preserve_exact_bound_costs() {
                     bound.theory(),
                     &interpretation,
                     zetesis_ferraris::Limits::default(),
-                    &control
+                    &cancellation
                 )
                 .unwrap(),
                 joined_cost(mask) <= joined_cost(incumbent_mask),
@@ -425,7 +430,7 @@ fn joined_planning_refuses_every_incomplete_work_prefix() {
                 max_work,
                 ..ObjectivePlanLimits::default()
             },
-            &Control::default(),
+            &Cancellation::default(),
         )
     };
     let complete = run(ObjectivePlanLimits::default().max_work).unwrap();
@@ -457,7 +462,7 @@ fn incomplete_catalogs_cannot_supply_original_atom_ids() {
             &atoms,
             &program(vec![]),
             ObjectivePlanLimits::default(),
-            &Control::default(),
+            &Cancellation::default(),
         )
         .unwrap_err();
         assert_eq!(error.kind(), ObjectiveBoundErrorKind::AtomCatalog);

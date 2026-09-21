@@ -43,8 +43,8 @@ fn exhausted_available_permits_wait_for_outstanding_grants() {
 #[test]
 fn a_charge_commits_available_permits_and_is_refused_beyond_them() {
     let shared = budget(WORK_QUANTUM + 3);
-    let control = Control::default();
-    let lease = shared.lease(&control);
+    let cancellation = Cancellation::default();
+    let lease = shared.lease(&cancellation);
     lease.tick().unwrap();
     state(&shared, (0, 3, WORK_QUANTUM));
     shared.charge(2).unwrap();
@@ -60,9 +60,9 @@ fn a_charge_commits_available_permits_and_is_refused_beyond_them() {
 #[test]
 fn each_grant_conserves_used_available_and_outstanding_permits() {
     let shared = budget(2 * WORK_QUANTUM + 3);
-    let control = Control::default();
-    let first = shared.lease(&control);
-    let second = shared.lease(&control);
+    let cancellation = Cancellation::default();
+    let first = shared.lease(&cancellation);
+    let second = shared.lease(&cancellation);
     first.tick().unwrap();
     state(&shared, (0, WORK_QUANTUM + 3, WORK_QUANTUM));
     second.tick().unwrap();
@@ -82,10 +82,10 @@ fn each_grant_conserves_used_available_and_outstanding_permits() {
 #[test]
 fn cancelled_renewal_commits_its_consumed_grant() {
     let shared = budget(2 * WORK_QUANTUM);
-    let control = Control::default();
-    let lease = shared.lease(&control);
+    let cancellation = Cancellation::default();
+    let lease = shared.lease(&cancellation);
     lease.take(WORK_QUANTUM).unwrap();
-    control.cancel();
+    cancellation.cancel();
     assert_eq!(lease.tick(), Err(Incomplete::Cancelled));
     // Inspect before Drop: the failed renewal itself must publish the used
     // prefix, and cannot retain a replacement or commit the old grant twice.
@@ -97,8 +97,9 @@ fn cancelled_renewal_commits_its_consumed_grant() {
 #[test]
 fn final_consumed_grant_wakes_exhaustion_waiters() {
     let shared = budget(WORK_QUANTUM);
-    let control = Control::with_deadline(Instant::now() + Duration::from_secs(5)).unwrap();
-    let lease = shared.lease(&control);
+    let cancellation =
+        Cancellation::with_deadline(Instant::now() + Duration::from_secs(5)).unwrap();
+    let lease = shared.lease(&cancellation);
     lease.take(WORK_QUANTUM).unwrap();
     thread::scope(|scope| {
         let (started, starting) = mpsc::sync_channel(1);
@@ -130,8 +131,8 @@ fn final_consumed_grant_wakes_exhaustion_waiters() {
 #[test]
 fn bulk_consumption_preserves_its_unused_remainder() {
     let shared = budget(WORK_QUANTUM + 7);
-    let control = Control::default();
-    let lease = shared.lease(&control);
+    let cancellation = Cancellation::default();
+    let lease = shared.lease(&cancellation);
     lease.take(WORK_QUANTUM + 3).unwrap();
     state(&shared, (WORK_QUANTUM, 0, 7));
     drop(lease);
@@ -141,8 +142,9 @@ fn bulk_consumption_preserves_its_unused_remainder() {
 #[test]
 fn failed_bulk_consumption_commits_its_admitted_prefix() {
     let shared = budget(WORK_QUANTUM + 3);
-    let control = Control::with_deadline(Instant::now() + Duration::from_secs(5)).unwrap();
-    let lease = shared.lease(&control);
+    let cancellation =
+        Cancellation::with_deadline(Instant::now() + Duration::from_secs(5)).unwrap();
+    let lease = shared.lease(&cancellation);
     assert_eq!(lease.take(WORK_QUANTUM + 4), Err(Incomplete::WorkLimit));
     state(&shared, (WORK_QUANTUM + 3, 0, 0));
     drop(lease);
@@ -153,14 +155,14 @@ fn failed_bulk_consumption_commits_its_admitted_prefix() {
 fn joined_work_is_exact_at_every_small_inclusive_ceiling() {
     for ceiling in 0..=2 * WORK_QUANTUM + 1 {
         let shared = budget(ceiling);
-        let control = Control::default();
+        let cancellation = Cancellation::default();
         thread::scope(|scope| {
             let mut jobs = Vec::new();
             for _ in 0..4 {
                 let shared = &shared;
-                let control = &control;
+                let cancellation = &cancellation;
                 jobs.push(scope.spawn(move || {
-                    let lease = shared.lease(control);
+                    let lease = shared.lease(cancellation);
                     let mut consumed = 0;
                     while lease.tick().is_ok() {
                         consumed += 1;
@@ -184,17 +186,17 @@ fn joined_work_is_exact_at_every_small_inclusive_ceiling() {
 #[test]
 fn returned_unused_permits_allow_a_waiting_query_to_continue() {
     let shared = budget(2);
-    let control = Control::default();
-    let first = shared.lease(&control);
+    let cancellation = Cancellation::default();
+    let first = shared.lease(&cancellation);
     first.tick().unwrap();
     state(&shared, (0, 0, 2));
     thread::scope(|scope| {
         let (started, starting) = mpsc::sync_channel(1);
         let (done, result) = mpsc::sync_channel(1);
         let shared = &shared;
-        let control = &control;
+        let cancellation = &cancellation;
         scope.spawn(move || {
-            let next = shared.lease(control);
+            let next = shared.lease(cancellation);
             started.send(()).unwrap();
             done.send(next.tick()).unwrap();
         });
@@ -210,24 +212,24 @@ fn returned_unused_permits_allow_a_waiting_query_to_continue() {
 fn waiting_for_permits_observes_cancellation_and_deadline() {
     for deadline in [false, true] {
         let shared = budget(2);
-        let owner_control = Control::default();
+        let owner_control = Cancellation::default();
         let owner = shared.lease(&owner_control);
         owner.tick().unwrap();
-        let control = if deadline {
-            Control::with_deadline(Instant::now() + Duration::from_millis(20)).unwrap()
+        let cancellation = if deadline {
+            Cancellation::with_deadline(Instant::now() + Duration::from_millis(20)).unwrap()
         } else {
-            Control::default()
+            Cancellation::default()
         };
         thread::scope(|scope| {
             let (done, result) = mpsc::sync_channel(1);
             let shared = &shared;
-            let waiter_control = &control;
+            let waiter_control = &cancellation;
             scope.spawn(move || {
                 let waiter = shared.lease(waiter_control);
                 done.send(waiter.tick()).unwrap();
             });
             if !deadline {
-                control.cancel();
+                cancellation.cancel();
             }
             assert_eq!(
                 result.recv_timeout(Duration::from_secs(2)).unwrap(),
@@ -246,7 +248,7 @@ fn waiting_for_permits_observes_cancellation_and_deadline() {
 #[test]
 fn every_typed_query_error_returns_unspent_grants() {
     let shared = budget(WORK_QUANTUM);
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     for error in [
         Incomplete::Allocation,
         Incomplete::InvalidWitness,
@@ -255,7 +257,7 @@ fn every_typed_query_error_returns_unspent_grants() {
         Incomplete::Deadline,
     ] {
         let result = (|| {
-            let lease = shared.lease(&control);
+            let lease = shared.lease(&cancellation);
             lease.tick()?;
             Err::<(), _>(error)
         })();
@@ -270,9 +272,9 @@ fn every_typed_query_error_returns_unspent_grants() {
 #[test]
 fn allocation_failure_and_unwind_return_unused_permits() {
     let shared = budget(WORK_QUANTUM);
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let result = (|| {
-        let lease = shared.lease(&control);
+        let lease = shared.lease(&cancellation);
         lease.tick()?;
         Vec::<u64>::new()
             .try_reserve_exact(usize::MAX)
@@ -281,7 +283,7 @@ fn allocation_failure_and_unwind_return_unused_permits() {
     assert_eq!(result, Err(Incomplete::Allocation));
     assert!(
         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let lease = shared.lease(&control);
+            let lease = shared.lease(&cancellation);
             lease.tick().unwrap();
             panic!("query failed outside the permit lock");
         }))
@@ -305,8 +307,8 @@ fn last_representable_reservation_never_wraps_or_spends_a_different_quota() {
         },
         spent,
     );
-    let control = Control::default();
-    let lease = shared.lease(&control);
+    let cancellation = Cancellation::default();
+    let lease = shared.lease(&cancellation);
     assert_eq!(lease.tick(), Ok(()));
     assert_eq!(lease.tick(), Err(Incomplete::WorkLimit));
     assert_eq!(lease.decide(), Err(Incomplete::DecisionLimit));
@@ -319,8 +321,8 @@ fn last_representable_reservation_never_wraps_or_spends_a_different_quota() {
 #[test]
 fn an_accounted_attempt_refunds_its_unused_allowance() {
     let shared = budget(100);
-    let control = Control::default();
-    let mut lease = shared.lease(&control);
+    let cancellation = Cancellation::default();
+    let mut lease = shared.lease(&cancellation);
     lease.tick().unwrap();
     let reservation = lease.reserve(20).unwrap();
     assert_eq!(reservation.allowance(), 20);
@@ -333,8 +335,8 @@ fn an_accounted_attempt_refunds_its_unused_allowance() {
 #[test]
 fn a_kernel_can_execute_only_the_reserved_remainder() {
     let shared = budget(7);
-    let control = Control::default();
-    let mut lease = shared.lease(&control);
+    let cancellation = Cancellation::default();
+    let mut lease = shared.lease(&cancellation);
     let reservation = lease.reserve(20).unwrap();
     assert_eq!(reservation.allowance(), 7);
     state(&shared, (0, 0, 7));
@@ -346,16 +348,17 @@ fn a_kernel_can_execute_only_the_reserved_remainder() {
 #[test]
 fn a_kernel_reservation_returns_its_lease_before_waiting() {
     let shared = budget(10);
-    let control = Control::with_deadline(Instant::now() + Duration::from_secs(2)).unwrap();
-    let mut first = shared.lease(&control);
+    let cancellation =
+        Cancellation::with_deadline(Instant::now() + Duration::from_secs(2)).unwrap();
+    let mut first = shared.lease(&cancellation);
     let reservation = first.reserve(8).unwrap();
     thread::scope(|scope| {
         let (started, starting) = mpsc::sync_channel(1);
         let (done, result) = mpsc::sync_channel(1);
         let shared = &shared;
-        let control = &control;
+        let cancellation = &cancellation;
         scope.spawn(move || {
-            let mut lease = shared.lease(control);
+            let mut lease = shared.lease(cancellation);
             lease.tick().unwrap();
             started.send(()).unwrap();
             let reservation = lease.reserve(4).unwrap();
@@ -374,8 +377,8 @@ fn a_kernel_reservation_returns_its_lease_before_waiting() {
 #[test]
 fn an_unwinding_kernel_consumes_its_reserved_allowance() {
     let shared = budget(10);
-    let control = Control::default();
-    let mut lease = shared.lease(&control);
+    let cancellation = Cancellation::default();
+    let mut lease = shared.lease(&cancellation);
     let stopped = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let _reservation = lease.reserve(8).unwrap();
         panic!("kernel unwound before returning its work receipt");

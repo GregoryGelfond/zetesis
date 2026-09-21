@@ -5,7 +5,7 @@
 use std::collections::BTreeSet;
 
 use zetesis_core::{Atom, Term};
-use zetesis_cpu::Control;
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
@@ -27,7 +27,7 @@ fn admitted(source: &str) -> AdmittedFormula {
 fn exhaustive(input: &AdmittedFormula) -> Models {
     let count = input.atoms().len();
     assert!(count <= 16, "small independent enumeration carrier");
-    let control = Control::default();
+    let cancellation = Cancellation::default();
     let mut models = Models::new();
     for bits in 0..(1_usize << count) {
         let candidate = Interpretation::new(
@@ -35,7 +35,7 @@ fn exhaustive(input: &AdmittedFormula) -> Models {
             (0..count).filter(|&atom| bits & (1 << atom) != 0),
         )
         .expect("same-theory interpretation");
-        if check(input.theory(), &candidate, Limits::default(), &control)
+        if check(input.theory(), &candidate, Limits::default(), &cancellation)
             .expect("complete subset minimality check")
             .accepted()
         {
