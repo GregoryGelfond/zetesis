@@ -1,0 +1,5894 @@
+{
+  "schema": 1,
+  "format": "zetesis_hybrid_grounding_evidence",
+  "identities": {
+    "native": {
+      "version": "zetesis 0.1.4 | Copyright (c) 2026 Gregory Gelfond | MIT License",
+      "sha256": "e3f53a2debb11664c9cccd8dc1205147d06251587921b8ec77d9a6dd7b44e487",
+      "bytes": 18228592
+    },
+    "reference": {
+      "version": "clingo version 5.8.2",
+      "sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "bytes": 341232
+    },
+    "corpus_manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958"
+  },
+  "source_revision": "4a281c9612dc4ff22557341354b1ad610cfd9672",
+  "source_revision_basis": "retained native build source identity; raw reports bind the executable SHA-256",
+  "protocol": {
+    "protocol": "instrumented_derived_workload_matrix_v2",
+    "wall_scope": "fresh_process_spawn_capture_reap; native_json_and_stats_included; reference_json_included; comparison_hashing_excluded; no_cold_cache_claim",
+    "comparison_scope": "complete_selected_displays_with_symbol_and_model_multiplicities; final_optimum_ties_and_costs; full_native_atoms_and_shown_values_compared_across_profiles_and_repeats; hidden_reference_interpretations_unavailable",
+    "peak_rss": "memory_rounds: separate_fresh_helper_RUSAGE_CHILDREN; excludes_helper; may_include_usage_propagated_by_waited_descendants; not_simultaneous_tree_RSS_or_device_memory; macOS_bytes_Linux_KiB_converted_to_bytes"
+  },
+  "measurement_scope": {
+    "same_native_executable": true,
+    "reference_timing_included": false,
+    "native_timing_samples_per_cell": 4,
+    "native_rss_samples_per_cell": 2,
+    "median_rule": "sort samples, midpoint of two central values rounded down",
+    "stage_scope": "grounding is initial core materialization; solving includes candidate search and interleaved source constraints; original_validation is nested detail, not additive with solving; null means unavailable",
+    "rss_scope": "separate memory samples only; their outer wall time includes the helper and is not a timed-process comparison",
+    "sample_phase_order": "qualification, warmup, timed, memory; native order rotates by case and round; report_position preserves actual schedule"
+  },
+  "verification": {
+    "all_positions_passed": 306,
+    "native_families_compared": 288,
+    "complete_family_counts": [
+      2,
+      10,
+      2,
+      10,
+      2,
+      2,
+      7,
+      2,
+      2
+    ],
+    "comparison": "full typed JSON atom payloads resolved from incremental schema2 catalogs; shown atoms/terms and cost vectors; sorted with multiplicities; no semantic solver re-execution"
+  },
+  "workloads": [
+    {
+      "entry": "standalone/n-queens/variant-01.lp",
+      "identity": "e276aa369c2c3e38e91ba773e9765433f8ef5f35a0fb337c34b2770f25735b97",
+      "amended": true,
+      "sources": [
+        {
+          "path": "standalone/n-queens/variant-01.lp",
+          "base_sha256": "c43d5ddf900ce2fd1d3328f2df337f1c1e8b85b63255473713b16a2dfd0dc1fd",
+          "derived_sha256": "8f2e74498e90654a3104a5e19da2b194463e203074ddae7968eaaa2b58505be0",
+          "derived_bytes": 858,
+          "edits": [
+            {
+              "start_byte": 368,
+              "end_byte": 369,
+              "before": "8",
+              "after": "4"
+            }
+          ]
+        }
+      ],
+      "index": 0,
+      "label": "Queens01 N4",
+      "complete_models": 2,
+      "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958"
+    },
+    {
+      "entry": "standalone/n-queens/variant-01.lp",
+      "identity": "aa760ff38bb0c5f71a0bc02e284b56082160172462591ae49d096d2d2199fbb9",
+      "amended": true,
+      "sources": [
+        {
+          "path": "standalone/n-queens/variant-01.lp",
+          "base_sha256": "c43d5ddf900ce2fd1d3328f2df337f1c1e8b85b63255473713b16a2dfd0dc1fd",
+          "derived_sha256": "e8631546a74c2a3cfe347975cfcda287d703b6882f7b6d5570a33712d6a8425e",
+          "derived_bytes": 858,
+          "edits": [
+            {
+              "start_byte": 368,
+              "end_byte": 369,
+              "before": "8",
+              "after": "5"
+            }
+          ]
+        }
+      ],
+      "index": 1,
+      "label": "Queens01 N5",
+      "complete_models": 10,
+      "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958"
+    },
+    {
+      "entry": "standalone/n-queens/variant-03.lp",
+      "identity": "d14da1dae17b0817496d63af7e190cb47d81cf8a2c3ac63362e7e1f8c33b0a78",
+      "amended": true,
+      "sources": [
+        {
+          "path": "standalone/n-queens/variant-03.lp",
+          "base_sha256": "6e04e47594fd44b6ed2e17370f81ad3ae9db684af9e5aa4a85c7e1d98a5f5dd6",
+          "derived_sha256": "256809734d135d6ee298de7f32e0fc30bfdc5c0a31146c860eec779a0bfdbb66",
+          "derived_bytes": 878,
+          "edits": [
+            {
+              "start_byte": 389,
+              "end_byte": 390,
+              "before": "8",
+              "after": "4"
+            }
+          ]
+        }
+      ],
+      "index": 2,
+      "label": "Queens03 N4",
+      "complete_models": 2,
+      "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958"
+    },
+    {
+      "entry": "standalone/n-queens/variant-03.lp",
+      "identity": "97a972e67982e028e58b80e6a88351a9e1c197c2b5f71f0741acc04b2daf02ee",
+      "amended": true,
+      "sources": [
+        {
+          "path": "standalone/n-queens/variant-03.lp",
+          "base_sha256": "6e04e47594fd44b6ed2e17370f81ad3ae9db684af9e5aa4a85c7e1d98a5f5dd6",
+          "derived_sha256": "845557649b9d92a362ba492dcb675e780dc77224007f52c7314a0684b27fd5a6",
+          "derived_bytes": 878,
+          "edits": [
+            {
+              "start_byte": 389,
+              "end_byte": 390,
+              "before": "8",
+              "after": "5"
+            }
+          ]
+        }
+      ],
+      "index": 3,
+      "label": "Queens03 N5",
+      "complete_models": 10,
+      "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958"
+    },
+    {
+      "entry": "standalone/n-queens/variant-02.lp",
+      "identity": "e5d1dd056876167f3a8fea78d72dbeb03f7942169f4e1b25287fc0c235d288e5",
+      "amended": true,
+      "sources": [
+        {
+          "path": "standalone/n-queens/variant-02.lp",
+          "base_sha256": "b6e636c06664e0e3b1a34b883e342f9c7b599f8625e154adb1927d41442fca02",
+          "derived_sha256": "a80305b9b16f080233ee1107c310290e1db3d312e3689f9a75366e02252a9b50",
+          "derived_bytes": 960,
+          "edits": [
+            {
+              "start_byte": 430,
+              "end_byte": 431,
+              "before": "8",
+              "after": "4"
+            }
+          ]
+        }
+      ],
+      "index": 4,
+      "label": "Queens02 N4",
+      "complete_models": 2,
+      "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958"
+    },
+    {
+      "entry": "standalone/n-queens/variant-06.lp",
+      "identity": "7b205afd1161823a8b394a1496741f99b670a273d21090bb2c8880bdaed4ff84",
+      "amended": true,
+      "sources": [
+        {
+          "path": "standalone/n-queens/variant-06.lp",
+          "base_sha256": "9d6ff26ac9bec747f4a237145ea732fd689d065545254186375afc682604fc3c",
+          "derived_sha256": "a0e69f93aecc8e5f0bd88149ff007c018cf2084e6ffc883041514e6bb54788ad",
+          "derived_bytes": 1116,
+          "edits": [
+            {
+              "start_byte": 409,
+              "end_byte": 410,
+              "before": "8",
+              "after": "4"
+            }
+          ]
+        }
+      ],
+      "index": 5,
+      "label": "Queens06 N4",
+      "complete_models": 2,
+      "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958"
+    },
+    {
+      "entry": "generated/monotone-choices-6.lp",
+      "identity": "14a5f22782e95dd950212b46af853f131f91c0aed8d116502eb30f4c7a6f72f1",
+      "amended": false,
+      "sources": [],
+      "index": 6,
+      "label": "MonotoneChoices6",
+      "complete_models": 7,
+      "generated": {
+        "family": "monotone-choices",
+        "size": 6,
+        "sha256": "1779f05ccf84d6f7bb3b2cd744fb764830a23e64e28b418b0c818b2d9b105d03",
+        "bytes": 52
+      }
+    },
+    {
+      "entry": "generated/redundant-transitivity-8.lp",
+      "identity": "6e980b9a3cf35e2f0e8e0fd88a740d20a602fe16059dc2eaa39a1a55b7751722",
+      "amended": false,
+      "sources": [],
+      "index": 7,
+      "label": "RedundantTransitivity8",
+      "complete_models": 2,
+      "generated": {
+        "family": "redundant-transitivity",
+        "size": 8,
+        "sha256": "25436491cbd00d90378e5651257ae6cb11c9431d4d9c2291b3a082583529fd0e",
+        "bytes": 69
+      }
+    },
+    {
+      "entry": "generated/redundant-transitivity-12.lp",
+      "identity": "c9e6a0a3a6376399f06b37aba7c755a294646609491c21b923b67341c0105968",
+      "amended": false,
+      "sources": [],
+      "index": 8,
+      "label": "RedundantTransitivity12",
+      "complete_models": 2,
+      "generated": {
+        "family": "redundant-transitivity",
+        "size": 12,
+        "sha256": "9465ccc41493a9d53b6daba847c611c79b04bb0ef5e3afa501debff056f2edd3",
+        "bytes": 70
+      }
+    }
+  ],
+  "reports": [
+    {
+      "id": "cpu1",
+      "raw_report_sha256": "4e64d034510b89804bd06284b7700af0fb91704f956e9c50e1bc4041a95e5507",
+      "summary_sha256": "af81a8b806cd2a34ed38c5769a37025269a660fcf21207f703d99f57d56ac119",
+      "started_unix_ns": 1790010696205227000,
+      "finished_unix_ns": 1790010697632055000,
+      "started_utc": "2026-09-21T17:11:36.205227+00:00",
+      "positions": 153,
+      "passed": true,
+      "accounted": true,
+      "native_captures": 144,
+      "reference_qualification_captures": 9,
+      "all_executable_and_input_seals_unchanged": true,
+      "plan": {
+        "suite": "queens",
+        "profiles": [
+          {
+            "backend": "cpu",
+            "oracle": "auto",
+            "grounder": "eager",
+            "formula_joins": "indexed",
+            "search": "regions",
+            "workers": 1,
+            "completion_workers": 1,
+            "batch_size": 64,
+            "max_completion_scratch_bytes": 268435456
+          },
+          {
+            "backend": "cpu",
+            "oracle": "auto",
+            "grounder": "lazy",
+            "formula_joins": "indexed",
+            "search": "regions",
+            "workers": 1,
+            "completion_workers": 1,
+            "batch_size": 64,
+            "max_completion_scratch_bytes": 268435456
+          }
+        ],
+        "reference_workers": 1,
+        "reference_policy": "qualification_only",
+        "warmups": 1,
+        "repetitions": 4,
+        "memory_runs": 2
+      },
+      "limits": {
+        "answers": {
+          "max_cost_dimensions": 8388608,
+          "max_input_bytes": 8388608,
+          "max_symbols": 8388608,
+          "max_witnesses": 8388608
+        },
+        "campaign_timeout": {
+          "nanos": 0,
+          "secs": 180
+        },
+        "corpus": {
+          "cases": 94,
+          "contract_symbols": 65536,
+          "files": 108,
+          "manifest_bytes": 1048576,
+          "source_bytes": 1048576,
+          "total_source_bytes": 4194304
+        },
+        "max_executable_bytes": 268435456,
+        "max_report_bytes": 536870912,
+        "max_total_capture_bytes": 134217728,
+        "process": {
+          "cleanup_timeout": {
+            "nanos": 0,
+            "secs": 1
+          },
+          "max_output_bytes": 4194304,
+          "timeout": {
+            "nanos": 0,
+            "secs": 10
+          }
+        }
+      },
+      "native_normalization_limits": {
+        "atoms": 262144,
+        "cost_dimensions": 8388608,
+        "input_bytes": 8388608,
+        "spelling_bytes": 8388608,
+        "symbols": 8388608,
+        "value": {
+          "bytes": 16777216,
+          "depth": 128,
+          "nodes": 262144
+        },
+        "value_nodes": 1048576,
+        "witnesses": 8388608
+      }
+    },
+    {
+      "id": "cpu4",
+      "raw_report_sha256": "b2694c6e62a6be4219bfa09188115a11431c0b3273d00444d5b4e92c23fd91d9",
+      "summary_sha256": "2e890684b1e0b87ad694849948db132f8da30ef93afa85a492b83f09fd22bf16",
+      "started_unix_ns": 1790010730845362000,
+      "finished_unix_ns": 1790010732283680000,
+      "started_utc": "2026-09-21T17:12:10.845362+00:00",
+      "positions": 153,
+      "passed": true,
+      "accounted": true,
+      "native_captures": 144,
+      "reference_qualification_captures": 9,
+      "all_executable_and_input_seals_unchanged": true,
+      "plan": {
+        "suite": "queens",
+        "profiles": [
+          {
+            "backend": "cpu",
+            "oracle": "auto",
+            "grounder": "eager",
+            "formula_joins": "indexed",
+            "search": "regions",
+            "workers": 4,
+            "completion_workers": 1,
+            "batch_size": 64,
+            "max_completion_scratch_bytes": 268435456
+          },
+          {
+            "backend": "cpu",
+            "oracle": "auto",
+            "grounder": "lazy",
+            "formula_joins": "indexed",
+            "search": "regions",
+            "workers": 4,
+            "completion_workers": 1,
+            "batch_size": 64,
+            "max_completion_scratch_bytes": 268435456
+          }
+        ],
+        "reference_workers": 1,
+        "reference_policy": "qualification_only",
+        "warmups": 1,
+        "repetitions": 4,
+        "memory_runs": 2
+      },
+      "limits": {
+        "answers": {
+          "max_cost_dimensions": 8388608,
+          "max_input_bytes": 8388608,
+          "max_symbols": 8388608,
+          "max_witnesses": 8388608
+        },
+        "campaign_timeout": {
+          "nanos": 0,
+          "secs": 180
+        },
+        "corpus": {
+          "cases": 94,
+          "contract_symbols": 65536,
+          "files": 108,
+          "manifest_bytes": 1048576,
+          "source_bytes": 1048576,
+          "total_source_bytes": 4194304
+        },
+        "max_executable_bytes": 268435456,
+        "max_report_bytes": 536870912,
+        "max_total_capture_bytes": 134217728,
+        "process": {
+          "cleanup_timeout": {
+            "nanos": 0,
+            "secs": 1
+          },
+          "max_output_bytes": 4194304,
+          "timeout": {
+            "nanos": 0,
+            "secs": 10
+          }
+        }
+      },
+      "native_normalization_limits": {
+        "atoms": 262144,
+        "cost_dimensions": 8388608,
+        "input_bytes": 8388608,
+        "spelling_bytes": 8388608,
+        "symbols": 8388608,
+        "value": {
+          "bytes": 16777216,
+          "depth": 128,
+          "nodes": 262144
+        },
+        "value_nodes": 1048576,
+        "witnesses": 8388608
+      }
+    }
+  ],
+  "cells": [
+    {
+      "report": "cpu1",
+      "workload": 0,
+      "profile": 0,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 2,
+        "verified_models": 2,
+        "checked": 2,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "tight_support",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "eager",
+        "search_scope": "original_theory"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 24,
+        "nodes": 410,
+        "roots": 100
+      },
+      "streamed_constraints_all_samples": null,
+      "hybrid_execution_all_samples": null,
+      "search_counter_ranges_all_samples": {
+        "work": [
+          7615,
+          7615
+        ],
+        "candidates": [
+          2,
+          2
+        ],
+        "countermodel_queries": [
+          0,
+          0
+        ],
+        "stable_models": [
+          2,
+          2
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 1,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 7773333,
+          "source_preparation_ns": 1318959,
+          "grounding_ns": 492083,
+          "solving_ns": 246542,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 27,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 6176667,
+          "source_preparation_ns": 334125,
+          "grounding_ns": 211916,
+          "solving_ns": 91291,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 45,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 6171542,
+          "source_preparation_ns": 341042,
+          "grounding_ns": 211667,
+          "solving_ns": 92749,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 80,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 6186875,
+          "source_preparation_ns": 331542,
+          "grounding_ns": 209166,
+          "solving_ns": 95373,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 95,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 4651959,
+          "source_preparation_ns": 340166,
+          "grounding_ns": 212417,
+          "solving_ns": 95792,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 112,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 4657542,
+          "source_preparation_ns": 323292,
+          "grounding_ns": 209334,
+          "solving_ns": 93791,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 117,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 7681500,
+          "source_preparation_ns": 335124,
+          "grounding_ns": 215000,
+          "solving_ns": 96250,
+          "original_validation_ns": null,
+          "peak_rss_bytes": 13811712
+        },
+        {
+          "report_position": 152,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 7708000,
+          "source_preparation_ns": 337667,
+          "grounding_ns": 216750,
+          "solving_ns": 115916,
+          "original_validation_ns": null,
+          "peak_rss_bytes": 13877248
+        }
+      ]
+    },
+    {
+      "report": "cpu1",
+      "workload": 0,
+      "profile": 1,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 2,
+        "verified_models": 2,
+        "checked": 24,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "tight_support",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "mixed",
+        "search_scope": "retained_core"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 24,
+        "nodes": 354,
+        "roots": 72
+      },
+      "streamed_constraints_all_samples": {
+        "templates": 2,
+        "admitted_instances": 28
+      },
+      "hybrid_execution_all_samples": {
+        "core_answers": 24,
+        "accepted": 2,
+        "rejected": 22,
+        "pending": 0,
+        "constraints": {
+          "work": 52902,
+          "substitutions": 273,
+          "scalar_bytes": 0
+        }
+      },
+      "search_counter_ranges_all_samples": {
+        "work": [
+          19642,
+          19642
+        ],
+        "candidates": [
+          24,
+          24
+        ],
+        "countermodel_queries": [
+          0,
+          0
+        ],
+        "stable_models": [
+          24,
+          24
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 2,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 6200666,
+          "source_preparation_ns": 326916,
+          "grounding_ns": 205209,
+          "solving_ns": 724625,
+          "original_validation_ns": 572749,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 28,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 6188708,
+          "source_preparation_ns": 335542,
+          "grounding_ns": 203125,
+          "solving_ns": 713125,
+          "original_validation_ns": 562750,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 46,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 6194958,
+          "source_preparation_ns": 324667,
+          "grounding_ns": 199833,
+          "solving_ns": 707583,
+          "original_validation_ns": 557416,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 79,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 6190709,
+          "source_preparation_ns": 345292,
+          "grounding_ns": 204625,
+          "solving_ns": 714167,
+          "original_validation_ns": 562789,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 96,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 6153209,
+          "source_preparation_ns": 339084,
+          "grounding_ns": 203375,
+          "solving_ns": 705792,
+          "original_validation_ns": 556459,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 111,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 6193166,
+          "source_preparation_ns": 331875,
+          "grounding_ns": 207833,
+          "solving_ns": 714916,
+          "original_validation_ns": 563623,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 118,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 9187416,
+          "source_preparation_ns": 342417,
+          "grounding_ns": 214708,
+          "solving_ns": 729460,
+          "original_validation_ns": 571206,
+          "peak_rss_bytes": 13893632
+        },
+        {
+          "report_position": 151,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 9205667,
+          "source_preparation_ns": 364416,
+          "grounding_ns": 208959,
+          "solving_ns": 727750,
+          "original_validation_ns": 564751,
+          "peak_rss_bytes": 13877248
+        }
+      ]
+    },
+    {
+      "report": "cpu1",
+      "workload": 1,
+      "profile": 0,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 10,
+        "verified_models": 10,
+        "checked": 10,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "tight_support",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "eager",
+        "search_scope": "original_theory"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 35,
+        "nodes": 657,
+        "roots": 165
+      },
+      "streamed_constraints_all_samples": null,
+      "hybrid_execution_all_samples": null,
+      "search_counter_ranges_all_samples": {
+        "work": [
+          22502,
+          22502
+        ],
+        "candidates": [
+          10,
+          10
+        ],
+        "countermodel_queries": [
+          0,
+          0
+        ],
+        "stable_models": [
+          10,
+          10
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 4,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 6216666,
+          "source_preparation_ns": 353749,
+          "grounding_ns": 348917,
+          "solving_ns": 168167,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 30,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 6194750,
+          "source_preparation_ns": 339417,
+          "grounding_ns": 347459,
+          "solving_ns": 168707,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 48,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 6229750,
+          "source_preparation_ns": 330958,
+          "grounding_ns": 342292,
+          "solving_ns": 168541,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 63,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 6219417,
+          "source_preparation_ns": 349541,
+          "grounding_ns": 350500,
+          "solving_ns": 173626,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 98,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 5931083,
+          "source_preparation_ns": 322666,
+          "grounding_ns": 344334,
+          "solving_ns": 163333,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 113,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 6174709,
+          "source_preparation_ns": 331250,
+          "grounding_ns": 342500,
+          "solving_ns": 169168,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 120,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 7690375,
+          "source_preparation_ns": 334458,
+          "grounding_ns": 356042,
+          "solving_ns": 167665,
+          "original_validation_ns": null,
+          "peak_rss_bytes": 14041088
+        },
+        {
+          "report_position": 135,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 7684125,
+          "source_preparation_ns": 348375,
+          "grounding_ns": 363125,
+          "solving_ns": 174458,
+          "original_validation_ns": null,
+          "peak_rss_bytes": 14073856
+        }
+      ]
+    },
+    {
+      "report": "cpu1",
+      "workload": 1,
+      "profile": 1,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 10,
+        "verified_models": 10,
+        "checked": 120,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "tight_support",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "mixed",
+        "search_scope": "retained_core"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 35,
+        "nodes": 537,
+        "roots": 105
+      },
+      "streamed_constraints_all_samples": {
+        "templates": 2,
+        "admitted_instances": 60
+      },
+      "hybrid_execution_all_samples": {
+        "core_answers": 120,
+        "accepted": 10,
+        "rejected": 110,
+        "pending": 0,
+        "constraints": {
+          "work": 503484,
+          "substitutions": 2318,
+          "scalar_bytes": 0
+        }
+      },
+      "search_counter_ranges_all_samples": {
+        "work": [
+          114019,
+          114019
+        ],
+        "candidates": [
+          120,
+          120
+        ],
+        "countermodel_queries": [
+          0,
+          0
+        ],
+        "stable_models": [
+          120,
+          120
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 5,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 12222416,
+          "source_preparation_ns": 329125,
+          "grounding_ns": 345958,
+          "solving_ns": 5937083,
+          "original_validation_ns": 5441372,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 29,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 12236625,
+          "source_preparation_ns": 330583,
+          "grounding_ns": 339917,
+          "solving_ns": 6022706,
+          "original_validation_ns": 5528929,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 47,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 12206500,
+          "source_preparation_ns": 332251,
+          "grounding_ns": 336166,
+          "solving_ns": 6067043,
+          "original_validation_ns": 5564880,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 64,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 12226708,
+          "source_preparation_ns": 368625,
+          "grounding_ns": 420334,
+          "solving_ns": 5904085,
+          "original_validation_ns": 5387382,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 97,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 12411334,
+          "source_preparation_ns": 346251,
+          "grounding_ns": 351166,
+          "solving_ns": 5986625,
+          "original_validation_ns": 5492467,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 114,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 10685084,
+          "source_preparation_ns": 337458,
+          "grounding_ns": 342125,
+          "solving_ns": 6025790,
+          "original_validation_ns": 5531498,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 119,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 15206291,
+          "source_preparation_ns": 368668,
+          "grounding_ns": 344916,
+          "solving_ns": 5972583,
+          "original_validation_ns": 5472208,
+          "peak_rss_bytes": 14024704
+        },
+        {
+          "report_position": 136,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 13702000,
+          "source_preparation_ns": 384042,
+          "grounding_ns": 352709,
+          "solving_ns": 6116792,
+          "original_validation_ns": 5602752,
+          "peak_rss_bytes": 14090240
+        }
+      ]
+    },
+    {
+      "report": "cpu1",
+      "workload": 2,
+      "profile": 0,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 2,
+        "verified_models": 2,
+        "checked": 2,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "tight_support",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "eager",
+        "search_scope": "original_theory"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 24,
+        "nodes": 386,
+        "roots": 112
+      },
+      "streamed_constraints_all_samples": null,
+      "hybrid_execution_all_samples": null,
+      "search_counter_ranges_all_samples": {
+        "work": [
+          7246,
+          7246
+        ],
+        "candidates": [
+          2,
+          2
+        ],
+        "countermodel_queries": [
+          0,
+          0
+        ],
+        "stable_models": [
+          2,
+          2
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 7,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 6238250,
+          "source_preparation_ns": 378291,
+          "grounding_ns": 235834,
+          "solving_ns": 84249,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 31,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 6193500,
+          "source_preparation_ns": 359417,
+          "grounding_ns": 216875,
+          "solving_ns": 86042,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 49,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 6208875,
+          "source_preparation_ns": 383667,
+          "grounding_ns": 217291,
+          "solving_ns": 93958,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 66,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 6219583,
+          "source_preparation_ns": 377625,
+          "grounding_ns": 213875,
+          "solving_ns": 89125,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 81,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 6165666,
+          "source_preparation_ns": 383583,
+          "grounding_ns": 221167,
+          "solving_ns": 89250,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 116,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 6198208,
+          "source_preparation_ns": 368458,
+          "grounding_ns": 215791,
+          "solving_ns": 90542,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 121,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 7679833,
+          "source_preparation_ns": 374375,
+          "grounding_ns": 230291,
+          "solving_ns": 93291,
+          "original_validation_ns": null,
+          "peak_rss_bytes": 14008320
+        },
+        {
+          "report_position": 138,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 7706958,
+          "source_preparation_ns": 363124,
+          "grounding_ns": 224292,
+          "solving_ns": 100748,
+          "original_validation_ns": null,
+          "peak_rss_bytes": 14008320
+        }
+      ]
+    },
+    {
+      "report": "cpu1",
+      "workload": 2,
+      "profile": 1,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 2,
+        "verified_models": 2,
+        "checked": 24,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "tight_support",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "mixed",
+        "search_scope": "retained_core"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 24,
+        "nodes": 274,
+        "roots": 56
+      },
+      "streamed_constraints_all_samples": {
+        "templates": 2,
+        "admitted_instances": 56
+      },
+      "hybrid_execution_all_samples": {
+        "core_answers": 24,
+        "accepted": 2,
+        "rejected": 22,
+        "pending": 0,
+        "constraints": {
+          "work": 52204,
+          "substitutions": 709,
+          "scalar_bytes": 0
+        }
+      },
+      "search_counter_ranges_all_samples": {
+        "work": [
+          15110,
+          15110
+        ],
+        "candidates": [
+          24,
+          24
+        ],
+        "countermodel_queries": [
+          0,
+          0
+        ],
+        "stable_models": [
+          24,
+          24
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 8,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 6189083,
+          "source_preparation_ns": 397750,
+          "grounding_ns": 197375,
+          "solving_ns": 656291,
+          "original_validation_ns": 519711,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 32,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 6191542,
+          "source_preparation_ns": 361458,
+          "grounding_ns": 193625,
+          "solving_ns": 643291,
+          "original_validation_ns": 508626,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 50,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 6218042,
+          "source_preparation_ns": 358833,
+          "grounding_ns": 193625,
+          "solving_ns": 641458,
+          "original_validation_ns": 513958,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 65,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 6214625,
+          "source_preparation_ns": 376167,
+          "grounding_ns": 197208,
+          "solving_ns": 642042,
+          "original_validation_ns": 509378,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 82,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 6167708,
+          "source_preparation_ns": 358166,
+          "grounding_ns": 194042,
+          "solving_ns": 638625,
+          "original_validation_ns": 506751,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 115,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 6209250,
+          "source_preparation_ns": 367751,
+          "grounding_ns": 196250,
+          "solving_ns": 646417,
+          "original_validation_ns": 512457,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 122,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 9222625,
+          "source_preparation_ns": 372541,
+          "grounding_ns": 203000,
+          "solving_ns": 647251,
+          "original_validation_ns": 510377,
+          "peak_rss_bytes": 13811712
+        },
+        {
+          "report_position": 137,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 9219916,
+          "source_preparation_ns": 378249,
+          "grounding_ns": 202875,
+          "solving_ns": 645708,
+          "original_validation_ns": 511500,
+          "peak_rss_bytes": 13828096
+        }
+      ]
+    },
+    {
+      "report": "cpu1",
+      "workload": 3,
+      "profile": 0,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 10,
+        "verified_models": 10,
+        "checked": 10,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "tight_support",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "eager",
+        "search_scope": "original_theory"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 35,
+        "nodes": 652,
+        "roots": 200
+      },
+      "streamed_constraints_all_samples": null,
+      "hybrid_execution_all_samples": null,
+      "search_counter_ranges_all_samples": {
+        "work": [
+          22504,
+          22504
+        ],
+        "candidates": [
+          10,
+          10
+        ],
+        "countermodel_queries": [
+          0,
+          0
+        ],
+        "stable_models": [
+          10,
+          10
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 10,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 6230750,
+          "source_preparation_ns": 371208,
+          "grounding_ns": 353459,
+          "solving_ns": 169250,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 34,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 6171500,
+          "source_preparation_ns": 375999,
+          "grounding_ns": 349500,
+          "solving_ns": 164458,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 52,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 6189209,
+          "source_preparation_ns": 404541,
+          "grounding_ns": 349084,
+          "solving_ns": 167167,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 67,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 6189333,
+          "source_preparation_ns": 363334,
+          "grounding_ns": 346875,
+          "solving_ns": 159998,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 84,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 6198916,
+          "source_preparation_ns": 370624,
+          "grounding_ns": 348209,
+          "solving_ns": 160082,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 99,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 7807750,
+          "source_preparation_ns": 514001,
+          "grounding_ns": 436625,
+          "solving_ns": 201249,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 124,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 7696541,
+          "source_preparation_ns": 375959,
+          "grounding_ns": 381541,
+          "solving_ns": 169417,
+          "original_validation_ns": null,
+          "peak_rss_bytes": 14204928
+        },
+        {
+          "report_position": 139,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 7687084,
+          "source_preparation_ns": 363959,
+          "grounding_ns": 348708,
+          "solving_ns": 159874,
+          "original_validation_ns": null,
+          "peak_rss_bytes": 14057472
+        }
+      ]
+    },
+    {
+      "report": "cpu1",
+      "workload": 3,
+      "profile": 1,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 10,
+        "verified_models": 10,
+        "checked": 120,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "tight_support",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "mixed",
+        "search_scope": "retained_core"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 35,
+        "nodes": 412,
+        "roots": 80
+      },
+      "streamed_constraints_all_samples": {
+        "templates": 2,
+        "admitted_instances": 120
+      },
+      "hybrid_execution_all_samples": {
+        "core_answers": 120,
+        "accepted": 10,
+        "rejected": 110,
+        "pending": 0,
+        "constraints": {
+          "work": 482460,
+          "substitutions": 5403,
+          "scalar_bytes": 0
+        }
+      },
+      "search_counter_ranges_all_samples": {
+        "work": [
+          87323,
+          87323
+        ],
+        "candidates": [
+          120,
+          120
+        ],
+        "countermodel_queries": [
+          0,
+          0
+        ],
+        "stable_models": [
+          120,
+          120
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 11,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 10702625,
+          "source_preparation_ns": 366583,
+          "grounding_ns": 310167,
+          "solving_ns": 5175083,
+          "original_validation_ns": 4750627,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 33,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 10719416,
+          "source_preparation_ns": 365751,
+          "grounding_ns": 310375,
+          "solving_ns": 5108710,
+          "original_validation_ns": 4682877,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 51,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 10740583,
+          "source_preparation_ns": 362958,
+          "grounding_ns": 316250,
+          "solving_ns": 5146416,
+          "original_validation_ns": 4716248,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 68,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 10445709,
+          "source_preparation_ns": 382001,
+          "grounding_ns": 311916,
+          "solving_ns": 5114166,
+          "original_validation_ns": 4688744,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 83,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 10700792,
+          "source_preparation_ns": 365125,
+          "grounding_ns": 310250,
+          "solving_ns": 5162998,
+          "original_validation_ns": 4742544,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 100,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 12384292,
+          "source_preparation_ns": 434751,
+          "grounding_ns": 334083,
+          "solving_ns": 5080375,
+          "original_validation_ns": 4655878,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 123,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 13723125,
+          "source_preparation_ns": 383041,
+          "grounding_ns": 324959,
+          "solving_ns": 5200541,
+          "original_validation_ns": 4774414,
+          "peak_rss_bytes": 13926400
+        },
+        {
+          "report_position": 140,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 13710292,
+          "source_preparation_ns": 383166,
+          "grounding_ns": 321334,
+          "solving_ns": 5218083,
+          "original_validation_ns": 4789379,
+          "peak_rss_bytes": 14139392
+        }
+      ]
+    },
+    {
+      "report": "cpu1",
+      "workload": 4,
+      "profile": 0,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 2,
+        "verified_models": 2,
+        "checked": 2,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "tight_support",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "eager",
+        "search_scope": "original_theory"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 24,
+        "nodes": 596,
+        "roots": 201
+      },
+      "streamed_constraints_all_samples": null,
+      "hybrid_execution_all_samples": null,
+      "search_counter_ranges_all_samples": {
+        "work": [
+          15770,
+          15770
+        ],
+        "candidates": [
+          2,
+          2
+        ],
+        "countermodel_queries": [
+          0,
+          0
+        ],
+        "stable_models": [
+          2,
+          2
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 13,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 6244500,
+          "source_preparation_ns": 381167,
+          "grounding_ns": 239458,
+          "solving_ns": 146043,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 35,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 6167333,
+          "source_preparation_ns": 368292,
+          "grounding_ns": 236375,
+          "solving_ns": 143958,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 53,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 6185042,
+          "source_preparation_ns": 378750,
+          "grounding_ns": 241333,
+          "solving_ns": 149875,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 70,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 6227875,
+          "source_preparation_ns": 398875,
+          "grounding_ns": 247291,
+          "solving_ns": 154666,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 85,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 6189125,
+          "source_preparation_ns": 381167,
+          "grounding_ns": 242958,
+          "solving_ns": 158376,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 102,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 6194333,
+          "source_preparation_ns": 372500,
+          "grounding_ns": 238917,
+          "solving_ns": 150207,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 125,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 7683709,
+          "source_preparation_ns": 385584,
+          "grounding_ns": 248708,
+          "solving_ns": 157792,
+          "original_validation_ns": null,
+          "peak_rss_bytes": 14139392
+        },
+        {
+          "report_position": 142,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 9248417,
+          "source_preparation_ns": 449626,
+          "grounding_ns": 250042,
+          "solving_ns": 150125,
+          "original_validation_ns": null,
+          "peak_rss_bytes": 14024704
+        }
+      ]
+    },
+    {
+      "report": "cpu1",
+      "workload": 4,
+      "profile": 1,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 2,
+        "verified_models": 2,
+        "checked": 1820,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "tight_support",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "mixed",
+        "search_scope": "retained_core"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 24,
+        "nodes": 293,
+        "roots": 49
+      },
+      "streamed_constraints_all_samples": {
+        "templates": 4,
+        "admitted_instances": 152
+      },
+      "hybrid_execution_all_samples": {
+        "core_answers": 1820,
+        "accepted": 2,
+        "rejected": 1818,
+        "pending": 0,
+        "constraints": {
+          "work": 1547220,
+          "substitutions": 49329,
+          "scalar_bytes": 0
+        }
+      },
+      "search_counter_ranges_all_samples": {
+        "work": [
+          930669,
+          930669
+        ],
+        "candidates": [
+          1820,
+          1820
+        ],
+        "countermodel_queries": [
+          0,
+          0
+        ],
+        "stable_models": [
+          1820,
+          1820
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 14,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 22726708,
+          "source_preparation_ns": 372375,
+          "grounding_ns": 207959,
+          "solving_ns": 17964709,
+          "original_validation_ns": 13647154,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 36,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 24265292,
+          "source_preparation_ns": 452417,
+          "grounding_ns": 240375,
+          "solving_ns": 17956585,
+          "original_validation_ns": 13606536,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 54,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 22727208,
+          "source_preparation_ns": 395916,
+          "grounding_ns": 214709,
+          "solving_ns": 17867459,
+          "original_validation_ns": 13612702,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 69,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 23846000,
+          "source_preparation_ns": 383833,
+          "grounding_ns": 206084,
+          "solving_ns": 17887292,
+          "original_validation_ns": 13613437,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 86,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 24245375,
+          "source_preparation_ns": 374375,
+          "grounding_ns": 207083,
+          "solving_ns": 18079166,
+          "original_validation_ns": 13727850,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 101,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 24284292,
+          "source_preparation_ns": 380292,
+          "grounding_ns": 211417,
+          "solving_ns": 18149793,
+          "original_validation_ns": 13767205,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 126,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 25792083,
+          "source_preparation_ns": 380083,
+          "grounding_ns": 218875,
+          "solving_ns": 18057458,
+          "original_validation_ns": 13745321,
+          "peak_rss_bytes": 13975552
+        },
+        {
+          "report_position": 141,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 25761208,
+          "source_preparation_ns": 395917,
+          "grounding_ns": 214375,
+          "solving_ns": 18156708,
+          "original_validation_ns": 13785889,
+          "peak_rss_bytes": 13926400
+        }
+      ]
+    },
+    {
+      "report": "cpu1",
+      "workload": 5,
+      "profile": 0,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 2,
+        "verified_models": 2,
+        "checked": 2,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "tight_support",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "eager",
+        "search_scope": "original_theory"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 56,
+        "nodes": 622,
+        "roots": 150
+      },
+      "streamed_constraints_all_samples": null,
+      "hybrid_execution_all_samples": null,
+      "search_counter_ranges_all_samples": {
+        "work": [
+          11658,
+          11658
+        ],
+        "candidates": [
+          2,
+          2
+        ],
+        "countermodel_queries": [
+          0,
+          0
+        ],
+        "stable_models": [
+          2,
+          2
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 16,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 6286792,
+          "source_preparation_ns": 430082,
+          "grounding_ns": 261459,
+          "solving_ns": 138500,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 38,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 6218625,
+          "source_preparation_ns": 417709,
+          "grounding_ns": 262125,
+          "solving_ns": 138875,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 56,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 6181458,
+          "source_preparation_ns": 413416,
+          "grounding_ns": 253209,
+          "solving_ns": 126999,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 71,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 6216875,
+          "source_preparation_ns": 416791,
+          "grounding_ns": 255667,
+          "solving_ns": 128667,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 88,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 6182083,
+          "source_preparation_ns": 416625,
+          "grounding_ns": 253834,
+          "solving_ns": 127624,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 103,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 6214500,
+          "source_preparation_ns": 412750,
+          "grounding_ns": 254958,
+          "solving_ns": 130333,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 128,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 7693958,
+          "source_preparation_ns": 429791,
+          "grounding_ns": 268208,
+          "solving_ns": 128583,
+          "original_validation_ns": null,
+          "peak_rss_bytes": 14254080
+        },
+        {
+          "report_position": 143,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 9244708,
+          "source_preparation_ns": 455250,
+          "grounding_ns": 258333,
+          "solving_ns": 141167,
+          "original_validation_ns": null,
+          "peak_rss_bytes": 14237696
+        }
+      ]
+    },
+    {
+      "report": "cpu1",
+      "workload": 5,
+      "profile": 1,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 2,
+        "verified_models": 2,
+        "checked": 2,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "tight_support",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "mixed",
+        "search_scope": "retained_core"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 56,
+        "nodes": 622,
+        "roots": 150
+      },
+      "streamed_constraints_all_samples": {
+        "templates": 0,
+        "admitted_instances": 0
+      },
+      "hybrid_execution_all_samples": {
+        "core_answers": 2,
+        "accepted": 2,
+        "rejected": 0,
+        "pending": 0,
+        "constraints": {
+          "work": 0,
+          "substitutions": 0,
+          "scalar_bytes": 0
+        }
+      },
+      "search_counter_ranges_all_samples": {
+        "work": [
+          11658,
+          11658
+        ],
+        "candidates": [
+          2,
+          2
+        ],
+        "countermodel_queries": [
+          0,
+          0
+        ],
+        "stable_models": [
+          2,
+          2
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 17,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 6196208,
+          "source_preparation_ns": 411458,
+          "grounding_ns": 248500,
+          "solving_ns": 139668,
+          "original_validation_ns": 333,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 37,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 6292541,
+          "source_preparation_ns": 420916,
+          "grounding_ns": 252333,
+          "solving_ns": 143874,
+          "original_validation_ns": 292,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 55,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 6179292,
+          "source_preparation_ns": 431167,
+          "grounding_ns": 252292,
+          "solving_ns": 138041,
+          "original_validation_ns": 208,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 72,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 6230208,
+          "source_preparation_ns": 412292,
+          "grounding_ns": 247833,
+          "solving_ns": 146917,
+          "original_validation_ns": 374,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 87,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 6197000,
+          "source_preparation_ns": 422625,
+          "grounding_ns": 260625,
+          "solving_ns": 142167,
+          "original_validation_ns": 208,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 104,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 6182542,
+          "source_preparation_ns": 414500,
+          "grounding_ns": 251750,
+          "solving_ns": 140501,
+          "original_validation_ns": 458,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 127,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 7709041,
+          "source_preparation_ns": 435250,
+          "grounding_ns": 263375,
+          "solving_ns": 143834,
+          "original_validation_ns": 333,
+          "peak_rss_bytes": 14188544
+        },
+        {
+          "report_position": 144,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 7696708,
+          "source_preparation_ns": 456208,
+          "grounding_ns": 270208,
+          "solving_ns": 144999,
+          "original_validation_ns": 416,
+          "peak_rss_bytes": 14221312
+        }
+      ]
+    },
+    {
+      "report": "cpu1",
+      "workload": 6,
+      "profile": 0,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 7,
+        "verified_models": 7,
+        "checked": 7,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "countermodel",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "eager",
+        "search_scope": "original_theory"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 18,
+        "nodes": 122,
+        "roots": 45
+      },
+      "streamed_constraints_all_samples": null,
+      "hybrid_execution_all_samples": null,
+      "search_counter_ranges_all_samples": {
+        "work": [
+          3894,
+          3894
+        ],
+        "candidates": [
+          7,
+          7
+        ],
+        "countermodel_queries": [
+          7,
+          7
+        ],
+        "stable_models": [
+          7,
+          7
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 19,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 4697000,
+          "source_preparation_ns": 207750,
+          "grounding_ns": 83083,
+          "solving_ns": 108957,
+          "original_validation_ns": 2541,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 39,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 4671042,
+          "source_preparation_ns": 194792,
+          "grounding_ns": 80000,
+          "solving_ns": 85502,
+          "original_validation_ns": 2625,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 57,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 4657917,
+          "source_preparation_ns": 195042,
+          "grounding_ns": 80167,
+          "solving_ns": 87124,
+          "original_validation_ns": 2669,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 74,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 4603375,
+          "source_preparation_ns": 195751,
+          "grounding_ns": 79541,
+          "solving_ns": 89793,
+          "original_validation_ns": 2791,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 89,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 4664500,
+          "source_preparation_ns": 202457,
+          "grounding_ns": 80667,
+          "solving_ns": 86666,
+          "original_validation_ns": 2541,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 106,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 4654500,
+          "source_preparation_ns": 199333,
+          "grounding_ns": 80542,
+          "solving_ns": 84541,
+          "original_validation_ns": 2333,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 129,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 7719875,
+          "source_preparation_ns": 230541,
+          "grounding_ns": 84250,
+          "solving_ns": 93917,
+          "original_validation_ns": 2543,
+          "peak_rss_bytes": 13271040
+        },
+        {
+          "report_position": 146,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 7720666,
+          "source_preparation_ns": 207375,
+          "grounding_ns": 83791,
+          "solving_ns": 83913,
+          "original_validation_ns": 2375,
+          "peak_rss_bytes": 13205504
+        }
+      ]
+    },
+    {
+      "report": "cpu1",
+      "workload": 6,
+      "profile": 1,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 7,
+        "verified_models": 7,
+        "checked": 64,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "countermodel",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "mixed",
+        "search_scope": "retained_core"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 18,
+        "nodes": 92,
+        "roots": 30
+      },
+      "streamed_constraints_all_samples": {
+        "templates": 1,
+        "admitted_instances": 15
+      },
+      "hybrid_execution_all_samples": {
+        "core_answers": 64,
+        "accepted": 7,
+        "rejected": 57,
+        "pending": 0,
+        "constraints": {
+          "work": 9291,
+          "substitutions": 392,
+          "scalar_bytes": 0
+        }
+      },
+      "search_counter_ranges_all_samples": {
+        "work": [
+          17556,
+          17556
+        ],
+        "candidates": [
+          64,
+          64
+        ],
+        "countermodel_queries": [
+          64,
+          64
+        ],
+        "stable_models": [
+          64,
+          64
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 20,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 4655042,
+          "source_preparation_ns": 203458,
+          "grounding_ns": 76625,
+          "solving_ns": 417167,
+          "original_validation_ns": 140621,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 40,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 6180083,
+          "source_preparation_ns": 200124,
+          "grounding_ns": 72292,
+          "solving_ns": 409874,
+          "original_validation_ns": 136002,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 58,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 6183750,
+          "source_preparation_ns": 195834,
+          "grounding_ns": 75250,
+          "solving_ns": 409124,
+          "original_validation_ns": 136126,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 73,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 4664042,
+          "source_preparation_ns": 199292,
+          "grounding_ns": 86583,
+          "solving_ns": 411749,
+          "original_validation_ns": 137501,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 90,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 4683125,
+          "source_preparation_ns": 203376,
+          "grounding_ns": 75375,
+          "solving_ns": 401334,
+          "original_validation_ns": 135543,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 105,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 6184500,
+          "source_preparation_ns": 200916,
+          "grounding_ns": 83500,
+          "solving_ns": 421292,
+          "original_validation_ns": 141079,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 130,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 7702000,
+          "source_preparation_ns": 202792,
+          "grounding_ns": 79375,
+          "solving_ns": 404167,
+          "original_validation_ns": 136879,
+          "peak_rss_bytes": 13352960
+        },
+        {
+          "report_position": 145,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 7692500,
+          "source_preparation_ns": 207958,
+          "grounding_ns": 79417,
+          "solving_ns": 418959,
+          "original_validation_ns": 143791,
+          "peak_rss_bytes": 13287424
+        }
+      ]
+    },
+    {
+      "report": "cpu1",
+      "workload": 7,
+      "profile": 0,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 2,
+        "verified_models": 2,
+        "checked": 2,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "countermodel",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "eager",
+        "search_scope": "original_theory"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 74,
+        "nodes": 2020,
+        "roots": 659
+      },
+      "streamed_constraints_all_samples": null,
+      "hybrid_execution_all_samples": null,
+      "search_counter_ranges_all_samples": {
+        "work": [
+          29206,
+          29206
+        ],
+        "candidates": [
+          2,
+          2
+        ],
+        "countermodel_queries": [
+          2,
+          2
+        ],
+        "stable_models": [
+          2,
+          2
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 22,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 6254833,
+          "source_preparation_ns": 217751,
+          "grounding_ns": 393083,
+          "solving_ns": 234750,
+          "original_validation_ns": 7208,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 42,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 6181333,
+          "source_preparation_ns": 224500,
+          "grounding_ns": 393042,
+          "solving_ns": 239791,
+          "original_validation_ns": 7542,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 60,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 6190625,
+          "source_preparation_ns": 209875,
+          "grounding_ns": 378291,
+          "solving_ns": 238375,
+          "original_validation_ns": 6916,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 75,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 6199208,
+          "source_preparation_ns": 212459,
+          "grounding_ns": 385416,
+          "solving_ns": 239958,
+          "original_validation_ns": 7042,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 92,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 6224625,
+          "source_preparation_ns": 217126,
+          "grounding_ns": 387000,
+          "solving_ns": 241500,
+          "original_validation_ns": 6833,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 107,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 6195583,
+          "source_preparation_ns": 212416,
+          "grounding_ns": 373542,
+          "solving_ns": 233168,
+          "original_validation_ns": 5958,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 132,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 7697250,
+          "source_preparation_ns": 230042,
+          "grounding_ns": 394875,
+          "solving_ns": 241917,
+          "original_validation_ns": 6375,
+          "peak_rss_bytes": 13926400
+        },
+        {
+          "report_position": 147,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 7706750,
+          "source_preparation_ns": 231459,
+          "grounding_ns": 391958,
+          "solving_ns": 286083,
+          "original_validation_ns": 7625,
+          "peak_rss_bytes": 13877248
+        }
+      ]
+    },
+    {
+      "report": "cpu1",
+      "workload": 7,
+      "profile": 1,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 2,
+        "verified_models": 2,
+        "checked": 2,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "countermodel",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "mixed",
+        "search_scope": "retained_core"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 74,
+        "nodes": 428,
+        "roots": 147
+      },
+      "streamed_constraints_all_samples": {
+        "templates": 1,
+        "admitted_instances": 512
+      },
+      "hybrid_execution_all_samples": {
+        "core_answers": 2,
+        "accepted": 2,
+        "rejected": 0,
+        "pending": 0,
+        "constraints": {
+          "work": 102330,
+          "substitutions": 1024,
+          "scalar_bytes": 0
+        }
+      },
+      "search_counter_ranges_all_samples": {
+        "work": [
+          6830,
+          6830
+        ],
+        "candidates": [
+          2,
+          2
+        ],
+        "countermodel_queries": [
+          2,
+          2
+        ],
+        "stable_models": [
+          2,
+          2
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 23,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 6188416,
+          "source_preparation_ns": 212875,
+          "grounding_ns": 306125,
+          "solving_ns": 422959,
+          "original_validation_ns": 309582,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 41,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 6165667,
+          "source_preparation_ns": 217458,
+          "grounding_ns": 303792,
+          "solving_ns": 431041,
+          "original_validation_ns": 318876,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 59,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 6203250,
+          "source_preparation_ns": 212917,
+          "grounding_ns": 302500,
+          "solving_ns": 426210,
+          "original_validation_ns": 316166,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 76,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 6181208,
+          "source_preparation_ns": 212833,
+          "grounding_ns": 303208,
+          "solving_ns": 447709,
+          "original_validation_ns": 338918,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 91,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 6180417,
+          "source_preparation_ns": 219208,
+          "grounding_ns": 302584,
+          "solving_ns": 420834,
+          "original_validation_ns": 312417,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 108,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 6199417,
+          "source_preparation_ns": 216459,
+          "grounding_ns": 305291,
+          "solving_ns": 425583,
+          "original_validation_ns": 315124,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 131,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 7697750,
+          "source_preparation_ns": 219374,
+          "grounding_ns": 309125,
+          "solving_ns": 469958,
+          "original_validation_ns": 341832,
+          "peak_rss_bytes": 13500416
+        },
+        {
+          "report_position": 148,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 7694500,
+          "source_preparation_ns": 225584,
+          "grounding_ns": 311958,
+          "solving_ns": 433041,
+          "original_validation_ns": 312375,
+          "peak_rss_bytes": 13516800
+        }
+      ]
+    },
+    {
+      "report": "cpu1",
+      "workload": 8,
+      "profile": 0,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 2,
+        "verified_models": 2,
+        "checked": 2,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "countermodel",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "eager",
+        "search_scope": "original_theory"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 158,
+        "nodes": 6240,
+        "roots": 2043
+      },
+      "streamed_constraints_all_samples": null,
+      "hybrid_execution_all_samples": null,
+      "search_counter_ranges_all_samples": {
+        "work": [
+          89362,
+          89362
+        ],
+        "candidates": [
+          2,
+          2
+        ],
+        "countermodel_queries": [
+          2,
+          2
+        ],
+        "stable_models": [
+          2,
+          2
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 25,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 6189416,
+          "source_preparation_ns": 226500,
+          "grounding_ns": 1045625,
+          "solving_ns": 572542,
+          "original_validation_ns": 17500,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 43,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 7228541,
+          "source_preparation_ns": 231208,
+          "grounding_ns": 1084959,
+          "solving_ns": 586667,
+          "original_validation_ns": 17874,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 61,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 6173333,
+          "source_preparation_ns": 229333,
+          "grounding_ns": 1073625,
+          "solving_ns": 582958,
+          "original_validation_ns": 17958,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 78,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 6169375,
+          "source_preparation_ns": 217416,
+          "grounding_ns": 1040833,
+          "solving_ns": 578083,
+          "original_validation_ns": 18333,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 93,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 6174833,
+          "source_preparation_ns": 228460,
+          "grounding_ns": 1039541,
+          "solving_ns": 576292,
+          "original_validation_ns": 17708,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 110,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 6168125,
+          "source_preparation_ns": 225208,
+          "grounding_ns": 1039417,
+          "solving_ns": 585793,
+          "original_validation_ns": 16083,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 133,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 9248375,
+          "source_preparation_ns": 239584,
+          "grounding_ns": 1101708,
+          "solving_ns": 573625,
+          "original_validation_ns": 17459,
+          "peak_rss_bytes": 15122432
+        },
+        {
+          "report_position": 150,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 9267833,
+          "source_preparation_ns": 235250,
+          "grounding_ns": 1080542,
+          "solving_ns": 582375,
+          "original_validation_ns": 18209,
+          "peak_rss_bytes": 15040512
+        }
+      ]
+    },
+    {
+      "report": "cpu1",
+      "workload": 8,
+      "profile": 1,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 2,
+        "verified_models": 2,
+        "checked": 2,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "countermodel",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "mixed",
+        "search_scope": "retained_core"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 158,
+        "nodes": 924,
+        "roots": 315
+      },
+      "streamed_constraints_all_samples": {
+        "templates": 1,
+        "admitted_instances": 1728
+      },
+      "hybrid_execution_all_samples": {
+        "core_answers": 2,
+        "accepted": 2,
+        "rejected": 0,
+        "pending": 0,
+        "constraints": {
+          "work": 404914,
+          "substitutions": 3456,
+          "scalar_bytes": 0
+        }
+      },
+      "search_counter_ranges_all_samples": {
+        "work": [
+          14758,
+          14758
+        ],
+        "candidates": [
+          2,
+          2
+        ],
+        "countermodel_queries": [
+          2,
+          2
+        ],
+        "stable_models": [
+          2,
+          2
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 26,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 7710750,
+          "source_preparation_ns": 219126,
+          "grounding_ns": 834166,
+          "solving_ns": 1319125,
+          "original_validation_ns": 1154335,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 44,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 7723542,
+          "source_preparation_ns": 217666,
+          "grounding_ns": 830125,
+          "solving_ns": 1330667,
+          "original_validation_ns": 1164541,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 62,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 7724167,
+          "source_preparation_ns": 241917,
+          "grounding_ns": 854708,
+          "solving_ns": 1308042,
+          "original_validation_ns": 1125583,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 77,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 7691083,
+          "source_preparation_ns": 230834,
+          "grounding_ns": 875583,
+          "solving_ns": 1360416,
+          "original_validation_ns": 1184542,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 94,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 7695292,
+          "source_preparation_ns": 219792,
+          "grounding_ns": 831375,
+          "solving_ns": 1309625,
+          "original_validation_ns": 1139582,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 109,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 7708209,
+          "source_preparation_ns": 221167,
+          "grounding_ns": 836333,
+          "solving_ns": 1352124,
+          "original_validation_ns": 1183834,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 134,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 9204458,
+          "source_preparation_ns": 237583,
+          "grounding_ns": 842750,
+          "solving_ns": 1368334,
+          "original_validation_ns": 1197251,
+          "peak_rss_bytes": 13877248
+        },
+        {
+          "report_position": 149,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 9188667,
+          "source_preparation_ns": 232083,
+          "grounding_ns": 843167,
+          "solving_ns": 1313376,
+          "original_validation_ns": 1138917,
+          "peak_rss_bytes": 13877248
+        }
+      ]
+    },
+    {
+      "report": "cpu4",
+      "workload": 0,
+      "profile": 0,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 2,
+        "verified_models": 2,
+        "checked": 2,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "tight_support",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "eager",
+        "search_scope": "original_theory"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 24,
+        "nodes": 410,
+        "roots": 100
+      },
+      "streamed_constraints_all_samples": null,
+      "hybrid_execution_all_samples": null,
+      "search_counter_ranges_all_samples": {
+        "work": [
+          7615,
+          7615
+        ],
+        "candidates": [
+          2,
+          2
+        ],
+        "countermodel_queries": [
+          0,
+          0
+        ],
+        "stable_models": [
+          2,
+          2
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 1,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 6003833,
+          "source_preparation_ns": 405124,
+          "grounding_ns": 237834,
+          "solving_ns": 184459,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 27,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 6190250,
+          "source_preparation_ns": 338625,
+          "grounding_ns": 211542,
+          "solving_ns": 148209,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 45,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 6189333,
+          "source_preparation_ns": 344292,
+          "grounding_ns": 219667,
+          "solving_ns": 132501,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 80,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 6231250,
+          "source_preparation_ns": 338541,
+          "grounding_ns": 214167,
+          "solving_ns": 144667,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 95,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 6190042,
+          "source_preparation_ns": 341501,
+          "grounding_ns": 213291,
+          "solving_ns": 149291,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 112,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 6196500,
+          "source_preparation_ns": 323333,
+          "grounding_ns": 208458,
+          "solving_ns": 135333,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 117,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 7677500,
+          "source_preparation_ns": 346458,
+          "grounding_ns": 215667,
+          "solving_ns": 138417,
+          "original_validation_ns": null,
+          "peak_rss_bytes": 13975552
+        },
+        {
+          "report_position": 152,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 7685125,
+          "source_preparation_ns": 335251,
+          "grounding_ns": 214208,
+          "solving_ns": 135459,
+          "original_validation_ns": null,
+          "peak_rss_bytes": 13811712
+        }
+      ]
+    },
+    {
+      "report": "cpu4",
+      "workload": 0,
+      "profile": 1,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 2,
+        "verified_models": 2,
+        "checked": 24,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "tight_support",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "mixed",
+        "search_scope": "retained_core"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 24,
+        "nodes": 354,
+        "roots": 72
+      },
+      "streamed_constraints_all_samples": {
+        "templates": 2,
+        "admitted_instances": 28
+      },
+      "hybrid_execution_all_samples": {
+        "core_answers": 24,
+        "accepted": 2,
+        "rejected": 22,
+        "pending": 0,
+        "constraints": {
+          "work": 52902,
+          "substitutions": 273,
+          "scalar_bytes": 0
+        }
+      },
+      "search_counter_ranges_all_samples": {
+        "work": [
+          19642,
+          19642
+        ],
+        "candidates": [
+          24,
+          24
+        ],
+        "countermodel_queries": [
+          0,
+          0
+        ],
+        "stable_models": [
+          24,
+          24
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 2,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 5775500,
+          "source_preparation_ns": 343918,
+          "grounding_ns": 210166,
+          "solving_ns": 742250,
+          "original_validation_ns": 582248,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 28,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 6199291,
+          "source_preparation_ns": 329167,
+          "grounding_ns": 202500,
+          "solving_ns": 736958,
+          "original_validation_ns": 580455,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 46,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 6224500,
+          "source_preparation_ns": 325209,
+          "grounding_ns": 200541,
+          "solving_ns": 754708,
+          "original_validation_ns": 592164,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 79,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 6212583,
+          "source_preparation_ns": 332500,
+          "grounding_ns": 206125,
+          "solving_ns": 756417,
+          "original_validation_ns": 591664,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 96,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 6198916,
+          "source_preparation_ns": 332625,
+          "grounding_ns": 201250,
+          "solving_ns": 756333,
+          "original_validation_ns": 594498,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 111,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 5729666,
+          "source_preparation_ns": 348126,
+          "grounding_ns": 204416,
+          "solving_ns": 746166,
+          "original_validation_ns": 580999,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 118,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 9212292,
+          "source_preparation_ns": 327084,
+          "grounding_ns": 205625,
+          "solving_ns": 752416,
+          "original_validation_ns": 589458,
+          "peak_rss_bytes": 13828096
+        },
+        {
+          "report_position": 151,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 9225750,
+          "source_preparation_ns": 349000,
+          "grounding_ns": 211459,
+          "solving_ns": 773501,
+          "original_validation_ns": 609291,
+          "peak_rss_bytes": 13910016
+        }
+      ]
+    },
+    {
+      "report": "cpu4",
+      "workload": 1,
+      "profile": 0,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 10,
+        "verified_models": 10,
+        "checked": 10,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "tight_support",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "eager",
+        "search_scope": "original_theory"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 35,
+        "nodes": 657,
+        "roots": 165
+      },
+      "streamed_constraints_all_samples": null,
+      "hybrid_execution_all_samples": null,
+      "search_counter_ranges_all_samples": {
+        "work": [
+          22502,
+          22502
+        ],
+        "candidates": [
+          10,
+          10
+        ],
+        "countermodel_queries": [
+          0,
+          0
+        ],
+        "stable_models": [
+          10,
+          10
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 4,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 6255666,
+          "source_preparation_ns": 341959,
+          "grounding_ns": 350875,
+          "solving_ns": 194790,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 30,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 6278875,
+          "source_preparation_ns": 389625,
+          "grounding_ns": 366125,
+          "solving_ns": 192581,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 48,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 6224500,
+          "source_preparation_ns": 335916,
+          "grounding_ns": 345875,
+          "solving_ns": 179167,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 63,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 6186375,
+          "source_preparation_ns": 336042,
+          "grounding_ns": 347208,
+          "solving_ns": 191419,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 98,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 6228875,
+          "source_preparation_ns": 340501,
+          "grounding_ns": 345625,
+          "solving_ns": 186374,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 113,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 6203583,
+          "source_preparation_ns": 328999,
+          "grounding_ns": 348292,
+          "solving_ns": 186498,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 120,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 7692542,
+          "source_preparation_ns": 358084,
+          "grounding_ns": 361875,
+          "solving_ns": 178583,
+          "original_validation_ns": null,
+          "peak_rss_bytes": 14090240
+        },
+        {
+          "report_position": 135,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 9004125,
+          "source_preparation_ns": 357250,
+          "grounding_ns": 355292,
+          "solving_ns": 172248,
+          "original_validation_ns": null,
+          "peak_rss_bytes": 14041088
+        }
+      ]
+    },
+    {
+      "report": "cpu4",
+      "workload": 1,
+      "profile": 1,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 10,
+        "verified_models": 10,
+        "checked": 120,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "tight_support",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "mixed",
+        "search_scope": "retained_core"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 35,
+        "nodes": 537,
+        "roots": 105
+      },
+      "streamed_constraints_all_samples": {
+        "templates": 2,
+        "admitted_instances": 60
+      },
+      "hybrid_execution_all_samples": {
+        "core_answers": 120,
+        "accepted": 10,
+        "rejected": 110,
+        "pending": 0,
+        "constraints": {
+          "work": 503484,
+          "substitutions": 2318,
+          "scalar_bytes": 0
+        }
+      },
+      "search_counter_ranges_all_samples": {
+        "work": [
+          114019,
+          114019
+        ],
+        "candidates": [
+          120,
+          120
+        ],
+        "countermodel_queries": [
+          0,
+          0
+        ],
+        "stable_models": [
+          120,
+          120
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 5,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 12254791,
+          "source_preparation_ns": 335834,
+          "grounding_ns": 338000,
+          "solving_ns": 5888541,
+          "original_validation_ns": 5589957,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 29,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 12237250,
+          "source_preparation_ns": 327916,
+          "grounding_ns": 334459,
+          "solving_ns": 6057915,
+          "original_validation_ns": 5777500,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 47,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 12222125,
+          "source_preparation_ns": 339125,
+          "grounding_ns": 337750,
+          "solving_ns": 5903835,
+          "original_validation_ns": 5632667,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 64,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 10691333,
+          "source_preparation_ns": 332500,
+          "grounding_ns": 335125,
+          "solving_ns": 5837626,
+          "original_validation_ns": 5569989,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 97,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 10694167,
+          "source_preparation_ns": 334291,
+          "grounding_ns": 339709,
+          "solving_ns": 5928542,
+          "original_validation_ns": 5663456,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 114,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 12230000,
+          "source_preparation_ns": 334249,
+          "grounding_ns": 338084,
+          "solving_ns": 5964333,
+          "original_validation_ns": 5689413,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 119,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 13707875,
+          "source_preparation_ns": 358499,
+          "grounding_ns": 356042,
+          "solving_ns": 5945962,
+          "original_validation_ns": 5661623,
+          "peak_rss_bytes": 14221312
+        },
+        {
+          "report_position": 136,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 13532333,
+          "source_preparation_ns": 345458,
+          "grounding_ns": 351125,
+          "solving_ns": 5981794,
+          "original_validation_ns": 5695086,
+          "peak_rss_bytes": 14254080
+        }
+      ]
+    },
+    {
+      "report": "cpu4",
+      "workload": 2,
+      "profile": 0,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 2,
+        "verified_models": 2,
+        "checked": 2,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "tight_support",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "eager",
+        "search_scope": "original_theory"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 24,
+        "nodes": 386,
+        "roots": 112
+      },
+      "streamed_constraints_all_samples": null,
+      "hybrid_execution_all_samples": null,
+      "search_counter_ranges_all_samples": {
+        "work": [
+          7246,
+          7246
+        ],
+        "candidates": [
+          2,
+          2
+        ],
+        "countermodel_queries": [
+          0,
+          0
+        ],
+        "stable_models": [
+          2,
+          2
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 7,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 6261500,
+          "source_preparation_ns": 460584,
+          "grounding_ns": 263875,
+          "solving_ns": 154999,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 31,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 6237084,
+          "source_preparation_ns": 382041,
+          "grounding_ns": 221084,
+          "solving_ns": 134375,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 49,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 6194917,
+          "source_preparation_ns": 367251,
+          "grounding_ns": 218083,
+          "solving_ns": 133332,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 66,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 6196209,
+          "source_preparation_ns": 360417,
+          "grounding_ns": 215916,
+          "solving_ns": 136208,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 81,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 6198959,
+          "source_preparation_ns": 371583,
+          "grounding_ns": 215000,
+          "solving_ns": 132375,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 116,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 6190292,
+          "source_preparation_ns": 362500,
+          "grounding_ns": 217958,
+          "solving_ns": 133957,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 121,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 7709166,
+          "source_preparation_ns": 389791,
+          "grounding_ns": 225792,
+          "solving_ns": 132585,
+          "original_validation_ns": null,
+          "peak_rss_bytes": 13910016
+        },
+        {
+          "report_position": 138,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 7698416,
+          "source_preparation_ns": 377750,
+          "grounding_ns": 222333,
+          "solving_ns": 133960,
+          "original_validation_ns": null,
+          "peak_rss_bytes": 14024704
+        }
+      ]
+    },
+    {
+      "report": "cpu4",
+      "workload": 2,
+      "profile": 1,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 2,
+        "verified_models": 2,
+        "checked": 24,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "tight_support",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "mixed",
+        "search_scope": "retained_core"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 24,
+        "nodes": 274,
+        "roots": 56
+      },
+      "streamed_constraints_all_samples": {
+        "templates": 2,
+        "admitted_instances": 56
+      },
+      "hybrid_execution_all_samples": {
+        "core_answers": 24,
+        "accepted": 2,
+        "rejected": 22,
+        "pending": 0,
+        "constraints": {
+          "work": 52204,
+          "substitutions": 709,
+          "scalar_bytes": 0
+        }
+      },
+      "search_counter_ranges_all_samples": {
+        "work": [
+          15110,
+          15110
+        ],
+        "candidates": [
+          24,
+          24
+        ],
+        "countermodel_queries": [
+          0,
+          0
+        ],
+        "stable_models": [
+          24,
+          24
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 8,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 6318875,
+          "source_preparation_ns": 428417,
+          "grounding_ns": 232750,
+          "solving_ns": 735418,
+          "original_validation_ns": 561999,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 32,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 6231542,
+          "source_preparation_ns": 358708,
+          "grounding_ns": 194167,
+          "solving_ns": 691917,
+          "original_validation_ns": 536167,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 50,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 6215000,
+          "source_preparation_ns": 354333,
+          "grounding_ns": 191000,
+          "solving_ns": 695710,
+          "original_validation_ns": 546290,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 65,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 6196292,
+          "source_preparation_ns": 362917,
+          "grounding_ns": 195250,
+          "solving_ns": 662375,
+          "original_validation_ns": 518872,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 82,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 6195291,
+          "source_preparation_ns": 359958,
+          "grounding_ns": 192875,
+          "solving_ns": 667623,
+          "original_validation_ns": 529044,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 115,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 6213291,
+          "source_preparation_ns": 375959,
+          "grounding_ns": 196583,
+          "solving_ns": 672251,
+          "original_validation_ns": 528456,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 122,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 9239667,
+          "source_preparation_ns": 383625,
+          "grounding_ns": 201542,
+          "solving_ns": 698208,
+          "original_validation_ns": 549377,
+          "peak_rss_bytes": 14041088
+        },
+        {
+          "report_position": 137,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 9210458,
+          "source_preparation_ns": 379540,
+          "grounding_ns": 207959,
+          "solving_ns": 704626,
+          "original_validation_ns": 556335,
+          "peak_rss_bytes": 13975552
+        }
+      ]
+    },
+    {
+      "report": "cpu4",
+      "workload": 3,
+      "profile": 0,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 10,
+        "verified_models": 10,
+        "checked": 10,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "tight_support",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "eager",
+        "search_scope": "original_theory"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 35,
+        "nodes": 652,
+        "roots": 200
+      },
+      "streamed_constraints_all_samples": null,
+      "hybrid_execution_all_samples": null,
+      "search_counter_ranges_all_samples": {
+        "work": [
+          22504,
+          22504
+        ],
+        "candidates": [
+          10,
+          10
+        ],
+        "countermodel_queries": [
+          0,
+          0
+        ],
+        "stable_models": [
+          10,
+          10
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 10,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 7803500,
+          "source_preparation_ns": 471875,
+          "grounding_ns": 399375,
+          "solving_ns": 224167,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 34,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 6199125,
+          "source_preparation_ns": 368874,
+          "grounding_ns": 345959,
+          "solving_ns": 175835,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 52,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 6211209,
+          "source_preparation_ns": 368750,
+          "grounding_ns": 347250,
+          "solving_ns": 172832,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 67,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 6211209,
+          "source_preparation_ns": 371415,
+          "grounding_ns": 348334,
+          "solving_ns": 180624,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 84,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 6184917,
+          "source_preparation_ns": 378584,
+          "grounding_ns": 350750,
+          "solving_ns": 187582,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 99,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 6222125,
+          "source_preparation_ns": 379250,
+          "grounding_ns": 351750,
+          "solving_ns": 168666,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 124,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 9228209,
+          "source_preparation_ns": 366167,
+          "grounding_ns": 375208,
+          "solving_ns": 170960,
+          "original_validation_ns": null,
+          "peak_rss_bytes": 14172160
+        },
+        {
+          "report_position": 139,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 7703792,
+          "source_preparation_ns": 371459,
+          "grounding_ns": 355791,
+          "solving_ns": 168460,
+          "original_validation_ns": null,
+          "peak_rss_bytes": 14090240
+        }
+      ]
+    },
+    {
+      "report": "cpu4",
+      "workload": 3,
+      "profile": 1,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 10,
+        "verified_models": 10,
+        "checked": 120,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "tight_support",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "mixed",
+        "search_scope": "retained_core"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 35,
+        "nodes": 412,
+        "roots": 80
+      },
+      "streamed_constraints_all_samples": {
+        "templates": 2,
+        "admitted_instances": 120
+      },
+      "hybrid_execution_all_samples": {
+        "core_answers": 120,
+        "accepted": 10,
+        "rejected": 110,
+        "pending": 0,
+        "constraints": {
+          "work": 482460,
+          "substitutions": 5403,
+          "scalar_bytes": 0
+        }
+      },
+      "search_counter_ranges_all_samples": {
+        "work": [
+          87323,
+          87323
+        ],
+        "candidates": [
+          120,
+          120
+        ],
+        "countermodel_queries": [
+          0,
+          0
+        ],
+        "stable_models": [
+          120,
+          120
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 11,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 12315417,
+          "source_preparation_ns": 422459,
+          "grounding_ns": 336125,
+          "solving_ns": 5140875,
+          "original_validation_ns": 4879959,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 33,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 10234334,
+          "source_preparation_ns": 372250,
+          "grounding_ns": 313792,
+          "solving_ns": 5098585,
+          "original_validation_ns": 4858286,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 51,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 10729750,
+          "source_preparation_ns": 360876,
+          "grounding_ns": 306250,
+          "solving_ns": 5080625,
+          "original_validation_ns": 4837171,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 68,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 10749542,
+          "source_preparation_ns": 357749,
+          "grounding_ns": 307084,
+          "solving_ns": 5055875,
+          "original_validation_ns": 4807753,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 83,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 10702292,
+          "source_preparation_ns": 367083,
+          "grounding_ns": 310792,
+          "solving_ns": 5069374,
+          "original_validation_ns": 4813666,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 100,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 10712625,
+          "source_preparation_ns": 363374,
+          "grounding_ns": 310542,
+          "solving_ns": 5122708,
+          "original_validation_ns": 4844756,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 123,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 13758917,
+          "source_preparation_ns": 380875,
+          "grounding_ns": 321708,
+          "solving_ns": 5211544,
+          "original_validation_ns": 4950084,
+          "peak_rss_bytes": 14106624
+        },
+        {
+          "report_position": 140,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 13511834,
+          "source_preparation_ns": 381791,
+          "grounding_ns": 323500,
+          "solving_ns": 5199039,
+          "original_validation_ns": 4931952,
+          "peak_rss_bytes": 14254080
+        }
+      ]
+    },
+    {
+      "report": "cpu4",
+      "workload": 4,
+      "profile": 0,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 2,
+        "verified_models": 2,
+        "checked": 2,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "tight_support",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "eager",
+        "search_scope": "original_theory"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 24,
+        "nodes": 596,
+        "roots": 201
+      },
+      "streamed_constraints_all_samples": null,
+      "hybrid_execution_all_samples": null,
+      "search_counter_ranges_all_samples": {
+        "work": [
+          15770,
+          15770
+        ],
+        "candidates": [
+          2,
+          2
+        ],
+        "countermodel_queries": [
+          0,
+          0
+        ],
+        "stable_models": [
+          2,
+          2
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 13,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 6305125,
+          "source_preparation_ns": 393834,
+          "grounding_ns": 249833,
+          "solving_ns": 184125,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 35,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 6206250,
+          "source_preparation_ns": 382335,
+          "grounding_ns": 244541,
+          "solving_ns": 174457,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 53,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 6198584,
+          "source_preparation_ns": 374791,
+          "grounding_ns": 239750,
+          "solving_ns": 184959,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 70,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 6263000,
+          "source_preparation_ns": 395333,
+          "grounding_ns": 244667,
+          "solving_ns": 173708,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 85,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 6192417,
+          "source_preparation_ns": 375333,
+          "grounding_ns": 242250,
+          "solving_ns": 180542,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 102,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 5949917,
+          "source_preparation_ns": 386791,
+          "grounding_ns": 241708,
+          "solving_ns": 179624,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 125,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 7688375,
+          "source_preparation_ns": 386792,
+          "grounding_ns": 250208,
+          "solving_ns": 162916,
+          "original_validation_ns": null,
+          "peak_rss_bytes": 14254080
+        },
+        {
+          "report_position": 142,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 7719083,
+          "source_preparation_ns": 404084,
+          "grounding_ns": 256666,
+          "solving_ns": 172250,
+          "original_validation_ns": null,
+          "peak_rss_bytes": 14090240
+        }
+      ]
+    },
+    {
+      "report": "cpu4",
+      "workload": 4,
+      "profile": 1,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 2,
+        "verified_models": 2,
+        "checked": 1820,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "tight_support",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "mixed",
+        "search_scope": "retained_core"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 24,
+        "nodes": 293,
+        "roots": 49
+      },
+      "streamed_constraints_all_samples": {
+        "templates": 4,
+        "admitted_instances": 152
+      },
+      "hybrid_execution_all_samples": {
+        "core_answers": 1820,
+        "accepted": 2,
+        "rejected": 1818,
+        "pending": 0,
+        "constraints": {
+          "work": 1547220,
+          "substitutions": 49329,
+          "scalar_bytes": 0
+        }
+      },
+      "search_counter_ranges_all_samples": {
+        "work": [
+          930669,
+          930669
+        ],
+        "candidates": [
+          1820,
+          1820
+        ],
+        "countermodel_queries": [
+          0,
+          0
+        ],
+        "stable_models": [
+          1820,
+          1820
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 14,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 25809625,
+          "source_preparation_ns": 376209,
+          "grounding_ns": 210583,
+          "solving_ns": 19631999,
+          "original_validation_ns": 17384179,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 36,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 25770458,
+          "source_preparation_ns": 379709,
+          "grounding_ns": 209875,
+          "solving_ns": 19562917,
+          "original_validation_ns": 17240089,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 54,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 25744500,
+          "source_preparation_ns": 382666,
+          "grounding_ns": 209125,
+          "solving_ns": 19773459,
+          "original_validation_ns": 17465942,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 69,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 25647583,
+          "source_preparation_ns": 373375,
+          "grounding_ns": 206584,
+          "solving_ns": 19594999,
+          "original_validation_ns": 17295337,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 86,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 24087792,
+          "source_preparation_ns": 379708,
+          "grounding_ns": 210292,
+          "solving_ns": 19333750,
+          "original_validation_ns": 17031080,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 101,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 24274666,
+          "source_preparation_ns": 383834,
+          "grounding_ns": 207250,
+          "solving_ns": 19535125,
+          "original_validation_ns": 17198158,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 126,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 27246833,
+          "source_preparation_ns": 380792,
+          "grounding_ns": 213000,
+          "solving_ns": 18669334,
+          "original_validation_ns": 16217242,
+          "peak_rss_bytes": 14090240
+        },
+        {
+          "report_position": 141,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 27297875,
+          "source_preparation_ns": 391124,
+          "grounding_ns": 210917,
+          "solving_ns": 19610834,
+          "original_validation_ns": 17264578,
+          "peak_rss_bytes": 14172160
+        }
+      ]
+    },
+    {
+      "report": "cpu4",
+      "workload": 5,
+      "profile": 0,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 2,
+        "verified_models": 2,
+        "checked": 2,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "tight_support",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "eager",
+        "search_scope": "original_theory"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 56,
+        "nodes": 622,
+        "roots": 150
+      },
+      "streamed_constraints_all_samples": null,
+      "hybrid_execution_all_samples": null,
+      "search_counter_ranges_all_samples": {
+        "work": [
+          11658,
+          11658
+        ],
+        "candidates": [
+          2,
+          2
+        ],
+        "countermodel_queries": [
+          0,
+          0
+        ],
+        "stable_models": [
+          2,
+          2
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 16,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 6302583,
+          "source_preparation_ns": 449916,
+          "grounding_ns": 267292,
+          "solving_ns": 185000,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 38,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 6201709,
+          "source_preparation_ns": 434042,
+          "grounding_ns": 256292,
+          "solving_ns": 172958,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 56,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 6207167,
+          "source_preparation_ns": 428958,
+          "grounding_ns": 265292,
+          "solving_ns": 168835,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 71,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 6220333,
+          "source_preparation_ns": 411125,
+          "grounding_ns": 254791,
+          "solving_ns": 178583,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 88,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 6212375,
+          "source_preparation_ns": 420749,
+          "grounding_ns": 260875,
+          "solving_ns": 179251,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 103,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 5811125,
+          "source_preparation_ns": 411582,
+          "grounding_ns": 254667,
+          "solving_ns": 173042,
+          "original_validation_ns": null,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 128,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 7700667,
+          "source_preparation_ns": 451750,
+          "grounding_ns": 271875,
+          "solving_ns": 171833,
+          "original_validation_ns": null,
+          "peak_rss_bytes": 14270464
+        },
+        {
+          "report_position": 143,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 7704333,
+          "source_preparation_ns": 437542,
+          "grounding_ns": 269917,
+          "solving_ns": 169000,
+          "original_validation_ns": null,
+          "peak_rss_bytes": 14352384
+        }
+      ]
+    },
+    {
+      "report": "cpu4",
+      "workload": 5,
+      "profile": 1,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 2,
+        "verified_models": 2,
+        "checked": 2,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "tight_support",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "mixed",
+        "search_scope": "retained_core"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 56,
+        "nodes": 622,
+        "roots": 150
+      },
+      "streamed_constraints_all_samples": {
+        "templates": 0,
+        "admitted_instances": 0
+      },
+      "hybrid_execution_all_samples": {
+        "core_answers": 2,
+        "accepted": 2,
+        "rejected": 0,
+        "pending": 0,
+        "constraints": {
+          "work": 0,
+          "substitutions": 0,
+          "scalar_bytes": 0
+        }
+      },
+      "search_counter_ranges_all_samples": {
+        "work": [
+          11658,
+          11658
+        ],
+        "candidates": [
+          2,
+          2
+        ],
+        "countermodel_queries": [
+          0,
+          0
+        ],
+        "stable_models": [
+          2,
+          2
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 17,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 6245750,
+          "source_preparation_ns": 413166,
+          "grounding_ns": 256292,
+          "solving_ns": 186416,
+          "original_validation_ns": 583,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 37,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 6213625,
+          "source_preparation_ns": 422959,
+          "grounding_ns": 257084,
+          "solving_ns": 188458,
+          "original_validation_ns": 458,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 55,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 6226208,
+          "source_preparation_ns": 438542,
+          "grounding_ns": 263125,
+          "solving_ns": 189541,
+          "original_validation_ns": 417,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 72,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 6211875,
+          "source_preparation_ns": 422126,
+          "grounding_ns": 252625,
+          "solving_ns": 176749,
+          "original_validation_ns": 417,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 87,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 5844083,
+          "source_preparation_ns": 432043,
+          "grounding_ns": 257041,
+          "solving_ns": 192540,
+          "original_validation_ns": 501,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 104,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 6218708,
+          "source_preparation_ns": 422375,
+          "grounding_ns": 250375,
+          "solving_ns": 184665,
+          "original_validation_ns": 500,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 127,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 7692292,
+          "source_preparation_ns": 454208,
+          "grounding_ns": 286792,
+          "solving_ns": 182957,
+          "original_validation_ns": 334,
+          "peak_rss_bytes": 14237696
+        },
+        {
+          "report_position": 144,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 7709084,
+          "source_preparation_ns": 443251,
+          "grounding_ns": 267292,
+          "solving_ns": 181293,
+          "original_validation_ns": 499,
+          "peak_rss_bytes": 14303232
+        }
+      ]
+    },
+    {
+      "report": "cpu4",
+      "workload": 6,
+      "profile": 0,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 7,
+        "verified_models": 7,
+        "checked": 7,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "countermodel",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "eager",
+        "search_scope": "original_theory"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 18,
+        "nodes": 122,
+        "roots": 45
+      },
+      "streamed_constraints_all_samples": null,
+      "hybrid_execution_all_samples": null,
+      "search_counter_ranges_all_samples": {
+        "work": [
+          3894,
+          3894
+        ],
+        "candidates": [
+          7,
+          7
+        ],
+        "countermodel_queries": [
+          7,
+          7
+        ],
+        "stable_models": [
+          7,
+          7
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 19,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 6244291,
+          "source_preparation_ns": 211750,
+          "grounding_ns": 80834,
+          "solving_ns": 118458,
+          "original_validation_ns": 5623,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 39,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 4702625,
+          "source_preparation_ns": 200125,
+          "grounding_ns": 79500,
+          "solving_ns": 119623,
+          "original_validation_ns": 5084,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 57,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 4666583,
+          "source_preparation_ns": 197374,
+          "grounding_ns": 78792,
+          "solving_ns": 119583,
+          "original_validation_ns": 5793,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 74,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 4682667,
+          "source_preparation_ns": 192375,
+          "grounding_ns": 77917,
+          "solving_ns": 118499,
+          "original_validation_ns": 5334,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 89,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 4684875,
+          "source_preparation_ns": 198417,
+          "grounding_ns": 79667,
+          "solving_ns": 117251,
+          "original_validation_ns": 5876,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 106,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 4678167,
+          "source_preparation_ns": 196708,
+          "grounding_ns": 80167,
+          "solving_ns": 115039,
+          "original_validation_ns": 5417,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 129,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 10477791,
+          "source_preparation_ns": 263875,
+          "grounding_ns": 120000,
+          "solving_ns": 127043,
+          "original_validation_ns": 7459,
+          "peak_rss_bytes": 13287424
+        },
+        {
+          "report_position": 146,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 7747167,
+          "source_preparation_ns": 204874,
+          "grounding_ns": 83084,
+          "solving_ns": 114291,
+          "original_validation_ns": 6417,
+          "peak_rss_bytes": 13402112
+        }
+      ]
+    },
+    {
+      "report": "cpu4",
+      "workload": 6,
+      "profile": 1,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 7,
+        "verified_models": 7,
+        "checked": 64,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "countermodel",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "mixed",
+        "search_scope": "retained_core"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 18,
+        "nodes": 92,
+        "roots": 30
+      },
+      "streamed_constraints_all_samples": {
+        "templates": 1,
+        "admitted_instances": 15
+      },
+      "hybrid_execution_all_samples": {
+        "core_answers": 64,
+        "accepted": 7,
+        "rejected": 57,
+        "pending": 0,
+        "constraints": {
+          "work": 9291,
+          "substitutions": 392,
+          "scalar_bytes": 0
+        }
+      },
+      "search_counter_ranges_all_samples": {
+        "work": [
+          17556,
+          17556
+        ],
+        "candidates": [
+          64,
+          64
+        ],
+        "countermodel_queries": [
+          64,
+          64
+        ],
+        "stable_models": [
+          64,
+          64
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 20,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 6196458,
+          "source_preparation_ns": 194210,
+          "grounding_ns": 75041,
+          "solving_ns": 340290,
+          "original_validation_ns": 184500,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 40,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 6197709,
+          "source_preparation_ns": 194876,
+          "grounding_ns": 74958,
+          "solving_ns": 327333,
+          "original_validation_ns": 181661,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 58,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 6183834,
+          "source_preparation_ns": 202334,
+          "grounding_ns": 75833,
+          "solving_ns": 343875,
+          "original_validation_ns": 182215,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 73,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 6193458,
+          "source_preparation_ns": 208792,
+          "grounding_ns": 75917,
+          "solving_ns": 342873,
+          "original_validation_ns": 185168,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 90,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 6190459,
+          "source_preparation_ns": 197083,
+          "grounding_ns": 74792,
+          "solving_ns": 338293,
+          "original_validation_ns": 184201,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 105,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 6196042,
+          "source_preparation_ns": 209375,
+          "grounding_ns": 76667,
+          "solving_ns": 334666,
+          "original_validation_ns": 185300,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 130,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 9316958,
+          "source_preparation_ns": 223625,
+          "grounding_ns": 84792,
+          "solving_ns": 325542,
+          "original_validation_ns": 181998,
+          "peak_rss_bytes": 13434880
+        },
+        {
+          "report_position": 145,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 7502416,
+          "source_preparation_ns": 214293,
+          "grounding_ns": 78666,
+          "solving_ns": 346083,
+          "original_validation_ns": 177661,
+          "peak_rss_bytes": 13500416
+        }
+      ]
+    },
+    {
+      "report": "cpu4",
+      "workload": 7,
+      "profile": 0,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 2,
+        "verified_models": 2,
+        "checked": 2,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "countermodel",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "eager",
+        "search_scope": "original_theory"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 74,
+        "nodes": 2020,
+        "roots": 659
+      },
+      "streamed_constraints_all_samples": null,
+      "hybrid_execution_all_samples": null,
+      "search_counter_ranges_all_samples": {
+        "work": [
+          29206,
+          29206
+        ],
+        "candidates": [
+          2,
+          2
+        ],
+        "countermodel_queries": [
+          2,
+          2
+        ],
+        "stable_models": [
+          2,
+          2
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 22,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 6209459,
+          "source_preparation_ns": 223500,
+          "grounding_ns": 384625,
+          "solving_ns": 294375,
+          "original_validation_ns": 9583,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 42,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 6199125,
+          "source_preparation_ns": 215083,
+          "grounding_ns": 380792,
+          "solving_ns": 274333,
+          "original_validation_ns": 8917,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 60,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 6193500,
+          "source_preparation_ns": 219209,
+          "grounding_ns": 379792,
+          "solving_ns": 286209,
+          "original_validation_ns": 8709,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 75,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 6213458,
+          "source_preparation_ns": 215292,
+          "grounding_ns": 386416,
+          "solving_ns": 278541,
+          "original_validation_ns": 9709,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 92,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 6172792,
+          "source_preparation_ns": 212875,
+          "grounding_ns": 380125,
+          "solving_ns": 282125,
+          "original_validation_ns": 9166,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 107,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 5704167,
+          "source_preparation_ns": 216500,
+          "grounding_ns": 387542,
+          "solving_ns": 287417,
+          "original_validation_ns": 9375,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 132,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 9227917,
+          "source_preparation_ns": 230959,
+          "grounding_ns": 392917,
+          "solving_ns": 286418,
+          "original_validation_ns": 9458,
+          "peak_rss_bytes": 14106624
+        },
+        {
+          "report_position": 147,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 7693042,
+          "source_preparation_ns": 220167,
+          "grounding_ns": 384709,
+          "solving_ns": 289165,
+          "original_validation_ns": 8084,
+          "peak_rss_bytes": 14139392
+        }
+      ]
+    },
+    {
+      "report": "cpu4",
+      "workload": 7,
+      "profile": 1,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 2,
+        "verified_models": 2,
+        "checked": 2,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "countermodel",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "mixed",
+        "search_scope": "retained_core"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 74,
+        "nodes": 428,
+        "roots": 147
+      },
+      "streamed_constraints_all_samples": {
+        "templates": 1,
+        "admitted_instances": 512
+      },
+      "hybrid_execution_all_samples": {
+        "core_answers": 2,
+        "accepted": 2,
+        "rejected": 0,
+        "pending": 0,
+        "constraints": {
+          "work": 102330,
+          "substitutions": 1024,
+          "scalar_bytes": 0
+        }
+      },
+      "search_counter_ranges_all_samples": {
+        "work": [
+          6830,
+          6830
+        ],
+        "candidates": [
+          2,
+          2
+        ],
+        "countermodel_queries": [
+          2,
+          2
+        ],
+        "stable_models": [
+          2,
+          2
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 23,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 6226125,
+          "source_preparation_ns": 215625,
+          "grounding_ns": 305583,
+          "solving_ns": 491374,
+          "original_validation_ns": 336000,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 41,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 6178792,
+          "source_preparation_ns": 208124,
+          "grounding_ns": 301792,
+          "solving_ns": 487291,
+          "original_validation_ns": 331292,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 59,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 6210542,
+          "source_preparation_ns": 211001,
+          "grounding_ns": 303916,
+          "solving_ns": 487540,
+          "original_validation_ns": 328583,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 76,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 6204958,
+          "source_preparation_ns": 220418,
+          "grounding_ns": 299000,
+          "solving_ns": 481375,
+          "original_validation_ns": 327666,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 91,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 6222375,
+          "source_preparation_ns": 213374,
+          "grounding_ns": 306125,
+          "solving_ns": 490958,
+          "original_validation_ns": 327999,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 108,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 6196917,
+          "source_preparation_ns": 222418,
+          "grounding_ns": 301875,
+          "solving_ns": 497126,
+          "original_validation_ns": 324541,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 131,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 9220291,
+          "source_preparation_ns": 235459,
+          "grounding_ns": 322875,
+          "solving_ns": 518291,
+          "original_validation_ns": 357833,
+          "peak_rss_bytes": 13582336
+        },
+        {
+          "report_position": 148,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 7690792,
+          "source_preparation_ns": 219833,
+          "grounding_ns": 305375,
+          "solving_ns": 508000,
+          "original_validation_ns": 352791,
+          "peak_rss_bytes": 13516800
+        }
+      ]
+    },
+    {
+      "report": "cpu4",
+      "workload": 8,
+      "profile": 0,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 2,
+        "verified_models": 2,
+        "checked": 2,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "countermodel",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "eager",
+        "search_scope": "original_theory"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 158,
+        "nodes": 6240,
+        "roots": 2043
+      },
+      "streamed_constraints_all_samples": null,
+      "hybrid_execution_all_samples": null,
+      "search_counter_ranges_all_samples": {
+        "work": [
+          89362,
+          89362
+        ],
+        "candidates": [
+          2,
+          2
+        ],
+        "countermodel_queries": [
+          2,
+          2
+        ],
+        "stable_models": [
+          2,
+          2
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 25,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 7713125,
+          "source_preparation_ns": 230625,
+          "grounding_ns": 1061750,
+          "solving_ns": 602000,
+          "original_validation_ns": 24792,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 43,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 6188750,
+          "source_preparation_ns": 222875,
+          "grounding_ns": 1045708,
+          "solving_ns": 597500,
+          "original_validation_ns": 24333,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 61,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 6183416,
+          "source_preparation_ns": 227917,
+          "grounding_ns": 1052917,
+          "solving_ns": 581333,
+          "original_validation_ns": 24125,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 78,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 6173625,
+          "source_preparation_ns": 224250,
+          "grounding_ns": 1045542,
+          "solving_ns": 584917,
+          "original_validation_ns": 26375,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 93,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 6193292,
+          "source_preparation_ns": 228207,
+          "grounding_ns": 1034042,
+          "solving_ns": 596959,
+          "original_validation_ns": 22417,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 110,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 6181208,
+          "source_preparation_ns": 225750,
+          "grounding_ns": 1043750,
+          "solving_ns": 599124,
+          "original_validation_ns": 25625,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 133,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 9205292,
+          "source_preparation_ns": 235042,
+          "grounding_ns": 1074583,
+          "solving_ns": 646332,
+          "original_validation_ns": 21458,
+          "peak_rss_bytes": 15450112
+        },
+        {
+          "report_position": 150,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 9231458,
+          "source_preparation_ns": 236084,
+          "grounding_ns": 1060208,
+          "solving_ns": 619209,
+          "original_validation_ns": 23000,
+          "peak_rss_bytes": 15548416
+        }
+      ]
+    },
+    {
+      "report": "cpu4",
+      "workload": 8,
+      "profile": 1,
+      "complete_outcome_all_samples": {
+        "status": "satisfiable",
+        "completion": "exhausted",
+        "coverage": "exhausted",
+        "published_models": 2,
+        "verified_models": 2,
+        "checked": 2,
+        "projection": null,
+        "interruption": null,
+        "publication_stop": null,
+        "optimization": null,
+        "error": null
+      },
+      "actual_route_all_samples": {
+        "execution": {
+          "backend": "cpu",
+          "procedure": "countermodel",
+          "adapter": null,
+          "device": {
+            "kind": "cpu"
+          }
+        },
+        "grounding_mode": "mixed",
+        "search_scope": "retained_core"
+      },
+      "retained_formula_all_samples": {
+        "atoms": 158,
+        "nodes": 924,
+        "roots": 315
+      },
+      "streamed_constraints_all_samples": {
+        "templates": 1,
+        "admitted_instances": 1728
+      },
+      "hybrid_execution_all_samples": {
+        "core_answers": 2,
+        "accepted": 2,
+        "rejected": 0,
+        "pending": 0,
+        "constraints": {
+          "work": 404914,
+          "substitutions": 3456,
+          "scalar_bytes": 0
+        }
+      },
+      "search_counter_ranges_all_samples": {
+        "work": [
+          14758,
+          14758
+        ],
+        "candidates": [
+          2,
+          2
+        ],
+        "countermodel_queries": [
+          2,
+          2
+        ],
+        "stable_models": [
+          2,
+          2
+        ]
+      },
+      "samples": [
+        {
+          "report_position": 26,
+          "phase": "qualification",
+          "round": 0,
+          "wall_ns": 7736583,
+          "source_preparation_ns": 219876,
+          "grounding_ns": 833125,
+          "solving_ns": 1328500,
+          "original_validation_ns": 1120541,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 44,
+          "phase": "warmup",
+          "round": 0,
+          "wall_ns": 7666041,
+          "source_preparation_ns": 214666,
+          "grounding_ns": 826792,
+          "solving_ns": 1341709,
+          "original_validation_ns": 1124167,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 62,
+          "phase": "timed",
+          "round": 0,
+          "wall_ns": 7696167,
+          "source_preparation_ns": 217583,
+          "grounding_ns": 833333,
+          "solving_ns": 1365667,
+          "original_validation_ns": 1140166,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 77,
+          "phase": "timed",
+          "round": 1,
+          "wall_ns": 7714417,
+          "source_preparation_ns": 226458,
+          "grounding_ns": 853209,
+          "solving_ns": 1365167,
+          "original_validation_ns": 1158332,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 94,
+          "phase": "timed",
+          "round": 2,
+          "wall_ns": 7745834,
+          "source_preparation_ns": 216209,
+          "grounding_ns": 829583,
+          "solving_ns": 1362917,
+          "original_validation_ns": 1141125,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 109,
+          "phase": "timed",
+          "round": 3,
+          "wall_ns": 7758542,
+          "source_preparation_ns": 231334,
+          "grounding_ns": 825625,
+          "solving_ns": 1330790,
+          "original_validation_ns": 1115083,
+          "peak_rss_bytes": null
+        },
+        {
+          "report_position": 134,
+          "phase": "memory",
+          "round": 0,
+          "wall_ns": 10738500,
+          "source_preparation_ns": 245583,
+          "grounding_ns": 858958,
+          "solving_ns": 1408292,
+          "original_validation_ns": 1182751,
+          "peak_rss_bytes": 14057472
+        },
+        {
+          "report_position": 149,
+          "phase": "memory",
+          "round": 1,
+          "wall_ns": 10724875,
+          "source_preparation_ns": 231959,
+          "grounding_ns": 845958,
+          "solving_ns": 1420500,
+          "original_validation_ns": 1202584,
+          "peak_rss_bytes": 14073856
+        }
+      ]
+    }
+  ]
+}

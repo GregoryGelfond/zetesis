@@ -1,0 +1,4332 @@
+{
+  "schema": 1,
+  "study": "eager-preservation-generated-abba",
+  "qualification": {
+    "passed": true,
+    "positions": 576,
+    "complete_native_family_checks": 384,
+    "audit_sha256": "7d6d2460575846dd7e82705259b1cbb785cc04aadd6950dfb6cc152b4836feae",
+    "scope": "All 576 positions, 384 complete native families, raw/summary telemetry and source seals. Hidden atoms, model multiplicity and objective priorities retained. No hidden-clingo comparison, solver correctness proof or causal performance claim. Timed worker phases may overlap; RSS is separate child accounting. Source revisions are manifest declarations whose build correspondence must be qualified externally."
+  },
+  "identities": {
+    "manifest_sha256": "9b36f4b19f2e1a7745ec6d7bf96b1266d75836abdc4123c12621cf16ca969722",
+    "validation_revision": "2e14b8f0ae29259ff164efe06aeb3125c8551f33",
+    "old": {
+      "sha256": "746979b9cfb2614c7ac7f716b66757b5396d09b465ddb75b23be63092d2d533c",
+      "source_revision": "3d7454d810acec99121ee5b5615505b6ddc6eea7"
+    },
+    "new": {
+      "sha256": "e3f53a2debb11664c9cccd8dc1205147d06251587921b8ec77d9a6dd7b44e487",
+      "source_revision": "4a281c9612dc4ff22557341354b1ad610cfd9672"
+    },
+    "reference": {
+      "sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015"
+    },
+    "reports": [
+      {
+        "leg": "A1",
+        "sha256": "a3cf8cec80015069608a2f3951dc09a19a7a26b65f7846ae9b2a66b2b89641e6",
+        "positions": 144,
+        "native_families": 96,
+        "native_sha256": "746979b9cfb2614c7ac7f716b66757b5396d09b465ddb75b23be63092d2d533c",
+        "native_source_revision": "3d7454d810acec99121ee5b5615505b6ddc6eea7",
+        "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+        "rss_helper_ids_retained": 24
+      },
+      {
+        "leg": "B1",
+        "sha256": "44a807c0812bc04804abbfdc1fafcd4e78690c9de3cb47cdb1eaa6f6ee175f03",
+        "positions": 144,
+        "native_families": 96,
+        "native_sha256": "e3f53a2debb11664c9cccd8dc1205147d06251587921b8ec77d9a6dd7b44e487",
+        "native_source_revision": "4a281c9612dc4ff22557341354b1ad610cfd9672",
+        "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+        "rss_helper_ids_retained": 24
+      },
+      {
+        "leg": "B2",
+        "sha256": "386a7bddc52c7ac29bc7ce74f6ab85ed1cab706a0b7ed2bf78099e97a50b7e71",
+        "positions": 144,
+        "native_families": 96,
+        "native_sha256": "e3f53a2debb11664c9cccd8dc1205147d06251587921b8ec77d9a6dd7b44e487",
+        "native_source_revision": "4a281c9612dc4ff22557341354b1ad610cfd9672",
+        "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+        "rss_helper_ids_retained": 24
+      },
+      {
+        "leg": "A2",
+        "sha256": "ead1367f3a276b22a98bad2c9fe5ce67cb01ebb157a3bd85ed58b398c2789404",
+        "positions": 144,
+        "native_families": 96,
+        "native_sha256": "746979b9cfb2614c7ac7f716b66757b5396d09b465ddb75b23be63092d2d533c",
+        "native_source_revision": "3d7454d810acec99121ee5b5615505b6ddc6eea7",
+        "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+        "rss_helper_ids_retained": 24
+      }
+    ]
+  },
+  "protocol": {
+    "name": "instrumented_derived_workload_matrix_v2",
+    "order": [
+      "A1",
+      "B1",
+      "B2",
+      "A2"
+    ],
+    "plan": {
+      "suite": "corpus",
+      "profiles": [
+        {
+          "backend": "cpu",
+          "oracle": "auto",
+          "grounder": "auto",
+          "formula_joins": "indexed",
+          "search": "regions",
+          "workers": 1,
+          "completion_workers": 1,
+          "batch_size": 64,
+          "max_completion_scratch_bytes": 268435456
+        },
+        {
+          "backend": "cpu",
+          "oracle": "auto",
+          "grounder": "auto",
+          "formula_joins": "indexed",
+          "search": "regions",
+          "workers": 4,
+          "completion_workers": 1,
+          "batch_size": 64,
+          "max_completion_scratch_bytes": 268435456
+        }
+      ],
+      "reference_workers": 1,
+      "warmups": 2,
+      "repetitions": 7,
+      "memory_runs": 2
+    },
+    "required_native_memory_allowance_bytes": 2147483648,
+    "process_limits": {
+      "cleanup_timeout": {
+        "nanos": 0,
+        "secs": 1
+      },
+      "max_output_bytes": 16777216,
+      "timeout": {
+        "nanos": 0,
+        "secs": 10
+      }
+    },
+    "campaign_timeout_per_leg": {
+      "nanos": 0,
+      "secs": 300
+    },
+    "positions_per_leg_by_phase": [
+      {
+        "phase": "memory",
+        "positions": 24
+      },
+      {
+        "phase": "qualification",
+        "positions": 12
+      },
+      {
+        "phase": "timed",
+        "positions": 84
+      },
+      {
+        "phase": "warmup",
+        "positions": 24
+      }
+    ],
+    "wall_scope": "fresh_process_spawn_capture_reap; native_json_and_stats_included; reference_json_included; comparison_hashing_excluded; no_cold_cache_claim",
+    "rss_scope": "memory_rounds: separate_fresh_helper_RUSAGE_CHILDREN; excludes_helper; may_include_usage_propagated_by_waited_descendants; not_simultaneous_tree_RSS_or_device_memory; macOS_bytes_Linux_KiB_converted_to_bytes",
+    "statistics": "enabled for every native capture; host instrumentation and output included",
+    "aggregation": "rows contain per-leg medians of seven timed captures and two separate RSS captures; ranges are retained timed minima/maxima"
+  },
+  "workloads": [
+    {
+      "amended": false,
+      "default_contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 1,
+        "notes": [],
+        "required_symbols": [],
+        "satisfiability": "sat",
+        "witnesses": []
+      },
+      "entry": "generated/transitive-dense-20.lp",
+      "generated": {
+        "bytes": 95,
+        "family": "transitive-dense",
+        "sha256": "448014f03eed340cfd07a61ba0f99e6e9c7257df60514055faef515904baca39",
+        "size": 20
+      },
+      "identity": "c9d25097594003692f96574db6ef6cc870108f5b60ff047f1ac185260f96ebcd",
+      "metadata_bytes": 160,
+      "source_bytes": 95,
+      "sources": []
+    },
+    {
+      "amended": false,
+      "default_contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 1,
+        "notes": [],
+        "required_symbols": [],
+        "satisfiability": "sat",
+        "witnesses": []
+      },
+      "entry": "generated/transitive-dense-40.lp",
+      "generated": {
+        "bytes": 95,
+        "family": "transitive-dense",
+        "sha256": "0161e9d3008b26fbd43c592607b1489cff8026223bc3f2118ec5d690cab227c1",
+        "size": 40
+      },
+      "identity": "436cbef7e47bcde6acba3a09411249575c887875535f30e22349d10da7cd5fe5",
+      "metadata_bytes": 160,
+      "source_bytes": 95,
+      "sources": []
+    },
+    {
+      "amended": false,
+      "default_contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 1,
+        "notes": [],
+        "required_symbols": [],
+        "satisfiability": "sat",
+        "witnesses": []
+      },
+      "entry": "generated/chain-1000.lp",
+      "generated": {
+        "bytes": 11811,
+        "family": "chain",
+        "sha256": "a41ca83b995331954fbf3194489682e9e56b98757aab683e207d25f8a05cf9c5",
+        "size": 1000
+      },
+      "identity": "c241c45329a5ac9ba44e4f6ee2a6aac2b00cef2e14ebbc43f708ba5462063d63",
+      "metadata_bytes": 151,
+      "source_bytes": 11811,
+      "sources": []
+    },
+    {
+      "amended": false,
+      "default_contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 1,
+        "notes": [],
+        "required_symbols": [],
+        "satisfiability": "sat",
+        "witnesses": []
+      },
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "generated": {
+        "bytes": 32,
+        "family": "chain-arithmetic",
+        "sha256": "adb0c098d282d43bd65ddd79efe0d9fd0343fe1f34a4fcd72ce012a6826986bd",
+        "size": 1000
+      },
+      "identity": "e98fcc7310024239bcc4772b1bd87b0d5d70748b7cc0c28fd4c9c79fc97f1bc7",
+      "metadata_bytes": 162,
+      "source_bytes": 32,
+      "sources": []
+    }
+  ],
+  "full_native_families": [
+    {
+      "entry": "generated/transitive-dense-40.lp",
+      "workload_identity": "436cbef7e47bcde6acba3a09411249575c887875535f30e22349d10da7cd5fe5",
+      "models": 1,
+      "costs": null,
+      "canonical_sha256": "1d7048eae8e9f9c5779c2783bb2308d954774d9e5f7577239afdca6b19c63f2e",
+      "checked": 96
+    },
+    {
+      "entry": "generated/chain-1000.lp",
+      "workload_identity": "c241c45329a5ac9ba44e4f6ee2a6aac2b00cef2e14ebbc43f708ba5462063d63",
+      "models": 1,
+      "costs": null,
+      "canonical_sha256": "bc44bd6f6da1f7fbf878cdd9bc1c91ee53cb0b73c4c636a919876b9b7204c3ef",
+      "checked": 96
+    },
+    {
+      "entry": "generated/transitive-dense-20.lp",
+      "workload_identity": "c9d25097594003692f96574db6ef6cc870108f5b60ff047f1ac185260f96ebcd",
+      "models": 1,
+      "costs": null,
+      "canonical_sha256": "767a94fcfd891e2dbf66671c7ef8eddb99ac226edc9542d97f199735a826cf9b",
+      "checked": 96
+    },
+    {
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "workload_identity": "e98fcc7310024239bcc4772b1bd87b0d5d70748b7cc0c28fd4c9c79fc97f1bc7",
+      "models": 1,
+      "costs": null,
+      "canonical_sha256": "effab6cda1d2468437c29e6b4a01aaa1d34f53450e04b2524b85c615fc6f0e87",
+      "checked": 96
+    }
+  ],
+  "rows": [
+    {
+      "report": "A1",
+      "entry": "generated/transitive-dense-20.lp",
+      "workers": 1,
+      "native": {
+        "samples": 7,
+        "minimum_ns": 7748542,
+        "median_ns": 7761334,
+        "maximum_ns": 7789792,
+        "driver_median_ns": 2627167,
+        "published_models": 1,
+        "candidates_examined": 1,
+        "search_work": 133769,
+        "phases": {
+          "admission_materialization": {
+            "median_ns": 1742042
+          },
+          "candidate_generation": {
+            "median_ns": 123374
+          },
+          "candidate_setup": {
+            "median_ns": 367958
+          },
+          "certificate_setup": {
+            "median_ns": 98417
+          },
+          "certified_membership": {
+            "median_ns": 8958
+          },
+          "execution_setup": {
+            "median_ns": 2209
+          },
+          "observation_output": {
+            "median_ns": 97250
+          }
+        },
+        "breakdown": {
+          "grounding": 1422750,
+          "proposal": 494916,
+          "membership": 107375
+        },
+        "peak_rss_bytes": 15360000
+      },
+      "reference": {
+        "samples": 7,
+        "minimum_ns": 4645792,
+        "median_ns": 4654833,
+        "maximum_ns": 4667500,
+        "grounding_ns": 1000000,
+        "solving_ns": 0,
+        "peak_rss_bytes": 5324800
+      },
+      "ratio_to_clingo": 1.6673710958051555,
+      "native_minus_clingo_ns": 3106501
+    },
+    {
+      "report": "A1",
+      "entry": "generated/transitive-dense-20.lp",
+      "workers": 4,
+      "native": {
+        "samples": 7,
+        "minimum_ns": 7703292,
+        "median_ns": 7717541,
+        "maximum_ns": 7773875,
+        "driver_median_ns": 2685541,
+        "published_models": 1,
+        "candidates_examined": 1,
+        "search_work": 133769,
+        "phases": {
+          "admission_materialization": {
+            "median_ns": 1720459
+          },
+          "candidate_generation": {
+            "median_ns": 145750
+          },
+          "candidate_setup": {
+            "median_ns": 370958
+          },
+          "certificate_setup": {
+            "median_ns": 101167
+          },
+          "certified_membership": {
+            "median_ns": 8458
+          },
+          "execution_setup": {
+            "median_ns": 2792
+          },
+          "observation_output": {
+            "median_ns": 103124
+          }
+        },
+        "breakdown": {
+          "grounding": 1407292,
+          "proposal": 519874,
+          "membership": 109958
+        },
+        "peak_rss_bytes": 15400960
+      },
+      "reference": {
+        "samples": 7,
+        "minimum_ns": 4645792,
+        "median_ns": 4654833,
+        "maximum_ns": 4667500,
+        "grounding_ns": 1000000,
+        "solving_ns": 0,
+        "peak_rss_bytes": 5324800
+      },
+      "ratio_to_clingo": 1.6579630246670503,
+      "native_minus_clingo_ns": 3062708
+    },
+    {
+      "report": "A1",
+      "entry": "generated/transitive-dense-40.lp",
+      "workers": 1,
+      "native": {
+        "samples": 7,
+        "minimum_ns": 21439500,
+        "median_ns": 22930334,
+        "maximum_ns": 24521250,
+        "driver_median_ns": 17116083,
+        "published_models": 1,
+        "candidates_examined": 1,
+        "search_work": 939917,
+        "phases": {
+          "admission_materialization": {
+            "median_ns": 9884708
+          },
+          "candidate_generation": {
+            "median_ns": 901333
+          },
+          "candidate_setup": {
+            "median_ns": 2893625
+          },
+          "certificate_setup": {
+            "median_ns": 675750
+          },
+          "certified_membership": {
+            "median_ns": 56417
+          },
+          "execution_setup": {
+            "median_ns": 2750
+          },
+          "observation_output": {
+            "median_ns": 1727541
+          }
+        },
+        "breakdown": {
+          "grounding": 9471125,
+          "proposal": 3791375,
+          "membership": 734459
+        },
+        "peak_rss_bytes": 27983872
+      },
+      "reference": {
+        "samples": 7,
+        "minimum_ns": 6231833,
+        "median_ns": 6256375,
+        "maximum_ns": 7781959,
+        "grounding_ns": 2000000,
+        "solving_ns": 0,
+        "peak_rss_bytes": 5619712
+      },
+      "ratio_to_clingo": 3.6651150226768694,
+      "native_minus_clingo_ns": 16673959
+    },
+    {
+      "report": "A1",
+      "entry": "generated/transitive-dense-40.lp",
+      "workers": 4,
+      "native": {
+        "samples": 7,
+        "minimum_ns": 21388583,
+        "median_ns": 23040750,
+        "maximum_ns": 25500042,
+        "driver_median_ns": 16967708,
+        "published_models": 1,
+        "candidates_examined": 1,
+        "search_work": 939917,
+        "phases": {
+          "admission_materialization": {
+            "median_ns": 9886250
+          },
+          "candidate_generation": {
+            "median_ns": 935959
+          },
+          "candidate_setup": {
+            "median_ns": 2939167
+          },
+          "certificate_setup": {
+            "median_ns": 664959
+          },
+          "certified_membership": {
+            "median_ns": 55833
+          },
+          "execution_setup": {
+            "median_ns": 3208
+          },
+          "observation_output": {
+            "median_ns": 1428084
+          }
+        },
+        "breakdown": {
+          "grounding": 9458417,
+          "proposal": 3849959,
+          "membership": 716001
+        },
+        "peak_rss_bytes": 27852800
+      },
+      "reference": {
+        "samples": 7,
+        "minimum_ns": 6231833,
+        "median_ns": 6256375,
+        "maximum_ns": 7781959,
+        "grounding_ns": 2000000,
+        "solving_ns": 0,
+        "peak_rss_bytes": 5619712
+      },
+      "ratio_to_clingo": 3.68276358114723,
+      "native_minus_clingo_ns": 16784375
+    },
+    {
+      "report": "A1",
+      "entry": "generated/chain-1000.lp",
+      "workers": 1,
+      "native": {
+        "samples": 7,
+        "minimum_ns": 13798250,
+        "median_ns": 15420584,
+        "maximum_ns": 17013834,
+        "driver_median_ns": 9186833,
+        "published_models": 1,
+        "candidates_examined": 1,
+        "search_work": 211573,
+        "phases": {
+          "admission_materialization": {
+            "median_ns": 6600292
+          },
+          "candidate_generation": {
+            "median_ns": 3708
+          },
+          "candidate_setup": {
+            "median_ns": 1167
+          },
+          "closure_membership": {
+            "median_ns": 998958
+          },
+          "execution_setup": {
+            "median_ns": 22500
+          },
+          "observation_output": {
+            "median_ns": 1353916
+          }
+        },
+        "breakdown": {
+          "proposal": 4917,
+          "membership": 998958
+        },
+        "peak_rss_bytes": 18259968
+      },
+      "reference": {
+        "samples": 7,
+        "minimum_ns": 6168083,
+        "median_ns": 6196542,
+        "maximum_ns": 7762042,
+        "grounding_ns": 3000000,
+        "solving_ns": 0,
+        "peak_rss_bytes": 5685248
+      },
+      "ratio_to_clingo": 2.4885789525835538,
+      "native_minus_clingo_ns": 9224042
+    },
+    {
+      "report": "A1",
+      "entry": "generated/chain-1000.lp",
+      "workers": 4,
+      "native": {
+        "samples": 7,
+        "minimum_ns": 13792250,
+        "median_ns": 15437833,
+        "maximum_ns": 18416000,
+        "driver_median_ns": 9326459,
+        "published_models": 1,
+        "candidates_examined": 1,
+        "search_work": 211573,
+        "phases": {
+          "admission_materialization": {
+            "median_ns": 6485250
+          },
+          "candidate_generation": {
+            "median_ns": 3667
+          },
+          "candidate_setup": {
+            "median_ns": 1250
+          },
+          "closure_membership": {
+            "median_ns": 994458
+          },
+          "execution_setup": {
+            "median_ns": 41125
+          },
+          "observation_output": {
+            "median_ns": 1383916
+          }
+        },
+        "breakdown": {
+          "proposal": 4792,
+          "membership": 994458
+        },
+        "peak_rss_bytes": 18243584
+      },
+      "reference": {
+        "samples": 7,
+        "minimum_ns": 6168083,
+        "median_ns": 6196542,
+        "maximum_ns": 7762042,
+        "grounding_ns": 3000000,
+        "solving_ns": 0,
+        "peak_rss_bytes": 5685248
+      },
+      "ratio_to_clingo": 2.491362601915714,
+      "native_minus_clingo_ns": 9241291
+    },
+    {
+      "report": "A1",
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "workers": 1,
+      "native": {
+        "samples": 7,
+        "minimum_ns": 9305166,
+        "median_ns": 9330042,
+        "maximum_ns": 10808583,
+        "driver_median_ns": 3886000,
+        "published_models": 1,
+        "candidates_examined": 1,
+        "search_work": 105151,
+        "phases": {
+          "admission_materialization": {
+            "median_ns": 2876500
+          },
+          "candidate_generation": {
+            "median_ns": 107793
+          },
+          "candidate_setup": {
+            "median_ns": 176000
+          },
+          "certificate_setup": {
+            "median_ns": 77750
+          },
+          "certified_membership": {
+            "median_ns": 8417
+          },
+          "execution_setup": {
+            "median_ns": 2291
+          },
+          "observation_output": {
+            "median_ns": 513084
+          }
+        },
+        "breakdown": {
+          "grounding": 2643333,
+          "proposal": 283793,
+          "membership": 88583
+        },
+        "peak_rss_bytes": 14917632
+      },
+      "reference": {
+        "samples": 7,
+        "minimum_ns": 4659875,
+        "median_ns": 4703000,
+        "maximum_ns": 6244500,
+        "grounding_ns": 1000000,
+        "solving_ns": 0,
+        "peak_rss_bytes": 5439488
+      },
+      "ratio_to_clingo": 1.983849032532426,
+      "native_minus_clingo_ns": 4627042
+    },
+    {
+      "report": "A1",
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "workers": 4,
+      "native": {
+        "samples": 7,
+        "minimum_ns": 9266208,
+        "median_ns": 9298083,
+        "maximum_ns": 10834250,
+        "driver_median_ns": 4219458,
+        "published_models": 1,
+        "candidates_examined": 1,
+        "search_work": 105151,
+        "phases": {
+          "admission_materialization": {
+            "median_ns": 2895459
+          },
+          "candidate_generation": {
+            "median_ns": 124750
+          },
+          "candidate_setup": {
+            "median_ns": 180959
+          },
+          "certificate_setup": {
+            "median_ns": 83584
+          },
+          "certified_membership": {
+            "median_ns": 7958
+          },
+          "execution_setup": {
+            "median_ns": 3000
+          },
+          "observation_output": {
+            "median_ns": 725792
+          }
+        },
+        "breakdown": {
+          "grounding": 2677542,
+          "proposal": 305709,
+          "membership": 91542
+        },
+        "peak_rss_bytes": 14974976
+      },
+      "reference": {
+        "samples": 7,
+        "minimum_ns": 4659875,
+        "median_ns": 4703000,
+        "maximum_ns": 6244500,
+        "grounding_ns": 1000000,
+        "solving_ns": 0,
+        "peak_rss_bytes": 5439488
+      },
+      "ratio_to_clingo": 1.9770535828194769,
+      "native_minus_clingo_ns": 4595083
+    },
+    {
+      "report": "B1",
+      "entry": "generated/transitive-dense-20.lp",
+      "workers": 1,
+      "native": {
+        "samples": 7,
+        "minimum_ns": 7750500,
+        "median_ns": 7777917,
+        "maximum_ns": 7792459,
+        "driver_median_ns": 2686334,
+        "published_models": 1,
+        "candidates_examined": 1,
+        "search_work": 133769,
+        "phases": {
+          "admission_materialization": {
+            "median_ns": 1782084
+          },
+          "candidate_generation": {
+            "median_ns": 129042
+          },
+          "candidate_setup": {
+            "median_ns": 375541
+          },
+          "certificate_setup": {
+            "median_ns": 101542
+          },
+          "certified_membership": {
+            "median_ns": 8375
+          },
+          "execution_setup": {
+            "median_ns": 2708
+          },
+          "observation_output": {
+            "median_ns": 91834
+          }
+        },
+        "breakdown": {
+          "grounding": 1461541,
+          "proposal": 503416,
+          "membership": 109917
+        },
+        "peak_rss_bytes": 15654912
+      },
+      "reference": {
+        "samples": 7,
+        "minimum_ns": 4652083,
+        "median_ns": 4654958,
+        "maximum_ns": 4669375,
+        "grounding_ns": 1000000,
+        "solving_ns": 0,
+        "peak_rss_bytes": 5324800
+      },
+      "ratio_to_clingo": 1.6708887598985855,
+      "native_minus_clingo_ns": 3122959
+    },
+    {
+      "report": "B1",
+      "entry": "generated/transitive-dense-20.lp",
+      "workers": 4,
+      "native": {
+        "samples": 7,
+        "minimum_ns": 7697416,
+        "median_ns": 7723209,
+        "maximum_ns": 7739791,
+        "driver_median_ns": 2721291,
+        "published_models": 1,
+        "candidates_examined": 1,
+        "search_work": 133769,
+        "phases": {
+          "admission_materialization": {
+            "median_ns": 1758542
+          },
+          "candidate_generation": {
+            "median_ns": 145208
+          },
+          "candidate_setup": {
+            "median_ns": 369750
+          },
+          "certificate_setup": {
+            "median_ns": 100291
+          },
+          "certified_membership": {
+            "median_ns": 9042
+          },
+          "execution_setup": {
+            "median_ns": 3291
+          },
+          "observation_output": {
+            "median_ns": 105666
+          }
+        },
+        "breakdown": {
+          "grounding": 1454333,
+          "proposal": 515084,
+          "membership": 109292
+        },
+        "peak_rss_bytes": 15687680
+      },
+      "reference": {
+        "samples": 7,
+        "minimum_ns": 4652083,
+        "median_ns": 4654958,
+        "maximum_ns": 4669375,
+        "grounding_ns": 1000000,
+        "solving_ns": 0,
+        "peak_rss_bytes": 5324800
+      },
+      "ratio_to_clingo": 1.659136129692255,
+      "native_minus_clingo_ns": 3068251
+    },
+    {
+      "report": "B1",
+      "entry": "generated/transitive-dense-40.lp",
+      "workers": 1,
+      "native": {
+        "samples": 7,
+        "minimum_ns": 21355542,
+        "median_ns": 22900750,
+        "maximum_ns": 22980917,
+        "driver_median_ns": 16954791,
+        "published_models": 1,
+        "candidates_examined": 1,
+        "search_work": 939917,
+        "phases": {
+          "admission_materialization": {
+            "median_ns": 10182209
+          },
+          "candidate_generation": {
+            "median_ns": 901541
+          },
+          "candidate_setup": {
+            "median_ns": 2945042
+          },
+          "certificate_setup": {
+            "median_ns": 675209
+          },
+          "certified_membership": {
+            "median_ns": 63125
+          },
+          "execution_setup": {
+            "median_ns": 3125
+          },
+          "observation_output": {
+            "median_ns": 1274292
+          }
+        },
+        "breakdown": {
+          "grounding": 9800333,
+          "proposal": 3847124,
+          "membership": 742709
+        },
+        "peak_rss_bytes": 28196864
+      },
+      "reference": {
+        "samples": 7,
+        "minimum_ns": 6167209,
+        "median_ns": 6229000,
+        "maximum_ns": 6305084,
+        "grounding_ns": 2000000,
+        "solving_ns": 0,
+        "peak_rss_bytes": 5619712
+      },
+      "ratio_to_clingo": 3.6764729491090065,
+      "native_minus_clingo_ns": 16671750
+    },
+    {
+      "report": "B1",
+      "entry": "generated/transitive-dense-40.lp",
+      "workers": 4,
+      "native": {
+        "samples": 7,
+        "minimum_ns": 21227042,
+        "median_ns": 22921959,
+        "maximum_ns": 24487875,
+        "driver_median_ns": 16452875,
+        "published_models": 1,
+        "candidates_examined": 1,
+        "search_work": 939917,
+        "phases": {
+          "admission_materialization": {
+            "median_ns": 10289000
+          },
+          "candidate_generation": {
+            "median_ns": 917084
+          },
+          "candidate_setup": {
+            "median_ns": 2928042
+          },
+          "certificate_setup": {
+            "median_ns": 682000
+          },
+          "certified_membership": {
+            "median_ns": 60292
+          },
+          "execution_setup": {
+            "median_ns": 4166
+          },
+          "observation_output": {
+            "median_ns": 458083
+          }
+        },
+        "breakdown": {
+          "grounding": 9876334,
+          "proposal": 3857084,
+          "membership": 743417
+        },
+        "peak_rss_bytes": 28262400
+      },
+      "reference": {
+        "samples": 7,
+        "minimum_ns": 6167209,
+        "median_ns": 6229000,
+        "maximum_ns": 6305084,
+        "grounding_ns": 2000000,
+        "solving_ns": 0,
+        "peak_rss_bytes": 5619712
+      },
+      "ratio_to_clingo": 3.679877829507144,
+      "native_minus_clingo_ns": 16692959
+    },
+    {
+      "report": "B1",
+      "entry": "generated/chain-1000.lp",
+      "workers": 1,
+      "native": {
+        "samples": 7,
+        "minimum_ns": 13846250,
+        "median_ns": 15436042,
+        "maximum_ns": 15490584,
+        "driver_median_ns": 9396667,
+        "published_models": 1,
+        "candidates_examined": 1,
+        "search_work": 211573,
+        "phases": {
+          "admission_materialization": {
+            "median_ns": 6602958
+          },
+          "candidate_generation": {
+            "median_ns": 5333
+          },
+          "candidate_setup": {
+            "median_ns": 2042
+          },
+          "closure_membership": {
+            "median_ns": 1029625
+          },
+          "execution_setup": {
+            "median_ns": 22792
+          },
+          "observation_output": {
+            "median_ns": 1322875
+          }
+        },
+        "breakdown": {
+          "proposal": 7458,
+          "membership": 1029625
+        },
+        "peak_rss_bytes": 18423808
+      },
+      "reference": {
+        "samples": 7,
+        "minimum_ns": 6180583,
+        "median_ns": 6199833,
+        "maximum_ns": 7767833,
+        "grounding_ns": 3000000,
+        "solving_ns": 0,
+        "peak_rss_bytes": 5685248
+      },
+      "ratio_to_clingo": 2.489751256203191,
+      "native_minus_clingo_ns": 9236209
+    },
+    {
+      "report": "B1",
+      "entry": "generated/chain-1000.lp",
+      "workers": 4,
+      "native": {
+        "samples": 7,
+        "minimum_ns": 13836833,
+        "median_ns": 13867750,
+        "maximum_ns": 15376625,
+        "driver_median_ns": 8005500,
+        "published_models": 1,
+        "candidates_examined": 1,
+        "search_work": 211573,
+        "phases": {
+          "admission_materialization": {
+            "median_ns": 6152459
+          },
+          "candidate_generation": {
+            "median_ns": 5458
+          },
+          "candidate_setup": {
+            "median_ns": 1833
+          },
+          "closure_membership": {
+            "median_ns": 1032833
+          },
+          "execution_setup": {
+            "median_ns": 42500
+          },
+          "observation_output": {
+            "median_ns": 530584
+          }
+        },
+        "breakdown": {
+          "proposal": 7458,
+          "membership": 1032833
+        },
+        "peak_rss_bytes": 18440192
+      },
+      "reference": {
+        "samples": 7,
+        "minimum_ns": 6180583,
+        "median_ns": 6199833,
+        "maximum_ns": 7767833,
+        "grounding_ns": 3000000,
+        "solving_ns": 0,
+        "peak_rss_bytes": 5685248
+      },
+      "ratio_to_clingo": 2.2367941200996864,
+      "native_minus_clingo_ns": 7667917
+    },
+    {
+      "report": "B1",
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "workers": 1,
+      "native": {
+        "samples": 7,
+        "minimum_ns": 9280792,
+        "median_ns": 9313208,
+        "maximum_ns": 9356000,
+        "driver_median_ns": 3942917,
+        "published_models": 1,
+        "candidates_examined": 1,
+        "search_work": 105151,
+        "phases": {
+          "admission_materialization": {
+            "median_ns": 2881333
+          },
+          "candidate_generation": {
+            "median_ns": 107584
+          },
+          "candidate_setup": {
+            "median_ns": 177083
+          },
+          "certificate_setup": {
+            "median_ns": 70750
+          },
+          "certified_membership": {
+            "median_ns": 7542
+          },
+          "execution_setup": {
+            "median_ns": 2958
+          },
+          "observation_output": {
+            "median_ns": 508625
+          }
+        },
+        "breakdown": {
+          "grounding": 2636666,
+          "proposal": 290250,
+          "membership": 78500
+        },
+        "peak_rss_bytes": 15155200
+      },
+      "reference": {
+        "samples": 7,
+        "minimum_ns": 4666625,
+        "median_ns": 4678500,
+        "maximum_ns": 4715875,
+        "grounding_ns": 1000000,
+        "solving_ns": 0,
+        "peak_rss_bytes": 5439488
+      },
+      "ratio_to_clingo": 1.9906397349577856,
+      "native_minus_clingo_ns": 4634708
+    },
+    {
+      "report": "B1",
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "workers": 4,
+      "native": {
+        "samples": 7,
+        "minimum_ns": 9272166,
+        "median_ns": 9293875,
+        "maximum_ns": 10900542,
+        "driver_median_ns": 4257167,
+        "published_models": 1,
+        "candidates_examined": 1,
+        "search_work": 105151,
+        "phases": {
+          "admission_materialization": {
+            "median_ns": 2914292
+          },
+          "candidate_generation": {
+            "median_ns": 122500
+          },
+          "candidate_setup": {
+            "median_ns": 187417
+          },
+          "certificate_setup": {
+            "median_ns": 72375
+          },
+          "certified_membership": {
+            "median_ns": 7708
+          },
+          "execution_setup": {
+            "median_ns": 3250
+          },
+          "observation_output": {
+            "median_ns": 779708
+          }
+        },
+        "breakdown": {
+          "grounding": 2693584,
+          "proposal": 308500,
+          "membership": 80916
+        },
+        "peak_rss_bytes": 15114240
+      },
+      "reference": {
+        "samples": 7,
+        "minimum_ns": 4666625,
+        "median_ns": 4678500,
+        "maximum_ns": 4715875,
+        "grounding_ns": 1000000,
+        "solving_ns": 0,
+        "peak_rss_bytes": 5439488
+      },
+      "ratio_to_clingo": 1.9865074275943144,
+      "native_minus_clingo_ns": 4615375
+    },
+    {
+      "report": "B2",
+      "entry": "generated/transitive-dense-20.lp",
+      "workers": 1,
+      "native": {
+        "samples": 7,
+        "minimum_ns": 7738209,
+        "median_ns": 7762834,
+        "maximum_ns": 7797292,
+        "driver_median_ns": 2683834,
+        "published_models": 1,
+        "candidates_examined": 1,
+        "search_work": 133769,
+        "phases": {
+          "admission_materialization": {
+            "median_ns": 1796792
+          },
+          "candidate_generation": {
+            "median_ns": 127125
+          },
+          "candidate_setup": {
+            "median_ns": 374792
+          },
+          "certificate_setup": {
+            "median_ns": 104959
+          },
+          "certified_membership": {
+            "median_ns": 9583
+          },
+          "execution_setup": {
+            "median_ns": 2750
+          },
+          "observation_output": {
+            "median_ns": 93667
+          }
+        },
+        "breakdown": {
+          "grounding": 1457500,
+          "proposal": 501292,
+          "membership": 112917
+        },
+        "peak_rss_bytes": 15523840
+      },
+      "reference": {
+        "samples": 7,
+        "minimum_ns": 4634750,
+        "median_ns": 4659458,
+        "maximum_ns": 4732125,
+        "grounding_ns": 1000000,
+        "solving_ns": 0,
+        "peak_rss_bytes": 5324800
+      },
+      "ratio_to_clingo": 1.666037981241595,
+      "native_minus_clingo_ns": 3103376
+    },
+    {
+      "report": "B2",
+      "entry": "generated/transitive-dense-20.lp",
+      "workers": 4,
+      "native": {
+        "samples": 7,
+        "minimum_ns": 7642458,
+        "median_ns": 7729125,
+        "maximum_ns": 7776291,
+        "driver_median_ns": 2724292,
+        "published_models": 1,
+        "candidates_examined": 1,
+        "search_work": 133769,
+        "phases": {
+          "admission_materialization": {
+            "median_ns": 1766501
+          },
+          "candidate_generation": {
+            "median_ns": 146708
+          },
+          "candidate_setup": {
+            "median_ns": 366292
+          },
+          "certificate_setup": {
+            "median_ns": 99917
+          },
+          "certified_membership": {
+            "median_ns": 9000
+          },
+          "execution_setup": {
+            "median_ns": 3292
+          },
+          "observation_output": {
+            "median_ns": 101667
+          }
+        },
+        "breakdown": {
+          "grounding": 1445792,
+          "proposal": 512375,
+          "membership": 108917
+        },
+        "peak_rss_bytes": 15728640
+      },
+      "reference": {
+        "samples": 7,
+        "minimum_ns": 4634750,
+        "median_ns": 4659458,
+        "maximum_ns": 4732125,
+        "grounding_ns": 1000000,
+        "solving_ns": 0,
+        "peak_rss_bytes": 5324800
+      },
+      "ratio_to_clingo": 1.6588034488131451,
+      "native_minus_clingo_ns": 3069667
+    },
+    {
+      "report": "B2",
+      "entry": "generated/transitive-dense-40.lp",
+      "workers": 1,
+      "native": {
+        "samples": 7,
+        "minimum_ns": 21395458,
+        "median_ns": 22899334,
+        "maximum_ns": 24522584,
+        "driver_median_ns": 16980500,
+        "published_models": 1,
+        "candidates_examined": 1,
+        "search_work": 939917,
+        "phases": {
+          "admission_materialization": {
+            "median_ns": 10346458
+          },
+          "candidate_generation": {
+            "median_ns": 924625
+          },
+          "candidate_setup": {
+            "median_ns": 2955583
+          },
+          "certificate_setup": {
+            "median_ns": 660750
+          },
+          "certified_membership": {
+            "median_ns": 62458
+          },
+          "execution_setup": {
+            "median_ns": 3417
+          },
+          "observation_output": {
+            "median_ns": 1212167
+          }
+        },
+        "breakdown": {
+          "grounding": 9922750,
+          "proposal": 3882416,
+          "membership": 724166
+        },
+        "peak_rss_bytes": 28024832
+      },
+      "reference": {
+        "samples": 7,
+        "minimum_ns": 6164083,
+        "median_ns": 6243333,
+        "maximum_ns": 6321417,
+        "grounding_ns": 2000000,
+        "solving_ns": 0,
+        "peak_rss_bytes": 5619712
+      },
+      "ratio_to_clingo": 3.6678059619757586,
+      "native_minus_clingo_ns": 16656001
+    },
+    {
+      "report": "B2",
+      "entry": "generated/transitive-dense-40.lp",
+      "workers": 4,
+      "native": {
+        "samples": 7,
+        "minimum_ns": 21421417,
+        "median_ns": 22817000,
+        "maximum_ns": 22971834,
+        "driver_median_ns": 16467833,
+        "published_models": 1,
+        "candidates_examined": 1,
+        "search_work": 939917,
+        "phases": {
+          "admission_materialization": {
+            "median_ns": 10278208
+          },
+          "candidate_generation": {
+            "median_ns": 923458
+          },
+          "candidate_setup": {
+            "median_ns": 2971250
+          },
+          "certificate_setup": {
+            "median_ns": 676250
+          },
+          "certified_membership": {
+            "median_ns": 55875
+          },
+          "execution_setup": {
+            "median_ns": 4042
+          },
+          "observation_output": {
+            "median_ns": 467042
+          }
+        },
+        "breakdown": {
+          "grounding": 9845750,
+          "proposal": 3893875,
+          "membership": 734125
+        },
+        "peak_rss_bytes": 28262400
+      },
+      "reference": {
+        "samples": 7,
+        "minimum_ns": 6164083,
+        "median_ns": 6243333,
+        "maximum_ns": 6321417,
+        "grounding_ns": 2000000,
+        "solving_ns": 0,
+        "peak_rss_bytes": 5619712
+      },
+      "ratio_to_clingo": 3.654618454597889,
+      "native_minus_clingo_ns": 16573667
+    },
+    {
+      "report": "B2",
+      "entry": "generated/chain-1000.lp",
+      "workers": 1,
+      "native": {
+        "samples": 7,
+        "minimum_ns": 13843500,
+        "median_ns": 15442958,
+        "maximum_ns": 15457000,
+        "driver_median_ns": 9312375,
+        "published_models": 1,
+        "candidates_examined": 1,
+        "search_work": 211573,
+        "phases": {
+          "admission_materialization": {
+            "median_ns": 6180375
+          },
+          "candidate_generation": {
+            "median_ns": 5375
+          },
+          "candidate_setup": {
+            "median_ns": 1792
+          },
+          "closure_membership": {
+            "median_ns": 1026542
+          },
+          "execution_setup": {
+            "median_ns": 22833
+          },
+          "observation_output": {
+            "median_ns": 1718000
+          }
+        },
+        "breakdown": {
+          "proposal": 7250,
+          "membership": 1026542
+        },
+        "peak_rss_bytes": 18448384
+      },
+      "reference": {
+        "samples": 7,
+        "minimum_ns": 6190709,
+        "median_ns": 6211084,
+        "maximum_ns": 7759666,
+        "grounding_ns": 3000000,
+        "solving_ns": 0,
+        "peak_rss_bytes": 5685248
+      },
+      "ratio_to_clingo": 2.4863547168255975,
+      "native_minus_clingo_ns": 9231874
+    },
+    {
+      "report": "B2",
+      "entry": "generated/chain-1000.lp",
+      "workers": 4,
+      "native": {
+        "samples": 7,
+        "minimum_ns": 13835417,
+        "median_ns": 15444459,
+        "maximum_ns": 15562834,
+        "driver_median_ns": 9083959,
+        "published_models": 1,
+        "candidates_examined": 1,
+        "search_work": 211573,
+        "phases": {
+          "admission_materialization": {
+            "median_ns": 6281125
+          },
+          "candidate_generation": {
+            "median_ns": 5251
+          },
+          "candidate_setup": {
+            "median_ns": 1916
+          },
+          "closure_membership": {
+            "median_ns": 1046292
+          },
+          "execution_setup": {
+            "median_ns": 41042
+          },
+          "observation_output": {
+            "median_ns": 1441542
+          }
+        },
+        "breakdown": {
+          "proposal": 7249,
+          "membership": 1046292
+        },
+        "peak_rss_bytes": 18497536
+      },
+      "reference": {
+        "samples": 7,
+        "minimum_ns": 6190709,
+        "median_ns": 6211084,
+        "maximum_ns": 7759666,
+        "grounding_ns": 3000000,
+        "solving_ns": 0,
+        "peak_rss_bytes": 5685248
+      },
+      "ratio_to_clingo": 2.486596381565601,
+      "native_minus_clingo_ns": 9233375
+    },
+    {
+      "report": "B2",
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "workers": 1,
+      "native": {
+        "samples": 7,
+        "minimum_ns": 9269791,
+        "median_ns": 9316042,
+        "maximum_ns": 9381459,
+        "driver_median_ns": 3887917,
+        "published_models": 1,
+        "candidates_examined": 1,
+        "search_work": 105151,
+        "phases": {
+          "admission_materialization": {
+            "median_ns": 2898833
+          },
+          "candidate_generation": {
+            "median_ns": 107334
+          },
+          "candidate_setup": {
+            "median_ns": 182750
+          },
+          "certificate_setup": {
+            "median_ns": 76833
+          },
+          "certified_membership": {
+            "median_ns": 8208
+          },
+          "execution_setup": {
+            "median_ns": 2959
+          },
+          "observation_output": {
+            "median_ns": 445458
+          }
+        },
+        "breakdown": {
+          "grounding": 2643542,
+          "proposal": 290666,
+          "membership": 85500
+        },
+        "peak_rss_bytes": 15228928
+      },
+      "reference": {
+        "samples": 7,
+        "minimum_ns": 4663416,
+        "median_ns": 4691416,
+        "maximum_ns": 4722750,
+        "grounding_ns": 1000000,
+        "solving_ns": 0,
+        "peak_rss_bytes": 5439488
+      },
+      "ratio_to_clingo": 1.985763360145423,
+      "native_minus_clingo_ns": 4624626
+    },
+    {
+      "report": "B2",
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "workers": 4,
+      "native": {
+        "samples": 7,
+        "minimum_ns": 9258834,
+        "median_ns": 9288750,
+        "maximum_ns": 10863583,
+        "driver_median_ns": 4130708,
+        "published_models": 1,
+        "candidates_examined": 1,
+        "search_work": 105151,
+        "phases": {
+          "admission_materialization": {
+            "median_ns": 2883001
+          },
+          "candidate_generation": {
+            "median_ns": 123708
+          },
+          "candidate_setup": {
+            "median_ns": 183625
+          },
+          "certificate_setup": {
+            "median_ns": 72500
+          },
+          "certified_membership": {
+            "median_ns": 8500
+          },
+          "execution_setup": {
+            "median_ns": 3292
+          },
+          "observation_output": {
+            "median_ns": 680750
+          }
+        },
+        "breakdown": {
+          "grounding": 2686625,
+          "proposal": 308833,
+          "membership": 81000
+        },
+        "peak_rss_bytes": 15187968
+      },
+      "reference": {
+        "samples": 7,
+        "minimum_ns": 4663416,
+        "median_ns": 4691416,
+        "maximum_ns": 4722750,
+        "grounding_ns": 1000000,
+        "solving_ns": 0,
+        "peak_rss_bytes": 5439488
+      },
+      "ratio_to_clingo": 1.9799459267734945,
+      "native_minus_clingo_ns": 4597334
+    },
+    {
+      "report": "A2",
+      "entry": "generated/transitive-dense-20.lp",
+      "workers": 1,
+      "native": {
+        "samples": 7,
+        "minimum_ns": 7736000,
+        "median_ns": 7760292,
+        "maximum_ns": 7788666,
+        "driver_median_ns": 2642333,
+        "published_models": 1,
+        "candidates_examined": 1,
+        "search_work": 133769,
+        "phases": {
+          "admission_materialization": {
+            "median_ns": 1761000
+          },
+          "candidate_generation": {
+            "median_ns": 126251
+          },
+          "candidate_setup": {
+            "median_ns": 366708
+          },
+          "certificate_setup": {
+            "median_ns": 101208
+          },
+          "certified_membership": {
+            "median_ns": 9667
+          },
+          "execution_setup": {
+            "median_ns": 2208
+          },
+          "observation_output": {
+            "median_ns": 93209
+          }
+        },
+        "breakdown": {
+          "grounding": 1422916,
+          "proposal": 492959,
+          "membership": 110875
+        },
+        "peak_rss_bytes": 15351808
+      },
+      "reference": {
+        "samples": 7,
+        "minimum_ns": 4645417,
+        "median_ns": 4657875,
+        "maximum_ns": 4677625,
+        "grounding_ns": 1000000,
+        "solving_ns": 0,
+        "peak_rss_bytes": 5324800
+      },
+      "ratio_to_clingo": 1.6660584494002093,
+      "native_minus_clingo_ns": 3102417
+    },
+    {
+      "report": "A2",
+      "entry": "generated/transitive-dense-20.lp",
+      "workers": 4,
+      "native": {
+        "samples": 7,
+        "minimum_ns": 7510750,
+        "median_ns": 7732958,
+        "maximum_ns": 7755292,
+        "driver_median_ns": 2693792,
+        "published_models": 1,
+        "candidates_examined": 1,
+        "search_work": 133769,
+        "phases": {
+          "admission_materialization": {
+            "median_ns": 1724459
+          },
+          "candidate_generation": {
+            "median_ns": 147459
+          },
+          "candidate_setup": {
+            "median_ns": 374875
+          },
+          "certificate_setup": {
+            "median_ns": 102000
+          },
+          "certified_membership": {
+            "median_ns": 8916
+          },
+          "execution_setup": {
+            "median_ns": 2792
+          },
+          "observation_output": {
+            "median_ns": 102208
+          }
+        },
+        "breakdown": {
+          "grounding": 1417958,
+          "proposal": 522334,
+          "membership": 110708
+        },
+        "peak_rss_bytes": 15441920
+      },
+      "reference": {
+        "samples": 7,
+        "minimum_ns": 4645417,
+        "median_ns": 4657875,
+        "maximum_ns": 4677625,
+        "grounding_ns": 1000000,
+        "solving_ns": 0,
+        "peak_rss_bytes": 5324800
+      },
+      "ratio_to_clingo": 1.6601901081501758,
+      "native_minus_clingo_ns": 3075083
+    },
+    {
+      "report": "A2",
+      "entry": "generated/transitive-dense-40.lp",
+      "workers": 1,
+      "native": {
+        "samples": 7,
+        "minimum_ns": 21396500,
+        "median_ns": 22898167,
+        "maximum_ns": 22922167,
+        "driver_median_ns": 16892084,
+        "published_models": 1,
+        "candidates_examined": 1,
+        "search_work": 939917,
+        "phases": {
+          "admission_materialization": {
+            "median_ns": 10135167
+          },
+          "candidate_generation": {
+            "median_ns": 909208
+          },
+          "candidate_setup": {
+            "median_ns": 3006042
+          },
+          "certificate_setup": {
+            "median_ns": 666167
+          },
+          "certified_membership": {
+            "median_ns": 56542
+          },
+          "execution_setup": {
+            "median_ns": 2666
+          },
+          "observation_output": {
+            "median_ns": 1237251
+          }
+        },
+        "breakdown": {
+          "grounding": 9758083,
+          "proposal": 3921416,
+          "membership": 718125
+        },
+        "peak_rss_bytes": 27918336
+      },
+      "reference": {
+        "samples": 7,
+        "minimum_ns": 6158083,
+        "median_ns": 6260167,
+        "maximum_ns": 6274292,
+        "grounding_ns": 2000000,
+        "solving_ns": 0,
+        "peak_rss_bytes": 5619712
+      },
+      "ratio_to_clingo": 3.657756574225576,
+      "native_minus_clingo_ns": 16638000
+    },
+    {
+      "report": "A2",
+      "entry": "generated/transitive-dense-40.lp",
+      "workers": 4,
+      "native": {
+        "samples": 7,
+        "minimum_ns": 21098958,
+        "median_ns": 22760250,
+        "maximum_ns": 22941042,
+        "driver_median_ns": 16123208,
+        "published_models": 1,
+        "candidates_examined": 1,
+        "search_work": 939917,
+        "phases": {
+          "admission_materialization": {
+            "median_ns": 10070875
+          },
+          "candidate_generation": {
+            "median_ns": 928208
+          },
+          "candidate_setup": {
+            "median_ns": 2945125
+          },
+          "certificate_setup": {
+            "median_ns": 682333
+          },
+          "certified_membership": {
+            "median_ns": 56833
+          },
+          "execution_setup": {
+            "median_ns": 3459
+          },
+          "observation_output": {
+            "median_ns": 459583
+          }
+        },
+        "breakdown": {
+          "grounding": 9668750,
+          "proposal": 3866792,
+          "membership": 735417
+        },
+        "peak_rss_bytes": 27967488
+      },
+      "reference": {
+        "samples": 7,
+        "minimum_ns": 6158083,
+        "median_ns": 6260167,
+        "maximum_ns": 6274292,
+        "grounding_ns": 2000000,
+        "solving_ns": 0,
+        "peak_rss_bytes": 5619712
+      },
+      "ratio_to_clingo": 3.635725692301819,
+      "native_minus_clingo_ns": 16500083
+    },
+    {
+      "report": "A2",
+      "entry": "generated/chain-1000.lp",
+      "workers": 1,
+      "native": {
+        "samples": 7,
+        "minimum_ns": 13849417,
+        "median_ns": 15405625,
+        "maximum_ns": 15496458,
+        "driver_median_ns": 9240208,
+        "published_models": 1,
+        "candidates_examined": 1,
+        "search_work": 211573,
+        "phases": {
+          "admission_materialization": {
+            "median_ns": 6311792
+          },
+          "candidate_generation": {
+            "median_ns": 3792
+          },
+          "candidate_setup": {
+            "median_ns": 1250
+          },
+          "closure_membership": {
+            "median_ns": 1026958
+          },
+          "execution_setup": {
+            "median_ns": 22250
+          },
+          "observation_output": {
+            "median_ns": 1633334
+          }
+        },
+        "breakdown": {
+          "proposal": 5083,
+          "membership": 1026958
+        },
+        "peak_rss_bytes": 18268160
+      },
+      "reference": {
+        "samples": 7,
+        "minimum_ns": 6182750,
+        "median_ns": 6202709,
+        "maximum_ns": 7736084,
+        "grounding_ns": 3000000,
+        "solving_ns": 0,
+        "peak_rss_bytes": 5685248
+      },
+      "ratio_to_clingo": 2.48369301219838,
+      "native_minus_clingo_ns": 9202916
+    },
+    {
+      "report": "A2",
+      "entry": "generated/chain-1000.lp",
+      "workers": 4,
+      "native": {
+        "samples": 7,
+        "minimum_ns": 13803125,
+        "median_ns": 15410083,
+        "maximum_ns": 15489375,
+        "driver_median_ns": 9444834,
+        "published_models": 1,
+        "candidates_examined": 1,
+        "search_work": 211573,
+        "phases": {
+          "admission_materialization": {
+            "median_ns": 6354417
+          },
+          "candidate_generation": {
+            "median_ns": 3459
+          },
+          "candidate_setup": {
+            "median_ns": 1333
+          },
+          "closure_membership": {
+            "median_ns": 1038000
+          },
+          "execution_setup": {
+            "median_ns": 42083
+          },
+          "observation_output": {
+            "median_ns": 1456250
+          }
+        },
+        "breakdown": {
+          "proposal": 4709,
+          "membership": 1038000
+        },
+        "peak_rss_bytes": 18309120
+      },
+      "reference": {
+        "samples": 7,
+        "minimum_ns": 6182750,
+        "median_ns": 6202709,
+        "maximum_ns": 7736084,
+        "grounding_ns": 3000000,
+        "solving_ns": 0,
+        "peak_rss_bytes": 5685248
+      },
+      "ratio_to_clingo": 2.484411730422949,
+      "native_minus_clingo_ns": 9207374
+    },
+    {
+      "report": "A2",
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "workers": 1,
+      "native": {
+        "samples": 7,
+        "minimum_ns": 9282709,
+        "median_ns": 9314250,
+        "maximum_ns": 9352542,
+        "driver_median_ns": 3936292,
+        "published_models": 1,
+        "candidates_examined": 1,
+        "search_work": 105151,
+        "phases": {
+          "admission_materialization": {
+            "median_ns": 2933375
+          },
+          "candidate_generation": {
+            "median_ns": 108416
+          },
+          "candidate_setup": {
+            "median_ns": 175167
+          },
+          "certificate_setup": {
+            "median_ns": 80583
+          },
+          "certified_membership": {
+            "median_ns": 9000
+          },
+          "execution_setup": {
+            "median_ns": 2375
+          },
+          "observation_output": {
+            "median_ns": 476375
+          }
+        },
+        "breakdown": {
+          "grounding": 2700125,
+          "proposal": 285749,
+          "membership": 89625
+        },
+        "peak_rss_bytes": 14925824
+      },
+      "reference": {
+        "samples": 7,
+        "minimum_ns": 4643292,
+        "median_ns": 4672791,
+        "maximum_ns": 5805708,
+        "grounding_ns": 1000000,
+        "solving_ns": 0,
+        "peak_rss_bytes": 5439488
+      },
+      "ratio_to_clingo": 1.993294799617616,
+      "native_minus_clingo_ns": 4641459
+    },
+    {
+      "report": "A2",
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "workers": 4,
+      "native": {
+        "samples": 7,
+        "minimum_ns": 9279125,
+        "median_ns": 9306458,
+        "maximum_ns": 9334292,
+        "driver_median_ns": 4270917,
+        "published_models": 1,
+        "candidates_examined": 1,
+        "search_work": 105151,
+        "phases": {
+          "admission_materialization": {
+            "median_ns": 2911375
+          },
+          "candidate_generation": {
+            "median_ns": 125250
+          },
+          "candidate_setup": {
+            "median_ns": 181834
+          },
+          "certificate_setup": {
+            "median_ns": 75375
+          },
+          "certified_membership": {
+            "median_ns": 8208
+          },
+          "execution_setup": {
+            "median_ns": 3000
+          },
+          "observation_output": {
+            "median_ns": 717124
+          }
+        },
+        "breakdown": {
+          "grounding": 2690167,
+          "proposal": 306709,
+          "membership": 83583
+        },
+        "peak_rss_bytes": 15032320
+      },
+      "reference": {
+        "samples": 7,
+        "minimum_ns": 4643292,
+        "median_ns": 4672791,
+        "maximum_ns": 5805708,
+        "grounding_ns": 1000000,
+        "solving_ns": 0,
+        "peak_rss_bytes": 5439488
+      },
+      "ratio_to_clingo": 1.9916272737214227,
+      "native_minus_clingo_ns": 4633667
+    }
+  ],
+  "grounding_phase_medians": [
+    {
+      "entry": "generated/chain-1000.lp",
+      "workers": 1,
+      "leg": "A1",
+      "actual_execution": {
+        "adapter": null,
+        "backend": "cpu",
+        "device": {
+          "kind": "cpu"
+        },
+        "procedure": "closure"
+      },
+      "actual_grounder": "lazy_interleaved",
+      "source_preparation_median_ns": 6601291,
+      "grounding_phases": {
+        "coherence": null,
+        "domain_analysis": null,
+        "formula_initialization": null,
+        "objective_activation": null,
+        "rule_instantiation": null,
+        "support_completion": null,
+        "support_guards": null,
+        "theory_validation": null
+      }
+    },
+    {
+      "entry": "generated/chain-1000.lp",
+      "workers": 1,
+      "leg": "A2",
+      "actual_execution": {
+        "adapter": null,
+        "backend": "cpu",
+        "device": {
+          "kind": "cpu"
+        },
+        "procedure": "closure"
+      },
+      "actual_grounder": "lazy_interleaved",
+      "source_preparation_median_ns": 6312542,
+      "grounding_phases": {
+        "coherence": null,
+        "domain_analysis": null,
+        "formula_initialization": null,
+        "objective_activation": null,
+        "rule_instantiation": null,
+        "support_completion": null,
+        "support_guards": null,
+        "theory_validation": null
+      }
+    },
+    {
+      "entry": "generated/chain-1000.lp",
+      "workers": 1,
+      "leg": "B1",
+      "actual_execution": {
+        "adapter": null,
+        "backend": "cpu",
+        "device": {
+          "kind": "cpu"
+        },
+        "procedure": "closure"
+      },
+      "actual_grounder": "lazy_interleaved",
+      "source_preparation_median_ns": 6604583,
+      "grounding_phases": {
+        "coherence": null,
+        "domain_analysis": null,
+        "formula_initialization": null,
+        "objective_activation": null,
+        "rule_instantiation": null,
+        "support_completion": null,
+        "support_guards": null,
+        "theory_validation": null
+      }
+    },
+    {
+      "entry": "generated/chain-1000.lp",
+      "workers": 1,
+      "leg": "B2",
+      "actual_execution": {
+        "adapter": null,
+        "backend": "cpu",
+        "device": {
+          "kind": "cpu"
+        },
+        "procedure": "closure"
+      },
+      "actual_grounder": "lazy_interleaved",
+      "source_preparation_median_ns": 6182000,
+      "grounding_phases": {
+        "coherence": null,
+        "domain_analysis": null,
+        "formula_initialization": null,
+        "objective_activation": null,
+        "rule_instantiation": null,
+        "support_completion": null,
+        "support_guards": null,
+        "theory_validation": null
+      }
+    },
+    {
+      "entry": "generated/chain-1000.lp",
+      "workers": 4,
+      "leg": "A1",
+      "actual_execution": {
+        "adapter": null,
+        "backend": "cpu",
+        "device": {
+          "kind": "cpu"
+        },
+        "procedure": "closure"
+      },
+      "actual_grounder": "lazy_interleaved",
+      "source_preparation_median_ns": 6486083,
+      "grounding_phases": {
+        "coherence": null,
+        "domain_analysis": null,
+        "formula_initialization": null,
+        "objective_activation": null,
+        "rule_instantiation": null,
+        "support_completion": null,
+        "support_guards": null,
+        "theory_validation": null
+      }
+    },
+    {
+      "entry": "generated/chain-1000.lp",
+      "workers": 4,
+      "leg": "A2",
+      "actual_execution": {
+        "adapter": null,
+        "backend": "cpu",
+        "device": {
+          "kind": "cpu"
+        },
+        "procedure": "closure"
+      },
+      "actual_grounder": "lazy_interleaved",
+      "source_preparation_median_ns": 6355375,
+      "grounding_phases": {
+        "coherence": null,
+        "domain_analysis": null,
+        "formula_initialization": null,
+        "objective_activation": null,
+        "rule_instantiation": null,
+        "support_completion": null,
+        "support_guards": null,
+        "theory_validation": null
+      }
+    },
+    {
+      "entry": "generated/chain-1000.lp",
+      "workers": 4,
+      "leg": "B1",
+      "actual_execution": {
+        "adapter": null,
+        "backend": "cpu",
+        "device": {
+          "kind": "cpu"
+        },
+        "procedure": "closure"
+      },
+      "actual_grounder": "lazy_interleaved",
+      "source_preparation_median_ns": 6154250,
+      "grounding_phases": {
+        "coherence": null,
+        "domain_analysis": null,
+        "formula_initialization": null,
+        "objective_activation": null,
+        "rule_instantiation": null,
+        "support_completion": null,
+        "support_guards": null,
+        "theory_validation": null
+      }
+    },
+    {
+      "entry": "generated/chain-1000.lp",
+      "workers": 4,
+      "leg": "B2",
+      "actual_execution": {
+        "adapter": null,
+        "backend": "cpu",
+        "device": {
+          "kind": "cpu"
+        },
+        "procedure": "closure"
+      },
+      "actual_grounder": "lazy_interleaved",
+      "source_preparation_median_ns": 6282750,
+      "grounding_phases": {
+        "coherence": null,
+        "domain_analysis": null,
+        "formula_initialization": null,
+        "objective_activation": null,
+        "rule_instantiation": null,
+        "support_completion": null,
+        "support_guards": null,
+        "theory_validation": null
+      }
+    },
+    {
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "workers": 1,
+      "leg": "A1",
+      "actual_execution": {
+        "adapter": null,
+        "backend": "cpu",
+        "device": {
+          "kind": "cpu"
+        },
+        "procedure": "positive_consequences"
+      },
+      "actual_grounder": "eager",
+      "source_preparation_median_ns": 241125,
+      "grounding_phases": {
+        "coherence": 750,
+        "domain_analysis": 2625,
+        "formula_initialization": 958,
+        "objective_activation": 3708,
+        "rule_instantiation": 737750,
+        "support_completion": 1768417,
+        "support_guards": 92417,
+        "theory_validation": 4666
+      }
+    },
+    {
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "workers": 1,
+      "leg": "A2",
+      "actual_execution": {
+        "adapter": null,
+        "backend": "cpu",
+        "device": {
+          "kind": "cpu"
+        },
+        "procedure": "positive_consequences"
+      },
+      "actual_grounder": "eager",
+      "source_preparation_median_ns": 242584,
+      "grounding_phases": {
+        "coherence": 833,
+        "domain_analysis": 2750,
+        "formula_initialization": 917,
+        "objective_activation": 3750,
+        "rule_instantiation": 759083,
+        "support_completion": 1787834,
+        "support_guards": 97042,
+        "theory_validation": 4542
+      }
+    },
+    {
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "workers": 1,
+      "leg": "B1",
+      "actual_execution": {
+        "adapter": null,
+        "backend": "cpu",
+        "device": {
+          "kind": "cpu"
+        },
+        "procedure": "positive_consequences"
+      },
+      "actual_grounder": "eager",
+      "source_preparation_median_ns": 243041,
+      "grounding_phases": {
+        "coherence": 958,
+        "domain_analysis": 2125,
+        "formula_initialization": 2084,
+        "objective_activation": 1834,
+        "rule_instantiation": 756124,
+        "support_completion": 1740209,
+        "support_guards": 92875,
+        "theory_validation": 4459
+      }
+    },
+    {
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "workers": 1,
+      "leg": "B2",
+      "actual_execution": {
+        "adapter": null,
+        "backend": "cpu",
+        "device": {
+          "kind": "cpu"
+        },
+        "procedure": "positive_consequences"
+      },
+      "actual_grounder": "eager",
+      "source_preparation_median_ns": 248417,
+      "grounding_phases": {
+        "coherence": 833,
+        "domain_analysis": 2375,
+        "formula_initialization": 2084,
+        "objective_activation": 1833,
+        "rule_instantiation": 766333,
+        "support_completion": 1742792,
+        "support_guards": 93583,
+        "theory_validation": 4667
+      }
+    },
+    {
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "workers": 4,
+      "leg": "A1",
+      "actual_execution": {
+        "adapter": null,
+        "backend": "cpu",
+        "device": {
+          "kind": "cpu"
+        },
+        "procedure": "positive_consequences"
+      },
+      "actual_grounder": "eager",
+      "source_preparation_median_ns": 205626,
+      "grounding_phases": {
+        "coherence": 667,
+        "domain_analysis": 2000,
+        "formula_initialization": 583,
+        "objective_activation": 3041,
+        "rule_instantiation": 738708,
+        "support_completion": 1801334,
+        "support_guards": 94917,
+        "theory_validation": 4625
+      }
+    },
+    {
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "workers": 4,
+      "leg": "A2",
+      "actual_execution": {
+        "adapter": null,
+        "backend": "cpu",
+        "device": {
+          "kind": "cpu"
+        },
+        "procedure": "positive_consequences"
+      },
+      "actual_grounder": "eager",
+      "source_preparation_median_ns": 197334,
+      "grounding_phases": {
+        "coherence": 750,
+        "domain_analysis": 2042,
+        "formula_initialization": 542,
+        "objective_activation": 3000,
+        "rule_instantiation": 743792,
+        "support_completion": 1797041,
+        "support_guards": 95500,
+        "theory_validation": 4541
+      }
+    },
+    {
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "workers": 4,
+      "leg": "B1",
+      "actual_execution": {
+        "adapter": null,
+        "backend": "cpu",
+        "device": {
+          "kind": "cpu"
+        },
+        "procedure": "positive_consequences"
+      },
+      "actual_grounder": "eager",
+      "source_preparation_median_ns": 201333,
+      "grounding_phases": {
+        "coherence": 875,
+        "domain_analysis": 1542,
+        "formula_initialization": 1583,
+        "objective_activation": 1250,
+        "rule_instantiation": 759667,
+        "support_completion": 1779876,
+        "support_guards": 92334,
+        "theory_validation": 4666
+      }
+    },
+    {
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "workers": 4,
+      "leg": "B2",
+      "actual_execution": {
+        "adapter": null,
+        "backend": "cpu",
+        "device": {
+          "kind": "cpu"
+        },
+        "procedure": "positive_consequences"
+      },
+      "actual_grounder": "eager",
+      "source_preparation_median_ns": 207708,
+      "grounding_phases": {
+        "coherence": 834,
+        "domain_analysis": 1625,
+        "formula_initialization": 1625,
+        "objective_activation": 1084,
+        "rule_instantiation": 786708,
+        "support_completion": 1751125,
+        "support_guards": 93750,
+        "theory_validation": 4625
+      }
+    },
+    {
+      "entry": "generated/transitive-dense-20.lp",
+      "workers": 1,
+      "leg": "A1",
+      "actual_execution": {
+        "adapter": null,
+        "backend": "cpu",
+        "device": {
+          "kind": "cpu"
+        },
+        "procedure": "positive_consequences"
+      },
+      "actual_grounder": "eager",
+      "source_preparation_median_ns": 317751,
+      "grounding_phases": {
+        "coherence": 375,
+        "domain_analysis": 58709,
+        "formula_initialization": 541,
+        "objective_activation": 2417,
+        "rule_instantiation": 728126,
+        "support_completion": 541416,
+        "support_guards": 67209,
+        "theory_validation": 4708
+      }
+    },
+    {
+      "entry": "generated/transitive-dense-20.lp",
+      "workers": 1,
+      "leg": "A2",
+      "actual_execution": {
+        "adapter": null,
+        "backend": "cpu",
+        "device": {
+          "kind": "cpu"
+        },
+        "procedure": "positive_consequences"
+      },
+      "actual_grounder": "eager",
+      "source_preparation_median_ns": 327083,
+      "grounding_phases": {
+        "coherence": 292,
+        "domain_analysis": 62167,
+        "formula_initialization": 583,
+        "objective_activation": 2167,
+        "rule_instantiation": 722085,
+        "support_completion": 543916,
+        "support_guards": 69125,
+        "theory_validation": 4875
+      }
+    },
+    {
+      "entry": "generated/transitive-dense-20.lp",
+      "workers": 1,
+      "leg": "B1",
+      "actual_execution": {
+        "adapter": null,
+        "backend": "cpu",
+        "device": {
+          "kind": "cpu"
+        },
+        "procedure": "positive_consequences"
+      },
+      "actual_grounder": "eager",
+      "source_preparation_median_ns": 330833,
+      "grounding_phases": {
+        "coherence": 459,
+        "domain_analysis": 57583,
+        "formula_initialization": 1666,
+        "objective_activation": 1458,
+        "rule_instantiation": 748583,
+        "support_completion": 551792,
+        "support_guards": 68625,
+        "theory_validation": 4875
+      }
+    },
+    {
+      "entry": "generated/transitive-dense-20.lp",
+      "workers": 1,
+      "leg": "B2",
+      "actual_execution": {
+        "adapter": null,
+        "backend": "cpu",
+        "device": {
+          "kind": "cpu"
+        },
+        "procedure": "positive_consequences"
+      },
+      "actual_grounder": "eager",
+      "source_preparation_median_ns": 333584,
+      "grounding_phases": {
+        "coherence": 500,
+        "domain_analysis": 56625,
+        "formula_initialization": 1666,
+        "objective_activation": 1583,
+        "rule_instantiation": 749292,
+        "support_completion": 551374,
+        "support_guards": 69958,
+        "theory_validation": 4792
+      }
+    },
+    {
+      "entry": "generated/transitive-dense-20.lp",
+      "workers": 4,
+      "leg": "A1",
+      "actual_execution": {
+        "adapter": null,
+        "backend": "cpu",
+        "device": {
+          "kind": "cpu"
+        },
+        "procedure": "positive_consequences"
+      },
+      "actual_grounder": "eager",
+      "source_preparation_median_ns": 308749,
+      "grounding_phases": {
+        "coherence": 292,
+        "domain_analysis": 60291,
+        "formula_initialization": 541,
+        "objective_activation": 2000,
+        "rule_instantiation": 719252,
+        "support_completion": 535500,
+        "support_guards": 67583,
+        "theory_validation": 4708
+      }
+    },
+    {
+      "entry": "generated/transitive-dense-20.lp",
+      "workers": 4,
+      "leg": "A2",
+      "actual_execution": {
+        "adapter": null,
+        "backend": "cpu",
+        "device": {
+          "kind": "cpu"
+        },
+        "procedure": "positive_consequences"
+      },
+      "actual_grounder": "eager",
+      "source_preparation_median_ns": 308083,
+      "grounding_phases": {
+        "coherence": 292,
+        "domain_analysis": 57500,
+        "formula_initialization": 500,
+        "objective_activation": 2000,
+        "rule_instantiation": 726251,
+        "support_completion": 536832,
+        "support_guards": 66167,
+        "theory_validation": 4875
+      }
+    },
+    {
+      "entry": "generated/transitive-dense-20.lp",
+      "workers": 4,
+      "leg": "B1",
+      "actual_execution": {
+        "adapter": null,
+        "backend": "cpu",
+        "device": {
+          "kind": "cpu"
+        },
+        "procedure": "positive_consequences"
+      },
+      "actual_grounder": "eager",
+      "source_preparation_median_ns": 312917,
+      "grounding_phases": {
+        "coherence": 375,
+        "domain_analysis": 56083,
+        "formula_initialization": 1458,
+        "objective_activation": 1417,
+        "rule_instantiation": 755878,
+        "support_completion": 540375,
+        "support_guards": 69750,
+        "theory_validation": 5166
+      }
+    },
+    {
+      "entry": "generated/transitive-dense-20.lp",
+      "workers": 4,
+      "leg": "B2",
+      "actual_execution": {
+        "adapter": null,
+        "backend": "cpu",
+        "device": {
+          "kind": "cpu"
+        },
+        "procedure": "positive_consequences"
+      },
+      "actual_grounder": "eager",
+      "source_preparation_median_ns": 313292,
+      "grounding_phases": {
+        "coherence": 375,
+        "domain_analysis": 56458,
+        "formula_initialization": 1417,
+        "objective_activation": 1541,
+        "rule_instantiation": 751457,
+        "support_completion": 539707,
+        "support_guards": 70583,
+        "theory_validation": 4792
+      }
+    },
+    {
+      "entry": "generated/transitive-dense-40.lp",
+      "workers": 1,
+      "leg": "A1",
+      "actual_execution": {
+        "adapter": null,
+        "backend": "cpu",
+        "device": {
+          "kind": "cpu"
+        },
+        "procedure": "positive_consequences"
+      },
+      "actual_grounder": "eager",
+      "source_preparation_median_ns": 409666,
+      "grounding_phases": {
+        "coherence": 1083,
+        "domain_analysis": 134125,
+        "formula_initialization": 750,
+        "objective_activation": 2875,
+        "rule_instantiation": 5830584,
+        "support_completion": 2880959,
+        "support_guards": 534166,
+        "theory_validation": 27917
+      }
+    },
+    {
+      "entry": "generated/transitive-dense-40.lp",
+      "workers": 1,
+      "leg": "A2",
+      "actual_execution": {
+        "adapter": null,
+        "backend": "cpu",
+        "device": {
+          "kind": "cpu"
+        },
+        "procedure": "positive_consequences"
+      },
+      "actual_grounder": "eager",
+      "source_preparation_median_ns": 380666,
+      "grounding_phases": {
+        "coherence": 1125,
+        "domain_analysis": 141125,
+        "formula_initialization": 708,
+        "objective_activation": 2375,
+        "rule_instantiation": 6035835,
+        "support_completion": 2940917,
+        "support_guards": 527333,
+        "theory_validation": 29375
+      }
+    },
+    {
+      "entry": "generated/transitive-dense-40.lp",
+      "workers": 1,
+      "leg": "B1",
+      "actual_execution": {
+        "adapter": null,
+        "backend": "cpu",
+        "device": {
+          "kind": "cpu"
+        },
+        "procedure": "positive_consequences"
+      },
+      "actual_grounder": "eager",
+      "source_preparation_median_ns": 383500,
+      "grounding_phases": {
+        "coherence": 1208,
+        "domain_analysis": 128208,
+        "formula_initialization": 1542,
+        "objective_activation": 1583,
+        "rule_instantiation": 6143843,
+        "support_completion": 2916292,
+        "support_guards": 529708,
+        "theory_validation": 28333
+      }
+    },
+    {
+      "entry": "generated/transitive-dense-40.lp",
+      "workers": 1,
+      "leg": "B2",
+      "actual_execution": {
+        "adapter": null,
+        "backend": "cpu",
+        "device": {
+          "kind": "cpu"
+        },
+        "procedure": "positive_consequences"
+      },
+      "actual_grounder": "eager",
+      "source_preparation_median_ns": 393543,
+      "grounding_phases": {
+        "coherence": 1208,
+        "domain_analysis": 127416,
+        "formula_initialization": 1875,
+        "objective_activation": 1666,
+        "rule_instantiation": 6259918,
+        "support_completion": 2940457,
+        "support_guards": 527167,
+        "theory_validation": 26583
+      }
+    },
+    {
+      "entry": "generated/transitive-dense-40.lp",
+      "workers": 4,
+      "leg": "A1",
+      "actual_execution": {
+        "adapter": null,
+        "backend": "cpu",
+        "device": {
+          "kind": "cpu"
+        },
+        "procedure": "positive_consequences"
+      },
+      "actual_grounder": "eager",
+      "source_preparation_median_ns": 426416,
+      "grounding_phases": {
+        "coherence": 1083,
+        "domain_analysis": 136458,
+        "formula_initialization": 834,
+        "objective_activation": 3125,
+        "rule_instantiation": 5845749,
+        "support_completion": 2890459,
+        "support_guards": 528708,
+        "theory_validation": 26542
+      }
+    },
+    {
+      "entry": "generated/transitive-dense-40.lp",
+      "workers": 4,
+      "leg": "A2",
+      "actual_execution": {
+        "adapter": null,
+        "backend": "cpu",
+        "device": {
+          "kind": "cpu"
+        },
+        "procedure": "positive_consequences"
+      },
+      "actual_grounder": "eager",
+      "source_preparation_median_ns": 401751,
+      "grounding_phases": {
+        "coherence": 1000,
+        "domain_analysis": 129292,
+        "formula_initialization": 833,
+        "objective_activation": 2750,
+        "rule_instantiation": 6020884,
+        "support_completion": 2903460,
+        "support_guards": 533791,
+        "theory_validation": 28875
+      }
+    },
+    {
+      "entry": "generated/transitive-dense-40.lp",
+      "workers": 4,
+      "leg": "B1",
+      "actual_execution": {
+        "adapter": null,
+        "backend": "cpu",
+        "device": {
+          "kind": "cpu"
+        },
+        "procedure": "positive_consequences"
+      },
+      "actual_grounder": "eager",
+      "source_preparation_median_ns": 418000,
+      "grounding_phases": {
+        "coherence": 1208,
+        "domain_analysis": 132791,
+        "formula_initialization": 2084,
+        "objective_activation": 2042,
+        "rule_instantiation": 6175793,
+        "support_completion": 2956543,
+        "support_guards": 530791,
+        "theory_validation": 28042
+      }
+    },
+    {
+      "entry": "generated/transitive-dense-40.lp",
+      "workers": 4,
+      "leg": "B2",
+      "actual_execution": {
+        "adapter": null,
+        "backend": "cpu",
+        "device": {
+          "kind": "cpu"
+        },
+        "procedure": "positive_consequences"
+      },
+      "actual_grounder": "eager",
+      "source_preparation_median_ns": 412542,
+      "grounding_phases": {
+        "coherence": 1209,
+        "domain_analysis": 132333,
+        "formula_initialization": 1916,
+        "objective_activation": 2167,
+        "rule_instantiation": 6192456,
+        "support_completion": 2924793,
+        "support_guards": 532208,
+        "theory_validation": 27834
+      }
+    }
+  ],
+  "unchanged_work": [
+    {
+      "entry": "generated/chain-1000.lp",
+      "checked": 96,
+      "distinct_numeric_work_and_outcome_records": 1,
+      "grounding_populations": {
+        "rule_instantiation": {
+          "outcomes": null,
+          "work": {
+            "binding_snapshots": null,
+            "join_rows": null,
+            "join_probes": null,
+            "indexed_probes": null,
+            "atoms_inserted": null,
+            "atom_lookups": null,
+            "nodes_inserted": null,
+            "node_lookups": null,
+            "roots": null,
+            "expression_evaluations": null,
+            "expression_nodes": null,
+            "domain_prepare_work": null,
+            "support_atoms": null,
+            "support_rounds": null,
+            "support_producer_visits": null,
+            "support_snapshot_preparations": null,
+            "support_peak_bytes": null
+          }
+        },
+        "support_completion": {
+          "outcomes": null,
+          "work": {
+            "binding_snapshots": null,
+            "join_rows": null,
+            "join_probes": null,
+            "indexed_probes": null,
+            "atoms_inserted": null,
+            "atom_lookups": null,
+            "nodes_inserted": null,
+            "node_lookups": null,
+            "roots": null,
+            "expression_evaluations": null,
+            "expression_nodes": null,
+            "domain_prepare_work": null,
+            "support_atoms": null,
+            "support_rounds": null,
+            "support_producer_visits": null,
+            "support_snapshot_preparations": null,
+            "support_peak_bytes": null
+          }
+        }
+      },
+      "search": null,
+      "closure_execution": {
+        "backend": "cpu",
+        "completed_checks": 1,
+        "derived_atoms": 2001,
+        "grounder": "lazy",
+        "joins": {
+          "bindings": 2001,
+          "block_steps": 0,
+          "catalog_work": 169506,
+          "dense_heads": 2001,
+          "peak_closure_bytes": 617734,
+          "tuple_probes": 3001
+        },
+        "rounds": 1002,
+        "stopped_checks": 0,
+        "work": 211573
+      }
+    },
+    {
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "checked": 96,
+      "distinct_numeric_work_and_outcome_records": 1,
+      "grounding_populations": {
+        "rule_instantiation": {
+          "outcomes": {
+            "completed": 2,
+            "failed": 0,
+            "unwound": 0
+          },
+          "work": {
+            "binding_snapshots": 1000,
+            "join_rows": 1001,
+            "join_probes": 1,
+            "indexed_probes": 1,
+            "atoms_inserted": 1001,
+            "atom_lookups": 2001,
+            "nodes_inserted": 2002,
+            "node_lookups": 3002,
+            "roots": 1001,
+            "expression_evaluations": 3002,
+            "expression_nodes": 5002,
+            "domain_prepare_work": 0,
+            "support_atoms": 0,
+            "support_rounds": 0,
+            "support_producer_visits": 0,
+            "support_snapshot_preparations": 0,
+            "support_peak_bytes": 169232
+          }
+        },
+        "support_completion": {
+          "outcomes": {
+            "completed": 4,
+            "failed": 0,
+            "unwound": 0
+          },
+          "work": {
+            "binding_snapshots": 1001,
+            "join_rows": 1001,
+            "join_probes": 1001,
+            "indexed_probes": 1001,
+            "atoms_inserted": 0,
+            "atom_lookups": 0,
+            "nodes_inserted": 0,
+            "node_lookups": 0,
+            "roots": 0,
+            "expression_evaluations": 3002,
+            "expression_nodes": 5002,
+            "domain_prepare_work": 0,
+            "support_atoms": 1001,
+            "support_rounds": 1002,
+            "support_producer_visits": 2004,
+            "support_snapshot_preparations": 1002,
+            "support_peak_bytes": 169232
+          }
+        }
+      },
+      "search": {
+        "candidate_queries": 0,
+        "candidate_regions": {
+          "cut": 0,
+          "frontier": null,
+          "held": 1001,
+          "leaves": 1,
+          "propagations": 7009,
+          "reading_work": 28035,
+          "refuted": 0,
+          "support_cut": "applied",
+          "visited": 1
+        },
+        "candidate_restrictions": 0,
+        "candidates": 1,
+        "countermodel_queries": 0,
+        "countermodels": 0,
+        "decisions": 0,
+        "necessary_support": null,
+        "projection_history": {
+          "entries": 0,
+          "nodes": 0,
+          "peak_bytes": 0,
+          "retained_bytes": 0,
+          "work": 0
+        },
+        "reduct_query_regions": {
+          "leaves": 0,
+          "propagations": 0,
+          "reading_work": 0,
+          "refuted": 0,
+          "visited": 0
+        },
+        "stable_models": 1,
+        "work": 105151
+      },
+      "closure_execution": null
+    },
+    {
+      "entry": "generated/transitive-dense-20.lp",
+      "checked": 96,
+      "distinct_numeric_work_and_outcome_records": 1,
+      "grounding_populations": {
+        "rule_instantiation": {
+          "outcomes": {
+            "completed": 23,
+            "failed": 0,
+            "unwound": 0
+          },
+          "work": {
+            "binding_snapshots": 0,
+            "join_rows": 1940,
+            "join_probes": 213,
+            "indexed_probes": 213,
+            "atoms_inserted": 400,
+            "atom_lookups": 4390,
+            "nodes_inserted": 3270,
+            "node_lookups": 7260,
+            "roots": 1540,
+            "expression_evaluations": 800,
+            "expression_nodes": 800,
+            "domain_prepare_work": 8,
+            "support_atoms": 0,
+            "support_rounds": 0,
+            "support_producer_visits": 0,
+            "support_snapshot_preparations": 0,
+            "support_peak_bytes": 68880
+          }
+        },
+        "support_completion": {
+          "outcomes": {
+            "completed": 4,
+            "failed": 0,
+            "unwound": 0
+          },
+          "work": {
+            "binding_snapshots": 400,
+            "join_rows": 1940,
+            "join_probes": 215,
+            "indexed_probes": 215,
+            "atoms_inserted": 0,
+            "atom_lookups": 0,
+            "nodes_inserted": 0,
+            "node_lookups": 0,
+            "roots": 0,
+            "expression_evaluations": 800,
+            "expression_nodes": 800,
+            "domain_prepare_work": 12,
+            "support_atoms": 400,
+            "support_rounds": 4,
+            "support_producer_visits": 24,
+            "support_snapshot_preparations": 4,
+            "support_peak_bytes": 69736
+          }
+        }
+      },
+      "search": {
+        "candidate_queries": 0,
+        "candidate_regions": {
+          "cut": 0,
+          "frontier": null,
+          "held": 400,
+          "leaves": 1,
+          "propagations": 5443,
+          "reading_work": 31879,
+          "refuted": 0,
+          "support_cut": "applied",
+          "visited": 1
+        },
+        "candidate_restrictions": 0,
+        "candidates": 1,
+        "countermodel_queries": 0,
+        "countermodels": 0,
+        "decisions": 0,
+        "necessary_support": null,
+        "projection_history": {
+          "entries": 0,
+          "nodes": 0,
+          "peak_bytes": 0,
+          "retained_bytes": 0,
+          "work": 0
+        },
+        "reduct_query_regions": {
+          "leaves": 0,
+          "propagations": 0,
+          "reading_work": 0,
+          "refuted": 0,
+          "visited": 0
+        },
+        "stable_models": 1,
+        "work": 133769
+      },
+      "closure_execution": null
+    },
+    {
+      "entry": "generated/transitive-dense-40.lp",
+      "checked": 96,
+      "distinct_numeric_work_and_outcome_records": 1,
+      "grounding_populations": {
+        "rule_instantiation": {
+          "outcomes": {
+            "completed": 43,
+            "failed": 0,
+            "unwound": 0
+          },
+          "work": {
+            "binding_snapshots": 0,
+            "join_rows": 13080,
+            "join_probes": 823,
+            "indexed_probes": 823,
+            "atoms_inserted": 1600,
+            "atom_lookups": 33580,
+            "nodes_inserted": 23740,
+            "node_lookups": 55720,
+            "roots": 11480,
+            "expression_evaluations": 3200,
+            "expression_nodes": 3200,
+            "domain_prepare_work": 8,
+            "support_atoms": 0,
+            "support_rounds": 0,
+            "support_producer_visits": 0,
+            "support_snapshot_preparations": 0,
+            "support_peak_bytes": 241584
+          }
+        },
+        "support_completion": {
+          "outcomes": {
+            "completed": 4,
+            "failed": 0,
+            "unwound": 0
+          },
+          "work": {
+            "binding_snapshots": 1600,
+            "join_rows": 13080,
+            "join_probes": 825,
+            "indexed_probes": 825,
+            "atoms_inserted": 0,
+            "atom_lookups": 0,
+            "nodes_inserted": 0,
+            "node_lookups": 0,
+            "roots": 0,
+            "expression_evaluations": 3200,
+            "expression_nodes": 3200,
+            "domain_prepare_work": 12,
+            "support_atoms": 1600,
+            "support_rounds": 4,
+            "support_producer_visits": 44,
+            "support_snapshot_preparations": 4,
+            "support_peak_bytes": 242920
+          }
+        }
+      },
+      "search": {
+        "candidate_queries": 0,
+        "candidate_regions": {
+          "cut": 0,
+          "frontier": null,
+          "held": 1600,
+          "leaves": 1,
+          "propagations": 32483,
+          "reading_work": 218149,
+          "refuted": 0,
+          "support_cut": "applied",
+          "visited": 1
+        },
+        "candidate_restrictions": 0,
+        "candidates": 1,
+        "countermodel_queries": 0,
+        "countermodels": 0,
+        "decisions": 0,
+        "necessary_support": null,
+        "projection_history": {
+          "entries": 0,
+          "nodes": 0,
+          "peak_bytes": 0,
+          "retained_bytes": 0,
+          "work": 0
+        },
+        "reduct_query_regions": {
+          "leaves": 0,
+          "propagations": 0,
+          "reading_work": 0,
+          "refuted": 0,
+          "visited": 0
+        },
+        "stable_models": 1,
+        "work": 939917
+      },
+      "closure_execution": null
+    }
+  ],
+  "rss_observations": [
+    {
+      "leg": "A1",
+      "entry": "generated/transitive-dense-20.lp",
+      "producer": "reference",
+      "workers": null,
+      "round": 0,
+      "peak_rss_bytes": 5324800,
+      "raw_max_rss": 5324800,
+      "raw_unit": "bytes",
+      "exit_code": 30,
+      "signal": null
+    },
+    {
+      "leg": "A1",
+      "entry": "generated/transitive-dense-20.lp",
+      "producer": "native",
+      "workers": 1,
+      "round": 0,
+      "peak_rss_bytes": 15351808,
+      "raw_max_rss": 15351808,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "A1",
+      "entry": "generated/transitive-dense-20.lp",
+      "producer": "native",
+      "workers": 4,
+      "round": 0,
+      "peak_rss_bytes": 15384576,
+      "raw_max_rss": 15384576,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "A1",
+      "entry": "generated/transitive-dense-40.lp",
+      "producer": "native",
+      "workers": 1,
+      "round": 0,
+      "peak_rss_bytes": 27983872,
+      "raw_max_rss": 27983872,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "A1",
+      "entry": "generated/transitive-dense-40.lp",
+      "producer": "native",
+      "workers": 4,
+      "round": 0,
+      "peak_rss_bytes": 27983872,
+      "raw_max_rss": 27983872,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "A1",
+      "entry": "generated/transitive-dense-40.lp",
+      "producer": "reference",
+      "workers": null,
+      "round": 0,
+      "peak_rss_bytes": 5619712,
+      "raw_max_rss": 5619712,
+      "raw_unit": "bytes",
+      "exit_code": 30,
+      "signal": null
+    },
+    {
+      "leg": "A1",
+      "entry": "generated/chain-1000.lp",
+      "producer": "native",
+      "workers": 4,
+      "round": 0,
+      "peak_rss_bytes": 18284544,
+      "raw_max_rss": 18284544,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "A1",
+      "entry": "generated/chain-1000.lp",
+      "producer": "reference",
+      "workers": null,
+      "round": 0,
+      "peak_rss_bytes": 5685248,
+      "raw_max_rss": 5685248,
+      "raw_unit": "bytes",
+      "exit_code": 30,
+      "signal": null
+    },
+    {
+      "leg": "A1",
+      "entry": "generated/chain-1000.lp",
+      "producer": "native",
+      "workers": 1,
+      "round": 0,
+      "peak_rss_bytes": 18251776,
+      "raw_max_rss": 18251776,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "A1",
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "producer": "reference",
+      "workers": null,
+      "round": 0,
+      "peak_rss_bytes": 5439488,
+      "raw_max_rss": 5439488,
+      "raw_unit": "bytes",
+      "exit_code": 30,
+      "signal": null
+    },
+    {
+      "leg": "A1",
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "producer": "native",
+      "workers": 1,
+      "round": 0,
+      "peak_rss_bytes": 14942208,
+      "raw_max_rss": 14942208,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "A1",
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "producer": "native",
+      "workers": 4,
+      "round": 0,
+      "peak_rss_bytes": 14958592,
+      "raw_max_rss": 14958592,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "A1",
+      "entry": "generated/transitive-dense-40.lp",
+      "producer": "native",
+      "workers": 4,
+      "round": 1,
+      "peak_rss_bytes": 27721728,
+      "raw_max_rss": 27721728,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "A1",
+      "entry": "generated/transitive-dense-40.lp",
+      "producer": "reference",
+      "workers": null,
+      "round": 1,
+      "peak_rss_bytes": 5619712,
+      "raw_max_rss": 5619712,
+      "raw_unit": "bytes",
+      "exit_code": 30,
+      "signal": null
+    },
+    {
+      "leg": "A1",
+      "entry": "generated/transitive-dense-40.lp",
+      "producer": "native",
+      "workers": 1,
+      "round": 1,
+      "peak_rss_bytes": 27983872,
+      "raw_max_rss": 27983872,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "A1",
+      "entry": "generated/chain-1000.lp",
+      "producer": "reference",
+      "workers": null,
+      "round": 1,
+      "peak_rss_bytes": 5685248,
+      "raw_max_rss": 5685248,
+      "raw_unit": "bytes",
+      "exit_code": 30,
+      "signal": null
+    },
+    {
+      "leg": "A1",
+      "entry": "generated/chain-1000.lp",
+      "producer": "native",
+      "workers": 1,
+      "round": 1,
+      "peak_rss_bytes": 18268160,
+      "raw_max_rss": 18268160,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "A1",
+      "entry": "generated/chain-1000.lp",
+      "producer": "native",
+      "workers": 4,
+      "round": 1,
+      "peak_rss_bytes": 18202624,
+      "raw_max_rss": 18202624,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "A1",
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "producer": "native",
+      "workers": 1,
+      "round": 1,
+      "peak_rss_bytes": 14893056,
+      "raw_max_rss": 14893056,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "A1",
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "producer": "native",
+      "workers": 4,
+      "round": 1,
+      "peak_rss_bytes": 14991360,
+      "raw_max_rss": 14991360,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "A1",
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "producer": "reference",
+      "workers": null,
+      "round": 1,
+      "peak_rss_bytes": 5439488,
+      "raw_max_rss": 5439488,
+      "raw_unit": "bytes",
+      "exit_code": 30,
+      "signal": null
+    },
+    {
+      "leg": "A1",
+      "entry": "generated/transitive-dense-20.lp",
+      "producer": "native",
+      "workers": 1,
+      "round": 1,
+      "peak_rss_bytes": 15368192,
+      "raw_max_rss": 15368192,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "A1",
+      "entry": "generated/transitive-dense-20.lp",
+      "producer": "native",
+      "workers": 4,
+      "round": 1,
+      "peak_rss_bytes": 15417344,
+      "raw_max_rss": 15417344,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "A1",
+      "entry": "generated/transitive-dense-20.lp",
+      "producer": "reference",
+      "workers": null,
+      "round": 1,
+      "peak_rss_bytes": 5324800,
+      "raw_max_rss": 5324800,
+      "raw_unit": "bytes",
+      "exit_code": 30,
+      "signal": null
+    },
+    {
+      "leg": "B1",
+      "entry": "generated/transitive-dense-20.lp",
+      "producer": "reference",
+      "workers": null,
+      "round": 0,
+      "peak_rss_bytes": 5324800,
+      "raw_max_rss": 5324800,
+      "raw_unit": "bytes",
+      "exit_code": 30,
+      "signal": null
+    },
+    {
+      "leg": "B1",
+      "entry": "generated/transitive-dense-20.lp",
+      "producer": "native",
+      "workers": 1,
+      "round": 0,
+      "peak_rss_bytes": 15613952,
+      "raw_max_rss": 15613952,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "B1",
+      "entry": "generated/transitive-dense-20.lp",
+      "producer": "native",
+      "workers": 4,
+      "round": 0,
+      "peak_rss_bytes": 15613952,
+      "raw_max_rss": 15613952,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "B1",
+      "entry": "generated/transitive-dense-40.lp",
+      "producer": "native",
+      "workers": 1,
+      "round": 0,
+      "peak_rss_bytes": 28180480,
+      "raw_max_rss": 28180480,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "B1",
+      "entry": "generated/transitive-dense-40.lp",
+      "producer": "native",
+      "workers": 4,
+      "round": 0,
+      "peak_rss_bytes": 28278784,
+      "raw_max_rss": 28278784,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "B1",
+      "entry": "generated/transitive-dense-40.lp",
+      "producer": "reference",
+      "workers": null,
+      "round": 0,
+      "peak_rss_bytes": 5619712,
+      "raw_max_rss": 5619712,
+      "raw_unit": "bytes",
+      "exit_code": 30,
+      "signal": null
+    },
+    {
+      "leg": "B1",
+      "entry": "generated/chain-1000.lp",
+      "producer": "native",
+      "workers": 4,
+      "round": 0,
+      "peak_rss_bytes": 18448384,
+      "raw_max_rss": 18448384,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "B1",
+      "entry": "generated/chain-1000.lp",
+      "producer": "reference",
+      "workers": null,
+      "round": 0,
+      "peak_rss_bytes": 5685248,
+      "raw_max_rss": 5685248,
+      "raw_unit": "bytes",
+      "exit_code": 30,
+      "signal": null
+    },
+    {
+      "leg": "B1",
+      "entry": "generated/chain-1000.lp",
+      "producer": "native",
+      "workers": 1,
+      "round": 0,
+      "peak_rss_bytes": 18382848,
+      "raw_max_rss": 18382848,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "B1",
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "producer": "reference",
+      "workers": null,
+      "round": 0,
+      "peak_rss_bytes": 5439488,
+      "raw_max_rss": 5439488,
+      "raw_unit": "bytes",
+      "exit_code": 30,
+      "signal": null
+    },
+    {
+      "leg": "B1",
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "producer": "native",
+      "workers": 1,
+      "round": 0,
+      "peak_rss_bytes": 15138816,
+      "raw_max_rss": 15138816,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "B1",
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "producer": "native",
+      "workers": 4,
+      "round": 0,
+      "peak_rss_bytes": 15073280,
+      "raw_max_rss": 15073280,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "B1",
+      "entry": "generated/transitive-dense-40.lp",
+      "producer": "native",
+      "workers": 4,
+      "round": 1,
+      "peak_rss_bytes": 28246016,
+      "raw_max_rss": 28246016,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "B1",
+      "entry": "generated/transitive-dense-40.lp",
+      "producer": "reference",
+      "workers": null,
+      "round": 1,
+      "peak_rss_bytes": 5619712,
+      "raw_max_rss": 5619712,
+      "raw_unit": "bytes",
+      "exit_code": 30,
+      "signal": null
+    },
+    {
+      "leg": "B1",
+      "entry": "generated/transitive-dense-40.lp",
+      "producer": "native",
+      "workers": 1,
+      "round": 1,
+      "peak_rss_bytes": 28213248,
+      "raw_max_rss": 28213248,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "B1",
+      "entry": "generated/chain-1000.lp",
+      "producer": "reference",
+      "workers": null,
+      "round": 1,
+      "peak_rss_bytes": 5685248,
+      "raw_max_rss": 5685248,
+      "raw_unit": "bytes",
+      "exit_code": 30,
+      "signal": null
+    },
+    {
+      "leg": "B1",
+      "entry": "generated/chain-1000.lp",
+      "producer": "native",
+      "workers": 1,
+      "round": 1,
+      "peak_rss_bytes": 18464768,
+      "raw_max_rss": 18464768,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "B1",
+      "entry": "generated/chain-1000.lp",
+      "producer": "native",
+      "workers": 4,
+      "round": 1,
+      "peak_rss_bytes": 18432000,
+      "raw_max_rss": 18432000,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "B1",
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "producer": "native",
+      "workers": 1,
+      "round": 1,
+      "peak_rss_bytes": 15171584,
+      "raw_max_rss": 15171584,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "B1",
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "producer": "native",
+      "workers": 4,
+      "round": 1,
+      "peak_rss_bytes": 15155200,
+      "raw_max_rss": 15155200,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "B1",
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "producer": "reference",
+      "workers": null,
+      "round": 1,
+      "peak_rss_bytes": 5439488,
+      "raw_max_rss": 5439488,
+      "raw_unit": "bytes",
+      "exit_code": 30,
+      "signal": null
+    },
+    {
+      "leg": "B1",
+      "entry": "generated/transitive-dense-20.lp",
+      "producer": "native",
+      "workers": 1,
+      "round": 1,
+      "peak_rss_bytes": 15695872,
+      "raw_max_rss": 15695872,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "B1",
+      "entry": "generated/transitive-dense-20.lp",
+      "producer": "native",
+      "workers": 4,
+      "round": 1,
+      "peak_rss_bytes": 15761408,
+      "raw_max_rss": 15761408,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "B1",
+      "entry": "generated/transitive-dense-20.lp",
+      "producer": "reference",
+      "workers": null,
+      "round": 1,
+      "peak_rss_bytes": 5324800,
+      "raw_max_rss": 5324800,
+      "raw_unit": "bytes",
+      "exit_code": 30,
+      "signal": null
+    },
+    {
+      "leg": "B2",
+      "entry": "generated/transitive-dense-20.lp",
+      "producer": "reference",
+      "workers": null,
+      "round": 0,
+      "peak_rss_bytes": 5324800,
+      "raw_max_rss": 5324800,
+      "raw_unit": "bytes",
+      "exit_code": 30,
+      "signal": null
+    },
+    {
+      "leg": "B2",
+      "entry": "generated/transitive-dense-20.lp",
+      "producer": "native",
+      "workers": 1,
+      "round": 0,
+      "peak_rss_bytes": 15466496,
+      "raw_max_rss": 15466496,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "B2",
+      "entry": "generated/transitive-dense-20.lp",
+      "producer": "native",
+      "workers": 4,
+      "round": 0,
+      "peak_rss_bytes": 15728640,
+      "raw_max_rss": 15728640,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "B2",
+      "entry": "generated/transitive-dense-40.lp",
+      "producer": "native",
+      "workers": 1,
+      "round": 0,
+      "peak_rss_bytes": 28098560,
+      "raw_max_rss": 28098560,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "B2",
+      "entry": "generated/transitive-dense-40.lp",
+      "producer": "native",
+      "workers": 4,
+      "round": 0,
+      "peak_rss_bytes": 28246016,
+      "raw_max_rss": 28246016,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "B2",
+      "entry": "generated/transitive-dense-40.lp",
+      "producer": "reference",
+      "workers": null,
+      "round": 0,
+      "peak_rss_bytes": 5619712,
+      "raw_max_rss": 5619712,
+      "raw_unit": "bytes",
+      "exit_code": 30,
+      "signal": null
+    },
+    {
+      "leg": "B2",
+      "entry": "generated/chain-1000.lp",
+      "producer": "native",
+      "workers": 4,
+      "round": 0,
+      "peak_rss_bytes": 18464768,
+      "raw_max_rss": 18464768,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "B2",
+      "entry": "generated/chain-1000.lp",
+      "producer": "reference",
+      "workers": null,
+      "round": 0,
+      "peak_rss_bytes": 5685248,
+      "raw_max_rss": 5685248,
+      "raw_unit": "bytes",
+      "exit_code": 30,
+      "signal": null
+    },
+    {
+      "leg": "B2",
+      "entry": "generated/chain-1000.lp",
+      "producer": "native",
+      "workers": 1,
+      "round": 0,
+      "peak_rss_bytes": 18448384,
+      "raw_max_rss": 18448384,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "B2",
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "producer": "reference",
+      "workers": null,
+      "round": 0,
+      "peak_rss_bytes": 5439488,
+      "raw_max_rss": 5439488,
+      "raw_unit": "bytes",
+      "exit_code": 30,
+      "signal": null
+    },
+    {
+      "leg": "B2",
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "producer": "native",
+      "workers": 1,
+      "round": 0,
+      "peak_rss_bytes": 15220736,
+      "raw_max_rss": 15220736,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "B2",
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "producer": "native",
+      "workers": 4,
+      "round": 0,
+      "peak_rss_bytes": 15187968,
+      "raw_max_rss": 15187968,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "B2",
+      "entry": "generated/transitive-dense-40.lp",
+      "producer": "native",
+      "workers": 4,
+      "round": 1,
+      "peak_rss_bytes": 28278784,
+      "raw_max_rss": 28278784,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "B2",
+      "entry": "generated/transitive-dense-40.lp",
+      "producer": "reference",
+      "workers": null,
+      "round": 1,
+      "peak_rss_bytes": 5619712,
+      "raw_max_rss": 5619712,
+      "raw_unit": "bytes",
+      "exit_code": 30,
+      "signal": null
+    },
+    {
+      "leg": "B2",
+      "entry": "generated/transitive-dense-40.lp",
+      "producer": "native",
+      "workers": 1,
+      "round": 1,
+      "peak_rss_bytes": 27951104,
+      "raw_max_rss": 27951104,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "B2",
+      "entry": "generated/chain-1000.lp",
+      "producer": "reference",
+      "workers": null,
+      "round": 1,
+      "peak_rss_bytes": 5685248,
+      "raw_max_rss": 5685248,
+      "raw_unit": "bytes",
+      "exit_code": 30,
+      "signal": null
+    },
+    {
+      "leg": "B2",
+      "entry": "generated/chain-1000.lp",
+      "producer": "native",
+      "workers": 1,
+      "round": 1,
+      "peak_rss_bytes": 18448384,
+      "raw_max_rss": 18448384,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "B2",
+      "entry": "generated/chain-1000.lp",
+      "producer": "native",
+      "workers": 4,
+      "round": 1,
+      "peak_rss_bytes": 18530304,
+      "raw_max_rss": 18530304,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "B2",
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "producer": "native",
+      "workers": 1,
+      "round": 1,
+      "peak_rss_bytes": 15237120,
+      "raw_max_rss": 15237120,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "B2",
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "producer": "native",
+      "workers": 4,
+      "round": 1,
+      "peak_rss_bytes": 15187968,
+      "raw_max_rss": 15187968,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "B2",
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "producer": "reference",
+      "workers": null,
+      "round": 1,
+      "peak_rss_bytes": 5439488,
+      "raw_max_rss": 5439488,
+      "raw_unit": "bytes",
+      "exit_code": 30,
+      "signal": null
+    },
+    {
+      "leg": "B2",
+      "entry": "generated/transitive-dense-20.lp",
+      "producer": "native",
+      "workers": 1,
+      "round": 1,
+      "peak_rss_bytes": 15581184,
+      "raw_max_rss": 15581184,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "B2",
+      "entry": "generated/transitive-dense-20.lp",
+      "producer": "native",
+      "workers": 4,
+      "round": 1,
+      "peak_rss_bytes": 15728640,
+      "raw_max_rss": 15728640,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "B2",
+      "entry": "generated/transitive-dense-20.lp",
+      "producer": "reference",
+      "workers": null,
+      "round": 1,
+      "peak_rss_bytes": 5324800,
+      "raw_max_rss": 5324800,
+      "raw_unit": "bytes",
+      "exit_code": 30,
+      "signal": null
+    },
+    {
+      "leg": "A2",
+      "entry": "generated/transitive-dense-20.lp",
+      "producer": "reference",
+      "workers": null,
+      "round": 0,
+      "peak_rss_bytes": 5324800,
+      "raw_max_rss": 5324800,
+      "raw_unit": "bytes",
+      "exit_code": 30,
+      "signal": null
+    },
+    {
+      "leg": "A2",
+      "entry": "generated/transitive-dense-20.lp",
+      "producer": "native",
+      "workers": 1,
+      "round": 0,
+      "peak_rss_bytes": 15351808,
+      "raw_max_rss": 15351808,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "A2",
+      "entry": "generated/transitive-dense-20.lp",
+      "producer": "native",
+      "workers": 4,
+      "round": 0,
+      "peak_rss_bytes": 15417344,
+      "raw_max_rss": 15417344,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "A2",
+      "entry": "generated/transitive-dense-40.lp",
+      "producer": "native",
+      "workers": 1,
+      "round": 0,
+      "peak_rss_bytes": 27869184,
+      "raw_max_rss": 27869184,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "A2",
+      "entry": "generated/transitive-dense-40.lp",
+      "producer": "native",
+      "workers": 4,
+      "round": 0,
+      "peak_rss_bytes": 28000256,
+      "raw_max_rss": 28000256,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "A2",
+      "entry": "generated/transitive-dense-40.lp",
+      "producer": "reference",
+      "workers": null,
+      "round": 0,
+      "peak_rss_bytes": 5619712,
+      "raw_max_rss": 5619712,
+      "raw_unit": "bytes",
+      "exit_code": 30,
+      "signal": null
+    },
+    {
+      "leg": "A2",
+      "entry": "generated/chain-1000.lp",
+      "producer": "native",
+      "workers": 4,
+      "round": 0,
+      "peak_rss_bytes": 18317312,
+      "raw_max_rss": 18317312,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "A2",
+      "entry": "generated/chain-1000.lp",
+      "producer": "reference",
+      "workers": null,
+      "round": 0,
+      "peak_rss_bytes": 5685248,
+      "raw_max_rss": 5685248,
+      "raw_unit": "bytes",
+      "exit_code": 30,
+      "signal": null
+    },
+    {
+      "leg": "A2",
+      "entry": "generated/chain-1000.lp",
+      "producer": "native",
+      "workers": 1,
+      "round": 0,
+      "peak_rss_bytes": 18235392,
+      "raw_max_rss": 18235392,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "A2",
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "producer": "reference",
+      "workers": null,
+      "round": 0,
+      "peak_rss_bytes": 5439488,
+      "raw_max_rss": 5439488,
+      "raw_unit": "bytes",
+      "exit_code": 30,
+      "signal": null
+    },
+    {
+      "leg": "A2",
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "producer": "native",
+      "workers": 1,
+      "round": 0,
+      "peak_rss_bytes": 14942208,
+      "raw_max_rss": 14942208,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "A2",
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "producer": "native",
+      "workers": 4,
+      "round": 0,
+      "peak_rss_bytes": 15056896,
+      "raw_max_rss": 15056896,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "A2",
+      "entry": "generated/transitive-dense-40.lp",
+      "producer": "native",
+      "workers": 4,
+      "round": 1,
+      "peak_rss_bytes": 27934720,
+      "raw_max_rss": 27934720,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "A2",
+      "entry": "generated/transitive-dense-40.lp",
+      "producer": "reference",
+      "workers": null,
+      "round": 1,
+      "peak_rss_bytes": 5619712,
+      "raw_max_rss": 5619712,
+      "raw_unit": "bytes",
+      "exit_code": 30,
+      "signal": null
+    },
+    {
+      "leg": "A2",
+      "entry": "generated/transitive-dense-40.lp",
+      "producer": "native",
+      "workers": 1,
+      "round": 1,
+      "peak_rss_bytes": 27967488,
+      "raw_max_rss": 27967488,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "A2",
+      "entry": "generated/chain-1000.lp",
+      "producer": "reference",
+      "workers": null,
+      "round": 1,
+      "peak_rss_bytes": 5685248,
+      "raw_max_rss": 5685248,
+      "raw_unit": "bytes",
+      "exit_code": 30,
+      "signal": null
+    },
+    {
+      "leg": "A2",
+      "entry": "generated/chain-1000.lp",
+      "producer": "native",
+      "workers": 1,
+      "round": 1,
+      "peak_rss_bytes": 18300928,
+      "raw_max_rss": 18300928,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "A2",
+      "entry": "generated/chain-1000.lp",
+      "producer": "native",
+      "workers": 4,
+      "round": 1,
+      "peak_rss_bytes": 18300928,
+      "raw_max_rss": 18300928,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "A2",
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "producer": "native",
+      "workers": 1,
+      "round": 1,
+      "peak_rss_bytes": 14909440,
+      "raw_max_rss": 14909440,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "A2",
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "producer": "native",
+      "workers": 4,
+      "round": 1,
+      "peak_rss_bytes": 15007744,
+      "raw_max_rss": 15007744,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "A2",
+      "entry": "generated/chain-arithmetic-1000.lp",
+      "producer": "reference",
+      "workers": null,
+      "round": 1,
+      "peak_rss_bytes": 5439488,
+      "raw_max_rss": 5439488,
+      "raw_unit": "bytes",
+      "exit_code": 30,
+      "signal": null
+    },
+    {
+      "leg": "A2",
+      "entry": "generated/transitive-dense-20.lp",
+      "producer": "native",
+      "workers": 1,
+      "round": 1,
+      "peak_rss_bytes": 15351808,
+      "raw_max_rss": 15351808,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "A2",
+      "entry": "generated/transitive-dense-20.lp",
+      "producer": "native",
+      "workers": 4,
+      "round": 1,
+      "peak_rss_bytes": 15466496,
+      "raw_max_rss": 15466496,
+      "raw_unit": "bytes",
+      "exit_code": 0,
+      "signal": null
+    },
+    {
+      "leg": "A2",
+      "entry": "generated/transitive-dense-20.lp",
+      "producer": "reference",
+      "workers": null,
+      "round": 1,
+      "peak_rss_bytes": 5324800,
+      "raw_max_rss": 5324800,
+      "raw_unit": "bytes",
+      "exit_code": 30,
+      "signal": null
+    }
+  ],
+  "interpretation": {
+    "whole_process": "Eager-case paired median changes range from -0.52% to +0.25%; no established performance equivalence.",
+    "dense_grounding": "All dense paired grounding medians increase, by 1.69% to 4.42%; rule-instantiation work is unchanged. Cause not isolated.",
+    "memory": "All native paired RSS medians increase by approximately 0.10 to 0.39 MiB; attribution not established.",
+    "lazy_control": "Chain1000 uses lazy_interleaved closure; its CPU4 B1 wall improvement does not repeat in B2.",
+    "limits": [
+      "No hidden-clingo atom comparison or whole-solver proof.",
+      "Source/executable build correspondence is qualified separately from declared source identities.",
+      "Logical work counters do not count every instruction; no schedule/control-check causal attribution.",
+      "Nested phase medians and worker-accumulated time are not additive process wall time.",
+      "This is a comparison against the post-row-lending baseline, not a third pre-row-lending build."
+    ]
+  }
+}

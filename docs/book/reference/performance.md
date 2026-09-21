@@ -36,6 +36,11 @@ lending completed grounding rows. Dense40 rule instantiation took 6.4–10.0%
 less time; whole-process improvements were smaller, and the controls were mixed.
 It does not update the full-corpus or Metal results above.
 
+The [eager/hybrid comparison](hybrid-grounding.md) uses one executable with
+different grounding schedules. It shows a storage benefit on a generated
+constraint-heavy program and increased search cost when constraints are delayed.
+It is a CPU comparison on small workloads, not a replacement for the corpus data.
+
 ## Run a benchmark
 
 From a repository checkout, with zetesis and clingo installed:
@@ -103,6 +108,7 @@ their original programs and executables; they are not a cumulative speedup chart
 
 | Question | Report |
 | --- | --- |
+| What changes when source constraints are checked during solving? | [Eager and hybrid grounding](hybrid-grounding.md) |
 | What does lending completed eager join rows change? | [Grounding row lending](grounding-row-lending.md) |
 | How do thread count, CPU and Metal compare with clingo? | [Worker scaling](worker-scaling.md) |
 | What changed when CPU and GPU used the same semantic plans? | [Shared-plan execution](plan-execution.md) |

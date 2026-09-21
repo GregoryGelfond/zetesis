@@ -46,6 +46,7 @@
 # Performance and testing
 
 - [Performance results](reference/performance.md)
+  - [Eager and hybrid formula grounding](reference/hybrid-grounding.md)
   - [Lending completed grounding rows](reference/grounding-row-lending.md)
   - [Worker scaling: CPU and Metal](reference/worker-scaling.md)
   - [Shared-plan execution: CPU and Metal](reference/plan-execution.md)
