@@ -52,10 +52,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     assert_eq!(family, expected);
     let checked = outcome.hybrid_execution().ok_or("missing hybrid receipt")?;
-    assert_eq!(checked.core_answers, 8);
+    assert_eq!(checked.core_answers, 4);
     assert_eq!(checked.accepted, 4);
-    assert_eq!(checked.rejected, 4);
+    assert_eq!(checked.rejected, 0);
     assert_eq!(checked.pending, 0);
+    let regions = outcome
+        .countermodel_statistics()
+        .and_then(|statistics| statistics.region_filter)
+        .ok_or("missing source region receipt")?;
+    assert!(regions.refuted > 0);
     Ok(())
 }
 // ANCHOR_END: example

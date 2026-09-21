@@ -322,7 +322,8 @@ the separate constraint-work counters as well.
 
 For a smaller fixed population, the maintained
 [grounding comparison example](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-validation/examples/grounding_comparison.rs)
-uses the same typed matrix API. It prepares queens variants 01 and 03 at n=4/5,
+uses the same typed matrix API. Its default `--study storage` preserves nine
+workloads: queens variants 01 and 03 at n=4/5,
 variant 02 at n=4 as a control for lost early constraint pruning, and variant 06
 at n=4 whose scoped constraints remain eager. Generated monotone choices at
 n=6 and redundant transitivity at n=8/12 provide additional pruning and storage
@@ -341,6 +342,25 @@ example uses one warmup, four timed rounds and two separate RSS rounds per
 native profile, a ten-second child timeout and a 180-second campaign deadline.
 All 153 planned positions are retained, including nine qualification-only
 clingo invocations. A nonpass exits unsuccessfully after publishing the evidence.
+
+The fixed `refutation` study compares earlier constraint pruning with repeated
+scan costs. Its twenty workloads are queens 01/03 at n=4/5/6, queens 02/04/05/06
+at n=4/5, monotone choices at n=6/8/10 and redundant transitivity at n=8/12/16.
+It retains the same profiles and rounds, with a 300-second campaign deadline
+and 340 planned positions, including twenty qualification-only clingo invocations.
+
+```sh
+cargo run --release -p zetesis-validation --example grounding_comparison -- \
+  --study refutation --zetesis /absolute/path/to/zetesis \
+  --clingo /absolute/path/to/clingo --helper /absolute/path/to/zetesis \
+  --workers 4 --report grounding-refutation.json > grounding-refutation-summary.json
+```
+
+The larger cases can reach the fixed resource ceilings or timeout, particularly
+when hybrid execution checks every core answer before rejecting it. Those
+refusals remain nonpasses; an incomplete family does not supply a speed ratio.
+Both studies compare complete native families within each workload. Clingo
+supplies the selected-output census only, with no reference timings or RSS runs.
 
 ## Measure primitives
 

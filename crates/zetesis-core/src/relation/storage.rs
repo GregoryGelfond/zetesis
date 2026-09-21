@@ -209,15 +209,28 @@ pub(super) fn lookup(
     value: &Value,
     work: &mut Work,
 ) -> Result<Option<u32>, Failure> {
+    lookup_with(layout, source, value, &mut || work.tick(1))
+}
+
+/// One dictionary traversal, usable with local or enclosing pre-operation work.
+pub(super) fn lookup_with<E: From<Failure>>(
+    layout: &Layout,
+    source: &Source<'_>,
+    value: &Value,
+    before: &mut impl FnMut() -> Result<(), E>,
+) -> Result<Option<u32>, E> {
     match &layout.index {
         DictionaryIndex::Sorted(ordered) => {
             let mut start = 0;
             let mut end = ordered.len();
             while start < end {
-                work.tick(1)?;
+                before()?;
                 let middle = start + (end - start) / 2;
                 let id = ordered[middle];
-                match work.compare(layout.dictionary[id as usize].value(source)?, value)? {
+                match layout.dictionary[id as usize]
+                    .value(source)?
+                    .compare_identity_with(value, &mut *before)?
+                {
                     Ordering::Less => start = middle + 1,
                     Ordering::Equal => return Ok(Some(id)),
                     Ordering::Greater => end = middle,
@@ -229,12 +242,12 @@ pub(super) fn lookup(
             &index.nodes,
             index.root,
             |id| {
-                work.tick(1)?;
-                work.compare(value, layout.dictionary[id].value(source)?)
+                before()?;
+                value.compare_identity_with(layout.dictionary[id].value(source)?, &mut *before)
             },
             |_| {},
         )?
-        .map(|id| u32::try_from(id).map_err(|_| Failure::Overflow))
+        .map(|id| u32::try_from(id).map_err(|_| Failure::Overflow.into()))
         .transpose(),
     }
 }

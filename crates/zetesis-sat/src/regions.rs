@@ -60,7 +60,8 @@ impl SearchMethod {
 pub struct RegionCounts {
     /// Regions narrowed, the root included.
     pub regions: usize,
-    /// Regions the readings refuted.
+    /// Regions refuted by readings or an original-candidate filter. Frozen
+    /// proper-subset queries use only their reduct readings.
     pub refuted: usize,
     /// Regions with every atom decided: the classical candidates proposed,
     /// or the proper-subset models and the candidate itself.
@@ -207,6 +208,7 @@ pub(crate) struct RegionSearch {
     /// Each restriction with its own index.
     restrictions: Vec<(Theory, Narrower)>,
     statistics: RegionSearchStatistics,
+    pub(super) filter: Option<crate::region_filter::Filter>,
 }
 
 /// What opening a region search over a theory establishes: its producers,
@@ -272,6 +274,7 @@ impl RegionSearch {
             ),
             index,
             restrictions: Vec::new(),
+            filter: None,
         })
     }
 
@@ -316,6 +319,7 @@ impl RegionSearch {
         &mut self,
         theory: &Theory,
         budget: &mut Budget<'_>,
+        timings: &mut Option<crate::SearchPhaseTimings>,
     ) -> Result<Option<Interpretation>, Incomplete> {
         let Self {
             producers,
@@ -323,11 +327,14 @@ impl RegionSearch {
             traversal,
             restrictions,
             statistics,
+            filter,
         } = self;
         let subject = index.subject(theory)?;
+        let factory = filter.as_ref();
+        let mut worker = None;
         let before = traversal.statistics();
-        let visit = traversal.next(|region, knowledge| {
-            narrow(
+        let visit = traversal.next(|region, knowledge| -> Result<Narrowing, Incomplete> {
+            let narrowed = narrow(
                 subject,
                 producers.as_ref(),
                 restrictions,
@@ -335,7 +342,15 @@ impl RegionSearch {
                 knowledge,
                 budget,
                 &mut statistics.counts,
-            )
+            )?;
+            if narrowed != Narrowing::Refuted
+                && let Some(filter) = factory
+                && filter.check(&mut worker, theory, region, budget.cancellation, timings)?
+                    == crate::RegionFeasibility::Refuted
+            {
+                return Ok(Narrowing::Refuted);
+            }
+            Ok(narrowed)
         });
         let after = traversal.statistics();
         for _ in 0..after.splits_since(before) {

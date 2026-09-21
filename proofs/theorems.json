@@ -5560,6 +5560,36 @@
     "line": 248
   },
   {
+    "name": "Zetesis.StreamedRegions.sure_antecedent_iff",
+    "file": "Zetesis/StreamedRegions.lean",
+    "line": 42
+  },
+  {
+    "name": "Zetesis.StreamedRegions.held_body_satisfied",
+    "file": "Zetesis/StreamedRegions.lean",
+    "line": 67
+  },
+  {
+    "name": "Zetesis.StreamedRegions.sure_occurrence_refutes",
+    "file": "Zetesis/StreamedRegions.lean",
+    "line": 82
+  },
+  {
+    "name": "Zetesis.StreamedRegions.scan_refutes",
+    "file": "Zetesis/StreamedRegions.lean",
+    "line": 99
+  },
+  {
+    "name": "Zetesis.StreamedRegions.complete_scan_can_miss_violation",
+    "file": "Zetesis/StreamedRegions.lean",
+    "line": 115
+  },
+  {
+    "name": "Zetesis.StreamedRegions.pending_can_retain_answer",
+    "file": "Zetesis/StreamedRegions.lean",
+    "line": 126
+  },
+  {
     "name": "Zetesis.StrongNegation.satisfies_rename",
     "file": "Zetesis/StrongNegation.lean",
     "line": 44

@@ -209,16 +209,20 @@ When timing is enabled, streamed checks are included in
 core admission are separate; their elapsed time is not the total cost of source
 evaluation in a hybrid session.
 
-The session uses the ordinary formula enumerator to obtain core answers, then
+The session first rejects candidate regions with a certain source-constraint
+violation. This operation runs only on original candidate regions and returns
+`NotRefuted` when it cannot establish exclusion. It does not change proper-subset
+queries of the frozen reduct. The ordinary formula enumerator obtains surviving
+core answers, then
 checks the streamed constraints before returning an `AnswerSet` of the original
 `Subject::Hybrid`. A violation rejects that core answer. A completed check permits
 publication; an interrupted or failed check remains pending and establishes
 neither acceptance nor exhaustion. A positive model limit counts accepted
 original-program answers, not rejected core proposals.
 
-This example checks every full answer, including the domain facts. Its eight
-core answers reduce to four original answers, each choosing a q-prefix followed
-by a p-suffix:
+This example checks every full answer, including the domain facts. The core has
+eight answers; early region rejection leaves four for membership and final
+source checking. Each returned answer chooses a q-prefix followed by a p-suffix:
 
 ```rust
 # extern crate zetesis_solve;
@@ -237,17 +241,26 @@ cargo run --locked -p zetesis-solve --no-default-features --example book-hybrid
 `SolveConfig::constraints` supplies cumulative `ConstraintCheckLimits` for that
 session: work, substitutions and copied scalar payload. These are separate from
 source admission and per-candidate reduct-oracle limits. Completed support
-indexes are reused; constraint joins run again for each consumed core answer.
-Avoiding retained constraint formulas can therefore cost additional work and
-lose pruning that eager constraints provide during candidate generation.
+indexes are reused; constraint joins run for regions and for consumed core
+answers. The worker checks and final checker share one allowance. Additional
+region scans and preparation can cost more than the avoided membership work,
+so the schedule still needs workload-specific measurement.
 
 `SemanticOutcome::hybrid_execution()` reports consumed `core_answers`,
 `accepted`, `rejected`, `pending` and cumulative constraint-check statistics.
 Their invariant is `core_answers = accepted + rejected + pending`. Core answers
 still buffered by the inner enumerator are excluded. Formula search statistics
-continue to describe the core; `verified_models()` counts original-program
-answers. Cancellation and deadline stops use `Interruption::Constraint`; typed
-resource or evaluation failures retain the failure cause and incomplete outcome.
+include `region_filter` counts for attempted preparations, region checks,
+refutations and failures. Those are not core-answer counts. Core membership
+statistics describe surviving proposals; `verified_models()` counts original-program
+answers. Cancellation or a deadline observed during source checking uses
+`Interruption::Constraint`; a stop in core search retains its
+`Interruption::Countermodel` cause. Typed resource or evaluation failures retain
+the failure cause and incomplete outcome.
+The typed source failure retains its worker-local receipt; the hybrid outcome
+reports the settled total across all source checkers. A shared first-recorded
+failure is resolved after workers join, including when a requested model limit
+ends the session. Recording order does not assert wall-clock failure order.
 Cloning the admitted owner shares identity and preparation; starting another
 session starts new search and check budgets.
 

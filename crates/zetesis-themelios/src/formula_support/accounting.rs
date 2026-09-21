@@ -14,6 +14,7 @@ pub(crate) struct Accounting {
     pub(crate) work: u64,
     pub(crate) substitutions: u64,
     generated_values: BTreeSet<Value>,
+    allowance: Option<crate::ConstraintAllowance>,
 }
 
 impl Counters {
@@ -22,6 +23,7 @@ impl Counters {
             work: self.work,
             substitutions: self.substitutions,
             generated_values: self.generated_values,
+            allowance: self.allowance,
         }
     }
 }
@@ -39,6 +41,7 @@ impl Accounting {
             work,
             substitutions,
             generated_values,
+            allowance,
         } = mem::take(self);
         let mut active = Active {
             retained: self,
@@ -46,6 +49,7 @@ impl Accounting {
                 work,
                 substitutions,
                 generated_values,
+                allowance,
                 cancellation: Some(cancellation.clone()),
                 ..Counters::default()
             },

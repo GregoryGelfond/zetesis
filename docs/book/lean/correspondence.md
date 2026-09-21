@@ -737,6 +737,22 @@ The occurrence-count fuel bound does not bound Rust join or expression work;
 less retained materialization need not mean less replay work. See the
 [constraint-stream guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/streamed-constraints.md).
 
+[`StreamedRegions`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/StreamedRegions.lean)
+adds a sufficient original-candidate region test using the existing `Cube` and
+`FormulaBounds.Sure` readings. Positive and double-negated atoms held in the
+lower bound, and default-negated atoms absent from the upper bound, make a
+normalized body true in every interpretation between those bounds. One
+authenticated original constraint occurrence with that body excludes every
+answer set of the retained theory plus the constraints from the region.
+`scan_refutes` supplies the soundness premise of `CoverageTree.refuted`; it does
+not prove that Rust constructs a coverage tree. A completed sufficient scan
+without a witness is only `NotRefuted`, not original satisfaction; an interrupted
+scan is not refutation. The final exact per-candidate checks retain their full
+family-coverage obligation. Concrete lowering, discharged guards, complete body
+readings, catalog-coordinate identity and sound candidate bounds remain premises
+to establish. This law does not authorize applying the same original-constraint
+hook inside a proper-subset search of the frozen reduct.
+
 For membership checking, clause search restricts candidates to the least
 interpretation; region search may still propose a larger original model of a
 positive cycle. The positive checker separately authenticates original

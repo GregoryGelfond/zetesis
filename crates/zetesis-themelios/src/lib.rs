@@ -113,9 +113,11 @@ pub use formula::{
 };
 pub use formula_warning::FormulaWarning;
 mod formula_hybrid;
+mod constraint_allowance;
+pub use constraint_allowance::ConstraintAllowance;
 pub use formula_hybrid::{
     ConstraintCheckCause, ConstraintCheckFailure, ConstraintCheckLimits, ConstraintCheckStatistics,
-    ConstraintChecker, ConstraintVerdict, HybridFeature, HybridFormula,
+    ConstraintChecker, ConstraintRegionVerdict, ConstraintVerdict, HybridFeature, HybridFormula,
 };
 mod formula_count_plan;
 pub use formula_count_plan::{

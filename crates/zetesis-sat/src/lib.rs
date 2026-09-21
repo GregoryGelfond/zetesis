@@ -18,6 +18,10 @@ mod ordering;
 mod encoding;
 mod ferraris;
 mod timing;
+mod region_filter;
+pub use region_filter::{
+    RegionFeasibility, RegionFilter, RegionFilterStatistics, RegionFilterWorker,
+};
 mod checked;
 mod prepared_reduct;
 pub use prepared_reduct::{

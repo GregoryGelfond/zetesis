@@ -475,3 +475,72 @@ fn membership_preserves_cumulative_work_limits() {
         matches!(support.contains(&key, &short, &mut fresh(), location()), Err(FormulaFailure::Limit { resource: FormulaResource::Work, observed, limit, location: found }) if observed == u128::from(counters.work) && limit == u128::from(counters.work - 1) && found == location())
     );
 }
+
+#[test]
+fn shared_probe_refusal_preserves_its_dictionary_prefix() {
+    let mut catalog = SupportCatalog::default();
+    for value in 0..8 {
+        insert(&mut catalog, atom(&[value]));
+    }
+    let limits = FormulaLimits::default();
+    let support = catalog
+        .snapshot(&limits, &mut Counters::default(), location())
+        .unwrap();
+    let pattern = AtomPattern::new(
+        atom(&[7]).predicate().clone(),
+        vec![Term::Constant(Value::Number(7))],
+    )
+    .unwrap();
+    let allowance = crate::ConstraintAllowance::new(crate::ConstraintCheckLimits {
+        max_work: 2,
+        ..Default::default()
+    });
+    let mut counters =
+        Counters::with_allowance(allowance.clone(), &zetesis_cpu::Cancellation::default());
+    let result = support.probe(&pattern, &[], &limits, &mut counters, location());
+    assert!(matches!(
+        result,
+        Err(FormulaFailure::Limit {
+            resource: FormulaResource::Work,
+            observed: 3,
+            limit: 2,
+            ..
+        })
+    ));
+    // One outer key visit, then one inner equality inspection; the shared
+    // quota refuses before the dictionary search's next charged read.
+    // Postcharging the complete query would instead retain only the outer 1.
+    assert_eq!(counters.work, 2);
+    assert_eq!(allowance.statistics().work, 2);
+}
+
+#[test]
+fn shared_probe_matches_local_execution() {
+    let mut catalog = SupportCatalog::default();
+    for value in 0..8 {
+        insert(&mut catalog, atom(&[value]));
+    }
+    let limits = FormulaLimits::default();
+    let support = catalog
+        .snapshot(&limits, &mut Counters::default(), location())
+        .unwrap();
+    let pattern = AtomPattern::new(
+        atom(&[7]).predicate().clone(),
+        vec![Term::Constant(Value::Number(7))],
+    )
+    .unwrap();
+    let mut local = Counters::default();
+    let expected = support
+        .probe(&pattern, &[], &limits, &mut local, location())
+        .unwrap();
+    assert_eq!(expected, Some([7].as_slice()));
+    let allowance = crate::ConstraintAllowance::new(crate::ConstraintCheckLimits::default());
+    let mut shared =
+        Counters::with_allowance(allowance.clone(), &zetesis_cpu::Cancellation::default());
+    let actual = support
+        .probe(&pattern, &[], &limits, &mut shared, location())
+        .unwrap();
+    assert_eq!(actual, expected);
+    assert_eq!(shared.work, local.work);
+    assert_eq!(allowance.statistics().work, local.work);
+}

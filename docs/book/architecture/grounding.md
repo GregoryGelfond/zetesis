@@ -89,7 +89,14 @@ The execution composition is:
 ```text
 admit complete support, arithmetic and atom identities
 materialize all producers and ineligible constraints as the core
-for each answer of the core:
+walk the core's candidate regions:
+    narrow the region under the core and existing candidate restrictions
+    join admitted constraint templates with completed possible support
+    filter substitutions by their checked scalar conditions
+    read each body against the region's lower and upper bounds
+    any certainly true body -> refute this original candidate region
+    otherwise               -> continue splitting or core membership checking
+for each surviving answer of the core:
     check the streamed constraint instances against that answer
     violation  -> reject this proposal
     complete   -> return an answer of the original program
@@ -103,16 +110,42 @@ justifies this composition around the reduct. Its premises still require correct
 source instances, original truth and complete coverage; it does not verify the
 Rust cursor or backend implementation.
 
+The early test has a narrower conclusion than satisfaction. In a region
+`L ⊆ S ⊆ U`, a positive or double-negated atom is certainly true when it is
+in `L`; a default-negated atom is certainly true when its atom is outside `U`.
+A conjunction of such literals, after its scalar guards pass, violates its
+integrity constraint for every interpretation in the region. One witness
+therefore suffices to reject that region. Finding no witness returns
+`NotRefuted`; final original-constraint checking remains required. The
+[region-refutation laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/StreamedRegions.lean)
+make the applicability and coverage argument explicit.
+
+This is an original candidate restriction. It never enters a proper-subset
+search under a frozen reduct, and never replaces that membership check. The
+optional existing clause-search route retains final constraint checking without
+this region operation.
+
 The [shared source owner](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_hybrid.rs)
-retains prepared constraints and completed support indexes. Each session has its
-own checker, cumulative budgets and scratch. Ordinary rows remain borrowed,
+retains prepared constraints and completed support indexes. Each checker has its
+own mutable state and prepares a checked dense atom lookup on its first region
+operation. Native persistent workers retain that index; scalar pulls and joined
+producer rounds prepare checkers for their operation. The indexed query wrapper
+borrows existing indexes and allocates nothing. Ordinary rows remain borrowed,
 and typed candidate lookup copies no atom. The eager builder keeps its bulk
 materialization path. No channel or task is created for each instance.
 
+All source checks within a hybrid session share one cumulative allowance for
+work, substitutions and copied scalar bytes. Charges precede the operations,
+including failed attempts; adding workers does not multiply the allowance.
+The final outcome joins workers before publishing settled receipts. Region
+attempts and refutations remain distinct from core answers checked, original
+answers accepted and frozen-reduct work.
+
 Streaming can avoid a constraint-node or root ceiling, but the finite atom
 and support envelope must still fit. Retained source plans and support also
-occupy memory. Repeated joins and the loss of constraint pruning in core search
-can increase execution work, so reduced formula storage does not imply a time
+occupy memory. Early refutation avoids some complete candidates, but repeated
+region joins and checker preparation can increase execution work. Reduced
+formula storage therefore does not imply a time
 or RSS improvement. Full demand-driven producer/atom discovery and device
 constraint streaming are not implemented by this profile. See the
 [checked hybrid session example](../rust/sessions.md#hybrid-formula-sessions).

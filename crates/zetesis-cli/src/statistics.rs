@@ -664,6 +664,13 @@ fn countermodel(
     stats: &zetesis_sat::Statistics,
     hybrid: bool,
 ) -> io::Result<()> {
+    if let Some(filter) = stats.region_filter {
+        writeln!(
+            sink,
+            "  candidate region checks: preparations={}; checks={}; refuted={}; failed={}; overflowed={}; source work accounted separately; frozen reduct excluded",
+            filter.preparations, filter.checks, filter.refuted, filter.failed, filter.overflowed
+        )?;
+    }
     if let Some(support) = stats.support {
         writeln!(
             sink,

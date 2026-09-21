@@ -57,6 +57,15 @@ pub enum Incomplete {
     ClosedEnumerator,
     /// A certificate cannot be configured after candidate generation has begun.
     LateCertificate,
+    /// A caller-owned candidate-region filter retained an external failure.
+    /// Its adapter must supply the typed receipt; this never means exhaustion.
+    RegionFilter,
+    /// Original-region filtering is unavailable for the selected proposer.
+    RegionFilterUnsupported,
+    /// A region filter cannot be installed after candidate traversal began.
+    LateRegionFilter,
+    /// An installed original-region filter cannot be replaced.
+    RegionFilterAlreadySet,
     /// Optional candidate certification stopped without establishing membership.
     Certificate(crate::CertificateError),
     /// Independent formula evaluation stopped without validating a witness.
@@ -118,6 +127,18 @@ impl fmt::Display for Incomplete {
             Self::ClosedEnumerator => f.write_str("candidate enumeration is already closed"),
             Self::LateCertificate => {
                 f.write_str("certificate configuration requires an unstarted candidate stream")
+            }
+            Self::RegionFilter => {
+                f.write_str("candidate-region filter failed; inspect its receipt")
+            }
+            Self::RegionFilterUnsupported => {
+                f.write_str("candidate-region filtering requires region search")
+            }
+            Self::LateRegionFilter => {
+                f.write_str("candidate-region filtering requires an unstarted stream")
+            }
+            Self::RegionFilterAlreadySet => {
+                f.write_str("candidate-region filter is already installed")
             }
             Self::Certificate(error) => write!(f, "certified membership: {error}"),
             Self::Verification(error) => write!(f, "independent verification: {error}"),

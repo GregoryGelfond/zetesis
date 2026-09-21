@@ -70,6 +70,8 @@ pub struct Report {
 pub enum RunError {
     /// A streamed source constraint could not be completely evaluated.
     Constraint(zetesis_themelios::ConstraintCheckFailure),
+    /// A source region refusal lost its required typed cause.
+    ConstraintFailureMissing,
     /// Consumed core-answer accounting cannot represent another answer.
     HybridStatisticsOverflow,
     /// Streamed formula constraints do not have a device executor yet.
@@ -210,6 +212,7 @@ impl fmt::Display for RunError {
         }
         match self {
             Self::Constraint(error) => error.fmt(f),
+            Self::ConstraintFailureMissing => f.write_str("source region check stopped without its failure receipt"),
             Self::HybridStatisticsOverflow => f.write_str("hybrid answer accounting overflow"),
             Self::HybridBackend { backend } => write!(f,
                 "streamed formula constraints support cpu or auto execution; requested {}", backend.label()),
@@ -343,6 +346,7 @@ impl std::error::Error for RunError {
             Self::JsonRecord(error) => Some(error),
             Self::ObservationOutputLimit { .. } | Self::TimeLimitRange { .. } => None,
             Self::MixedStandardInput
+            | Self::ConstraintFailureMissing
             | Self::HybridStatisticsOverflow
             | Self::HybridBackend { .. }
             | Self::BackendUnavailable
@@ -749,6 +753,7 @@ impl From<zetesis_solve::SolveError> for RunError {
         use zetesis_solve::SolveError;
         match error {
             SolveError::Constraint(error) => Self::Constraint(error),
+            SolveError::ConstraintFailureMissing => Self::ConstraintFailureMissing,
             SolveError::HybridStatisticsOverflow => Self::HybridStatisticsOverflow,
             SolveError::HybridBackend { backend } => Self::HybridBackend { backend },
             SolveError::Executor(error) => Self::Executor(error),

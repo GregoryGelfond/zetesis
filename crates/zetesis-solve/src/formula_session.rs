@@ -33,6 +33,35 @@ pub(crate) struct FormulaSession<'a, E> {
 }
 
 impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
+    /// Install an original-only source restriction before the first proposal.
+    /// An already stopped initialization has no traversal left to configure.
+    pub(crate) fn set_region_filter(
+        &mut self,
+        filter: std::sync::Arc<dyn zetesis_sat::RegionFilter>,
+        phases: &Recorder,
+    ) {
+        if let Some(models) = self.models.as_mut()
+            && let Err(error) = models.set_region_filter(filter)
+        {
+            self.complete(
+                SearchState::Interrupted(Interruption::Countermodel(error)),
+                phases,
+            );
+        }
+    }
+
+    /// Stop candidate production and join native workers without cancelling the
+    /// caller's shared token. Refresh receipts after the workers have settled.
+    pub(crate) fn stop(&mut self, phases: &Recorder) -> Result<(), zetesis_sat::Incomplete> {
+        let result = self.models.as_mut().map_or(Ok(()), StableModels::stop);
+        if let Some(previous) = self.final_outcome.take() {
+            let mut outcome = self.snapshot(phases);
+            outcome.search_state = previous.search_state;
+            self.final_outcome = Some(outcome);
+        }
+        result
+    }
+
     #[cfg(test)]
     pub(crate) fn with_selection(
         input: Input<'a>,

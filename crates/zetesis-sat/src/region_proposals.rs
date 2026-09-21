@@ -127,6 +127,7 @@ pub(crate) struct RegionProposals {
     pending: Frontier,
     pool: rayon::ThreadPool,
     statistics: RegionSearchStatistics,
+    pub(super) filter: Option<crate::region_filter::Filter>,
 }
 
 impl std::fmt::Debug for RegionProposals {
@@ -143,6 +144,7 @@ impl std::fmt::Debug for RegionProposals {
 pub(crate) struct Produced {
     pub(crate) exhausted: bool,
     pub(crate) stopped: Option<Incomplete>,
+    pub(crate) original_validation: crate::PhaseMeasurement,
 }
 
 impl RegionProposals {
@@ -172,6 +174,7 @@ impl RegionProposals {
             pending,
             pool,
             statistics,
+            filter: None,
         })
     }
 
@@ -217,6 +220,7 @@ impl RegionProposals {
         remaining: u64,
         budget: &mut Budget<'_>,
         output: &mut Vec<Interpretation>,
+        timed: bool,
     ) -> Produced {
         debug_assert!(output.is_empty());
         debug_assert!(maximum > 0 && output.capacity() >= maximum);
@@ -226,12 +230,15 @@ impl RegionProposals {
                 return Produced {
                     exhausted: false,
                     stopped: Some(error),
+                    original_validation: crate::PhaseMeasurement::default(),
                 };
             }
         };
         let allowance = SharedBudget::new(budget.limits, budget.statistics);
         let round = Round {
             theory,
+            filter: self.filter.as_ref(),
+            timed,
             producers: self.producers.as_ref(),
             narrower,
             restrictions: &self.restrictions,
@@ -247,6 +254,7 @@ impl RegionProposals {
                 active: 0,
                 counts: RegionCounts::default(),
                 stopped: None,
+                original_validation: crate::PhaseMeasurement::default(),
             }),
         };
         self.pool.install(|| {
@@ -273,6 +281,7 @@ impl RegionProposals {
         Produced {
             exhausted: state.stopped.is_none() && self.pending.is_empty(),
             stopped: state.stopped,
+            original_validation: state.original_validation,
         }
     }
 }
@@ -284,6 +293,7 @@ struct State {
     active: usize,
     counts: RegionCounts,
     stopped: Option<Incomplete>,
+    original_validation: crate::PhaseMeasurement,
 }
 
 #[cfg(test)]
@@ -292,6 +302,8 @@ mod tests;
 
 struct Round<'a> {
     theory: &'a Theory,
+    filter: Option<&'a crate::region_filter::Filter>,
+    timed: bool,
     producers: Option<&'a Producers>,
     narrower: &'a Narrower,
     restrictions: &'a [(Theory, Narrower)],
@@ -349,6 +361,8 @@ impl Round<'_> {
     }
 
     fn work(&self) {
+        let mut filter = None;
+        let mut timings = self.timed.then(crate::SearchPhaseTimings::default);
         while let Some(mut entry) = self.take() {
             let mut counts = RegionCounts {
                 regions: 1,
@@ -363,7 +377,13 @@ impl Round<'_> {
                     cancellation: self.cancellation,
                     statistics: SearchStatistics::default(),
                 };
-                self.step(&mut entry, &mut budget, &mut counts)
+                self.step(
+                    &mut entry,
+                    &mut budget,
+                    &mut counts,
+                    &mut filter,
+                    &mut timings,
+                )
             };
             let mut state = self.lock();
             state.active -= 1;
@@ -392,6 +412,11 @@ impl Round<'_> {
             }
             self.changed.notify_all();
         }
+        if let Some(timings) = timings {
+            self.lock()
+                .original_validation
+                .merge(timings.original_validation);
+        }
     }
 
     fn step<'a>(
@@ -399,6 +424,8 @@ impl Round<'_> {
         (region, knowledge): &mut PendingRegion,
         budget: &mut Budget<'a, WorkLease<'a>>,
         counts: &mut RegionCounts,
+        filter: &mut Option<crate::region_filter::Worker<'a>>,
+        timings: &mut Option<crate::SearchPhaseTimings>,
     ) -> Result<Step, Incomplete> {
         if regions::narrow(
             (self.theory, self.narrower),
@@ -409,6 +436,13 @@ impl Round<'_> {
             budget,
             counts,
         )? == Narrowing::Refuted
+            || match self.filter {
+                Some(factory) => {
+                    factory.check(filter, self.theory, region, self.cancellation, timings)?
+                        == crate::RegionFeasibility::Refuted
+                }
+                None => false,
+            }
         {
             counts.refuted = 1;
             return Ok(Step::Refuted);

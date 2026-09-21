@@ -105,7 +105,13 @@ fn explicit_lazy_formula_publishes_checked_original_answers() {
     );
     let document: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
     assert_eq!(document["statistics"]["hybrid_execution"]["accepted"], 2);
-    assert_eq!(document["statistics"]["hybrid_execution"]["rejected"], 2);
+    assert_eq!(document["statistics"]["hybrid_execution"]["rejected"], 0);
+    assert!(
+        document["statistics"]["search"]["region_filter"]["refuted"]
+            .as_u64()
+            .is_some_and(|count| count > 0)
+    );
+    assert_eq!(document["outcome"]["coverage"], "exhausted");
     let answers = zetesis_validation::answers::native_json::parse(
         &result.stdout,
         zetesis_validation::answers::native_json::Limits::default(),

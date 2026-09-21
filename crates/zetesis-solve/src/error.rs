@@ -9,6 +9,8 @@ use crate::{Backend, Grounder, Oracle, PhaseTimings, PreparedProfile, SemanticOu
 pub enum SolveError {
     /// A streamed source constraint could not be completely evaluated.
     Constraint(zetesis_themelios::ConstraintCheckFailure),
+    /// The candidate traversal reported a source failure without its typed cause.
+    ConstraintFailureMissing,
     /// Consumed core-answer accounting cannot represent another answer.
     HybridStatisticsOverflow,
     /// Streamed formula constraints do not have a device executor yet.
@@ -90,6 +92,7 @@ impl fmt::Display for SolveError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Constraint(error) => error.fmt(formatter),
+            Self::ConstraintFailureMissing => formatter.write_str("source region check stopped without its failure receipt"),
             Self::HybridStatisticsOverflow => formatter.write_str("hybrid answer accounting overflow"),
             Self::HybridBackend { backend } => write!(formatter,
                 "streamed formula constraints support cpu or auto execution; requested {}", backend.label()),
@@ -152,6 +155,7 @@ impl std::error::Error for SolveError {
             Self::Words(error) => Some(error),
             Self::Model(error) => Some(error),
             Self::BackendUnavailable
+            | Self::ConstraintFailureMissing
             | Self::HybridStatisticsOverflow
             | Self::HybridBackend { .. }
             | Self::UnsupportedOracle { .. }

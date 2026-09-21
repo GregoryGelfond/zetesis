@@ -57,6 +57,54 @@ The retained theory need not be positive, and constraint bodies need not be
 monotone. A violating constraint rejects a candidate; it does not establish
 that no other retained-theory candidate is an answer set.
 
+## Refuting a region before it becomes a candidate
+
+[`StreamedRegions`](../Zetesis/StreamedRegions.lean) supplies a different,
+sufficient test over the existing `Cube` and `FormulaBounds.Sure` definitions.
+For a region with bounds `L` and `U`, every interpretation `S` under consideration
+satisfies `L ⊆ S ⊆ U`. A normalized constraint body is sure when:
+
+- every positive atom is in `L`;
+- every double-negated atom is in `L`;
+- every default-negated atom is absent from `U`.
+
+`sure_antecedent_iff` connects exactly these tests to the existing
+`NormalFerraris.antecedent` translation, including empty bodies. Scalar guards
+must already have selected an admitted ground instance. Absence from `L` is
+not enough for a default-negated atom: an undecided atom may still belong to `S`.
+Double negation reads membership here because this is original truth; it is not
+being replaced by a positive atom in a frozen reduct.
+
+`held_body_satisfied` composes those literal readings with `sure_sound`: every
+interpretation in the region makes the whole body true. If that body belongs to
+an original integrity constraint, each interpretation violates the constraint.
+`sure_occurrence_refutes` consequently excludes all answer sets of the arbitrary
+retained theory plus the original constraint family from this region. One
+authenticated occurrence suffices; finding it need not exhaust the family.
+
+`scan_refutes` connects the bounded scanner to that argument:
+
+1. `scan_preserves` establishes that the returned witness occurs in the source
+   and that its sufficient test returned true.
+2. The pointwise test-soundness premise establishes a sure body for that witness.
+3. `sure_occurrence_refutes` excludes every original answer set in the region.
+
+The conclusion is precisely the soundness premise of `CoverageTree.refuted`
+with original Ferraris stability as its acceptance predicate. Existing
+`CoverageTree.mem_outputs_iff` then accounts for such a cut inside a completed
+coverage tree. This is a mathematical composition; it does not assert that the
+Rust traversal constructs Lean trees or already satisfies their invariants.
+
+The same scanner now tests a **sufficient condition**, rather than exact truth
+in a fixed candidate. Completion means only that no tested body was sure. The
+counterexample `complete_scan_can_miss_violation` leaves one atom undecided:
+the test completes without a witness, yet the interpretation containing that
+atom violates the constraint. This corresponds to `NotRefuted`, not
+`Satisfied`. `pending_can_retain_answer` supplies an answer set in a region
+whose scan stopped immediately, so interruption cannot authorize a cut either.
+Final candidate checks still require the complete original family and exact
+evaluation described above.
+
 ## Concrete obligations
 
 Source lowering must establish the finite family, its original occurrence and
@@ -73,3 +121,16 @@ bound total replay work. Cache validity, machine arithmetic, allocation, CPU/GPU
 scheduling and full candidate enumeration are not proved by this module. The
 finite scanner is a formal algorithm over supplied occurrences, not a verified
 implementation of the source grounder or the whole solver.
+
+For region checks, the dense coordinates must denote the same original atoms
+as the prepared owner, and `L` and `U` must bound the original candidates being
+searched. Exact theory identity and region width can authenticate a coordinate
+convention; they do not by themselves prove how a raw region was constructed.
+Every witnessed row must belong to the admitted source family, all its scalar
+guards must hold, and every literal in its body must pass the appropriate
+held/cut test. Unsupported local or aggregate scopes cannot be silently omitted
+from that witness. The region hook is an original-candidate restriction: applying
+it to subsets of a frozen reduct would require a different preservation law.
+Resource refusal and cancellation retain their typed failure and accepted
+charges; neither becomes a refuted region. Bounded storage does not bound the
+cumulative work of replaying the source across many regions.

@@ -7,8 +7,8 @@
 use std::{fmt, sync::Arc};
 use themelios_base::{source::Source, span::Location};
 use themelios_program::program::{DefaultNegation, Program};
-use zetesis_core::{AtomCatalog, Model};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_core::{AtomCatalog, AtomIndex, AtomIndexError, Model};
+use zetesis_cpu::{Cancellation, Stop, regions::Region};
 use zetesis_ferraris::Theory;
 
 use crate::expansion::Budget;
@@ -16,7 +16,10 @@ use crate::formula::Compiled;
 use crate::formula_binding::Binding;
 use crate::formula_ir::{HeadIr, LiteralIr, RuleIr};
 use crate::formula_support::{Accounting, CompletedCatalog, CompletedSupport, Counters, Join};
-use crate::{ExpansionLimits, FormulaFailure, FormulaLimits, SourceBundle, SourceMetadata};
+use crate::{
+    ConstraintAllowance, ExpansionLimits, FormulaFailure, FormulaLimits, SourceBundle,
+    SourceMetadata,
+};
 
 /// Capability deliberately outside the first hybrid schedule.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -223,7 +226,44 @@ impl HybridFormula {
         &self,
         limits: ConstraintCheckLimits,
     ) -> Result<ConstraintChecker<'_>, ConstraintCheckFailure> {
-        let mut counters = Counters::default();
+        self.prepare_checker(limits, Counters::default(), scalar_budget(limits))
+    }
+
+    /// Prepare an independent checker whose charges share `allowance` with all
+    /// other attached checkers, including final full-model checking. Cancellation
+    /// is polled during charged setup work and before publishing the checker.
+    ///
+    /// # Errors
+    /// Returns a typed preparation/resource/control refusal with its local
+    /// accepted receipt. `allowance.statistics()` retains the combined receipt.
+    pub fn checker_with_allowance(
+        &self,
+        allowance: &ConstraintAllowance,
+        cancellation: &Cancellation,
+    ) -> Result<ConstraintChecker<'_>, ConstraintCheckFailure> {
+        cancellation.poll().map_err(|stop| ConstraintCheckFailure {
+            cause: ConstraintCheckCause::Stopped(stop),
+            statistics: ConstraintCheckStatistics::default(),
+        })?;
+        let limits = allowance.limits();
+        let checker = self.prepare_checker(
+            limits,
+            Counters::with_allowance(allowance.clone(), cancellation),
+            scalar_budget(limits).with_allowance(allowance.clone()),
+        )?;
+        cancellation.poll().map_err(|stop| ConstraintCheckFailure {
+            cause: ConstraintCheckCause::Stopped(stop),
+            statistics: checker.statistics(),
+        })?;
+        Ok(checker)
+    }
+
+    fn prepare_checker(
+        &self,
+        limits: ConstraintCheckLimits,
+        mut counters: Counters,
+        budget: Budget,
+    ) -> Result<ConstraintChecker<'_>, ConstraintCheckFailure> {
         let prepared = if let Some(constraints) = &self.0.constraints {
             let mut formula_limits = constraints.limits;
             formula_limits.max_work = limits.max_work;
@@ -243,6 +283,7 @@ impl HybridFormula {
                 source: constraints,
                 completed,
                 limits: formula_limits,
+                index: None,
             })
         } else {
             None
@@ -250,16 +291,20 @@ impl HybridFormula {
         Ok(ConstraintChecker {
             owner: self,
             prepared,
-            budget: Budget::new(
-                ExpansionLimits {
-                    max_scalar_bytes: limits.max_scalar_bytes,
-                    ..ExpansionLimits::default()
-                },
-                0,
-            ),
+            budget,
             accounting: counters.into_accounting(),
         })
     }
+}
+
+fn scalar_budget(limits: ConstraintCheckLimits) -> Budget {
+    Budget::new(
+        ExpansionLimits {
+            max_scalar_bytes: limits.max_scalar_bytes,
+            ..ExpansionLimits::default()
+        },
+        0,
+    )
 }
 
 struct WarningView<'a>(&'a HybridFormula);
@@ -325,11 +370,35 @@ pub enum ConstraintVerdict {
     },
 }
 
+/// Whether one streamed body is true throughout an original candidate region.
+/// This operation establishes neither satisfaction nor reduct membership.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConstraintRegionVerdict {
+    /// No single admitted body was found true throughout the region. Some or
+    /// all remaining candidates may still violate the constraints.
+    NotRefuted,
+    /// One admitted body is true in every interpretation between the bounds.
+    Refuted {
+        /// Original enclosing source rule.
+        location: Location,
+    },
+}
+
 /// A check stopped without establishing satisfaction or a violation.
 #[derive(Debug)]
 pub enum ConstraintCheckCause {
-    /// The model does not retain this owner's exact dense atom catalog.
+    /// The model catalog or supplied region theory has a different owner.
     WrongProgram,
+    /// Region coordinates do not span the authenticated original atom catalog.
+    WrongRegionSize {
+        /// Original catalog dimension.
+        expected: usize,
+        /// Supplied region dimension.
+        actual: usize,
+    },
+    /// Preparation of the bounded catalog lookup refused allocation or found
+    /// duplicate typed atoms. Source-work stops use `Source` instead.
+    Index(AtomIndexError<Box<FormulaFailure>>),
     /// Caller cancellation or deadline, never semantic rejection.
     Stopped(Stop),
     /// Located join/evaluation/allocation/resource refusal.
@@ -339,6 +408,13 @@ impl fmt::Display for ConstraintCheckCause {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::WrongProgram => f.write_str("constraint candidate belongs to another program"),
+            Self::WrongRegionSize { expected, actual } => {
+                write!(
+                    f,
+                    "constraint region has {actual} atoms; expected {expected}"
+                )
+            }
+            Self::Index(error) => error.fmt(f),
             Self::Stopped(stop) => stop.fmt(f),
             Self::Source(error) => error.fmt(f),
         }
@@ -347,7 +423,8 @@ impl fmt::Display for ConstraintCheckCause {
 impl std::error::Error for ConstraintCheckCause {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::WrongProgram => None,
+            Self::WrongProgram | Self::WrongRegionSize { .. } => None,
+            Self::Index(error) => Some(error),
             Self::Stopped(error) => Some(error),
             Self::Source(error) => Some(error.as_ref()),
         }
@@ -372,7 +449,13 @@ impl ConstraintCheckFailure {
                 FormulaFailure::Interrupted { reason, .. } => Some(*reason),
                 _ => None,
             },
-            ConstraintCheckCause::WrongProgram => None,
+            ConstraintCheckCause::Index(AtomIndexError::Stopped(error)) => match error.as_ref() {
+                FormulaFailure::Interrupted { reason, .. } => Some(*reason),
+                _ => None,
+            },
+            ConstraintCheckCause::WrongProgram
+            | ConstraintCheckCause::WrongRegionSize { .. }
+            | ConstraintCheckCause::Index(_) => None,
         }
     }
 }
@@ -402,6 +485,52 @@ struct PreparedConstraints<'a> {
     source: &'a Constraints,
     completed: CompletedSupport<'a>,
     limits: FormulaLimits,
+    /// Original dense IDs, prepared once on first region use. The final-model
+    /// path keeps its existing canonical selection lookup.
+    index: Option<AtomIndex<'a>>,
+}
+
+impl<'a> PreparedConstraints<'a> {
+    fn prepare_index(
+        &mut self,
+        atoms: &'a AtomCatalog,
+        counters: &mut Counters,
+    ) -> Result<(), ConstraintCheckCause> {
+        if self.index.is_some() {
+            return Ok(());
+        }
+        let location = self.source.location;
+        // Two retained integer orders and one preparation scratch order, all
+        // bounded by the admitted atom count. AtomIndex reserves fallibly and
+        // charges each comparison/write; it never copies atom payloads.
+        let requested = size_of::<AtomIndex<'_>>() as u128
+            + size_of::<Vec<usize>>() as u128
+            + 3 * atoms.atoms().len() as u128 * size_of::<usize>() as u128;
+        self.completed
+            .admit_workspace(requested, &self.limits, location)
+            .map_err(|error| ConstraintCheckCause::Source(Box::new(error)))?;
+        let index = AtomIndex::new_with(atoms.atoms(), || {
+            counters.work(&self.limits, location).map_err(Box::new)
+        })
+        .map_err(|error| match error {
+            AtomIndexError::Stopped(error) => ConstraintCheckCause::Source(error),
+            other => ConstraintCheckCause::Index(other),
+        })?;
+        self.completed
+            .admit_workspace(index.preparation_peak_bytes(), &self.limits, location)
+            .map_err(|error| ConstraintCheckCause::Source(Box::new(error)))?;
+        self.completed.retain_workspace(
+            usize::try_from(index.retained_bytes()).expect("admitted support bytes fit usize"),
+        );
+        self.index = Some(index);
+        Ok(())
+    }
+}
+
+#[derive(Clone, Copy)]
+enum Candidate<'a> {
+    Model(&'a Model),
+    Region(&'a Theory, &'a Region),
 }
 
 impl ConstraintChecker<'_> {
@@ -430,21 +559,91 @@ impl ConstraintChecker<'_> {
         model: &Model,
         cancellation: &Cancellation,
     ) -> Result<ConstraintVerdict, ConstraintCheckFailure> {
-        let result = if !model.catalog().same_owner(self.owner.atom_catalog()) {
-            Err(ConstraintCheckCause::WrongProgram)
-        } else if let Err(stop) = cancellation.poll() {
-            Err(ConstraintCheckCause::Stopped(stop))
-        } else {
-            self.accounting
+        self.examine(Candidate::Model(model), cancellation)
+            .map(|location| match location {
+                Some(location) => ConstraintVerdict::Violated { location },
+                None => ConstraintVerdict::Satisfied,
+            })
+    }
+
+    /// Refute an original candidate region only when one admitted constraint
+    /// body is true throughout it. Positive and double-negated atoms must be
+    /// held; default-negated atoms must be cut. Open atoms establish neither.
+    ///
+    /// The supplied theory must be this owner's exact core, and the region must
+    /// span its dense catalog. These checks authenticate the coordinate convention,
+    /// not the provenance of a raw `Region`. No region or candidate is mutated.
+    /// Never use this operation to read a candidate's frozen reduct.
+    ///
+    /// First use prepares a bounded typed catalog index; later checks reuse it.
+    /// Joins still visit complete possible support and share the scalar evaluator
+    /// with `check`. Source arithmetic admission has already completed. Failure
+    /// preserves every accepted charge; `NotRefuted` does not prove satisfaction.
+    ///
+    /// # Errors
+    /// Wrong theory/dimension, cancellation, or a checked index/source refusal.
+    pub fn check_region(
+        &mut self,
+        theory: &Theory,
+        region: &Region,
+        cancellation: &Cancellation,
+    ) -> Result<ConstraintRegionVerdict, ConstraintCheckFailure> {
+        self.examine(Candidate::Region(theory, region), cancellation)
+            .map(|location| match location {
+                Some(location) => ConstraintRegionVerdict::Refuted { location },
+                None => ConstraintRegionVerdict::NotRefuted,
+            })
+    }
+
+    fn authenticate(&self, candidate: Candidate<'_>) -> Result<(), ConstraintCheckCause> {
+        match candidate {
+            Candidate::Model(model) => {
+                if !model.catalog().same_owner(self.owner.atom_catalog()) {
+                    return Err(ConstraintCheckCause::WrongProgram);
+                }
+            }
+            Candidate::Region(theory, region) => {
+                if !theory.same_instance(self.owner.core_theory()) {
+                    return Err(ConstraintCheckCause::WrongProgram);
+                }
+                let expected = self.owner.atom_catalog().atoms().len();
+                if region.len() != expected {
+                    return Err(ConstraintCheckCause::WrongRegionSize {
+                        expected,
+                        actual: region.len(),
+                    });
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn examine(
+        &mut self,
+        candidate: Candidate<'_>,
+        cancellation: &Cancellation,
+    ) -> Result<Option<Location>, ConstraintCheckFailure> {
+        let result = self.authenticate(candidate).and_then(|()| {
+            cancellation.poll().map_err(ConstraintCheckCause::Stopped)?;
+            let verdict = self
+                .accounting
                 .with_cancellation(cancellation, |counters| {
-                    Self::scan(self.prepared.as_ref(), &mut self.budget, counters, model)
-                })
-                .map_err(|error| ConstraintCheckCause::Source(Box::new(error)))
-                .and_then(|verdict| {
-                    cancellation.poll().map_err(ConstraintCheckCause::Stopped)?;
-                    Ok(verdict)
-                })
-        };
+                    if matches!(candidate, Candidate::Region(..))
+                        && let Some(prepared) = &mut self.prepared
+                    {
+                        prepared.prepare_index(self.owner.atom_catalog(), counters)?;
+                    }
+                    Self::scan(
+                        self.prepared.as_ref(),
+                        &mut self.budget,
+                        counters,
+                        candidate,
+                    )
+                    .map_err(|error| ConstraintCheckCause::Source(Box::new(error)))
+                })?;
+            cancellation.poll().map_err(ConstraintCheckCause::Stopped)?;
+            Ok(verdict)
+        });
         result.map_err(|cause| ConstraintCheckFailure {
             cause,
             statistics: self.statistics(),
@@ -455,10 +654,10 @@ impl ConstraintChecker<'_> {
         prepared: Option<&PreparedConstraints<'_>>,
         budget: &mut Budget,
         counters: &mut Counters,
-        model: &Model,
-    ) -> Result<ConstraintVerdict, FormulaFailure> {
+        candidate: Candidate<'_>,
+    ) -> Result<Option<Location>, FormulaFailure> {
         let Some(prepared) = prepared else {
-            return Ok(ConstraintVerdict::Satisfied);
+            return Ok(None);
         };
         let constraints = prepared.source;
         let queries = prepared.completed.queries(
@@ -477,19 +676,18 @@ impl ConstraintChecker<'_> {
                     && body(
                         &rule.body,
                         &row.values,
-                        model,
+                        candidate,
+                        prepared.index.as_ref(),
                         &prepared.limits,
                         counters,
                         rule.location,
                     )?
                 {
-                    return Ok(ConstraintVerdict::Violated {
-                        location: rule.location,
-                    });
+                    return Ok(Some(rule.location));
                 }
             }
         }
-        Ok(ConstraintVerdict::Satisfied)
+        Ok(None)
     }
 }
 
@@ -506,7 +704,8 @@ pub(crate) fn eligible(rule: &RuleIr) -> bool {
 fn body(
     literals: &[LiteralIr],
     binding: &Binding<'_>,
-    model: &Model,
+    candidate: Candidate<'_>,
+    index: Option<&AtomIndex<'_>>,
     limits: &FormulaLimits,
     counters: &mut Counters,
     location: Location,
@@ -533,13 +732,35 @@ fn body(
                 variable: error.variable,
                 location,
             })?;
-        let present = model
-            .lookup()
-            .get_key_with(&key, || counters.work(limits, location))?
-            .is_some();
-        let truth = match negation {
-            DefaultNegation::Not => !present,
-            DefaultNegation::None | DefaultNegation::NotNot => present,
+        let truth = match candidate {
+            Candidate::Model(model) => {
+                let present = model
+                    .lookup()
+                    .get_key_with(&key, || counters.work(limits, location))?
+                    .is_some();
+                match negation {
+                    DefaultNegation::Not => !present,
+                    DefaultNegation::None | DefaultNegation::NotNot => present,
+                }
+            }
+            Candidate::Region(_, region) => {
+                let row = index
+                    .expect("prepared before region scan")
+                    .lookup()
+                    .get_key_with(&key, || counters.work(limits, location))?;
+                // Passing source rows contributed every occurrence to the
+                // completed catalog at admission, including unsupported atoms.
+                let position = row
+                    .ok_or(FormulaFailure::SupportRelation {
+                        error: zetesis_core::relation::Failure::Owner,
+                        location,
+                    })?
+                    .position();
+                match negation {
+                    DefaultNegation::Not => region.is_cut(position),
+                    DefaultNegation::None | DefaultNegation::NotNot => region.is_held(position),
+                }
+            }
         };
         if !truth {
             return Ok(false);

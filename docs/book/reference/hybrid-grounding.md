@@ -1,5 +1,12 @@
 # Eager and hybrid formula grounding
 
+The measurements below describe the original full-candidate checking schedule
+at its named revision. Current hybrid region search also checks for certain
+constraint violations before splitting or core membership. The
+[current execution contract](../architecture/grounding.md#eager-and-lazy-execution)
+distinguishes those early refutations from final candidate checks. These retained
+measurements do not measure that later schedule.
+
 Streaming source constraints reduces the stored formula, but can increase the
 number of core answer sets that must be checked. This comparison measures both
 effects using the same zetesis executable. It does not establish a general

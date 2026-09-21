@@ -293,7 +293,13 @@ impl StableModels {
                     .saturating_sub(self.statistics.candidates),
                 &mut budget,
                 &mut self.batch.pending,
+                self.statistics.phase_timings.is_some(),
             );
+            if let Some(timings) = self.statistics.phase_timings.as_mut() {
+                timings
+                    .original_validation
+                    .merge(produced.original_validation);
+            }
             timing::finish(
                 &mut self.statistics.phase_timings,
                 Phase::Candidates,

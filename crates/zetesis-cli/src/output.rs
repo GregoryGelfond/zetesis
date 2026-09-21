@@ -268,6 +268,7 @@ fn stages(out: &mut Buffer, timings: Option<&crate::StageTimings>) -> Result<(),
 fn error_kind(error: &RunError) -> &'static str {
     match error {
         RunError::Constraint(_) => "constraint",
+        RunError::ConstraintFailureMissing => "constraint_failure_missing",
         RunError::HybridStatisticsOverflow => "hybrid_statistics_overflow",
         RunError::HybridBackend { .. } => "hybrid_backend",
         RunError::Input(_) => "input",
@@ -344,6 +345,10 @@ fn reason_code(reason: Interruption) -> &'static str {
                 Incomplete::RestrictionUniverse { .. } => "restriction_universe",
                 Incomplete::ClosedEnumerator => "closed_enumerator",
                 Incomplete::LateCertificate => "late_certificate",
+                Incomplete::RegionFilter => "region_filter",
+                Incomplete::RegionFilterUnsupported => "region_filter_unsupported",
+                Incomplete::LateRegionFilter => "late_region_filter",
+                Incomplete::RegionFilterAlreadySet => "region_filter_already_set",
                 Incomplete::Certificate(_) => "certificate",
                 Incomplete::Verification(_) => "verification",
                 Incomplete::InvalidWitness => "invalid_witness",
@@ -739,6 +744,8 @@ fn search_statistics(
     support_statistics(out, stats.support)?;
     out.text(",\"candidate_regions\":")?;
     region_statistics(out, stats.regions)?;
+    out.text(",\"region_filter\":")?;
+    region_filter_statistics(out, stats.region_filter)?;
     out.text(",\"reduct_query_regions\":{\"visited\":")?;
     out.text(&stats.reduct.regions.regions.to_string())?;
     out.number_field("refuted", stats.reduct.regions.refuted)?;
@@ -746,6 +753,23 @@ fn search_statistics(
     out.number_field("propagations", stats.reduct.regions.propagations)?;
     out.number_field("reading_work", stats.reduct.regions.work)?;
     out.text("}}")
+}
+
+fn region_filter_statistics(
+    out: &mut Buffer,
+    statistics: Option<zetesis_sat::RegionFilterStatistics>,
+) -> Result<(), RunError> {
+    let Some(stats) = statistics else {
+        return out.text("null");
+    };
+    out.text("{\"preparations\":")?;
+    out.text(&stats.preparations.to_string())?;
+    out.number_field("checks", stats.checks)?;
+    out.number_field("refuted", stats.refuted)?;
+    out.number_field("failed", stats.failed)?;
+    out.text(",\"overflowed\":")?;
+    out.text(if stats.overflowed { "true" } else { "false" })?;
+    out.text("}")
 }
 
 fn hybrid_statistics(

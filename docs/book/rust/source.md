@@ -44,6 +44,14 @@ deadline, allocation and resource failures are typed separately from both
 verdicts; failures preserve cumulative statistics. Equal source bytes do not
 substitute for owner identity.
 
+`check_region(&theory, &region, &cancellation)` requires the exact retained core
+and a region spanning its dense atom catalog. A certainly true constraint body
+returns `Refuted { location }`; otherwise it returns `NotRefuted`, which does
+not assert satisfaction. The checker prepares and reuses a typed atom index on
+first region use. The method checks the coordinate convention, not the origin
+of an arbitrary caller-created region. Use it only to restrict original
+candidates, never to evaluate their frozen reducts.
+
 Support dictionaries and equality indexes are reused. Ordinary joins lend their
 current binding; generators retain their existing owned-row requirements.
 Candidate truth uses borrowed typed atom keys, with no temporary formula DAG or
@@ -61,14 +69,25 @@ atom guards. `streamed_templates()` counts lowered templates, including pool
 alternatives, and `streamed_instances()` counts scalar-selected instances visited
 during admission; neither is a retained instance store.
 
-Each checker has separate cumulative work, substitution and copied-scalar-byte
-limits across all candidate checks. Snapshot descriptors are prepared once,
-without copying support rows; per-operation binding/storage ceilings remain
-those of the admitted source. A new checker starts new execution allowances,
-not new source admission. Its statistics describe charged work and payload,
-not process memory. Streaming can reduce retained constraint storage while
-repeating joins and proposing more core answers; it does not remove the complete
+`checker(limits)` has its own cumulative work, substitution and copied-scalar-byte
+limits. For parallel composition, create `ConstraintAllowance::new(limits)` and
+use `checker_with_allowance(&allowance, &cancellation)` for every worker and final
+checker. Its clones share before-operation charges; no allowance is multiplied
+by the worker count. `allowance.statistics()` is exact after those workers join;
+live fields are independently observed monotone counters. Snapshot descriptors
+are prepared once per checker, without copying support rows; per-operation
+binding/storage ceilings remain those of the admitted source. A new checker
+starts its own local receipt; a supplied shared allowance continues across
+checkers. Neither repeats source admission. These statistics describe charged
+work and payload, not process memory. Streaming can reduce retained constraint storage while
+repeating joins; it does not remove the complete
 finite atom envelope or imply a time improvement.
+
+Shared checking also meters bound-key relation queries before their dictionary
+steps. `Relation::query_attempt_with` supplies this composition boundary: the
+relation enforces its own limits, then asks the enclosing operation for each
+work permit. A refusal retains the accepted prefix and runs no later step. It
+uses the same equality resolver as locally metered `query_attempt`.
 
 ## Reuse original input across profiles
 

@@ -1,0 +1,180 @@
+//! Borrowed original-only filter fixtures shared by the route controls.
+
+use std::collections::BTreeSet;
+use std::num::NonZeroUsize;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+use zetesis_cpu::regions::Region;
+use zetesis_ferraris::{AdmissionLimits, Interpretation, Node, Theory};
+use zetesis_sat::{
+    BatchLimits, BatchVerdict, Cancellation, Incomplete, Limits, RegionFeasibility, RegionFilter,
+    RegionFilterWorker, StableModels,
+};
+
+#[derive(Clone, Copy, Debug)]
+pub enum Route {
+    Scalar,
+    Producers,
+    Native,
+}
+
+pub const ROUTES: [Route; 3] = [Route::Scalar, Route::Producers, Route::Native];
+
+impl Route {
+    pub fn search(self, theory: &Theory, cancellation: Cancellation) -> StableModels {
+        let workers = NonZeroUsize::new(4).unwrap();
+        match self {
+            Self::Scalar => StableModels::new(theory, Limits::default(), cancellation),
+            Self::Producers => StableModels::with_region_producers(
+                theory,
+                workers,
+                Limits::default(),
+                cancellation,
+            ),
+            Self::Native => {
+                StableModels::with_region_workers(theory, workers, Limits::default(), cancellation)
+            }
+        }
+        .unwrap()
+    }
+
+    pub fn collect(self, search: &mut StableModels) -> BTreeSet<Vec<usize>> {
+        let mut answers = BTreeSet::new();
+        if matches!(self, Self::Producers) {
+            while !search.exhausted() {
+                for answer in search
+                    .next_batch(
+                        BatchLimits {
+                            max_candidates: NonZeroUsize::new(64).unwrap(),
+                            max_pending_bytes: 1024 * 1024,
+                        },
+                        residual,
+                    )
+                    .unwrap()
+                {
+                    assert!(answers.insert(answer.atoms().collect()));
+                }
+            }
+        } else {
+            for answer in search.by_ref() {
+                assert!(answers.insert(answer.unwrap().atoms().collect()));
+            }
+        }
+        assert!(search.exhausted());
+        answers
+    }
+}
+
+fn residual(
+    _: &Theory,
+    candidates: &[Interpretation],
+) -> Result<Vec<BatchVerdict>, std::collections::TryReserveError> {
+    let mut result = Vec::new();
+    result.try_reserve_exact(candidates.len())?;
+    result.resize(candidates.len(), BatchVerdict::Residual);
+    Ok(result)
+}
+
+pub fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
+    Theory::new(atoms, nodes, roots, AdmissionLimits::default()).unwrap()
+}
+
+pub fn choices(atoms: usize) -> Theory {
+    let mut nodes = vec![Node::False];
+    let mut roots = Vec::new();
+    for atom in 0..atoms {
+        let offset = nodes.len();
+        nodes.extend([
+            Node::Atom(atom),
+            Node::Implies(offset, 0),
+            Node::Or(offset, offset + 1),
+        ]);
+        roots.push(offset + 2);
+    }
+    theory(atoms, nodes, roots)
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum Condition {
+    Pass,
+    ForbidHeld(usize),
+    Require(usize),
+    ForbidPair(usize, usize),
+    FailPreparation,
+    FailCheck,
+    Cancel,
+}
+
+#[derive(Debug)]
+pub struct Filter {
+    subject: Theory,
+    condition: Condition,
+    pub live: AtomicUsize,
+}
+
+impl Filter {
+    pub fn new(subject: &Theory, condition: Condition) -> Arc<Self> {
+        Arc::new(Self {
+            subject: subject.clone(),
+            condition,
+            live: AtomicUsize::new(0),
+        })
+    }
+}
+
+struct Worker<'a>(&'a Filter);
+
+impl Drop for Worker<'_> {
+    fn drop(&mut self) {
+        self.0.live.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+impl RegionFilter for Filter {
+    fn worker(
+        &self,
+        theory: &Theory,
+        cancellation: &Cancellation,
+    ) -> Result<Box<dyn RegionFilterWorker + '_>, Incomplete> {
+        cancellation.poll()?;
+        if !theory.same_instance(&self.subject) {
+            return Err(Incomplete::WrongTheory);
+        }
+        if matches!(self.condition, Condition::FailPreparation) {
+            return Err(Incomplete::RegionFilter);
+        }
+        self.live.fetch_add(1, Ordering::SeqCst);
+        Ok(Box::new(Worker(self)))
+    }
+}
+
+impl RegionFilterWorker for Worker<'_> {
+    fn check(
+        &mut self,
+        theory: &Theory,
+        region: &Region,
+        cancellation: &Cancellation,
+    ) -> Result<RegionFeasibility, Incomplete> {
+        assert!(theory.same_instance(&self.0.subject));
+        cancellation.poll()?;
+        let refuted = match self.0.condition {
+            Condition::Pass => false,
+            Condition::ForbidHeld(atom) => region.is_held(atom),
+            Condition::Require(atom) => region.is_cut(atom),
+            Condition::ForbidPair(left, right) => region.is_held(left) && region.is_held(right),
+            Condition::FailCheck => return Err(Incomplete::RegionFilter),
+            Condition::Cancel => {
+                cancellation.cancel();
+                cancellation.poll()?;
+                unreachable!("the check just cancelled its token")
+            }
+            Condition::FailPreparation => unreachable!("preparation refused this checker"),
+        };
+        Ok(if refuted {
+            RegionFeasibility::Refuted
+        } else {
+            RegionFeasibility::NotRefuted
+        })
+    }
+}

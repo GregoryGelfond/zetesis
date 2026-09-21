@@ -55,6 +55,51 @@ fn mixed_grounding_keeps_core_and_original_counts_distinct() {
 }
 
 #[test]
+fn early_region_counts_remain_separate_from_core_answers() {
+    let (mut document, text, request) = mixed();
+    document["statistics"]["search"]["region_filter"] = json!({
+        "preparations":4,"checks":120,"refuted":43,"failed":0,"overflowed":false
+    });
+    let observation = observe(&document, text.as_bytes(), request).unwrap();
+    let hybrid = observation.hybrid.unwrap();
+    assert_eq!(hybrid.core_answers, 64);
+    let regions = hybrid.regions.unwrap();
+    assert_eq!(regions.preparations, 4);
+    assert_eq!(regions.checks, 120);
+    assert_eq!(regions.refuted, 43);
+}
+
+#[test]
+fn failed_region_check_cannot_qualify_completion() {
+    let (mut document, text, request) = mixed();
+    document["statistics"]["search"]["region_filter"] = json!({
+        "preparations":1,"checks":2,"refuted":1,"failed":1,"overflowed":false
+    });
+    assert!(observe(&document, text.as_bytes(), request).is_err());
+}
+
+#[test]
+fn overflowed_region_counts_cannot_qualify_completion() {
+    let (mut document, text, request) = mixed();
+    document["statistics"]["search"]["region_filter"] = json!({
+        "preparations":1,"checks":2,"refuted":1,"failed":0,"overflowed":true
+    });
+    assert!(observe(&document, text.as_bytes(), request).is_err());
+}
+
+#[test]
+fn impossible_region_counts_cannot_qualify_completion() {
+    let (mut document, text, request) = mixed();
+    for receipt in [
+        json!({"preparations":1,"checks":2,"refuted":3,"failed":0,"overflowed":false}),
+        json!({"preparations":0,"checks":2,"refuted":1,"failed":0,"overflowed":false}),
+    ] {
+        document["statistics"]["search"]["region_filter"] = receipt;
+        assert!(observe(&document, text.as_bytes(), request).is_err());
+    }
+}
+
+#[test]
 fn hybrid_core_certificates_do_not_claim_eager_source_execution() {
     let (document, text, request) = mixed();
     for (name, procedure) in [

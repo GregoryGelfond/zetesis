@@ -43,7 +43,7 @@ pub use catalog::{
     Canonical, Catalog, CatalogFailure, ExtractedAtoms, Insertion, Lookup, Preparation, Runs,
 };
 
-pub use selection::{Equality, Mask, Query, QueryAttempt, Selection};
+pub use selection::{Equality, Mask, Query, QueryAttempt, QueryFailure, Selection};
 
 /// Inclusive construction and operation ceilings.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

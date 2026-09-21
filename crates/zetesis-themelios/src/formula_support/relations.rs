@@ -350,24 +350,16 @@ impl Relations<'_> {
             super::postings::observe(rows, pattern, values, None);
             return Ok(None);
         }
-        let base_work = counters.work;
         let outer = memory.bytes - rows.relation.storage().retained_bytes;
-        let attempt = rows.relation.query_attempt(
+        let query = resolve_equalities(
+            &rows.relation,
             &keys,
-            relation_limits(
-                limits,
-                counters,
-                pattern.predicate(),
-                rows.relation.storage().retained_bytes + memory.remaining()?,
-            ),
-        );
-        counters.charge_work(attempt.work, limits, location)?;
-        counters.record(Event::SupportPeakBytes(
-            outer as u128 + attempt.peak_bytes as u128,
-        ));
-        let query = attempt
-            .result
-            .map_err(|error| relation_failure(error, limits, base_work, outer, location))?;
+            limits,
+            counters,
+            rows.relation.storage().retained_bytes + memory.remaining()?,
+            outer,
+            location,
+        )?;
         memory.add(query.retained_bytes())?;
         let mut selected: Option<&[usize]> = None;
         if query.is_possible() {
@@ -386,6 +378,48 @@ impl Relations<'_> {
         super::postings::observe(rows, pattern, values, selected);
         Ok(selected)
     }
+}
+
+/// The local eager path keeps its accounted query; shared checkers instead
+/// admit each dictionary step before executing it. A remaining-quota snapshot
+/// would race other checkers, and postcharging would omit refused executed work.
+fn resolve_equalities<'owner, 'source>(
+    relation: &'owner Relation<'source>,
+    keys: &[(usize, &Value)],
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    scoped_bytes: usize,
+    outer_bytes: usize,
+    location: Location,
+) -> Result<zetesis_core::relation::Query<'owner, 'source>, FormulaFailure> {
+    let base_work = counters.work;
+    let checked = relation_limits(limits, counters, relation.predicate(), scoped_bytes);
+    let (result, peak_bytes) = if counters.allowance.is_some() {
+        let attempt =
+            relation.query_attempt_with(keys, checked, || counters.work(limits, location));
+        (
+            attempt.result.map_err(|error| match error {
+                zetesis_core::relation::QueryFailure::Relation(error) => {
+                    relation_failure(error, limits, base_work, outer_bytes, location)
+                }
+                zetesis_core::relation::QueryFailure::Stopped(error) => error,
+            }),
+            attempt.peak_bytes,
+        )
+    } else {
+        let attempt = relation.query_attempt(keys, checked);
+        counters.charge_work(attempt.work, limits, location)?;
+        (
+            attempt
+                .result
+                .map_err(|error| relation_failure(error, limits, base_work, outer_bytes, location)),
+            attempt.peak_bytes,
+        )
+    };
+    counters.record(Event::SupportPeakBytes(
+        outer_bytes as u128 + peak_bytes as u128,
+    ));
+    result
 }
 
 fn relation_limits(

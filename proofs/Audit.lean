@@ -1112,6 +1112,12 @@ import Zetesis
 #print axioms Zetesis.StreamedConstraints.clear_iff_models
 #print axioms Zetesis.StreamedConstraints.stable_iff_completed_partition
 #print axioms Zetesis.StreamedConstraints.pending_can_hide_violation
+#print axioms Zetesis.StreamedRegions.sure_antecedent_iff
+#print axioms Zetesis.StreamedRegions.held_body_satisfied
+#print axioms Zetesis.StreamedRegions.sure_occurrence_refutes
+#print axioms Zetesis.StreamedRegions.scan_refutes
+#print axioms Zetesis.StreamedRegions.complete_scan_can_miss_violation
+#print axioms Zetesis.StreamedRegions.pending_can_retain_answer
 #print axioms Zetesis.StrongNegation.satisfies_rename
 #print axioms Zetesis.StrongNegation.reduct_rename
 #print axioms Zetesis.StrongNegation.frozen_rename

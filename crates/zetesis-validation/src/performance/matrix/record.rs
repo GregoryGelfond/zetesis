@@ -156,6 +156,9 @@ pub struct Observation {
 /// Completed hybrid source-checking receipt, independent of device execution.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub struct HybridStatistics {
+    /// Optional early region checks; absent in records from earlier executables.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub regions: Option<RegionChecks>,
     /// Core answers consumed by the checker, including rejected ones.
     pub core_answers: u64,
     /// Original-program answers after checking all required constraints.
@@ -170,6 +173,17 @@ pub struct HybridStatistics {
     pub substitutions: u64,
     /// Cumulative copied scalar payload, not retained memory or RSS.
     pub scalar_bytes: u64,
+}
+
+/// Completed candidate-region restriction counts, independent of membership.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub struct RegionChecks {
+    /// Worker-local checker preparations, including attempts.
+    pub preparations: u64,
+    /// Candidate regions checked before splitting or membership.
+    pub checks: u64,
+    /// Regions rejected by a certain original constraint violation.
+    pub refuted: u64,
 }
 impl Observation {
     /// Reconcile already-parsed native statistics with their captured text view.

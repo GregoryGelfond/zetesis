@@ -74,6 +74,28 @@ impl CompletedCatalog {
 }
 
 impl CompletedSupport<'_> {
+    /// Keep a checker's additional retained index inside the same support-byte
+    /// allowance as its borrowed catalog and query descriptor. Preparation also
+    /// checks its simultaneous scratch before allocating it.
+    pub(crate) fn admit_workspace(
+        &self,
+        bytes: u128,
+        limits: &FormulaLimits,
+        location: Location,
+    ) -> Result<(), FormulaFailure> {
+        ceiling(
+            FormulaResource::SupportBytes,
+            self.relations.bytes as u128 + size_of::<Support<'_>>() as u128 + bytes,
+            limits.max_support_bytes as u128,
+            location,
+        )
+    }
+
+    pub(crate) fn retain_workspace(&mut self, bytes: usize) {
+        // The caller admitted this exact retained capacity before publication.
+        self.relations.bytes += bytes;
+    }
+
     /// Borrow the same typed rows used by final grounding and objective joins.
     pub(crate) fn queries(
         &self,
@@ -108,12 +130,24 @@ pub(crate) fn row_values<'source>(
 #[derive(Default)]
 pub(crate) struct Counters {
     cancellation: Option<zetesis_cpu::Cancellation>,
+    allowance: Option<crate::ConstraintAllowance>,
     pub work: u64,
     pub substitutions: u64,
     generated_values: BTreeSet<Value>,
     observed: Work,
 }
 impl Counters {
+    pub(crate) fn with_allowance(
+        allowance: crate::ConstraintAllowance,
+        cancellation: &zetesis_cpu::Cancellation,
+    ) -> Self {
+        Self {
+            allowance: Some(allowance),
+            cancellation: Some(cancellation.clone()),
+            ..Self::default()
+        }
+    }
+
     pub(super) fn observed(observed: Work) -> Self {
         Self {
             observed,
@@ -147,6 +181,9 @@ impl Counters {
             u128::from(limits.max_work),
             location,
         )?;
+        if let Some(allowance) = &self.allowance {
+            allowance.work(amount, location)?;
+        }
         self.work += u64::try_from(amount).expect("charged work fits its u64 ceiling");
         Ok(())
     }
@@ -179,6 +216,9 @@ impl Counters {
             u128::from(limits.max_substitutions),
             location,
         )?;
+        if let Some(allowance) = &self.allowance {
+            allowance.substitution(location)?;
+        }
         self.substitutions += 1;
         Ok(())
     }

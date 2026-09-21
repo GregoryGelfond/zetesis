@@ -131,3 +131,39 @@ fn unwind_restores_accepted_history() {
     assert!(result.is_err());
     assert_eq!(accounting.work, 1);
 }
+
+#[test]
+fn unwind_preserves_shared_admission_charges() {
+    let allowance = crate::ConstraintAllowance::new(crate::ConstraintCheckLimits {
+        max_work: 1,
+        ..Default::default()
+    });
+    let cancellation = Cancellation::default();
+    let mut accounting =
+        super::Counters::with_allowance(allowance.clone(), &cancellation).into_accounting();
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        accounting.with_cancellation(&cancellation, |counters| {
+            counters
+                .work(&FormulaLimits::default(), location())
+                .unwrap();
+            panic!("controlled unwind after shared admission");
+        });
+    }));
+    assert!(result.is_err());
+    assert_eq!(accounting.work, 1);
+    assert_eq!(allowance.statistics().work, 1);
+    let refused = accounting.with_cancellation(&cancellation, |counters| {
+        counters.work(&FormulaLimits::default(), location())
+    });
+    assert!(matches!(
+        refused,
+        Err(FormulaFailure::Limit {
+            resource: FormulaResource::Work,
+            observed: 2,
+            limit: 1,
+            ..
+        })
+    ));
+    assert_eq!(accounting.work, 1);
+    assert_eq!(allowance.statistics().work, 1);
+}

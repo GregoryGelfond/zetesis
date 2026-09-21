@@ -160,12 +160,12 @@ fn a_split_donates_its_held_child_to_an_idle_worker() {
     let result = if idle {
         step(
             &search.shared,
-            region,
-            knowledge,
+            (region, knowledge),
             &mut local,
             &mut budget,
             &mut membership,
             &mut report,
+            &mut None,
         )
     } else {
         Err(Incomplete::Deadline)

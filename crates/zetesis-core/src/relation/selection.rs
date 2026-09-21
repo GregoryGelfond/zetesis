@@ -1,6 +1,6 @@
 //! Exact conjunction filtering over an explicitly supplied ordered selection.
 
-use std::mem::size_of;
+use std::{fmt, mem::size_of};
 
 use crate::Value;
 
@@ -46,9 +46,9 @@ pub struct Query<'owner, 'source> {
 /// borrowed relation and the query's named frame/buffer, not caller scratch,
 /// this by-value receipt wrapper or source payload. These observations neither grant additional budget nor
 /// establish row feasibility or semantic truth.
-pub struct QueryAttempt<'owner, 'source> {
+pub struct QueryAttempt<'owner, 'source, E = Failure> {
     /// Complete owner-bound query, or the original typed failure.
-    pub result: Result<Query<'owner, 'source>, Failure>,
+    pub result: Result<Query<'owner, 'source>, E>,
     /// Admitted inspection/comparison work, including a failed attempt's prefix.
     pub work: u128,
     /// Highest admitted or actually allocated named capacity in this attempt.
@@ -56,6 +56,39 @@ pub struct QueryAttempt<'owner, 'source> {
     /// Refused proposed allocations are excluded; actual allocator slack can
     /// exceed the byte limit and is retained even when the attempt then fails.
     pub peak_bytes: usize,
+}
+
+/// A relation refusal or an enclosing caller's refused work permit.
+#[derive(Debug, PartialEq, Eq)]
+pub enum QueryFailure<E> {
+    /// Relation shape, allocation or operation-scoped resource failure.
+    Relation(Failure),
+    /// The caller refused before the next inspection or comparison.
+    Stopped(E),
+}
+
+impl<E> From<Failure> for QueryFailure<E> {
+    fn from(error: Failure) -> Self {
+        Self::Relation(error)
+    }
+}
+
+impl<E: fmt::Display> fmt::Display for QueryFailure<E> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Relation(error) => error.fmt(formatter),
+            Self::Stopped(error) => error.fmt(formatter),
+        }
+    }
+}
+
+impl<E: std::error::Error + 'static> std::error::Error for QueryFailure<E> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Relation(error) => Some(error),
+            Self::Stopped(error) => Some(error),
+        }
+    }
 }
 
 impl<'owner, 'source> Query<'owner, 'source> {
@@ -200,7 +233,10 @@ impl<'source> Relation<'source> {
     /// Resolve equalities with the same implementation as [`Self::query`],
     /// retaining actual admitted work and named capacity on every outcome.
     ///
-    /// Use this door when an enclosing operation charges a cumulative budget.
+    /// A sequential caller can supply its local remaining work allowance and
+    /// charge the returned prefix, including failure. Concurrent shared quotas
+    /// require [`Self::query_attempt_with`] to admit each step before execution;
+    /// a remaining-quota snapshot or later charge cannot reserve shared work.
     /// A failed lookup cannot supply a partially resolved query or refund work.
     #[must_use]
     pub fn query_attempt(
@@ -208,17 +244,52 @@ impl<'source> Relation<'source> {
         equalities: &[(usize, &Value)],
         limits: Limits,
     ) -> QueryAttempt<'_, 'source> {
+        let attempt =
+            self.query_attempt_with(
+                equalities,
+                limits,
+                || Ok::<(), std::convert::Infallible>(()),
+            );
+        QueryAttempt {
+            result: attempt.result.map_err(|error| match error {
+                QueryFailure::Relation(error) => error,
+                QueryFailure::Stopped(never) => match never {},
+            }),
+            work: attempt.work,
+            peak_bytes: attempt.peak_bytes,
+        }
+    }
+
+    /// Resolve equalities while admitting every charged step through `before`.
+    ///
+    /// The operation's own work ceiling is checked first. The callback then
+    /// admits one inspection, identity descriptor/text comparison or equality
+    /// write before it occurs. Its refusal does not increment the work receipt
+    /// and no later step runs. Caller charges already accepted are not refunded.
+    /// Shape/storage admission remains governed by `limits`; the caller's
+    /// callback can enforce a shared cumulative quota and cancellation.
+    ///
+    /// The same resolver implements [`Self::query_attempt`]. Every outcome
+    /// retains actual accepted work/capacity, and neither failure kind publishes
+    /// a partially resolved query.
+    #[must_use]
+    pub fn query_attempt_with<E>(
+        &self,
+        equalities: &[(usize, &Value)],
+        limits: Limits,
+        mut before: impl FnMut() -> Result<(), E>,
+    ) -> QueryAttempt<'_, 'source, QueryFailure<E>> {
         let mut work = match self.work(limits, size_of::<Query<'_, '_>>()) {
             Ok(work) => work,
             Err(error) => {
                 return QueryAttempt {
-                    result: Err(error),
+                    result: Err(QueryFailure::Relation(error)),
                     work: 0,
                     peak_bytes: 0,
                 };
             }
         };
-        let result = self.resolve_query(equalities, &mut work);
+        let result = self.resolve_query(equalities, &mut work, &mut before);
         QueryAttempt {
             result,
             work: work.used,
@@ -226,21 +297,34 @@ impl<'source> Relation<'source> {
         }
     }
 
-    fn resolve_query(
+    fn resolve_query<E>(
         &self,
         equalities: &[(usize, &Value)],
         work: &mut Work,
-    ) -> Result<Query<'_, 'source>, Failure> {
+        before: &mut impl FnMut() -> Result<(), E>,
+    ) -> Result<Query<'_, 'source>, QueryFailure<E>> {
         let mut resolved = work.reserve(equalities.len())?;
         let mut possible = true;
+        let mut tick = || -> Result<(), QueryFailure<E>> {
+            let next = work.used.checked_add(1).ok_or(Failure::Overflow)?;
+            super::ceiling(
+                super::Resource::Work,
+                next,
+                u128::from(work.limits.max_work),
+            )?;
+            before().map_err(QueryFailure::Stopped)?;
+            work.used = next;
+            Ok(())
+        };
         for &(column, value) in equalities {
-            work.tick(1)?;
+            tick()?;
             if column >= self.predicate.arity() {
-                return Err(Failure::Column);
+                return Err(Failure::Column.into());
             }
-            if let Some(index) = storage::lookup(&self.layout, &self.source, value, work)? {
+            if let Some(index) = storage::lookup_with(&self.layout, &self.source, value, &mut tick)?
+            {
                 let value_id = index;
-                work.tick(1)?;
+                tick()?;
                 resolved.push(Equality { column, value_id });
             } else {
                 possible = false;

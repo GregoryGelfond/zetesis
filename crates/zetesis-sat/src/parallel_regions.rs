@@ -72,6 +72,7 @@ struct Shared {
     producers: Option<Producers>,
     index: Arc<IndexedTheory>,
     certificate: Option<Arc<Certification>>,
+    filter: Option<crate::region_filter::Filter>,
     restrictions: RwLock<Vec<Arc<(Theory, Narrower)>>>,
     pool: Mutex<Pool>,
     /// Every worker was idle with nothing pending, or a stop was raised.
@@ -278,6 +279,7 @@ impl ParallelRegions {
                 producers,
                 index,
                 certificate: None,
+                filter: None,
                 restrictions: RwLock::new(Vec::new()),
                 pool: Mutex::new(Pool {
                     pending,
@@ -302,6 +304,39 @@ impl ParallelRegions {
             statistics,
             merged: Statistics::default(),
         })
+    }
+
+    pub(crate) fn set_filter(
+        &mut self,
+        filter: crate::region_filter::Filter,
+    ) -> Result<(), Incomplete> {
+        if self.started {
+            return Err(Incomplete::LateRegionFilter);
+        }
+        Arc::get_mut(&mut self.shared)
+            .ok_or(Incomplete::LateRegionFilter)?
+            .filter = Some(filter);
+        Ok(())
+    }
+
+    pub(crate) fn search_statistics(&self) -> SearchStatistics {
+        let mut statistics = SearchStatistics::default();
+        self.shared.budget.snapshot(&mut statistics);
+        statistics
+    }
+
+    pub(crate) fn filter(&self) -> Option<&crate::region_filter::Filter> {
+        self.shared.filter.as_ref()
+    }
+
+    /// Stop admission, release blocked senders, then join before exposing the
+    /// final source-accounting receipt. The caller's token is unchanged.
+    pub(crate) fn stop(&mut self) -> Result<(), Incomplete> {
+        self.shared.close();
+        drop(self.receiver.take());
+        drop(self.sender.take());
+        let joined = self.join();
+        self.shared.lock().stopped.map_or(joined, Err)
     }
 
     pub(crate) fn index(&self) -> &Arc<IndexedTheory> {
@@ -411,11 +446,12 @@ impl ParallelRegions {
                     // Every worker has finished: the channel holds nothing
                     // more, so the stop, if one was raised, follows every
                     // model the workers verified.
-                    self.join()?;
+                    let joined = self.join();
                     self.account(budget);
                     if let Some(error) = self.shared.lock().stopped {
                         return Err(error);
                     }
+                    joined?;
                     self.exhausted = true;
                     return Ok(None);
                 }
@@ -466,14 +502,19 @@ impl ParallelRegions {
     /// # Errors
     /// A merged count beyond its width is the counter refusal.
     fn join(&mut self) -> Result<(), Incomplete> {
+        let mut failure = None;
         for handle in self.handles.drain(..) {
-            match handle.join() {
-                Ok(Some(report)) => merge_membership(&mut self.merged, &report.statistics)?,
-                Ok(None) => {}
-                Err(_) => self.shared.stop(Incomplete::WorkerPanicked),
+            let result = match handle.join() {
+                Ok(Some(report)) => merge_membership(&mut self.merged, &report.statistics),
+                Ok(None) => Ok(()),
+                Err(_) => Err(Incomplete::WorkerPanicked),
+            };
+            if let Err(error) = result {
+                self.shared.stop(error);
+                failure.get_or_insert(error);
             }
         }
-        Ok(())
+        failure.map_or(Ok(()), Err)
     }
 
     /// The shared allowance's spent work and decisions become the
@@ -499,12 +540,7 @@ fn contain_worker(shared: &Shared, run: impl FnOnce() -> WorkerReport) -> Option
 
 impl Drop for ParallelRegions {
     fn drop(&mut self) {
-        self.shared.close();
-        // Dropping the receiver makes every pending send fail, so a worker
-        // blocked on a full channel exits at once. The receipts of a dropped
-        // enumeration have no reader, so an overflow in them has none.
-        drop(self.receiver.take());
-        let _ = self.join();
+        let _ = self.stop();
     }
 }
 
@@ -553,6 +589,7 @@ fn worker(shared: &Shared, sender: &SyncSender<Interpretation>) -> WorkerReport 
             ..Statistics::default()
         },
     };
+    let mut filter = None;
     let mut reported = SearchPhaseTimings::default();
     let mut search = SearchStatistics::default();
     let mut membership = crate::prepared_reduct::State::with_index(Arc::clone(&shared.index));
@@ -569,12 +606,12 @@ fn worker(shared: &Shared, sender: &SyncSender<Interpretation>) -> WorkerReport 
             };
             let result = step(
                 shared,
-                region,
-                knowledge,
+                (region, knowledge),
                 &mut local,
                 &mut budget,
                 &mut membership,
                 &mut report,
+                &mut filter,
             );
             search = budget.statistics;
             result
@@ -656,13 +693,13 @@ fn take(
 /// Narrow one region and act on it: refuted, split, or a leaf decided by
 /// the reduct. Returns a verified stable model when the leaf is one.
 fn step<'a>(
-    shared: &Shared,
-    mut region: Region,
-    mut knowledge: Vec<Knowledge>,
+    shared: &'a Shared,
+    (mut region, mut knowledge): (Region, Vec<Knowledge>),
     local: &mut Vec<(Region, Vec<Knowledge>)>,
     budget: &mut Budget<'a, WorkLease<'a>>,
     membership: &mut crate::prepared_reduct::State,
     report: &mut WorkerReport,
+    filter: &mut Option<crate::region_filter::Worker<'a>>,
 ) -> Result<Option<Interpretation>, Incomplete> {
     // The restrictions current when the region is taken, held for its
     // narrowing without the lock.
@@ -675,15 +712,30 @@ fn step<'a>(
     Live::add(&shared.live.regions, 1);
     let before = report.regions;
     let started = timing::start(report.statistics.phase_timings.as_ref());
-    let narrowing = super::regions::narrow(
-        (shared.index.theory(), shared.index.narrower()),
-        shared.producers.as_ref(),
-        &restrictions,
-        &mut region,
-        &mut knowledge,
-        budget,
-        &mut report.regions,
-    );
+    let narrowing: Result<Narrowing, Incomplete> = (|| {
+        let narrowing = super::regions::narrow(
+            (shared.index.theory(), shared.index.narrower()),
+            shared.producers.as_ref(),
+            &restrictions,
+            &mut region,
+            &mut knowledge,
+            budget,
+            &mut report.regions,
+        )?;
+        if narrowing != Narrowing::Refuted
+            && let Some(factory) = shared.filter.as_ref()
+            && factory.check(
+                filter,
+                shared.index.theory(),
+                &region,
+                &shared.cancellation,
+                &mut report.statistics.phase_timings,
+            )? == crate::RegionFeasibility::Refuted
+        {
+            return Ok(Narrowing::Refuted);
+        }
+        Ok(narrowing)
+    })();
     timing::finish(
         &mut report.statistics.phase_timings,
         Phase::Candidates,

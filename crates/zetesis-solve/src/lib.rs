@@ -90,6 +90,7 @@ mod query_observation;
 pub use query_observation::QueryExecutionObservation;
 mod closure_session;
 mod formula_session;
+mod hybrid_regions;
 mod hybrid_session;
 mod session;
 mod world_view;

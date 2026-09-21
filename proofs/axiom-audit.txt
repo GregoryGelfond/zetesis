@@ -1160,6 +1160,12 @@
 'Zetesis.StreamedConstraints.clear_iff_models' depends on axioms: [propext, Quot.sound]
 'Zetesis.StreamedConstraints.stable_iff_completed_partition' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.StreamedConstraints.pending_can_hide_violation' depends on axioms: [propext, Quot.sound]
+'Zetesis.StreamedRegions.sure_antecedent_iff' depends on axioms: [propext, Quot.sound]
+'Zetesis.StreamedRegions.held_body_satisfied' depends on axioms: [propext, Quot.sound]
+'Zetesis.StreamedRegions.sure_occurrence_refutes' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.StreamedRegions.scan_refutes' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.StreamedRegions.complete_scan_can_miss_violation' depends on axioms: [propext, Quot.sound]
+'Zetesis.StreamedRegions.pending_can_retain_answer' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.StrongNegation.satisfies_rename' does not depend on any axioms
 'Zetesis.StrongNegation.reduct_rename' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.StrongNegation.frozen_rename' depends on axioms: [propext, Classical.choice, Quot.sound]

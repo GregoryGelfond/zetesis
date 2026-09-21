@@ -15,6 +15,21 @@ pub struct PhaseMeasurement {
     pub overflowed: bool,
 }
 impl PhaseMeasurement {
+    /// Merge a joined worker's timing without turning measurement overflow
+    /// into a semantic stop.
+    pub(crate) fn merge(&mut self, other: Self) {
+        match (
+            self.calls.checked_add(other.calls),
+            self.elapsed.checked_add(other.elapsed),
+        ) {
+            (Some(calls), Some(elapsed)) if !self.overflowed && !other.overflowed => {
+                self.calls = calls;
+                self.elapsed = elapsed;
+            }
+            _ => self.overflowed = true,
+        }
+    }
+
     /// Add one returned attempt without changing solver completion on overflow.
     pub fn record(&mut self, elapsed: Duration) {
         match (self.calls.checked_add(1), self.elapsed.checked_add(elapsed)) {
@@ -27,15 +42,17 @@ impl PhaseMeasurement {
     }
 }
 
-/// Opt-in native search wall intervals. The five phases do not nest.
+/// Opt-in native search wall intervals. Original-region filter checks nest
+/// inside candidate traversal; phase sums therefore need not be exclusive.
 /// Initial CNF construction and candidate restriction application are excluded;
 /// their caller can measure these operations independently. Driver setup,
-/// callback/device execution, publication and timer overhead are not included.
+/// external batch/device execution, publication and timer overhead are not included.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SearchPhaseTimings {
     /// Candidate query, projection and exact blocking, including failed attempts.
     pub candidates: PhaseMeasurement,
-    /// Independent original-model checks, including repeated residual prechecks.
+    /// Independent original-model and original-region checks, including
+    /// repeated residual prechecks, filter preparation and failed attempts.
     pub original_validation: PhaseMeasurement,
     /// Cold immutable reduct construction, including failed preparation.
     pub reduct_preparation: PhaseMeasurement,

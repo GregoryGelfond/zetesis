@@ -138,6 +138,8 @@ pub struct Statistics {
     pub support: Option<SupportStatistics>,
     /// The regions proposer's statistics; absent under the clauses proposer.
     pub regions: Option<RegionSearchStatistics>,
+    /// Original-region callback attempts; source work is accounted by its owner.
+    pub region_filter: Option<crate::RegionFilterStatistics>,
     /// Actual persistent-reduct construction and query work, including failures.
     pub reduct: crate::ReductStatistics,
 }
@@ -580,8 +582,73 @@ impl StableModels {
         result
     }
 
+    /// Install a caller-owned original-program condition before traversal.
+    /// Certificates may already be prepared. The filter can only refute
+    /// candidate regions; it never participates in frozen-reduct queries.
+    /// Exhaustion then covers the family allowed by this filter as well as
+    /// explicit candidate restrictions. See [`crate::RegionFilter`] for the
+    /// caller's soundness, resource and failure-receipt obligations.
+    ///
+    /// # Errors
+    /// Refuses a closed or started stream, replacement, or clause search.
+    pub fn set_region_filter(
+        &mut self,
+        filter: std::sync::Arc<dyn crate::RegionFilter>,
+    ) -> Result<(), Incomplete> {
+        if self.terminal {
+            return Err(Incomplete::ClosedEnumerator);
+        }
+        let statistics = self.statistics();
+        if self.pending_error.is_some()
+            || !self.batch.pending.is_empty()
+            || statistics.candidates != 0
+            || statistics.candidate_queries != 0
+            || statistics
+                .regions
+                .is_some_and(|regions| regions.counts.regions != 0)
+        {
+            return Err(Incomplete::LateRegionFilter);
+        }
+        if self.proposer.filter().is_some() {
+            return Err(Incomplete::RegionFilterAlreadySet);
+        }
+        let filter = crate::region_filter::Filter::new(filter);
+        match &mut self.proposer {
+            Proposer::Clauses(_) => return Err(Incomplete::RegionFilterUnsupported),
+            Proposer::Regions(regions) => regions.filter = Some(filter),
+            Proposer::Proposals(proposals) => proposals.filter = Some(filter),
+            Proposer::Parallel(parallel) => parallel.set_filter(filter)?,
+        }
+        Ok(())
+    }
+
+    /// Fuse future pulls and join candidate workers without cancelling the
+    /// caller's shared token. Statistics retain every joined worker's prefix;
+    /// unresolved batch entries remain visible in their pending receipt.
+    /// Queued worker models are discarded, not counted as delivered answers.
+    /// An early stop cannot establish exhaustion; prior exhaustion is retained.
+    ///
+    /// # Errors
+    /// Reports the first worker stop or a failure to merge joined receipts.
+    /// All workers are joined even on failure; the stream remains fused.
+    pub fn stop(&mut self) -> Result<(), Incomplete> {
+        self.terminal = true;
+        if let Proposer::Parallel(parallel) = &mut self.proposer {
+            let result = parallel.stop();
+            let joined = parallel.search_statistics();
+            // Before the first pull, certificate preparation can have charged
+            // the coordinator while the workers still hold construction totals.
+            self.statistics.search.work = self.statistics.search.work.max(joined.work);
+            self.statistics.search.decisions =
+                self.statistics.search.decisions.max(joined.decisions);
+            return result;
+        }
+        Ok(())
+    }
+
     /// True only after a completed outer query refutes every unblocked model
-    /// satisfying all successful candidate restrictions, if any were added.
+    /// satisfying all successful candidate restrictions and the original-region
+    /// filter, if either was configured.
     #[must_use]
     pub const fn exhausted(&self) -> bool {
         self.exhausted
@@ -589,7 +656,7 @@ impl StableModels {
     /// Cumulative work, including an incomplete terminal attempt.
     #[must_use]
     pub fn statistics(&self) -> Statistics {
-        match &self.proposer {
+        let mut statistics = match &self.proposer {
             Proposer::Clauses(clauses) => Statistics {
                 projections: clauses.cursor.projection_statistics(),
                 ..self.statistics
@@ -629,7 +696,12 @@ impl StableModels {
                     ..self.statistics
                 }
             }
-        }
+        };
+        statistics.region_filter = self
+            .proposer
+            .filter()
+            .map(crate::region_filter::Filter::statistics);
+        statistics
     }
 
     fn advance(&mut self) -> Result<Option<Interpretation>, Incomplete> {
@@ -750,6 +822,15 @@ struct ClauseProposer {
 }
 
 impl Proposer {
+    fn filter(&self) -> Option<&crate::region_filter::Filter> {
+        match self {
+            Self::Clauses(_) => None,
+            Self::Regions(regions) => regions.filter.as_ref(),
+            Self::Proposals(proposals) => proposals.filter.as_ref(),
+            Self::Parallel(parallel) => parallel.filter(),
+        }
+    }
+
     /// The next classical candidate, or `None` when the proposer has
     /// covered the candidate space. A proposal is refused, not returned,
     /// once the candidate ceiling is reached; the caller admits it.
@@ -776,7 +857,7 @@ impl Proposer {
                 }
             }
             Self::Regions(regions) => {
-                let proposal = regions.propose(theory, budget)?;
+                let proposal = regions.propose(theory, budget, &mut statistics.phase_timings)?;
                 if proposal.is_some() && statistics.candidates >= limits.max_candidates {
                     return Err(Incomplete::CandidateLimit);
                 }
@@ -796,7 +877,13 @@ impl Proposer {
                     limits.max_candidates.saturating_sub(statistics.candidates),
                     budget,
                     &mut output,
+                    statistics.phase_timings.is_some(),
                 );
+                if let Some(timings) = statistics.phase_timings.as_mut() {
+                    timings
+                        .original_validation
+                        .merge(produced.original_validation);
+                }
                 // With one reserved slot no second producer can stop after
                 // the first emits. Batched calls retain that richer outcome.
                 if let Some(error) = produced.stopped {

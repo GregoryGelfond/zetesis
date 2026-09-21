@@ -155,10 +155,21 @@ fn json_distinguishes_core_models_from_original_membership() {
             stats.rejected,
             stats.pending
         ),
-        (4, 2, 2, 0)
+        (2, 2, 0, 0)
     );
     let document: Json = serde_json::from_slice(&output).unwrap();
     assert_eq!(document["statistics"]["search"]["scope"], "retained_core");
+    let regions = outcome
+        .semantic()
+        .countermodel_statistics()
+        .unwrap()
+        .region_filter
+        .unwrap();
+    assert!(regions.refuted > 0);
+    assert_eq!(
+        document["statistics"]["search"]["region_filter"]["refuted"],
+        regions.refuted
+    );
     assert_eq!(
         document["statistics"]["hybrid_execution"]["accepted"],
         stats.accepted

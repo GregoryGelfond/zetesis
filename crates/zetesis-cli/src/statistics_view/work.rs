@@ -205,6 +205,16 @@ fn hybrid(rows: &mut Vec<Row>, execution: &zetesis_solve::HybridExecutionStatist
 }
 
 fn formula(rows: &mut Vec<Row>, statistics: &zetesis_sat::Statistics) {
+    if let Some(filter) = statistics.region_filter {
+        let scope = if filter.overflowed {
+            "original candidate regions; counts overflowed"
+        } else {
+            "original candidate regions; excludes reduct queries"
+        };
+        rows.push(count("Source region checks", filter.checks, scope));
+        rows.push(count("Source regions rejected", filter.refuted, scope));
+        rows.push(count("Source region failures", filter.failed, scope));
+    }
     rows.push(count(
         "Formula search work",
         statistics.search.work,

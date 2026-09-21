@@ -1,14 +1,15 @@
-//! Core answer-set enumeration followed by complete source-constraint checking.
+//! Source restrictions on candidate regions and complete answer checking.
 //!
-//! The retained core uses the ordinary formula session unchanged. Its answers
+//! The retained core uses the ordinary formula session. Its answers
 //! become answers of the original subject only after all streamed constraints
 //! are satisfied. The append-constraints law justifies this composition; source
 //! instance coverage and completed admission remain separate prerequisites.
 
+use std::sync::Arc;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_objective::Score;
-use zetesis_themelios::{ConstraintChecker, ConstraintVerdict, HybridFormula};
+use zetesis_themelios::{ConstraintAllowance, ConstraintChecker, ConstraintVerdict, HybridFormula};
 
 use crate::execution_observation::ExecutionSink;
 use crate::formula_execution::Execution;
@@ -31,15 +32,22 @@ pub struct HybridExecutionStatistics {
     pub rejected: u64,
     /// Consumed core answers whose constraint check did not finish.
     pub pending: u64,
-    /// Cumulative source checking work, including interrupted attempts.
+    /// Cumulative source checking work, including region checks, preparation and
+    /// interrupted attempts. Live worker counters become final after joining.
     pub constraints: zetesis_themelios::ConstraintCheckStatistics,
 }
+
+#[cfg(test)]
+#[path = "../tests/support/hybrid_terminal.rs"]
+mod terminal_tests;
 
 pub(crate) struct HybridSession<'a> {
     owner: &'a HybridFormula,
     core: FormulaSession<'a, Execution>,
     core_config: SolveConfig,
     checker: ConstraintChecker<'a>,
+    allowance: ConstraintAllowance,
+    regions: Option<Arc<crate::hybrid_regions::Constraints>>,
     statistics: HybridExecutionStatistics,
     final_outcome: Option<SemanticOutcome>,
 }
@@ -60,8 +68,9 @@ impl<'a> HybridSession<'a> {
             streamed_templates: owner.streamed_templates(),
             streamed_instances: owner.streamed_instances(),
         })?;
+        let allowance = ConstraintAllowance::new(config.constraints);
         let checker = owner
-            .checker(config.constraints)
+            .checker_with_allowance(&allowance, cancellation)
             .map_err(SolveError::Constraint)?;
         let statistics = HybridExecutionStatistics {
             constraints: checker.statistics(),
@@ -84,7 +93,7 @@ impl<'a> HybridSession<'a> {
                 owner.analysis_basis(),
             ),
         };
-        let core = FormulaSession::with_resources(
+        let mut core = FormulaSession::with_resources(
             input,
             &core_config,
             resources,
@@ -93,11 +102,23 @@ impl<'a> HybridSession<'a> {
             phases,
             selection,
         )?;
+        let regions = (owner.streamed_templates() != 0
+            && config.search == crate::SearchMethod::Regions)
+            .then(|| {
+                let regions = Arc::new(crate::hybrid_regions::Constraints::new(
+                    owner.clone(),
+                    allowance.clone(),
+                ));
+                core.set_region_filter(regions.clone(), phases);
+                regions
+            });
         Ok(Self {
             owner,
             core,
             core_config,
             checker,
+            allowance,
+            regions,
             statistics,
             final_outcome: None,
         })
@@ -114,8 +135,7 @@ impl<'a> HybridSession<'a> {
             return None;
         }
         if config.models != 0 && self.statistics.accepted >= config.models as u64 {
-            self.finish(Some(SearchState::RequestedModels), phases);
-            return None;
+            return self.finish(Some(SearchState::RequestedModels), None, phases);
         }
         loop {
             let model = match self
@@ -124,24 +144,19 @@ impl<'a> HybridSession<'a> {
             {
                 Some(Ok((model, _))) => model,
                 Some(Err(error)) => {
-                    self.finish(None, phases);
-                    return Some(Err(error));
+                    return self.finish(None, Some(error), phases);
                 }
-                None => {
-                    self.finish(self.core.outcome(phases).search_state, phases);
-                    return None;
-                }
+                None => return self.finish(self.core.outcome(phases).search_state, None, phases),
             };
             let Some(count) = self.statistics.core_answers.checked_add(1) else {
-                self.finish(None, phases);
-                return Some(Err(SolveError::HybridStatisticsOverflow));
+                return self.finish(None, Some(SolveError::HybridStatisticsOverflow), phases);
             };
             self.statistics.core_answers = count;
             self.statistics.pending = 1;
             let checked = phases.measure(SolvePhase::OriginalValidation, || {
                 self.checker.check(&model, cancellation)
             });
-            self.statistics.constraints = self.checker.statistics();
+            self.statistics.constraints = self.allowance.statistics();
             match checked {
                 Ok(ConstraintVerdict::Satisfied) => {
                     // The completed count is bounded by the checked core count.
@@ -154,15 +169,7 @@ impl<'a> HybridSession<'a> {
                     self.statistics.pending = 0;
                 }
                 Err(error) => {
-                    if let Some(stop) = error.stop() {
-                        self.finish(
-                            Some(SearchState::Interrupted(Interruption::Constraint(stop))),
-                            phases,
-                        );
-                        return None;
-                    }
-                    self.finish(None, phases);
-                    return Some(Err(SolveError::Constraint(error)));
+                    return self.finish(None, Some(SolveError::Constraint(error)), phases);
                 }
             }
         }
@@ -174,14 +181,62 @@ impl<'a> HybridSession<'a> {
         outcome.verified = self.statistics.accepted;
         // Core exhaustion cannot establish completion of an unfinished source check.
         outcome.search_state = None;
-        outcome.hybrid_execution = Some(self.statistics);
+        outcome.hybrid_execution = Some(HybridExecutionStatistics {
+            constraints: self.allowance.statistics(),
+            ..self.statistics
+        });
         outcome
     }
 
-    fn finish(&mut self, state: Option<SearchState>, phases: &Recorder) {
+    /// Record a final-check failure before stopping workers, then resolve every
+    /// terminal path once. A worker may already have recorded a source fault;
+    /// their shared slot preserves the first recording, not a wall-clock order.
+    fn finish(
+        &mut self,
+        state: Option<SearchState>,
+        error: Option<SolveError>,
+        phases: &Recorder,
+    ) -> Option<Result<(Model, Option<Score>), SolveError>> {
+        let mut error = match (error, &self.regions) {
+            (Some(SolveError::Constraint(error)), Some(regions)) => {
+                regions.record_failure(error);
+                None
+            }
+            (error, _) => error,
+        };
+        let stopped = self.core.stop(phases);
+        let source_failure = self.regions.as_ref().and_then(|r| r.take_failure());
+        error = error.or_else(|| source_failure.map(SolveError::Constraint));
+        let source_marker = stopped == Err(zetesis_sat::Incomplete::RegionFilter)
+            || matches!(
+                state,
+                Some(SearchState::Interrupted(Interruption::Countermodel(
+                    zetesis_sat::Incomplete::RegionFilter
+                )))
+            );
+        if source_marker && error.is_none() {
+            error = Some(SolveError::ConstraintFailureMissing);
+        }
+        let (state, result) = match error {
+            Some(SolveError::Constraint(error)) if error.stop().is_some() => (
+                Some(SearchState::Interrupted(Interruption::Constraint(
+                    error.stop().expect("checked source stop"),
+                ))),
+                None,
+            ),
+            Some(error) => (None, Some(Err(error))),
+            None => (
+                stopped.map_or_else(
+                    |error| Some(SearchState::Interrupted(Interruption::Countermodel(error))),
+                    |()| state,
+                ),
+                None,
+            ),
+        };
         let mut outcome = self.snapshot(phases);
         outcome.search_state = state;
         self.final_outcome = Some(outcome);
+        result
     }
 
     pub(crate) fn outcome(&self, phases: &Recorder) -> SemanticOutcome {

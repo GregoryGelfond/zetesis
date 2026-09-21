@@ -204,29 +204,44 @@ fn streamed_constraints_preserve_the_complete_family() {
 }
 
 #[test]
-fn hybrid_counts_the_core_answers_it_filters() {
+fn region_refutation_avoids_rejected_core_membership() {
     let admitted = hybrid(MONOTONE, &limits());
-    let (_, outcome) = capture(PreparedInput::hybrid(&admitted), configuration());
-    let statistics = outcome.hybrid_execution().unwrap();
-    // Deferred constraints do not secretly prune the producer core. This is a
-    // deliberately visible cost of composing membership and source checking.
-    assert_eq!(statistics.core_answers, 64);
-    assert_eq!(statistics.accepted, 7);
-    assert_eq!(statistics.rejected, 57);
-    assert_eq!(statistics.pending, 0);
+    for workers in [1, 4] {
+        let config = SolveConfig {
+            workers: NonZeroUsize::new(workers).unwrap(),
+            ..configuration()
+        };
+        let (family, outcome) = capture(PreparedInput::hybrid(&admitted), config);
+        assert_eq!(family, monotone_family());
+        let statistics = outcome.hybrid_execution().unwrap();
+        assert_eq!(statistics.core_answers, 7);
+        assert_eq!(statistics.accepted, 7);
+        assert_eq!(statistics.rejected, 0);
+        assert_eq!(statistics.pending, 0);
+        let search = outcome.countermodel_statistics().unwrap();
+        let regions = search.region_filter.unwrap();
+        assert!(regions.refuted > 0);
+        assert!(regions.checks >= regions.refuted);
+        assert_eq!(regions.failed, 0);
+        assert!(!regions.overflowed);
+        assert!(search.candidates < 64);
+    }
 }
 
 #[test]
-fn all_filtered_core_answers_establish_unsatisfiability() {
+fn a_refuted_root_establishes_unsatisfiability() {
     let admitted = hybrid("a|b. :-not missing.", &limits());
     let (family, outcome) = capture(PreparedInput::hybrid(&admitted), configuration());
     assert!(family.is_empty());
     assert!(outcome.unsatisfiable());
     let statistics = outcome.hybrid_execution().unwrap();
-    assert_eq!(statistics.core_answers, 2);
+    assert_eq!(statistics.core_answers, 0);
     assert_eq!(statistics.accepted, 0);
-    assert_eq!(statistics.rejected, 2);
+    assert_eq!(statistics.rejected, 0);
     assert_eq!(statistics.pending, 0);
+    let search = outcome.countermodel_statistics().unwrap();
+    assert_eq!(search.candidates, 0);
+    assert_eq!(search.region_filter.unwrap().refuted, 1);
 }
 
 #[test]
@@ -266,10 +281,10 @@ fn requested_models_count_only_source_answers() {
     assert_eq!(outcome.completion(), Some(Completion::RequestedModels));
     let statistics = outcome.hybrid_execution().unwrap();
     assert_eq!(
-        statistics.core_answers, 2,
-        "the first core answer must be rejected"
+        statistics.core_answers, 1,
+        "the forbidden region is cut before its core membership check"
     );
-    assert_eq!(statistics.rejected, 1);
+    assert_eq!(statistics.rejected, 0);
     assert_eq!(outcome.verified_models(), 1);
 }
 
@@ -365,10 +380,10 @@ fn checker_setup_refusal_retains_the_source_subject() {
 }
 
 #[test]
-fn unfinished_constraint_check_never_yields_a_core_answer() {
+fn unfinished_region_check_never_yields_a_core_answer() {
     let admitted = hybrid(MONOTONE, &limits());
     // Admit exactly the public preparation receipt. The next charged operation
-    // belongs to a real core answer's source check and must refuse before yield.
+    // belongs to source region preparation and must refuse before membership.
     let prepared = admitted
         .checker(ConstraintCheckLimits::default())
         .unwrap()
@@ -398,11 +413,11 @@ fn unfinished_constraint_check_never_yields_a_core_answer() {
     );
     let outcome = failure.semantic().unwrap();
     let statistics = outcome.hybrid_execution().unwrap();
-    assert_eq!(statistics.core_answers, 1);
+    assert_eq!(statistics.core_answers, 0);
     assert_eq!(statistics.accepted, 0);
     assert_eq!(statistics.rejected, 0);
-    assert_eq!(statistics.pending, 1);
-    assert_eq!(statistics.constraints, error.statistics);
+    assert_eq!(statistics.pending, 0);
+    assert!(error.statistics.work <= statistics.constraints.work);
     assert_eq!(statistics.constraints.work, prepared.work);
     assert_eq!(outcome.verified_models(), 0);
     assert_eq!(outcome.completion(), None);
@@ -450,4 +465,81 @@ fn cancellation_preserves_only_the_verified_prefix() {
     assert_eq!(statistics.pending, 0);
     assert!(!outcome.unsatisfiable());
     assert!(session.next().is_none());
+}
+
+#[test]
+fn workers_share_one_constraint_substitution_allowance() {
+    let admitted = hybrid(MONOTONE, &limits());
+    for workers in [1, 4] {
+        let config = SolveConfig {
+            workers: NonZeroUsize::new(workers).unwrap(),
+            constraints: ConstraintCheckLimits {
+                max_substitutions: 1,
+                ..Default::default()
+            },
+            ..configuration()
+        };
+        let mut session = Session::builder(
+            PreparedInput::hybrid(&admitted),
+            config,
+            Cancellation::default(),
+        )
+        .start()
+        .unwrap();
+        let failure = session.next().unwrap().unwrap_err();
+        let SolveError::Constraint(error) = failure.cause.as_ref() else {
+            panic!("unexpected failure: {failure:?}");
+        };
+        assert!(matches!(&error.cause, ConstraintCheckCause::Source(error)
+        if matches!(error.as_ref(), FormulaFailure::Limit {
+            resource: FormulaResource::Substitutions, limit: 1, ..
+        })));
+        let outcome = failure.semantic().unwrap();
+        assert_eq!(outcome.completion(), None);
+        assert!(!outcome.unsatisfiable());
+        let statistics = outcome.hybrid_execution().unwrap();
+        assert_eq!(statistics.constraints.substitutions, 1);
+        assert!(error.statistics.substitutions <= statistics.constraints.substitutions);
+        assert_eq!(statistics.accepted, 0);
+        assert!(session.next().is_none());
+        // Final progress is stable after joining the workers, even when the
+        // client keeps the stopped session alive.
+        assert_eq!(session.progress().hybrid_execution(), Some(statistics));
+    }
+}
+
+#[test]
+fn a_requested_prefix_settles_region_workers() {
+    let admitted = hybrid(MONOTONE, &limits());
+    let cancellation = Cancellation::default();
+    let config = SolveConfig {
+        workers: NonZeroUsize::new(4).unwrap(),
+        models: 1,
+        ..configuration()
+    };
+    let mut session = Session::builder(
+        PreparedInput::hybrid(&admitted),
+        config,
+        cancellation.clone(),
+    )
+    .start()
+    .unwrap();
+    let answer = session.next().unwrap().unwrap();
+    assert!(monotone_family().contains(&{
+        let mut atoms: Vec<_> = answer.interpretation().atoms().iter().cloned().collect();
+        atoms.sort();
+        atoms
+    }));
+    assert!(session.next().is_none());
+    let outcome = session.outcome().unwrap();
+    assert_eq!(outcome.completion(), Some(Completion::RequestedModels));
+    assert_eq!(outcome.verified_models(), 1);
+    assert!(
+        cancellation.poll().is_ok(),
+        "stopping this session must not cancel its caller"
+    );
+    assert_eq!(
+        session.progress().hybrid_execution(),
+        outcome.hybrid_execution()
+    );
 }
