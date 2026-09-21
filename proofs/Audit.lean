@@ -1114,6 +1114,7 @@ import Zetesis
 #print axioms Zetesis.StreamedConstraints.pending_can_hide_violation
 #print axioms Zetesis.StreamedRegions.sure_antecedent_iff
 #print axioms Zetesis.StreamedRegions.held_body_satisfied
+#print axioms Zetesis.StreamedRegions.necessary_selection_preserves_witness
 #print axioms Zetesis.StreamedRegions.sure_occurrence_refutes
 #print axioms Zetesis.StreamedRegions.scan_refutes
 #print axioms Zetesis.StreamedRegions.complete_scan_can_miss_violation

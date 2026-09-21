@@ -47,8 +47,12 @@ substitute for owner identity.
 `check_region(&theory, &region, &cancellation)` requires the exact retained core
 and a region spanning its dense atom catalog. A certainly true constraint body
 returns `Refuted { location }`; otherwise it returns `NotRefuted`, which does
-not assert satisfaction. The checker prepares and reuses a typed atom index on
-first region use. The method checks the coordinate convention, not the origin
+not assert satisfaction. The checker prepares and reuses a typed atom index and
+support-row correspondence on first region use. Region checks select known-held
+positive rows before binding, while retaining rows without a known correspondence.
+A necessary signed-predicate test can avoid a template that cannot have a sure
+body. Neither operation changes the final full-model check or arithmetic admission.
+The method checks the coordinate convention, not the origin
 of an arbitrary caller-created region. Use it only to restrict original
 candidates, never to evaluate their frozen reducts.
 

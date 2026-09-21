@@ -48,7 +48,9 @@ fn region_refutation_excludes_every_completion() {
         "{p;q}. :-p,not q.",
         "{p;q}. :-not not p,not q.",
         "{p(1);p(\"1\");-p(1)}. :-p(1),not p(\"1\"),not not -p(1).",
+        "{p(f(1),f(1));p(f(1),f(2));-p(f(1),f(1))}. :-p(f(X),f(X)),not -p(f(X),f(X)).",
         "{p}. :-p,not missing.",
+        "{p(1)}. :-p(1),not -p(1).",
         "d(0;1). {p(X)}:-d(X). :-p(X),1/X=1.",
         "d(1..2). {p(2..3)}. :-d(X),Y=X+1,p(Y),Y>2.",
         ":-.",
@@ -231,12 +233,14 @@ fn shared_substitution_limit_spans_all_checkers() {
     let mut final_checker = owner
         .checker_with_allowance(&allowance, &cancellation)
         .unwrap();
-    assert_eq!(
+    let mut held = Region::all_open(1);
+    assert!(held.hold(0));
+    assert!(matches!(
         region_checker
-            .check_region(owner.core_theory(), &Region::all_open(1), &cancellation,)
+            .check_region(owner.core_theory(), &held, &cancellation)
             .unwrap(),
-        ConstraintRegionVerdict::NotRefuted
-    );
+        ConstraintRegionVerdict::Refuted { .. }
+    ));
     let failure = final_checker
         .check(&completion(&owner, 0), &cancellation)
         .unwrap_err();
@@ -247,6 +251,61 @@ fn shared_substitution_limit_spans_all_checkers() {
     ));
     assert_eq!(failure.statistics.substitutions, 0);
     assert_eq!(allowance.statistics().substitutions, 1);
+}
+
+#[test]
+fn unheld_rows_do_not_consume_substitutions() {
+    let owner = admit("{p(1..8)}. :-p(X),X>0.");
+    let mut checker = owner
+        .checker(ConstraintCheckLimits {
+            max_substitutions: 1,
+            ..Default::default()
+        })
+        .unwrap();
+    let mut region = Region::all_open(owner.atom_catalog().atoms().len());
+    let last = owner
+        .atom_catalog()
+        .atoms()
+        .iter()
+        .position(|atom| {
+            atom.predicate().name() == "p" && atom.values() == [zetesis_core::Value::Number(8)]
+        })
+        .unwrap();
+    assert!(region.hold(last));
+    assert!(matches!(
+        checker
+            .check_region(owner.core_theory(), &region, &Cancellation::default())
+            .unwrap(),
+        ConstraintRegionVerdict::Refuted { .. }
+    ));
+    // The broad predicate gate passes because p(8) is held. The row filter
+    // excludes p(1)..p(7) before binding; only p(8) consumes a substitution.
+    // Without that selection, p(1) spends the quota and p(2) exceeds it.
+    assert_eq!(checker.statistics().substitutions, 1);
+}
+
+#[test]
+fn held_negative_predicate_skips_join_substitutions() {
+    let owner = admit("d(1..4). p(X,Y):-d(X),d(Y). {a}. :-p(X,Y),p(Y,Z),not p(X,Z).");
+    let mut checker = owner
+        .checker(ConstraintCheckLimits {
+            max_substitutions: 0,
+            ..Default::default()
+        })
+        .unwrap();
+    let mut region = Region::all_open(owner.atom_catalog().atoms().len());
+    for (position, atom) in owner.atom_catalog().atoms().iter().enumerate() {
+        if atom.predicate().name() == "p" {
+            assert!(region.hold(position));
+        }
+    }
+    assert_eq!(
+        checker
+            .check_region(owner.core_theory(), &region, &Cancellation::default())
+            .unwrap(),
+        ConstraintRegionVerdict::NotRefuted
+    );
+    assert_eq!(checker.statistics().substitutions, 0);
 }
 
 #[test]

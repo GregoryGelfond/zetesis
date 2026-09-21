@@ -38,6 +38,7 @@ pub(crate) use queries::{Candidates, Support};
 #[cfg(test)]
 use relations::RelationRows;
 pub(crate) use relations::{Relations, SupportCatalog};
+pub(crate) use rows::{FilteredRows, RowFilter};
 
 /// Possible atoms after a complete support round added no new head.
 ///
@@ -73,7 +74,16 @@ impl CompletedCatalog {
     }
 }
 
-impl CompletedSupport<'_> {
+impl<'source> CompletedSupport<'source> {
+    /// Borrow original support occurrences without copying typed atoms. Each
+    /// slice position is the corresponding predicate relation's row position,
+    /// not a dense position in an independently prepared formula catalog.
+    pub(crate) fn source_atoms(
+        &self,
+    ) -> impl Iterator<Item = (&'source zetesis_core::Predicate, &'source [Atom])> {
+        self.relations.source_atoms()
+    }
+
     /// Keep a checker's additional retained index inside the same support-byte
     /// allowance as its borrowed catalog and query descriptor. Preparation also
     /// checks its simultaneous scratch before allocating it.
@@ -558,8 +568,9 @@ enum Traversal {
 }
 
 /// The cursor owns its current assignment, undo trails and bounded expression
-/// storage. Negative gates never restrict this upper relation; the emitted
-/// formulas still retain them.
+/// storage. Ordinary joins enumerate upper support and retain negative gates
+/// in emitted formulas. An explicit admitted-source scan may additionally
+/// borrow a necessary positive-row filter; it never supplies family evidence.
 pub(crate) struct Join<'a, 'source> {
     bindings: Option<&'a crate::formula_assignment_plan::Plan>,
     literals: &'a [LiteralIr],
@@ -584,6 +595,7 @@ pub(crate) struct Join<'a, 'source> {
     patterns: Vec<PatternOccurrence<'a>>,
     delta: Option<usize>,
     domains: Option<&'a queries::Guards<'a, 'source>>,
+    row_filter: Option<&'a dyn RowFilter>,
     support: &'a Support<'source>,
     values: Vec<Option<Value>>,
     slots: Vec<Slot>,
@@ -663,6 +675,21 @@ impl<'a, 'source> Join<'a, 'source> {
             }
         }
         Ok(join)
+    }
+
+    /// Select rows only after the caller has admitted the complete source
+    /// family. The filter must preserve every witness sought by that consumer;
+    /// it is not a new support owner or an arithmetic admission certificate.
+    /// The returned view deliberately has no family-evidence operation.
+    pub(crate) fn filtered_rule(
+        rule: &'a crate::formula_ir::RuleIr,
+        support: &'a Support<'source>,
+        filter: Option<&'a dyn RowFilter>,
+        budget: &mut Budget,
+    ) -> Result<FilteredRows<'a, 'source>, FormulaFailure> {
+        let mut join = Self::rule(rule, support, budget)?;
+        join.row_filter = filter;
+        Ok(FilteredRows::new(join))
     }
 
     /// Attach necessary domains to their exact rule and support owner.
@@ -866,6 +893,7 @@ impl<'a, 'source> Join<'a, 'source> {
             patterns,
             delta: None,
             domains: None,
+            row_filter: None,
             support,
             values,
             slots,
@@ -936,7 +964,8 @@ impl<'a, 'source> Join<'a, 'source> {
     ) -> Result<Option<Binding<'static>>, FormulaFailure> {
         self.next_selected(None, limits, budget, counters, location)
     }
-    /// Return every complete positive row for validation before selection.
+    /// Return each completed positive binding with its scalar selection result.
+    /// Ordinary admission joins have no external row filter and visit the full family.
     pub(crate) fn next_row(
         &mut self,
         limits: &FormulaLimits,
@@ -1242,10 +1271,7 @@ impl<'a, 'source> Join<'a, 'source> {
                 continue;
             };
             counters.record(Event::JoinRow);
-            if self.coverage == Coverage::Selected
-                && let Some(domains) = self.domains
-                && !domains.permits(pattern.source, atom.position(), limits, counters, location)?
-            {
+            if !self.permits_row(pattern, atom, limits, counters, location)? {
                 continue;
             }
             let matches =
@@ -1256,6 +1282,29 @@ impl<'a, 'source> Join<'a, 'source> {
                 self.undo();
             }
         }
+    }
+    /// External admitted-source selection and ordinary necessary domains meet
+    /// at the same pre-binding boundary. Complete arithmetic admission ignores
+    /// domains as before; only an explicit filtered consumer has a row filter.
+    fn permits_row(
+        &self,
+        pattern: PatternOccurrence<'_>,
+        atom: zetesis_core::relation::Row<'_, '_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: Location,
+    ) -> Result<bool, FormulaFailure> {
+        if let Some(filter) = self.row_filter
+            && !filter.permits(atom, limits, counters, location)?
+        {
+            return Ok(false);
+        }
+        if self.coverage == Coverage::Selected
+            && let Some(domains) = self.domains
+        {
+            return domains.permits(pattern.source, atom.position(), limits, counters, location);
+        }
+        Ok(true)
     }
     fn match_row(
         &mut self,

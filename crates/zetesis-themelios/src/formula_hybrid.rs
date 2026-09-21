@@ -4,10 +4,12 @@
 //! checker establishes satisfaction, never reduct minimality. Every successful
 //! check exhausts its required source instances; a violation may stop early.
 
+mod selection;
+
 use std::{fmt, sync::Arc};
 use themelios_base::{source::Source, span::Location};
 use themelios_program::program::{DefaultNegation, Program};
-use zetesis_core::{AtomCatalog, AtomIndex, AtomIndexError, Model};
+use zetesis_core::{AtomCatalog, AtomIndex, AtomIndexError, AtomPattern, Model};
 use zetesis_cpu::{Cancellation, Stop, regions::Region};
 use zetesis_ferraris::Theory;
 
@@ -15,11 +17,14 @@ use crate::expansion::Budget;
 use crate::formula::Compiled;
 use crate::formula_binding::Binding;
 use crate::formula_ir::{HeadIr, LiteralIr, RuleIr};
-use crate::formula_support::{Accounting, CompletedCatalog, CompletedSupport, Counters, Join};
+use crate::formula_support::{
+    Accounting, CompletedCatalog, CompletedSupport, Counters, Join, RowFilter,
+};
 use crate::{
     ConstraintAllowance, ExpansionLimits, FormulaFailure, FormulaLimits, SourceBundle,
     SourceMetadata,
 };
+use selection::{Selection, SourceRows};
 
 /// Capability deliberately outside the first hybrid schedule.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -284,6 +289,7 @@ impl HybridFormula {
                 completed,
                 limits: formula_limits,
                 index: None,
+                rows: None,
             })
         } else {
             None
@@ -488,9 +494,32 @@ struct PreparedConstraints<'a> {
     /// Original dense IDs, prepared once on first region use. The final-model
     /// path keeps its existing canonical selection lookup.
     index: Option<AtomIndex<'a>>,
+    /// Source occurrence IDs mapped once into the original dense catalog.
+    rows: Option<SourceRows<'a>>,
 }
 
 impl<'a> PreparedConstraints<'a> {
+    fn prepare_selection(
+        &mut self,
+        atoms: &'a AtomCatalog,
+        counters: &mut Counters,
+    ) -> Result<(), ConstraintCheckCause> {
+        self.prepare_index(atoms, counters)?;
+        if self.rows.is_none() {
+            self.rows = Some(
+                SourceRows::prepare(
+                    &mut self.completed,
+                    self.index.as_ref().expect("prepared above"),
+                    &self.limits,
+                    counters,
+                    self.source.location,
+                )
+                .map_err(|error| ConstraintCheckCause::Source(Box::new(error)))?,
+            );
+        }
+        Ok(())
+    }
+
     fn prepare_index(
         &mut self,
         atoms: &'a AtomCatalog,
@@ -575,10 +604,13 @@ impl ConstraintChecker<'_> {
     /// not the provenance of a raw `Region`. No region or candidate is mutated.
     /// Never use this operation to read a candidate's frozen reduct.
     ///
-    /// First use prepares a bounded typed catalog index; later checks reuse it.
-    /// Joins still visit complete possible support and share the scalar evaluator
-    /// with `check`. Source arithmetic admission has already completed. Failure
-    /// preserves every accepted charge; `NotRefuted` does not prove satisfaction.
+    /// First use prepares a bounded typed catalog index and source-row ID map;
+    /// later checks reuse both. Necessary predicate and held-row selections
+    /// precede binding/scalar evaluation, over the same completed support and
+    /// shared evaluator as `check`. Missing row IDs remain eligible until the
+    /// full body check. Source arithmetic admission has already completed.
+    /// Failure preserves every accepted charge; `NotRefuted` does not prove
+    /// satisfaction. This does not construct a filtered support certificate.
     ///
     /// # Errors
     /// Wrong theory/dimension, cancellation, or a checked index/source refusal.
@@ -631,7 +663,7 @@ impl ConstraintChecker<'_> {
                     if matches!(candidate, Candidate::Region(..))
                         && let Some(prepared) = &mut self.prepared
                     {
-                        prepared.prepare_index(self.owner.atom_catalog(), counters)?;
+                        prepared.prepare_selection(self.owner.atom_catalog(), counters)?;
                     }
                     Self::scan(
                         self.prepared.as_ref(),
@@ -667,8 +699,27 @@ impl ConstraintChecker<'_> {
             constraints.location,
         )?;
         let support = queries.support();
+        let selection = match candidate {
+            Candidate::Model(_) => None,
+            Candidate::Region(_, region) => Some(Selection {
+                rows: prepared.rows.as_ref().expect("prepared before region scan"),
+                index: prepared
+                    .index
+                    .as_ref()
+                    .expect("prepared before region scan"),
+                region,
+            }),
+        };
         for rule in &constraints.rules {
-            let mut join = Join::rule(rule, support, budget)?;
+            if let Some(selection) = &selection
+                && !selection.possible(rule, &prepared.limits, counters)?
+            {
+                continue;
+            }
+            let filter = selection
+                .as_ref()
+                .map(|selection| selection as &dyn RowFilter);
+            let mut join = Join::filtered_rule(rule, support, filter, budget)?;
             while let Some(row) =
                 join.next_row(&prepared.limits, budget, counters, rule.location)?
             {
@@ -711,19 +762,8 @@ fn body(
     location: Location,
 ) -> Result<bool, FormulaFailure> {
     for literal in literals {
-        let (negation, pattern) = match literal {
-            LiteralIr::Atom(negation, pattern) => (*negation, pattern),
-            LiteralIr::PatternAtom(pattern) => (DefaultNegation::None, &pattern.atom),
-            // Join has already completed all scalar comparisons and generators.
-            LiteralIr::Compare(..)
-            | LiteralIr::TupleCompare(..)
-            | LiteralIr::ArgumentCheck { .. }
-            | LiteralIr::Guard(_)
-            | LiteralIr::Bind { .. }
-            | LiteralIr::Range { .. } => continue,
-            LiteralIr::ProjectedAtom(..) | LiteralIr::Conditional(_) | LiteralIr::Aggregate(_) => {
-                unreachable!("only admitted ordinary constraints are streamed")
-            }
+        let Some((negation, pattern)) = literal_atom(literal) else {
+            continue;
         };
         counters.work(limits, location)?;
         let key = pattern
@@ -767,6 +807,23 @@ fn body(
         }
     }
     Ok(true)
+}
+
+fn literal_atom(literal: &LiteralIr) -> Option<(DefaultNegation, &AtomPattern)> {
+    match literal {
+        LiteralIr::Atom(negation, pattern) => Some((*negation, pattern)),
+        LiteralIr::PatternAtom(pattern) => Some((DefaultNegation::None, &pattern.atom)),
+        // The join owns scalar comparisons and generated bindings.
+        LiteralIr::Compare(..)
+        | LiteralIr::TupleCompare(..)
+        | LiteralIr::ArgumentCheck { .. }
+        | LiteralIr::Guard(_)
+        | LiteralIr::Bind { .. }
+        | LiteralIr::Range { .. } => None,
+        LiteralIr::ProjectedAtom(..) | LiteralIr::Conditional(_) | LiteralIr::Aggregate(_) => {
+            unreachable!("only admitted ordinary constraints are streamed")
+        }
+    }
 }
 
 #[cfg(test)]

@@ -91,7 +91,9 @@ admit complete support, arithmetic and atom identities
 materialize all producers and ineligible constraints as the core
 walk the core's candidate regions:
     narrow the region under the core and existing candidate restrictions
-    join admitted constraint templates with completed possible support
+    exclude templates whose signed predicates cannot supply a sure body
+    select held positive rows from completed possible support
+    join the selected rows through the existing binding operation
     filter substitutions by their checked scalar conditions
     read each body against the region's lower and upper bounds
     any certainly true body -> refute this original candidate region
@@ -128,7 +130,17 @@ this region operation.
 The [shared source owner](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_hybrid.rs)
 retains prepared constraints and completed support indexes. Each checker has its
 own mutable state and prepares a checked dense atom lookup on its first region
-operation. Native persistent workers retain that index; scalar pulls and joined
+operation. A prepared correspondence maps support rows to original dense atom
+IDs without copying their tuples. The region selects held positive rows before
+binding or scalar evaluation; a missing correspondence conservatively retains
+the row. A necessary template test also checks whether each signed predicate
+has any held atom, or any cut atom for a default-negated literal. The latter
+uses the whole original catalog, including unsupported negative occurrences.
+These selections can retain extra work; the complete body test still establishes
+each refutation. They do not filter the separate arithmetic-admission traversal
+or the final candidate check.
+
+Native persistent workers retain the preparation; scalar pulls and joined
 producer rounds prepare checkers for their operation. The indexed query wrapper
 borrows existing indexes and allocates nothing. Ordinary rows remain borrowed,
 and typed candidate lookup copies no atom. The eager builder keeps its bulk

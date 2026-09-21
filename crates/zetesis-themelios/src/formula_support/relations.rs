@@ -245,14 +245,24 @@ pub(super) struct RelationRows<'source> {
     pub(super) atoms: &'source [Atom],
 }
 
-impl Relations<'_> {
+impl<'source> Relations<'source> {
     pub(super) fn relation(&self, predicate: &Predicate) -> Option<&Relation<'_>> {
         self.rows.get(predicate).map(|rows| &rows.relation)
     }
 
     /// Predicates in this snapshot, borrowed from their sole atom owner.
-    pub(crate) fn predicates(&self) -> impl Iterator<Item = &Predicate> {
+    pub(crate) fn predicates(&self) -> impl Iterator<Item = &'source Predicate> {
         self.rows.keys().copied()
+    }
+
+    /// The catalog occurrence order is also this snapshot's local row order.
+    /// References keep the sole immutable atom owner; this allocates no rows.
+    pub(super) fn source_atoms(
+        &self,
+    ) -> impl Iterator<Item = (&'source Predicate, &'source [Atom])> {
+        self.rows
+            .values()
+            .map(|rows| (rows.catalog.predicate(), rows.catalog.atoms()))
     }
 
     pub(super) fn len(&self) -> usize {

@@ -5573,21 +5573,26 @@
     {
       "file": "Zetesis/StreamedRegions.lean",
       "line": 82,
+      "name": "Zetesis.StreamedRegions.necessary_selection_preserves_witness"
+    },
+    {
+      "file": "Zetesis/StreamedRegions.lean",
+      "line": 104,
       "name": "Zetesis.StreamedRegions.sure_occurrence_refutes"
     },
     {
       "file": "Zetesis/StreamedRegions.lean",
-      "line": 99,
+      "line": 121,
       "name": "Zetesis.StreamedRegions.scan_refutes"
     },
     {
       "file": "Zetesis/StreamedRegions.lean",
-      "line": 115,
+      "line": 137,
       "name": "Zetesis.StreamedRegions.complete_scan_can_miss_violation"
     },
     {
       "file": "Zetesis/StreamedRegions.lean",
-      "line": 126,
+      "line": 148,
       "name": "Zetesis.StreamedRegions.pending_can_retain_answer"
     },
     {
@@ -6706,7 +6711,7 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "59aea3273697393e3f6e543f6f536ad09bd1d270dd7e309713f7c013d2931e37",
+    "Audit.lean": "bcddea650d9f0bb30f1abc115744dee920ad09976cf9f19681cc0d383151191b",
     "Zetesis.lean": "cc80a0fd1cae11784f524910a1259eb8cf64b478bea08b4642b0e1c6261bc084",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
     "Zetesis/AggregateBounds.lean": "c1a49f93ac5140bcd22876b42c52c23c4f447352c9cf61f2f01741fbbdc98452",
@@ -6832,7 +6837,7 @@
     "Zetesis/SourceSupport.lean": "ee2c6f8e7e3031c667f29a93ddc376f2d4c5b84725cc1a9482b5c636ff232387",
     "Zetesis/StorageOwners.lean": "6319788182043ddcfaf40d79ab7de9a052b1bb719679031042f4002b20d3be22",
     "Zetesis/StreamedConstraints.lean": "5535a3f68b9ab89ca0ee5894df7acd0f6a4d3be4727d466c9feb9297fa4a37fd",
-    "Zetesis/StreamedRegions.lean": "eb7e9e28a5fab2e57f6341080d6f3cdf7fe30c05b9ab4a03c84e667440515613",
+    "Zetesis/StreamedRegions.lean": "648a77fd4c3f85233b869d9b34b875946cca5ada41764418c2b8fbeda0d28386",
     "Zetesis/StrongNegation.lean": "4f99901e0dfc2e777d12110aca36c2c3be4964f5cbcf88d0a3d87b355a5730c6",
     "Zetesis/StructuralBindings.lean": "8606044bbfeab1c9238e9c2311206d0dd894bb6482463c02613e759a44f06894",
     "Zetesis/StructuredWitnesses.lean": "035fda4f2857801d516f26c1dca179233a561581beffbfbc69c1897e8926be8c",

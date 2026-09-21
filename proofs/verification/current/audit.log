@@ -1162,6 +1162,7 @@
 'Zetesis.StreamedConstraints.pending_can_hide_violation' depends on axioms: [propext, Quot.sound]
 'Zetesis.StreamedRegions.sure_antecedent_iff' depends on axioms: [propext, Quot.sound]
 'Zetesis.StreamedRegions.held_body_satisfied' depends on axioms: [propext, Quot.sound]
+'Zetesis.StreamedRegions.necessary_selection_preserves_witness' depends on axioms: [propext]
 'Zetesis.StreamedRegions.sure_occurrence_refutes' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.StreamedRegions.scan_refutes' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.StreamedRegions.complete_scan_can_miss_violation' depends on axioms: [propext, Quot.sound]

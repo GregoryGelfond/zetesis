@@ -5,9 +5,54 @@
 //! creates its sole `Row`/`Binding` view after mutation has stopped. The token
 //! owns no second copy of current slots and never escapes the join module.
 
+use themelios_base::span::Location;
 use zetesis_core::Value;
 
+use super::{Counters, Join, Row};
+use crate::expansion::Budget;
 use crate::formula_binding::Binding;
+use crate::{FormulaFailure, FormulaLimits};
+
+/// A necessary condition on an original positive support occurrence. The join
+/// consults it before binding or evaluating scalar expressions. It must charge
+/// its work before execution through the supplied counters, preserving failure
+/// prefixes. `false` skips only this row; an error stops the enclosing scan.
+///
+/// Row positions are predicate-local support coordinates. Any interpretation
+/// in another catalog must authenticate that mapping; no equality of positions
+/// is implied. Unmapped rows may be retained conservatively. Only already
+/// admitted witness scans attach this filter, never source-family validation.
+pub(crate) trait RowFilter {
+    fn permits(
+        &self,
+        row: zetesis_core::relation::Row<'_, '_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: Location,
+    ) -> Result<bool, FormulaFailure>;
+}
+
+/// One existing join cursor with a selected-row-only consumer interface. Its
+/// private cursor cannot export partial arithmetic evidence as a whole family.
+pub(crate) struct FilteredRows<'a, 'source> {
+    join: Join<'a, 'source>,
+}
+
+impl<'a, 'source> FilteredRows<'a, 'source> {
+    pub(super) fn new(join: Join<'a, 'source>) -> Self {
+        Self { join }
+    }
+
+    pub(crate) fn next_row(
+        &mut self,
+        limits: &FormulaLimits,
+        budget: &mut Budget,
+        counters: &mut Counters,
+        location: Location,
+    ) -> Result<Option<Row<'_>>, FormulaFailure> {
+        self.join.next_row(limits, budget, counters, location)
+    }
+}
 
 #[derive(Clone, Copy)]
 pub(super) enum Ownership {
@@ -55,3 +100,5 @@ pub(super) struct Staged {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod filtering;

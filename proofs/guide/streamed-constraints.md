@@ -105,6 +105,39 @@ whose scan stopped immediately, so interruption cannot authorize a cut either.
 Final candidate checks still require the complete original family and exact
 evaluation described above.
 
+### Selecting possible sure witnesses
+
+`necessary_selection_preserves_witness` permits filtering the original occurrence
+list with a Boolean `keep` test when every sure body implies `keep = true`.
+A retained witness still belongs to the original source; an original sure witness
+cannot be filtered out because it satisfies that necessary condition. Thus the
+filtered and original lists have a sure witness together. Retained occurrences
+may still fail the full body test. This law does not equate interrupted scans or
+their resource charges.
+
+`sure_antecedent_iff` supplies the logical basis for positive-row selection: a
+ground positive atom in a sure body must be held. Rejecting that exact unheld
+row before extending a join therefore cannot discard a sure witness. A weaker
+signed-predicate test may retain a template only if its required predicate has
+some held atom, or some cut atom for a default-negated occurrence. Such a test
+is necessary only when its searched domain contains every corresponding admitted
+ground atom. Negative occurrences require the whole original catalog, including
+atoms without possible positive support. Positive and double-negated occurrences
+require held atoms; default-negated occurrences require cut atoms. Signed
+predicate identity, the relevant occurrence's existence, and its ground atom's
+membership in that domain are premises of this argument.
+
+The theorem describes selection of ground occurrences. Rust must separately
+establish that pre-binding row filters and template gates implement a necessary
+selection, preserve each surviving binding's interpretation, and use the current
+region's authenticated catalog coordinates. An optional source-row-to-dense-ID map
+must distinguish absent correspondence from an unheld atom; conservatively
+retaining an unmapped row preserves the necessary-condition direction. Neither
+relation-local ordinals nor equal dimensions establish dense atom identity.
+The lemma proves no Rust join refinement, arithmetic admission, or scheduling
+correspondence. Admission and final exact candidate checks retain their original
+complete-family obligations.
+
 ## Concrete obligations
 
 Source lowering must establish the finite family, its original occurrence and

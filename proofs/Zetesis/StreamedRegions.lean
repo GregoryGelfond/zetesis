@@ -72,6 +72,28 @@ theorem held_body_satisfied (c : Cube A) (r : Semantics.Rule A)
     Satisfies M (NormalFerraris.antecedent r) :=
   sure_sound c inside ((sure_antecedent_iff c r).mpr ⟨positive, doubleNegative, negative⟩)
 
+/-- Filtering original occurrences by a necessary condition for a sure body
+preserves existence of a sure witness. The condition may retain extra occurrences;
+it need not decide whether their bodies are sure. This is an occurrence-selection
+law, not a refinement proof for a concrete join or its bounded execution.
+
+Proof outline: a filtered witness still belongs to the original source. Conversely,
+the necessary-condition premise retains each original sure witness unchanged. -/
+theorem necessary_selection_preserves_witness (source : List ι) (body : ι → Formula A)
+    (c : Cube A) (keep : ι → Bool)
+    (necessary : ∀ occurrence ∈ source, Sure c (body occurrence) → keep occurrence = true) :
+    (∃ occurrence ∈ source.filter keep, Sure c (body occurrence)) ↔
+      ∃ occurrence ∈ source, Sure c (body occurrence) := by
+  constructor
+  · rintro ⟨occurrence, retained, sure⟩
+    have original : occurrence ∈ source := (List.mem_filter.mp retained).1
+    exact ⟨occurrence, original, sure⟩
+  · rintro ⟨occurrence, original, sure⟩
+    have selected : keep occurrence = true := necessary occurrence original sure
+    have retained : occurrence ∈ source.filter keep :=
+      List.mem_filter.mpr ⟨original, selected⟩
+    exact ⟨occurrence, retained, sure⟩
+
 /-- One authenticated original constraint with a sure body refutes the region.
 The retained core is arbitrary. The witness can come from any checked prefix;
 the rest of the source need not have been traversed to reject this region.

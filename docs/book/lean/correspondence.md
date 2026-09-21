@@ -744,6 +744,12 @@ lower bound, and default-negated atoms absent from the upper bound, make a
 normalized body true in every interpretation between those bounds. One
 authenticated original constraint occurrence with that body excludes every
 answer set of the retained theory plus the constraints from the region.
+`necessary_selection_preserves_witness` preserves existence of a sure witness
+when every sure occurrence passes the supplied selection. The sign law supplies
+the necessary held/cut conditions for positive-row and signed-predicate filters;
+the predicate domain must include each admitted atom, including unsupported
+negative occurrences. The lemma does not prove Rust's row-to-dense-ID mapping,
+join traversal, or equivalence of resource-limited prefixes.
 `scan_refutes` supplies the soundness premise of `CoverageTree.refuted`; it does
 not prove that Rust constructs a coverage tree. A completed sufficient scan
 without a witness is only `NotRefuted`, not original satisfaction; an interrupted
