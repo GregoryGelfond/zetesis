@@ -7,6 +7,10 @@ use zetesis_cli::{
 };
 use zetesis_presentation::Layout;
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[path = "support/testing_views.rs"]
+mod human_views;
+
 fn command(arguments: &[&str]) -> TestCommand {
     let Invocation::Test(command) = Invocation::try_parse_from(arguments.iter().copied()).unwrap()
     else {

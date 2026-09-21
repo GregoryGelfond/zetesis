@@ -104,6 +104,26 @@ impl CaseResult {
             .as_ref()
             .map(|capture| capture.elapsed_ms)
     }
+
+    /// Observed reference exit, including its terminating signal on Unix.
+    /// Absence means no reaped exit was retained; it is not an exit code.
+    #[must_use]
+    pub fn reference_exit(&self) -> Option<crate::process::Exit> {
+        self.evidence
+            .reference_process
+            .as_ref()
+            .and_then(|capture| capture.exit.0)
+    }
+
+    /// Observed native exit, independent of capture stop and semantic outcome.
+    /// A normal exit alone does not establish completed answer enumeration.
+    #[must_use]
+    pub fn native_exit(&self) -> Option<crate::process::Exit> {
+        self.evidence
+            .native_process
+            .as_ref()
+            .and_then(|capture| capture.exit.0)
+    }
 }
 
 #[derive(Debug, Serialize)]

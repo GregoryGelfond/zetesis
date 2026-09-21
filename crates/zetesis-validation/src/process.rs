@@ -30,6 +30,9 @@ mod posix;
 
 pub mod memory;
 
+mod executable;
+pub use executable::resolve_executable;
+
 /// Borrowed process arguments. Both paths must be absolute.
 #[derive(Clone, Copy, Debug)]
 pub struct Invocation<'a> {

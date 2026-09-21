@@ -104,6 +104,22 @@ pub struct WorldViewFailure {
     outcome: Option<Box<SemanticOutcome>>,
 }
 
+/// Owned evidence transferred from a failed complete-family collection.
+/// Moving these fields performs no answer or error cloning. The checked prefix
+/// remains incomplete even when the retained session outcome records exhaustion:
+/// collection admission can refuse an answer after search verified it.
+#[derive(Debug)]
+pub struct WorldViewFailureParts {
+    /// Original setup, execution, coverage or collection refusal.
+    pub cause: WorldViewError,
+    /// Exact original subject, including when setup failed before any answer.
+    pub subject: Subject,
+    /// Checked answers retained before failure; no completeness is implied.
+    pub answer_sets: Vec<AnswerSet>,
+    /// Available session evidence, independent of collection admission.
+    pub outcome: Option<Box<SemanticOutcome>>,
+}
+
 impl WorldViewFailure {
     /// Original setup, execution, coverage or collection refusal.
     #[must_use]
@@ -134,6 +150,18 @@ impl WorldViewFailure {
     #[must_use]
     pub fn into_answer_sets(self) -> Vec<AnswerSet> {
         self.answer_sets
+    }
+
+    /// Transfer the original cause, subject, checked prefix and outcome together.
+    /// This preserves their owners without cloning or discarding evidence.
+    #[must_use]
+    pub fn into_parts(self) -> WorldViewFailureParts {
+        WorldViewFailureParts {
+            cause: self.cause,
+            subject: self.subject,
+            answer_sets: self.answer_sets,
+            outcome: self.outcome,
+        }
     }
 }
 

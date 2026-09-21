@@ -61,7 +61,7 @@ pub(super) fn corpus(
     }
     table(
         "Corpus result",
-        &["Cases completed", "Cases required", "All passed"],
+        &["Cases recorded", "Cases required", "All passed"],
         vec![
             Row::new([
                 report.cases().len().to_string(),
@@ -138,7 +138,7 @@ pub(super) fn backend(
     }
     table(
         "Backend result — not full physical qualification",
-        &["Cases completed", "Cases required", "All passed"],
+        &["Cases recorded", "Cases required", "All passed"],
         vec![
             Row::new([
                 report.cases().len().to_string(),

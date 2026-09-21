@@ -19,9 +19,16 @@ to the same typed requests available to library callers.
 The executable comparison workflows deliberately launch bounded solver children.
 That is part of their task: they test the process interface and include its
 startup, input and output costs. They are not required for an embedded solve.
-The new command adapters select the public `solve` interface for the installed
+The command adapters select the public `solve` interface for the installed
 executable; legacy argument spelling remains available for comparing an older
 binary. Selecting an interface does not alter the requested semantic task.
+
+Executable lookup uses `process::resolve_executable` with an explicit search
+path. The corpus compatibility workflow supplies ambient PATH per invocation;
+the benchmark adapter resolves it once per run. Corpus case results retain typed
+exit codes and terminating signals
+separately from capture stops and answer-set decisions. A reaped child is not
+necessarily a successful or semantically complete run.
 
 ## Separate measurement from presentation
 

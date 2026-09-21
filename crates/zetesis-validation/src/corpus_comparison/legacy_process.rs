@@ -1,19 +1,20 @@
 //! Historical text/JSON report view over the shared raw capture implementation.
 
 use std::ffi::OsString;
-use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use super::decision::{CaptureStatus, InvocationFailure};
+use super::exit::ExitEvidence;
 use crate::process::{self, Invocation, Limits, PendingChild, Stop};
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
 pub(crate) struct Capture {
     pub(crate) status: CaptureStatus,
-    pub(crate) exit_code: Option<i32>,
+    #[serde(flatten)]
+    pub(super) exit: ExitEvidence,
     pub(crate) elapsed_ms: u128,
     pub(crate) stdout: String,
     pub(crate) stderr: String,
@@ -64,7 +65,9 @@ pub(super) fn invoke_with_cancellation(
     if cancelled.load(Ordering::Relaxed) {
         return Err(InvocationFailure::Cancelled);
     }
-    let executable = resolve(executable)?;
+    let search_path = std::env::var_os("PATH");
+    let executable = process::resolve_executable(executable, search_path.as_deref())
+        .map_err(|error| error.to_string())?;
     let directory = std::path::absolute(directory).map_err(|error| error.to_string())?;
     let outcome = process::invoke_with_cancellation(
         Invocation {
@@ -96,7 +99,7 @@ pub(super) fn invoke_with_cancellation(
     };
     Ok(Capture {
         status,
-        exit_code: capture.exit().and_then(|exit| exit.code),
+        exit: ExitEvidence(capture.exit()),
         elapsed_ms: capture.elapsed().as_millis(),
         stdout: String::from_utf8_lossy(capture.stdout()).into_owned(),
         stderr: String::from_utf8_lossy(capture.stderr()).into_owned(),
@@ -116,22 +119,4 @@ pub(super) fn invoke_with_cancellation(
         pending_child_id: pending.as_ref().map(PendingChild::id),
         pending,
     })
-}
-
-fn resolve(executable: &Path) -> Result<PathBuf, String> {
-    if executable.components().count() != 1 || executable.is_absolute() {
-        return std::path::absolute(executable).map_err(|error| error.to_string());
-    }
-    // Resolve anew for each invocation under this comparison's PATH policy.
-    // The shared capture API accepts only a selected absolute executable.
-    let path = std::env::var_os("PATH").ok_or("PATH is absent")?;
-    for directory in std::env::split_paths(&path) {
-        let candidate = directory.join(executable);
-        if std::fs::metadata(&candidate)
-            .is_ok_and(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
-        {
-            return std::path::absolute(candidate).map_err(|error| error.to_string());
-        }
-    }
-    Err(format!("executable not found: {}", executable.display()))
 }

@@ -125,6 +125,10 @@ iterator has not completed the final exhaustion step. Thus the failure carries
 relabelled a complete one-answer world view. Larger batches can also retain
 queued membership results in verification accounting before those answers are
 scored or yielded. The retained answer's subject remains the original owner.
+The example uses `WorldViewFailure::into_parts()` to move that prefix and its
+typed cause, subject and outcome together. This transfers ownership without
+cloning answers or strengthening the incomplete evidence. `into_answer_sets()`
+instead deliberately discards the cause and coverage context.
 
 `Session::new` with an objective must finish its search phase before yielding
 retained incumbents. Streaming all answers can release each answer after use;

@@ -59,9 +59,10 @@ pub struct SolveConfig {
     pub batch_size: NonZeroUsize,
     /// Worker count: the closure route's pool, and the walkers of the
     /// region tree under the regions method, one being the scalar walk.
-    /// Every worker is admitted at `max_closure_bytes`, so raise the two
-    /// together, as [`Self::for_allowance`] does; the command defaults the
-    /// count to the host's parallelism.
+    /// CPU closure setup conservatively reserves `max_closure_bytes` per worker;
+    /// [`Self::for_allowance`] keeps that product within the collective ceiling.
+    /// The library default is four; the command uses at most four available
+    /// host threads.
     pub workers: NonZeroUsize,
     /// Worker count for unresolved formula queries: under the clauses search,
     /// and under regions with one CPU walker or general device propagation.
@@ -94,9 +95,12 @@ pub struct SolveConfig {
     pub max_work: u64,
     /// Named storage for one independent lazy CPU closure construction.
     /// Input seeds and completed model retention belong to separate owners.
-    /// Every assigned worker is admitted at this allowance, so
+    /// CPU closure setup conservatively admits every assigned worker at this
+    /// allowance, including eager and shared execution, so
     /// `workers * max_closure_bytes` must not exceed `max_closure_batch_bytes`;
-    /// [`Self::validate`] refuses the product before a session starts.
+    /// that route refuses an excessive or overflowing product before allocating
+    /// its pool, compiling static rules or initializing candidates. Formula and
+    /// device execution do not use this reservation.
     pub max_closure_bytes: usize,
     /// Collective independent CPU preparation, cached workspace and active
     /// closure allowance. Also bounds immutable query preparation bytes.
@@ -210,7 +214,7 @@ impl SolveConfig {
     /// storage scaled by `memory` over [`Self::REFERENCE_MEMORY`], each
     /// saturating at its type's maximum, and the per-closure allowance each
     /// worker's share of the scaled collective closure ceiling, so that the
-    /// product [`Self::validate`] checks holds. The projection, objective
+    /// product checked by CPU closure setup holds. The projection, objective
     /// key, incumbent, reduct, completion scratch, candidate, collective
     /// closure and batch ceilings scale; work, count and structural
     /// ceilings, and the ceilings of source admission, do not. Constant
@@ -248,11 +252,13 @@ impl SolveConfig {
     ///
     /// This performs no admission, execution, allocation or device discovery.
     /// A later prepared input can impose additional representation constraints.
+    /// Execution-specific resource checks happen only when their route is set
+    /// up. CPU closure setup checks the worker reservation before allocating or
+    /// initializing execution state. After policy validation, a pre-cancelled
+    /// session stops before those resource checks and allocations.
     ///
     /// # Errors
-    /// Refuses incompatible oracle, grounding and shared-source policies, and
-    /// a worker count whose product with `max_closure_bytes` exceeds
-    /// `max_closure_batch_bytes`, whatever route the session would take.
+    /// Refuses incompatible oracle, grounding and shared-source policies.
     pub fn validate(&self) -> Result<(), crate::SolveError> {
         crate::engine::validate_combination(self)
     }

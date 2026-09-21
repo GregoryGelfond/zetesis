@@ -22,6 +22,15 @@ An admitted formula session can also use a caller-supplied
 [membership executor](executors.md), while retaining the ordinary candidate,
 reduct, objective and outcome owners.
 
+`SolveConfig::validate` checks representation-independent policy combinations.
+Prepared input adds its profile constraints; the selected executor then checks
+its own resources. CPU closure setup conservatively requires
+`workers * max_closure_bytes <= max_closure_batch_bytes` for lazy, eager and
+shared execution, before allocating its pool or initializing candidates.
+Formula and device execution do not inherit this unused reservation. With valid
+policies, an already cancelled control stops before executor resource checks
+and allocation; an incompatible policy remains a setup error.
+
 ## Pulling and stopping
 
 `Session` is a fused iterator of `Result<AnswerSet, SolveFailure>`. Each
@@ -211,6 +220,9 @@ and available semantic outcome. Search interruption, scoring failure and
 collection limits cannot produce a complete value. A model whose score or
 storage admission failed can remain in verified accounting without appearing in
 the retained prefix. No partial result is treated as a smaller program.
+`into_parts()` transfers the original cause, subject, answers and outcome into
+`WorldViewFailureParts` without cloning. `into_answer_sets()` remains the explicit
+choice to keep only the answers and discard the other failure evidence.
 
 These are zetesis's collection guarantees. The streaming `Session` remains the
 surface for partial observations. Interoperability with another library's solver

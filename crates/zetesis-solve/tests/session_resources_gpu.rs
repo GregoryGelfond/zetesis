@@ -311,15 +311,24 @@ fn independent_closures(resources: &ExecutionResources, device: Device) {
             stopped.outcome.interruption(),
             Some(Interruption::Oracle(Stop::CandidateLimit)),
         );
-        for (owner, value) in [
-            (&first, Value::Number(7)),
-            (&second, Value::String("7".into())),
+        for (owner, value, closure_budget) in [
+            (
+                &first,
+                Value::Number(7),
+                SolveConfig::DEFAULT.max_closure_batch_bytes,
+            ),
+            (&second, Value::String("7".into()), 0),
         ] {
             let subject = Subject::Program(owner.program().clone());
             let captured = solve(
                 PreparedInput::admitted(owner),
                 &subject,
-                config(device.backend(), profile),
+                SolveConfig {
+                    // A device session does not reserve CPU worker closures.
+                    // Its candidate preparation still retains the per-closure bound.
+                    max_closure_batch_bytes: closure_budget,
+                    ..config(device.backend(), profile)
+                },
                 resources,
                 AnswerSelection::All,
             );

@@ -23,6 +23,7 @@ mod config;
 mod corpus;
 mod decision;
 mod execution;
+mod exit;
 mod normalize;
 mod record;
 mod runner;

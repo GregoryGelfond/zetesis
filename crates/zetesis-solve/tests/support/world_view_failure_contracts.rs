@@ -85,7 +85,7 @@ fn search_refusal_transfers_the_original_checked_prefix() {
     assert_eq!(outcome.completion(), Some(Completion::Interrupted));
     assert_eq!(failure.answer_sets().len(), 1);
     let subject = failure.subject().clone();
-    let original_answer = std::ptr::from_ref(&failure.answer_sets()[0]);
+    let original_answer = failure.answer_sets().as_ptr();
     let original_atom = std::ptr::from_ref(
         failure.answer_sets()[0]
             .interpretation()
@@ -137,4 +137,77 @@ fn observer_refusal_chain_retains_the_external_error() {
         assert_eq!(external.to_string(), "collection observer refused");
         assert!(external.source().is_none());
     }
+}
+
+#[test]
+fn decomposition_transfers_the_original_typed_cause() {
+    let (failure, _, _) = observer_failure(Refusal::Execution);
+    let subject = failure.subject().clone();
+    let WorldViewError::Solve(solve) = failure.cause() else {
+        panic!("expected an owned solve failure");
+    };
+    let original_solve = std::ptr::from_ref(solve.as_ref());
+    let original_error = std::ptr::from_ref(
+        solve
+            .cause
+            .source()
+            .unwrap()
+            .downcast_ref::<io::Error>()
+            .unwrap(),
+    );
+    let zetesis_solve::WorldViewFailureParts {
+        cause,
+        subject: transferred_subject,
+        answer_sets,
+        outcome,
+    } = failure.into_parts();
+    let WorldViewError::Solve(solve) = cause else {
+        panic!("decomposition must preserve the solve failure");
+    };
+    assert!(std::ptr::eq(solve.as_ref(), original_solve));
+    let external = solve
+        .cause
+        .source()
+        .unwrap()
+        .downcast_ref::<io::Error>()
+        .unwrap();
+    assert!(std::ptr::eq(external, original_error));
+    assert_eq!(external.kind(), io::ErrorKind::ConnectionAborted);
+    assert!(transferred_subject.same_instance(&subject));
+    assert!(solve.subject().unwrap().same_instance(&subject));
+    assert!(answer_sets.is_empty());
+    assert!(outcome.is_none());
+}
+
+#[test]
+fn decomposition_transfers_the_original_collection_evidence() {
+    let owner = formula("a. {b}.");
+    let failure = WorldView::collect(
+        PreparedInput::formula(&owner),
+        SolveConfig {
+            max_candidates: 1,
+            ..config()
+        },
+        WorldViewLimits::default(),
+        Control::default(),
+    )
+    .unwrap_err();
+    let subject = failure.subject().clone();
+    assert_eq!(failure.answer_sets().len(), 1);
+    let original_answer = std::ptr::from_ref(&failure.answer_sets()[0]);
+    let original_outcome = std::ptr::from_ref(failure.outcome().unwrap());
+    let expected = names(&failure.answer_sets()[0]);
+    let parts = failure.into_parts();
+    drop(owner);
+    assert!(matches!(parts.cause, WorldViewError::NotExhausted));
+    assert!(parts.subject.same_instance(&subject));
+    assert_eq!(parts.answer_sets.len(), 1);
+    assert!(std::ptr::eq(parts.answer_sets.as_ptr(), original_answer));
+    assert_eq!(names(&parts.answer_sets[0]), expected);
+    assert!(parts.answer_sets[0].subject().same_instance(&subject));
+    let outcome = parts.outcome.unwrap();
+    assert!(std::ptr::eq(outcome.as_ref(), original_outcome));
+    assert!(outcome.subject().unwrap().same_instance(&subject));
+    assert_eq!(outcome.verified_models(), 1);
+    assert_eq!(outcome.completion(), Some(Completion::Interrupted));
 }

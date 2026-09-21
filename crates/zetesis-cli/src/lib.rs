@@ -76,5 +76,5 @@ pub use zetesis_solve::{
     QueryExecutionObservation, SearchMethod, SearchState, SemanticOutcome, Session, SessionBuilder,
     SessionModel, SharedExecutionStatistics, SolveConfig, SolveError, SolveFailure,
     SolveMeasurements, SolvePhase, SourceBatching, Subject, WorldView, WorldViewError,
-    WorldViewFailure, WorldViewLimits,
+    WorldViewFailure, WorldViewFailureParts, WorldViewLimits,
 };

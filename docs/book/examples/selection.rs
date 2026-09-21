@@ -7,7 +7,7 @@ use zetesis_core::{Atom, Model, Predicate};
 use zetesis_cpu::Control;
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, PreparedInput, Session, SolveConfig, WorldView,
-    WorldViewError, WorldViewLimits,
+    WorldViewError, WorldViewFailureParts, WorldViewLimits,
 };
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
@@ -108,17 +108,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Control::default(),
     )
     .expect_err("the original family has two answers");
-    assert!(matches!(failure.cause(), WorldViewError::AnswerSets));
-    assert_eq!(failure.answer_sets().len(), 1);
-    let retained = &failure.answer_sets()[0];
+    let WorldViewFailureParts {
+        cause,
+        subject,
+        answer_sets,
+        outcome,
+    } = failure.into_parts();
+    assert!(matches!(cause, WorldViewError::AnswerSets));
+    assert_eq!(answer_sets.len(), 1);
+    let retained = &answer_sets[0];
     assert!(full_answers.contains(&(
         retained.interpretation().clone(),
         retained.score().expect("active objective").costs().to_vec(),
     )));
-    assert!(retained.subject().same_instance(failure.subject()));
-    let outcome = failure
-        .outcome()
-        .expect("search started before collection failed");
+    assert!(retained.subject().same_instance(&subject));
+    let outcome = outcome.expect("search started before collection failed");
     assert_eq!(outcome.selection(), Some(AnswerSelection::All));
     assert_eq!(outcome.verified_models(), 2);
     assert_eq!(outcome.completion(), None);

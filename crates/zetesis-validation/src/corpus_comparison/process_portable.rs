@@ -14,12 +14,14 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use super::decision::{CaptureStatus, InvocationFailure};
+use super::exit::ExitEvidence;
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
 pub(crate) struct Capture {
     pub(crate) status: CaptureStatus,
-    pub(crate) exit_code: Option<i32>,
+    #[serde(flatten)]
+    pub(super) exit: ExitEvidence,
     pub(crate) elapsed_ms: u128,
     pub(crate) stdout: String,
     pub(crate) stderr: String,
@@ -73,13 +75,9 @@ pub(super) fn invoke_with_cancellation(
     let deadline = started
         .checked_add(timeout)
         .ok_or("timeout is not representable")?;
-    let executable = if executable.is_absolute() || executable.components().count() == 1 {
-        executable.to_path_buf()
-    } else {
-        std::env::current_dir()
-            .map_err(|error| error.to_string())?
-            .join(executable)
-    };
+    let search_path = std::env::var_os("PATH");
+    let executable = crate::process::resolve_executable(executable, search_path.as_deref())
+        .map_err(|error| error.to_string())?;
     if cancelled.load(Ordering::Relaxed) {
         return Err(InvocationFailure::Cancelled);
     }
@@ -160,7 +158,7 @@ fn monitor(
 ) -> Capture {
     let mut capture = Capture {
         status: CaptureStatus::Completed,
-        exit_code: None,
+        exit: ExitEvidence(None),
         elapsed_ms: 0,
         stdout: String::new(),
         stderr: String::new(),
@@ -178,7 +176,7 @@ fn monitor(
         } else {
             match child.try_wait() {
                 Ok(Some(exit)) => {
-                    capture.exit_code = exit.code();
+                    capture.exit = ExitEvidence(Some(exit.into()));
                     return capture;
                 }
                 Ok(None) => {
@@ -200,7 +198,7 @@ fn monitor(
     loop {
         match child.try_wait() {
             Ok(Some(exit)) => {
-                capture.exit_code = exit.code();
+                capture.exit = ExitEvidence(Some(exit.into()));
                 break;
             }
             Ok(None) if cleanup_deadline.is_some_and(|deadline| Instant::now() < deadline) => {
@@ -280,6 +278,52 @@ mod tests {
     use super::{CaptureStatus, invoke};
     use std::path::Path;
     use std::time::Duration;
+
+    #[test]
+    fn signal_termination_retains_portable_exit_evidence() {
+        let captured = invoke(
+            Path::new("/bin/sh"),
+            &["-c".into(), "kill -TERM $$".into()],
+            Path::new("/"),
+            Duration::from_secs(2),
+            128,
+        )
+        .unwrap();
+        assert_eq!(captured.status, CaptureStatus::Completed);
+        assert_eq!(
+            captured.exit.0,
+            Some(crate::process::Exit {
+                code: None,
+                signal: Some(15)
+            })
+        );
+        assert!(!captured.cleanup_unresolved());
+        let json = serde_json::to_value(captured).unwrap();
+        assert!(json["exit_code"].is_null());
+        assert_eq!(json["exit_signal"], 15);
+    }
+
+    #[test]
+    fn normal_exit_retains_portable_exit_evidence() {
+        let captured = invoke(
+            Path::new("/bin/sh"),
+            &["-c".into(), "exit 17".into()],
+            Path::new("/"),
+            Duration::from_secs(2),
+            128,
+        )
+        .unwrap();
+        assert_eq!(
+            captured.exit.0,
+            Some(crate::process::Exit {
+                code: Some(17),
+                signal: None
+            })
+        );
+        let json = serde_json::to_value(captured).unwrap();
+        assert_eq!(json["exit_code"], 17);
+        assert!(json["exit_signal"].is_null());
+    }
 
     #[test]
     fn capture_limit_bounds_both_streams_and_preserves_exit_classification() {

@@ -247,6 +247,43 @@ fn external_reference_preserves_complete_families() {
 }
 
 #[test]
+fn external_formula_execution_ignores_closure_reservations() {
+    let owner = input("{a;b}.");
+    let mut native = Session::builder(
+        PreparedInput::formula(&owner),
+        SolveConfig {
+            backend: Backend::Cpu,
+            ..config()
+        },
+        Control::default(),
+    )
+    .start()
+    .unwrap();
+    let expected = family(&mut native);
+    assert_eq!(expected.len(), 4);
+    let executor = ReferenceExecutor::new(ExecutorCapabilities::General, Behavior::Reference);
+    let activity = Arc::clone(&executor.activity);
+    let mut session = Session::builder(
+        PreparedInput::formula(&owner),
+        SolveConfig {
+            max_closure_bytes: usize::MAX,
+            max_closure_batch_bytes: 0,
+            ..config()
+        },
+        Control::default(),
+    )
+    .executor(executor)
+    .start()
+    .unwrap();
+    assert_eq!(family(&mut session), expected);
+    let outcome = session.outcome().unwrap();
+    assert_eq!(outcome.completion(), Some(Completion::Exhausted));
+    assert!(outcome.batch_execution().is_some());
+    assert!(outcome.closure_execution().is_none());
+    assert!(activity.lock().unwrap().calls > 0);
+}
+
+#[test]
 fn external_execution_preserves_objective_selection() {
     let owner = input("1 {a;b;c} 1. #minimize {1,a:a;1,b:b;2,c:c}.");
     for selection in [AnswerSelection::All, AnswerSelection::Optimal] {

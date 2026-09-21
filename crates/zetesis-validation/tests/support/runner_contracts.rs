@@ -23,6 +23,9 @@ mod stage_contracts;
 #[path = "runner_cancellation.rs"]
 mod cancellation;
 
+#[path = "runner_exit.rs"]
+mod exit_evidence;
+
 fn reference() -> String {
     json!({
         "Solver": "synthetic protocol fixture",
@@ -233,7 +236,7 @@ fn concurrent_fixture_publication_preserves_exact_process_results() {
                     )
                     .unwrap();
                     assert_eq!(captured.status, crate::corpus_comparison::decision::CaptureStatus::Completed, "{captured:?}");
-                    assert_eq!(captured.exit_code, Some(17));
+                    assert_eq!(captured.exit.0.unwrap().code, Some(17));
                     assert_eq!(captured.stdout, stdout);
                     assert_eq!(captured.stderr, stderr);
                 }

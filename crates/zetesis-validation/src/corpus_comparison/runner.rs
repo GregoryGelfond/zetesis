@@ -127,7 +127,7 @@ fn check_case(
     let mut result = CaseEvidence::new(case);
     let reference = retain_pending(reference, pending);
     let failure = reference.status.failure();
-    let exit = reference.exit_code;
+    let exit = reference.exit.0.and_then(|exit| exit.code);
     result.reference_process = Some(reference);
     if let Some(failure) = failure {
         return decide(
@@ -294,14 +294,15 @@ fn native_failure(native: &Capture) -> Option<Decision> {
     if let Some(failure) = native.status.failure() {
         return Some(Decision::CaptureFailed(Producer::Native, failure));
     }
-    if native.exit_code == Some(3) {
+    let exit_code = native.exit.0.and_then(|exit| exit.code);
+    if exit_code == Some(3) {
         return Some(Decision::NativeIncomplete);
     }
-    if native.exit_code == Some(0) {
+    if exit_code == Some(0) {
         return None;
     }
     Some(
-        if native.exit_code == Some(2)
+        if exit_code == Some(2)
             && (native.stderr.contains("source admission:")
                 || native.stderr.contains("S0")
                 || native.stderr.contains("source expansion"))

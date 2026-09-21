@@ -289,22 +289,6 @@ pub(super) fn execute(
 }
 
 fn executable(path: &Path) -> Result<PathBuf, Error> {
-    if path.components().count() != 1 || path.is_absolute() {
-        return std::path::absolute(path).map_err(Error::Io);
-    }
-    std::env::var_os("PATH")
-        .and_then(|value| {
-            std::env::split_paths(&value)
-                .map(|directory| directory.join(path))
-                .find(|candidate| candidate.is_file())
-        })
-        .map(std::path::absolute)
-        .transpose()
-        .map_err(Error::Io)?
-        .ok_or_else(|| {
-            Error::Io(io::Error::new(
-                io::ErrorKind::NotFound,
-                format!("executable not found on PATH: {}", path.display()),
-            ))
-        })
+    let search_path = std::env::var_os("PATH");
+    zetesis_validation::process::resolve_executable(path, search_path.as_deref()).map_err(Error::Io)
 }

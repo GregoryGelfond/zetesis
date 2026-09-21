@@ -1,7 +1,18 @@
 # zetesis-validation
 
-Reusable corpus integrity checks, bounded process capture and reported-answer
-comparison, with three command adapters:
+Reusable corpus integrity checks, bounded process capture, reported-answer
+comparison and performance measurements. The main command provides:
+
+| Command | Purpose |
+|---|---|
+| `zetesis test corpus` | Compare the maintained corpus with clingo. |
+| `zetesis test backend` | Check a device against known complete answer families. |
+| `zetesis bench corpus` | Measure ordinary solver processes. |
+| `zetesis bench compare` | Compare retained measurement reports. |
+
+See the [command guide](../../docs/book/reference/commands.md) for these interfaces.
+The following compatibility tools remain available; the detailed examples below
+also cover their source-integrity and selected-upstream capabilities:
 
 | Command | Purpose |
 |---|---|
@@ -61,6 +72,13 @@ parsing JSON. `Report::to_json` supplies the fallible schema-1 presentation view
 publication belongs to the caller. A rendering failure does not alter the
 retained comparison decision. See [the corpus API](src/corpus_comparison.rs) and
 its [direct-consumer tests](tests/corpus_comparison.rs).
+
+`CaseResult::native_exit` and `reference_exit` retain both the exit code and, on
+Unix, the terminating signal. The JSON view preserves `exit_code` and adds
+`exit_signal`; a missing reaped exit is distinct from signal termination.
+`process::resolve_executable` accepts an explicit search path and is shared by
+the command adapters. The corpus compatibility workflow supplies the ambient
+PATH anew for each invocation; the benchmark adapter resolves it once per run.
 
 ## Understand answer parity
 

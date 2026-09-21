@@ -25,8 +25,12 @@ pub(crate) fn validate_combination(options: &SolveConfig) -> Result<(), SolveErr
     if options.oracle == Oracle::Countermodel {
         validate_countermodel(options)?;
     }
-    // Each assigned worker is admitted at the full per-closure allowance, so
-    // the collective ceiling must hold the product before a session starts.
+    Ok(())
+}
+
+fn validate_closure_reservation(options: &SolveConfig) -> Result<(), SolveError> {
+    // Preserve the conservative reservation for every CPU closure variant.
+    // Formula execution and device closures have their own resource contracts.
     let workers = options.workers.get();
     if workers
         .checked_mul(options.max_closure_bytes)
@@ -291,6 +295,7 @@ impl Executor {
         observations: &mut impl ExecutionSink,
         phases: &Recorder,
     ) -> Result<Self, SolveError> {
+        validate_closure_reservation(options)?;
         let oracle = BatchOracle::new(options.workers, options.batch_size)
             .map_err(SolveError::Batch)?
             .with_closure_storage_limit(options.max_closure_batch_bytes)

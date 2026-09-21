@@ -80,6 +80,7 @@ fn active_cancellation_retains_the_stopped_producer() {
         });
         assert!(observed_start, "fixture never entered its active wait");
         assert!(report.cancelled());
+        assert!(!report.passed());
         assert_eq!(report.cases().len(), 1);
         assert_eq!(
             report.cases()[0].decision(),
@@ -92,7 +93,14 @@ fn active_cancellation_retains_the_stopped_producer() {
         };
         let capture = &view["cases"][0][field];
         assert_eq!(capture["status"], "cancelled");
-        assert_eq!(capture["stdout"], "partial");
+        // The marker establishes the producer's write, not pipe-read admission.
+        // Cancellation stops polling before another read; an empty admitted
+        // prefix is valid even when the pipe still holds the complete payload.
+        assert!("partial".starts_with(capture["stdout"].as_str().unwrap()));
+        assert_eq!(capture["stderr"], "");
+        assert!(capture["exit_code"].is_null());
+        assert_eq!(capture["exit_signal"], 9);
+        assert!(capture["capture_failure"].is_null());
         assert!(capture["pending_child_id"].is_null());
         assert!(capture["cleanup_failure"].is_null());
         if producer == Producer::Reference {

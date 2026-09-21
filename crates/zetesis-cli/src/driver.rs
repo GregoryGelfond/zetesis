@@ -236,7 +236,7 @@ impl fmt::Display for RunError {
                 max_closure_batch_bytes,
             } => write!(
                 f,
-                "--workers {workers} at --max-closure-bytes {max_closure_bytes} need {} bytes, above --max-closure-batch-bytes {max_closure_batch_bytes}; use fewer workers, a smaller allowance, or a larger collective ceiling",
+                "--threads {workers} at --max-closure-bytes {max_closure_bytes} need {} bytes, above --max-closure-batch-bytes {max_closure_batch_bytes}; use fewer threads, a smaller allowance, or a larger collective ceiling",
                 (*workers as u128) * (*max_closure_bytes as u128)
             ),
             Self::SharedCpu(cause) => cause.fmt(f),

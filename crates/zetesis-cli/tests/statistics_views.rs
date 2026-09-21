@@ -10,6 +10,9 @@ use zetesis_cli::{
 use zetesis_cpu::Control;
 use zetesis_presentation::Layout;
 
+#[path = "support/bounded_writer.rs"]
+mod bounded_writer;
+
 fn solve(source: &str, arguments: &[&str], stats: bool) -> (Options, PublicationOutcome) {
     let mut options = Options::try_parse_from(
         ["zetesis", "--workers", "1", "--models", "0"]
@@ -135,4 +138,188 @@ fn recorded_zero_does_not_become_unavailable() {
         Some("0")
     );
     assert!(value(&text, "Recorded execution").starts_with("unavailable"));
+}
+
+#[test]
+fn shared_work_keeps_distinct_operation_counts() {
+    let (options, outcome) = solve("{a}. {b}.", &["--source-batching", "worlds"], true);
+    let semantic = outcome.semantic();
+    let execution = semantic.shared_execution().unwrap();
+    assert!(execution.source_work > 0);
+    assert!(execution.world_work > 0);
+    let text = render(&SolveConfig::from(&options), Some(semantic));
+    assert_eq!(
+        value(&text, "Recorded execution"),
+        "CPU shared lazy closure"
+    );
+    for (label, expected) in [
+        ("Shared source work", execution.source_work),
+        ("Shared world work", execution.world_work),
+    ] {
+        assert_eq!(
+            value(&text, label).split_whitespace().next().unwrap(),
+            expected.to_string()
+        );
+    }
+    assert!(!text.contains("Closure tuple probes"));
+    assert!(!text.contains("GPU decoded work"));
+}
+
+#[test]
+fn eager_closure_work_does_not_claim_tuple_probes() {
+    let (options, outcome) = solve("{a}. {b}.", &["--grounder", "eager"], true);
+    let semantic = outcome.semantic();
+    let execution = semantic.closure_execution().unwrap();
+    assert_eq!(execution.route, zetesis_cli::ClosureRoute::Eager);
+    assert!(execution.work > 0);
+    let text = render(&SolveConfig::from(&options), Some(semantic));
+    assert_eq!(
+        value(&text, "Recorded execution"),
+        "CPU independent eager closure"
+    );
+    assert!(value(&text, "Closure work").contains("eager scan units; completed checks only"));
+    assert!(!text.contains("Closure tuple probes"));
+}
+
+#[test]
+fn positive_execution_is_named_from_its_certificate() {
+    let (options, outcome) = solve(
+        "a. b:-a. a:-b. #minimize{2@3,k:b;1@1,k:a}.",
+        &["--grounder", "eager", "--search", "clauses"],
+        true,
+    );
+    let semantic = outcome.semantic();
+    let certified = semantic
+        .countermodel_statistics()
+        .unwrap()
+        .certified
+        .unwrap();
+    assert!(matches!(
+        certified.plan,
+        Some(zetesis_sat::CertificatePlanStatistics::Positive(_))
+    ));
+    assert!(certified.checks > 0);
+    let text = render(&SolveConfig::from(&options), Some(semantic));
+    assert_eq!(
+        value(&text, "Recorded execution"),
+        "CPU native formula (positive consequences)"
+    );
+}
+
+#[test]
+fn objective_work_preserves_the_recorded_count() {
+    let (options, outcome) = solve("a. #minimize{2@3,k:a}.", &[], true);
+    let semantic = outcome.semantic();
+    let text = render(&SolveConfig::from(&options), Some(semantic));
+    let objective = semantic.incumbent().unwrap();
+    assert!(objective.work > 0);
+    assert_eq!(
+        value(&text, "Objective evaluation work")
+            .split_whitespace()
+            .next()
+            .unwrap(),
+        objective.work.to_string()
+    );
+}
+
+#[test]
+fn batched_cpu_completion_does_not_claim_device_work() {
+    let (options, outcome) = solve(
+        "a|b.",
+        &[
+            "--oracle",
+            "countermodel",
+            "--search",
+            "clauses",
+            "--completion-workers",
+            "2",
+        ],
+        true,
+    );
+    let semantic = outcome.semantic();
+    let execution = semantic.formula_execution().unwrap();
+    assert!(execution.adapter.is_empty());
+    assert!(execution.completion.entered > 0);
+    let text = render(&SolveConfig::from(&options), Some(semantic));
+    assert_eq!(
+        value(&text, "Recorded execution"),
+        "CPU batched formula completion"
+    );
+    assert_eq!(
+        value(&text, "Host completion attempts")
+            .split_whitespace()
+            .next()
+            .unwrap(),
+        execution.completion.entered.to_string()
+    );
+    assert!(!text.contains("GPU submitted candidates"));
+    assert!(!text.contains("GPU decoded work"));
+}
+
+#[test]
+fn grounding_rows_preserve_the_measured_rule_scope() {
+    let (options, outcome) = solve(
+        "d(1..3). {p(X)}:-d(X). #minimize{X:p(X)}.",
+        &["--grounder", "eager", "--formula-joins", "table"],
+        true,
+    );
+    let config = SolveConfig::from(&options);
+    let timings = outcome.report().unwrap().phase_timings.as_ref().unwrap();
+    let rules = timings
+        .grounding
+        .get(zetesis_cli::GroundingPhase::RuleInstantiation)
+        .unwrap();
+    let view = Statistics {
+        requested: &config,
+        timings,
+        semantic: Some(outcome.semantic()),
+        publication: Some(outcome.publication()),
+        failed: false,
+    };
+    let mut output = Vec::new();
+    view.write_human(
+        &mut output,
+        Layout::new(NonZeroUsize::new(256).unwrap(), ColorMode::Never),
+    )
+    .unwrap();
+    let text = String::from_utf8(output).unwrap();
+    for (label, recorded) in [
+        ("Rule join probes", rules.work.join_probes),
+        ("Rule table preparations", rules.work.table_preparations),
+        ("Rule table reuses", rules.work.table_reuses),
+        ("Rule table probes", rules.work.table_probes),
+    ] {
+        let row = value(&text, label);
+        assert_eq!(
+            row.split_whitespace().next().unwrap(),
+            recorded.map_or_else(|| "unavailable".into(), |count| count.to_string())
+        );
+        assert!(row.contains("eager formula rule instantiation only"));
+    }
+}
+
+#[test]
+fn statistics_writer_failure_preserves_its_prefix() {
+    let (options, outcome) = solve("a.", &[], true);
+    let config = SolveConfig::from(&options);
+    let view = Statistics {
+        requested: &config,
+        timings: outcome.report().unwrap().phase_timings.as_ref().unwrap(),
+        semantic: Some(outcome.semantic()),
+        publication: Some(outcome.publication()),
+        failed: false,
+    };
+    let layout = Layout::new(NonZeroUsize::new(80).unwrap(), ColorMode::Always);
+    let mut expected = Vec::new();
+    view.write_human(&mut expected, layout).unwrap();
+    for capacity in [0, expected.len() / 2, expected.len() - 1] {
+        let mut output = bounded_writer::BoundedWriter::new(capacity);
+        let error = view.write_human(&mut output, layout).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::BrokenPipe);
+        assert_eq!(output.bytes(), &expected[..capacity]);
+    }
+    assert_eq!(
+        outcome.semantic().completion(),
+        Some(zetesis_cli::Completion::Exhausted)
+    );
 }

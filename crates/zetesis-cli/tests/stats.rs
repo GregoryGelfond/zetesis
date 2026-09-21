@@ -385,7 +385,7 @@ fn statistics_print_expansion_usage_beside_its_ceilings() {
 }
 
 #[test]
-fn an_inconsistent_closure_reservation_is_refused_before_any_work() {
+fn cpu_closure_refuses_an_oversized_reservation() {
     // At the reference allowance the collective ceiling is the library's.
     let mut configured = options(&["--stats", "--memory", "2147483648"]);
     configured.workers = std::num::NonZeroUsize::new(5).unwrap();
@@ -401,7 +401,7 @@ fn an_inconsistent_closure_reservation_is_refused_before_any_work() {
     )
     .unwrap_err();
     let text = error.to_string();
-    assert!(text.contains("--workers 5"), "{text}");
+    assert!(text.contains("--threads 5"), "{text}");
     assert!(text.contains("--max-closure-bytes 134217728"), "{text}");
     assert!(
         text.contains("--max-closure-batch-bytes 536870912"),

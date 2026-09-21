@@ -292,10 +292,15 @@ per-candidate allowance, the required envelope is
 `S + sum(idle R_i) + sum(assigned max(R_i, L - P))`. Every assigned workspace
 requires `L >= P`. The cache's own header, including the inline prepared-query
 owner, is bookkeeping outside the ceiling, like allocator metadata, so the
-envelope never exceeds `workers * L`: that product is what
-`SolveConfig::validate` checks before a session starts, and the command derives
-`L` as each worker's share of the collective ceiling when `--max-closure-bytes`
-is not given. At most `min(submitted candidates, worker count)` workspaces are
+envelope never exceeds `workers * L`: CPU closure setup checks that product
+before allocating its pool, compiling static rules or initializing candidates.
+This conservative guard also covers eager and shared CPU closure execution;
+formula and device routes apply their own resource checks instead.
+`SolveConfig::validate` checks representation-independent policies. With valid
+policies, an already cancelled session stops before executor resource checks.
+The command derives `L` as each worker's share of the collective ceiling when
+`--max-closure-bytes` is not given. At most
+`min(submitted candidates, worker count)` workspaces are
 assigned, each to a contiguous candidate range; candidates inside one range run
 sequentially. An empty batch admits only retained collective capacity and does
 not prepare a program. Returned models, input seeds, worker stacks and
