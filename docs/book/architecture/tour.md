@@ -11,16 +11,16 @@ Its answer sets are `{a}` and `{b}`. The complete world view is therefore
 
 ```sh
 cargo run --locked -p zetesis-cli --no-default-features --bin zetesis -- \
-  docs/book/examples/choices.lp --backend cpu --models 0
+  solve docs/book/examples/choices.lp --device cpu --all
 ```
 
 An installed executable can use the same source path and options:
 
 ```sh
-zetesis docs/book/examples/choices.lp --backend cpu --models 0
+zetesis solve docs/book/examples/choices.lp --device cpu --all
 ```
 
-The two answers may appear in either order. `--models 0` requests exhaustive
+The two answers may appear in either order. `--all` requests exhaustive
 enumeration; stopping after the first answer does not establish the complete
 family. The [Rust session example](../rust/sessions.md) checks these exact two
 full interpretations and `Completion::Exhausted`, then repeats the collection
