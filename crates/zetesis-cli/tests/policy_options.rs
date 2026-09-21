@@ -158,10 +158,7 @@ fn byte_ceilings_are_the_library_defaults_scaled_by_the_memory_allowance() {
     let reference = SolveConfig::from(
         &Options::try_parse_from(["zetesis", "--workers", "4", "--memory", "2147483648"]).unwrap(),
     );
-    assert_eq!(
-        format!("{reference:?}"),
-        format!("{:?}", SolveConfig::DEFAULT)
-    );
+    assert_eq!(reference, SolveConfig::DEFAULT);
     let doubled = SolveConfig::from(
         &Options::try_parse_from(["zetesis", "--workers", "4", "--memory", "4294967296"]).unwrap(),
     );

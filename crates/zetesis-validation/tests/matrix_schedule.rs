@@ -2,7 +2,7 @@
 use std::num::NonZeroUsize;
 use zetesis_validation::performance::{
     Phase,
-    matrix::{Plan, Producer, Suite},
+    matrix::{Plan, Producer, ReferencePolicy, Suite},
 };
 use zetesis_validation::selected::{Backend, Grounder, NativeExecution};
 
@@ -88,6 +88,7 @@ fn memory_rounds_follow_the_timed_rounds() {
 
 #[test]
 fn reference_census_precedes_native_census() {
+    assert_eq!(plan(1).reference_policy(), ReferencePolicy::AllPhases);
     let slots = plan(1).slots(6).unwrap();
     assert!(
         slots[..30]
@@ -100,6 +101,68 @@ fn reference_census_precedes_native_census() {
             .all(|row| row[0].producer == Producer::Reference)
     );
     assert_eq!(slots.len(), 6 * 5 * 5);
+}
+
+#[test]
+fn qualification_only_omits_reference_measurements() {
+    let plan = plan(4)
+        .with_memory(2)
+        .unwrap()
+        .with_reference(ReferencePolicy::QualificationOnly);
+    let slots = plan.slots(2).unwrap();
+    let reference: Vec<_> = slots
+        .iter()
+        .filter(|slot| slot.producer == Producer::Reference)
+        .collect();
+    assert_eq!(reference.len(), 2);
+    assert!(
+        reference
+            .iter()
+            .all(|slot| slot.phase == Phase::Qualification)
+    );
+    assert_eq!(slots.len(), 2 * (5 + 4 * (3 + 4 + 2)));
+    for case in 0..2 {
+        for profile in 0..4 {
+            assert_eq!(
+                slots
+                    .iter()
+                    .filter(
+                        |slot| slot.case == case && slot.producer == Producer::Native { profile }
+                    )
+                    .count(),
+                10
+            );
+        }
+    }
+    assert_eq!(
+        serde_json::to_value(plan).unwrap()["reference_policy"],
+        "qualification_only"
+    );
+}
+
+#[test]
+fn qualification_only_balances_native_positions() {
+    let slots = plan(8)
+        .with_reference(ReferencePolicy::QualificationOnly)
+        .slots(3)
+        .unwrap();
+    for case in 0..3 {
+        let timed: Vec<_> = slots
+            .iter()
+            .filter(|slot| slot.case == case && slot.phase == Phase::Timed)
+            .collect();
+        for position in 0..4 {
+            for profile in 0..4 {
+                assert_eq!(
+                    timed
+                        .chunks_exact(4)
+                        .filter(|round| round[position].producer == Producer::Native { profile })
+                        .count(),
+                    2
+                );
+            }
+        }
+    }
 }
 #[test]
 fn automatic_grounding_is_an_admitted_profile() {

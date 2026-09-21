@@ -1,7 +1,7 @@
 # Using the zetesis command
 
 The `zetesis` command solves answer-set programs, checks selected contracts and
-measures performance. Install it using the [repository instructions](../../../README.md#install-and-run).
+measures performance. Install it using the [repository instructions](https://github.com/GregoryGelfond/zetesis/blob/main/README.md#install-and-run).
 Installed commands do not require Cargo at runtime. Programs use the admitted
 [ASP language](language.md); these command examples are separate from the
 themelios library's source-representation examples.
@@ -81,6 +81,19 @@ matters. The reduct remains the criterion for accepting an answer.
 | `--time-limit DURATION` | No deadline when omitted; accepts whole seconds or `s`, `m`, `h`. |
 | `--memory-budget SIZE` | Host-based allowance for named storage; accepts bytes or `B`, `KiB`, `MiB`, `GiB`, `TiB`. |
 
+For a formula input, explicit `--grounder lazy` selects CPU hybrid grounding:
+the producer core is materialized, while eligible integrity constraints are
+checked from their admitted source families. Automatic formula admission remains
+eager. The first hybrid profile accepts `--device cpu` or `auto`, uses indexed
+joins and refuses objective declarations and table joins. Relational lazy
+closure retains its existing CPU and device routes.
+
+Hybrid statistics distinguish retained-core models from original answers accepted
+after complete constraint checks. The existing source work, substitution and
+scalar-byte options also set separate cumulative ceilings for constraint replay;
+admission and replay do not share one remaining allowance. A stopped check is
+incomplete, never an accepted answer or an UNSAT result.
+
 ```sh
 zetesis solve program.lp --device cpu --threads 4
 zetesis solve program.lp --device metal --grounder eager --all
@@ -147,7 +160,7 @@ shown channels, costs and the terminal outcome. Diagnostics and optional
 statistics remain on stderr; machine requests retain line-oriented statistics.
 A writer failure can leave a truncated document. Consumers must check the final
 outcome and process status rather than treat a valid prefix as a complete family.
-See the [CLI stream reference](../../../crates/zetesis-cli/README.md#results-and-presentation)
+See the [CLI stream reference](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cli/README.md#results-and-presentation)
 for the schema and publication boundary.
 
 For solving, exit `0` means that the requested run completed, `2` reports an
@@ -280,6 +293,55 @@ Omitting `--zetesis` measures this installed executable through its explicit
 interface for retained binaries; add `--native-interface solve` for another
 modern executable. The report retains the actual argument sequences.
 
+`--compare-grounders` requests eager and lazy profiles of the same native
+executable, with identical device, worker, batch and completion settings. It
+conflicts with an explicit `--grounder`. Clingo supplies one complete
+qualification census per case; only the two native profiles have warmup,
+timing and RSS rounds. These reports therefore contain no clingo timing or
+memory comparison. Without this option, the existing single-profile campaign
+continues to measure clingo in every phase.
+
+```sh
+zetesis bench corpus examples/kr-domains --suite queens --device cpu \
+  --threads 1 --compare-grounders --repetitions 4 --memory-runs 2 \
+  --report grounding-comparison.json
+```
+
+All native populations must agree on complete full-model identities as well as
+the selected outputs and costs qualified by clingo. Lazy formula execution
+records the eager retained core and streamed constraint checks separately.
+Deferring constraints can increase core enumeration work, so a refusal or a
+slower lazy result is a meaningful result of the comparison. Four timed rounds
+balance the rotating eager/lazy order; RSS rounds remain separate.
+
+For hybrid formula execution, the grounding interval covers initial support and
+core admission. Streamed constraint checks occur during solving and are included
+in `original_validation`. The initial grounding time alone therefore does not
+measure all source evaluation work. Compare complete solve time, storage and
+the separate constraint-work counters as well.
+
+For a smaller fixed population, the maintained
+[grounding comparison example](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-validation/examples/grounding_comparison.rs)
+uses the same typed matrix API. It prepares queens variants 01 and 03 at n=4/5,
+variant 02 at n=4 as a control for lost early constraint pruning, and variant 06
+at n=4 whose scoped constraints remain eager. Generated monotone choices at
+n=6 and redundant transitivity at n=8/12 provide additional pruning and storage
+controls. Workload constructors retain source identities and leave the corpus
+unchanged. Neither those labels nor successful qualification predicts a speedup.
+
+```sh
+cargo run --release -p zetesis-validation --example grounding_comparison -- \
+  --zetesis /absolute/path/to/zetesis --clingo /absolute/path/to/clingo \
+  --helper /absolute/path/to/zetesis --workers 1 \
+  --report grounding-small.json > grounding-small-summary.json
+```
+
+The native and helper paths must name the current zetesis executable. The
+example uses one warmup, four timed rounds and two separate RSS rounds per
+native profile, a ten-second child timeout and a 180-second campaign deadline.
+All 153 planned positions are retained, including nine qualification-only
+clingo invocations. A nonpass exits unsuccessfully after publishing the evidence.
+
 ## Measure primitives
 
 Primitive measurements compare matched operations and qualified result batches.
@@ -319,7 +381,7 @@ The current primitive command requires a build with the `gpu` feature, including
 when selecting a CPU primitive profile. CPU-only builds explicitly refuse this
 command; corpus measurements and saved-report comparison remain available.
 The compatibility `zetesis-bench` executable retains its other legacy experiment
-profiles and views, documented in the [experiment library](../../../crates/zetesis-experiments/README.md).
+profiles and views, documented in the [experiment library](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-experiments/README.md).
 
 ## Compare reports and consume machine output
 

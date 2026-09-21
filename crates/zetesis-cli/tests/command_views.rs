@@ -93,6 +93,34 @@ fn requested_json_contains_machine_statistics() {
 }
 
 #[test]
+fn explicit_lazy_formula_publishes_checked_original_answers() {
+    let result = solve(
+        "a|b. {hidden}. :- b. #show a/0.",
+        &["--grounder", "lazy", "--json", "--stats"],
+    );
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let document: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(document["statistics"]["hybrid_execution"]["accepted"], 2);
+    assert_eq!(document["statistics"]["hybrid_execution"]["rejected"], 2);
+    let answers = zetesis_validation::answers::native_json::parse(
+        &result.stdout,
+        zetesis_validation::answers::native_json::Limits::default(),
+    )
+    .unwrap();
+    assert_eq!(
+        answers.full_model_symbols(65_536).unwrap(),
+        vec![
+            vec!["a".to_owned()],
+            vec!["a".to_owned(), "hidden".to_owned()],
+        ]
+    );
+}
+
+#[test]
 fn solve_statistics_are_absent_by_default() {
     let result = solve("a.", &["--json"]);
     assert!(result.status.success());

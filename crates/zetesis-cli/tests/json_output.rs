@@ -1014,7 +1014,7 @@ fn setup_refusals_have_unavailable_coverage() {
         (
             "a.",
             vec!["--oracle", "countermodel", "--grounder", "lazy"],
-            "unsupported_oracle",
+            "hybrid_backend",
         ),
         ("p(.", vec!["--grounder", "lazy"], "expansion"),
         ("p(.", vec!["--oracle", "countermodel"], "formula_admission"),
@@ -1032,6 +1032,9 @@ fn setup_refusals_have_unavailable_coverage() {
         ),
     ] {
         let mut configured = options(&extra);
+        if kind == "hybrid_backend" {
+            configured.backend = zetesis_cli::Backend::Metal;
+        }
         if kind == "expansion" {
             configured.backend = zetesis_cli::Backend::Nvidia;
         }

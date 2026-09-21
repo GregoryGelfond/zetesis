@@ -136,7 +136,14 @@ fn interruption(
     if !interruption.is_null()
         && (!matches!(
             interruption["kind"].as_str(),
-            Some("preparation" | "oracle" | "countermodel" | "objective" | "incumbent")
+            Some(
+                "preparation"
+                    | "oracle"
+                    | "countermodel"
+                    | "constraint"
+                    | "objective"
+                    | "incumbent"
+            )
         ) || interruption["code"].as_str().is_none_or(str::is_empty)
             || interruption["detail"].as_str().is_none())
     {

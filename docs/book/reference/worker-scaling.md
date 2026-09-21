@@ -181,14 +181,14 @@ comparison retains its original timestamps.
 
 | Backend | Workers | Maintained comparison | All 94 cases |
 | --- | ---: | --- | --- |
-| CPU | 1 | [JSON](observations/workers-687f0d0b-cpu-1.json) | [tables](observations/workers-687f0d0b-cpu-1-tables.md) |
-| CPU | 2 | [JSON](observations/workers-687f0d0b-cpu-2.json) | [tables](observations/workers-687f0d0b-cpu-2-tables.md) |
-| CPU | 4 | [JSON](observations/workers-687f0d0b-cpu-4.json) | [tables](observations/workers-687f0d0b-cpu-4-tables.md) |
-| CPU | 14 | [JSON](observations/workers-687f0d0b-cpu-14.json) | [tables](observations/workers-687f0d0b-cpu-14-tables.md) |
-| Metal | 1 | [JSON](observations/workers-687f0d0b-metal-1.json) | [tables](observations/workers-687f0d0b-metal-1-tables.md) |
-| Metal | 2 | [JSON](observations/workers-687f0d0b-metal-2.json) | [tables](observations/workers-687f0d0b-metal-2-tables.md) |
-| Metal | 4 | [JSON](observations/workers-687f0d0b-metal-4.json) | [tables](observations/workers-687f0d0b-metal-4-tables.md) |
-| Metal | 14 | [JSON](observations/workers-687f0d0b-metal-14.json) | [tables](observations/workers-687f0d0b-metal-14-tables.md) |
+| CPU | 1 | [JSON](observations/workers-687f0d0b-cpu-1.json) | [tables](https://github.com/GregoryGelfond/zetesis/blob/main/docs/book/reference/observations/workers-687f0d0b-cpu-1-tables.md) |
+| CPU | 2 | [JSON](observations/workers-687f0d0b-cpu-2.json) | [tables](https://github.com/GregoryGelfond/zetesis/blob/main/docs/book/reference/observations/workers-687f0d0b-cpu-2-tables.md) |
+| CPU | 4 | [JSON](observations/workers-687f0d0b-cpu-4.json) | [tables](https://github.com/GregoryGelfond/zetesis/blob/main/docs/book/reference/observations/workers-687f0d0b-cpu-4-tables.md) |
+| CPU | 14 | [JSON](observations/workers-687f0d0b-cpu-14.json) | [tables](https://github.com/GregoryGelfond/zetesis/blob/main/docs/book/reference/observations/workers-687f0d0b-cpu-14-tables.md) |
+| Metal | 1 | [JSON](observations/workers-687f0d0b-metal-1.json) | [tables](https://github.com/GregoryGelfond/zetesis/blob/main/docs/book/reference/observations/workers-687f0d0b-metal-1-tables.md) |
+| Metal | 2 | [JSON](observations/workers-687f0d0b-metal-2.json) | [tables](https://github.com/GregoryGelfond/zetesis/blob/main/docs/book/reference/observations/workers-687f0d0b-metal-2-tables.md) |
+| Metal | 4 | [JSON](observations/workers-687f0d0b-metal-4.json) | [tables](https://github.com/GregoryGelfond/zetesis/blob/main/docs/book/reference/observations/workers-687f0d0b-metal-4-tables.md) |
+| Metal | 14 | [JSON](observations/workers-687f0d0b-metal-14.json) | [tables](https://github.com/GregoryGelfond/zetesis/blob/main/docs/book/reference/observations/workers-687f0d0b-metal-14-tables.md) |
 
 Each backend uses A1, B1, B2, A2. A1/B1 visit workers 1, 2, 4, 14; B2/A2 reverse
 that worker order. Fourteen was the observed host default. Each leg has one

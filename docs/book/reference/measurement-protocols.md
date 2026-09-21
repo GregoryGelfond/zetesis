@@ -129,7 +129,7 @@ and a scoreboard against the reference solver per report and profile, whose
 parts the validation crate's README describes. The
 [comparison guide](https://github.com/GregoryGelfond/zetesis/blob/main/scripts/README-comparison.md#the-fixed-series)
 gives the commands. Retained series comparisons live beside the other
-[recorded observations](observations/README.md).
+[recorded observations](https://github.com/GregoryGelfond/zetesis/blob/main/docs/book/reference/observations/README.md).
 
 ## Performance evidence
 
@@ -186,15 +186,15 @@ rendering and capture remain included.
 
 | Case | Previous zetesis, ms | Current zetesis, ms | clingo, ms |
 | --- | ---: | ---: | ---: |
-| [Queens 1, N=8](../../../examples/kr-domains/standalone/n-queens/variant-01.lp) | 9.224–9.237 | 9.225–9.239 | 6.160–6.187 |
-| [Queens 2, N=8](../../../examples/kr-domains/standalone/n-queens/variant-02.lp) | 93.551–93.741 | 92.266–93.555 | 123.634–125.123 |
-| [Queens 3, N=8](../../../examples/kr-domains/standalone/n-queens/variant-03.lp) | 9.325–9.338 | 9.323–9.336 | 6.192–6.227 |
-| [Queens 4, N=8](../../../examples/kr-domains/standalone/n-queens/variant-04.lp) | 7.726–7.751 | 7.732–7.753 | 6.157–6.164 |
-| [Queens 5, N=8](../../../examples/kr-domains/standalone/n-queens/variant-05.lp) | 10.733–10.743 | 10.735–10.737 | 6.153–6.169 |
-| [Queens 6, N=8](../../../examples/kr-domains/standalone/n-queens/variant-06.lp) | 12.236–12.256 | 12.251–12.253 | 6.158–6.173 |
-| [SEND + MORE = MONEY](../../../examples/kr-domains/standalone/send-money/send-money.lp) | 40.658–40.839 | 39.393–40.830 | 12.230–13.759 |
-| [Task allocation: scheduling](../../../examples/kr-domains/scenarios/task-allocation/variant-04/05-larger-mix.lp) | 123.917–126.926 | 123.913–131.220 | 185.434–194.311 |
-| [Shortest path: layered DAG](../../../examples/kr-domains/scenarios/shortest-path/variant-01/06-layered-dag.lp) | 7.884–7.888 | 7.842–7.852 | 6.188–6.241 |
+| [Queens 1, N=8](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/standalone/n-queens/variant-01.lp) | 9.224–9.237 | 9.225–9.239 | 6.160–6.187 |
+| [Queens 2, N=8](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/standalone/n-queens/variant-02.lp) | 93.551–93.741 | 92.266–93.555 | 123.634–125.123 |
+| [Queens 3, N=8](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/standalone/n-queens/variant-03.lp) | 9.325–9.338 | 9.323–9.336 | 6.192–6.227 |
+| [Queens 4, N=8](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/standalone/n-queens/variant-04.lp) | 7.726–7.751 | 7.732–7.753 | 6.157–6.164 |
+| [Queens 5, N=8](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/standalone/n-queens/variant-05.lp) | 10.733–10.743 | 10.735–10.737 | 6.153–6.169 |
+| [Queens 6, N=8](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/standalone/n-queens/variant-06.lp) | 12.236–12.256 | 12.251–12.253 | 6.158–6.173 |
+| [SEND + MORE = MONEY](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/standalone/send-money/send-money.lp) | 40.658–40.839 | 39.393–40.830 | 12.230–13.759 |
+| [Task allocation: scheduling](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/scenarios/task-allocation/variant-04/05-larger-mix.lp) | 123.917–126.926 | 123.913–131.220 | 185.434–194.311 |
+| [Shortest path: layered DAG](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/scenarios/shortest-path/variant-01/06-layered-dag.lp) | 7.884–7.888 | 7.842–7.852 | 6.188–6.241 |
 
 These results do not demonstrate a broad application speedup from the columnar
 integration. Most differences are small; one current task-allocation block is
@@ -301,10 +301,10 @@ are not confidence intervals.
 
 | Case | zetesis `3afaf719`, ms | zetesis `0d287734`, ms | Direct clingo, ms |
 | --- | ---: | ---: | ---: |
-| [Queens 2, N=8](../../../examples/kr-domains/standalone/n-queens/variant-02.lp) | 93.173–93.467 | 94.042–94.846 | 126.297–127.296 |
-| [SEND + MORE = MONEY](../../../examples/kr-domains/standalone/send-money/send-money.lp) | 40.301–40.653 | 40.719–41.735 | 13.050–14.131 |
-| [Task allocation: scheduling](../../../examples/kr-domains/scenarios/task-allocation/variant-04/05-larger-mix.lp) | 125.165–126.981 | 128.198–129.724 | 184.024–192.129 |
-| [Shortest path: layered DAG](../../../examples/kr-domains/scenarios/shortest-path/variant-01/06-layered-dag.lp) | 7.933–7.936 | 7.939–8.003 | 6.567–6.598 |
+| [Queens 2, N=8](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/standalone/n-queens/variant-02.lp) | 93.173–93.467 | 94.042–94.846 | 126.297–127.296 |
+| [SEND + MORE = MONEY](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/standalone/send-money/send-money.lp) | 40.301–40.653 | 40.719–41.735 | 13.050–14.131 |
+| [Task allocation: scheduling](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/scenarios/task-allocation/variant-04/05-larger-mix.lp) | 125.165–126.981 | 128.198–129.724 | 184.024–192.129 |
+| [Shortest path: layered DAG](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/scenarios/shortest-path/variant-01/06-layered-dag.lp) | 7.933–7.936 | 7.939–8.003 | 6.567–6.598 |
 
 Separate child peak-RSS observations use three fresh runs per block, giving
 six observations per native revision/case and twelve for clingo. The ranges
@@ -376,7 +376,8 @@ native records in all 12 paired passing positions. The other 36 native
 positions remain unavailable. Comparisons with clingo concern displayed-model
 multisets, costs and optimum ties; hidden clingo interpretations are unavailable.
 
-Explicit lazy execution remains unsupported for these six formula encodings.
+Explicit lazy execution was unsupported for these six formula encodings in the
+measured revisions; these records do not qualify the later hybrid profile.
 At N=10, variant 02 reaches the native countermodel work ceiling before
 publishing an answer. Variants 05/06 reach the measurement harness's 4 MiB
 capture ceiling; that does not establish a solver scalability limit. A larger

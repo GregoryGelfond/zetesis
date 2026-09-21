@@ -10,6 +10,9 @@ mod tight_tests;
 #[path = "matrix_residual_telemetry.rs"]
 mod residual_tests;
 
+#[path = "matrix_hybrid_telemetry.rs"]
+mod hybrid_tests;
+
 #[test]
 fn actual_cpu_route_remains_distinct_from_requested_metal() {
     let (document, text) = fixture();

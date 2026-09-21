@@ -389,7 +389,7 @@ fn incomplete_oracle_limits_do_not_switch_algorithms_or_claim_unsatisfiable() {
 }
 
 #[test]
-fn automatic_formula_selection_preserves_explicit_hardware_and_grounder_requests() {
+fn hybrid_formula_refuses_unavailable_device_routes() {
     for backend in [
         Backend::Gpu,
         Backend::Metal,
@@ -403,19 +403,7 @@ fn automatic_formula_selection_preserves_explicit_hardware_and_grounder_requests
         configured.grounder = Grounder::Lazy;
         assert!(matches!(
             assert_refused_without_output("1 {a;b} 1.", &configured),
-            RunError::UnsupportedOracle { backend: requested, .. } if requested == backend
-        ));
-    }
-    for oracle in [Oracle::Auto, Oracle::Countermodel] {
-        let mut configured = options(&[]);
-        configured.oracle = oracle;
-        configured.grounder = Grounder::Lazy;
-        assert!(matches!(
-            assert_refused_without_output("1 {a;b} 1.", &configured),
-            RunError::UnsupportedOracle {
-                grounder: Grounder::Lazy,
-                ..
-            }
+            RunError::HybridBackend { backend: requested } if requested == backend
         ));
     }
 }

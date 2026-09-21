@@ -373,6 +373,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             shared_execution: None,
             closure_execution: None,
             query_execution: None,
+            hybrid_execution: None,
             formula_execution: self
                 .models
                 .as_ref()

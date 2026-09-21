@@ -1,7 +1,7 @@
 //! Automatic routing preserves choice groups, observed ties and objective slots.
 
 use clap::Parser;
-use zetesis_cli::{Backend, Completion, Grounder, Options, Report, RunError, run_with_diagnostics};
+use zetesis_cli::{Backend, Completion, Options, Report, RunError, run_with_diagnostics};
 use zetesis_cpu::Control;
 use zetesis_themelios::{
     AdmissionFailure, ExpansionFailure, FormulaFailure, FormulaResource, ProfileFeature,
@@ -114,9 +114,8 @@ fn explicit_closure_refuses_interval_choices_without_emitting_answers() {
 }
 
 #[test]
-fn explicit_lazy_choice_routes_are_refused_before_device_discovery() {
-    for (arguments, backend) in [
-        (vec!["--grounder", "lazy"], Backend::Auto),
+fn explicit_lazy_device_choices_are_refused_before_discovery() {
+    for (arguments, expected) in [
         (
             vec!["--backend", "metal", "--grounder", "lazy"],
             Backend::Metal,
@@ -126,13 +125,11 @@ fn explicit_lazy_choice_routes_are_refused_before_device_discovery() {
             Backend::Nvidia,
         ),
     ] {
-        // This formula profile still requires eager grounding, independently of
-        // the relational lazy device capability.
+        // Hybrid formula checking is CPU-only, independently of the existing
+        // relational lazy device capability.
         let (result, output, diagnostics) = solve("1 {p(1..4)} 1.", &arguments);
         let error = result.expect_err("lazy choice route must be refused");
-        assert!(
-            matches!(error, RunError::UnsupportedOracle { backend: requested, grounder: Grounder::Lazy } if requested == backend)
-        );
+        assert!(matches!(error, RunError::HybridBackend { backend } if backend == expected));
         assert!(output.is_empty(), "{arguments:?}: {output}");
         assert!(diagnostics.is_empty(), "{arguments:?}: {diagnostics}");
     }

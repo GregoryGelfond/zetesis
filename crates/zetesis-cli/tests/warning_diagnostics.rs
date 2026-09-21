@@ -8,7 +8,7 @@ use std::{fs, io};
 use bounded_writer::BoundedWriter;
 use clap::Parser;
 use zetesis_cli::{
-    ColorMode, Completion, Options, Oracle, RunError, run_bundle_with_diagnostics,
+    ColorMode, Completion, Grounder, Options, Oracle, RunError, run_bundle_with_diagnostics,
     run_finalized_with_diagnostics, run_with_diagnostics,
 };
 use zetesis_cpu::Control;
@@ -102,8 +102,14 @@ fn explicit_guards_produce_no_admission_warning() {
 
 #[test]
 fn warning_writer_failure_stops_before_semantic_search() {
-    for color in [ColorMode::Never, ColorMode::Always] {
+    for (grounder, color) in [
+        (Grounder::Eager, ColorMode::Never),
+        (Grounder::Eager, ColorMode::Always),
+        (Grounder::Lazy, ColorMode::Never),
+        (Grounder::Lazy, ColorMode::Always),
+    ] {
         let mut options = options();
+        options.grounder = grounder;
         options.color = color;
         let (_, complete) = solve(SOURCE, &options);
         for capacity in [

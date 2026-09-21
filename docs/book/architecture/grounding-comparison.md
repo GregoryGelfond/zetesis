@@ -12,13 +12,15 @@ acceptance criterion.
 | --- | --- | --- |
 | clingo ordinary grounding | Selected source parts are instantiated and simplified into ground input for solving | Grounding of those selected parts in their parameter/incremental context |
 | zetesis eager formula | Possible support is completed and a finite atom catalog, shared formula DAG, objectives and observations are constructed | Source lowering and every relevant original formula/metadata obligation |
+| zetesis hybrid formula | Complete support, arithmetic admission and producer-core materialization precede source-constraint checks against core answers | Core answer membership and every streamed constraint for each accepted answer; complete core enumeration for exhaustion |
 | zetesis eager relational | A bounded complete graph is compiled explicitly from relational templates | The retained ground instances and graph identity |
 | zetesis lazy relational | Templates remain available; source joins generate instances during frozen-gate positive inference | Final closure coverage and constraints, plus separately complete candidate enumeration |
 
 These routes do not have equal language coverage. The
 [language reference](../reference/language.md) identifies the current profiles.
-General lazy formula grounding, including arbitrary bounded choice groups, is
-not yet implemented.
+The CPU hybrid formula profile retains bounded choices and other producers
+eagerly. It streams eligible ordinary constraints and currently refuses objectives
+and table joins. General demand-driven formula producers are not implemented.
 
 ![Grounding selected program parts produces retained solver input; lazy relational checking composes source joins with world-specific reduct rounds.](grounding-comparison.svg)
 
@@ -236,8 +238,8 @@ separates this borrowed view from the semantic narrowing law.
 The predicate/domain carrier can still contain many combinations, and seed
 enumeration can remain exponential in the number of open gate atoms. A small
 demanded catalog during one check does not establish that other choices are
-irrelevant. General formula grounding remains eager; this root-indexing change
-does not extend that language path to lazy execution.
+irrelevant. This relational root-indexing operation is separate from the formula
+profile's [hybrid constraint schedule](grounding.md#eager-and-lazy-execution).
 
 ## Hardware, memory, and comparisons
 

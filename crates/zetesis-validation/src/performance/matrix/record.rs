@@ -147,6 +147,29 @@ pub struct Observation {
     pub timing: Diagnostics,
     /// Actual execution metadata and measured device counters.
     pub execution: Execution,
+    /// Completed streamed-source checking, absent on ordinary eager/lazy routes.
+    /// Core search counters remain separate from original-program acceptance.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hybrid: Option<HybridStatistics>,
+}
+
+/// Completed hybrid source-checking receipt, independent of device execution.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub struct HybridStatistics {
+    /// Core answers consumed by the checker, including rejected ones.
+    pub core_answers: u64,
+    /// Original-program answers after checking all required constraints.
+    pub accepted: u64,
+    /// Core answers with an observed source-constraint violation.
+    pub rejected: u64,
+    /// Unfinished consumed checks; zero for a complete observation.
+    pub pending: u64,
+    /// Cumulative checker work, including its snapshot preparation.
+    pub work: u64,
+    /// Complete source substitutions visited by checks.
+    pub substitutions: u64,
+    /// Cumulative copied scalar payload, not retained memory or RSS.
+    pub scalar_bytes: u64,
 }
 impl Observation {
     /// Reconcile already-parsed native statistics with their captured text view.

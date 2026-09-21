@@ -124,6 +124,9 @@ pub struct CorpusOptions {
     /// Requested materialization policy.
     #[arg(long, value_enum, default_value_t)]
     pub grounder: Grounder,
+    /// Compare eager and lazy native profiles; clingo only qualifies complete answers.
+    #[arg(long, conflicts_with = "grounder")]
+    pub compare_grounders: bool,
     /// Native candidate/closure workers; auto uses at most four available threads.
     #[arg(long, alias = "workers", value_name = "auto|N", value_parser = crate::options::values::workers, default_value = "auto")]
     pub threads: NonZeroUsize,
@@ -205,21 +208,37 @@ impl CorpusOptions {
     /// # Errors
     /// Refuses worker counts, dimensions or schedules outside maintained bounds.
     pub fn plan(&self) -> Result<matrix::Plan, performance::Error> {
-        matrix::Plan::new(
+        let profile = selected::NativeExecution {
+            backend: self.device.into(),
+            grounder: self.grounder.into(),
+            workers: self.threads,
+            completion_workers: self.completion_workers,
+            batch_size: self.batch_size,
+            ..selected::NativeExecution::default()
+        };
+        let profiles = if self.compare_grounders {
+            [selected::Grounder::Eager, selected::Grounder::Lazy]
+                .map(|grounder| selected::NativeExecution {
+                    grounder,
+                    ..profile
+                })
+                .to_vec()
+        } else {
+            vec![profile]
+        };
+        let plan = matrix::Plan::new(
             self.suite.into(),
-            vec![selected::NativeExecution {
-                backend: self.device.into(),
-                grounder: self.grounder.into(),
-                workers: self.threads,
-                completion_workers: self.completion_workers,
-                batch_size: self.batch_size,
-                ..selected::NativeExecution::default()
-            }],
+            profiles,
             self.clingo_threads,
             self.warmups,
             self.repetitions,
         )?
-        .with_memory(self.memory_runs)
+        .with_memory(self.memory_runs)?;
+        Ok(if self.compare_grounders {
+            plan.with_reference(matrix::ReferencePolicy::QualificationOnly)
+        } else {
+            plan
+        })
     }
 
     /// Actual interface selection. Omission always exercises the explicit solve

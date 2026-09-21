@@ -28,8 +28,9 @@ default = ["gpu"]
 gpu = ["dep:zetesis-wgpu"]
 
 [[example]]
-name = "book-getting-started"
-path = "../../docs/book/examples/getting-started.rs"
+name = "solve"
+path = "examples/solve.rs"
+test = true
 
 [[example]]
 name = "book-session"
@@ -74,4 +75,9 @@ path = "../../docs/book/examples/measurements.rs"
 [[example]]
 name = "book-batch-executor"
 path = "../../docs/book/examples/batch-executor.rs"
+test = true
+
+[[example]]
+name = "book-hybrid"
+path = "../../docs/book/examples/hybrid.rs"
 test = true

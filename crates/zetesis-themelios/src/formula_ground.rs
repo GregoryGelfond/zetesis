@@ -44,6 +44,37 @@ pub(super) const fn boolean(truth: bool) -> usize {
     if truth { VERUM } else { FALSUM }
 }
 
+#[derive(Clone, Copy)]
+enum Schedule<'a> {
+    Eager(Option<crate::formula_count_plan::Request<'a>>),
+    Hybrid,
+}
+
+impl Schedule<'_> {
+    fn retain_constraints(
+        self,
+        mut rules: Vec<RuleIr>,
+        catalog: formula_support::CompletedCatalog,
+        instances: u64,
+        limits: &FormulaLimits,
+        location: Location,
+    ) -> Option<crate::formula_hybrid::Constraints> {
+        if !matches!(self, Self::Hybrid) {
+            return None;
+        }
+        // Compact the already admitted source vector in place. No instance
+        // population or duplicate source representation is retained.
+        rules.retain(crate::formula_hybrid::eligible);
+        Some(crate::formula_hybrid::Constraints {
+            catalog,
+            rules,
+            instances,
+            limits: *limits,
+            location,
+        })
+    }
+}
+
 pub(crate) fn ground(
     prepared: Prepared,
     limits: &FormulaLimits,
@@ -53,6 +84,64 @@ pub(crate) fn ground(
     count_plan: Option<crate::formula_count_plan::Request<'_>>,
     options: crate::grounding_options::Execution,
 ) -> Result<Compiled, FormulaFailure> {
+    ground_with_schedule(
+        prepared,
+        limits,
+        budget,
+        location,
+        observer,
+        Schedule::Eager(count_plan),
+        options,
+    )
+    .map(|(compiled, _)| compiled)
+}
+
+pub(crate) fn ground_hybrid(
+    prepared: Prepared,
+    limits: &FormulaLimits,
+    budget: &mut Budget,
+    location: Location,
+    observer: Option<&dyn crate::GroundingObserver>,
+    options: crate::grounding_options::Execution,
+) -> Result<(Compiled, crate::formula_hybrid::Constraints), FormulaFailure> {
+    if let Some(&location) = prepared.objective_declarations.first() {
+        return Err(FormulaFailure::HybridUnsupported {
+            feature: crate::HybridFeature::Objectives,
+            location,
+        });
+    }
+    if options.joins != crate::JoinStrategy::Indexed {
+        return Err(FormulaFailure::HybridUnsupported {
+            feature: crate::HybridFeature::TableJoins,
+            location,
+        });
+    }
+    ground_with_schedule(
+        prepared,
+        limits,
+        budget,
+        location,
+        observer,
+        Schedule::Hybrid,
+        options,
+    )
+    .map(|(compiled, constraints)| {
+        (
+            compiled,
+            constraints.expect("hybrid schedule retains its constraints"),
+        )
+    })
+}
+
+fn ground_with_schedule(
+    prepared: Prepared,
+    limits: &FormulaLimits,
+    budget: &mut Budget,
+    location: Location,
+    observer: Option<&dyn crate::GroundingObserver>,
+    schedule: Schedule<'_>,
+    options: crate::grounding_options::Execution,
+) -> Result<(Compiled, Option<crate::formula_hybrid::Constraints>), FormulaFailure> {
     use crate::GroundingPhase;
 
     let profile = Profile::new(observer);
@@ -68,8 +157,9 @@ pub(crate) fn ground(
         analyzed,
         objective_declarations,
         warnings,
+        constraints,
     } = instantiate(
-        prepared, limits, budget, location, &profile, count_plan, options,
+        prepared, limits, budget, location, &profile, schedule, options,
     )?;
     let Emission {
         atoms,
@@ -86,27 +176,31 @@ pub(crate) fn ground(
         crate::formula_count_plan::Outcome::NotRequested,
         |collector| collector.finish(&theory),
     );
-    Ok(Compiled {
-        warnings,
-        projection,
-        analysis_basis,
-        analysis,
-        analyzed,
-        theory,
-        count_plan,
-        atoms: AtomCatalog::new(atoms),
-        origins,
-        objectives,
-        objective_origins,
-        objective_declarations,
-        keyed_constraints,
-        key_analysis,
-        expansion: budget.usage(),
-    })
+    Ok((
+        Compiled {
+            warnings,
+            projection,
+            analysis_basis,
+            analysis,
+            analyzed,
+            theory,
+            count_plan,
+            atoms: AtomCatalog::new(atoms),
+            origins,
+            objectives,
+            objective_origins,
+            objective_declarations,
+            keyed_constraints,
+            key_analysis,
+            expansion: budget.usage(),
+        },
+        constraints,
+    ))
 }
 
-/// Source-dependent construction owns possible support only while joins use it.
-/// The returned builder owns emitted atoms, not a borrowed support catalog.
+/// The builder owns emitted atoms independently of possible support. Eager
+/// construction releases support after joins; hybrid construction additionally
+/// retains its complete owner with the unmaterialized constraint templates.
 struct Instantiation<'a> {
     projection: crate::PreparedProjection,
     builder: Builder<'a>,
@@ -117,6 +211,7 @@ struct Instantiation<'a> {
     analyzed: themelios_program::program::Program,
     objective_declarations: Vec<Location>,
     warnings: Vec<crate::FormulaWarning>,
+    constraints: Option<crate::formula_hybrid::Constraints>,
 }
 
 fn instantiate<'a>(
@@ -125,7 +220,7 @@ fn instantiate<'a>(
     budget: &'a mut Budget,
     location: Location,
     profile: &Profile<'_>,
-    count_plan: Option<crate::formula_count_plan::Request<'_>>,
+    schedule: Schedule<'_>,
     options: crate::grounding_options::Execution,
 ) -> Result<Instantiation<'a>, FormulaFailure> {
     use crate::GroundingPhase;
@@ -187,19 +282,32 @@ fn instantiate<'a>(
             budget,
             counters,
             Purpose::Theory,
-            count_plan.map(|request| crate::formula_count_plan::Collector::new(request, location)),
+            match schedule {
+                Schedule::Eager(request) => request
+                    .map(|request| crate::formula_count_plan::Collector::new(request, location)),
+                Schedule::Hybrid => None,
+            },
         );
         builder.initialize(location)?;
         Ok::<_, FormulaFailure>(builder)
     })?;
-    for (index, rule) in prepared.rules.iter().enumerate() {
-        profile.phase(
-            GroundingPhase::RuleInstantiation,
-            Some(rule.location),
-            || builder.instantiate_rule(rule, index, domains.as_ref(), support),
-        )?;
-    }
+    let streamed_instances = builder.instantiate_rules(
+        &prepared.rules,
+        domains.as_ref(),
+        support,
+        profile,
+        schedule,
+    )?;
     drop(domains);
+    drop(queries);
+    drop(completed);
+    let constraints = schedule.retain_constraints(
+        prepared.rules,
+        catalog,
+        streamed_instances,
+        limits,
+        location,
+    );
     Ok(Instantiation {
         projection,
         builder,
@@ -210,6 +318,7 @@ fn instantiate<'a>(
         analyzed: prepared.analyzed,
         objective_declarations: prepared.objective_declarations,
         warnings: warnings.into_values(),
+        constraints,
     })
 }
 
@@ -277,6 +386,75 @@ impl GroundAggregate {
     }
 }
 impl Builder<'_> {
+    fn instantiate_rules(
+        &mut self,
+        rules: &[RuleIr],
+        domains: Option<&crate::formula_domains::Domains<'_>>,
+        support: &Support<'_>,
+        profile: &Profile<'_>,
+        schedule: Schedule<'_>,
+    ) -> Result<u64, FormulaFailure> {
+        let mut streamed_instances = 0;
+        for (index, rule) in rules.iter().enumerate() {
+            profile.phase(
+                crate::GroundingPhase::RuleInstantiation,
+                Some(rule.location),
+                || {
+                    if matches!(schedule, Schedule::Hybrid) && crate::formula_hybrid::eligible(rule)
+                    {
+                        self.capture_constraint(rule, support, &mut streamed_instances)
+                    } else {
+                        self.instantiate_rule(rule, index, domains, support)
+                    }
+                },
+            )?;
+        }
+        Ok(streamed_instances)
+    }
+
+    /// Retain every atom identity a streamed instance can read, without its
+    /// conjunction/implication DAG. Existing completion then emits coherence
+    /// and support guards, including falsity for atoms with no producer.
+    fn capture_constraint(
+        &mut self,
+        rule: &RuleIr,
+        support: &Support<'_>,
+        instances: &mut u64,
+    ) -> Result<(), FormulaFailure> {
+        let mut join = Join::rule(rule, support, self.budget)?;
+        while let Some(row) =
+            join.next_row(self.limits, self.budget, &mut self.counters, rule.location)?
+        {
+            if row.passes {
+                // Every retained count is bounded by the charged substitution cap.
+                *instances += 1;
+            }
+            for literal in &rule.body {
+                let pattern = match literal {
+                    LiteralIr::Atom(_, pattern) => pattern,
+                    LiteralIr::PatternAtom(pattern) => &pattern.atom,
+                    _ => continue,
+                };
+                if row.passes {
+                    self.atom(pattern, &row.values, rule.location)?;
+                } else {
+                    // Eager discarded-body validation checks these bindings but
+                    // publishes no atoms. All scalar operations were checked by
+                    // the shared family admission and join; no local scopes are
+                    // eligible here, so atom-key validation completes that duty.
+                    self.work(rule.location)?;
+                    pattern.key(row.values.slots()).map_err(|error| {
+                        FormulaFailure::UnsafeVariable {
+                            variable: error.variable,
+                            location: rule.location,
+                        }
+                    })?;
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn instantiate_rule(
         &mut self,
         rule: &RuleIr,

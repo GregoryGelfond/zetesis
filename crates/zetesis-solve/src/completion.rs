@@ -66,6 +66,8 @@ pub enum Interruption {
     Oracle(Stop),
     /// Reduct countermodel encoding, search or independent witness checking stopped.
     Countermodel(zetesis_sat::Incomplete),
+    /// A streamed source constraint stopped before original-program membership.
+    Constraint(Stop),
     /// An objective could not be completely evaluated for a verified model.
     Objective(zetesis_objective::Error),
     /// Retaining complete incumbent models exceeded an explicit bound.
@@ -74,7 +76,9 @@ pub enum Interruption {
 impl fmt::Display for Interruption {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Preparation(error) | Self::Oracle(error) => error.fmt(f),
+            Self::Preparation(error) | Self::Oracle(error) | Self::Constraint(error) => {
+                error.fmt(f)
+            }
             Self::Countermodel(error) => error.fmt(f),
             Self::Objective(error) => error.fmt(f),
             Self::Incumbent(error) => error.fmt(f),

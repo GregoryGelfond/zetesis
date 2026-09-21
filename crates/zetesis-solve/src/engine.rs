@@ -49,12 +49,6 @@ pub(crate) fn validate_countermodel(options: &SolveConfig) -> Result<(), SolveEr
     if options.source_batching != SourceBatching::Independent {
         return Err(SolveError::UnsupportedSourceBatching);
     }
-    if options.grounder == Grounder::Lazy {
-        return Err(SolveError::UnsupportedOracle {
-            backend: options.backend,
-            grounder: options.grounder,
-        });
-    }
     Ok(())
 }
 

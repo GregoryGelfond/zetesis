@@ -278,13 +278,42 @@ impl<'index, 'source> AtomLookup<'index, 'source> {
         query: &Atom,
         mut before: impl FnMut() -> Result<(), E>,
     ) -> Result<Option<AtomRow<'source>>, E> {
+        self.find_with(&mut before, |atom, before| {
+            identity::atom(atom, query, before)
+        })
+    }
+
+    /// Find a fully bound pattern key in the same canonical atom index used by
+    /// [`Self::get_with`]. This borrows the pattern and binding without allocating
+    /// an intermediate atom. Work and failure semantics are identical to that
+    /// operation: each probe and visited identity descriptor is charged.
+    ///
+    /// # Errors
+    /// Returns the callback error before the refused operation, never absence.
+    pub fn get_key_with<E>(
+        self,
+        query: &crate::AtomKey<'_>,
+        mut before: impl FnMut() -> Result<(), E>,
+    ) -> Result<Option<AtomRow<'source>>, E> {
+        self.find_with(&mut before, |atom, before| {
+            query
+                .compare_identity_with(atom, before)
+                .map(Ordering::reverse)
+        })
+    }
+
+    fn find_with<E, F: FnMut() -> Result<(), E>>(
+        self,
+        before: &mut F,
+        mut compare: impl FnMut(&Atom, &mut F) -> Result<Ordering, E>,
+    ) -> Result<Option<AtomRow<'source>>, E> {
         let (mut low, mut high) = (0, self.keys.len());
         while low < high {
             before()?;
             let middle = low + (high - low) / 2;
             let position = self.keys[middle];
             let atom = &self.atoms[position];
-            match identity::atom(atom, query, &mut before)? {
+            match compare(atom, before)? {
                 Ordering::Less => low = middle + 1,
                 Ordering::Greater => high = middle,
                 Ordering::Equal => return Ok(Some(AtomRow { position, atom })),

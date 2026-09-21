@@ -1,6 +1,7 @@
 //! A finite support upper bound and complete iterative relational joins.
 
 mod evaluation;
+mod accounting;
 mod filters;
 mod rows;
 pub(crate) mod family;
@@ -31,6 +32,7 @@ use crate::grounding_observer::{Event, Work};
 use crate::{ExpansionFailure, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
 use rows::{Frame, Ownership, Staged};
 
+pub(crate) use accounting::Accounting;
 pub(crate) use evaluation::{Evaluation, Failures};
 pub(crate) use queries::{Candidates, Support};
 #[cfg(test)]
@@ -105,6 +107,7 @@ pub(crate) fn row_values<'source>(
 
 #[derive(Default)]
 pub(crate) struct Counters {
+    control: Option<zetesis_cpu::Control>,
     pub work: u64,
     pub substitutions: u64,
     generated_values: BTreeSet<Value>,
@@ -133,6 +136,11 @@ impl Counters {
         limits: &FormulaLimits,
         location: Location,
     ) -> Result<(), FormulaFailure> {
+        if let Some(control) = &self.control {
+            control
+                .poll()
+                .map_err(|reason| FormulaFailure::Interrupted { reason, location })?;
+        }
         ceiling(
             FormulaResource::Work,
             u128::from(self.work) + amount,

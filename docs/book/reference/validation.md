@@ -37,7 +37,7 @@ the Rust implementation or shaders.
 
 The shell checks target macOS and Linux. Install Git and
 [Rust's native prerequisites](https://doc.rust-lang.org/book/ch01-01-installation.html),
-including a linker. The [installation guide](../../../README.md#install-and-run)
+including a linker. The [installation guide](https://github.com/GregoryGelfond/zetesis/blob/main/README.md#install-and-run)
 covers source access and the installed zetesis commands.
 
 ### Rust, coverage and documentation
@@ -179,7 +179,7 @@ This requires an available Metal adapter. The selection includes static-oracle
 construction and closure against an independent ordered-set reference, tight and
 general formula checking, resource refusal, reusable sessions, and completed
 table joins composed with GPU checking. Formula tests do not replace the
-[static shader tests](../../../crates/zetesis-wgpu/tests/hardware.rs).
+[static shader tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/tests/hardware.rs).
 The coverage snapshot below describes the tests qualified on its stated source;
 today's required selection does not update that snapshot.
 

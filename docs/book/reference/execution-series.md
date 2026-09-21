@@ -34,8 +34,8 @@ semantic and assurance boundaries separately.
 
 | Acquisition | Exact maintained view | Rendered tables |
 | --- | --- | --- |
-| CPU, automatic grounding, 22 cells | [JSON](observations/series-eca5a1a7-cpu-auto.json) | [all observations](observations/series-eca5a1a7-cpu-auto-tables.md) |
-| Metal, eager grounding, 3 cells | [JSON](observations/series-eca5a1a7-metal-eager.json) | [all observations](observations/series-eca5a1a7-metal-eager-tables.md) |
+| CPU, automatic grounding, 22 cells | [JSON](observations/series-eca5a1a7-cpu-auto.json) | [all observations](https://github.com/GregoryGelfond/zetesis/blob/main/docs/book/reference/observations/series-eca5a1a7-cpu-auto-tables.md) |
+| Metal, eager grounding, 3 cells | [JSON](observations/series-eca5a1a7-metal-eager.json) | [all observations](https://github.com/GregoryGelfond/zetesis/blob/main/docs/book/reference/observations/series-eca5a1a7-metal-eager-tables.md) |
 
 The [provenance](observations/series-eca5a1a7-provenance.json) retains source,
 binary, runner and raw-report hashes, acquisition order, workload identities,

@@ -1,7 +1,7 @@
 # Preparing source and interpreting analysis
 
 Use `zetesis_themelios::prepare_formula` to prepare input for zetesis's finite
-formula solver and inspect the analysis it retains before eager materialization.
+formula solver and inspect its retained analysis before materialization.
 `zetesis_themelios` is zetesis's source bridge; this workflow does not require
 constructing an upstream parser or logical program. The returned
 `PreparedFormula` owns source, metadata, checked intermediate representation and
@@ -19,6 +19,56 @@ The preparation can succeed while grounding later refuses arithmetic or a
 resource ceiling. Splitting the calls does not refresh the source expansion
 budget. Keeping the returned owner is therefore part of the contract, not merely
 a convenience for avoiding another parse.
+
+## Stream ordinary constraints
+
+`PreparedFormula::ground_hybrid()` and the corresponding bundle method return
+one shared `HybridFormula`. It retains the original source, complete possible
+support and typed atom catalog. Producers and constraints with aggregates,
+projected atoms or conditional scopes remain in `core_theory()`. Ordinary
+atom/scalar integrity constraints retain their prepared templates instead of
+complete formula DAGs. This first schedule requires indexed joins and refuses
+objective programs explicitly. The existing `ground()` methods remain eager.
+
+Use `PreparedInput::hybrid(&owner)` for solving. A core answer is only a proposal:
+the session checks the retained constraints before returning an answer of the
+original program. A core certificate applies to the core. It does not establish
+membership in the original program on its own.
+
+For direct composition, `owner.checker(ConstraintCheckLimits { .. })` creates a
+mutable checker borrowing the owner. `check(&model, &control)` requires the
+model's exact atom-catalog owner. It returns `Satisfied` after the required scan
+completes, or `Violated { location }` when an admitted constraint body is true.
+Neither result establishes reduct minimality. Wrong-owner, cancellation,
+deadline, allocation and resource failures are typed separately from both
+verdicts; failures preserve cumulative statistics. Equal source bytes do not
+substitute for owner identity.
+
+Support dictionaries and equality indexes are reused. Ordinary joins lend their
+current binding; generators retain their existing owned-row requirements.
+Candidate truth uses borrowed typed atom keys, with no temporary formula DAG or
+copied atom per instance. Original source-family arithmetic validation completes
+before the hybrid owner is returned, independently of later candidate truth.
+Omitted zero-divisor instances therefore retain the same located warnings, and
+candidate filtering cannot conceal fatal arithmetic.
+
+Hybrid admission preserves its original expansion-budget prefix. It also keeps
+prepared constraint plans and completed support that eager grounding can release
+after emission. The existing source, scalar and support ceilings still apply;
+they are not a single aggregate live-memory or RSS bound. Core atoms, nodes and
+roots retain the formula-theory ceilings, including coherence and unsupported
+atom guards. `streamed_templates()` counts lowered templates, including pool
+alternatives, and `streamed_instances()` counts scalar-selected instances visited
+during admission; neither is a retained instance store.
+
+Each checker has separate cumulative work, substitution and copied-scalar-byte
+limits across all candidate checks. Snapshot descriptors are prepared once,
+without copying support rows; per-operation binding/storage ceilings remain
+those of the admitted source. A new checker starts new execution allowances,
+not new source admission. Its statistics describe charged work and payload,
+not process memory. Streaming can reduce retained constraint storage while
+repeating joins and proposing more core answers; it does not remove the complete
+finite atom envelope or imply a time improvement.
 
 ## Reuse original input across profiles
 
@@ -217,7 +267,7 @@ and only natural numbers, facts being all that produces them
 (`zetesis_domain::facts`); the equation then has one solution, and for a
 negative `s` no solution, in which case both forms fire. The product of the
 demanded value with every value the key admits is never formed; the
-[observation record](../reference/observations/README.md#keyed-constraints-the-one-atom-the-key-admits)
+[observation record](https://github.com/GregoryGelfond/zetesis/blob/main/docs/book/reference/observations/README.md#keyed-constraints-the-one-atom-the-key-admits)
 measures the send-money puzzle's columns at one hundred instances each in
 place of eighteen hundred forbidden combinations.
 
@@ -344,7 +394,8 @@ catalog is small. `FormulaLimits` separately bounds substitutions, construction
 work, support rounds, caches, origin locations and final atoms/nodes/roots.
 Retained space includes those structures and their logical value payloads;
 allocator overhead is outside these logical counters. A successful preparation
-therefore promises neither cheap grounding nor lazy formula execution.
+therefore promises neither cheap grounding nor a smaller retained representation;
+the hybrid schedule still completes this support before streaming constraints.
 
 See [source grounding](../architecture/grounding.md) for binding and coverage
 invariants and [completion and resources](outcomes.md) for result accounting.

@@ -32,9 +32,9 @@ later test/documentation source; it is not a claim that a binary was rebuilt at
 
 | Acquisition | Maintained JSON view | Complete tables |
 | --- | --- | --- |
-| CPU, automatic grounding, 22 cells | [JSON](observations/series-2e80d065-cpu-auto.json) | [all 22 cells](observations/series-2e80d065-cpu-auto-tables.md) |
-| CPU, eager grounding, 3 cells | [JSON](observations/series-2e80d065-cpu-eager.json) | [all observations](observations/series-2e80d065-cpu-eager-tables.md) |
-| Metal, eager grounding, the same 3 cells | [JSON](observations/series-2e80d065-metal-eager.json) | [all observations](observations/series-2e80d065-metal-eager-tables.md) |
+| CPU, automatic grounding, 22 cells | [JSON](observations/series-2e80d065-cpu-auto.json) | [all 22 cells](https://github.com/GregoryGelfond/zetesis/blob/main/docs/book/reference/observations/series-2e80d065-cpu-auto-tables.md) |
+| CPU, eager grounding, 3 cells | [JSON](observations/series-2e80d065-cpu-eager.json) | [all observations](https://github.com/GregoryGelfond/zetesis/blob/main/docs/book/reference/observations/series-2e80d065-cpu-eager-tables.md) |
+| Metal, eager grounding, the same 3 cells | [JSON](observations/series-2e80d065-metal-eager.json) | [all observations](https://github.com/GregoryGelfond/zetesis/blob/main/docs/book/reference/observations/series-2e80d065-metal-eager-tables.md) |
 
 The [provenance](observations/series-2e80d065-provenance.json) records executable,
 runner, input and raw-report hashes, acquisition order, timestamps and limits.
@@ -154,7 +154,7 @@ Old reason-specific residual counts are unavailable and are not replaced by zero
 
 ## The 22-cell CPU-auto comparison
 
-The [full tables](observations/series-2e80d065-cpu-auto-tables.md) retain every
+The [full tables](https://github.com/GregoryGelfond/zetesis/blob/main/docs/book/reference/observations/series-2e80d065-cpu-auto-tables.md) retain every
 cell, including less favorable observations. Each leg has two timed observations
 per producer/cell, no warmup and one RSS observation. All 704 positions pass.
 The actual routes are unchanged: ten lazy CPU closure cells, nine eager

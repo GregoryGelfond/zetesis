@@ -200,13 +200,18 @@ crossover for a supported execution profile. An explicit GPU request prepares
 its device during session setup and never silently falls back to CPU. Static
 GPU closure admits at most 4,096 atoms.
 
-Finite formula execution requires eager admission. Automatic backend selection
+Finite formula execution defaults to eager admission. Explicit lazy CPU execution
+can stream ordinary constraints after complete support and arithmetic admission,
+while retaining producers and ineligible constraints. This hybrid profile currently
+refuses objectives, table joins and explicit devices; see the
+[grounding contract](../../docs/book/architecture/grounding.md#eager-and-lazy-execution).
+Automatic backend selection
 uses CPU. With `--oracle auto`, complete-theory checks can select ranked support
 on CPU or a device. Device tight checking evaluates original truth and complete
 positive support without CPU residual queries. When no tight certificate is
 selected, explicit GPU execution uses general propagation and completes
 unresolved reduct queries exactly on CPU. Outer candidate search and objective
-scoring remain on the host. Explicit lazy formula execution is unsupported.
+scoring remain on the host. Formula device execution requires an eager theory.
 
 CPU automatic membership can also select positive least consequences, including
 positive recursion and checks of all original constraints after closure. The

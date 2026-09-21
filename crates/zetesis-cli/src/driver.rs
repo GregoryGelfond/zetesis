@@ -42,6 +42,9 @@ pub struct Report {
     /// Actual batched formula execution and pending-result accounting; absent
     /// when the scalar CPU route was used or initialization did not finish.
     pub formula_execution: Option<crate::FormulaExecutionStatistics>,
+    /// Retained-core answers and their source-constraint decisions. Only accepted
+    /// checks establish membership in the original hybrid program.
+    pub hybrid_execution: Option<zetesis_solve::HybridExecutionStatistics>,
     /// Actual lazy device execution, including shared source work and failed
     /// batch progress. Absent when no lazy device executor was initialized.
     pub lazy_execution: Option<crate::LazyExecutionStatistics>,
@@ -65,6 +68,15 @@ pub struct Report {
 /// A failed input, transport, or backend operation; never a claim of UNSAT.
 #[derive(Debug)]
 pub enum RunError {
+    /// A streamed source constraint could not be completely evaluated.
+    Constraint(zetesis_themelios::ConstraintCheckFailure),
+    /// Consumed core-answer accounting cannot represent another answer.
+    HybridStatisticsOverflow,
+    /// Streamed formula constraints do not have a device executor yet.
+    HybridBackend {
+        /// Explicitly requested execution hardware.
+        backend: Backend,
+    },
     /// Fixed-domain projected enumeration failed with full membership retained.
     Projection(zetesis_solve::ProjectionError),
     /// Reading a bounded standard-input source failed before semantic admission.
@@ -197,6 +209,10 @@ impl fmt::Display for RunError {
             f.write_str("source admission: ")?;
         }
         match self {
+            Self::Constraint(error) => error.fmt(f),
+            Self::HybridStatisticsOverflow => f.write_str("hybrid answer accounting overflow"),
+            Self::HybridBackend { backend } => write!(f,
+                "streamed formula constraints support cpu or auto execution; requested {}", backend.label()),
             Self::Executor(error) => error.fmt(f),
             Self::Projection(error) => error.fmt(f),
             Self::Input(error) => write!(f, "standard input ('-'): {error}"),
@@ -308,6 +324,7 @@ impl RunError {
 impl std::error::Error for RunError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
+            Self::Constraint(error) => Some(error),
             Self::Projection(error) => Some(error),
             Self::Input(error) => Some(error),
             Self::Admission(error) => Some(error),
@@ -326,6 +343,8 @@ impl std::error::Error for RunError {
             Self::JsonRecord(error) => Some(error),
             Self::ObservationOutputLimit { .. } | Self::TimeLimitRange { .. } => None,
             Self::MixedStandardInput
+            | Self::HybridStatisticsOverflow
+            | Self::HybridBackend { .. }
             | Self::BackendUnavailable
             | Self::UnsupportedCombination { .. }
             | Self::UnsupportedOracle { .. }
@@ -715,6 +734,9 @@ impl From<zetesis_solve::SolveError> for RunError {
     fn from(error: zetesis_solve::SolveError) -> Self {
         use zetesis_solve::SolveError;
         match error {
+            SolveError::Constraint(error) => Self::Constraint(error),
+            SolveError::HybridStatisticsOverflow => Self::HybridStatisticsOverflow,
+            SolveError::HybridBackend { backend } => Self::HybridBackend { backend },
             SolveError::Executor(error) => Self::Executor(error),
             SolveError::Projection(error) => Self::Projection(error),
             SolveError::Batch(error) => Self::Batch(error),

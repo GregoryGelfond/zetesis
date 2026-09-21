@@ -93,7 +93,7 @@ pub(super) fn campaign(
         started_unix_ns: started,
         finished_unix_ns: None,
         wall_scope: "fresh_process_spawn_capture_reap; native_json_and_stats_included; reference_json_included; comparison_hashing_excluded; no_cold_cache_claim",
-        comparison_scope: "complete_selected_displays_with_symbol_and_model_multiplicities; final_optimum_ties_and_costs; native_full_records_retained; hidden_reference_interpretations_unavailable",
+        comparison_scope: "complete_selected_displays_with_symbol_and_model_multiplicities; final_optimum_ties_and_costs; full_native_atoms_and_shown_values_compared_across_profiles_and_repeats; hidden_reference_interpretations_unavailable",
         peak_rss: if request.plan.memory_runs() > 0 {
             "memory_rounds: separate_fresh_helper_RUSAGE_CHILDREN; excludes_helper; may_include_usage_propagated_by_waited_descendants; not_simultaneous_tree_RSS_or_device_memory; macOS_bytes_Linux_KiB_converted_to_bytes"
         } else {
@@ -378,8 +378,7 @@ fn execute(
         fill_unattempted(report)?;
         return Ok(());
     }
-    let mut references: Vec<Option<answers::ReportedAnswers>> =
-        (0..cases.len()).map(|_| None).collect();
+    let mut censuses: Vec<_> = (0..cases.len()).map(|_| Census::default()).collect();
     let width = request.plan.profiles.len() + 1;
     let mut blocked: Vec<Option<usize>> = vec![None; cases.len() * width];
     let mut stopped = false;
@@ -393,7 +392,7 @@ fn execute(
                 Some(previous),
                 "cell disabled by its first non-pass observation",
             ))
-        } else if slot.phase != Phase::Qualification && references[slot.case].is_none() {
+        } else if slot.phase != Phase::Qualification && censuses[slot.case].reference.is_none() {
             Some((
                 blocked[slot.case * width],
                 "reference census did not establish a complete family",
@@ -451,23 +450,10 @@ fn execute(
             continue;
         }
         let contract = selected.input.contract();
-        let result = qualify(
-            &mut sample,
-            contract,
-            references[slot.case].as_ref(),
-            request,
-        );
-        match result {
-            Ok(answer) => {
-                if slot.phase == Phase::Qualification && slot.producer == Producer::Reference {
-                    references[slot.case] = Some(answer);
-                }
-            }
-            Err((decision, detail)) => {
-                sample.decision = decision;
-                sample.detail = Some(detail);
-                blocked[cell] = Some(report.samples.len());
-            }
+        if let Err((decision, detail)) = censuses[slot.case].check(&mut sample, contract, request) {
+            sample.decision = decision;
+            sample.detail = Some(detail);
+            blocked[cell] = Some(report.samples.len());
         }
         stopped = !report.unresolved_children.is_empty();
         report.samples.push(sample);
@@ -508,12 +494,45 @@ fn arguments<'a>(
     arguments.push(directory.join(path).into_os_string());
     (executable, arguments)
 }
+#[derive(Debug)]
+struct Qualified {
+    display: answers::ReportedAnswers,
+    native: Option<answers::native_json::NativeAnswers>,
+}
+
+/// One workload's completed answer baselines. Neither a failed reference nor a
+/// mismatching native sample can replace the first accepted census it violates.
+#[derive(Default)]
+struct Census {
+    reference: Option<answers::ReportedAnswers>,
+    native: Option<answers::native_json::NativeAnswers>,
+}
+
+impl Census {
+    fn check(
+        &mut self,
+        sample: &mut Sample,
+        contract: Option<&examples::Contract>,
+        request: &Request<'_>,
+    ) -> Result<(), (Decision, String)> {
+        let answer = qualify(sample, contract, self.reference.as_ref(), request)?;
+        if let Some(native) = answer.native {
+            super::native_family::accept(&mut self.native, native)?;
+        }
+        if sample.slot.phase == Phase::Qualification && sample.slot.producer == Producer::Reference
+        {
+            self.reference = Some(answer.display);
+        }
+        Ok(())
+    }
+}
+
 fn qualify(
     sample: &mut Sample,
     contract: Option<&examples::Contract>,
     reference: Option<&answers::ReportedAnswers>,
     request: &Request<'_>,
-) -> Result<answers::ReportedAnswers, (Decision, String)> {
+) -> Result<Qualified, (Decision, String)> {
     let capture = sample
         .capture
         .as_ref()
@@ -537,7 +556,7 @@ fn qualify(
         ));
     }
     let exit = solver_exit(sample)?;
-    let parsed = match sample.slot.producer {
+    let (parsed, native) = match sample.slot.producer {
         Producer::Reference => {
             if !exit.is_some_and(|exit| {
                 exit.signal.is_none() && matches!(exit.code, Some(0 | 10 | 20 | 30))
@@ -547,8 +566,11 @@ fn qualify(
                     "reference exit did not complete".into(),
                 ));
             }
-            answers::clingo_json(capture.stdout(), request.limits.answers)
-                .map_err(|error| invalid(&error))?
+            (
+                answers::clingo_json(capture.stdout(), request.limits.answers)
+                    .map_err(|error| invalid(&error))?,
+                None,
+            )
         }
         Producer::Native { profile } => {
             let document: Value = serde_json::from_slice(capture.stdout())
@@ -567,7 +589,7 @@ fn qualify(
                 )
                 .map_err(|e| (Decision::InvalidTelemetry, e))?,
             );
-            display
+            (display, Some(native))
         }
     };
     sample.selected_models = Some(parsed.model_count());
@@ -592,7 +614,10 @@ fn qualify(
             "no complete qualified reference family".into(),
         ));
     }
-    Ok(parsed)
+    Ok(Qualified {
+        display: parsed,
+        native,
+    })
 }
 
 /// A memory capture belongs to the helper. Require its success separately,

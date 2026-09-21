@@ -4,8 +4,8 @@
 use std::{cmp::Ordering, convert::Infallible};
 
 use zetesis_core::{
-    Atom, AtomCatalog, AtomIndex, AtomIndexError, Model, Predicate, Sign, Value, ValueLimits,
-    ValueNode,
+    Atom, AtomCatalog, AtomIndex, AtomIndexError, AtomPattern, Model, Predicate, Sign, Term, Value,
+    ValueLimits, ValueNode,
 };
 
 fn atom(name: &str, sign: Sign, values: Vec<Value>) -> Atom {
@@ -269,6 +269,59 @@ fn model_lookup_never_selects_hidden_catalog_atoms() {
             .filter(|atom| atom.predicate() == &predicate)
             .collect::<Vec<_>>()
     );
+}
+
+#[test]
+fn bound_key_lookup_preserves_selected_identity() {
+    let atoms = AtomCatalog::new(catalog());
+    let model = Model::from_positions(&atoms, [4, 7, 10]).unwrap();
+    for query in atoms.atoms() {
+        let pattern = AtomPattern::new(
+            query.predicate().clone(),
+            (0..query.values().len()).map(Term::Variable).collect(),
+        )
+        .unwrap();
+        let key = pattern.key(query.values()).unwrap();
+        let found = model
+            .lookup()
+            .get_key_with(&key, || Ok::<_, Infallible>(()))
+            .unwrap();
+        assert_eq!(found.is_some(), model.contains(query));
+        if let Some(row) = found {
+            assert!(std::ptr::eq(row.atom(), query));
+        }
+    }
+}
+
+#[test]
+fn refused_bound_key_never_reports_absence() {
+    let atoms = AtomCatalog::new(catalog());
+    let model = Model::from_positions(&atoms, 0..atoms.atoms().len()).unwrap();
+    let pattern =
+        AtomPattern::new(Predicate::new("p", 1).unwrap(), vec![Term::Variable(0)]).unwrap();
+    let binding = [Value::String("a\\n\\\"é".into())];
+    let key = pattern.key(binding.as_slice()).unwrap();
+    let mut work = 0;
+    model
+        .lookup()
+        .get_key_with(&key, || {
+            work += 1;
+            Ok::<_, Infallible>(())
+        })
+        .unwrap();
+    assert!(work > 0);
+    for limit in 0..work {
+        let mut spent = 0;
+        let result = model.lookup().get_key_with(&key, || {
+            if spent == limit {
+                return Err(limit);
+            }
+            spent += 1;
+            Ok(())
+        });
+        assert!(matches!(result, Err(cause) if cause == limit));
+        assert_eq!(spent, limit);
+    }
 }
 
 #[test]

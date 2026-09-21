@@ -33,6 +33,7 @@ fn summary<'a>(cases: &'a [String], profiles: &'a [NativeExecution]) -> matrix::
         cases,
         workloads: None,
         profiles,
+        reference_policy: matrix::ReferencePolicy::AllPhases,
         before: &[],
         cells: vec![
             matrix::CellSummary {
@@ -158,6 +159,31 @@ fn summary_json_preserves_raw_units_without_styling() {
     assert_eq!(value["cells"][1]["peak_rss_bytes"], 0);
     assert!(value["cells"][2]["timing"].is_null());
     assert!(!output.contains(&0x1b));
+}
+
+#[test]
+fn qualification_only_reference_has_no_measurements_in_either_view() {
+    let cases = [reports::CASES[0].to_owned()];
+    let profiles = reports::profiles();
+    let mut summary = summary(&cases, &profiles);
+    summary.reference_policy = matrix::ReferencePolicy::QualificationOnly;
+    let reference = &mut summary.cells[0];
+    reference.decisions[0].positions = 1;
+    reference.timing = None;
+    reference.peak_rss_bytes = None;
+    let mut human = Vec::new();
+    super::corpus(&summary, false, layout(ColorMode::Never), &mut human).unwrap();
+    assert_row(
+        &String::from_utf8(human).unwrap(),
+        "1: generated/choice-2.lp clingo — — — Pass: 1",
+    );
+    let mut machine = Vec::new();
+    super::corpus(&summary, true, layout(ColorMode::Never), &mut machine).unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&machine).unwrap();
+    assert_eq!(value["reference_policy"], "qualification_only");
+    assert_eq!(value["cells"][0]["decisions"][0]["positions"], 1);
+    assert!(value["cells"][0]["timing"].is_null());
+    assert!(value["cells"][0]["peak_rss_bytes"].is_null());
 }
 
 #[test]
@@ -323,6 +349,7 @@ fn amended_workloads_have_distinct_human_labels() {
         cases: &cases,
         workloads: Some(&workloads),
         profiles: &[],
+        reference_policy: matrix::ReferencePolicy::AllPhases,
         before: &[],
         cells: (0..2)
             .map(|case| matrix::CellSummary {

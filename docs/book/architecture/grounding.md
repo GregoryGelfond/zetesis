@@ -71,11 +71,51 @@ and each completed closure owes coverage of all instances enabled in its final
 snapshot. Laziness moves and limits materialization; it does not remove these
 obligations or guarantee smaller memory use on every input.
 
-The finite formula source path currently materializes a bounded theory. Explicit
-lazy formula grounding is unsupported. This is a current implementation boundary,
-not a theorem that general formulas require eager grounding. Automatic selection
-chooses among implemented profiles; it does not relax admission limits to obtain
-an answer.
+The ordinary finite formula path materializes a bounded theory. An explicit
+**hybrid formula** profile instead retains every producer and streams eligible
+integrity constraints. It currently runs on CPU with indexed joins and no
+objectives. Constraints containing aggregates, projected atoms or conditional
+scopes remain eager; ordinary atom/scalar constraints use the shared binding
+and evaluation operations. Existing eager entry points remain unchanged.
+
+Hybrid admission still completes possible support and original source-family
+arithmetic validation. It visits the eligible constraint instances to retain
+their atom identities, without retaining their complete formula DAGs. Coherence
+and support guards remain in the core, including guards that force unsupported
+atoms false. Candidate truth cannot suppress a required admission error.
+
+The execution composition is:
+
+```text
+admit complete support, arithmetic and atom identities
+materialize all producers and ineligible constraints as the core
+for each answer of the core:
+    check the streamed constraint instances against that answer
+    violation  -> reject this proposal
+    complete   -> return an answer of the original program
+    stopped    -> retain an incomplete outcome
+```
+
+An exhausted core plus completed checks establishes original-program exhaustion.
+A core answer alone does not. The
+[constraint-filtering law](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/streamed-constraints.md)
+justifies this composition around the reduct. Its premises still require correct
+source instances, original truth and complete coverage; it does not verify the
+Rust cursor or backend implementation.
+
+The [shared source owner](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_hybrid.rs)
+retains prepared constraints and completed support indexes. Each session has its
+own checker, cumulative budgets and scratch. Ordinary rows remain borrowed,
+and typed candidate lookup copies no atom. The eager builder keeps its bulk
+materialization path. No channel or task is created for each instance.
+
+Streaming can avoid a constraint-node or root ceiling, but the finite atom
+and support envelope must still fit. Retained source plans and support also
+occupy memory. Repeated joins and the loss of constraint pruning in core search
+can increase execution work, so reduced formula storage does not imply a time
+or RSS improvement. Full demand-driven producer/atom discovery and device
+constraint streaming are not implemented by this profile. See the
+[checked hybrid session example](../rust/sessions.md#hybrid-formula-sessions).
 
 ## Source instances as a composition
 
@@ -169,8 +209,10 @@ arithmetic error order and Rust execution remain correspondence obligations.
 
 Formula construction has an explicit ownership boundary. Source instantiation
 consumes the source IR and owns the completed support catalog and its snapshot
-while it emits formulas and activates objectives. A consuming builder then adds
-coherence and support guards.
+while it emits formulas and activates objectives. Eager grounding releases that
+support after its consumers finish; hybrid grounding retains it with nonempty
+streamed constraint plans. An empty streamed plan releases both. A consuming
+builder then adds coherence and support guards.
 It passes nodes and roots into theory validation and retains the ordered atoms
 and origins for the compiled owner. Interning indexes, producer tables and
 aggregate caches remain construction scratch.

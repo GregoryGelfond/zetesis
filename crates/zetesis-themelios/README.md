@@ -23,8 +23,8 @@ cargo doc --locked -p zetesis-themelios --no-deps --open
 | `ParsedSource` | One owned parse with consuming admission attempts; eligible retries retain the original source and parse. |
 | `admit` | Relational templates for the strict normal-rule profile. |
 | `admit_extended`, `admit_bundle_extended` | Relational templates with bounded scalar expansion and source metadata, with the expansion charges each admission accepted under its `ExpansionLimits`. Suitable input for lazy relational solving. |
-| `prepare_formula`, `prepare_bundle_formula` | An owned preparation that separates source preparation from eager formula grounding. |
-| `admit_formula`, `admit_bundle_formula` | A complete finite Ferraris theory, dense original-atom mapping, lifted objectives and source metadata. Composes preparation and grounding. Expansion is charged under the same `ExpansionLimits`; the usage is not reported. |
+| `prepare_formula`, `prepare_bundle_formula` | An owned preparation that separates source preparation from formula materialization. |
+| `admit_formula`, `admit_bundle_formula` | A complete finite Ferraris theory, dense original-atom mapping, lifted objectives and source metadata. Composes preparation and grounding. Expansion is charged under the same `ExpansionLimits`; the admitted owner retains its usage. |
 
 The strict profile contains normal rules, constraints, singleton unconditioned
 choices, closed logical values, positive/default-negated atoms and
@@ -37,6 +37,22 @@ A prepared formula exposes source evidence and analysis before consuming
 budgets; preparation can succeed before grounding encounters an unsupported
 dependency, arithmetic failure or resource limit. See [preparation](src/formula.rs)
 and [observer contracts](src/grounding_observer.rs).
+
+An explicit `ground_hybrid()` instead returns an immutable shared `HybridFormula`.
+It completes original support and arithmetic admission, materializes producers
+and richer constraints, and retains ordinary atom/scalar integrity constraints
+for repeat checking. Indexed joins are required; objectives are currently
+refused. `core_theory()` is only the producer core. A solve session combines its
+membership result with complete streamed constraint satisfaction before returning
+an answer of the original program.
+
+The independent `ConstraintChecker` accepts only models sharing the owner's exact
+atom catalog, reuses support indexes and borrowed bindings, and retains cumulative
+work/substitution/scalar-copy charges. A stopped check is not satisfaction.
+Retained source plans and support preserve their original admission ceilings;
+these and the separate checker limits do not claim an aggregate live-memory or
+RSS bound. See [hybrid source ownership](../../docs/book/rust/source.md#stream-ordinary-constraints)
+for the completion, identity, costs and current capability boundaries.
 
 These APIs deliberately remain distinct. A caller may use
 `ExpansionFailure::needs_formula_admission()` to recognize an eligible retry

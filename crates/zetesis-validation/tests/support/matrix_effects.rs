@@ -128,6 +128,114 @@ fn completed_matrix_publishes_its_exact_schedule_and_capture_total() {
 }
 
 #[test]
+fn qualification_only_never_launches_a_reference_measurement() {
+    let fixture = Fixture::new();
+    executable(
+        &fixture.reference,
+        &format!(
+            "if [ -e reference-seen ]; then exit 65; fi; : > reference-seen; printf '%s' {}",
+            quote(UNSAT)
+        ),
+    );
+    let mut request = fixture.request();
+    request.plan = request
+        .plan
+        .with_reference(crate::performance::matrix::ReferencePolicy::QualificationOnly);
+    let report = fixture.run(&request);
+    assert!(report.passed(), "{report:?}");
+    assert_eq!(report.samples().len(), 5);
+    let reference = report
+        .summary()
+        .cells
+        .into_iter()
+        .find(|cell| cell.producer == Producer::Reference)
+        .unwrap();
+    assert_eq!(reference.decisions.len(), 1);
+    assert_eq!(reference.decisions[0].positions, 1);
+    assert!(reference.timing.is_none());
+    assert!(reference.peak_rss_bytes.is_none());
+}
+
+fn changed_hidden_family(profiles: usize) -> Report {
+    let fixture = Fixture::new();
+    executable(&fixture.reference, &format!("printf '%s' {}", quote(SAT)));
+    let (_, stderr) = crate::performance::matrix::fixtures::fixture();
+    executable(
+        &fixture.native,
+        &format!(
+            "if [ -e native-seen ]; then printf '%s' {}; else : > native-seen; printf '%s' {}; fi; printf '%s' {} >&2",
+            quote(&native_family::document(&["b"]).to_string()),
+            quote(&native_family::document(&["a"]).to_string()),
+            quote(&stderr)
+        ),
+    );
+    let mut request = fixture.request();
+    request.plan = Plan::new(
+        Suite::Queens,
+        vec![crate::selected::NativeExecution::default(); profiles],
+        NonZeroUsize::MIN,
+        1,
+        2,
+    )
+    .unwrap();
+    fixture.run(&request)
+}
+
+#[test]
+fn native_qualification_compares_hidden_atoms_across_profiles() {
+    let report = changed_hidden_family(2);
+    assert!(report.accounted());
+    assert!(!report.passed());
+    let samples: Vec<_> = report
+        .samples()
+        .iter()
+        .filter(|sample| {
+            sample.slot().phase == Phase::Qualification
+                && matches!(sample.slot().producer, Producer::Native { .. })
+        })
+        .collect();
+    assert_eq!(samples[0].decision(), Decision::Pass);
+    assert_eq!(samples[1].decision(), Decision::ParityMismatch);
+    assert_eq!(samples[0].selected_models, samples[1].selected_models);
+    assert!(samples[1].capture().is_some());
+    assert!(
+        report
+            .samples()
+            .iter()
+            .filter(|sample| sample.slot().phase != Phase::Qualification
+                && sample.slot().producer == Producer::Native { profile: 1 })
+            .all(|sample| sample.decision() == Decision::NotAttempted)
+    );
+}
+
+#[test]
+fn repeated_native_hidden_mismatch_stops_that_cell() {
+    let report = changed_hidden_family(1);
+    let failed = report
+        .samples()
+        .iter()
+        .position(|sample| {
+            sample.slot().phase == Phase::Warmup
+                && sample.slot().producer == Producer::Native { profile: 0 }
+        })
+        .unwrap();
+    assert_eq!(
+        report.samples()[failed].decision(),
+        Decision::ParityMismatch
+    );
+    assert!(report.accounted());
+    assert!(!report.passed());
+    for sample in report.samples().iter().filter(|sample| {
+        sample.slot().phase == Phase::Timed
+            && sample.slot().producer == Producer::Native { profile: 0 }
+    }) {
+        assert_eq!(sample.decision(), Decision::NotAttempted);
+        assert_eq!(sample.blocked_by(), Some(failed));
+        assert!(sample.capture().is_none());
+    }
+}
+
+#[test]
 fn later_reference_mismatch_disables_only_its_own_cell() {
     let fixture = Fixture::new();
     executable(

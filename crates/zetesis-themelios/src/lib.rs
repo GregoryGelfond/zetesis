@@ -112,6 +112,11 @@ pub use formula::{
     admit_formula_with_grounding_observer, prepare_bundle_formula, prepare_formula,
 };
 pub use formula_warning::FormulaWarning;
+mod formula_hybrid;
+pub use formula_hybrid::{
+    ConstraintCheckCause, ConstraintCheckFailure, ConstraintCheckLimits, ConstraintCheckStatistics,
+    ConstraintChecker, ConstraintVerdict, HybridFeature, HybridFormula,
+};
 mod formula_count_plan;
 pub use formula_count_plan::{
     CountPlan, CountPlanFailure, CountPlanFailureKind, CountPlanLimits, CountPlanResource,

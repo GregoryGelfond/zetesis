@@ -243,7 +243,12 @@ fn formula_device_route_refuses_explicit_lazy_grounding() {
         &Control::default(),
     )
     .unwrap_err();
-    assert!(matches!(error, RunError::UnsupportedOracle { .. }));
+    assert!(matches!(
+        error,
+        RunError::HybridBackend {
+            backend: zetesis_cli::Backend::Metal
+        }
+    ));
     assert!(output.is_empty());
 }
 

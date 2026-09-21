@@ -721,6 +721,22 @@ consumes remaining work and counts its actual capacity beside the retained least
 interpretation after CSR release. The append/partition law does not prove those
 Rust ownership, work, first-error or source-completeness obligations.
 
+[`StreamedConstraints`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/StreamedConstraints.lean)
+adds an executable finite scan beneath that filtering law. A violation names an
+original occurrence, completion certifies that every checked body is false, and
+interruption retains the suffix after a checked false prefix. A partition's
+flattened occurrences must be a permutation of the complete source family.
+`completed_partition` and `partition_invariance` preserve the completed
+satisfaction verdict across chunk sizes and orders; they do not preserve the
+first violation or authorize acceptance before every required part completes.
+`stable_iff_completed_partition` combines pointwise Boolean-to-formula original
+truth with the append law for an arbitrary retained theory. Concrete source
+lowering, local and aggregate-family completeness, arithmetic admission, prepared
+owner identity, cursor coverage and bounded execution remain separate obligations.
+The occurrence-count fuel bound does not bound Rust join or expression work;
+less retained materialization need not mean less replay work. See the
+[constraint-stream guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/streamed-constraints.md).
+
 For membership checking, clause search restricts candidates to the least
 interpretation; region search may still propose a larger original model of a
 positive cycle. The positive checker separately authenticates original

@@ -338,7 +338,7 @@ fn model_retention_failures_preserve_the_typed_cause() {
 }
 
 #[test]
-fn lazy_countermodel_requests_are_refused_before_parsing() {
+fn hybrid_device_policy_is_refused_before_parsing() {
     let mut options = options(&["--oracle", "countermodel", "--grounder", "lazy"]);
     options.backend = zetesis_cli::Backend::Metal;
     let mut output = Vec::new();
@@ -352,19 +352,18 @@ fn lazy_countermodel_requests_are_refused_before_parsing() {
     )
     .unwrap_err();
     match &error {
-        RunError::UnsupportedOracle { backend, grounder } => {
+        RunError::HybridBackend { backend } => {
             assert_eq!(*backend, options.backend);
-            assert_eq!(*grounder, options.grounder);
         }
         _ => panic!("route validation must precede source admission: {error}"),
     }
     let message = error.to_string();
     assert!(
-        message.contains("the countermodel oracle requires --grounder eager or auto"),
+        message.contains(
+            "streamed formula constraints support cpu or auto execution; requested metal"
+        ),
         "{message}"
     );
-    assert!(message.contains("requested metal with lazy"), "{message}");
-    assert!(message.contains("lazy"), "{message}");
     assert!(error.source().is_none());
     assert!(output.is_empty());
     assert!(diagnostics.is_empty(), "no backend may be initialized");

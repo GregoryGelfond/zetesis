@@ -21,6 +21,7 @@ use zetesis_themelios::{
 use crate::closure_session::ClosureSession;
 use crate::formula_execution::Execution;
 use crate::formula_session::FormulaSession;
+use crate::hybrid_session::HybridSession;
 use crate::phase_timing::Recorder;
 use crate::{
     AnswerSelection, ExecutionResources, Grounder, Interruption, Oracle, PhaseTimings,
@@ -35,6 +36,8 @@ pub enum PreparedProfile {
     Relational,
     /// Coherently indexed finite formulas and their objective/observation programs.
     Formula,
+    /// Complete producer theory with admitted constraints checked from source.
+    Hybrid,
     /// A complete ground graph retaining its original relational program identity.
     Ground,
 }
@@ -43,6 +46,7 @@ pub enum PreparedProfile {
 enum Prepared<'a> {
     Relational(&'a Program),
     Formula(crate::countermodel::Input<'a>),
+    Hybrid(&'a zetesis_themelios::HybridFormula),
     Ground(&'a Arc<GroundProgram>),
 }
 
@@ -56,6 +60,19 @@ pub struct PreparedInput<'a> {
     projection: Option<&'a zetesis_themelios::PreparedProjection>,
 }
 impl<'a> PreparedInput<'a> {
+    /// Borrow a coherent producer theory and its admitted streamed constraints.
+    /// No grounding or solving occurs here. CPU/automatic execution supports
+    /// lazy/automatic grounding; objectives and device checking are not part of
+    /// this initial hybrid profile.
+    #[must_use]
+    pub fn hybrid(owner: &'a zetesis_themelios::HybridFormula) -> Self {
+        Self {
+            input: Prepared::Hybrid(owner),
+            metadata: Some(owner.metadata()),
+            projection: Some(owner.projection()),
+        }
+    }
+
     /// Reuse an admitted native relational program without source metadata.
     /// This borrows the program directly: it performs no parsing, carrier
     /// expansion or grounding. Lazy and eager execution use the same relational
@@ -143,6 +160,7 @@ impl<'a> PreparedInput<'a> {
         match self.input {
             Prepared::Relational(_) => PreparedProfile::Relational,
             Prepared::Formula(_) => PreparedProfile::Formula,
+            Prepared::Hybrid(_) => PreparedProfile::Hybrid,
             Prepared::Ground(_) => PreparedProfile::Ground,
         }
     }
@@ -162,6 +180,7 @@ impl<'a> PreparedInput<'a> {
         match self.input {
             Prepared::Relational(program) => Subject::Program(program.clone()),
             Prepared::Formula(input) => Subject::Theory(input.theory.clone()),
+            Prepared::Hybrid(owner) => Subject::Hybrid(owner.clone()),
             Prepared::Ground(ground) => Subject::Program(ground.program().clone()),
         }
     }
@@ -172,6 +191,10 @@ impl<'a> PreparedInput<'a> {
         }
     }
     fn configure(self, mut config: SolveConfig) -> Result<SolveConfig, SolveError> {
+        if matches!(self.input, Prepared::Hybrid(_)) {
+            config.validate_hybrid()?;
+            return Ok(config);
+        }
         if !matches!(self.input, Prepared::Relational(_))
             && config.source_batching != crate::SourceBatching::Independent
         {
@@ -182,6 +205,7 @@ impl<'a> PreparedInput<'a> {
             Prepared::Formula(_) => {
                 config.oracle != Oracle::Closure && config.grounder != Grounder::Lazy
             }
+            Prepared::Hybrid(_) => unreachable!("hybrid policy validated above"),
             Prepared::Ground(_) => {
                 config.oracle != Oracle::Countermodel && config.grounder != Grounder::Lazy
             }
@@ -210,6 +234,8 @@ pub enum Subject {
     Program(Program),
     /// Original indexed finite formula theory, before candidate restrictions.
     Theory(Theory),
+    /// Original producer core together with its admitted source constraints.
+    Hybrid(zetesis_themelios::HybridFormula),
 }
 impl Subject {
     /// Whether both handles retain the same original immutable semantic instance.
@@ -219,6 +245,7 @@ impl Subject {
         match (self, other) {
             (Self::Program(left), Self::Program(right)) => left.same_instance(right),
             (Self::Theory(left), Self::Theory(right)) => left.same_instance(right),
+            (Self::Hybrid(left), Self::Hybrid(right)) => left.same_instance(right),
             _ => false,
         }
     }
@@ -277,6 +304,7 @@ pub type SessionModel = AnswerSet;
 enum State<'a> {
     Closure(Box<ClosureSession<'a>>),
     Formula(Box<FormulaSession<'a, Execution>>),
+    Hybrid(Box<HybridSession<'a>>),
     Stopped(Box<SemanticOutcome>),
 }
 
@@ -687,6 +715,7 @@ impl<'a> Session<'a> {
                     shared_execution: None,
                     closure_execution: None,
                     query_execution: None,
+                    hybrid_execution: None,
                 })),
                 config,
             ));
@@ -721,6 +750,15 @@ impl<'a> Session<'a> {
                 phases,
                 selection,
             )?)),
+            Prepared::Hybrid(owner) => State::Hybrid(Box::new(HybridSession::new(
+                owner,
+                &config,
+                resources,
+                observations,
+                control,
+                phases,
+                selection,
+            )?)),
         };
         Ok((state, config))
     }
@@ -734,6 +772,9 @@ impl<'a> Session<'a> {
         let mut outcome = match &self.state {
             State::Closure(state) => state.terminal().then(|| state.outcome()),
             State::Formula(state) => state
+                .finished()
+                .then(|| state.outcome(self.phases.recorder())),
+            State::Hybrid(state) => state
                 .finished()
                 .then(|| state.outcome(self.phases.recorder())),
             State::Stopped(outcome) => Some((**outcome).clone()),
@@ -768,6 +809,7 @@ impl<'a> Session<'a> {
         let mut outcome = match &self.state {
             State::Closure(state) => state.outcome(),
             State::Formula(state) => state.outcome(self.phases.recorder()),
+            State::Hybrid(state) => state.outcome(self.phases.recorder()),
             State::Stopped(outcome) => (**outcome).clone(),
         };
         outcome.projection = self
@@ -865,6 +907,12 @@ impl<'a> Session<'a> {
                 .next(&self.config, &self.control, self.phases.recorder())
                 .map(|result| result.map(|model| (model, None))),
             State::Formula(state) => state.next(
+                &self.config,
+                observations,
+                &self.control,
+                self.phases.recorder(),
+            ),
+            State::Hybrid(state) => state.next(
                 &self.config,
                 observations,
                 &self.control,

@@ -9,8 +9,12 @@ claim or a promise that every combination of individually supported forms works.
 The ordinary source driver selects a supported profile automatically. Explicit
 library admission doors are narrower: `admit` accepts the strict relational
 profile, `admit_extended` adds its scalar expansions, and `admit_formula` builds
-the broader finite Ferraris representation. General formula grounding remains
-eager. Selecting a GPU does not expand the accepted source language.
+the broader finite Ferraris representation. Formula programs default to eager
+grounding. Explicit lazy CPU execution can retain a producer core and stream
+eligible ordinary constraints; objectives and table joins are currently refused
+by this hybrid profile. Complete possible support and source arithmetic
+admission remain required. See the [grounding profiles](../architecture/grounding.md#eager-and-lazy-execution).
+Selecting a GPU does not expand the accepted source language.
 
 ## Source loading and finite admission limits
 
@@ -674,7 +678,8 @@ literals. Declaration atoms absent from original possible support are omitted.
 The library requests this behavior explicitly through
 [`SessionBuilder::projected`](../rust/sessions.md#projected-enumeration).
 `WorldView` always collects the complete original answer family. The current
-projection source profile uses eager formula grounding; work and retained-domain
+projection source profile prepares a complete finite projection domain for both
+eager and hybrid formula owners; work and retained-domain
 limits can refuse preparation, and separate history limits can stop enumeration
 without claiming complete projected coverage.
 

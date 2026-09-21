@@ -36,6 +36,22 @@ impl Preparation {
         }
     }
 
+    fn ground_hybrid(
+        mut self,
+        observer: Option<&dyn GroundingObserver>,
+    ) -> Result<(Compiled, crate::formula_hybrid::Constraints), FormulaFailure> {
+        grounding_observer::observe(observer, || {
+            formula_ground::ground_hybrid(
+                self.program,
+                &self.limits,
+                &mut self.budget,
+                self.location,
+                observer,
+                self.options,
+            )
+        })
+    }
+
     fn ground(
         mut self,
         observer: Option<&dyn GroundingObserver>,
@@ -141,6 +157,36 @@ impl PreparedFormula {
     pub const fn with_domain_analysis(mut self, limits: Option<crate::DomainLimits>) -> Self {
         self.preparation.options.domains = limits;
         self
+    }
+
+    /// Materialize producers and ineligible constraints while retaining ordinary
+    /// atom/scalar integrity constraints for repeated bounded satisfaction checks.
+    /// Complete possible support and original arithmetic admission still run.
+    /// This explicit schedule currently requires indexed joins and no objectives.
+    /// No solver runs; core answer sets still require the retained constraints.
+    ///
+    /// # Errors
+    /// Returns a located capability, arithmetic, allocation or resource refusal.
+    pub fn ground_hybrid(self) -> Result<crate::HybridFormula, FormulaFailure> {
+        self.ground_hybrid_with_observer(None)
+    }
+
+    /// Hybrid materialization with the same source phase observer as eager
+    /// grounding. Counts describe actual retained core nodes and admission work.
+    ///
+    /// # Errors
+    /// Returns the same failures as [`Self::ground_hybrid`].
+    pub fn ground_hybrid_with_observer(
+        self,
+        observer: Option<&dyn GroundingObserver>,
+    ) -> Result<crate::HybridFormula, FormulaFailure> {
+        let (compiled, constraints) = self.preparation.ground_hybrid(observer)?;
+        Ok(crate::HybridFormula::new(
+            compiled,
+            constraints,
+            crate::formula_hybrid::SourceOwner::Single(self.source),
+            self.metadata,
+        ))
     }
 
     /// Materialize the complete formula theory using the retained preparation.
@@ -288,6 +334,37 @@ impl PreparedFormulaBundle {
     /// Retains the original source bundle alongside every grounding refusal.
     pub fn ground(self) -> Result<AdmittedFormulaBundle, FormulaBundleFailure> {
         self.ground_with_observer(None)
+    }
+
+    /// Bundle counterpart of [`PreparedFormula::ground_hybrid`]. The original
+    /// include catalog remains owned through successful admission or refusal.
+    ///
+    /// # Errors
+    /// Returns a located source failure with the complete original bundle.
+    pub fn ground_hybrid(self) -> Result<crate::HybridFormula, FormulaBundleFailure> {
+        self.ground_hybrid_with_observer(None)
+    }
+
+    /// Hybrid bundle materialization with source phase observations.
+    ///
+    /// # Errors
+    /// Returns the same failures as [`Self::ground_hybrid`].
+    pub fn ground_hybrid_with_observer(
+        self,
+        observer: Option<&dyn GroundingObserver>,
+    ) -> Result<crate::HybridFormula, FormulaBundleFailure> {
+        match self.preparation.ground_hybrid(observer) {
+            Ok((compiled, constraints)) => Ok(crate::HybridFormula::new(
+                compiled,
+                constraints,
+                crate::formula_hybrid::SourceOwner::Bundle(self.bundle),
+                self.metadata,
+            )),
+            Err(error) => Err(FormulaBundleFailure {
+                bundle: self.bundle,
+                error: Box::new(error),
+            }),
+        }
     }
 
     /// Bundle counterpart of [`PreparedFormula::ground_with_count_plan`], with

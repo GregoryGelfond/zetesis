@@ -1,7 +1,10 @@
 # Library reference index
 
 Start with [Getting started with the library](getting-started.md) for dependency
-setup and a complete runnable program. The usual path is to prepare source with
+setup and the complete
+[solve example](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/examples/solve.rs).
+From a checkout, run `cargo run -p zetesis-solve --example solve --no-default-features`.
+The usual path is to prepare source with
 `zetesis_themelios`, pass the admitted owner to `zetesis_solve::Session`, consume
 `AnswerSet` values, and inspect the final outcome. Use the tables below when you
 need a specific capability rather than a complete solve.
@@ -105,3 +108,12 @@ is also available online.
 The current API does not offer a general ASPIF importer, a custom theory
 propagator or a themelios-solve backend implementation. The documented admitted
 inputs and session APIs define the supported integration points.
+
+When themelios-solve becomes available, the intended direction is to adopt its
+applicable programmatic interaction abstractions through a shared public layer
+or adapter. That integration is future work, not a shipped API. Zetesis's current
+library remains usable independently. Any adapter must preserve typed
+`AnswerSet` and `WorldView` outcomes, incomplete-result evidence, and zetesis's
+ownership of reduct checking and backend execution. The aim is convenient Rust
+interaction without requiring callers to reproduce a C-style handle protocol;
+future signatures and capabilities are not specified here.

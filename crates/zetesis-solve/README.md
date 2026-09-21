@@ -14,16 +14,17 @@ through path dependencies or a pinned Git revision, not from crates.io.
 Run the quickstart example from the checkout root:
 
 ```sh
-cargo run --locked -p zetesis-solve --no-default-features --example book-getting-started
+cargo run --locked -p zetesis-solve --example solve --no-default-features
 ```
 
-The [example source](../../docs/book/examples/getting-started.rs) admits a two-rule
-ASP program, starts a CPU session, prints each full interpretation in Rust's
-debug format and checks that search is exhausted. Errors propagate to its
-fallible `main`.
+The complete [example source](examples/solve.rs) chooses two compatible tasks
+from three. It prepares the ASP source, starts a CPU session, renders each full
+interpretation beside its `#show` output and checks exhaustion before reporting
+the two-answer complete family. Errors propagate to its fallible `main`.
 
 For an application, source admission usually comes from `zetesis-themelios`.
-`PreparedInput::admitted` borrows that owner, `Session::enumerate` yields
+`PreparedInput::formula` borrows the example's formula owner; normal programs can
+instead use `PreparedInput::admitted`. `Session::enumerate` yields
 `Result<AnswerSet, SolveFailure>`, and `AnswerSet::interpretation` exposes the full
 true-atom set. Inspect `Session::outcome` separately to determine what completed.
 

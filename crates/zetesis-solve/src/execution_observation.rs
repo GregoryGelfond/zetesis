@@ -12,6 +12,16 @@ use zetesis_themelios::objective_bound::ObjectiveBoundError;
 /// its own storage policy. Its work and storage are outside solver resource limits.
 #[derive(Debug)]
 pub enum ExecutionObservation<'a> {
+    /// The complete producer core is retained; eligible source constraints are
+    /// checked on the host before any original-program answer is accepted.
+    HybridGrounding {
+        /// Requested schedule; effective execution combines eager and lazy work.
+        requested: Grounder,
+        /// Lowered constraint templates, not a count of original declarations.
+        streamed_templates: usize,
+        /// Possible instances visited during complete source admission.
+        streamed_instances: u64,
+    },
     /// An explicitly supplied executor owns only bounded membership batches.
     /// Capabilities do not identify hardware or establish successful execution.
     ExternalExecutor {

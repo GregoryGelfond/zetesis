@@ -8,7 +8,7 @@ the command, embedding the libraries and understanding the solver.
 
 | I want to… | Read |
 | --- | --- |
-| Install zetesis and solve a program | [Installation and first solve](../../README.md#install-and-run), then the [command guide](reference/commands.md) |
+| Install zetesis and solve a program | [Installation and first solve](https://github.com/GregoryGelfond/zetesis/blob/main/README.md#install-and-run), then the [command guide](reference/commands.md) |
 | Check whether my program is supported | [Admitted language](reference/language.md) |
 | Use zetesis from Rust | [Getting started with the library](rust/getting-started.md), then [solving sessions](rust/sessions.md) |
 | Understand how the solver works | [A guided tour](architecture/tour.md), then [programs, answer sets and the reduct](architecture/semantics.md) |

@@ -48,6 +48,8 @@ pub struct Summary<'a> {
     pub workloads: Option<&'a [super::Workload]>,
     /// Exact requested native profiles.
     pub profiles: &'a [crate::selected::NativeExecution],
+    /// Whether the reference was measured or used only for its census.
+    pub reference_policy: super::ReferencePolicy,
     /// Sealed executable and source identities.
     pub before: &'a [crate::selected::FileSeal],
     /// Source-major, reference-first compact cells.
@@ -118,6 +120,7 @@ pub(super) fn summarize(report: &Report) -> Summary<'_> {
         cases: &report.cases,
         workloads: report.workloads.as_deref(),
         profiles: &report.plan.profiles,
+        reference_policy: report.plan.reference_policy,
         before: &report.before,
         cells,
     }

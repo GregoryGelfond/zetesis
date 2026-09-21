@@ -186,6 +186,69 @@ not a combined process-memory ceiling. Preparation work is charged once to the
 session search budget and reported in `SolvePhase::ReductPreparation`.
 Reuse preserves consumed work and pending-candidate accounting after a refusal.
 
+## Hybrid formula sessions
+
+`PreparedFormula::ground_hybrid()` and its bundle counterpart return a shared
+`HybridFormula` owning the original source, retained core and streamed constraint
+plans. Pass it through `PreparedInput::hybrid(&owner)`. The current profile uses
+CPU execution, indexed joins and no objectives; richer constraints remain in
+the eager core. `Backend::Cpu` or `Auto` and `Grounder::Lazy` or `Auto` are
+accepted. An explicit device request, eager schedule, closure oracle or external
+batch executor is refused for this profile.
+
+Preparation still completes possible support, arithmetic admission and the atom
+catalog. Eligible instances are visited during admission, but their full
+constraint DAGs are not stored. The original eager doors remain available.
+[Source preparation](source.md#stream-ordinary-constraints) details eligibility,
+identity and retained-memory bounds.
+
+When timing is enabled, streamed checks are included in
+`SolvePhase::OriginalValidation` during solving. Initial source preparation and
+core admission are separate; their elapsed time is not the total cost of source
+evaluation in a hybrid session.
+
+The session uses the ordinary formula enumerator to obtain core answers, then
+checks the streamed constraints before returning an `AnswerSet` of the original
+`Subject::Hybrid`. A violation rejects that core answer. A completed check permits
+publication; an interrupted or failed check remains pending and establishes
+neither acceptance nor exhaustion. A positive model limit counts accepted
+original-program answers, not rejected core proposals.
+
+This example checks every full answer, including the domain facts. Its eight
+core answers reduce to four original answers, each choosing a q-prefix followed
+by a p-suffix:
+
+```rust
+# extern crate zetesis_solve;
+# extern crate zetesis_core;
+# extern crate zetesis_cpu;
+# extern crate zetesis_themelios;
+{{#include ../examples/hybrid.rs:example}}
+```
+
+Run the maintained example from a checkout:
+
+```sh
+cargo run --locked -p zetesis-solve --no-default-features --example book-hybrid
+```
+
+`SolveConfig::constraints` supplies cumulative `ConstraintCheckLimits` for that
+session: work, substitutions and copied scalar payload. These are separate from
+source admission and per-candidate reduct-oracle limits. Completed support
+indexes are reused; constraint joins run again for each consumed core answer.
+Avoiding retained constraint formulas can therefore cost additional work and
+lose pruning that eager constraints provide during candidate generation.
+
+`SemanticOutcome::hybrid_execution()` reports consumed `core_answers`,
+`accepted`, `rejected`, `pending` and cumulative constraint-check statistics.
+Their invariant is `core_answers = accepted + rejected + pending`. Core answers
+still buffered by the inner enumerator are excluded. Formula search statistics
+continue to describe the core; `verified_models()` counts original-program
+answers. Cancellation and deadline stops use `Interruption::Constraint`; typed
+resource or evaluation failures retain the failure cause and incomplete outcome.
+Cloning the admitted owner shares identity and preparation; starting another
+session starts new search and check budgets.
+
 ## Collecting the original world view
 
 `WorldView::collect(input, config, limits, control)` owns a fresh unrestricted
@@ -242,7 +305,8 @@ The grounder completes the domain with the original source owner.
 `PreparedInput::projection()` exposes that immutable domain. A projected request
 without an explicit declaration returns `ProjectionError::MissingDeclaration`.
 An explicit empty domain has one class if the selected family is nonempty.
-The current source door uses finite formula admission and eager grounding.
+The source door uses finite formula admission; eager and hybrid owners both
+retain the complete projection domain.
 
 Objective selection precedes projection. Two answers with the same key can have
 different costs, so discarding one before optimization could discard an optimum.
@@ -411,7 +475,9 @@ and their scores. It requires an accessible physical GPU.
 
 ### Retain the original subject
 
-`AnswerSet::subject()` retains the checked `Program` or `Theory`.
+`AnswerSet::subject()` retains the checked `Program`, `Theory` or original
+`HybridFormula`. A hybrid answer retains the full source owner, not merely its
+core theory.
 `Subject::same_instance` distinguishes shared owners from independently admitted but
 structurally equal inputs. `into_interpretation()` explicitly discards the
 subject association for raw-model interoperability; use it only when your own

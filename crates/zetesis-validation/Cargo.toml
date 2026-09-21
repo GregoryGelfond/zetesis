@@ -42,3 +42,7 @@ test = true
 [[example]]
 name = "release_observations"
 test = true
+
+[[example]]
+name = "grounding_comparison"
+test = true

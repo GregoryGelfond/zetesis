@@ -267,6 +267,9 @@ fn stages(out: &mut Buffer, timings: Option<&crate::StageTimings>) -> Result<(),
 
 fn error_kind(error: &RunError) -> &'static str {
     match error {
+        RunError::Constraint(_) => "constraint",
+        RunError::HybridStatisticsOverflow => "hybrid_statistics_overflow",
+        RunError::HybridBackend { .. } => "hybrid_backend",
         RunError::Input(_) => "input",
         RunError::TimeLimitRange { .. } => "time_limit_range",
         RunError::DeadlineTimer(_) => "deadline_timer",
@@ -313,7 +316,9 @@ fn error_kind(error: &RunError) -> &'static str {
 
 fn reason_code(reason: Interruption) -> &'static str {
     match reason {
-        Interruption::Preparation(reason) | Interruption::Oracle(reason) => control_code(reason),
+        Interruption::Preparation(reason)
+        | Interruption::Oracle(reason)
+        | Interruption::Constraint(reason) => control_code(reason),
         Interruption::Countermodel(reason) => {
             use zetesis_sat::Incomplete;
             match reason {
@@ -478,6 +483,7 @@ fn write_interruption(
             Interruption::Preparation(_) => "preparation",
             Interruption::Oracle(_) => "oracle",
             Interruption::Countermodel(_) => "countermodel",
+            Interruption::Constraint(_) => "constraint",
             Interruption::Objective(_) => "objective",
             Interruption::Incumbent(_) => "incumbent",
         };
@@ -500,7 +506,9 @@ fn statistics(out: &mut Buffer, view: &SummaryView<'_>) -> Result<(), RunError> 
     // serialization of debug text or the human statistics protocol.
     if view.timings.is_some() {
         out.text("{\"search\":")?;
-        search_statistics(out, view.search)?;
+        search_statistics(out, view.search, view.hybrid_execution.is_some())?;
+        out.text(",\"hybrid_execution\":")?;
+        hybrid_statistics(out, view.hybrid_execution)?;
         out.text(",\"candidate_restrictions\":")?;
         candidate_statistics(out, view.candidates)?;
         out.text(",\"execution\":")?;
@@ -632,6 +640,7 @@ struct SummaryView<'a> {
     search: Option<&'a zetesis_sat::Statistics>,
     candidates: Option<zetesis_cpu::CandidateStatistics>,
     execution: Option<&'a crate::FormulaExecutionStatistics>,
+    hybrid_execution: Option<&'a zetesis_solve::HybridExecutionStatistics>,
     lazy_execution: Option<&'a crate::LazyExecutionStatistics>,
     shared_execution: Option<&'a crate::SharedExecutionStatistics>,
     closure_execution: Option<&'a crate::ClosureExecutionStatistics>,
@@ -656,6 +665,7 @@ impl<'a> SummaryView<'a> {
                     search: semantic.and_then(crate::SemanticOutcome::countermodel_statistics),
                     candidates: semantic.and_then(crate::SemanticOutcome::candidate_statistics),
                     execution: semantic.and_then(crate::SemanticOutcome::formula_execution),
+                    hybrid_execution: semantic.and_then(crate::SemanticOutcome::hybrid_execution),
                     lazy_execution: semantic.and_then(crate::SemanticOutcome::lazy_execution),
                     shared_execution: semantic.and_then(crate::SemanticOutcome::shared_execution),
                     closure_execution: semantic.and_then(crate::SemanticOutcome::closure_execution),
@@ -682,6 +692,7 @@ impl<'a> SummaryView<'a> {
                     search: partial.and_then(|p| p.countermodel_statistics.as_ref()),
                     candidates: partial.and_then(|p| p.candidate_statistics),
                     execution: partial.and_then(|p| p.formula_execution.as_ref()),
+                    hybrid_execution: partial.and_then(|p| p.hybrid_execution.as_ref()),
                     lazy_execution: partial.and_then(|p| p.lazy_execution.as_ref()),
                     shared_execution: partial.and_then(|p| p.shared_execution.as_ref()),
                     closure_execution: partial.and_then(|p| p.closure_execution.as_ref()),
@@ -697,12 +708,19 @@ impl<'a> SummaryView<'a> {
 fn search_statistics(
     out: &mut Buffer,
     statistics: Option<&zetesis_sat::Statistics>,
+    hybrid: bool,
 ) -> Result<(), RunError> {
     let Some(stats) = statistics else {
         return out.text("null");
     };
     out.text("{\"work\":")?;
     out.text(&stats.search.work.to_string())?;
+    out.text(",\"scope\":")?;
+    out.string(if hybrid {
+        "retained_core"
+    } else {
+        "original_theory"
+    })?;
     out.number_field("decisions", stats.search.decisions)?;
     out.number_field("candidate_queries", stats.candidate_queries)?;
     out.number_field("candidate_restrictions", stats.candidate_restrictions)?;
@@ -727,6 +745,25 @@ fn search_statistics(
     out.number_field("leaves", stats.reduct.regions.leaves)?;
     out.number_field("propagations", stats.reduct.regions.propagations)?;
     out.number_field("reading_work", stats.reduct.regions.work)?;
+    out.text("}}")
+}
+
+fn hybrid_statistics(
+    out: &mut Buffer,
+    statistics: Option<&zetesis_solve::HybridExecutionStatistics>,
+) -> Result<(), RunError> {
+    let Some(statistics) = statistics else {
+        return out.text("null");
+    };
+    out.text("{\"core_answers\":")?;
+    out.text(&statistics.core_answers.to_string())?;
+    out.number_field("accepted", statistics.accepted)?;
+    out.number_field("rejected", statistics.rejected)?;
+    out.number_field("pending", statistics.pending)?;
+    out.text(",\"constraints\":{\"work\":")?;
+    out.text(&statistics.constraints.work.to_string())?;
+    out.number_field("substitutions", statistics.constraints.substitutions)?;
+    out.number_field("scalar_bytes", statistics.constraints.scalar_bytes)?;
     out.text("}}")
 }
 

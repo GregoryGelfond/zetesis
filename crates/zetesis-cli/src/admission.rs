@@ -19,6 +19,83 @@ enum Input {
     Parsed(ParsedSource),
 }
 
+enum FormulaInput {
+    Source(zetesis_themelios::AdmittedFormula),
+    Bundle(zetesis_themelios::AdmittedFormulaBundle),
+    Hybrid(zetesis_themelios::HybridFormula),
+}
+
+impl FormulaInput {
+    fn prepared(&self) -> crate::PreparedInput<'_> {
+        match self {
+            Self::Source(owner) => crate::PreparedInput::formula(owner),
+            Self::Bundle(owner) => crate::PreparedInput::formula_bundle(owner),
+            Self::Hybrid(owner) => crate::PreparedInput::hybrid(owner),
+        }
+    }
+
+    fn warnings(&self, diagnostics: &mut Diagnostics<impl Write>) -> std::io::Result<()> {
+        match self {
+            Self::Source(owner) if !owner.warnings().is_empty() => {
+                diagnostics.diagnostic(&owner.warning_view())
+            }
+            Self::Bundle(owner) if !owner.warnings().is_empty() => {
+                diagnostics.diagnostic(&owner.warning_view())
+            }
+            Self::Hybrid(owner) if !owner.warnings().is_empty() => {
+                diagnostics.diagnostic(&owner.warning_view())
+            }
+            _ => Ok(()),
+        }
+    }
+
+    fn retain_source(&self, failure: PublicationFailure) -> PublicationFailure {
+        match self {
+            Self::Source(owner) => source_failure(failure, "<input>", owner.source()),
+            Self::Bundle(owner) => bundle_failure(failure, owner.bundle()),
+            Self::Hybrid(owner) => {
+                if let Some(bundle) = owner.bundle() {
+                    bundle_failure(failure, bundle)
+                } else if let Some(source) = owner.source() {
+                    source_failure(failure, "<input>", source)
+                } else {
+                    failure
+                }
+            }
+        }
+    }
+
+    fn solve(
+        &self,
+        options: &Options,
+        renderer: &mut impl crate::AnswerRenderer,
+        diagnostics: &mut Diagnostics<impl Write>,
+        control: &Control,
+        phases: &Recorder,
+    ) -> Result<Progress, PublicationFailure> {
+        self.warnings(diagnostics)?;
+        crate::publication::solve(
+            self.prepared(),
+            None,
+            &crate::PublicationConfig::from(options),
+            renderer,
+            diagnostics,
+            control,
+            phases,
+        )
+        .map_err(|failure| self.retain_source(failure))
+    }
+}
+
+fn validate_formula(options: &Options) -> Result<(), RunError> {
+    let config = crate::SolveConfig::from(options);
+    if options.grounder == crate::Grounder::Lazy {
+        config.validate_hybrid().map_err(Into::into)
+    } else {
+        config.validate_formula().map_err(Into::into)
+    }
+}
+
 pub(crate) fn source(
     source: String,
     options: &Options,
@@ -71,7 +148,7 @@ pub(crate) fn source(
             Err(error) => return Err(RunError::Expansion(error.into_error()).into()),
         }
     };
-    crate::SolveConfig::from(options).validate_formula()?;
+    validate_formula(options)?;
     if let Some(report) = crate::publication::check_control(renderer, diagnostics, control, phases)?
     {
         return Ok(report);
@@ -83,31 +160,26 @@ pub(crate) fn source(
                 Input::Text(text) => ParsedSource::new(text, admission)?,
                 Input::Parsed(parsed) => parsed,
             };
-            parsed
+            let prepared = parsed
                 .prepare_formula(expansion_limits(options), formula_limits(options))
                 .map_err(SourceFailure::into_error)?
                 .with_grounding_options(grounding_options(options))
-                .with_domain_analysis(Some(zetesis_themelios::DomainLimits::default()))
-                .ground_with_observer(
-                    observer
-                        .as_ref()
-                        .map(|observer| observer as &dyn zetesis_themelios::GroundingObserver),
-                )
+                .with_domain_analysis(Some(zetesis_themelios::DomainLimits::default()));
+            let observer = observer
+                .as_ref()
+                .map(|observer| observer as &dyn zetesis_themelios::GroundingObserver);
+            if options.grounder == crate::Grounder::Lazy {
+                prepared
+                    .ground_hybrid_with_observer(observer)
+                    .map(FormulaInput::Hybrid)
+            } else {
+                prepared
+                    .ground_with_observer(observer)
+                    .map(FormulaInput::Source)
+            }
         })
         .map_err(RunError::FormulaAdmission)?;
-    if !admitted.warnings().is_empty() {
-        diagnostics.diagnostic(&admitted.warning_view())?;
-    }
-    crate::publication::solve(
-        crate::PreparedInput::formula(&admitted),
-        None,
-        &crate::PublicationConfig::from(options),
-        renderer,
-        diagnostics,
-        control,
-        phases,
-    )
-    .map_err(|failure| source_failure(failure, "<input>", admitted.source()))
+    admitted.solve(options, renderer, diagnostics, control, phases)
 }
 
 pub(crate) fn bundle(
@@ -167,7 +239,7 @@ pub(crate) fn bundle(
             Err(error) => return Err(RunError::BundleAdmission(error).into()),
         }
     };
-    crate::SolveConfig::from(options).validate_formula()?;
+    validate_formula(options)?;
     if let Some(report) = crate::publication::check_control(renderer, diagnostics, control, phases)?
     {
         return Ok(report);
@@ -175,34 +247,29 @@ pub(crate) fn bundle(
     let observer = phases.grounding_observer();
     let admitted = phases
         .measure(SolvePhase::AdmissionMaterialization, || {
-            zetesis_themelios::prepare_bundle_formula(
+            let prepared = zetesis_themelios::prepare_bundle_formula(
                 bundle,
                 bundle_options(options),
                 expansion_limits(options),
                 formula_limits(options),
             )?
             .with_grounding_options(grounding_options(options))
-            .with_domain_analysis(Some(zetesis_themelios::DomainLimits::default()))
-            .ground_with_observer(
-                observer
-                    .as_ref()
-                    .map(|observer| observer as &dyn zetesis_themelios::GroundingObserver),
-            )
+            .with_domain_analysis(Some(zetesis_themelios::DomainLimits::default()));
+            let observer = observer
+                .as_ref()
+                .map(|observer| observer as &dyn zetesis_themelios::GroundingObserver);
+            if options.grounder == crate::Grounder::Lazy {
+                prepared
+                    .ground_hybrid_with_observer(observer)
+                    .map(FormulaInput::Hybrid)
+            } else {
+                prepared
+                    .ground_with_observer(observer)
+                    .map(FormulaInput::Bundle)
+            }
         })
         .map_err(RunError::FormulaBundleAdmission)?;
-    if !admitted.warnings().is_empty() {
-        diagnostics.diagnostic(&admitted.warning_view())?;
-    }
-    crate::publication::solve(
-        crate::PreparedInput::formula_bundle(&admitted),
-        None,
-        &crate::PublicationConfig::from(options),
-        renderer,
-        diagnostics,
-        control,
-        phases,
-    )
-    .map_err(|failure| bundle_failure(failure, admitted.bundle()))
+    admitted.solve(options, renderer, diagnostics, control, phases)
 }
 
 fn source_failure(

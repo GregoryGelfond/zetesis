@@ -207,6 +207,83 @@ fn labels_are_distinct_file_stems() {
     }
 }
 
+#[test]
+fn monotone_choices_preserve_the_order_constraint() {
+    assert_eq!(
+        Family::MonotoneChoices.source(3).unwrap(),
+        "d(1..3).\np(X) | q(X) :- d(X).\n:- p(X), q(Y), X < Y.\n"
+    );
+}
+
+#[test]
+fn redundant_transitivity_preserves_the_connected_join() {
+    assert_eq!(
+        Family::RedundantTransitivity.source(2).unwrap(),
+        "d(1..2).\np(X,Y) :- d(X), d(Y).\na | b.\n:- p(X,Y), p(Y,Z), not p(X,Z).\n"
+    );
+}
+
+#[test]
+fn monotone_contract_counts_exactly_the_prefix_cuts() {
+    for size in 1..=8 {
+        // Each producer answer chooses p (set bit) or q (clear bit). Reject
+        // every assignment containing a p before a later q, independently of
+        // the closed-form implementation in the generator.
+        let accepted = (0_u64..(1 << size))
+            .filter(|bits| {
+                (0..size)
+                    .all(|x| (x + 1..size).all(|y| bits & (1 << x) == 0 || bits & (1 << y) != 0))
+            })
+            .count();
+        let contract = Family::MonotoneChoices.contract(size).unwrap();
+        assert_eq!(
+            contract.model_count(),
+            Some(u64::try_from(accepted).unwrap())
+        );
+        assert_eq!(contract.family(), Selection::All);
+        assert_eq!(contract.cost(), None);
+    }
+    assert_eq!(
+        Family::MonotoneChoices.contract(16).unwrap().model_count(),
+        Some(17)
+    );
+}
+
+#[test]
+fn redundant_transitivity_keeps_two_complete_answers() {
+    for size in Family::RedundantTransitivity.sizes() {
+        let contract = Family::RedundantTransitivity.contract(size).unwrap();
+        assert_eq!(contract.model_count(), Some(2));
+        assert_eq!(contract.family(), Selection::All);
+        assert_eq!(contract.satisfiability(), Satisfiability::Sat);
+        assert_eq!(contract.cost(), None);
+    }
+}
+
+#[test]
+fn constraint_controls_reject_sizes_outside_their_bounds() {
+    for (family, first, last) in [
+        (Family::MonotoneChoices, 1, 16),
+        (Family::RedundantTransitivity, 2, 64),
+    ] {
+        assert_eq!(family.sizes(), first..=last);
+        for size in [first, last] {
+            let source = family.source(size).unwrap();
+            assert!(
+                parse_str(&source, Dialect::Clingo)
+                    .unwrap()
+                    .diagnostics()
+                    .is_empty()
+            );
+            assert!(family.contract(size).is_ok());
+        }
+        for size in [first - 1, last + 1, u32::MAX] {
+            assert_eq!(family.source(size), Err(Error::Size { family, size }));
+            assert_eq!(family.contract(size), Err(Error::Size { family, size }));
+        }
+    }
+}
+
 proptest! {
     #[test]
     fn every_admitted_source_parses_without_diagnostics(index in 0..Family::ALL.len(), size in 1u32..=4096) {

@@ -430,6 +430,7 @@ impl Options {
 impl From<&Options> for crate::SolveConfig {
     fn from(options: &Options) -> Self {
         let allowed = options.allowed();
+        let formula = crate::admission::formula_limits(options);
         Self {
             backend: options.backend,
             grounder: options.grounder,
@@ -437,6 +438,11 @@ impl From<&Options> for crate::SolveConfig {
             oracle: options.oracle,
             search: options.search,
             stats: options.stats,
+            constraints: zetesis_themelios::ConstraintCheckLimits {
+                max_work: formula.max_work,
+                max_substitutions: formula.max_substitutions,
+                max_scalar_bytes: options.max_expansion_bytes,
+            },
             models: options.models,
             max_search_work: options.max_search_work,
             max_search_decisions: options.max_search_decisions,

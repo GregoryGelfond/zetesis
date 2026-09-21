@@ -10,6 +10,9 @@ mod effects;
 #[path = "matrix_publication.rs"]
 mod publication;
 
+#[path = "matrix_native_family.rs"]
+mod native_family;
+
 fn request() -> Request<'static> {
     Request {
         corpus: Path::new("/unused/corpus"),
@@ -263,7 +266,7 @@ fn complete_answers_require_the_actual_requested_route() {
         &request(),
     )
     .unwrap();
-    assert!(!answer.satisfiable());
+    assert!(!answer.display.satisfiable());
     assert!(sample.observation.is_some());
     let mut request = request();
     request.plan.profiles[0].backend = crate::selected::Backend::Metal;
@@ -332,6 +335,23 @@ fn interruption_is_not_an_unsatisfiability_conclusion() {
     assert_eq!(
         outcome::check(&interrupted(), Some(exit(3))).unwrap_err().0,
         Decision::Incomplete
+    );
+}
+
+#[test]
+fn constraint_cancellation_remains_an_incomplete_census() {
+    let mut document = interrupted();
+    document["outcome"]["interruption"] =
+        json!({"kind":"constraint","code":"cancelled","detail":"unfinished source check"});
+    assert_eq!(
+        outcome::check(&document, Some(exit(3))).unwrap_err().0,
+        Decision::Incomplete
+    );
+    document["outcome"]["completion"] = json!("exhausted");
+    document["outcome"]["coverage"] = json!("exhausted");
+    assert_eq!(
+        outcome::check(&document, Some(exit(3))).unwrap_err().0,
+        Decision::InvalidReport
     );
 }
 #[test]

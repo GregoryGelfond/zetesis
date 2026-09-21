@@ -61,14 +61,31 @@ zetesis solve examples/network-repair.lp --all
 | `--time-limit 60s` | Set a cooperative deadline. |
 | `--memory-budget 4GiB` | Set the allowance for supported storage limits. |
 
-Execution defaults to CPU and uses lazy grounding where supported. General
-formulas use eager grounding. Use `zetesis devices` to list devices and
+Execution defaults to CPU and uses lazy grounding where supported. Formula
+programs default to eager grounding; explicit lazy CPU execution can stream
+eligible constraints while retaining their producer core. See the
+[grounding profiles](docs/book/architecture/grounding.md#eager-and-lazy-execution)
+for the current limits. Use `zetesis devices` to list devices and
 `--device metal` to request Metal explicitly.
 
 A stopped search is incomplete; it does not prove unsatisfiability or optimality.
 The time and memory options are not hard process-time or RSS caps.
 Human output is the default, and diagnostics go to stderr.
 See `zetesis help solve`, or add `--advanced` for resource controls.
+
+## Use from Rust
+
+Run the complete [Rust example](crates/zetesis-solve/examples/solve.rs) from the
+checkout root:
+
+```sh
+cargo run --locked -p zetesis-solve --example solve --no-default-features
+```
+
+It prepares a bounded task-choice program, streams typed `AnswerSet` values,
+distinguishes full interpretations from `#show`, and checks complete search.
+The [library quickstart](docs/book/rust/getting-started.md) includes the full
+program and dependency setup for your own application.
 
 ## Documentation
 

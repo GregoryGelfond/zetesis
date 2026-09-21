@@ -92,7 +92,7 @@ fn configuration_defaults_preserve_legacy_limits() {
         max_closure_bytes: library.max_closure_bytes,
         ..command
     };
-    assert_eq!(format!("{aligned:?}"), format!("{library:?}"));
+    assert_eq!(aligned, library);
 }
 
 #[test]

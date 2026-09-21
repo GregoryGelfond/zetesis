@@ -39,6 +39,7 @@ pub struct SemanticOutcome {
     pub(crate) shared_execution: Option<crate::SharedExecutionStatistics>,
     pub(crate) closure_execution: Option<crate::ClosureExecutionStatistics>,
     pub(crate) query_execution: Option<crate::QueryExecutionObservation>,
+    pub(crate) hybrid_execution: Option<crate::HybridExecutionStatistics>,
 }
 
 impl SemanticOutcome {
@@ -67,6 +68,7 @@ impl SemanticOutcome {
             shared_execution: None,
             closure_execution: None,
             query_execution: None,
+            hybrid_execution: None,
         }
     }
 
@@ -113,9 +115,19 @@ impl SemanticOutcome {
     }
 
     /// Formula candidate/reduct accounting, when that stream was initialized.
+    /// For hybrid input this describes the retained core. Its stable-model count
+    /// does not include subsequent source-constraint rejection; use
+    /// [`Self::verified_models`] for original-program membership.
     #[must_use]
     pub const fn countermodel_statistics(&self) -> Option<&zetesis_sat::Statistics> {
         self.countermodel_statistics.as_ref()
+    }
+
+    /// Core answers filtered by complete source-constraint checks. Absent for
+    /// eager and relational execution. Pending checks establish no membership.
+    #[must_use]
+    pub const fn hybrid_execution(&self) -> Option<&crate::HybridExecutionStatistics> {
+        self.hybrid_execution.as_ref()
     }
 
     /// Host batch receipts for an explicitly supplied executor. Absent for

@@ -27,12 +27,24 @@ pub enum Suite {
     Series,
 }
 
+/// Which populations include the independent reference solver.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReferencePolicy {
+    /// Qualify and measure the reference alongside every native profile.
+    #[default]
+    AllPhases,
+    /// Establish one complete reference census per case; measure native profiles only.
+    QualificationOnly,
+}
+
 /// Validated finite campaign configuration; requested profiles never imply execution.
 #[derive(Clone, Debug, Serialize)]
 pub struct Plan {
     pub(super) suite: Suite,
     pub(super) profiles: Vec<NativeExecution>,
     pub(super) reference_workers: NonZeroUsize,
+    pub(super) reference_policy: ReferencePolicy,
     pub(super) warmups: usize,
     pub(super) repetitions: usize,
     /// Separate child-resource rounds per producer and case, after the
@@ -71,10 +83,23 @@ impl Plan {
             suite,
             profiles,
             reference_workers,
+            reference_policy: ReferencePolicy::AllPhases,
             warmups,
             repetitions,
             memory_runs: 0,
         })
+    }
+    /// Select reference populations without changing native qualification,
+    /// repetition counts or source/answer contracts. Defaults to all phases.
+    #[must_use]
+    pub const fn with_reference(mut self, policy: ReferencePolicy) -> Self {
+        self.reference_policy = policy;
+        self
+    }
+    /// Requested reference populations, retained in serialized evidence.
+    #[must_use]
+    pub const fn reference_policy(&self) -> ReferencePolicy {
+        self.reference_policy
     }
     /// Request zero through 41 memory rounds per producer and case: each a
     /// separate invocation through a fresh helper that reports the child's
@@ -124,6 +149,9 @@ impl Plan {
             (Phase::Timed, self.repetitions),
             (Phase::Memory, self.memory_runs),
         ] {
+            let reference = phase == Phase::Qualification
+                || self.reference_policy == ReferencePolicy::AllPhases;
+            let width = self.profiles.len() + usize::from(reference);
             for round in 0..rounds {
                 for position in 0..cases {
                     let case = (position + round) % cases;
@@ -137,10 +165,12 @@ impl Plan {
                             case,
                             phase,
                             round,
-                            producer: if index == 0 {
+                            producer: if reference && index == 0 {
                                 Producer::Reference
                             } else {
-                                Producer::Native { profile: index - 1 }
+                                Producer::Native {
+                                    profile: index - usize::from(reference),
+                                }
                             },
                         });
                     }

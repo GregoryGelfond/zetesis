@@ -5506,6 +5506,61 @@
       "name": "Zetesis.StorageOwners.shared_idle_active_within_limit"
     },
     {
+      "file": "Zetesis/StreamedConstraints.lean",
+      "line": 60,
+      "name": "Zetesis.StreamedConstraints.clear_append"
+    },
+    {
+      "file": "Zetesis/StreamedConstraints.lean",
+      "line": 66,
+      "name": "Zetesis.StreamedConstraints.clear_permutation"
+    },
+    {
+      "file": "Zetesis/StreamedConstraints.lean",
+      "line": 79,
+      "name": "Zetesis.StreamedConstraints.scan_preserves"
+    },
+    {
+      "file": "Zetesis/StreamedConstraints.lean",
+      "line": 117,
+      "name": "Zetesis.StreamedConstraints.enough_fuel_no_pending"
+    },
+    {
+      "file": "Zetesis/StreamedConstraints.lean",
+      "line": 136,
+      "name": "Zetesis.StreamedConstraints.scan_complete_iff"
+    },
+    {
+      "file": "Zetesis/StreamedConstraints.lean",
+      "line": 156,
+      "name": "Zetesis.StreamedConstraints.scan_violation_iff"
+    },
+    {
+      "file": "Zetesis/StreamedConstraints.lean",
+      "line": 178,
+      "name": "Zetesis.StreamedConstraints.completed_partition"
+    },
+    {
+      "file": "Zetesis/StreamedConstraints.lean",
+      "line": 198,
+      "name": "Zetesis.StreamedConstraints.partition_invariance"
+    },
+    {
+      "file": "Zetesis/StreamedConstraints.lean",
+      "line": 209,
+      "name": "Zetesis.StreamedConstraints.clear_iff_models"
+    },
+    {
+      "file": "Zetesis/StreamedConstraints.lean",
+      "line": 231,
+      "name": "Zetesis.StreamedConstraints.stable_iff_completed_partition"
+    },
+    {
+      "file": "Zetesis/StreamedConstraints.lean",
+      "line": 248,
+      "name": "Zetesis.StreamedConstraints.pending_can_hide_violation"
+    },
+    {
       "file": "Zetesis/StrongNegation.lean",
       "line": 44,
       "name": "Zetesis.StrongNegation.satisfies_rename"
@@ -6600,6 +6655,7 @@
     "Zetesis/SourceMeasures.lean",
     "Zetesis/SourceSupport.lean",
     "Zetesis/StorageOwners.lean",
+    "Zetesis/StreamedConstraints.lean",
     "Zetesis/StrongNegation.lean",
     "Zetesis/StructuralBindings.lean",
     "Zetesis/StructuredWitnesses.lean",
@@ -6619,8 +6675,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "a48613d148359df3abf76629e25b672af14c01a3236189d3bf8787114466b905",
-    "Zetesis.lean": "266afb2dd4603dfaf10086c791809d0b1b511f66885bcde956fef744c7da2b05",
+    "Audit.lean": "67333f3aa536ea6d4a82217794123bab2d471e18dfa8dd726389f414bb1050bf",
+    "Zetesis.lean": "77e6cd00dcae4514a5b528726337d28d2f9bcbd1efbf2b752200fff806c6bd8d",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
     "Zetesis/AggregateBounds.lean": "c1a49f93ac5140bcd22876b42c52c23c4f447352c9cf61f2f01741fbbdc98452",
     "Zetesis/AggregateConsumers.lean": "41aded89dbfaa79833ed3b336030ef4b08afa5be8e7029060416c2f8de59ef97",
@@ -6744,6 +6800,7 @@
     "Zetesis/SourceMeasures.lean": "87fb4bc2f98c01f2ae73a468554f751a9e2c3ab915b2eb62563e096e887fa154",
     "Zetesis/SourceSupport.lean": "ee2c6f8e7e3031c667f29a93ddc376f2d4c5b84725cc1a9482b5c636ff232387",
     "Zetesis/StorageOwners.lean": "6319788182043ddcfaf40d79ab7de9a052b1bb719679031042f4002b20d3be22",
+    "Zetesis/StreamedConstraints.lean": "5535a3f68b9ab89ca0ee5894df7acd0f6a4d3be4727d466c9feb9297fa4a37fd",
     "Zetesis/StrongNegation.lean": "4f99901e0dfc2e777d12110aca36c2c3be4964f5cbcf88d0a3d87b355a5730c6",
     "Zetesis/StructuralBindings.lean": "8606044bbfeab1c9238e9c2311206d0dd894bb6482463c02613e759a44f06894",
     "Zetesis/StructuredWitnesses.lean": "035fda4f2857801d516f26c1dca179233a561581beffbfbc69c1897e8926be8c",

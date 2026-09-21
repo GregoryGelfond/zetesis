@@ -379,7 +379,12 @@ fn lazy_formula_bundle_is_refused_before_device_discovery() {
     )
     .unwrap_err();
     assert!(
-        matches!(error, RunError::UnsupportedOracle { .. }),
+        matches!(
+            error,
+            RunError::HybridBackend {
+                backend: zetesis_cli::Backend::Metal
+            }
+        ),
         "{error}"
     );
 }

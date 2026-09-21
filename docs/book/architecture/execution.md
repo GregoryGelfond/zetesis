@@ -164,7 +164,7 @@ coverage and completion laws; concrete synchronization remains a refinement
 obligation.
 
 The regions method is the default, chosen by
-[measurement](../reference/observations/README.md#the-regions-default-and-one-worker-count)
+[measurement](https://github.com/GregoryGelfond/zetesis/blob/main/docs/book/reference/observations/README.md#the-regions-default-and-one-worker-count)
 beside the classical search over a clause form on the same cells, with the
 host's workers on the tree; the classical search remains reachable for
 comparison. Read as regions the classical search is the same tree:
@@ -430,8 +430,10 @@ qualification for each claimed backend; an observed driver fault is not presumed
 
 For admitted relational programs, automatic materialization selects lazy source
 grounding on both CPU and GPU. Hardware changes do not require a complete ground
-rule store. Explicit eager grounding retains its compiled graph. General
-formulas still require eager grounding.
+rule store. Explicit eager grounding retains its compiled graph. Formula programs
+default to eager grounding; the CPU hybrid profile can stream eligible constraints
+against answers of its retained producer core. Formula device execution still
+requires an eager theory.
 
 Automatic hardware selection retains CPU throughout the solve. Existing
 measurements do not establish a device crossover for an automatic policy; batch

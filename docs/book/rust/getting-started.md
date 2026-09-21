@@ -1,28 +1,40 @@
 # Getting started with the library
 
-Use `zetesis-solve` to solve a program from Rust and receive answer sets as typed
-values. Your application chooses how to load source and display results; a solve
-does not require command-line arguments or captured text output.
-
-This example finds the two answer sets `{a}` and `{b}` of:
-
-```asp
-{{#include ../examples/choices.lp}}
-```
-
-## Set up a project
-
-The packages are not published on crates.io. Use a checkout of zetesis, or pin
-its Git revision in your application's dependencies. The example below assumes
-`zetesis` and your new application are sibling directories. Use Rust 1.97 or
-newer; the repository's checked toolchain is 1.97.1.
+The complete [solve example](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/examples/solve.rs)
+prepares an ASP program, streams typed answer sets on the CPU, displays them and
+checks that enumeration completed. Run it from a zetesis checkout:
 
 ```sh
-cargo new answer-set-app
-cd answer-set-app
+cargo run --locked -p zetesis-solve --example solve --no-default-features
 ```
 
-Replace the new project's empty `[dependencies]` section in `Cargo.toml` with:
+The program chooses two of three tasks. Building and deploying together is
+forbidden, so its complete family contains two answers: build with test, and
+deploy with test. Each full interpretation also contains the three `task`
+facts. `#show run/1` changes only the displayed channel, not those typed answers.
+
+## Set up a Rust application
+
+The packages are not published on crates.io. Use their paths in a pinned local
+checkout. These commands create sibling repository and application directories:
+
+```sh
+git clone https://github.com/GregoryGelfond/zetesis.git
+git -C zetesis switch --detach
+git -C zetesis rev-parse HEAD
+rustup toolchain install 1.97.1 --profile minimal
+cargo new answer-set-app
+cd answer-set-app
+rustup override set 1.97.1
+```
+
+Record the full revision printed by `rev-parse`; keeping that detached checkout
+fixes the source used by all three path dependencies. To reproduce the setup
+elsewhere, check out that same revision. The first Cargo build also fetches the
+repository's pinned themelios dependency; no separate themelios checkout or
+direct parser dependency is needed.
+
+Replace the application's empty `[dependencies]` section with:
 
 ```toml
 [dependencies]
@@ -31,66 +43,61 @@ zetesis-themelios = { path = "../zetesis/crates/zetesis-themelios" }
 zetesis-cpu = { path = "../zetesis/crates/zetesis-cpu" }
 ```
 
-This selects a CPU-only solver build. GPU support is enabled by default when
-`default-features = false` is omitted; compiling that support does not itself
-select a GPU. Cargo features are shared across dependencies, so another package
-can enable that feature for the same build.
+This selects a CPU-only solver build. Without `default-features = false`, GPU
+support is compiled but a GPU is not selected automatically. Cargo feature
+unification allows another dependency to enable that support in the same build.
+Keep the application's generated `Cargo.lock` to pin its resolved dependencies.
 
-## Solve and check completion
+## Complete program
 
-Put the following in `src/main.rs`. This is the same source as the repository's
-`book-getting-started` example.
+Put this code in `src/main.rs` and run `cargo run`. The book includes the actual
+maintained example below; there is no separate abbreviated implementation.
 
 ```rust
 # extern crate zetesis_solve;
 # extern crate zetesis_cpu;
 # extern crate zetesis_themelios;
-{{#include ../examples/getting-started.rs:example}}
+{{#include ../../../crates/zetesis-solve/examples/solve.rs:example}}
 ```
 
-Run it with `cargo run`. It prints each full interpretation using Rust's debug
-format and checks that enumeration completed. This is not the source's `#show`
-projection. From the zetesis checkout, run the maintained example directly:
+For each answer, `Full answer` contains five atoms: the three task facts and two
+chosen `run` atoms. The two `#show` lines are, in either enumeration order:
 
-```sh
-cargo run --locked -p zetesis-solve --no-default-features --example book-getting-started
+```text
+#show: run(build) run(test)
+#show: run(deploy) run(test)
 ```
 
-The main steps are:
+Only after exhaustion does the example print `Complete family: 2 answer sets.`
+Parsing, preparation, solving, observation and writer failures propagate through
+the fallible `main`. A control or resource stop does not become a complete-family
+claim; answers printed before it remain a partial prefix.
 
-1. **Prepare the source.** `admit` parses and checks this normal-rule program,
-   returning an owner for its admitted representation. Keep that owner alive
-   while `PreparedInput::admitted` borrows it.
-2. **Start a session.** `Session::enumerate` searches the original program.
-   `Backend::Cpu` selects CPU execution; `models: 0` requests all answers.
-   `Control` supplies cooperative cancellation and deadlines when needed.
-3. **Read answer sets.** Each successful item is an `AnswerSet`.
-   `interpretation()` gives its full true-atom set, including atoms that source
-   display directives might hide. The `?` operator propagates a failed pull.
-4. **Check what finished.** Reaching an answer is different from exhausting the
-   search. The example requires `Completion::Exhausted` and returns an error if
-   enumeration stopped early.
+## What the calls do
 
-A resource limit, cancellation or failure can leave valid answers without a
-complete family. If the application needs to retain that family, use bounded
-`WorldView::collect` rather than an unbounded vector. A complete empty collection
-establishes inconsistency; an empty partial result does not. See
-[completion and output](outcomes.md) for this API and its failure evidence.
+1. **Prepare the program.** `zetesis_themelios::prepare_formula` parses, checks
+   and prepares this finite choice program; `ground` admits its eager formula
+   representation. Keep that owner alive while `PreparedInput::formula` borrows
+   it. The application does not use themelios's parser directly.
+2. **Configure execution.** `SolveConfig` selects CPU execution and eager
+   grounding. `models: 0` requests every answer. `Control` can supply cooperative
+   cancellation and deadlines without changing the program's semantics.
+3. **Consume typed answers.** `Session::enumerate` yields
+   `Result<AnswerSet, SolveFailure>`. `AnswerSet::interpretation` exposes the full
+   true-atom set. The observation API renders logical atom spellings, either all
+   atoms or the original source's `#show` selection; it does not alter membership.
+4. **Inspect completion.** `Completion::Exhausted` establishes complete search.
+   Finding an answer, reaching a requested answer limit or dropping the iterator
+   early does not. A complete empty family establishes inconsistency; an empty
+   partial prefix does not.
 
-## Adapt the example
+If the application needs to retain a complete family, use bounded
+`WorldView::collect` or `SessionBuilder::collect`. They preserve partial failure
+evidence instead of returning a `WorldView` for an incomplete collection. See
+[completion and output](outcomes.md).
 
-`admit` deliberately supports a normal-rule profile. Broader source programs may
-need `admit_extended` or `admit_formula`; successful parsing alone does not mean
-that a profile supports the program. See [source preparation](source.md) for
-those choices and multi-file input.
-
-For optimization, choose deliberately: `Session::enumerate` returns all original
-answer sets with their scores, including nonoptimal ones. `Session::new` selects
-incumbents when an objective exists. Inspect the final outcome before calling an
-incumbent optimal. The [session guide](sessions.md) covers streaming, stopping,
-execution policy and optimization; [completion and output](outcomes.md) explains
-complete collection and publication.
-
-Use [interpretations and atoms](models.md) to inspect results,
-[costs and shown terms](costs-and-output.md) for source presentation, and the
-[library reference index](libraries.md) when you need a lower-level operation.
+For normal-rule or multi-file source admission, see [source preparation](source.md).
+For objectives, `Session::enumerate` returns all answer sets with scores, while
+`Session::new` selects incumbents; inspect completion before calling an incumbent
+optimal. Continue with [sessions](sessions.md), [costs and shown terms](costs-and-output.md)
+or the [library reference index](libraries.md).

@@ -100,6 +100,7 @@ pub(crate) fn write_progress(
             candidate_statistics: semantic.candidate_statistics(),
             countermodel_statistics: semantic.countermodel_statistics(),
             formula_execution: semantic.formula_execution(),
+            hybrid_execution: semantic.hybrid_execution(),
             lazy_execution: semantic.lazy_execution(),
             shared_execution: semantic.shared_execution(),
             closure_execution: semantic.closure_execution(),
@@ -284,6 +285,7 @@ struct Details<'a> {
     candidate_statistics: Option<zetesis_cpu::CandidateStatistics>,
     countermodel_statistics: Option<&'a zetesis_sat::Statistics>,
     formula_execution: Option<&'a crate::FormulaExecutionStatistics>,
+    hybrid_execution: Option<&'a zetesis_solve::HybridExecutionStatistics>,
     lazy_execution: Option<&'a crate::LazyExecutionStatistics>,
     shared_execution: Option<&'a crate::SharedExecutionStatistics>,
     closure_execution: Option<&'a crate::ClosureExecutionStatistics>,
@@ -303,6 +305,7 @@ impl<'a> From<&'a Report> for Details<'a> {
             candidate_statistics: report.candidate_statistics,
             countermodel_statistics: report.countermodel_statistics.as_ref(),
             formula_execution: report.formula_execution.as_ref(),
+            hybrid_execution: report.hybrid_execution.as_ref(),
             lazy_execution: report.lazy_execution.as_ref(),
             shared_execution: report.shared_execution.as_ref(),
             closure_execution: report.closure_execution.as_ref(),
@@ -324,6 +327,7 @@ impl<'a> From<&'a crate::PartialReport> for Details<'a> {
             candidate_statistics: report.candidate_statistics,
             countermodel_statistics: report.countermodel_statistics.as_ref(),
             formula_execution: report.formula_execution.as_ref(),
+            hybrid_execution: report.hybrid_execution.as_ref(),
             lazy_execution: report.lazy_execution.as_ref(),
             shared_execution: report.shared_execution.as_ref(),
             closure_execution: report.closure_execution.as_ref(),
@@ -368,6 +372,9 @@ fn details(
     if let Some(stats) = report.lazy_execution {
         lazy(sink, stats)?;
     }
+    if let Some(stats) = report.hybrid_execution {
+        hybrid(sink, config, stats)?;
+    }
     let examined = if report.shared_execution.is_some() {
         "closure result/control records examined"
     } else {
@@ -383,7 +390,7 @@ fn details(
     }
     if let Some(stats) = report.countermodel_statistics {
         formula(sink, options, config, report)?;
-        countermodel(sink, config, stats)?;
+        countermodel(sink, config, stats, report.hybrid_execution.is_some())?;
         writeln!(
             sink,
             "  discovered gate tuples: inapplicable (complete semantic candidates)"
@@ -478,6 +485,28 @@ fn candidates(sink: &mut impl Write, stats: zetesis_cpu::CandidateStatistics) ->
         )?;
     }
     Ok(())
+}
+
+fn hybrid(
+    sink: &mut impl Write,
+    config: &crate::SolveConfig,
+    stats: &zetesis_solve::HybridExecutionStatistics,
+) -> io::Result<()> {
+    writeln!(
+        sink,
+        "  hybrid grounding: eager retained core; streamed source constraints; core answers={}; accepted={}; rejected={}; pending={}",
+        stats.core_answers, stats.accepted, stats.rejected, stats.pending
+    )?;
+    writeln!(
+        sink,
+        "  constraint checks: work={} of {}; substitutions={} of {}; cumulative scalar payload bytes={} of {}; independent of admission and reduct work",
+        stats.constraints.work,
+        config.constraints.max_work,
+        stats.constraints.substitutions,
+        config.constraints.max_substitutions,
+        stats.constraints.scalar_bytes,
+        config.constraints.max_scalar_bytes
+    )
 }
 
 fn query(sink: &mut impl Write, observation: &crate::QueryExecutionObservation) -> io::Result<()> {
@@ -633,6 +662,7 @@ fn countermodel(
     sink: &mut impl Write,
     config: &crate::SolveConfig,
     stats: &zetesis_sat::Statistics,
+    hybrid: bool,
 ) -> io::Result<()> {
     if let Some(support) = stats.support {
         writeln!(
@@ -660,9 +690,14 @@ fn countermodel(
             counts.work,
         )?;
     }
+    let membership = if hybrid {
+        "verified core models"
+    } else {
+        "verified stable models"
+    };
     writeln!(
         sink,
-        "  countermodel: search work={}; decisions={}; candidates={}; queries={}; witnesses={}; candidate restrictions={}; classical queries={}; verified stable models={}",
+        "  countermodel: search work={}; decisions={}; candidates={}; queries={}; witnesses={}; candidate restrictions={}; classical queries={}; {membership}={}",
         stats.search.work,
         stats.search.decisions,
         stats.candidates,
@@ -786,6 +821,11 @@ fn formula(
     config: &crate::SolveConfig,
     report: &Details<'_>,
 ) -> io::Result<()> {
+    let grounder = if report.hybrid_execution.is_some() {
+        "hybrid"
+    } else {
+        "eager"
+    };
     let oracle = match report
         .countermodel_statistics
         .and_then(|s| s.certified)
@@ -805,7 +845,7 @@ fn formula(
         };
         writeln!(
             sink,
-            "  effective execution: backend={backend}; oracle={oracle}; grounder=eager; CPU completion requested workers={}; peak preflight workers={}; adapter={}",
+            "  effective execution: backend={backend}; oracle={oracle}; grounder={grounder}; CPU completion requested workers={}; peak preflight workers={}; adapter={}",
             options.completion_workers, execution.completion.effective_workers, execution.adapter
         )?;
         writeln!(
@@ -860,7 +900,7 @@ fn formula(
     } else {
         writeln!(
             sink,
-            "  effective execution: backend=cpu; oracle={oracle}; grounder=eager; native CPU search; batch-completion scratch limit=inapplicable"
+            "  effective execution: backend=cpu; oracle={oracle}; grounder={grounder}; native CPU search; batch-completion scratch limit=inapplicable"
         )
     }
 }

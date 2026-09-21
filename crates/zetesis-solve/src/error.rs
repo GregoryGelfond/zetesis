@@ -7,6 +7,15 @@ use crate::{Backend, Grounder, Oracle, PhaseTimings, PreparedProfile, SemanticOu
 /// An unsuccessful preparation or execution operation; never evidence of UNSAT.
 #[derive(Debug)]
 pub enum SolveError {
+    /// A streamed source constraint could not be completely evaluated.
+    Constraint(zetesis_themelios::ConstraintCheckFailure),
+    /// Consumed core-answer accounting cannot represent another answer.
+    HybridStatisticsOverflow,
+    /// Streamed formula constraints do not have a device executor yet.
+    HybridBackend {
+        /// Explicitly requested execution hardware.
+        backend: Backend,
+    },
     /// Explicit batch executor selection, protocol, or original external failure.
     Executor(crate::ExecutorError),
     /// Fixed-domain answer projection failed after preserving full membership.
@@ -80,6 +89,10 @@ pub enum SolveError {
 impl fmt::Display for SolveError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Constraint(error) => error.fmt(formatter),
+            Self::HybridStatisticsOverflow => formatter.write_str("hybrid answer accounting overflow"),
+            Self::HybridBackend { backend } => write!(formatter,
+                "streamed formula constraints support cpu or auto execution; requested {}", backend.label()),
             Self::Executor(error) => error.fmt(formatter),
             Self::Projection(error) => error.fmt(formatter),
             Self::Batch(error) => error.fmt(formatter),
@@ -123,6 +136,7 @@ impl fmt::Display for SolveError {
 impl std::error::Error for SolveError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
+            Self::Constraint(error) => Some(error),
             Self::Executor(error) => Some(error),
             Self::Projection(error) => Some(error),
             Self::Batch(error) => Some(error),
@@ -138,6 +152,8 @@ impl std::error::Error for SolveError {
             Self::Words(error) => Some(error),
             Self::Model(error) => Some(error),
             Self::BackendUnavailable
+            | Self::HybridStatisticsOverflow
+            | Self::HybridBackend { .. }
             | Self::UnsupportedOracle { .. }
             | Self::UnsupportedSourceBatching
             | Self::ClosureReservation { .. }

@@ -3,17 +3,21 @@ use super::{DeviceWork, Execution, FormulaResidualStatistics, Observation, Proce
 use crate::selected::{Backend, Grounder, NativeExecution, Oracle};
 use serde_json::Value;
 
+mod hybrid;
+
 pub(super) fn observe(
     document: &Value,
     stderr: &[u8],
     request: NativeExecution,
 ) -> Result<Observation, String> {
     let timing = super::super::timing::parse_any(stderr)?;
+    let hybrid = hybrid::read(document)?;
     // An explicit request names the mode the cell must have taken; an
     // automatic request accepts either mode and retains the one observed.
     let taken = match timing.grounding_mode.as_str() {
         "eager" => Grounder::Eager,
         "lazy_interleaved" => Grounder::Lazy,
+        "mixed" if hybrid.is_some() => Grounder::Lazy,
         _ => return Err("unsupported reported grounding mode".into()),
     };
     if request.grounder != Grounder::Auto && taken != request.grounder {
@@ -34,22 +38,7 @@ pub(super) fn observe(
     let [route] = routes.as_slice() else {
         return Err("missing or ambiguous actual backend metadata".into());
     };
-    let (backend, adapter) = if route.starts_with("cpu") {
-        (Backend::Cpu, None)
-    } else {
-        let prefix = route
-            .strip_prefix("gpu (")
-            .or_else(|| route.strip_prefix("hybrid GPU propagation + exact CPU residual search ("))
-            .or_else(|| route.strip_prefix("GPU tight support ("))
-            .ok_or("unsupported actual backend metadata")?;
-        let (adapter, _) = prefix
-            .split_once(", Metal; vendor=")
-            .ok_or("actual device API is not Metal")?;
-        if adapter.is_empty() {
-            return Err("empty actual device name".into());
-        }
-        (Backend::Metal, Some(adapter.to_owned()))
-    };
+    let (backend, adapter) = reported_backend(route)?;
     if backend != request.backend {
         return Err("actual backend differs from requested matrix cell".into());
     }
@@ -59,7 +48,12 @@ pub(super) fn observe(
         "effective execution",
     )?;
     let effective_backend = field(effective, "backend")?;
-    if field(effective, "grounder")? != taken.label() {
+    let grounding = if hybrid.is_some() {
+        "hybrid"
+    } else {
+        taken.label()
+    };
+    if field(effective, "grounder")? != grounding {
         return Err("effective execution and measured grounding disagree".into());
     }
     let procedure = match field(effective, "oracle")? {
@@ -77,8 +71,17 @@ pub(super) fn observe(
     if !matches_request {
         return Err("actual oracle differs from explicit requested procedure".into());
     }
+    if hybrid.is_some()
+        && (timing.grounding_mode != "mixed"
+            || backend != Backend::Cpu
+            || procedure == Procedure::Closure)
+    {
+        return Err(
+            "hybrid source checking requires mixed grounding and CPU formula membership".into(),
+        );
+    }
     if procedure == Procedure::PositiveConsequences
-        && (backend != Backend::Cpu || taken != Grounder::Eager)
+        && (backend != Backend::Cpu || (taken != Grounder::Eager && hybrid.is_none()))
     {
         return Err("positive consequences require the eager CPU formula route".into());
     }
@@ -93,6 +96,7 @@ pub(super) fn observe(
     )?;
     Ok(Observation {
         timing,
+        hybrid,
         execution: Execution {
             backend,
             procedure,
@@ -101,6 +105,27 @@ pub(super) fn observe(
         },
     })
 }
+
+/// Decode the hardware actually named by the unique backend record. Requested
+/// policy and effective execution are reconciled separately by the caller.
+fn reported_backend(route: &str) -> Result<(Backend, Option<String>), String> {
+    if route.starts_with("cpu") {
+        return Ok((Backend::Cpu, None));
+    }
+    let prefix = route
+        .strip_prefix("gpu (")
+        .or_else(|| route.strip_prefix("hybrid GPU propagation + exact CPU residual search ("))
+        .or_else(|| route.strip_prefix("GPU tight support ("))
+        .ok_or("unsupported actual backend metadata")?;
+    let (adapter, _) = prefix
+        .split_once(", Metal; vendor=")
+        .ok_or("actual device API is not Metal")?;
+    if adapter.is_empty() {
+        return Err("empty actual device name".into());
+    }
+    Ok((Backend::Metal, Some(adapter.to_owned())))
+}
+
 fn one<'a>(mut values: impl Iterator<Item = &'a str>, label: &str) -> Result<&'a str, String> {
     let value = values.next().ok_or_else(|| format!("missing {label}"))?;
     if values.next().is_some() {

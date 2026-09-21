@@ -10,6 +10,9 @@ pub(super) fn execution(semantic: Option<&SemanticOutcome>) -> String {
     let Some(semantic) = semantic else {
         return "unavailable".into();
     };
+    if semantic.hybrid_execution().is_some() {
+        return "CPU hybrid formula; eager core, streamed constraints".into();
+    }
     if let Some(execution) = semantic.batch_execution() {
         let operation = match execution.operation {
             zetesis_solve::MembershipOperation::General => "general reduct",
@@ -69,8 +72,15 @@ pub(super) fn table(
         rows.push(count(
             "Verified memberships",
             semantic.verified_models(),
-            "includes queued results",
+            if semantic.hybrid_execution().is_some() {
+                "original answers after completed constraint checks"
+            } else {
+                "includes queued results"
+            },
         ));
+        if let Some(execution) = semantic.hybrid_execution() {
+            hybrid(&mut rows, execution);
+        }
         if let Some(statistics) = semantic.countermodel_statistics() {
             formula(&mut rows, statistics);
         }
@@ -150,6 +160,48 @@ pub(super) fn table(
         rows,
     )
     .map_err(io::Error::other)
+}
+
+fn hybrid(rows: &mut Vec<Row>, execution: &zetesis_solve::HybridExecutionStatistics) {
+    for (label, value, scope) in [
+        (
+            "Core answers checked",
+            execution.core_answers,
+            "consumed proposals, not original membership",
+        ),
+        (
+            "Constraint checks accepted",
+            execution.accepted,
+            "original answer membership established",
+        ),
+        (
+            "Constraint checks rejected",
+            execution.rejected,
+            "observed source constraint violation",
+        ),
+        (
+            "Constraint checks pending",
+            execution.pending,
+            "no original membership established",
+        ),
+        (
+            "Constraint checking work",
+            execution.constraints.work,
+            "cumulative; independent of admission and reduct work",
+        ),
+        (
+            "Constraint substitutions",
+            execution.constraints.substitutions,
+            "completed rows, including false filters",
+        ),
+    ] {
+        rows.push(count(label, value, scope));
+    }
+    rows.push(count(
+        "Constraint scalar bytes",
+        execution.constraints.scalar_bytes,
+        "cumulative copied payload; not live memory or RSS",
+    ));
 }
 
 fn formula(rows: &mut Vec<Row>, statistics: &zetesis_sat::Statistics) {

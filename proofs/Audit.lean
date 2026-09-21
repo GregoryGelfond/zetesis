@@ -1101,6 +1101,17 @@ import Zetesis
 #print axioms Zetesis.StorageOwners.active_storage_within_limit
 #print axioms Zetesis.StorageOwners.sum_within_component_bounds
 #print axioms Zetesis.StorageOwners.shared_idle_active_within_limit
+#print axioms Zetesis.StreamedConstraints.clear_append
+#print axioms Zetesis.StreamedConstraints.clear_permutation
+#print axioms Zetesis.StreamedConstraints.scan_preserves
+#print axioms Zetesis.StreamedConstraints.enough_fuel_no_pending
+#print axioms Zetesis.StreamedConstraints.scan_complete_iff
+#print axioms Zetesis.StreamedConstraints.scan_violation_iff
+#print axioms Zetesis.StreamedConstraints.completed_partition
+#print axioms Zetesis.StreamedConstraints.partition_invariance
+#print axioms Zetesis.StreamedConstraints.clear_iff_models
+#print axioms Zetesis.StreamedConstraints.stable_iff_completed_partition
+#print axioms Zetesis.StreamedConstraints.pending_can_hide_violation
 #print axioms Zetesis.StrongNegation.satisfies_rename
 #print axioms Zetesis.StrongNegation.reduct_rename
 #print axioms Zetesis.StrongNegation.frozen_rename

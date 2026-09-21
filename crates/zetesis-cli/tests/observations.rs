@@ -64,13 +64,12 @@ fn hidden_full_models_and_every_optimal_tie_keep_their_multiplicity() {
     }
 }
 #[test]
-fn explicit_closure_and_lazy_requests_are_refused_without_fallback() {
+fn incompatible_observation_routes_are_refused_without_fallback() {
     let source = "p(1). #show f(X):p(X).";
     for arguments in [
         vec!["--oracle", "closure"],
         vec!["--backend", "metal", "--grounder", "lazy"],
         vec!["--backend", "nvidia", "--grounder", "lazy"],
-        vec!["--grounder", "lazy"],
     ] {
         let (result, output, _) = solve(source, &arguments);
         assert!(result.is_err(), "{arguments:?}");

@@ -5505,6 +5505,61 @@
     "line": 87
   },
   {
+    "name": "Zetesis.StreamedConstraints.clear_append",
+    "file": "Zetesis/StreamedConstraints.lean",
+    "line": 60
+  },
+  {
+    "name": "Zetesis.StreamedConstraints.clear_permutation",
+    "file": "Zetesis/StreamedConstraints.lean",
+    "line": 66
+  },
+  {
+    "name": "Zetesis.StreamedConstraints.scan_preserves",
+    "file": "Zetesis/StreamedConstraints.lean",
+    "line": 79
+  },
+  {
+    "name": "Zetesis.StreamedConstraints.enough_fuel_no_pending",
+    "file": "Zetesis/StreamedConstraints.lean",
+    "line": 117
+  },
+  {
+    "name": "Zetesis.StreamedConstraints.scan_complete_iff",
+    "file": "Zetesis/StreamedConstraints.lean",
+    "line": 136
+  },
+  {
+    "name": "Zetesis.StreamedConstraints.scan_violation_iff",
+    "file": "Zetesis/StreamedConstraints.lean",
+    "line": 156
+  },
+  {
+    "name": "Zetesis.StreamedConstraints.completed_partition",
+    "file": "Zetesis/StreamedConstraints.lean",
+    "line": 178
+  },
+  {
+    "name": "Zetesis.StreamedConstraints.partition_invariance",
+    "file": "Zetesis/StreamedConstraints.lean",
+    "line": 198
+  },
+  {
+    "name": "Zetesis.StreamedConstraints.clear_iff_models",
+    "file": "Zetesis/StreamedConstraints.lean",
+    "line": 209
+  },
+  {
+    "name": "Zetesis.StreamedConstraints.stable_iff_completed_partition",
+    "file": "Zetesis/StreamedConstraints.lean",
+    "line": 231
+  },
+  {
+    "name": "Zetesis.StreamedConstraints.pending_can_hide_violation",
+    "file": "Zetesis/StreamedConstraints.lean",
+    "line": 248
+  },
+  {
     "name": "Zetesis.StrongNegation.satisfies_rename",
     "file": "Zetesis/StrongNegation.lean",
     "line": 44

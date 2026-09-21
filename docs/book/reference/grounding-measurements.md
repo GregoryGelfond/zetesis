@@ -335,7 +335,7 @@ The [observation data](observations/release-1e5b78ce-ca10a5e7.json) and
 identities, and the original report hashes. This is a derived receipt view;
 output streams and machine-local paths are omitted. It preserves the recorded
 selected-display/cost comparisons, not an independent comparison of hidden
-full interpretations. The [observation guide](observations/README.md) states
+full interpretations. The [observation guide](https://github.com/GregoryGelfond/zetesis/blob/main/docs/book/reference/observations/README.md) states
 that boundary and reproduces the three tables below without running a solver:
 
 ```sh
@@ -585,10 +585,10 @@ oracle selection, with one requested closure worker and one completion worker.
 | Corpus manifest | `b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958` |
 
 All six queens encodings use N=8 unless stated otherwise. SEND uses the
-[standalone encoding](../../../examples/kr-domains/standalone/send-money/send-money.lp),
-task allocation uses [variant04/scenario05](../../../examples/kr-domains/scenarios/task-allocation/variant-04/05-larger-mix.lp),
-and shortest path uses [variant01/scenario06](../../../examples/kr-domains/scenarios/shortest-path/variant-01/06-layered-dag.lp).
-Their [manifest](../../../examples/kr-domains/manifest.json) records companion
+[standalone encoding](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/standalone/send-money/send-money.lp),
+task allocation uses [variant04/scenario05](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/scenarios/task-allocation/variant-04/05-larger-mix.lp),
+and shortest path uses [variant01/scenario06](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/scenarios/shortest-path/variant-01/06-layered-dag.lp).
+Their [manifest](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/manifest.json) records companion
 sources and their hashes. Unoptimized programs enumerate all answers; optimized
 programs publish every optimum tie. This is neither time to the first answer
 nor a comparison of unpublished nonoptimal interpretations.
@@ -607,7 +607,7 @@ memory census or device-memory measure. MiB means 1,048,576 bytes.
 
 ## Canonical release comparison
 
-The [curated observation data](observations/README.md) publishes all 468 ordered
+The [curated observation data](https://github.com/GregoryGelfond/zetesis/blob/main/docs/book/reference/observations/README.md) publishes all 468 ordered
 receipts for this historical nine-workload, four-block comparison, with exact
 timing/RSS samples and source, executable and original-report hashes. The
 maintained `release_observations` Rust example reproduces the three tables below.

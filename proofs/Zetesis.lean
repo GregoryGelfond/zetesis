@@ -12,6 +12,7 @@ import Zetesis.Ferraris
 import Zetesis.ParametricReduct
 import Zetesis.PositiveTheory
 import Zetesis.ConstrainedPositive
+import Zetesis.StreamedConstraints
 import Zetesis.ProducerScheduling
 import Zetesis.FerrarisGuards
 import Zetesis.FerrarisMask

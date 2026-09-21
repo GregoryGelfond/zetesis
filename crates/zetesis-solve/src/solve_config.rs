@@ -4,6 +4,8 @@ use std::num::NonZeroUsize;
 
 use crate::{Backend, Grounder, Oracle, SearchMethod, SourceBatching};
 
+const DEFAULT_MAX_SUBSTITUTIONS: usize = 10_000_000;
+
 /// Policy for one semantic session. Budgets retain their existing ownership:
 /// Formula search/objective work is cumulative. Independent closure work is per
 /// candidate; shared CPU rounds separate collective source and per-world work.
@@ -12,7 +14,7 @@ use crate::{Backend, Grounder, Oracle, SearchMethod, SourceBatching};
 pub struct SolveConfig {
     /// Execution backend policy.
     pub backend: Backend,
-    /// Materialization policy for relational programs.
+    /// Materialization policy within the admitted input's supported profiles.
     pub grounder: Grounder,
     /// Relational source traversal; the sharing strategies require CPU execution.
     pub source_batching: SourceBatching,
@@ -22,6 +24,10 @@ pub struct SolveConfig {
     pub search: SearchMethod,
     /// Enable optional host timing; semantic/resource counters remain independent.
     pub stats: bool,
+    /// Cumulative streamed-constraint limits for a hybrid formula session.
+    /// Independent of core candidate/reduct work; eager sessions do not use them.
+    /// The default substitution ceiling matches the ordinary session allowance.
+    pub constraints: zetesis_themelios::ConstraintCheckLimits,
     /// Maximum yielded models or retained optimum ties; zero requests all.
     pub models: usize,
     /// Cumulative candidate restriction or formula encoding and search work.
@@ -137,10 +143,11 @@ impl SolveConfig {
     /// These finite session allowances differ from standalone primitive defaults.
     /// Logical work ceilings do not impose a wall-clock deadline or remove the
     /// independently configured source, storage and materialization limits.
-    /// The byte ceilings are the shares of [`Self::REFERENCE_MEMORY`];
+    /// The retained-storage byte ceilings are shares of [`Self::REFERENCE_MEMORY`];
     /// [`Self::for_allowance`] scales them by a session's allowance and
     /// shares the closure ceiling by its workers, which is how the command
-    /// takes the host's memory and parallelism.
+    /// takes the host's memory and parallelism. Cumulative scalar-copy limits
+    /// count work across source checks and are not scaled with retained storage.
     pub const DEFAULT: Self = Self {
         backend: Backend::Auto,
         grounder: Grounder::Auto,
@@ -148,6 +155,10 @@ impl SolveConfig {
         oracle: Oracle::Auto,
         search: SearchMethod::Regions,
         stats: false,
+        constraints: zetesis_themelios::ConstraintCheckLimits {
+            max_substitutions: DEFAULT_MAX_SUBSTITUTIONS as u64,
+            ..zetesis_themelios::ConstraintCheckLimits::DEFAULT
+        },
         models: 1,
         max_search_work: 10_000_000_000,
         max_search_decisions: 10_000_000,
@@ -177,7 +188,7 @@ impl SolveConfig {
         gpu_formula_rounds: 64,
         max_source_work: 10_000_000,
         max_atoms: 1_000_000,
-        max_substitutions: 10_000_000,
+        max_substitutions: DEFAULT_MAX_SUBSTITUTIONS,
         max_ground_rules: 1_000_000,
         max_batch_bytes: 67_108_864,
     };
@@ -270,6 +281,37 @@ impl SolveConfig {
     /// # Errors
     /// Refuses lazy grounding and relational shared-source policies.
     pub fn validate_formula(&self) -> Result<(), crate::SolveError> {
+        if self.grounder == Grounder::Lazy {
+            return Err(crate::SolveError::UnsupportedOracle {
+                backend: self.backend,
+                grounder: self.grounder,
+            });
+        }
         crate::engine::validate_countermodel(self)
+    }
+
+    /// Validate the execution policy for a producer core with streamed source
+    /// constraints. This does not admit source or construct an executor.
+    ///
+    /// # Errors
+    /// Refuses eager materialization, closure membership, device execution and
+    /// shared relational source rounds for this initial CPU formula profile.
+    pub fn validate_hybrid(&self) -> Result<(), crate::SolveError> {
+        if self.source_batching != SourceBatching::Independent {
+            return Err(crate::SolveError::UnsupportedSourceBatching);
+        }
+        if !matches!(self.backend, Backend::Auto | Backend::Cpu) {
+            return Err(crate::SolveError::HybridBackend {
+                backend: self.backend,
+            });
+        }
+        if self.oracle == Oracle::Closure || self.grounder == Grounder::Eager {
+            return Err(crate::SolveError::PreparedInput {
+                profile: crate::PreparedProfile::Hybrid,
+                oracle: self.oracle,
+                grounder: self.grounder,
+            });
+        }
+        Ok(())
     }
 }

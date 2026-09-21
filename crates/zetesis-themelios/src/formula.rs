@@ -237,6 +237,20 @@ impl fmt::Display for FormulaResource {
 /// A located refusal of finite formula source admission; never semantic UNSAT.
 #[derive(Debug)]
 pub enum FormulaFailure {
+    /// A cancellable streamed-source operation stopped before completion.
+    Interrupted {
+        /// Cancellation or deadline observed at a charged work boundary.
+        reason: zetesis_cpu::Stop,
+        /// Original source occurrence whose operation stopped.
+        location: Location,
+    },
+    /// The explicitly requested hybrid schedule cannot handle this capability.
+    HybridUnsupported {
+        /// Capability that remains available through eager grounding.
+        feature: crate::HybridFeature,
+        /// Original source occurrence, or the source for a join policy.
+        location: Location,
+    },
     /// Formula construction metadata or final root evidence could not reserve capacity.
     MetadataAllocation {
         /// Original reservation error, independent of configured resource limits.
@@ -377,7 +391,9 @@ impl FormulaFailure {
                     )
                 })
                 .collect(),
-            Self::MetadataAllocation { location, .. }
+            Self::Interrupted { location, .. }
+            | Self::HybridUnsupported { location, .. }
+            | Self::MetadataAllocation { location, .. }
             | Self::AtomAllocation { location, .. }
             | Self::SupportRelation { location, .. }
             | Self::SupportTable { location, .. }
@@ -401,6 +417,10 @@ impl FormulaFailure {
 impl fmt::Display for FormulaFailure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Interrupted { reason, .. } => reason.fmt(f),
+            Self::HybridUnsupported { feature, .. } => {
+                write!(f, "hybrid grounding does not support {feature}")
+            }
             Self::MetadataAllocation { error, .. } => {
                 write!(f, "formula metadata storage: {error}")
             }
@@ -446,6 +466,7 @@ impl fmt::Display for FormulaFailure {
 impl std::error::Error for FormulaFailure {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
+            Self::Interrupted { reason, .. } => Some(reason),
             Self::MetadataAllocation { error, .. } | Self::AtomAllocation { error, .. } => {
                 Some(error)
             }

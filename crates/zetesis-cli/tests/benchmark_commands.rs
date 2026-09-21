@@ -40,6 +40,107 @@ fn installed_corpus_defaults_to_canonical_solve() {
     );
 }
 
+#[test]
+fn ordinary_corpus_keeps_reference_measurements() {
+    use zetesis_validation::performance::{Phase, matrix};
+    let BenchCommand::Corpus(options) = command(&["corpus", "--report", "new.json"]) else {
+        panic!("expected corpus")
+    };
+    let plan = options.plan().unwrap();
+    assert_eq!(plan.profiles().len(), 1);
+    assert_eq!(plan.reference_policy(), matrix::ReferencePolicy::AllPhases);
+    assert!(
+        plan.slots(1)
+            .unwrap()
+            .iter()
+            .any(|slot| slot.producer == matrix::Producer::Reference && slot.phase == Phase::Timed)
+    );
+}
+
+#[test]
+fn grounder_comparison_varies_only_materialization() {
+    use zetesis_validation::selected::Grounder;
+    let BenchCommand::Corpus(options) = command(&[
+        "corpus",
+        "--report",
+        "new.json",
+        "--compare-grounders",
+        "--threads",
+        "4",
+        "--completion-workers",
+        "2",
+        "--batch-size",
+        "17",
+    ]) else {
+        panic!("expected corpus")
+    };
+    let plan = options.plan().unwrap();
+    let [eager, lazy] = plan.profiles() else {
+        panic!("expected matched profiles")
+    };
+    assert_eq!(eager.grounder, Grounder::Eager);
+    assert_eq!(lazy.grounder, Grounder::Lazy);
+    assert_eq!(eager.workers.get(), 4);
+    assert_eq!(eager.completion_workers.get(), 2);
+    assert_eq!(eager.batch_size.get(), 17);
+    let normalized = zetesis_validation::selected::NativeExecution {
+        grounder: eager.grounder,
+        ..*lazy
+    };
+    assert_eq!(
+        serde_json::to_value(eager).unwrap(),
+        serde_json::to_value(normalized).unwrap()
+    );
+}
+
+#[test]
+fn grounder_comparison_qualifies_reference_once() {
+    use zetesis_validation::performance::{Phase, matrix};
+    let BenchCommand::Corpus(options) =
+        command(&["corpus", "--report", "new.json", "--compare-grounders"])
+    else {
+        panic!("expected corpus")
+    };
+    let plan = options.plan().unwrap();
+    assert_eq!(
+        plan.reference_policy(),
+        matrix::ReferencePolicy::QualificationOnly
+    );
+    let slots = plan.slots(1).unwrap();
+    let reference: Vec<_> = slots
+        .iter()
+        .filter(|slot| slot.producer == matrix::Producer::Reference)
+        .collect();
+    assert_eq!(reference.len(), 1);
+    assert_eq!(reference[0].phase, Phase::Qualification);
+    for profile in 0..2 {
+        assert!(
+            slots
+                .iter()
+                .any(|slot| slot.producer == matrix::Producer::Native { profile }
+                    && slot.phase == Phase::Memory)
+        );
+    }
+}
+
+#[test]
+fn grounder_comparison_refuses_an_explicit_grounder() {
+    for grounder in ["auto", "eager", "lazy"] {
+        let error = Invocation::try_parse_from([
+            "zetesis",
+            "bench",
+            "corpus",
+            "--report",
+            "new.json",
+            "--compare-grounders",
+            "--grounder",
+            grounder,
+        ])
+        .unwrap_err();
+        assert_eq!(error.kind(), clap::error::ErrorKind::ArgumentConflict);
+    }
+}
+
 #[cfg(feature = "gpu")]
 #[test]
 fn primitive_json_is_an_unstyled_event_stream() {

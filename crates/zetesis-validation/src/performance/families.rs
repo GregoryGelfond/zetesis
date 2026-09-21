@@ -53,6 +53,14 @@ pub enum Family {
     /// ending at position `n / 2`: `C(n, n / 2)` plans, the inertia of the
     /// position carried by frame rules from step to step.
     Planning,
+    /// One `p/q` choice per position, with no `p` before a later `q`: `n + 1`
+    /// answers. The producer core alone has 2ⁿ answers, exposing lost pruning
+    /// when its ordinary constraints are streamed instead of retained.
+    MonotoneChoices,
+    /// A complete binary relation plus an independent `a/b` choice: two answers.
+    /// A connected transitivity constraint has n³ possible body substitutions
+    /// but rejects none. This separates constraint storage from rejection.
+    RedundantTransitivity,
 }
 
 /// A refused generation request.
@@ -83,7 +91,7 @@ impl std::error::Error for Error {}
 impl Family {
     /// Every family, in presentation order, for a consumer that enumerates
     /// them; the library itself names the families it measures.
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 15] = [
         Self::IndependentChoice,
         Self::IndependentNegation,
         Self::IndependentNegationAggregate,
@@ -97,6 +105,8 @@ impl Family {
         Self::ProducerChain,
         Self::LatinSquare,
         Self::Planning,
+        Self::MonotoneChoices,
+        Self::RedundantTransitivity,
     ];
 
     /// Stable lowercase name, usable as a file stem.
@@ -116,12 +126,17 @@ impl Family {
             Self::ProducerChain => "producer-chain",
             Self::LatinSquare => "latin-square",
             Self::Planning => "planning",
+            Self::MonotoneChoices => "monotone-choices",
+            Self::RedundantTransitivity => "redundant-transitivity",
         }
     }
 
     /// Admitted sizes. The upper bounds keep every count below 2⁶⁴, every
     /// source below a mebibyte, and the stratified pattern well formed; the
-    /// Latin squares stop where their count is known in closed form.
+    /// Latin squares stop where their count is known in closed form. The two
+    /// constraint controls additionally cap their core choices at 2¹⁶ and their
+    /// connected substitutions at 64³. These bounds do not promise admission or
+    /// completion under any particular solver's resource settings.
     #[must_use]
     pub const fn sizes(self) -> RangeInclusive<u32> {
         match self {
@@ -135,6 +150,8 @@ impl Family {
             Self::ProducerChain => 2..=4096,
             Self::LatinSquare => 1..=5,
             Self::Planning => 1..=20,
+            Self::MonotoneChoices => 1..=16,
+            Self::RedundantTransitivity => 2..=64,
         }
     }
 
@@ -170,6 +187,12 @@ impl Family {
             Self::ProducerChain => producer_chain(size),
             Self::LatinSquare => latin_square(size),
             Self::Planning => planning(size),
+            Self::MonotoneChoices => {
+                format!("d(1..{size}).\np(X) | q(X) :- d(X).\n:- p(X), q(Y), X < Y.\n")
+            }
+            Self::RedundantTransitivity => format!(
+                "d(1..{size}).\np(X,Y) :- d(X), d(Y).\na | b.\n:- p(X,Y), p(Y,Z), not p(X,Z).\n"
+            ),
         })
     }
 
@@ -194,6 +217,12 @@ impl Family {
             | Self::ProducerChain => 1,
             Self::LatinSquare => latin_squares(size),
             Self::Planning => binomial(size, size / 2),
+            // Each cut chooses a q-prefix and a p-suffix, including either
+            // empty prefix/suffix. All domain facts occur in every answer.
+            Self::MonotoneChoices => u64::from(size) + 1,
+            // Every d/p atom is forced, so transitivity always holds. Exactly
+            // one of a or b remains in each subset-minimal interpretation.
+            Self::RedundantTransitivity => 2,
         };
         let count = NonZeroU64::new(count).ok_or(Error::Size { family: self, size })?;
         Ok(match self {

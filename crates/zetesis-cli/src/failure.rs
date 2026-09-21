@@ -36,6 +36,9 @@ pub struct PartialReport {
     pub countermodel_statistics: Option<zetesis_sat::Statistics>,
     /// Actual hybrid accounting, including uncommitted candidates and queued models.
     pub formula_execution: Option<crate::FormulaExecutionStatistics>,
+    /// Retained-core answers and source-constraint decisions, including pending
+    /// checks that establish no membership in the original program.
+    pub hybrid_execution: Option<zetesis_solve::HybridExecutionStatistics>,
     /// Actual lazy device work, including incomplete batch progress.
     pub lazy_execution: Option<crate::LazyExecutionStatistics>,
     /// Shared CPU source/world work, including incomplete batch progress.
@@ -157,6 +160,7 @@ impl Progress {
             candidate_statistics: semantic.candidate_statistics(),
             countermodel_statistics: semantic.countermodel_statistics().copied(),
             formula_execution: semantic.formula_execution().cloned(),
+            hybrid_execution: semantic.hybrid_execution().copied(),
             lazy_execution: semantic.lazy_execution().cloned(),
             shared_execution: semantic.shared_execution().cloned(),
             closure_execution: semantic.closure_execution().cloned(),
@@ -223,6 +227,9 @@ impl Progress {
             formula_execution: semantic
                 .and_then(crate::SemanticOutcome::formula_execution)
                 .cloned(),
+            hybrid_execution: semantic
+                .and_then(crate::SemanticOutcome::hybrid_execution)
+                .copied(),
             lazy_execution: semantic
                 .and_then(crate::SemanticOutcome::lazy_execution)
                 .cloned(),

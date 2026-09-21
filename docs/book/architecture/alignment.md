@@ -60,8 +60,9 @@ different types of value.
 | Check several proposals | Share program data while keeping each interpretation, reduct and verdict separate | [`BatchOracle`](../rust/parallel.md); [commit boundaries](execution.md#immutable-rounds-and-commit-boundaries) |
 
 These are capability mappings. Ordinary relational solving supports lazy source
-rounds, Rayon and GPU closure. Ordinary formula solving currently grounds eagerly
-and combines host candidate production with membership checking on the selected
+rounds, Rayon and GPU closure. Ordinary formula solving defaults to eager grounding;
+explicit lazy CPU execution can compose core answer enumeration with streamed
+constraint satisfaction. Formula solving combines host candidate production with membership checking on the selected
 backend. Automatic device execution uses complete tight certificates when
 available; other formulas use GPU propagation and exact host completion.
 With multiple workers, joined Rayon rounds produce bounded candidate batches

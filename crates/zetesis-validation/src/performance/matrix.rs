@@ -4,7 +4,9 @@
 //! overhead, setup, grounding, solving and captured output. This is distinct from
 //! the legacy uninstrumented CPU protocol and the eventual full uninstrumented
 //! corpus matrix. Selected displays/counts/costs are compared with clingo; native
-//! full records are retained, but hidden clingo interpretations are unavailable.
+//! full families also agree across profiles and repeats, including hidden atoms,
+//! shown values and multiplicities. Hidden clingo interpretations are unavailable.
+//! A qualification-only reference policy leaves all later measurements native.
 //!
 //! First-observed refusals and failures disable only their cell's later launches;
 //! every fixed schedule position remains recorded. No failed sample is replaced.
@@ -12,6 +14,7 @@
 
 mod config;
 mod invocation;
+mod native_family;
 mod outcome;
 mod record;
 mod run;
@@ -21,10 +24,11 @@ pub use summary::{CellSummary, DecisionCount, Summary};
 mod telemetry;
 mod workload;
 
-pub use config::{Plan, Producer, Request, Slot, Suite};
+pub use config::{Plan, Producer, ReferencePolicy, Request, Slot, Suite};
 pub use invocation::NativeInvocation;
 pub use record::{
-    Decision, DeviceWork, Execution, FormulaResidualStatistics, Observation, Procedure, Sample,
+    Decision, DeviceWork, Execution, FormulaResidualStatistics, HybridStatistics, Observation,
+    Procedure, Sample,
 };
 pub(crate) use workload::workload_label;
 pub use workload::{ConstantAmendment, Workload, WorkloadLimits};
