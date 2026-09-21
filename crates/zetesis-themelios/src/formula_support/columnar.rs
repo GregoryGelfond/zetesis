@@ -126,7 +126,7 @@ fn evaluate(
         &mut budget,
         location(),
     )?;
-    assert_eq!(join.patterns.len(), 1, "fixed single-pattern control");
+    assert_eq!(join.plan.patterns.len(), 1, "fixed single-pattern control");
     match route {
         Route::Indexed => {}
         Route::Scan => {

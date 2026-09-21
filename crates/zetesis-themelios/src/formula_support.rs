@@ -7,6 +7,7 @@ mod rows;
 pub(crate) mod family;
 mod delta;
 mod order;
+mod prepared;
 mod producers;
 mod relations;
 mod queries;
@@ -17,10 +18,10 @@ mod membership;
 #[cfg(test)]
 mod postings;
 
-use std::collections::BTreeSet;
+use std::{borrow::Cow, collections::BTreeSet};
 
 use themelios_base::span::Location;
-use themelios_program::program::{DefaultNegation, Relation};
+use themelios_program::program::Relation;
 use themelios_program::term::EvalError;
 use zetesis_core::{Atom, AtomPattern, Value};
 
@@ -34,6 +35,7 @@ use rows::{Frame, Ownership, Staged};
 
 pub(crate) use accounting::Accounting;
 pub(crate) use evaluation::{Evaluation, Failures};
+pub(crate) use prepared::PreparedRule;
 pub(crate) use queries::{Candidates, Support};
 #[cfg(test)]
 use relations::RelationRows;
@@ -58,6 +60,7 @@ pub(crate) struct CompletedCatalog {
 /// An immutable relation view of one successfully completed support owner.
 /// Intermediate round snapshots deliberately have only the `Relations` type.
 pub(crate) struct CompletedSupport<'source> {
+    catalog: &'source CompletedCatalog,
     relations: Relations<'source>,
 }
 
@@ -70,7 +73,10 @@ impl CompletedCatalog {
     ) -> Result<CompletedSupport<'_>, FormulaFailure> {
         self.catalog
             .snapshot(limits, counters, location)
-            .map(|relations| CompletedSupport { relations })
+            .map(|relations| CompletedSupport {
+                catalog: self,
+                relations,
+            })
     }
 }
 
@@ -115,6 +121,7 @@ impl<'source> CompletedSupport<'source> {
         location: Location,
     ) -> Result<CompletedQueries<'_>, FormulaFailure> {
         Ok(CompletedQueries {
+            catalog: self.catalog,
             support: Support::completed(&self.relations, strategy, limits, counters, location)?,
         })
     }
@@ -123,6 +130,7 @@ impl<'source> CompletedSupport<'source> {
 /// Queries over exactly one completed support certificate. Only its completed
 /// snapshot constructs this workspace; growing relations cannot claim it.
 pub(crate) struct CompletedQueries<'source> {
+    catalog: &'source CompletedCatalog,
     support: Support<'source>,
 }
 impl<'source> CompletedQueries<'source> {
@@ -582,7 +590,7 @@ pub(crate) struct Join<'a, 'source> {
     head_bounds: &'a [crate::formula_ir::AggregateGuard],
     checked_guard: Option<&'a crate::formula_guard::Guard>,
     /// What each prefix of the current order decides.
-    decisions: order::Decisions,
+    plan: Cow<'a, order::Plan<'a>>,
     /// The conjunction of the comparisons decided up to each depth.
     verdicts: Vec<bool>,
     /// The first evaluation failure on the current prefix and the depth that
@@ -592,7 +600,6 @@ pub(crate) struct Join<'a, 'source> {
     pending: Option<crate::formula_binding_cursor::Cursor<'a, 'source>>,
     pending_head: Option<crate::formula_binding_cursor::Cursor<'a, 'source>>,
     head_slots: std::ops::Range<usize>,
-    patterns: Vec<PatternOccurrence<'a>>,
     delta: Option<usize>,
     domains: Option<&'a queries::Guards<'a, 'source>>,
     row_filter: Option<&'a dyn RowFilter>,
@@ -662,32 +669,51 @@ impl<'a, 'source> Join<'a, 'source> {
             budget,
             rule.location,
         )?;
-        join.bindings = rule.bindings.as_ref();
-        join.stage_head(rule.body_variables..rule.variables);
+        join.configure_rule(rule);
+        Ok(join)
+    }
+
+    fn configure_rule(&mut self, rule: &'a crate::formula_ir::RuleIr) {
+        self.bindings = rule.bindings.as_ref();
+        self.stage_head(rule.body_variables..rule.variables);
         if let HeadIr::Choice(choice) = &rule.head {
-            join.head_bounds = &choice.guards;
+            self.head_bounds = &choice.guards;
             if choice
                 .guards
                 .iter()
                 .any(|guard| family::expression(&guard.bound))
             {
-                join.coverage = Coverage::Complete;
+                self.coverage = Coverage::Complete;
             }
         }
-        Ok(join)
     }
 
     /// Select rows only after the caller has admitted the complete source
     /// family. The filter must preserve every witness sought by that consumer;
     /// it is not a new support owner or an arithmetic admission certificate.
     /// The returned view deliberately has no family-evidence operation.
-    pub(crate) fn filtered_rule(
+    fn filtered_rule(
         rule: &'a crate::formula_ir::RuleIr,
         support: &'a Support<'source>,
         filter: Option<&'a dyn RowFilter>,
+        plan: Option<&'a order::Plan<'a>>,
         budget: &mut Budget,
     ) -> Result<FilteredRows<'a, 'source>, FormulaFailure> {
-        let mut join = Self::rule(rule, support, budget)?;
+        let mut join = if let Some(plan) = plan {
+            let mut join = Self::with_plan(
+                &rule.body,
+                &Binding::default(),
+                rule.variables,
+                support,
+                Cow::Borrowed(plan),
+                budget,
+                rule.location,
+            )?;
+            join.configure_rule(rule);
+            join
+        } else {
+            Self::rule(rule, support, budget)?
+        };
         join.row_filter = filter;
         Ok(FilteredRows::new(join))
     }
@@ -808,45 +834,28 @@ impl<'a, 'source> Join<'a, 'source> {
         budget: &mut Budget,
         location: Location,
     ) -> Result<Self, FormulaFailure> {
-        // Universals have separate local scopes. Their conditions cannot bind
-        // outer variables, and truth/vacuity over an incomplete support round
-        // cannot prune possible heads. Only ordinary positive atoms join here.
-        let mut patterns: Vec<_> = literals
-            .iter()
-            .enumerate()
-            .filter_map(|(source, literal)| {
-                let pattern = match literal {
-                    LiteralIr::Atom(DefaultNegation::None, atom) => PositivePattern::Flat(atom),
-                    LiteralIr::PatternAtom(pattern) => PositivePattern::Structural(pattern),
-                    _ => return None,
-                };
-                Some(PatternOccurrence { pattern, source })
-            })
-            .collect();
-        for pattern in &patterns {
-            for term in pattern.atom().terms() {
-                budget.charge(ExpansionResource::TermWork, 1, location)?;
-                if let zetesis_core::Term::Variable(variable) = term
-                    && prefix.slots().get(*variable).is_some_and(Option::is_none)
-                {
-                    return Err(FormulaFailure::UnsafeVariable {
-                        variable: *variable,
-                        location,
-                    });
-                }
-            }
-        }
-        let mut bound: Vec<bool> = prefix.slots().iter().map(Option::is_some).collect();
-        bound.resize(variables, false);
-        order::arrange(
-            &mut patterns,
+        let plan = order::Plan::new(literals, prefix, variables, support, budget, location, None)?;
+        Self::with_plan(
             literals,
-            &mut bound,
-            |pattern| support.row_count(pattern.atom().predicate()),
+            prefix,
+            variables,
+            support,
+            Cow::Owned(plan),
             budget,
             location,
-        )?;
-        let count = patterns.len();
+        )
+    }
+
+    fn with_plan(
+        literals: &'a [LiteralIr],
+        prefix: &Binding,
+        variables: usize,
+        support: &'a Support<'source>,
+        plan: Cow<'a, order::Plan<'a>>,
+        budget: &mut Budget,
+        location: Location,
+    ) -> Result<Self, FormulaFailure> {
+        let count = plan.patterns.len();
         let mut values = vec![None; variables];
         let mut slots = vec![Slot::Relational; variables];
         for target in literals
@@ -866,8 +875,6 @@ impl<'a, 'source> Join<'a, 'source> {
                 slots[index] = Slot::Excluded;
             }
         }
-        let prefix: Vec<bool> = values.iter().map(Option::is_some).collect();
-        let decisions = order::Decisions::of(literals, &patterns, &prefix);
         Ok(Self {
             bindings: None,
             literals,
@@ -886,11 +893,10 @@ impl<'a, 'source> Join<'a, 'source> {
             family: family::Evidence::default(),
             head_bounds: &[],
             checked_guard: None,
-            decisions,
+            plan,
             verdicts: vec![true; count.max(1)],
             failure: None,
             evaluation: Evaluation::default(),
-            patterns,
             delta: None,
             domains: None,
             row_filter: None,
@@ -922,7 +928,8 @@ impl<'a, 'source> Join<'a, 'source> {
     }
     fn decide(&mut self) {
         let prefix: Vec<bool> = self.values.iter().map(Option::is_some).collect();
-        self.decisions = order::Decisions::of(self.literals, &self.patterns, &prefix);
+        self.plan.to_mut().decisions =
+            order::Decisions::of(self.literals, &self.plan.patterns, &prefix);
     }
     /// Restrict this round's join to the rows `variant` offers each source
     /// occurrence and order the join by those counts: the pivot occurrence
@@ -941,7 +948,7 @@ impl<'a, 'source> Join<'a, 'source> {
         let mut bound: Vec<bool> = self.values.iter().map(Option::is_some).collect();
         let (support, delta) = (self.support, self.delta);
         order::arrange(
-            &mut self.patterns,
+            &mut self.plan.to_mut().patterns,
             self.literals,
             &mut bound,
             |pattern| {
@@ -1142,7 +1149,7 @@ impl<'a, 'source> Join<'a, 'source> {
                     Err(FormulaFailure::Expansion(error @ ExpansionFailure::Evaluation { .. })) => {
                         let zero = self.evaluation.zero_divisor();
                         let excluded = filters::excludes(
-                            (self.literals, &self.decisions),
+                            (self.literals, &self.plan.decisions),
                             &mut self.evaluation,
                             pending.binding(),
                             limits,
@@ -1204,7 +1211,7 @@ impl<'a, 'source> Join<'a, 'source> {
                 }
                 continue;
             }
-            if self.patterns.is_empty() {
+            if self.plan.patterns.is_empty() {
                 if self.traversal == Traversal::EmptyVisited {
                     self.traversal = Traversal::Finished;
                     return Ok(None);
@@ -1218,13 +1225,13 @@ impl<'a, 'source> Join<'a, 'source> {
                     .complete(ownership, limits, budget, counters, location)
                     .map(Some);
             }
-            if self.depth == self.patterns.len() {
+            if self.depth == self.plan.patterns.len() {
                 self.comparisons = self.certificate();
                 return self
                     .complete(ownership, limits, budget, counters, location)
                     .map(Some);
             }
-            let pattern = self.patterns[self.depth];
+            let pattern = self.plan.patterns[self.depth];
             if self.probes[self.depth].is_none() {
                 self.probes[self.depth] = Some(
                     if let Some(rows) = self.support.select(
@@ -1385,7 +1392,7 @@ impl<'a, 'source> Join<'a, 'source> {
         }
         let depth = self.depth;
         let mut passes = depth == 0 || self.verdicts[depth - 1];
-        for index in self.decisions.decided_at(depth) {
+        for index in self.plan.decisions.decided_at(depth) {
             let (left, relation, right) =
                 comparison(&self.literals[index]).expect("a decided literal is a comparison");
             let values = self.evaluation.source_values(
@@ -1423,8 +1430,8 @@ impl<'a, 'source> Join<'a, 'source> {
         if let Some((_, error)) = &self.failure {
             return Comparisons::Failed(error.clone());
         }
-        let depth = self.patterns.len().saturating_sub(1);
-        if self.decisions.certifies(depth) {
+        let depth = self.plan.patterns.len().saturating_sub(1);
+        if self.plan.decisions.certifies(depth) {
             Comparisons::Verified
         } else {
             Comparisons::Deferred
@@ -1455,7 +1462,7 @@ impl<'a, 'source> Join<'a, 'source> {
         if self.depth == 0 {
             self.traversal = Traversal::Finished;
         } else {
-            if self.depth < self.patterns.len() {
+            if self.depth < self.plan.patterns.len() {
                 self.positions[self.depth] = 0;
                 self.probes[self.depth] = None;
             }
@@ -1522,7 +1529,7 @@ impl<'a, 'source> Join<'a, 'source> {
                 Frame::Current
             }
         };
-        if !self.patterns.is_empty() {
+        if !self.plan.patterns.is_empty() {
             self.traversal = Traversal::PendingUndo;
         }
         if matches!(ownership, Ownership::Own) {

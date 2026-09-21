@@ -110,6 +110,13 @@ impl Shared {
 /// Failed reservations change nothing; a successful reservation precedes the
 /// caller's infallible local increment and the charged operation.
 fn reserve(counter: &AtomicU64, amount: u128, limit: u128) -> Result<(), u128> {
+    // Every counter starts within its fixed ceiling and only admitted charges
+    // can advance it. A zero charge cannot change admission or the receipt.
+    // In particular, copying an inline number needs no shared payload update.
+    // Work callers still poll cancellation before reaching this operation.
+    if amount == 0 {
+        return Ok(());
+    }
     counter
         .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |used| {
             let observed = u128::from(used).saturating_add(amount);

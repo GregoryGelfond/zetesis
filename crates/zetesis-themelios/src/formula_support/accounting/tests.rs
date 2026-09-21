@@ -167,3 +167,61 @@ fn unwind_preserves_shared_admission_charges() {
     assert_eq!(accounting.work, 1);
     assert_eq!(allowance.statistics().work, 1);
 }
+
+#[test]
+fn zero_work_preserves_an_exhausted_allowance() {
+    let allowance = crate::ConstraintAllowance::new(crate::ConstraintCheckLimits {
+        max_work: 1,
+        ..Default::default()
+    });
+    let mut counters = super::Counters::with_allowance(allowance.clone(), &Cancellation::default());
+    let limits = FormulaLimits {
+        max_work: 1,
+        ..FormulaLimits::default()
+    };
+    counters.work(&limits, location()).unwrap();
+    counters.charge_work(0, &limits, location()).unwrap();
+    assert_eq!(counters.work, 1);
+    assert_eq!(allowance.statistics().work, 1);
+}
+
+#[test]
+fn zero_work_observes_cancellation() {
+    let allowance = crate::ConstraintAllowance::new(crate::ConstraintCheckLimits::default());
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
+    let mut counters = super::Counters::with_allowance(allowance.clone(), &cancellation);
+    assert!(matches!(
+        counters.charge_work(0, &FormulaLimits::default(), location()),
+        Err(FormulaFailure::Interrupted {
+            reason: Stop::Cancelled,
+            ..
+        })
+    ));
+    assert_eq!(counters.work, 0);
+    assert_eq!(allowance.statistics().work, 0);
+}
+
+#[test]
+fn inline_copies_need_no_scalar_allowance() {
+    let allowance = crate::ConstraintAllowance::new(crate::ConstraintCheckLimits {
+        max_scalar_bytes: 0,
+        ..Default::default()
+    });
+    let mut budget = Budget::new(
+        ExpansionLimits {
+            max_scalar_bytes: 0,
+            ..ExpansionLimits::default()
+        },
+        0,
+    )
+    .with_allowance(allowance.clone());
+    for value in [Value::Number(7), Value::Infimum, Value::Supremum] {
+        assert_eq!(
+            super::super::copy(&value, &mut budget, location()).unwrap(),
+            value
+        );
+    }
+    assert_eq!(budget.usage().scalar_bytes, 0);
+    assert_eq!(allowance.statistics().scalar_bytes, 0);
+}

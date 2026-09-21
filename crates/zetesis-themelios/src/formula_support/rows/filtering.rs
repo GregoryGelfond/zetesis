@@ -105,7 +105,7 @@ fn unfiltered(wrapped: bool, max_work: u64) -> Run {
         vec![atom("p", &[1, 1]), atom("p", &[1, 2]), atom("p", &[2, 3])],
         |support, budget, counters| {
             let mut ordinary = Join::rule(&rule, support, budget).unwrap();
-            let mut filtered = Join::filtered_rule(&rule, support, None, budget).unwrap();
+            let mut filtered = Join::filtered_rule(&rule, support, None, None, budget).unwrap();
             let limits = FormulaLimits {
                 max_work,
                 ..FormulaLimits::default()
@@ -161,7 +161,8 @@ fn selected_rows_preserve_correlated_backtracking() {
             atom("p", &[3, 5]),
         ],
         |support, budget, counters| {
-            let mut rows = Join::filtered_rule(&rule, support, Some(&selection), budget).unwrap();
+            let mut rows =
+                Join::filtered_rule(&rule, support, Some(&selection), None, budget).unwrap();
             let mut selected = Vec::new();
             while let Some(row) = rows
                 .next_row(&FormulaLimits::default(), budget, counters, location())
@@ -186,7 +187,8 @@ fn rejected_rows_copy_no_scalar_payload() {
     with_support(
         vec![Atom::new(Predicate::new("p", 1).unwrap(), vec![value]).unwrap()],
         |support, budget, counters| {
-            let mut rows = Join::filtered_rule(&rule, support, Some(&selection), budget).unwrap();
+            let mut rows =
+                Join::filtered_rule(&rule, support, Some(&selection), None, budget).unwrap();
             let mut no_payload = Budget::new(
                 ExpansionLimits {
                     max_scalar_bytes: 0,
@@ -240,7 +242,8 @@ fn structural_rows_are_selected_before_matching() {
     with_support(
         vec![Atom::new(predicate, vec![value]).unwrap()],
         |support, budget, counters| {
-            let mut rows = Join::filtered_rule(&rule, support, Some(&selection), budget).unwrap();
+            let mut rows =
+                Join::filtered_rule(&rule, support, Some(&selection), None, budget).unwrap();
             let mut no_matching = Budget::new(
                 ExpansionLimits {
                     max_term_work: 0,
@@ -284,7 +287,7 @@ fn rejected_rows_do_not_evaluate_partial_scalars() {
     );
     let selection = Select(|_: zetesis_core::relation::Row<'_, '_>| false);
     with_support(vec![atom("p", &[0])], |support, budget, counters| {
-        let mut rows = Join::filtered_rule(&rule, support, Some(&selection), budget).unwrap();
+        let mut rows = Join::filtered_rule(&rule, support, Some(&selection), None, budget).unwrap();
         // This still uses complete arithmetic coverage internally. The filter
         // belongs to a post-admission witness scan, so it precedes evaluation.
         assert!(rows.join.coverage == crate::formula_support::Coverage::Complete);
@@ -314,7 +317,7 @@ fn empty_positive_inputs_keep_their_scalar_row() {
         false
     });
     with_support(Vec::new(), |support, budget, counters| {
-        let mut rows = Join::filtered_rule(&rule, support, Some(&selection), budget).unwrap();
+        let mut rows = Join::filtered_rule(&rule, support, Some(&selection), None, budget).unwrap();
         let row = rows
             .next_row(&FormulaLimits::default(), budget, counters, location())
             .unwrap()
@@ -361,7 +364,8 @@ fn filter_failure_retains_the_completed_prefix() {
     with_support(
         vec![atom("p", &[1]), atom("p", &[2])],
         |support, budget, counters| {
-            let mut rows = Join::filtered_rule(&rule, support, Some(&selection), budget).unwrap();
+            let mut rows =
+                Join::filtered_rule(&rule, support, Some(&selection), None, budget).unwrap();
             let first = rows
                 .next_row(&FormulaLimits::default(), budget, counters, location())
                 .unwrap()
@@ -392,7 +396,7 @@ fn filter_cancellation_stops_before_binding() {
         true
     });
     with_support(vec![atom("p", &[7])], |support, budget, _| {
-        let mut rows = Join::filtered_rule(&rule, support, Some(&selection), budget).unwrap();
+        let mut rows = Join::filtered_rule(&rule, support, Some(&selection), None, budget).unwrap();
         let mut accounting = crate::formula_support::Accounting::default();
         let result = accounting.with_cancellation(&cancellation, |counters| {
             rows.next_row(&FormulaLimits::default(), budget, counters, location())

@@ -42,7 +42,7 @@ impl Join<'_, '_> {
                 .is_some_and(|target| target >= binding.len())
                 || (self.coverage == Coverage::Selected
                     && comparison(literal).is_some()
-                    && self.decisions.decides(index))
+                    && self.plan.decisions.decides(index))
             {
                 continue;
             }
@@ -55,7 +55,7 @@ impl Join<'_, '_> {
                 counters,
                 location,
             );
-            excluded |= matches!(result, Ok(false)) && self.decisions.decides(index);
+            excluded |= matches!(result, Ok(false)) && self.plan.decisions.decides(index);
             retain(
                 result,
                 self.evaluation.zero_divisor(),

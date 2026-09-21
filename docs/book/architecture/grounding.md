@@ -146,12 +146,23 @@ borrows existing indexes and allocates nothing. Ordinary rows remain borrowed,
 and typed candidate lookup copies no atom. The eager builder keeps its bulk
 materialization path. No channel or task is created for each instance.
 
+A hybrid checker also retains a rule's join order and comparison schedule after
+that rule first needs a scan. The plan belongs to the exact rule and completed
+support owner; it carries no candidate truth. Each scan starts fresh binding,
+probe and evaluation state. Preparation is charged once and retained plan storage
+counts against the support-byte allowance. A failed preparation publishes no plan.
+Ordinary eager joins still prepare against their current support snapshot, whose
+row counts can change as the fixed point grows.
+
 All source checks within a hybrid session share one cumulative allowance for
 work, substitutions and copied scalar bytes. Charges precede the operations,
 including failed attempts; adding workers does not multiply the allowance.
 The final outcome joins workers before publishing settled receipts. Region
 attempts and refutations remain distinct from core answers checked, original
 answers accepted and frozen-reduct work.
+Zero-byte scalar charges, such as copying an inline number, require no shared
+counter update. Zero work charges still poll cancellation. Positive charges
+retain the same atomic admission and all-or-nothing failure behavior.
 
 Streaming can avoid a constraint-node or root ceiling, but the finite atom
 and support envelope must still fit. Retained source plans and support also

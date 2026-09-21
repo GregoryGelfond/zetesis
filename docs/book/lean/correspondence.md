@@ -750,6 +750,12 @@ the necessary held/cut conditions for positive-row and signed-predicate filters;
 the predicate domain must include each admitted atom, including unsupported
 negative occurrences. The lemma does not prove Rust's row-to-dense-ID mapping,
 join traversal, or equivalence of resource-limited prefixes.
+Hybrid join-plan reuse adds a representation obligation: the cached order and
+comparison schedule must equal fresh planning for the same rule, empty outer
+binding and completed support owner. Candidate truth, bindings and arithmetic
+failure state must not enter the cached plan. Rust owner checks and repeated-scan
+tests exercise this boundary; the semantic selection lemma does not prove the
+Rust cache or its storage accounting.
 `scan_refutes` supplies the soundness premise of `CoverageTree.refuted`; it does
 not prove that Rust constructs a coverage tree. A completed sufficient scan
 without a witness is only `NotRefuted`, not original satisfaction; an interrupted

@@ -18,7 +18,7 @@ use crate::formula::Compiled;
 use crate::formula_binding::Binding;
 use crate::formula_ir::{HeadIr, LiteralIr, RuleIr};
 use crate::formula_support::{
-    Accounting, CompletedCatalog, CompletedSupport, Counters, Join, RowFilter,
+    Accounting, CompletedCatalog, CompletedSupport, Counters, PreparedRule, RowFilter,
 };
 use crate::{
     ConstraintAllowance, ExpansionLimits, FormulaFailure, FormulaLimits, SourceBundle,
@@ -290,6 +290,7 @@ impl HybridFormula {
                 limits: formula_limits,
                 index: None,
                 rows: None,
+                plans: Vec::new(),
             })
         } else {
             None
@@ -496,6 +497,8 @@ struct PreparedConstraints<'a> {
     index: Option<AtomIndex<'a>>,
     /// Source occurrence IDs mapped once into the original dense catalog.
     rows: Option<SourceRows<'a>>,
+    /// Lazily prepared after each rule's first successful predicate gate.
+    plans: Vec<Option<PreparedRule<'a>>>,
 }
 
 impl<'a> PreparedConstraints<'a> {
@@ -666,7 +669,7 @@ impl ConstraintChecker<'_> {
                         prepared.prepare_selection(self.owner.atom_catalog(), counters)?;
                     }
                     Self::scan(
-                        self.prepared.as_ref(),
+                        self.prepared.as_mut(),
                         &mut self.budget,
                         counters,
                         candidate,
@@ -683,7 +686,7 @@ impl ConstraintChecker<'_> {
     }
 
     fn scan(
-        prepared: Option<&PreparedConstraints<'_>>,
+        prepared: Option<&mut PreparedConstraints<'_>>,
         budget: &mut Budget,
         counters: &mut Counters,
         candidate: Candidate<'_>,
@@ -692,13 +695,6 @@ impl ConstraintChecker<'_> {
             return Ok(None);
         };
         let constraints = prepared.source;
-        let queries = prepared.completed.queries(
-            crate::JoinStrategy::Indexed,
-            &prepared.limits,
-            counters,
-            constraints.location,
-        )?;
-        let support = queries.support();
         let selection = match candidate {
             Candidate::Model(_) => None,
             Candidate::Region(_, region) => Some(Selection {
@@ -710,7 +706,7 @@ impl ConstraintChecker<'_> {
                 region,
             }),
         };
-        for rule in &constraints.rules {
+        for (rule_index, rule) in constraints.rules.iter().enumerate() {
             if let Some(selection) = &selection
                 && !selection.possible(rule, &prepared.limits, counters)?
             {
@@ -719,7 +715,33 @@ impl ConstraintChecker<'_> {
             let filter = selection
                 .as_ref()
                 .map(|selection| selection as &dyn RowFilter);
-            let mut join = Join::filtered_rule(rule, support, filter, budget)?;
+            if prepared.plans.is_empty() {
+                prepared.plans = PreparedRule::slots(
+                    &constraints.rules,
+                    &mut prepared.completed,
+                    &prepared.limits,
+                    counters,
+                )?;
+            }
+            if prepared.plans[rule_index].is_none() {
+                prepared.plans[rule_index] = Some(PreparedRule::new(
+                    rule,
+                    &mut prepared.completed,
+                    &prepared.limits,
+                    budget,
+                    counters,
+                )?);
+            }
+            let queries = prepared.completed.queries(
+                crate::JoinStrategy::Indexed,
+                &prepared.limits,
+                counters,
+                rule.location,
+            )?;
+            let mut join = prepared.plans[rule_index]
+                .as_ref()
+                .expect("prepared above")
+                .rows(&queries, filter, budget)?;
             while let Some(row) =
                 join.next_row(&prepared.limits, budget, counters, rule.location)?
             {
@@ -828,6 +850,36 @@ fn literal_atom(literal: &LiteralIr) -> Option<(DefaultNegation, &AtomPattern)> 
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn impossible_predicates_prepare_no_join_plans() {
+        let owner = crate::prepare_formula(
+            "{p(1);p(2)}. :-p(X),X=2.".into(),
+            crate::AdmissionOptions::default(),
+            crate::ExpansionLimits::default(),
+            crate::FormulaLimits::default(),
+        )
+        .unwrap()
+        .ground_hybrid()
+        .unwrap();
+        let mut checker = owner
+            .checker(crate::ConstraintCheckLimits::default())
+            .unwrap();
+        let region = zetesis_cpu::regions::Region::all_open(owner.atom_catalog().atoms().len());
+        for _ in 0..2 {
+            assert_eq!(
+                checker
+                    .check_region(
+                        owner.core_theory(),
+                        &region,
+                        &zetesis_cpu::Cancellation::default()
+                    )
+                    .unwrap(),
+                crate::ConstraintRegionVerdict::NotRefuted
+            );
+            assert!(checker.prepared.as_ref().unwrap().plans.is_empty());
+        }
+    }
+
     #[test]
     fn empty_stream_releases_completed_support() {
         for source in ["d(1..20).", "d(1..20). :-#count{X:d(X)}<1."] {
