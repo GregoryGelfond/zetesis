@@ -278,11 +278,17 @@ fn metadata_preserves_the_original_formula_and_source_identity() {
         }
     }
 }
-#[test]
-fn source_and_runtime_limits_are_independent_inclusive_and_never_partial() {
+
+fn paired_observations() -> (AdmittedFormula, Model) {
     let source = "p(1;2). #show. #show pair(X,X):p(X).";
     let input = admit(source).unwrap();
     let model = Model::new(input.atoms().iter().cloned());
+    (input, model)
+}
+
+#[test]
+fn observation_work_limit_is_inclusive() {
+    let (input, model) = paired_observations();
     let program = input.metadata().observations();
     let evaluation = program
         .evaluate(&model, Limits::default(), &Cancellation::default())
@@ -314,6 +320,12 @@ fn source_and_runtime_limits_are_independent_inclusive_and_never_partial() {
             ..
         }
     ));
+}
+
+#[test]
+fn runtime_observation_ceilings_return_typed_refusals() {
+    let (input, model) = paired_observations();
+    let program = input.metadata().observations();
     for (limits, resource) in [
         (
             Limits {
@@ -362,6 +374,12 @@ fn source_and_runtime_limits_are_independent_inclusive_and_never_partial() {
             matches!(program.evaluate(&model, limits, &Cancellation::default()).unwrap_err().kind(), ErrorKind::Limit { resource: actual, .. } if *actual == resource)
         );
     }
+}
+
+#[test]
+fn cancelled_rendering_preserves_its_stop_reason() {
+    let (input, model) = paired_observations();
+    let program = input.metadata().observations();
     let cancelled = Cancellation::default();
     cancelled.cancel();
     assert_eq!(
@@ -376,6 +394,12 @@ fn source_and_runtime_limits_are_independent_inclusive_and_never_partial() {
             .kind(),
         &ErrorKind::Stopped(Stop::Cancelled)
     );
+}
+
+#[test]
+fn expired_observation_deadlines_preserve_their_stop_reason() {
+    let (input, model) = paired_observations();
+    let program = input.metadata().observations();
     let deadline = Cancellation::with_deadline(Instant::now()).unwrap();
     assert_eq!(
         program

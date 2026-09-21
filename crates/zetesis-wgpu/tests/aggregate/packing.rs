@@ -301,15 +301,12 @@ fn empty_extrema_require_canonical_absence() {
 
 #[test]
 fn batch_ceilings_are_inclusive() {
+    let cancellation = Cancellation::default();
     let theory = fixtures::theory();
     let worlds = fixtures::worlds(&theory);
     let group = fixtures::group(&theory, Function::Sum, 65);
-    let prepared = AggregateGpuPlan::new(
-        &group,
-        AggregateGpuPlanLimits::default(),
-        &Cancellation::default(),
-    )
-    .unwrap();
+    let prepared =
+        AggregateGpuPlan::new(&group, AggregateGpuPlanLimits::default(), &cancellation).unwrap();
     let records = fixtures::observations(&group, &worlds, 33);
     let device = wgpu::Limits::default();
     let plan = Plan::new(
@@ -318,7 +315,7 @@ fn batch_ceilings_are_inclusive() {
         AggregateGpuLimits::default(),
         &device,
         1,
-        &Cancellation::default(),
+        &cancellation,
     )
     .unwrap();
     let exact = AggregateGpuLimits {
@@ -328,17 +325,7 @@ fn batch_ceilings_are_inclusive() {
         max_device_work: plan.total_work,
         ..Default::default()
     };
-    assert!(
-        Plan::new(
-            &prepared,
-            &records,
-            exact,
-            &device,
-            1,
-            &Cancellation::default()
-        )
-        .is_ok()
-    );
+    assert!(Plan::new(&prepared, &records, exact, &device, 1, &cancellation).is_ok());
     for below in [
         AggregateGpuLimits {
             max_occurrences: records.len() - 1,
@@ -362,17 +349,10 @@ fn batch_ceilings_are_inclusive() {
         },
     ] {
         assert_eq!(
-            Plan::new(
-                &prepared,
-                &records,
-                below,
-                &device,
-                1,
-                &Cancellation::default()
-            )
-            .err()
-            .unwrap()
-            .kind(),
+            Plan::new(&prepared, &records, below, &device, 1, &cancellation)
+                .err()
+                .unwrap()
+                .kind(),
             GpuErrorKind::Capacity
         );
     }
@@ -395,17 +375,10 @@ fn batch_ceilings_are_inclusive() {
         },
     ] {
         assert_eq!(
-            Plan::new(
-                &prepared,
-                &records,
-                exact,
-                &limited,
-                1,
-                &Cancellation::default()
-            )
-            .err()
-            .unwrap()
-            .kind(),
+            Plan::new(&prepared, &records, exact, &limited, 1, &cancellation)
+                .err()
+                .unwrap()
+                .kind(),
             GpuErrorKind::Capacity
         );
     }
