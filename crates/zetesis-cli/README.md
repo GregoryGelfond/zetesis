@@ -144,10 +144,12 @@ leaves for the candidate tree and, under `--search regions`, for the reduct
 queries.
 
 `--threads auto|N` (`--workers` in existing scripts) defaults to at most four
-available host threads, or one when availability is unknown. It is the one
-worker count: the closure route's pool, and under `--search regions` the
-workers walking the region tree, each deciding the leaves it reaches. The
-family of answer sets is the same as with one worker, each answer once, and
+available host threads, or one when availability is unknown. It sets the closure
+route's pool and, under `--search regions`, the region walkers. Native CPU region
+workers decide the leaves they reach. Device region workers produce unchecked
+leaves in bounded rounds; all producers join before device membership checking
+and any exact CPU residual completion. The family of answer sets is the same as
+with one worker, each answer once, and
 with more than one worker the order in which answers appear is the
 schedule's and differs between runs. Under an objective the optimum and the retained ties keep
 their meaning; only the order among equally scored answers is unspecified.
@@ -198,17 +200,19 @@ crossover for a supported execution profile. An explicit GPU request prepares
 its device during session setup and never silently falls back to CPU. Static
 GPU closure admits at most 4,096 atoms.
 
-General formula execution requires eager admission. Automatic backend selection
-uses CPU; explicit GPU selection batches propagation and completes residual
-reduct queries exactly on CPU. Outer candidate search and objective scoring also
-remain on the host. This route is hybrid, and explicit lazy formula execution is
-unsupported.
+Finite formula execution requires eager admission. Automatic backend selection
+uses CPU. With `--oracle auto`, complete-theory checks can select ranked support
+on CPU or a device. Device tight checking evaluates original truth and complete
+positive support without CPU residual queries. When no tight certificate is
+selected, explicit GPU execution uses general propagation and completes
+unresolved reduct queries exactly on CPU. Outer candidate search and objective
+scoring remain on the host. Explicit lazy formula execution is unsupported.
 
-With `--oracle auto` on CPU, complete-theory checks can select ranked support or
-positive least consequences. The latter includes positive recursion and checks
-all original constraints after closure. Source analysis chooses attempt order;
-it never replaces complete ground-theory validation. `--oracle countermodel`
-retains the general reduct comparison route explicitly.
+CPU automatic membership can also select positive least consequences, including
+positive recursion and checks of all original constraints after closure. The
+device route has no positive-plan specialization. Source analysis chooses the
+certificate attempt order; it never replaces complete ground-theory validation.
+`--oracle countermodel` retains the general reduct comparison route explicitly.
 
 `--gpu-formula-work` and `--gpu-formula-rounds` independently bound device
 propagation per formula candidate. Their defaults are 100,000,000 charged work
@@ -272,19 +276,24 @@ and retains empty workspace capacities across batches. `--max-source-work` bound
 that preparation separately from candidate `--max-work`.
 `--max-closure-bytes` bounds one candidate's reserved named capacity;
 `--max-closure-batch-bytes` admits preparation, idle retained workspaces and
-assigned candidate allowances together. Every worker is admitted at the
-per-closure allowance, so `--workers` times `--max-closure-bytes` must not
-exceed `--max-closure-batch-bytes`; the command refuses a larger product
-before any work, naming all three, and when `--max-closure-bytes` is omitted
-it is each worker's share of the collective ceiling. Preparation refusal and
+assigned candidate allowances together. CPU closure setup conservatively admits
+every worker at the per-closure allowance, so `--threads` times
+`--max-closure-bytes` must not exceed `--max-closure-batch-bytes`. It refuses an
+excessive or overflowing product before allocating the execution pool, compiling
+static rules or initializing candidates. This check also applies to eager and
+shared CPU closure routes; formula and device execution use their own resource
+checks. Source admission and policy checks can already have run. When
+`--max-closure-bytes` is omitted, it is each worker's share of the collective
+ceiling. Preparation refusal and
 individual candidate refusal retain different interruption kinds. See the
 [ownership contract](../../docs/book/architecture/ownership.md#memory-contracts).
 
-Every byte ceiling in `--help-all` says which quantity it bounds: reserved
-capacity (counted when it is admitted, so it exceeds resident memory), canonical
-or encoded payload (the bytes a record or key occupies once written, without
-capacity or allocator slack), or the original bytes of a file. None is process
-RSS.
+Every byte ceiling in `--help-all` says which quantity it bounds: named reserved
+capacity, canonical or encoded payload without capacity or allocator slack, or
+original file bytes. Named capacity can include admitted allowances that are not
+resident, while process RSS also includes storage outside those owners. These
+quantities are not interchangeable, and none of these ceilings is a process RSS
+cap.
 
 ## Statistics and resource limits
 

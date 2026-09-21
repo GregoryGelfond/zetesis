@@ -1,5 +1,11 @@
 # Recorded release observations
 
+The current [0.1.4 coverage receipt](coverage-931a8805.json) identifies the
+qualified source, independent CPU and workspace populations, and 59 physical
+Metal tests. Three separate ordinary CLI backend checks also passed; they do
+not contribute instrumented coverage. See the [validation reference](../validation.md#coverage)
+for the scope. The performance records below retain their original identities.
+
 Four fixed datasets reproduce the ordinary release comparisons in the
 [performance reference](../performance.md). Each retains its own sources,
 executable identities, observations and completion limits. None qualifies a

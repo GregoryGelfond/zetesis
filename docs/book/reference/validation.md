@@ -226,36 +226,36 @@ status. A newer source remains unqualified until its own checks complete.
 
 | Population | Covered / instrumented lines | Coverage |
 | --- | ---: | ---: |
-| Workspace, all features, portable tests plus 59 physical Metal tests | 78,825 / 83,270 | 94.66% |
-| CPU-only solver library and CLI, separate instrumentation | 6,537 / 6,936 | 94.25% |
+| Workspace, all features, portable tests plus 59 physical Metal tests | 82,360 / 87,326 | 94.31% |
+| CPU-only solver library and CLI, separate instrumentation | 8,353 / 9,049 | 92.31% |
 
-This snapshot was qualified on 20 September 2026 UTC for version `0.1.3`, compiled
-source [`6754a4ff`](https://github.com/GregoryGelfond/zetesis/tree/6754a4ffb435e2614907630f62d91bed746cd462),
+This snapshot was qualified on 21 September 2026 UTC for version `0.1.4`, compiled
+source [`931a8805`](https://github.com/GregoryGelfond/zetesis/tree/931a8805ddc0f8af90a99052898de4c13f44d329),
 using Rust 1.97.1, cargo-llvm-cov 0.8.7 and LLVM 22.1.6 on macOS 26.6.2 with
 Apple M4 Pro Metal. Later updates to this description and the README badge do
 not change that measured source or its compiled documentation and data inputs.
-The [coverage receipt](observations/coverage-6754a4ff.json) retains exact line
-counts, profile populations and report hashes. The associated
-[CPU/Metal measurements](plan-execution.md) compare the exact
-`eca5a1a7` and `2e80d065` executables. The measured implementation and the
-qualified source differ only in one device test and two manual pages.
-Earlier measurements retain their own
-compiled sources and versions in the [grounding comparison](grounding-measurements.md).
+The [coverage receipt](observations/coverage-931a8805.json) retains exact line
+counts, profile populations and report hashes. Performance measurements retain
+their own executable identities: the [worker comparison](worker-scaling.md)
+precedes the CLI changes in this qualification. The
+[performance reference](performance.md) distinguishes those measurements from
+current interface and correctness checks.
 
 Both populations passed their independent 91% floor. The workspace contains
-2,362 profiles: 2,346 portable profiles plus 16 physical profiles from 59 tests
-in 16 groups. The 282-profile CPU-only population remains separate.
+2,406 profiles: 2,390 portable profiles plus 16 physical profiles from 59 tests
+in 16 groups. The 321-profile CPU-only population remains separate.
 Before physical profile import, the portable-only workspace report already
-passed its floor at 76,267 of 83,270 lines (91.5900%). A separate explicit-GPU
-device-failure check also passed; its auxiliary profile and all test-listing
-profiles are excluded from both coverage populations. Compiled-profile session
-checks belong to the 59 canonical physical tests.
+passed its floor at 79,791 of 87,326 lines (91.3714%). The separate ordinary
+`zetesis test backend --device metal` command passed its three complete-family
+checks with actual device work. That release command is not instrumented;
+its execution and the 16 test-listing profiles contribute no coverage.
+Compiled-profile session checks belong to the 59 canonical physical tests.
 
-The portable and external-oracle gates passed for the implementation in this
-checkpoint. The Lean 4.33.1 build, axiom audit and source-record checks
-cover 139 semantic modules and 1,291 audited theorems, as recorded with their
-source hashes in the
-[verification record](https://github.com/GregoryGelfond/zetesis/blob/6754a4ffb435e2614907630f62d91bed746cd462/proofs/verification.json).
+The portable, external-oracle and manual/example gates passed for this source.
+The unchanged Lean library retains its Lean 4.33.1 build, axiom audit and
+source-record checks, covering 139 semantic modules and 1,291 audited theorems.
+Their source hashes are recorded in the
+[verification record](https://github.com/GregoryGelfond/zetesis/blob/931a8805ddc0f8af90a99052898de4c13f44d329/proofs/verification.json).
 These counts describe the checked
 mathematical library, not verification of the Rust grounder, masks or GPU
 execution. Historical corpus and performance results retain their original
