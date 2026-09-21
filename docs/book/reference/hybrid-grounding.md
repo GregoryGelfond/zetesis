@@ -1,11 +1,132 @@
 # Eager and hybrid formula grounding
 
-The measurements below describe the original full-candidate checking schedule
-at its named revision. Current hybrid region search also checks for certain
-constraint violations before splitting or core membership. The
-[current execution contract](../architecture/grounding.md#eager-and-lazy-execution)
-distinguishes those early refutations from final candidate checks. These retained
-measurements do not measure that later schedule.
+Hybrid formula execution retains an eager core and checks eligible source
+constraints while searching and before publishing each answer set. Complete
+support and arithmetic admission still precede solving. The measurements below
+compare two versions of this schedule and retain the earlier full-candidate
+experiment separately. See the
+[execution contract](../architecture/grounding.md#eager-and-lazy-execution)
+for eligibility and completion boundaries.
+
+## Original-region checks
+
+The refinement at
+[`3108acfe`](https://github.com/GregoryGelfond/zetesis/commit/3108acfe40a1bf834ab44a6a991863ac4893829d)
+checks original constraints after ordinary region narrowing, before splitting
+or core membership. Necessary predicate tests and held positive-row selection
+avoid constructing join bindings that cannot witness a constraint violation.
+The final full-candidate check remains. The baseline is
+[`9bb73da9`](https://github.com/GregoryGelfond/zetesis/commit/9bb73da998f0b77cdc5e7db497783ac3fdd21aba),
+which checks these constraints after finding a core answer set.
+
+Both executables were measured on September 21, 2026 UTC, in
+old/new/new/old order, first at one CPU thread and then at four. Each leg compares
+eager and explicit lazy requests on the same 20 workloads: all six queens
+encodings at n=4 and n=5, encodings 01 and 03 also at n=6, and monotone-choice
+and redundant-transitivity controls. Every request asks for all answer sets.
+Clingo 5.8.2 supplies an untimed qualification census; these are not
+zetesis-versus-clingo timing results.
+The programs have no objectives, so this comparison does not exercise optimization.
+
+Each cell has one warmup, four timed processes and two separate RSS processes.
+The table spans the two leg medians for each executable, rather than pooling
+samples. Times include the complete CLI request, JSON and statistics. The
+[evidence for all 20 workloads](observations/hybrid-regions-3108acfe-evidence.json)
+retains the individual observations, identities and dispositions.
+
+| Program | Threads | Prior hybrid ms | Refined hybrid ms | Refined eager ms |
+| --- | ---: | ---: | ---: | ---: |
+| Queens 01, n=6 | 1 | 61.892–62.243 | 11.527–11.548 | 7.139–7.240 |
+| Queens 01, n=6 | 4 | 62.953–63.016 | 36.373–37.060 | 7.866–7.969 |
+| Queens 03, n=6 | 1 | 52.125–52.196 | 11.554–11.586 | 6.534–6.589 |
+| Queens 03, n=6 | 4 | 53.104–53.551 | 36.459–36.730 | 7.274–7.961 |
+| Queens 02, n=5 | 1 | work limit | 33.478–34.096 | 7.271–7.852 |
+| Queens 02, n=5 | 4 | work limit | 142.782–146.976 | 7.274–7.882 |
+| Queens 03, n=5 | 1 | 11.524–11.611 | 8.983–9.012 | 6.531–6.583 |
+| Queens 03, n=5 | 4 | 11.541–11.561 | 12.865–12.926 | 6.513–6.562 |
+| Monotone choices, n=10 | 1 | 13.353–13.356 | 6.397–6.505 | 5.893–6.494 |
+| Monotone choices, n=10 | 4 | 11.611–11.659 | 6.589–7.826 | 5.887–6.508 |
+| Redundant transitivity, n=16 | 1 | 11.638–11.665 | 12.299–12.592 | 10.297–10.335 |
+| Redundant transitivity, n=16 | 4 | 11.558–11.574 | 12.162–12.256 | 10.340–10.403 |
+
+The early checks reduce complete core candidates substantially on the rejection
+workloads. These one-thread counters are identical in both repeated legs:
+
+| Program | Prior → refined core answers | Accepted answers | Prior → refined source work |
+| --- | ---: | ---: | ---: |
+| Queens 01, n=6 | 720 → 4 | 4 | 4,625,076 → 616,106 |
+| Queens 03, n=6 | 720 → 4 | 4 | 4,307,335 → 614,762 |
+| Monotone choices, n=10 | 1,024 → 11 | 11 | 242,854 → 49,731 |
+| Redundant transitivity, n=16 | 2 → 2 | 2 | 1,059,178 → 1,097,017 |
+
+For Queens 01 at n=6, one-thread initial grounding remains
+0.572–0.607 ms before and 0.565–0.566 ms after. Solving falls from
+54.756–55.264 ms to 4.975–4.995 ms. The change is in searching and checking,
+not a removal of initial source admission. `original_validation` includes
+region preparation/checking and final checks; it overlaps candidate generation,
+and worker-duration sums are not additive with solving wall time.
+
+There are measured costs as well. Refined hybrid still trails eager on the
+representative queens cases and is substantially slower with four threads than
+with one. Queens 03 at n=5 regresses by about 11.5–11.8% against prior hybrid
+at four threads. Redundant transitivity refutes no region: n=12 regresses
+16.1–18.6% at four threads, and n=16 regresses about 5–8% at both settings.
+Its n=16 source checks still visit 8,192 substitutions; extra preparation and
+region checks add work. No eager cell has a wall increase above 5% in both
+paired comparisons, which is a bounded observation rather than proof of
+unchanged eager cost. The no-stream Queens 06 n=4 control also rises by
+about 0.54–0.59 ms at four threads; most of that difference is outside the
+recorded driver interval, so it is not evidence of a source-checking cause.
+
+Separate peak-RSS results illustrate the retained storage tradeoff:
+
+| Program | Threads | Prior hybrid MiB | Refined hybrid MiB | Refined eager MiB |
+| --- | ---: | ---: | ---: | ---: |
+| Queens 01, n=6 | 1 | 13.44–13.57 | 13.40–13.44 | 13.41–13.42 |
+| Queens 01, n=6 | 4 | 13.84–13.89 | 13.73–13.73 | 13.59–13.70 |
+| Redundant transitivity, n=16 | 1 | 13.58–13.65 | 13.51–13.54 | 16.39–16.41 |
+| Redundant transitivity, n=16 | 4 | 13.64–13.68 | 13.58–13.70 | 17.16–17.18 |
+
+The refinement does not establish a general memory reduction. Redundant
+transitivity retains 547 hybrid roots versus 4,643 eager roots at n=16, with
+lower hybrid RSS here, but the old hybrid schedule already had that smaller
+core. Root counts are not byte counts.
+
+All four refined campaigns pass **340 of 340 positions** each. Every baseline
+campaign records one Queens 02 n=5 hybrid refusal at its 10,000,000-unit source
+work ceiling, then leaves seven later positions in that cell unattempted. Across
+the eight campaigns, **2,688 positions pass, four refuse and 28 are unattempted**.
+The 2,528 complete native captures agree on full typed answer-set families,
+displayed results, costs and multiplicity across revisions, profiles and worker
+counts. The 160 clingo qualification captures agree on selected results; hidden
+clingo interpretations are unavailable. Incomplete baseline prefixes provide
+neither a completed timing baseline nor a speedup ratio.
+
+The fixed protocol uses CPU execution, automatic membership selection, indexed
+joins, region search, batch size 64 and one completion worker. Captures record
+a 2 GiB solver allowance; source checking separately allows 10,000,000 work
+units, 10,000,000 substitutions and 16 MiB cumulative copied scalar payload.
+Each process has a 10-second limit and each campaign a 300-second limit;
+output is bounded at 4 MiB per process and 128 MiB per campaign. The reports
+also retain cleanup and normalization limits. The host ran macOS 26.6.2;
+release builds used Rust 1.97.1 and LLVM 22.1.6. These small CPU workloads,
+four timed samples per leg and two RSS samples do not establish a general
+speedup, a fully lazy source pipeline or Metal performance.
+
+Reproduce the population with the maintained `grounding_comparison` example's
+`--study refutation` option, using one frozen comparison executable and the same
+refined `--helper` for every leg. Supply the baseline or refined `--zetesis`
+executable in old/new/new/old order, and repeat with `--workers 1` and
+`--workers 4`; every `--report` path must be new. The retained comparison
+runner was built from `5b50286a`, while the two measured native executables
+have the revisions above. Their full source and binary identities, generated
+workload hashes and queens constant edits are in the evidence file. See
+[corpus measurements](commands.md#measure-a-corpus) for the library/example door.
+
+## Historical full-candidate comparison
+
+The following results retain the original full-candidate checking schedule at
+`4a281c96`. They do not measure the later original-region checks above.
 
 Streaming source constraints reduces the stored formula, but can increase the
 number of core answer sets that must be checked. This comparison measures both
@@ -19,7 +140,7 @@ then checks eligible source constraints against each core answer set. Complete
 support and arithmetic admission still precede solving. See the
 [grounding contract](../architecture/grounding.md#eager-and-lazy-execution).
 
-## Matched eager and lazy requests
+### Matched eager and lazy requests
 
 Both requests enumerate all answer sets with CPU execution, indexed joins,
 region search, batch size 64 and one completion worker. Each worker setting
@@ -73,7 +194,7 @@ Reproduce the workload and protocol through the maintained
 `--workers 1` and once with `--workers 4`. It uses unchanged corpus files with
 recorded constant substitutions and the library's generated workloads.
 
-## Preservation of eager execution
+### Preservation of eager execution
 
 A separate comparison uses the prior eager executable
 [`3d7454d8`](https://github.com/GregoryGelfond/zetesis/commit/3d7454d810acec99121ee5b5615505b6ddc6eea7)

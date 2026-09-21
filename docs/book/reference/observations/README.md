@@ -1,10 +1,22 @@
 # Recorded release observations
 
-The current [0.1.4 coverage receipt](coverage-9bb73da9.json) identifies the
+The current [0.1.4 coverage receipt](coverage-3108acfe.json) identifies the
 qualified source, independent CPU and workspace populations, and 59 physical
 Metal tests. Three separate ordinary CLI backend checks also passed; they do
 not contribute instrumented coverage. See the [validation reference](../validation.md#coverage)
 for the scope. The performance records below retain their original identities.
+
+The [original-region comparison](../hybrid-grounding.md#original-region-checks)
+compares `9bb73da9` with `3108acfe` on 21 September 2026. Its
+[evidence](hybrid-regions-3108acfe-evidence.json) retains eight campaigns over
+20 workloads, with eager and hybrid CPU profiles at one and four threads.
+It includes per-sample timings, separate RSS observations, complete native
+family hashes, source and executable identities, limits and every nonpass
+disposition. Clingo supplies qualification only. The comparison records both
+reduced candidate work and repeated regressions; it does not qualify hybrid
+device execution or measure Metal performance. The
+[historical full-candidate results](../hybrid-grounding.md#historical-full-candidate-comparison)
+retain their original measurements and source identities.
 
 Four fixed datasets reproduce the ordinary release comparisons in the
 [performance reference](../performance.md). Each retains its own sources,

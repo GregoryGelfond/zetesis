@@ -36,10 +36,14 @@ lending completed grounding rows. Dense40 rule instantiation took 6.4–10.0%
 less time; whole-process improvements were smaller, and the controls were mixed.
 It does not update the full-corpus or Metal results above.
 
-The [eager/hybrid comparison](hybrid-grounding.md) uses one executable with
-different grounding schedules. It shows a storage benefit on a generated
-constraint-heavy program and increased search cost when constraints are delayed.
-It is a CPU comparison on small workloads, not a replacement for the corpus data.
+The [original-region comparison](hybrid-grounding.md#original-region-checks)
+measures eager and hybrid CPU profiles before and after early source-constraint
+checks. It reduces core candidates on several queens and monotone-choice cases,
+but hybrid still trails eager on representative queens workloads; redundant
+constraints and four-thread execution expose costs. The
+[historical full-candidate results](hybrid-grounding.md#historical-full-candidate-comparison)
+retain the earlier storage/search tradeoff. These small-workload CPU experiments
+do not replace the full-corpus or Metal measurements.
 
 ## Run a benchmark
 
