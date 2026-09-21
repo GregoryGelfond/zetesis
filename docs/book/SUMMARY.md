@@ -46,6 +46,7 @@
 # Performance and testing
 
 - [Performance results](reference/performance.md)
+  - [Lending completed grounding rows](reference/grounding-row-lending.md)
   - [Worker scaling: CPU and Metal](reference/worker-scaling.md)
   - [Shared-plan execution: CPU and Metal](reference/plan-execution.md)
   - [CPU and Metal execution series](reference/execution-series.md)

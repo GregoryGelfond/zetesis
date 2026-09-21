@@ -7,7 +7,7 @@ solve faster.
 
 ## What the results show
 
-The latest published comparison runs zetesis and clingo on the same programs on
+The published corpus comparison runs zetesis and clingo on the same programs on
 an Apple M4 Pro. Four CPU threads gave zetesis its lowest total time. Most small
 cases favored clingo; queens variant 2 and several task-allocation cases favored
 zetesis. Metal did not give an overall advantage on these workloads.
@@ -30,6 +30,11 @@ The [full CPU and Metal comparison](worker-scaling.md) supplies every case,
 memory results, settings, source revisions and raw measurements. Its measured
 sources precede the 0.1.4 command-line update; these numbers do not qualify a
 newer executable merely because it belongs to the same project.
+
+A subsequent [four-program CPU comparison](grounding-row-lending.md) measures
+lending completed grounding rows. Dense40 rule instantiation took 6.4–10.0%
+less time; whole-process improvements were smaller, and the controls were mixed.
+It does not update the full-corpus or Metal results above.
 
 ## Run a benchmark
 
@@ -98,6 +103,7 @@ their original programs and executables; they are not a cumulative speedup chart
 
 | Question | Report |
 | --- | --- |
+| What does lending completed eager join rows change? | [Grounding row lending](grounding-row-lending.md) |
 | How do thread count, CPU and Metal compare with clingo? | [Worker scaling](worker-scaling.md) |
 | What changed when CPU and GPU used the same semantic plans? | [Shared-plan execution](plan-execution.md) |
 | How did candidate generation and reduct execution change? | [Execution series](execution-series.md), [reduct execution](reduct-execution.md) |
