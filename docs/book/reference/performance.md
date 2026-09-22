@@ -36,6 +36,10 @@ lending completed grounding rows. Dense40 rule instantiation took 6.4–10.0%
 less time; whole-process improvements were smaller, and the controls were mixed.
 It does not update the full-corpus or Metal results above.
 
+The [prepared-join comparison](hybrid-grounding.md#reusing-completed-source-join-plans)
+measures a 4–5% improvement on one queens workload, mixed short-run results
+elsewhere and a small RSS increase.
+
 The [original-region comparison](hybrid-grounding.md#original-region-checks)
 measures eager and hybrid CPU profiles before and after early source-constraint
 checks. It reduces core candidates on several queens and monotone-choice cases,

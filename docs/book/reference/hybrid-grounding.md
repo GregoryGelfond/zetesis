@@ -3,10 +3,77 @@
 Hybrid formula execution retains an eager core and checks eligible source
 constraints while searching and before publishing each answer set. Complete
 support and arithmetic admission still precede solving. The measurements below
-compare two versions of this schedule and retain the earlier full-candidate
+record successive changes to this schedule and retain the earlier full-candidate
 experiment separately. See the
 [execution contract](../architecture/grounding.md#eager-and-lazy-execution)
 for eligibility and completion boundaries.
+
+## Reusing completed-source join plans
+
+The implementation at
+[`469d4d87`](https://github.com/GregoryGelfond/zetesis/commit/469d4d871c9753f58e573a135ce89b53afdd9874)
+retains immutable join ordering and comparison readiness for repeated hybrid
+constraint scans. Each scan has fresh bindings, probes, arithmetic state and
+traversal. Eager and hybrid execution share the planner; ordinary joins own
+their plans and hybrid scans borrow them. Zero-amount resource charges also
+avoid a shared atomic write while preserving the cancellation and positive-charge
+checks. The comparison combines both changes.
+
+The compiled baseline is
+[`df99d4bb`](https://github.com/GregoryGelfond/zetesis/commit/df99d4bb7961886ad5c620788d3eca5ef6c68e96).
+Measurements ran on September 21, 2026 in America/Chicago, on macOS 26.6.2 with
+Rust 1.97.1, using the same 20-workload population as the
+[original-region comparison](#original-region-checks). Each worker setting uses
+one old/new/new/old block. Every leg includes eager and hybrid profiles, one
+warmup, four timed processes and two separate RSS processes per cell.
+
+All eight campaigns pass 340 positions each. The 2,560 complete native captures
+agree on full typed answer-set families, shown channels and multiplicity across
+versions, grounders and worker settings. Clingo supplies 160 untimed selected-output
+qualifications and complete model counts. These programs have no objectives.
+The [complete observations](observations/hybrid-preparation-469d4d87-evidence.json)
+retain every position, integer wall/RSS sample, family-audit receipt, workload
+identity, executable hash and protocol. Original capture streams are retained
+separately; the public projection supports recalculating timing and memory
+summaries, rather than repeating the semantic audit from the original streams.
+
+The table shows separate leg medians in milliseconds. Compare B1 with A1 and
+B2 with A2; samples are not pooled. Wall time includes the complete process,
+JSON and statistics capture.
+
+| Hybrid program | Threads | Baseline A1 / A2 | Prepared B1 / B2 |
+| --- | ---: | ---: | ---: |
+| Queens 02, n=5 | 1 | 31.779 / 31.769 | 30.251 / 30.263 |
+| Queens 02, n=5 | 4 | 137.341 / 136.477 | 131.427 / 130.813 |
+| Queens 03, n=6 | 4 | 33.388 / 30.388 | 29.460 / 28.790 |
+| Queens 02, n=4 | 4 | 18.386 / 16.421 | 17.627 / 17.824 |
+
+Queens 02 at n=5 is about 4–5% faster in both pairings. Other cases show drift
+or reversals, including Queens 02 at n=4. No eager cell has a wall increase
+above 5% in both pairings; that observation does not establish unchanged eager
+cost. Four-thread hybrid execution still trails one thread substantially on
+the representative queens workloads. These results do not isolate either
+change's contribution or establish a general speedup or Metal performance gain.
+
+Each RSS cell is the median of two separately measured process peaks. Typical
+paired increases are 0.1–0.2 MiB. RSS excludes the fixed helper, may include
+waited descendants, and is not simultaneous process-tree or device memory.
+
+Caching preparation changes charged work and retained capacity. Queens 02 at
+n=5 uses 3,394,271 baseline source-work units and 3,395,219 afterward with one
+thread; substitutions remain 14,212. Successful ample-budget runs do not
+establish identical admission at resource ceilings. Plan storage is charged,
+and refused preparation publishes no plan. Reduct membership and final
+original-constraint checks remain mandatory.
+
+Reproduce with the maintained `grounding_comparison` example's `--study refutation`
+option. Use its compiled baseline revision `df99d4bb` as the fixed runner and
+use the baseline solver as `--helper` for every leg. Supply each measured solver
+as `--zetesis` in A1/B1/B2/A2 order, first with `--workers 1` and then with
+`--workers 4`, using a new `--report` path each time. The evidence retains both
+profiles, all limits, source edits and generated workload hashes. These runs
+use the 2 GiB solver allowance, 10-second process limit and 300-second campaign
+limit described below; they make no cold-cache claim.
 
 ## Original-region checks
 

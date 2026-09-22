@@ -1,0 +1,62 @@
+{
+  "compiled_source": "469d4d871c9753f58e573a135ce89b53afdd9874",
+  "validated_at": "2026-09-22T12:26:57.849Z",
+  "tools": {
+    "rust": "1.97.1",
+    "cargo_llvm_cov": "0.8.7",
+    "llvm": "22.1.6",
+    "clingo": "5.8.2",
+    "mdbook": "0.5.4"
+  },
+  "host": {
+    "os": "macOS 26.6.2",
+    "adapter": "Apple M4 Pro",
+    "backend": "Metal"
+  },
+  "local_gates": {
+    "portable": "passed",
+    "oracle": "passed",
+    "book": "passed",
+    "coverage": "passed"
+  },
+  "hosted_ci": "not run",
+  "totals": {
+    "workspace": {
+      "lines": {
+        "count": 90443,
+        "covered": 85242,
+        "percent": 94.24941675972713
+      },
+      "sha256": "516cd1a2431e860ade7b759983315ac0f36d3a9a5663e0a6de1303d64fb7af40"
+    },
+    "workspace-portable": {
+      "lines": {
+        "count": 90443,
+        "covered": 82668,
+        "percent": 91.4034253618301
+      },
+      "sha256": "b897634db4e71f69e80023f509cb6b22a731726105dc7e2fadffe3649ab98e9a"
+    },
+    "cli-cpu": {
+      "lines": {
+        "count": 9644,
+        "covered": 8857,
+        "percent": 91.83948569058482
+      },
+      "sha256": "f60a93422efe3148fcfc4479cc637040dc6249fce9bcd6121337633ec7ad020e"
+    }
+  },
+  "workspace_profiles": 2416,
+  "portable_profiles": 2400,
+  "physical_profiles": 16,
+  "physical_tests": 59,
+  "physical_groups": 16,
+  "excluded_listing_profiles": 16,
+  "ordinary_cli_backend_cases": 3,
+  "ordinary_cli_backend_instrumented": false,
+  "cpu_profiles": 326,
+  "physical_evidence_sha256": "3c5ad2716ed346abd87f7a1bbaa986d6befcf728f54ad4a902fac8787c2df082",
+  "floors_sha256": "2b1a8809c412156d61081dc5141279fca9a8e2c24ff4af0c3ec49cff1afdd378",
+  "report_log_sha256": "cbf83cbfe086d5c9653d4e07f5903c7191429abb9a9d0d9a040efe410f102779",
+  "status": "gate-passed"
+}
