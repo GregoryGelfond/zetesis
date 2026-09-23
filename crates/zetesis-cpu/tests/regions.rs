@@ -89,6 +89,31 @@ fn a_split_partitions_a_region_on_one_atom_cut_first() {
 }
 
 #[test]
+fn a_fully_decided_region_has_no_open_atom_to_split() {
+    let mut region = Region::all_open(3);
+    assert_eq!(region.highest_open(), Some(2));
+    assert!(region.hold(2));
+    assert_eq!(region.highest_open(), Some(1));
+    assert!(region.hold(1));
+    assert!(region.cut(0));
+    assert_eq!(region.highest_open(), None);
+    assert_eq!(region.split_atom(), None);
+}
+
+#[test]
+fn a_split_decides_the_atom_both_ways_and_drops_the_preference() {
+    let mut region = Region::all_open(4);
+    region.prefer(1);
+    assert_eq!(region.split_atom(), Some(1));
+    let (cut, held) = region.split(3);
+    assert!(cut.is_cut(3) && held.is_held(3));
+    // Neither child inherits the parent's preference; each falls back to its
+    // highest open atom.
+    assert_eq!(cut.split_atom(), Some(2));
+    assert_eq!(held.split_atom(), Some(2));
+}
+
+#[test]
 fn never_counting_visits_every_leaf_in_counter_order() {
     let traversal = Traversal::new(Region::all_open(2), Counting::Never);
     let leaves: Vec<Vec<usize>> = visits(traversal)
