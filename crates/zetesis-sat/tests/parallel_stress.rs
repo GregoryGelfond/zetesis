@@ -15,6 +15,7 @@
 
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
+use std::time::{Duration, Instant};
 
 use zetesis_ferraris::Theory;
 use zetesis_sat::{Cancellation, Limits, StableModels};
@@ -28,6 +29,11 @@ const EXPECTED_MODELS: usize = 92;
 /// small enough to keep the portable suite quick: this test builds unoptimized,
 /// so each enumeration is far dearer than a release run.
 const RUNS: usize = 16;
+/// A deadline far above any correct run of this small instance (each enumeration
+/// is milliseconds), so it never fires in normal operation but turns a
+/// counter-underflow hang into a test failure rather than an indefinitely wedged
+/// suite. This is the deadline the module doc's underflow claim refers to.
+const HANG_GUARD: Duration = Duration::from_mins(1);
 
 fn theory() -> Theory {
     admit_formula(
@@ -48,7 +54,7 @@ fn family(theory: &Theory, workers: usize) -> BTreeSet<Vec<usize>> {
         theory,
         NonZeroUsize::new(workers).unwrap(),
         Limits::default(),
-        Cancellation::default(),
+        Cancellation::with_deadline(Instant::now() + HANG_GUARD).unwrap(),
     )
     .unwrap();
     let mut models = BTreeSet::new();
