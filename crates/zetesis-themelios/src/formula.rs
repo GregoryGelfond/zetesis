@@ -440,7 +440,10 @@ impl fmt::Display for FormulaFailure {
                 limit,
                 observed,
                 ..
-            } => write!(f, "formula {resource} limit {limit}; required {observed}"),
+            } => write!(
+                f,
+                "formula {resource} limit {limit} exceeded (needed at least {observed}); raise the applicable resource limit or simplify the program"
+            ),
             Self::UnsafeVariable { variable, .. } => {
                 write!(f, "unsafe formula variable {variable}")
             }
