@@ -29,9 +29,10 @@ use std::mem::size_of;
 use crate::Stop;
 
 /// A region of candidates: every atom held, cut or open, and, once
-/// narrowed, the open atom its narrowing would split on. The region also
-/// keeps the order its atoms were decided in, so a narrowing that carries
-/// knowledge from the region's parent applies only the decisions made since.
+/// narrowed, the open atom its narrowing would split on. Its decisions are two
+/// atom bitmasks, one for held and one for cut; a narrowing that carries
+/// knowledge from the region's parent applies only the decisions the parent
+/// had not yet seen, by diffing this region's decided mask against a snapshot.
 #[derive(Clone, Debug)]
 pub struct Region {
     /// Bit set iff the atom is held. Disjoint from `cut` word for word, and
@@ -254,22 +255,22 @@ impl Region {
     /// Neither inherits a preference; their narrowing sets their own.
     ///
     /// # Panics
-    /// Panics if `atom` is not one of the region's atoms.
+    /// Panics unless `atom` is one of the region's open atoms.
     #[must_use]
     pub fn split(&self, atom: usize) -> (Self, Self) {
-        // A region is split on one of its atoms; an out-of-range atom fails
-        // fast rather than touching a non-atom bit, as indexing did before.
-        assert!(atom < self.atoms, "a region is split on one of its atoms");
+        // A region is split on one of its OPEN atoms: an out-of-range or
+        // already-decided atom fails fast, since deciding it would either touch
+        // a non-atom bit or leave a narrowing's knowledge out of step with the
+        // region's decision (a reader's seen-mask already covers a decided atom).
+        assert!(
+            self.is_open(atom),
+            "a region is split on one of its open atoms"
+        );
         let (word, bit) = locate(atom);
-        // Each child decides the atom its own way. Clearing the opposite bit
-        // keeps `held` and `cut` disjoint even if the atom was already decided
-        // (a precondition violation), reproducing the prior overwrite.
         let mut cut = self.clone();
-        cut.held[word] &= !bit;
         cut.cut[word] |= bit;
         cut.preferred = None;
         let mut held = self.clone();
-        held.cut[word] &= !bit;
         held.held[word] |= bit;
         held.preferred = None;
         (cut, held)

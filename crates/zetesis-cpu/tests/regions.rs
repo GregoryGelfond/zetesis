@@ -97,24 +97,20 @@ fn a_split_partitions_a_region_on_one_atom_cut_first() {
 }
 
 #[test]
-fn splitting_an_already_decided_atom_decides_it_cleanly_both_ways() {
-    // Splitting on a non-open atom violates the precondition, but the operation
-    // stays well-defined: each child decides the atom its own way, never both
-    // held and cut, matching the prior overwriting behavior.
+#[should_panic(expected = "one of its open atoms")]
+fn splitting_an_already_decided_atom_fails_fast() {
+    // Deciding an already-decided atom would leave a reader's seen-mask out of
+    // step with the region, so it fails fast rather than desynchronising silently.
     let mut region = Region::all_open(4);
     assert!(region.hold(2));
-    let (cut, held) = region.split(2);
-    assert_eq!(cut.decision(2), Some(false));
-    assert!(cut.is_cut(2) && !cut.is_held(2));
-    assert_eq!(held.decision(2), Some(true));
-    assert!(held.is_held(2) && !held.is_cut(2));
+    let _ = region.split(2);
 }
 
 #[test]
-#[should_panic(expected = "one of its atoms")]
+#[should_panic(expected = "one of its open atoms")]
 fn splitting_an_out_of_range_atom_fails_fast() {
     // Atom 100 is beyond the 65-atom universe but inside the top word; it must
-    // fail fast rather than set a phantom tail bit and record a phantom decision.
+    // fail fast rather than set a phantom tail bit.
     let region = Region::all_open(65);
     let _ = region.split(100);
 }

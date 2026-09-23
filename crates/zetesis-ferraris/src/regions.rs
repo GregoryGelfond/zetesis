@@ -404,6 +404,7 @@ impl Knowledge {
             + booleans.into_iter().map(|n| n as u128).sum::<u128>() * size_of::<bool>() as u128
             + indices.into_iter().map(|n| n as u128).sum::<u128>() * size_of::<usize>() as u128
             + known.nodes.capacity() as u128 * size_of::<(usize, bool)>() as u128
+            + known.seen.len() as u128 * size_of::<u64>() as u128
     }
 }
 
