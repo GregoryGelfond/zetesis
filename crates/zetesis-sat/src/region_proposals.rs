@@ -449,7 +449,9 @@ impl Round<'_> {
         }
         if let Some(atom) = region.split_atom() {
             budget.decide()?;
-            let (cut, held) = region.split(atom);
+            // Take the region out to split it by value; the emptied placeholder
+            // (no atoms, no allocation) is discarded with this pending entry.
+            let (cut, held) = std::mem::replace(region, Region::all_open(0)).split(atom);
             let cut = (cut, knowledge.clone());
             let held = (held, std::mem::take(knowledge));
             return Ok(Step::Split(cut, held));

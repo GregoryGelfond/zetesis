@@ -257,7 +257,7 @@ impl Region {
     /// # Panics
     /// Panics unless `atom` is one of the region's open atoms.
     #[must_use]
-    pub fn split(&self, atom: usize) -> (Self, Self) {
+    pub fn split(mut self, atom: usize) -> (Self, Self) {
         // A region is split on one of its OPEN atoms: an out-of-range or
         // already-decided atom fails fast, since deciding it would either touch
         // a non-atom bit or leave a narrowing's knowledge out of step with the
@@ -267,13 +267,14 @@ impl Region {
             "a region is split on one of its open atoms"
         );
         let (word, bit) = locate(atom);
-        let mut cut = self.clone();
-        cut.cut[word] |= bit;
-        cut.preferred = None;
+        // Clone once for the held child; reuse this region as the cut child
+        // rather than cloning it a second time.
         let mut held = self.clone();
         held.held[word] |= bit;
         held.preferred = None;
-        (cut, held)
+        self.cut[word] |= bit;
+        self.preferred = None;
+        (self, held)
     }
 }
 
