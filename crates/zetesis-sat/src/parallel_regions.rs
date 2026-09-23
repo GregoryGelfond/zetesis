@@ -64,6 +64,9 @@ use crate::{Cancellation, Incomplete, Limits, SearchPhaseTimings, SearchStatisti
 const IDLE_WAIT: Duration = Duration::from_millis(1);
 /// Models a worker may have sent and the enumeration not yet taken, per worker.
 const CHANNEL_SLACK: usize = 16;
+/// Idle steal rounds a worker spins (yielding) before it parks on a timed wait:
+/// the busy-wait/park backoff crossover, distinct from `CHANNEL_SLACK`.
+const SPIN_ROUNDS_BEFORE_PARK: u32 = 16;
 
 /// A region with its per-narrower knowledge, the unit workers steal.
 type Entry = (Region, Vec<Knowledge>);
@@ -459,6 +462,16 @@ impl ParallelRegions {
                         return Err(error);
                     }
                     joined?;
+                    // Clean completion with no stop: every region created was
+                    // resolved, so the frontier counter is exactly zero. This
+                    // guards the accounting-regression class (a missing or
+                    // doubled decrement, or a total premature exit that abandons
+                    // regions) that the exact-family check cannot see.
+                    debug_assert_eq!(
+                        self.shared.outstanding.load(Ordering::Acquire),
+                        0,
+                        "clean completion left regions outstanding"
+                    );
                     self.exhausted = true;
                     return Ok(None);
                 }
@@ -711,7 +724,7 @@ fn find_work(shared: &Shared, stealers: &[Stealer<Entry>], index: usize) -> Opti
         // Work is held by a busy worker; wait, rechecking cooperative control
         // at least once per timed wait, before trying to steal again.
         idle_rounds += 1;
-        if idle_rounds < 16 {
+        if idle_rounds < SPIN_ROUNDS_BEFORE_PARK {
             std::thread::yield_now();
         } else {
             std::thread::park_timeout(IDLE_WAIT);
@@ -810,6 +823,13 @@ fn step<'a>(
     // Two children replace this region (net +1). Count the gain BEFORE
     // publishing either child, so no other worker can observe a transient zero
     // and exit early; only infallible pushes may follow the increment.
+    //
+    // Allocation boundary: crossbeam's `push` cannot fail and aborts the process
+    // on OOM, so a per-split region-storage exhaustion no longer surfaces as a
+    // typed `Incomplete::Allocation` (the `knowledge.clone()` above already
+    // aborts on OOM). The typed allocation boundary is therefore not preserved
+    // per split; the remaining `Incomplete::Allocation` paths (`start`, `restrict`)
+    // are unrelated to it.
     shared.outstanding.fetch_add(1, Ordering::AcqRel);
     deque.push(held);
     deque.push((cut, knowledge));

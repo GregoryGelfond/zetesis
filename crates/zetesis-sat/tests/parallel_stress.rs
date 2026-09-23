@@ -1,13 +1,17 @@
 //! The work-stealing region scheduler returns the exact answer-set family on
 //! every run, whatever the worker count or interleaving.
 //!
-//! N-queens forces genuine region splitting and stealing across many workers, so
-//! a model lost or duplicated by a steal, or a termination race in the
-//! `outstanding` counter, would surface as a family that differs from the scalar
-//! walk's or between runs. Each worker count is exercised many times so a
-//! schedule-dependent fault has repeated opportunities to appear. The order in
-//! which models arrive is the schedule's and is deliberately not asserted; only
-//! the family is.
+//! N-queens forces genuine region splitting and stealing across many workers.
+//! This test guards the *family*: a model lost or duplicated by a steal shows as
+//! a family that differs from the scalar walk's or between runs, and a counter
+//! underflow that hangs is caught by the enumeration's deadline. It does NOT
+//! guard the add-before-push ordering property: that race nets the `outstanding`
+//! counter back to zero with exact model and region counts, degrading
+//! parallelism rather than the family, so it is a scaling property (evidenced by
+//! the measured scaling curve) that no family check can see. Each worker count is
+//! run many times so a schedule-dependent family fault has repeated chances to
+//! appear. Model arrival order is the schedule's and is deliberately not
+//! asserted; only the family is.
 
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
