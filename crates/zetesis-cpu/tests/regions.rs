@@ -136,6 +136,37 @@ fn iteration_reports_only_real_atoms_in_a_partial_word() {
 }
 
 #[test]
+fn decided_since_reports_new_decisions_with_values_ascending() {
+    let mut region = Region::all_open(70); // two words
+    region.hold(3);
+    region.cut(65);
+    let mut seen = vec![0u64; 2];
+    assert_eq!(
+        region.decided_since(&seen).collect::<Vec<_>>(),
+        vec![(3, true), (65, false)]
+    );
+    region.snapshot_decided(&mut seen);
+    // Nothing is new after the snapshot.
+    assert_eq!(region.decided_since(&seen).count(), 0);
+    // A further decision is the only new one.
+    region.hold(10);
+    assert_eq!(
+        region.decided_since(&seen).collect::<Vec<_>>(),
+        vec![(10, true)]
+    );
+}
+
+#[test]
+fn decided_since_with_empty_seen_reports_all_and_ignores_the_tail() {
+    let mut region = Region::all_open(65);
+    region.cut(64);
+    assert_eq!(
+        region.decided_since(&[]).collect::<Vec<_>>(),
+        vec![(64, false)]
+    );
+}
+
+#[test]
 fn a_fully_decided_region_has_no_open_atom_to_split() {
     let mut region = Region::all_open(3);
     assert_eq!(region.highest_open(), Some(2));

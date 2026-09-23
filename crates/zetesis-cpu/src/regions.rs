@@ -235,6 +235,28 @@ impl Region {
             (self.held[word] | self.cut[word]) & bit == 0
         })
     }
+    /// The atoms this region decides that are not set in `seen`, each paired
+    /// with whether it is held, ascending. `seen` is a decided-mask snapshot
+    /// over the same atoms; words missing from `seen` count as unseen. Reports
+    /// only real atoms, never a tail bit.
+    pub fn decided_since<'a>(&'a self, seen: &'a [u64]) -> impl Iterator<Item = (usize, bool)> + 'a {
+        (0..self.held.len()).flat_map(move |word| {
+            let seen_word = seen.get(word).copied().unwrap_or(0);
+            let fresh = (self.held[word] | self.cut[word]) & !seen_word;
+            let held = self.held[word];
+            let base = word * 64;
+            SetBits { bits: fresh }
+                .map(move |bit| (base + bit, held & (1u64 << bit) != 0))
+                .filter(move |&(atom, _)| atom < self.atoms)
+        })
+    }
+    /// Overwrite the first `words(len())` words of `dst` with this region's
+    /// decided mask (`held | cut`), the snapshot a reader remembers as seen.
+    pub fn snapshot_decided(&self, dst: &mut [u64]) {
+        for (word, (&held, &cut)) in dst.iter_mut().zip(self.held.iter().zip(self.cut.iter())) {
+            *word = held | cut;
+        }
+    }
     /// The two regions an open atom splits this one into: cut, then held.
     /// Neither inherits a preference; their narrowing sets their own.
     ///
