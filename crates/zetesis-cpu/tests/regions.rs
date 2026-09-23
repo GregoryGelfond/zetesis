@@ -89,6 +89,30 @@ fn a_split_partitions_a_region_on_one_atom_cut_first() {
 }
 
 #[test]
+fn tail_bits_beyond_the_atom_count_are_never_open() {
+    // 65 atoms need two 64-bit words; the high bits of the second word are not
+    // atoms and must never surface as open.
+    let mut region = Region::all_open(65);
+    for atom in 0..65 {
+        assert!(region.hold(atom));
+    }
+    assert_eq!(region.highest_open(), None);
+    assert_eq!(region.split_atom(), None);
+    assert_eq!(region.open().count(), 0);
+    assert_eq!(region.len(), 65);
+}
+
+#[test]
+fn iteration_reports_only_real_atoms_in_a_partial_word() {
+    let mut region = Region::all_open(63); // a single partial word
+    assert!(region.hold(62));
+    assert_eq!(region.held().collect::<Vec<_>>(), vec![62]);
+    assert_eq!(region.open().count(), 62);
+    assert!(region.open().all(|atom| atom < 63));
+    assert_eq!(region.highest_open(), Some(61));
+}
+
+#[test]
 fn a_fully_decided_region_has_no_open_atom_to_split() {
     let mut region = Region::all_open(3);
     assert_eq!(region.highest_open(), Some(2));

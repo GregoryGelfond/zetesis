@@ -34,18 +34,62 @@ use crate::Stop;
 /// knowledge from the region's parent applies only the decisions made since.
 #[derive(Clone, Debug)]
 pub struct Region {
-    decided: Vec<Option<bool>>,
+    /// Bit set iff the atom is held. Disjoint from `cut` word for word, and
+    /// bits at `[atoms, 64*words)` are always zero and are not atoms.
+    held: Box<[u64]>,
+    /// Bit set iff the atom is cut.
+    cut: Box<[u64]>,
+    /// The atom universe; each mask is `words(atoms)` words long.
+    atoms: usize,
     preferred: Option<usize>,
     /// The atoms decided, in the order they were decided.
     decisions: Vec<usize>,
 }
 
-/// Two regions are the same when they decide the same atoms the same way
-/// and prefer the same split; the order the decisions were made in is
-/// history, not identity.
+/// The number of 64-bit words a mask over `atoms` atoms needs.
+const fn words(atoms: usize) -> usize {
+    atoms.div_ceil(64)
+}
+
+/// The word index and single-bit mask of an atom.
+const fn locate(atom: usize) -> (usize, u64) {
+    (atom / 64, 1u64 << (atom % 64))
+}
+
+/// The set-bit positions of a mask, ascending, keeping only real atoms.
+fn set_bits(mask: &[u64], atoms: usize) -> impl Iterator<Item = usize> + '_ {
+    mask.iter().enumerate().flat_map(move |(word, &bits)| {
+        let base = word * 64;
+        SetBits { bits }
+            .map(move |bit| base + bit)
+            .filter(move |&atom| atom < atoms)
+    })
+}
+
+/// Iterates the set-bit positions of one word, ascending.
+struct SetBits {
+    bits: u64,
+}
+impl Iterator for SetBits {
+    type Item = usize;
+    fn next(&mut self) -> Option<usize> {
+        (self.bits != 0).then(|| {
+            let bit = self.bits.trailing_zeros() as usize;
+            self.bits &= self.bits - 1;
+            bit
+        })
+    }
+}
+
+/// Two regions are the same when they decide the same atoms the same way over
+/// the same universe and prefer the same split; the order the decisions were
+/// made in is history, not identity.
 impl PartialEq for Region {
     fn eq(&self, other: &Self) -> bool {
-        self.decided == other.decided && self.preferred == other.preferred
+        self.atoms == other.atoms
+            && self.held == other.held
+            && self.cut == other.cut
+            && self.preferred == other.preferred
     }
 }
 impl Eq for Region {}
@@ -56,7 +100,7 @@ impl Region {
     #[must_use]
     pub fn retained_bytes(&self) -> u128 {
         size_of::<Self>() as u128
-            + self.decided.capacity() as u128 * size_of::<Option<bool>>() as u128
+            + (self.held.len() + self.cut.len()) as u128 * size_of::<u64>() as u128
             + self.decisions.capacity() as u128 * size_of::<usize>() as u128
     }
 
@@ -64,7 +108,9 @@ impl Region {
     #[must_use]
     pub fn all_open(atoms: usize) -> Self {
         Self {
-            decided: vec![None; atoms],
+            held: vec![0; words(atoms)].into_boxed_slice(),
+            cut: vec![0; words(atoms)].into_boxed_slice(),
+            atoms,
             preferred: None,
             decisions: Vec::new(),
         }
@@ -72,12 +118,12 @@ impl Region {
     /// The number of atoms the region decides over.
     #[must_use]
     pub fn len(&self) -> usize {
-        self.decided.len()
+        self.atoms
     }
     /// Whether the region decides over no atom at all.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.decided.is_empty()
+        self.atoms == 0
     }
     /// Hold an atom in every candidate; `false` when the atom is cut or
     /// outside the region.
@@ -90,15 +136,23 @@ impl Region {
         self.decide(atom, false)
     }
     fn decide(&mut self, atom: usize, value: bool) -> bool {
-        match self.decided.get(atom) {
-            Some(None) => {
-                self.decided[atom] = Some(value);
-                self.decisions.push(atom);
-                true
-            }
-            Some(Some(decided)) => *decided == value,
-            None => false,
+        if atom >= self.atoms {
+            return false;
         }
+        let (word, bit) = locate(atom);
+        if self.held[word] & bit != 0 {
+            return value;
+        }
+        if self.cut[word] & bit != 0 {
+            return !value;
+        }
+        if value {
+            self.held[word] |= bit;
+        } else {
+            self.cut[word] |= bit;
+        }
+        self.decisions.push(atom);
+        true
     }
     /// The atoms decided so far, in the order they were decided: a reader
     /// that saw the first `n` takes up at `decisions()[n..]`.
@@ -109,7 +163,17 @@ impl Region {
     /// The atom's decision: held, cut, or open; `None` outside the region too.
     #[must_use]
     pub fn decision(&self, atom: usize) -> Option<bool> {
-        self.decided.get(atom).copied().flatten()
+        if atom >= self.atoms {
+            return None;
+        }
+        let (word, bit) = locate(atom);
+        if self.held[word] & bit != 0 {
+            Some(true)
+        } else if self.cut[word] & bit != 0 {
+            Some(false)
+        } else {
+            None
+        }
     }
     /// Whether every candidate holds the atom.
     #[must_use]
@@ -124,13 +188,28 @@ impl Region {
     /// Whether the atom is open: some candidates hold it and some do not.
     #[must_use]
     pub fn is_open(&self, atom: usize) -> bool {
-        self.decided.get(atom).is_some_and(Option::is_none)
+        atom < self.atoms && {
+            let (word, bit) = locate(atom);
+            (self.held[word] | self.cut[word]) & bit == 0
+        }
     }
     /// The highest open atom, the one a split decides when no atom is
     /// preferred.
     #[must_use]
     pub fn highest_open(&self) -> Option<usize> {
-        self.decided.iter().rposition(Option::is_none)
+        for word in (0..self.held.len()).rev() {
+            let mut open = !(self.held[word] | self.cut[word]);
+            // Ignore the unused high bits of the top partial word: they are not
+            // atoms and would otherwise read as open.
+            let valid = self.atoms - word * 64;
+            if valid < 64 {
+                open &= (1u64 << valid) - 1;
+            }
+            if open != 0 {
+                return Some(word * 64 + (63 - open.leading_zeros() as usize));
+            }
+        }
+        None
     }
     /// Prefer an open atom for the next split, as a narrowing may after
     /// reading the region; a decided atom is not retained.
@@ -147,29 +226,26 @@ impl Region {
     }
     /// The atoms every candidate holds, ascending.
     pub fn held(&self) -> impl Iterator<Item = usize> + '_ {
-        self.with_decision(Some(true))
+        set_bits(&self.held, self.atoms)
     }
     /// The open atoms, ascending.
     pub fn open(&self) -> impl Iterator<Item = usize> + '_ {
-        self.with_decision(None)
-    }
-    fn with_decision(&self, wanted: Option<bool>) -> impl Iterator<Item = usize> + '_ {
-        self.decided
-            .iter()
-            .enumerate()
-            .filter(move |(_, decision)| **decision == wanted)
-            .map(|(atom, _)| atom)
+        (0..self.atoms).filter(move |&atom| {
+            let (word, bit) = locate(atom);
+            (self.held[word] | self.cut[word]) & bit == 0
+        })
     }
     /// The two regions an open atom splits this one into: cut, then held.
     /// Neither inherits a preference; their narrowing sets their own.
     #[must_use]
     pub fn split(&self, atom: usize) -> (Self, Self) {
+        let (word, bit) = locate(atom);
         let mut cut = self.clone();
-        cut.decided[atom] = Some(false);
+        cut.cut[word] |= bit;
         cut.decisions.push(atom);
         cut.preferred = None;
         let mut held = self.clone();
-        held.decided[atom] = Some(true);
+        held.held[word] |= bit;
         held.decisions.push(atom);
         held.preferred = None;
         (cut, held)
