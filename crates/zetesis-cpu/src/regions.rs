@@ -237,14 +237,25 @@ impl Region {
     }
     /// The two regions an open atom splits this one into: cut, then held.
     /// Neither inherits a preference; their narrowing sets their own.
+    ///
+    /// # Panics
+    /// Panics if `atom` is not one of the region's atoms.
     #[must_use]
     pub fn split(&self, atom: usize) -> (Self, Self) {
+        // A region is split on one of its atoms; an out-of-range atom fails
+        // fast rather than touching a non-atom bit, as indexing did before.
+        assert!(atom < self.atoms, "a region is split on one of its atoms");
         let (word, bit) = locate(atom);
+        // Each child decides the atom its own way. Clearing the opposite bit
+        // keeps `held` and `cut` disjoint even if the atom was already decided
+        // (a precondition violation), reproducing the prior overwrite.
         let mut cut = self.clone();
+        cut.held[word] &= !bit;
         cut.cut[word] |= bit;
         cut.decisions.push(atom);
         cut.preferred = None;
         let mut held = self.clone();
+        held.cut[word] &= !bit;
         held.held[word] |= bit;
         held.decisions.push(atom);
         held.preferred = None;
