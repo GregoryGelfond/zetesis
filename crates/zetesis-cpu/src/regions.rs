@@ -42,8 +42,6 @@ pub struct Region {
     /// The atom universe; each mask is `words(atoms)` words long.
     atoms: usize,
     preferred: Option<usize>,
-    /// The atoms decided, in the order they were decided.
-    decisions: Vec<usize>,
 }
 
 /// The number of 64-bit words a mask over `atoms` atoms needs.
@@ -101,7 +99,6 @@ impl Region {
     pub fn retained_bytes(&self) -> u128 {
         size_of::<Self>() as u128
             + (self.held.len() + self.cut.len()) as u128 * size_of::<u64>() as u128
-            + self.decisions.capacity() as u128 * size_of::<usize>() as u128
     }
 
     /// The region in which every atom is open: every candidate lies in it.
@@ -112,7 +109,6 @@ impl Region {
             cut: vec![0; words(atoms)].into_boxed_slice(),
             atoms,
             preferred: None,
-            decisions: Vec::new(),
         }
     }
     /// The number of atoms the region decides over.
@@ -151,14 +147,7 @@ impl Region {
         } else {
             self.cut[word] |= bit;
         }
-        self.decisions.push(atom);
         true
-    }
-    /// The atoms decided so far, in the order they were decided: a reader
-    /// that saw the first `n` takes up at `decisions()[n..]`.
-    #[must_use]
-    pub fn decisions(&self) -> &[usize] {
-        &self.decisions
     }
     /// The atom's decision: held, cut, or open; `None` outside the region too.
     #[must_use]
@@ -257,6 +246,10 @@ impl Region {
             *word = held | cut;
         }
     }
+    /// Every decided atom with whether it is held, ascending.
+    pub fn decided(&self) -> impl Iterator<Item = (usize, bool)> + '_ {
+        self.decided_since(&[])
+    }
     /// The two regions an open atom splits this one into: cut, then held.
     /// Neither inherits a preference; their narrowing sets their own.
     ///
@@ -274,12 +267,10 @@ impl Region {
         let mut cut = self.clone();
         cut.held[word] &= !bit;
         cut.cut[word] |= bit;
-        cut.decisions.push(atom);
         cut.preferred = None;
         let mut held = self.clone();
         held.cut[word] &= !bit;
         held.held[word] |= bit;
-        held.decisions.push(atom);
         held.preferred = None;
         (cut, held)
     }

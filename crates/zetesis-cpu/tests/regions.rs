@@ -27,16 +27,19 @@ fn held(region: &Region) -> Vec<usize> {
 }
 
 #[test]
-fn region_storage_includes_decision_capacity() {
-    let mut region = Region::all_open(12);
+fn region_storage_is_its_mask_words_and_a_decision_does_not_allocate() {
     let empty = Region::all_open(0).retained_bytes();
-    assert!(region.retained_bytes() >= empty + 12 * size_of::<Option<bool>>() as u128);
+    let mut region = Region::all_open(65); // two words per mask
+    // Two masks (held and cut), two words each, eight bytes a word.
+    assert_eq!(
+        region.retained_bytes(),
+        empty + 2 * 2 * size_of::<u64>() as u128
+    );
     let before = region.retained_bytes();
     assert!(region.hold(11));
-    assert!(region.retained_bytes() >= before + size_of::<usize>() as u128);
-    let decided = region.retained_bytes();
-    assert!(region.hold(11));
-    assert_eq!(region.retained_bytes(), decided);
+    assert!(region.cut(64));
+    // Deciding an atom flips a bit; it allocates nothing.
+    assert_eq!(region.retained_bytes(), before);
 }
 
 #[test]
@@ -57,15 +60,21 @@ fn a_region_holds_cuts_or_leaves_each_atom_open() {
 }
 
 #[test]
-fn a_region_logs_its_decisions_in_order() {
+fn a_region_reports_its_decisions_with_values_ascending() {
     let mut region = Region::all_open(3);
     assert!(region.hold(2));
     assert!(region.cut(0));
     assert!(region.hold(2), "an idle hold is not a decision");
-    assert_eq!(region.decisions(), [2, 0]);
+    assert_eq!(region.decided().collect::<Vec<_>>(), vec![(0, false), (2, true)]);
     let (cut, held) = region.split(1);
-    assert_eq!(cut.decisions(), [2, 0, 1]);
-    assert_eq!(held.decisions(), [2, 0, 1]);
+    assert_eq!(
+        cut.decided().collect::<Vec<_>>(),
+        vec![(0, false), (1, false), (2, true)]
+    );
+    assert_eq!(
+        held.decided().collect::<Vec<_>>(),
+        vec![(0, false), (1, true), (2, true)]
+    );
 }
 
 #[test]
@@ -77,7 +86,6 @@ fn regions_are_equal_by_their_decisions_whatever_their_order() {
     assert!(other.cut(0));
     assert!(other.hold(2));
     assert_eq!(other, region);
-    assert_ne!(other.decisions(), region.decisions());
 }
 
 #[test]
@@ -343,15 +351,15 @@ fn a_traversal_from_a_narrowed_root_does_not_narrow_it_again() {
     let mut narrowed = Vec::new();
     while let Some(visit) = traversal
         .next(|region, ()| {
-            narrowed.push(region.decisions().to_vec());
+            narrowed.push(region.decided().collect::<Vec<_>>());
             Ok::<_, Stop>(Narrowing::Fixed { changed: false })
         })
         .unwrap()
     {
         assert!(matches!(visit, Visit::Counted(..)));
     }
-    // The root's two children, each narrowed once and counted.
-    assert_eq!(narrowed, vec![vec![1], vec![1]]);
+    // The root's two children, cut then held, each narrowed once and counted.
+    assert_eq!(narrowed, vec![vec![(1, false)], vec![(1, true)]]);
     assert_eq!(traversal.statistics().regions, 3);
     assert_eq!(traversal.statistics().counted, 2);
 }
