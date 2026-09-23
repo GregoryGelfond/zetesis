@@ -2071,6 +2071,7 @@ dependencies = [
 name = "zetesis-sat"
 version = "0.1.4"
 dependencies = [
+ "crossbeam-deque",
  "proptest",
  "rayon",
  "zetesis-cpu",
