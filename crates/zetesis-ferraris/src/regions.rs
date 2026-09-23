@@ -653,7 +653,7 @@ impl Narrower {
                 debug_assert!(decided, "a learned atom agrees with the region");
                 changed |= was_open;
             }
-            known.seen = region.decisions().len();
+            region.snapshot_decided(&mut known.seen);
             if let Some(atom) = most_constrained(region, known, &mut work)? {
                 region.prefer(atom);
             }
@@ -718,8 +718,9 @@ struct Known {
     /// Atoms whose support must be rechecked; queued only when producers
     /// are known, since only they say what supports an atom.
     heads: Vec<usize>,
-    /// How many of the region's decisions, in the order made, are known.
-    seen: usize,
+    /// The region's decided-mask snapshot already told to this closure; new
+    /// decisions are the region's decided atoms not set here.
+    seen: Box<[u64]>,
     /// The roots, falsum and every atom's support have been seeded once;
     /// later closures learn only decisions not yet known.
     seeded: bool,
@@ -757,6 +758,7 @@ fn learn(known: &mut [bool], opposite: &[bool], index: usize) -> Step {
 
 impl Known {
     fn empty(nodes: usize, chains: usize, unknown: Vec<usize>) -> Self {
+        let seen = vec![0u64; unknown.len().div_ceil(64)].into_boxed_slice();
         Self {
             sure: vec![false; nodes],
             never: vec![false; nodes],
@@ -768,7 +770,7 @@ impl Known {
             learned: Vec::new(),
             nodes: Vec::new(),
             heads: Vec::new(),
-            seen: 0,
+            seen,
             seeded: false,
         }
     }
@@ -861,11 +863,15 @@ impl Known {
             }
             self.seeded = true;
         }
-        for &atom in &region.decisions()[self.seen..] {
-            let value = region.decision(atom).expect("a decided atom is decided");
+        // Take the seen mask out so the new-decision iterator borrows the local
+        // rather than `self`, leaving `self.atom` free to mutate the closure;
+        // the swap moves a box pointer and copies nothing.
+        let mut seen = std::mem::take(&mut self.seen);
+        for (atom, value) in region.decided_since(&seen) {
             step = step.join(self.atom(index, producers, atom, value));
         }
-        self.seen = region.decisions().len();
+        region.snapshot_decided(&mut seen);
+        self.seen = seen;
         if step == Step::Contradiction {
             return Ok(step);
         }
