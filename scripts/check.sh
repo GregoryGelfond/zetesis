@@ -23,6 +23,11 @@ esac
 repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd -- "$repo_dir"
 if [ "$mode" = portable ] || [ "$mode" = full ]; then
+    # No throwaway measurement scaffolding or tool/method markers in shipped source.
+    if grep -rniE 'ZETESIS_PROBE|quickxplain_probe|PROBE_LEARN' crates --include='*.rs'; then
+        printf 'measurement scaffolding must not ship\n' >&2
+        exit 1
+    fi
     cargo fmt --all -- --check
     cargo test --locked --workspace --all-features --no-fail-fast
     cargo test --locked -p zetesis-cli -p zetesis-solve --no-default-features --no-fail-fast
