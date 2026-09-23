@@ -65,7 +65,10 @@ fn a_region_reports_its_decisions_with_values_ascending() {
     assert!(region.hold(2));
     assert!(region.cut(0));
     assert!(region.hold(2), "an idle hold is not a decision");
-    assert_eq!(region.decided().collect::<Vec<_>>(), vec![(0, false), (2, true)]);
+    assert_eq!(
+        region.decided().collect::<Vec<_>>(),
+        vec![(0, false), (2, true)]
+    );
     let (cut, held) = region.split(1);
     assert_eq!(
         cut.decided().collect::<Vec<_>>(),

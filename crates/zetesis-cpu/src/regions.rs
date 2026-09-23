@@ -229,7 +229,10 @@ impl Region {
     /// with whether it is held, ascending. `seen` is a decided-mask snapshot
     /// over the same atoms; words missing from `seen` count as unseen. Reports
     /// only real atoms, never a tail bit.
-    pub fn decided_since<'a>(&'a self, seen: &'a [u64]) -> impl Iterator<Item = (usize, bool)> + 'a {
+    pub fn decided_since<'a>(
+        &'a self,
+        seen: &'a [u64],
+    ) -> impl Iterator<Item = (usize, bool)> + 'a {
         (0..self.held.len()).flat_map(move |word| {
             let seen_word = seen.get(word).copied().unwrap_or(0);
             let fresh = (self.held[word] | self.cut[word]) & !seen_word;
