@@ -10,9 +10,8 @@ fn retained_bytes_counts_the_seen_mask() {
     };
     let k = &knowledge.known;
     let expected = size_of::<Knowledge>() as u128
-        + (k.sure.capacity() + k.never.capacity() + k.atom_sure.capacity() + k.atom_never.capacity())
-            as u128
-            * size_of::<bool>() as u128
+        + (k.sure.len() + k.never.len() + k.atom_sure.len() + k.atom_never.len()) as u128
+            * size_of::<u64>() as u128
         + (k.sure_operands.capacity()
             + k.never_operands.capacity()
             + k.unknown.capacity()
