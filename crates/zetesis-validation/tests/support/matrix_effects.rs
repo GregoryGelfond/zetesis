@@ -128,6 +128,134 @@ fn completed_matrix_publishes_its_exact_schedule_and_capture_total() {
 }
 
 #[test]
+fn qualification_campaign_retains_complete_checks_without_measurements() {
+    let fixture = Fixture::new();
+    let mut request = fixture.request();
+    request.plan = Plan::qualification(
+        Suite::Queens,
+        vec![crate::selected::NativeExecution::default()],
+        NonZeroUsize::MIN,
+    )
+    .unwrap();
+    let report = fixture.run(&request);
+    assert!(report.passed(), "{report:?}");
+    assert_eq!(report.samples().len(), 2);
+    assert!(
+        report
+            .samples()
+            .iter()
+            .all(|sample| sample.slot().phase == Phase::Qualification)
+    );
+    assert!(
+        report
+            .summary()
+            .cells
+            .iter()
+            .all(|cell| cell.timing.is_none() && cell.peak_rss_bytes.is_none())
+    );
+    report.publish().unwrap();
+    let published: Value = serde_json::from_slice(&fs::read(&fixture.report).unwrap()).unwrap();
+    assert!(matches!(
+        crate::performance::series::compare(&[crate::performance::series::Labelled {
+            label: "qualification",
+            report: &published,
+        }]),
+        Err(crate::performance::series::ViewError::NoTimedPopulation { .. })
+    ));
+}
+
+#[test]
+fn plain_scalability_run_refuses_to_omit_authored_inputs() {
+    let fixture = Fixture::new();
+    let mut request = fixture.request();
+    request.plan = Plan::qualification(
+        Suite::Scalability,
+        vec![crate::selected::NativeExecution::default()],
+        NonZeroUsize::MIN,
+    )
+    .unwrap();
+    assert!(matches!(
+        crate::performance::matrix::run(&request),
+        Err(Error::Configuration(
+            "scalability suite requires explicit authored workloads"
+        ))
+    ));
+}
+
+#[test]
+fn cancelled_scalability_keeps_every_workload_and_requested_position() {
+    let fixture = Fixture::new();
+    let mut request = fixture.request();
+    request.plan = Plan::qualification(
+        Suite::Scalability,
+        vec![crate::selected::NativeExecution::default()],
+        NonZeroUsize::MIN,
+    )
+    .unwrap();
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
+    let report = crate::performance::scalability::run_with_cancellation(
+        &request,
+        &root,
+        true,
+        NativeInvocation::Legacy,
+        &AtomicBool::new(true),
+    )
+    .unwrap();
+    assert!(report.accounted());
+    assert!(!report.passed());
+    assert!(report.metadata().is_empty());
+    assert_eq!(report.workloads().unwrap().len(), 10);
+    assert_eq!(
+        report
+            .workloads()
+            .unwrap()
+            .iter()
+            .filter(|workload| workload.is_authored())
+            .count(),
+        7
+    );
+    assert_eq!(report.samples().len(), 20);
+    assert!(
+        report
+            .samples()
+            .iter()
+            .all(|sample| sample.capture().is_none()
+                && sample.decision() == Decision::NotAttempted
+                && sample.slot().phase == Phase::Qualification)
+    );
+    assert!(
+        report
+            .after()
+            .iter()
+            .all(crate::selected::Change::unchanged)
+    );
+}
+
+#[test]
+fn scalability_wrapper_preserves_explicit_admission_limits() {
+    let fixture = Fixture::new();
+    let mut request = fixture.request();
+    request.plan = Plan::qualification(
+        Suite::Scalability,
+        vec![crate::selected::NativeExecution::default()],
+        NonZeroUsize::MIN,
+    )
+    .unwrap();
+    request.limits.corpus.manifest_bytes = 1;
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
+    assert!(matches!(
+        crate::performance::scalability::run_with_cancellation(
+            &request,
+            &root,
+            false,
+            NativeInvocation::Legacy,
+            &AtomicBool::new(true),
+        ),
+        Err(Error::Corpus(_))
+    ));
+}
+
+#[test]
 fn qualification_only_never_launches_a_reference_measurement() {
     let fixture = Fixture::new();
     executable(

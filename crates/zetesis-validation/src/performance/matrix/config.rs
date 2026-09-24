@@ -9,7 +9,7 @@ use crate::selected::NativeExecution;
 
 pub(super) const MAX_CASES: usize = 94;
 
-/// Base source selections from the verified clean corpus.
+/// Maintained source populations, including independently sealed authored inputs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Suite {
@@ -25,6 +25,10 @@ pub enum Suite {
     /// the series' own list, the queens, SEND and task-allocation cases;
     /// a plain run under this suite measures only those, unchanged.
     Series,
+    /// Authored queens/pigeonhole sizes and the three baseline corpus entries,
+    /// with optional Einstein. Requires explicit workloads, normally supplied by
+    /// [`super::super::scalability::run_with_cancellation`].
+    Scalability,
 }
 
 /// Which populations include the independent reference solver.
@@ -68,17 +72,7 @@ impl Plan {
         repetitions: usize,
     ) -> Result<Self, Error> {
         super::super::Schedule::new(warmups, repetitions)?;
-        if profiles.is_empty()
-            || profiles.len() > 8
-            || reference_workers.get() > 256
-            || profiles
-                .iter()
-                .any(|p| p.workers.get() > 256 || p.completion_workers.get() > 256)
-        {
-            return Err(Error::Configuration(
-                "matrix requires 1..=8 profiles and workers 1..=256",
-            ));
-        }
+        validate_profiles(&profiles, reference_workers)?;
         Ok(Self {
             suite,
             profiles,
@@ -86,6 +80,29 @@ impl Plan {
             reference_policy: ReferencePolicy::AllPhases,
             warmups,
             repetitions,
+            memory_runs: 0,
+        })
+    }
+
+    /// Qualify each complete family once with the reference and each native
+    /// profile. No warmup, timed or memory positions are scheduled. Profile
+    /// and worker bounds are identical to [`Self::new`].
+    ///
+    /// # Errors
+    /// Refuses empty/oversized profile families or worker counts above 256.
+    pub fn qualification(
+        suite: Suite,
+        profiles: Vec<NativeExecution>,
+        reference_workers: NonZeroUsize,
+    ) -> Result<Self, Error> {
+        validate_profiles(&profiles, reference_workers)?;
+        Ok(Self {
+            suite,
+            profiles,
+            reference_workers,
+            reference_policy: ReferencePolicy::QualificationOnly,
+            warmups: 0,
+            repetitions: 0,
             memory_runs: 0,
         })
     }
@@ -106,10 +123,12 @@ impl Plan {
     /// peak resident set, excluded from the timed population.
     ///
     /// # Errors
-    /// Refuses more than 41 rounds.
+    /// Refuses more than 41 rounds, or nonzero rounds on a qualification plan.
     pub fn with_memory(mut self, rounds: usize) -> Result<Self, Error> {
-        if rounds > 41 {
-            return Err(Error::Configuration("memory rounds must be 0..=41"));
+        if rounds > 41 || (self.repetitions == 0 && rounds != 0) {
+            return Err(Error::Configuration(
+                "memory rounds must be 0..=41 and require a measurement plan",
+            ));
         }
         self.memory_runs = rounds;
         Ok(self)
@@ -179,6 +198,24 @@ impl Plan {
         }
         Ok(slots)
     }
+}
+
+fn validate_profiles(
+    profiles: &[NativeExecution],
+    reference_workers: NonZeroUsize,
+) -> Result<(), Error> {
+    if profiles.is_empty()
+        || profiles.len() > 8
+        || reference_workers.get() > 256
+        || profiles
+            .iter()
+            .any(|profile| profile.workers.get() > 256 || profile.completion_workers.get() > 256)
+    {
+        return Err(Error::Configuration(
+            "matrix requires 1..=8 profiles and workers 1..=256",
+        ));
+    }
+    Ok(())
 }
 /// Producer at a fixed configuration position.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]

@@ -366,7 +366,8 @@ impl StableModels {
 
     /// Enumerate by regions with several workers walking the tree at once,
     /// each with its own knowledge, budget lease and reduct query state, sharing
-    /// the immutable original index and a pool of regions still to visit.
+    /// the immutable original index and stealing from per-worker deques of
+    /// regions still to visit. Deque growth can return an allocation refusal.
     /// The models arrive in the schedule's
     /// order, which is not a property of the result and differs between
     /// runs; the family is exact. One worker is the scalar regions method.

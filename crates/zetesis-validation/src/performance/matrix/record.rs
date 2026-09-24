@@ -240,6 +240,22 @@ impl Sample {
     pub const fn decision(&self) -> Decision {
         self.decision
     }
+    /// Retained explanation of a refusal, mismatch or skipped position.
+    #[must_use]
+    pub fn detail(&self) -> Option<&str> {
+        self.detail.as_deref()
+    }
+    /// Decoded selected model count, when answer normalization succeeded.
+    /// A count alone does not establish that the position passed qualification.
+    #[must_use]
+    pub const fn selected_models(&self) -> Option<u64> {
+        self.selected_models
+    }
+    /// Decoded selected cost vector, when one was reported and normalized.
+    #[must_use]
+    pub fn cost(&self) -> Option<&[i64]> {
+        self.cost.as_deref()
+    }
     /// Exact launched process record, absent for a skipped position.
     #[must_use]
     pub const fn capture(&self) -> Option<&Capture> {

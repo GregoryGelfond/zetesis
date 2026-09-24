@@ -9,7 +9,7 @@
 
 mod contract;
 mod document;
-mod files;
+pub(crate) mod files;
 mod originals;
 
 use std::fmt;

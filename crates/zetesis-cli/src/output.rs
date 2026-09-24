@@ -180,6 +180,8 @@ pub(crate) fn summary(
     if let Err(failure) = result {
         out.text("{\"kind\":")?;
         out.string(error_kind(&failure.cause))?;
+        out.text(",\"detail\":")?;
+        out.display_string(&failure.cause)?;
         out.text(",\"secondary_output_failure\":")?;
         out.text(if failure.secondary_output.is_some() {
             "true"
@@ -422,6 +424,14 @@ impl Buffer {
         serde_json::to_writer(&mut *self, value)
             .map_err(|error| self.error(io::Error::other(error)))
     }
+    /// Escape display fragments directly into the bounded record buffer.
+    /// `collect_str` stops formatting as soon as this writer refuses a fragment.
+    fn display_string(&mut self, value: &impl std::fmt::Display) -> Result<(), RunError> {
+        use serde::Serializer as _;
+        serde_json::Serializer::new(&mut *self)
+            .collect_str(value)
+            .map_err(|error| self.error(io::Error::other(error)))
+    }
     fn number_field(&mut self, key: &str, value: impl std::fmt::Display) -> Result<(), RunError> {
         self.text(",")?;
         self.string(key)?;
@@ -492,13 +502,12 @@ fn write_interruption(
             Interruption::Objective(_) => "objective",
             Interruption::Incumbent(_) => "incumbent",
         };
-        let detail = reason.to_string();
         out.text("{\"kind\":")?;
         out.string(kind)?;
         out.text(",\"code\":")?;
         out.string(reason_code(reason))?;
         out.text(",\"detail\":")?;
-        out.string(&detail)?;
+        out.display_string(&reason)?;
         out.text("}")?;
     } else {
         out.text("null")?;

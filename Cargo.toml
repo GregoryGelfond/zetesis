@@ -39,7 +39,6 @@ themelios-syntax = { git = "https://github.com/GregoryGelfond/themelios.git", re
 themelios-program = { git = "https://github.com/GregoryGelfond/themelios.git", rev = "4f0275875d624fae1817c4811310525c088a0f42", package = "themelios-program" }
 themelios-analysis = { git = "https://github.com/GregoryGelfond/themelios.git", rev = "4f0275875d624fae1817c4811310525c088a0f42", package = "themelios-analysis", default-features = false }
 rayon = "1.12"
-crossbeam-deque = "0.8"
 wgpu = "30.0.1"
 bytemuck = "1.25"
 pollster = "0.4"

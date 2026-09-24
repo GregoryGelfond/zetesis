@@ -27,18 +27,22 @@ fn held(region: &Region) -> Vec<usize> {
 }
 
 #[test]
-fn region_storage_is_its_mask_words_and_a_decision_does_not_allocate() {
+fn region_retained_bytes_count_both_masks() {
     let empty = Region::all_open(0).retained_bytes();
-    let mut region = Region::all_open(65); // two words per mask
+    let region = Region::all_open(65); // two words per mask
     // Two masks (held and cut), two words each, eight bytes a word.
     assert_eq!(
         region.retained_bytes(),
         empty + 2 * 2 * size_of::<u64>() as u128
     );
+}
+
+#[test]
+fn decisions_preserve_region_retained_bytes() {
+    let mut region = Region::all_open(65);
     let before = region.retained_bytes();
     assert!(region.hold(11));
     assert!(region.cut(64));
-    // Deciding an atom flips a bit; it allocates nothing.
     assert_eq!(region.retained_bytes(), before);
 }
 
@@ -164,12 +168,62 @@ fn decided_since_reports_new_decisions_with_values_ascending() {
 }
 
 #[test]
-fn decided_since_with_empty_seen_reports_all_and_ignores_the_tail() {
+fn decided_since_with_empty_seen_reports_every_decision() {
     let mut region = Region::all_open(65);
     region.cut(64);
     assert_eq!(
         region.decided_since(&[]).collect::<Vec<_>>(),
         vec![(64, false)]
+    );
+}
+
+#[test]
+fn a_short_snapshot_records_only_its_available_words() {
+    let mut region = Region::all_open(130);
+    assert!(region.hold(0));
+    assert!(region.cut(63));
+    assert!(region.hold(64));
+    assert!(region.cut(129));
+    let mut seen = [u64::MAX; 2];
+    region.snapshot_decided(&mut seen);
+    assert_eq!(seen, [1 | (1 << 63), 1]);
+    assert_eq!(
+        region.decided_since(&seen).collect::<Vec<_>>(),
+        vec![(129, false)]
+    );
+}
+
+#[test]
+fn a_snapshot_leaves_excess_destination_words_unchanged() {
+    let mut region = Region::all_open(65);
+    assert!(region.hold(64));
+    let mut seen = [u64::MAX; 3];
+    region.snapshot_decided(&mut seen);
+    assert_eq!(seen, [0, 1, u64::MAX]);
+}
+
+#[test]
+fn an_empty_snapshot_destination_leaves_every_decision_unseen() {
+    let mut region = Region::all_open(65);
+    assert!(region.cut(64));
+    let mut seen = [];
+    region.snapshot_decided(&mut seen);
+    assert_eq!(
+        region.decided_since(&seen).collect::<Vec<_>>(),
+        vec![(64, false)]
+    );
+}
+
+#[test]
+fn decided_since_ignores_nonatom_seen_bits() {
+    let mut region = Region::all_open(65);
+    assert!(region.hold(0));
+    assert!(region.cut(64));
+    // The partial word's tail and a whole excess word cannot hide either atom.
+    let seen = [0, !1, u64::MAX];
+    assert_eq!(
+        region.decided_since(&seen).collect::<Vec<_>>(),
+        vec![(0, true), (64, false)]
     );
 }
 

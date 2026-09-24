@@ -85,19 +85,16 @@ fn a_panicked_worker_keeps_coverage_incomplete() {
     )
     .unwrap();
     // Another worker waits for stealable work that never comes (the root is
-    // left unseeded, so its deque is empty). The panic closes the run, and the
+    // held here, outside the queues). The panic closes the run, and the
     // waiter exits rather than hanging.
     search.started = true;
-    let deque: Worker<Entry> = Worker::new_lifo();
-    let stealers: Arc<[Stealer<Entry>]> = [deque.stealer()].into();
+    let _root = search.shared.take_local(0).unwrap();
     let idle_shared = Arc::clone(&search.shared);
     // The waiter owns the only remaining sender, so the channel disconnects
     // when it exits, letting the coordinator join and report the panic.
     let sender = search.sender.take().unwrap();
     search.handles.push(std::thread::spawn(move || {
-        contain_worker(&idle_shared, || {
-            worker(&idle_shared, &deque, &stealers, 0, &sender)
-        })
+        contain_worker(&idle_shared, || worker(&idle_shared, 0, &sender))
     }));
     let failed_shared = Arc::clone(&search.shared);
     search.handles.push(std::thread::spawn(move || {

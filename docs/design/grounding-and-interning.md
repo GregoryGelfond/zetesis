@@ -1,190 +1,127 @@
-# Grounding performance and the interning direction
+# Term identity and grounding
 
-## Why this document
+Grounding, candidate generation and reduct checking compose exact joins,
+selections, masks, reductions and fixed-point operations. A shared execution
+representation should make that composition explicit while preserving typed
+logical values. The [architecture map](../book/architecture/alignment.md) connects
+these operations to answer-set semantics.
 
-The region-scheduler work in this change removes the parallel frontier as the
-limit on solving. With that bottleneck gone, a profile of a representative
-string-bearing program shows where the next cost lives: **grounding**, and within
-grounding, **term comparison over string-bearing values** in the ground-atom
-lookup. This document records the measured evidence, how to reproduce it, the
-resulting direction — intern terms to integer ids and carry a single canonical term
-form throughout the solver — and the one design question that must be settled before
-that representation change is carried through. It is written so the grounding and
-interning work can be planned and executed on this merged base.
+This document describes the current representation and the obligations of a
+solver-wide term-interning design. The latter is not yet implemented. Existing
+atom IDs and relation dictionaries do not establish that all term payloads are
+interned, nor that grounding runs on the GPU.
 
-## Summary
+## Current representation
 
-- The scheduler now walks per-worker work-stealing deques and returns the scalar
-  answer-set family under 1, 2, 4 and 14 workers (see the
-  [worker-scaling comparison](../book/reference/worker-scaling.md)). The shared-pool
-  frontier is no longer the constraint.
-- With that in place, a profile of Einstein's riddle
-  (`examples/einstein-riddle.lp`) shows solving is dominated by grounding, and
-  grounding is dominated by `GroundProgram::atom_id` — a binary search over a sorted
-  `&[Atom]` whose every comparison walks string-bearing `Value`s.
-- clingo interns every symbol to an integer at parse time, so its ground-atom keys
-  are integer tuples compared and hashed in O(1). That is the gap.
-- The direction is to intern distinct terms to stable integer ids at admission,
-  giving O(1) identity, equality, hash and comparison wherever a `Value` or `Atom`
-  is keyed, and a columnar, GPU-forward layout — a **single canonical term form**
-  carried at ingest, grounding and output.
-- The open question (below) is exactly that single-form commitment, and it is the
-  crux, not a detail: it must be decided with the maintainer before the
-  representation is changed.
+[`Value`](../../crates/zetesis-core/src/value.rs) represents integers, strings,
+symbols, structural values and extrema. Strings and symbols carry text;
+structural values retain a validated flat representation. An atom contains a
+predicate signature and an ordered argument vector.
 
-## The evidence
+Several execution representations already replace larger objects with IDs:
 
-### Phase breakdown — Einstein's riddle
-
-Release binary, Apple M4 Pro, with the budget raised so the program completes:
-
-| Phase | Time |
+| Representation | Meaning of an ID |
 | --- | --- |
-| Source preparation | 1.8 ms |
-| **Grounding** | **83.3 ms** |
-| Solving (reduct search) | 18.7 ms |
-| Observation | 0.03 ms |
-| Wall — zetesis | **0.11 s** |
-| Wall — clingo | **0.04 s** |
+| [`AtomInterner`](../../crates/zetesis-core/src/atom_interner.rs) | A unique atom in one appendable owner |
+| [`GroundProgram`](../../crates/zetesis-core/src/ground.rs) | An atom position in one static ground program |
+| Formula theory | An atom or formula-node position in that theory |
+| [`Relation`](../../crates/zetesis-core/src/relation.rs) | A value in one relation's equality dictionary, or a row occurrence |
 
-The reduct search is trivial: one candidate. The ~2.75× wall gap is grounding. The
-riddle's `solution/6` rule is a five-way join
-(`lives_in × painted × drinks × owns × smokes`); grounding it calls the ground-atom
-lookup once per generated atom.
+These coordinate systems serve different purposes. A relation row is not a term,
+and atom discovery does not establish truth. Candidate masks and reduct
+evaluation already use compact coordinates; their meaning depends on the
+associated owner and program.
 
-### Hot frames — sampled wide join, eager grounder
+Typed payload comparison remains in atom construction and lookup. The static
+relational grounder searches a sorted atom catalog. Formula grounding uses the
+appendable interner's per-predicate ordered indexes, and possible-support
+relations have their own catalog lifetimes. A profile of one path does not
+identify the cost of another. See the [grounding chapter](../book/architecture/grounding.md)
+for the supported eager and lazy routes.
 
-A scaled five-way join long enough to sample (an `item/1` domain at n = 14, eager
-grounder) has these hottest self-time leaves:
+## Canonical term ownership
 
-| Frame | Samples |
-| --- | --- |
-| `zetesis_core::ground::GroundProgram::atom_id` | 104 |
-| `<zetesis_core::value::Value as Ord>::cmp` | 66 |
-| `GroundProgram::instantiate_id` | 9 |
+The proposed foundation is one authoritative owner for each admitted program's
+typed terms, with stable compact references used throughout execution. Names,
+numbers, constructor structure and ordered children remain available through
+typed views. Source syntax and provenance remain themelios data.
 
-### Root cause
+The ownership contract must cover relational and formula grounding, bindings,
+aggregate tuples, objectives, candidate construction, observations and retained
+models. Extending only one lookup while retaining competing execution payloads
+would leave the underlying composition problem unresolved.
 
-`GroundProgram::atom_id` (`crates/zetesis-core/src/ground.rs`) resolves a ground
-atom to its dense id by binary-searching a sorted `&[Atom]`:
+Eager, lazy and hybrid grounding should share this vocabulary and the operations
+on it: substitution, tuple lookup, joins and column selection. Their demand and
+retention policies can differ without creating separate representations of a
+logical term. This does not remove their distinct completeness obligations.
 
-```rust
-self.atoms.atoms().binary_search(atom).ok().and_then(|index| u32::try_from(index).ok())
-```
+Required properties are:
 
-Each lookup is O(log N) `Atom`/`Value` comparisons, and each comparison walks
-string-bearing `Value`s — the riddle's atoms carry strings such as
-`"The Englishman"`, `"Coffee"` and `"Parliaments"`. Grounding the wide join performs
-on the order of N·log N such string comparisons. clingo interns every symbol to an
-integer at parse time, so the same keys are integer tuples: O(1) hash and compare,
-no byte walk. The "keyed join without symbol interning" hypothesis, confirmed.
+- Equal typed terms have equal IDs within an owner; distinct terms do not alias.
+- Appending terms preserves the meaning of every existing ID. Incomplete
+  construction never publishes a partially formed term.
+- Cross-owner use is checked or explicitly imported. Equal integer IDs from
+  unrelated owners do not establish equal terms.
+- Columns, postings, permutations and device buffers are derived views with
+  explicit owner and snapshot identity. They do not own competing term payloads.
+- Stable IDs do not make a prepared view current after discovery. Each view must
+  remain tied to its old snapshot, extend with the owner, or be rebuilt before
+  use with a newer generation. A completed-support certificate cannot silently
+  cover subsequently discovered rows.
+- Arithmetic reads numeric payloads and retains checked error behavior. An ID
+  is not the number it names.
+- Terms created during grounding or observation have a defined construction and
+  publication phase. Freezing the owner immediately after parsing is insufficient.
+- Storage accounting includes payload arenas, indexes, view storage, growth
+  overlap and retained owners; reduced payload copying does not excuse uncharged
+  index memory.
 
-## Reproduce the evidence
+Canonical identity does not require every operation to use one physical order.
+The current API distinguishes canonical storage order from ASP term order.
+Ordered construction and lookup must use the same named comparator; discovery
+order must never silently replace either semantic operation. Stable IDs can
+coexist with derived ordered views. Renumbering requires an explicit checked
+mapping of every affected atom, mask and formula reference.
 
-From the repository root, with the installed solver and a clingo 5.8.x on `PATH`.
+## Performance questions
 
-1. **Phase breakdown** — riddle, budget raised so it completes:
+Interning can reduce repeated text comparisons, argument copying and retained
+payload. Compact argument columns can also give CPU and GPU primitives common
+inputs. These are hypotheses to measure across the complete pipeline, including
+construction, indexing, conversion and output.
 
-   ```sh
-   zetesis solve examples/einstein-riddle.lp --all --max-expansion-work 300000000 --stats
-   ```
+Same-owner term-ID equality is constant time. Constructing or hashing an atom
+tuple still depends on its arity; interning a new compound visits its structure.
+Semantic ordering may require payload comparison or a prepared rank. Neither
+integer storage nor columnar layout alone demonstrates vectorization or a
+GPU speedup.
 
-   Read the per-phase timings; grounding dominates. Compare wall time against the
-   reference solver on the same source:
+The [scalability examples](../../examples/scalability/README.md) vary problem size
+independently of worker count. [Einstein's Riddle](../../examples/einstein-riddle.lp)
+provides a string-bearing, wide-join case. Its `solution/6` producer joins five
+possible relations; current formula hybrid grounding still prepares that
+producer eagerly. A larger work allowance permits an investigation but does not
+remove the work. Measure its actual formula-grounding path separately from
+synthetic relational joins.
 
-   ```sh
-   clingo examples/einstein-riddle.lp 0
-   ```
+Use the [measurement protocols](../book/reference/measurement-protocols.md) to
+retain source and executable identities, complete result checks, refusals, phase
+times and separate memory observations. The existing
+[worker-scaling study](../book/reference/worker-scaling.md) describes the exact
+older implementations named there; it is not evidence for later schedulers.
 
-2. **Default-budget behavior** — no override:
+## Preservation obligations
 
-   ```sh
-   zetesis solve examples/einstein-riddle.lp --all
-   ```
+The representation change needs encode/decode exactness, identity preservation,
+append stability, both ordering contracts, substitution correspondence and
+complete tuple-to-column correspondence. Transporting an interpretation through
+the atom mapping must preserve original satisfaction and satisfaction of its
+frozen reduct. Grounding completeness, objective tuple identity and observed
+output remain separate obligations.
 
-   At the default budget the eager grounder exceeds the formula-work ceiling on the
-   wide join. This change makes that refusal legible — an honest, actionable
-   resource-limit message rather than an opaque failure. The standing goal is for the
-   riddle to run at the **default budget, with no encoding change, par-or-faster than
-   clingo**.
-
-3. **Hot-frame profile** — a run long enough to sample. Construct a scaled wide join:
-   an `item(1..14).` domain and a five-way rule, e.g.
-
-   ```
-   item(1..14).
-   p(A,B) :- item(A), item(B).   q(A,B) :- item(A), item(B).
-   r(A,B) :- item(A), item(B).   s(A,B) :- item(A), item(B).
-   wide(A,B,C,D,E) :- p(A,B), q(B,C), r(C,D), s(D,E), item(E).
-   ```
-
-   run it under the eager grounder and sample the process (macOS `sample`; use the
-   equivalent sampler on other platforms):
-
-   ```sh
-   zetesis solve widejoin.lp --grounder eager --stats &
-   sample $!
-   ```
-
-   The hottest leaves are `atom_id` and `Value::cmp`, as tabulated above.
-
-Broader corpora for regression and scaling live beside the riddle:
-`examples/correctness` (semantic breadth on small instances, clingo-verified) and
-`examples/scalability` (parametric throughput cases). They are the verification base
-for any change to grounding or the term representation.
-
-## Direction — intern terms to integer ids
-
-The durable fix is to intern distinct terms to stable integer ids at admission:
-
-- **Integer identity.** Identity, equality, hash and comparison become integer
-  operations, O(1), wherever a `Value` or `Atom` is keyed — not only in `atom_id`
-  but on every `Value::cmp` hot path.
-- **Children-first structural interning.** A leaf keys by `(kind, payload)`; a
-  compound term by `(name-id, sign, [child id])`, so compound keys are small
-  id-tuples with no string comparison past leaves.
-- **Columnar, GPU-forward layout.** Dense typed id columns autovectorize and map to
-  device buffers.
-- **One canonical term form** carried throughout — the same interned representation
-  at ingest, grounding and output — rather than string-bearing values compared by
-  walking their bytes.
-
-Interning only assigns equal terms equal ids, so answer-set families are unchanged;
-correctness is checked by the `examples/correctness` corpus against clingo and by
-scalar-versus-workers agreement.
-
-A smaller first lever, if a staged approach is preferred, is a hash index for the
-ground-atom lookup (a `HashMap<Atom, AtomId>` or the existing `atom_lookup` index)
-built alongside the sorted catalog, turning the O(log N) `Value::cmp` in `atom_id`
-into O(1) hashing without yet changing the term representation. It is a legitimate,
-measurable stopping point; full interning is the end state and additionally removes
-the string comparisons on every other hot path.
-
-## Open design question — one canonical form, held once
-
-Carrying a *single* canonical term form is the goal, and it is also the crux. A bare
-integer-id representation for `Value` cannot also be its own canonical order: a
-`std::cmp::Ord` takes no arguments, but the canonical (storage) order of an interned
-term must be resolved *through the interner* — it is not the raw id order, because
-ids are assigned in discovery order. So once `Value` and `Atom` are id-backed:
-
-- `Atom`'s derived `Ord` necessarily becomes **id order**, sound only for internal,
-  unobservable membership (for example a `BTreeSet<Atom>` borrow bridge), and
-- every **observable** atom or term order — models, catalogs, the gate carrier, any
-  comparison that reaches output — must be resolved **canonically through the
-  interner**.
-
-The failure mode to avoid is a solver that ends up holding **two** orders at once:
-core structures canonical, some consumer's internal structures id-order, quietly
-converting between them. That is the opposite of the single-canonical-form goal, and
-a mismatch — a search in one order over data built in the other — is a correctness
-defect that compiles cleanly and surfaces only as a wrong answer-set family.
-
-**The decision to settle first**, with the maintainer, before the representation is
-changed: commit the entire solver — including internal membership and search
-structures — to **one** order resolved through the interner, accepting
-interner-threaded comparisons on the affected hot paths; versus any scheme that keeps
-more than one order. Every downstream choice follows from that commitment: which
-structures thread the interner, where a std `Ord` is still admissible, and how the
-columnar tables are keyed. The reproduction fixtures here and the correctness and
-scalability corpora are the verification base for whichever form is chosen.
+The [Lean correspondence](../book/lean/correspondence.md) records existing laws
+and their implementation boundaries. Equality interning alone does not prove
+the complete migration correct. Tests must also exercise owner mismatches,
+reversed discovery order, word and column boundaries, structural terms,
+resource refusal, parallel execution and retained results.

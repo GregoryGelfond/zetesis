@@ -41,6 +41,16 @@ impl FileSeal {
     pub const fn bytes(&self) -> u64 {
         self.bytes
     }
+
+    /// Compare observed file identity independently of each read's byte ceiling.
+    pub(crate) fn same_identity(&self, other: &Self) -> bool {
+        self.requested == other.requested
+            && self.canonical == other.canonical
+            && self.bytes == other.bytes
+            && self.sha256 == other.sha256
+            && self.device == other.device
+            && self.inode == other.inode
+    }
 }
 
 /// One after-run input check, retaining failure instead of inventing an identity.

@@ -2782,27 +2782,27 @@
   {
     "name": "Zetesis.Pending.outputs_append",
     "file": "Zetesis/Frontier.lean",
-    "line": 42
+    "line": 41
   },
   {
     "name": "Zetesis.Pending.outputs_cons",
     "file": "Zetesis/Frontier.lean",
-    "line": 46
+    "line": 45
   },
   {
     "name": "Zetesis.Pending.Step.perm",
     "file": "Zetesis/Frontier.lean",
-    "line": 78
+    "line": 77
   },
   {
     "name": "Zetesis.Pending.Walk.perm",
     "file": "Zetesis/Frontier.lean",
-    "line": 113
+    "line": 112
   },
   {
     "name": "Zetesis.Pending.Walk.exhausted",
     "file": "Zetesis/Frontier.lean",
-    "line": 124
+    "line": 123
   },
   {
     "name": "Zetesis.GatePositions.rank_fold_eq_blocks",

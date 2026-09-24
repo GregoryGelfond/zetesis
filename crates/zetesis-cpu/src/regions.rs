@@ -243,8 +243,11 @@ impl Region {
                 .filter(move |&(atom, _)| atom < self.atoms)
         })
     }
-    /// Overwrite the first `words(len())` words of `dst` with this region's
-    /// decided mask (`held | cut`), the snapshot a reader remembers as seen.
+    /// Copy this region's decided mask (`held | cut`) into the available prefix
+    /// of `dst`. A complete snapshot needs `self.len().div_ceil(64)` words.
+    /// A shorter destination receives only its prefix; any excess destination
+    /// words remain unchanged. An empty destination is valid. Missing snapshot
+    /// words count as unseen when passed to [`Self::decided_since`].
     pub fn snapshot_decided(&self, dst: &mut [u64]) {
         for (word, (&held, &cut)) in dst.iter_mut().zip(self.held.iter().zip(self.cut.iter())) {
             *word = held | cut;

@@ -136,6 +136,15 @@ fn medians_are_taken_per_cell_profile_and_report() {
     assert!(markdown.contains("| 0.250 | 0.093 |"));
 }
 
+#[test]
+fn qualification_evidence_cannot_supply_a_performance_comparison() {
+    let only = report(&["case.lp"], &[&[]], &[1], None);
+    assert!(
+        matches!(compare(&[Labelled { label: "qualification", report: &only }]),
+        Err(ViewError::NoTimedPopulation { label }) if label == "qualification")
+    );
+}
+
 /// Add passed memory rounds for one producer on the first case, with the
 /// given peak resident sets.
 fn with_memory(report: &mut Value, producer: &Value, peaks: &[u64]) {

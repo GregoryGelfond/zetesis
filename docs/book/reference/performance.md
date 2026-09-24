@@ -78,6 +78,25 @@ See the [benchmark command options](commands.md#measure-a-corpus) for limits,
 repetition counts and other suites. Use `zetesis test corpus` when you want to
 check answers without conducting a benchmark.
 
+The maintained scalability selection is shared by testing and benchmarking:
+
+```sh
+zetesis test scalability --threads 1,2,4,8,14 --report scalability-check.json
+zetesis bench corpus --suite scalability --grounder eager \
+  --compare-threads 1,2,4,8,14 --repetitions 4 --memory-runs 2 \
+  --timeout-seconds 30 --campaign-seconds 1800 --report scalability-timing.json
+```
+
+Both use authored queens at n=8/9/10, pigeonhole at h=5/6/7 and three unchanged
+corpus cases: queens variant 02, SEND+MORE=MONEY and task allocation.
+`--include-einstein` adds the unchanged riddle. The test runs complete-family
+qualifications only. The benchmark qualifies clingo once per case, then measures
+each native thread profile separately. Reports retain all refusals and limits;
+the workload's inclusion is not a scaling claim. `--max-expansion-work` can set
+an explicit common grounding ceiling when needed, and its value remains part of
+the profile identity. See the [command guide](commands.md#check-conformance) for
+source roots, process bounds and the required new evidence destination.
+
 ## Read the measurements
 
 | Measurement | Meaning |

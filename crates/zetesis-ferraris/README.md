@@ -151,26 +151,39 @@ over its operands, a *chain*, when its inner nodes have that one parent and
 are not roots; the closure keeps two counters per chain, the operands known
 to hold and known to fail, and applies the n-ary rules, a disjunction sure
 with one operand and impossible with all, forcing its one open operand when
-sure, and the duals for a conjunction (`FormulaChains`), so a decision costs
-one step per occurrence of its atom rather than a walk of every clause it
-satisfies. A node false under a frozen mask is either an operand, which
-fails, or an inner node whose operands' masks already read it. The region
-keeps the order of its decisions, so a closure carried from the region's
-parent applies only the decisions made since, and the count of parents
-still unknown that ranks the next split is kept as nodes become known. `Narrower::narrow_known` narrows from a
+sure, and the duals for a conjunction (`FormulaChains`). Propagating a new
+decision visits its atom occurrences rather than every satisfied clause.
+A node false under a frozen mask is either an operand, which fails, or an
+inner node whose operands' masks already read it. A region stores held and
+cut atom masks; its carried knowledge stores a snapshot of the decisions
+already incorporated. The difference supplies new decisions in ascending
+atom order. This scan visits `ceil(atoms / 64)` words, and each snapshot
+writes that many words, including when no decision is new. Those mask scans
+and writes are outside the charged node, parent, producer and open-atom reads
+reported as work. The count of parents still unknown that ranks the next
+split is kept as nodes become known. `Narrower::narrow_known` narrows from a
 `Knowledge` the caller carries from a region to its children and leaves it
 closed for them: the knowledge of a region holds in every region inside it
 (`known_mono`), so a child learns only the decisions its parent did not know. `Narrower::narrow_frozen_known` narrows a region of the
 theory's frozen reduct under a candidate, reading a node false in the
 candidate's truth as falsum and applying no support cut, which is the
-proper-subset query's narrowing; `FormulaEvaluation::truth` is that mask. `RegionLimits` bounds the work, and through it the events;
-exhausting either, or a control stop, returns the stop, and the region and
+proper-subset query's narrowing; `FormulaEvaluation::truth` is that mask.
+`RegionLimits` bounds charged work, and through it propagation events;
+exhausting that ceiling, or a control stop, returns the stop, and the region and
 the knowledge then hold what the closure had learned before it, sound but
 not closed, which the proposers abandon. A narrowing that does not refute also prefers the open atom with
 the most parents still unknown as the region's next split, which the
 traversal honours; without a preference it splits the highest open atom. The traversal that splits regions and
 covers the tree is `zetesis_cpu::regions::Traversal`, shared with the closure
 route; `zetesis-sat` uses it with this narrowing to propose candidates.
+
+Carried knowledge requires the same narrower, theory, producer set and frozen
+truth, and a region contained in the ancestor for which that knowledge was
+closed. These preconditions are not checked; sibling or foreign knowledge
+cannot be reused. The packed `Region` API replaces the old `decisions()`
+history with `decided()`'s ascending `(atom, value)` pairs, and `split` consumes
+its parent. `snapshot_decided` copies only the available destination prefix;
+the narrower supplies all `region.len().div_ceil(64)` words.
 
 `narrow_known_metered` and `narrow_frozen_known_metered` use the same closure with
 a caller-owned quota. They request a permit before each charged read and return
@@ -182,6 +195,9 @@ budget into the metered methods, so parallel workers acquire shared permits
 before candidate or frozen-reduct reads and retain their receipts after failure.
 Failed knowledge still must be abandoned. The [metering regressions](tests/region_work.rs)
 exercise every prefix of original and frozen narrowing and cancellation.
+The [packed knowledge regressions](tests/support/packed_knowledge.rs) compare
+carried and fresh original/frozen closure over 130 atoms and 132 nodes, including
+descendant conflicts, zero-work refusals and repeated completed closure.
 
 `proofs/Zetesis/FormulaBounds.lean` proves the readings sound, the knowledge
 sound (`Known`, `known_sound`), and the support cut and the sole-support

@@ -37,7 +37,7 @@ these operations fit into the solver. Public interfaces start in
 | `lazy` | Matched relational source rounds and closures | `lazy_measurement` |
 | `relation` | Equality masks over one retained typed column view | `relation_measurement` |
 | `table` | Complete surviving rows and projected domains on CPU | `table_measurement::measure` |
-| `grounding` | Fresh original-source formula admission | `grounding::profile`, `write_report` |
+| `grounding` | Fresh original-source formula admission | `grounding::measure_file`, `write_report` |
 | `feedback` | Finite conditional-witness replay and native restriction restarts | `feedback_measurement::measure` |
 
 Device profiles accept physical Metal or Vulkan. CPU mode explicitly omits the

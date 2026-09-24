@@ -1,6 +1,8 @@
 //! Command adapters for bounded conformance workflows and typed result views.
 
 mod view;
+mod scalability;
+pub use scalability::ScalabilityOptions;
 
 use clap::{
     Args, Subcommand,
@@ -17,12 +19,14 @@ pub enum TestCommand {
     Corpus(CorpusOptions),
     /// Check three fixed full answer families and actual CPU or Metal execution.
     Backend(BackendOptions),
+    /// Qualify maintained workloads across CPU thread counts; requires --report.
+    Scalability(ScalabilityOptions),
 }
 
 /// Test presentation and optional report publication.
 #[derive(Debug, Args)]
 pub struct ViewOptions {
-    /// Emit the structured evidence report on stdout instead of human tables.
+    /// Emit the workflow's structured report or compact evidence view on stdout.
     #[arg(long)]
     pub json: bool,
     /// Show optional elapsed-time details; off by default.
@@ -116,6 +120,10 @@ pub enum Error {
     Corpus(corpus_comparison::Error),
     /// Backend preparation failed before per-case results existed.
     Backend(backend_check::Error),
+    /// Scalability workload admission or qualification preparation failed.
+    Scalability(zetesis_validation::performance::Error),
+    /// Complete scalability evidence could not be published after the campaign.
+    ScalabilityPublication(zetesis_validation::performance::Error),
     /// Structured publication failed.
     Json(serde_json::Error),
     /// Human table shape was invalid.
@@ -136,6 +144,7 @@ impl fmt::Display for Error {
             Self::Io(error) => error.fmt(formatter),
             Self::Corpus(error) => error.fmt(formatter),
             Self::Backend(error) => error.fmt(formatter),
+            Self::Scalability(error) | Self::ScalabilityPublication(error) => error.fmt(formatter),
             Self::Json(error) => error.fmt(formatter),
             Self::Table(error) => error.fmt(formatter),
             Self::DurationOverflow => {
@@ -157,6 +166,7 @@ impl std::error::Error for Error {
             Self::Io(error) => Some(error),
             Self::Corpus(error) => Some(error),
             Self::Backend(error) => Some(error),
+            Self::Scalability(error) | Self::ScalabilityPublication(error) => Some(error),
             Self::Json(error) => Some(error),
             Self::Table(error) => Some(error),
             Self::DurationOverflow => None,
@@ -180,6 +190,7 @@ impl TestCommand {
         match self {
             Self::Corpus(options) => &options.view,
             Self::Backend(options) => &options.view,
+            Self::Scalability(options) => &options.view,
         }
     }
 }
@@ -234,9 +245,13 @@ pub fn execute_with_cancellation(
         let task = match command {
             TestCommand::Corpus(_) => "corpus",
             TestCommand::Backend(_) => "backend",
+            TestCommand::Scalability(_) => "scalability",
         };
         let status = match error {
-            Error::Corpus(_) | Error::Backend(_) | Error::DurationOverflow => "preparation_failed",
+            Error::Corpus(_)
+            | Error::Backend(_)
+            | Error::Scalability(_)
+            | Error::DurationOverflow => "preparation_failed",
             _ => "failed",
         };
         let failure = serde_json::json!({"schema":1,"format":"zetesis-test-failure","task":task,"status":status,"kind":error.code(),"detail":error.to_string()});
@@ -258,6 +273,9 @@ fn execute_inner(
     cancelled: &AtomicBool,
 ) -> Result<Completion, Error> {
     match command {
+        TestCommand::Scalability(options) => {
+            scalability::execute(options, layout, output, diagnostics, cancelled)
+        }
         TestCommand::Corpus(options) => {
             let report = corpus(options, cancelled)?;
             retain(&options.view, |file| {
@@ -379,6 +397,8 @@ impl Error {
             Self::Io(_) => "io",
             Self::Corpus(_) => "corpus_preparation",
             Self::Backend(_) => "backend_preparation",
+            Self::Scalability(_) => "scalability_preparation",
+            Self::ScalabilityPublication(_) => "scalability_publication",
             Self::Json(_) => "json_publication",
             Self::Table(_) => "table_shape",
             Self::DurationOverflow => "duration_overflow",

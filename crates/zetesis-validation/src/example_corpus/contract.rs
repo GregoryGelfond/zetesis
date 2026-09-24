@@ -41,6 +41,10 @@ pub struct Contract {
     pub(super) notes: Vec<String>,
 }
 impl Contract {
+    pub(crate) fn validate(&self) -> Result<(), super::Error> {
+        super::document::validate_contract(self)
+    }
+
     /// The complete ordinary family of a satisfiable program with `count`
     /// answers, without witnesses or required symbols. A generated program's
     /// closed-form count is the intended producer.
@@ -55,6 +59,19 @@ impl Contract {
             required_symbols: Vec::new(),
             notes: Vec::new(),
         }
+    }
+    /// Require these complete displayed witnesses in addition to this contract's
+    /// count and cost. Symbol multiplicities are retained; ordering is canonicalized.
+    ///
+    /// # Errors
+    /// Refuses witnesses inconsistent with an unsatisfiable contract.
+    pub fn with_witnesses(mut self, mut witnesses: Vec<Vec<String>>) -> Result<Self, super::Error> {
+        for witness in &mut witnesses {
+            witness.sort();
+        }
+        self.witnesses = witnesses;
+        self.validate()?;
+        Ok(self)
     }
     /// The complete family of final optimum ties with `count` answers at `cost`.
     #[must_use]

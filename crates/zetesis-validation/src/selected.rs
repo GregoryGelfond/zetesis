@@ -109,7 +109,7 @@ impl Grounder {
 }
 
 /// Execution requests only; no extra source, constants, stdin or output options.
-/// Other solver budgets retain the sealed executable's defaults.
+/// Unspecified solver budgets retain the sealed executable's defaults.
 #[derive(Clone, Copy, Debug, Serialize)]
 pub struct NativeExecution {
     /// Requested execution hardware.
@@ -139,12 +139,16 @@ pub struct NativeExecution {
     /// charged unit, so it is part of the profile's identity.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub time_limit_seconds: Option<std::num::NonZeroU64>,
+    /// Explicit formula expansion-work ceiling. Omission preserves the sealed
+    /// executable's default; an override is part of the measured profile.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_expansion_work: Option<usize>,
 }
 impl NativeExecution {
     /// The command-line arguments that request this execution of the native
     /// solver, in one fixed order: the backend, oracle, grounder, workers,
     /// completion workers, batch size, completion scratch and model count,
-    /// then the join strategy, the search method and the deadline when the
+    /// then the join strategy, search method, deadline and expansion ceiling when the
     /// profile names them. A campaign appends its output flags and the input.
     pub(crate) fn arguments(&self) -> Vec<std::ffi::OsString> {
         let values = [
@@ -181,6 +185,12 @@ impl NativeExecution {
                     std::ffi::OsString::from(seconds.to_string()),
                 ]
             }))
+            .chain(self.max_expansion_work.into_iter().flat_map(|work| {
+                [
+                    std::ffi::OsString::from("--max-expansion-work"),
+                    std::ffi::OsString::from(work.to_string()),
+                ]
+            }))
             .collect()
     }
 }
@@ -198,6 +208,7 @@ impl Default for NativeExecution {
             batch_size: NonZeroUsize::new(64).expect("64 is nonzero"),
             max_completion_scratch_bytes: 268_435_456,
             time_limit_seconds: None,
+            max_expansion_work: None,
         }
     }
 }

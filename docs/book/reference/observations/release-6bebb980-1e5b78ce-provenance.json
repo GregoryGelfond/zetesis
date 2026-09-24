@@ -35,67 +35,67 @@
   ],
   "corpus_files": [
     {
-      "path": "examples/correctness/manifest.json",
+      "path": "examples/kr-domains/manifest.json",
       "bytes": 176545,
       "sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958"
     },
     {
-      "path": "examples/correctness/LICENSE",
+      "path": "examples/kr-domains/LICENSE",
       "bytes": 1072,
       "sha256": "663fd58c4daf8c2247da12c61b73474ee7a5f79f884c6f16d785a725fe9bfe99"
     },
     {
-      "path": "examples/correctness/encodings/shortest-path/variant-01.lp",
+      "path": "examples/kr-domains/encodings/shortest-path/variant-01.lp",
       "bytes": 2115,
       "sha256": "ee593089ab5ecfa2cf1a1cef152686f9b5d99c2ab08d126f212050568f1179e7"
     },
     {
-      "path": "examples/correctness/encodings/task-allocation/variant-04.lp",
+      "path": "examples/kr-domains/encodings/task-allocation/variant-04.lp",
       "bytes": 3672,
       "sha256": "7a16f9cb73d644ea061ee71a8aed3a5686f5dce3dc6e1015cdf83c603305e421"
     },
     {
-      "path": "examples/correctness/scenarios/shortest-path/variant-01/06-layered-dag.lp",
+      "path": "examples/kr-domains/scenarios/shortest-path/variant-01/06-layered-dag.lp",
       "bytes": 837,
       "sha256": "8c19d1d8dd791a19f235ce4e07d57becadc753c9e15a5cc264adfaef171b001e"
     },
     {
-      "path": "examples/correctness/scenarios/task-allocation/variant-04/05-larger-mix.lp",
+      "path": "examples/kr-domains/scenarios/task-allocation/variant-04/05-larger-mix.lp",
       "bytes": 898,
       "sha256": "a7d80af4886cff9c7a0b592f51f95afdf5943af5ebcbeadd57b4a650082393fe"
     },
     {
-      "path": "examples/correctness/standalone/n-queens/variant-01.lp",
+      "path": "examples/kr-domains/standalone/n-queens/variant-01.lp",
       "bytes": 858,
       "sha256": "c43d5ddf900ce2fd1d3328f2df337f1c1e8b85b63255473713b16a2dfd0dc1fd"
     },
     {
-      "path": "examples/correctness/standalone/n-queens/variant-02.lp",
+      "path": "examples/kr-domains/standalone/n-queens/variant-02.lp",
       "bytes": 960,
       "sha256": "b6e636c06664e0e3b1a34b883e342f9c7b599f8625e154adb1927d41442fca02"
     },
     {
-      "path": "examples/correctness/standalone/n-queens/variant-03.lp",
+      "path": "examples/kr-domains/standalone/n-queens/variant-03.lp",
       "bytes": 878,
       "sha256": "6e04e47594fd44b6ed2e17370f81ad3ae9db684af9e5aa4a85c7e1d98a5f5dd6"
     },
     {
-      "path": "examples/correctness/standalone/n-queens/variant-04.lp",
+      "path": "examples/kr-domains/standalone/n-queens/variant-04.lp",
       "bytes": 919,
       "sha256": "d599e4b8e68f0b68df20bfaefb0a9916da69c6829cd340de301b08997cfb9295"
     },
     {
-      "path": "examples/correctness/standalone/n-queens/variant-05.lp",
+      "path": "examples/kr-domains/standalone/n-queens/variant-05.lp",
       "bytes": 1078,
       "sha256": "42475b96940e06b957f45441cb5de66681a509d35f1c41ddc72fc36899cbfaaa"
     },
     {
-      "path": "examples/correctness/standalone/n-queens/variant-06.lp",
+      "path": "examples/kr-domains/standalone/n-queens/variant-06.lp",
       "bytes": 1116,
       "sha256": "9d6ff26ac9bec747f4a237145ea732fd689d065545254186375afc682604fc3c"
     },
     {
-      "path": "examples/correctness/standalone/send-money/send-money.lp",
+      "path": "examples/kr-domains/standalone/send-money/send-money.lp",
       "bytes": 1954,
       "sha256": "de33a9970b578cf06fa42a85b55aaefaea2fd12b6d78ae051a6654875cd9e704"
     }

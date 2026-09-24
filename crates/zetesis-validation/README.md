@@ -7,6 +7,7 @@ comparison and performance measurements. The main command provides:
 |---|---|
 | `zetesis test corpus` | Compare the maintained corpus with clingo. |
 | `zetesis test backend` | Check a device against known complete answer families. |
+| `zetesis test scalability` | Qualify maintained authored/corpus workloads across CPU thread counts. |
 | `zetesis bench corpus` | Measure ordinary solver processes. |
 | `zetesis bench compare` | Compare retained measurement reports. |
 
@@ -262,6 +263,47 @@ The [manual's runnable client](../../docs/book/reference/measurement-protocols.m
 shows a complete N=4 comparison using this API, with explicit executable paths
 and a new report destination.
 
+### Share authored scalability checks and measurements
+
+The maintained commands select one library-owned workload population:
+
+```sh
+zetesis test scalability --threads 1,2,4,8,14 --report scalability-check.json
+zetesis bench corpus --suite scalability --grounder eager \
+  --compare-threads 1,2,4,8,14 --repetitions 4 --memory-runs 2 \
+  --timeout-seconds 30 --campaign-seconds 1800 --report scalability-timing.json
+```
+
+`performance::scalability::workloads` returns authored queens at n=8/9/10,
+pigeonhole at h=5/6/7, and unchanged queens variant 02, SEND+MORE=MONEY and task
+allocation. `--include-einstein` adds the unchanged riddle. The examples root is
+separate from the clean corpus root: both default to the repository's respective
+`examples` and `examples/correctness` directories. Authored source/manifest
+digests are checked; default contracts travel with the source, while amended
+sizes require a complete clingo family. No upstream cleaning provenance is
+invented for authored programs.
+
+The reusable `scalability::run_with_cancellation` admits those workloads and
+delegates to the same bounded matrix runner. Its request must select
+`matrix::Suite::Scalability`; a plain matrix run without explicit workloads
+refuses that suite instead of silently running only its three corpus entries.
+`matrix::Plan::qualification` schedules only one reference and one invocation
+per native profile for each workload. It adds no timing, warmup or RSS rounds
+and refuses adding memory rounds. This is the plan used by `test scalability`.
+`bench corpus --compare-threads` retains normal native measurement rounds and
+uses clingo only for qualification. Both preserve the complete workload and
+executable identities, typed refusals, cancellation and no-clobber report
+publication. `--stats` on the test controls optional elapsed presentation;
+mandatory route observations remain in its evidence.
+
+`Workload::authored(AuthoredProgram { root, entry, sha256, contract }, amendments,
+limits)` provides the same bounded admission independently of the maintained
+selection. It parses through themelios, rejects unsupported source closure and
+checks constant edits before retaining original/derived identities. The shared
+fixture population and its limits belong to the library, not a standalone
+experiment runner. See [authored workload admission](tests/authored_workloads.rs)
+and [CLI checks](../zetesis-cli/tests/scalability_commands.rs).
+
 ### Measure a fixed series of cells
 
 `performance::series::workloads(&Corpus, WorkloadLimits)` returns the
@@ -325,6 +367,7 @@ generation](tests/performance_families.rs) and [the view](tests/series_view.rs).
 | `answers` | Bounded decoding and reconciliation of reported answers. |
 | `selected::run` | Private source copies, selected comparisons and before/after seals. |
 | `corpus_comparison::run` | Fixed corpus comparisons with typed outcomes and an explicit progress observer. |
+| `performance::scalability::run_with_cancellation` | One sealed authored/corpus selection for qualification-only and measured matrices. |
 | `selected::Report::publish`, `performance::Report::publish` | Separate bounded publication that refuses an existing destination. |
 
 Curated verification reads its pinned manifest, license and ASP sources. A

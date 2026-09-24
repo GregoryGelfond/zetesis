@@ -54,6 +54,11 @@ pub enum ViewError {
         /// The label of the report.
         label: String,
     },
+    /// Qualification-only evidence has no native timed population to compare.
+    NoTimedPopulation {
+        /// The label of the report.
+        label: String,
+    },
     /// A report lacks a field the view reads.
     Malformed {
         /// The label of the report.
@@ -73,6 +78,12 @@ impl fmt::Display for ViewError {
             }
             Self::Methods { label } => {
                 write!(f, "report {label:?} requests different search methods")
+            }
+            Self::NoTimedPopulation { label } => {
+                write!(
+                    f,
+                    "report {label:?} has no native timed population to compare"
+                )
             }
             Self::Malformed { label, field } => {
                 write!(f, "report {label:?} lacks a readable {field}")
@@ -334,7 +345,8 @@ pub struct Comparison {
 /// # Errors
 /// Refuses an empty list, repeated labels, reports whose cells or profiles
 /// differ, a report whose profiles disagree on the search method, and
-/// reports lacking the fields the view reads.
+/// reports lacking the fields the view reads, or qualification evidence without
+/// a native timed population.
 pub fn compare(reports: &[Labelled<'_>]) -> Result<Comparison, ViewError> {
     let first = reports.first().ok_or(ViewError::Empty)?;
     let entries = cases(first)?;
@@ -345,6 +357,13 @@ pub fn compare(reports: &[Labelled<'_>]) -> Result<Comparison, ViewError> {
     let mut provenance = BTreeMap::new();
     let mut methods = BTreeMap::new();
     for labelled in reports {
+        if !samples(labelled)?.iter().any(|sample| {
+            sample["slot"]["phase"] == "timed" && sample["slot"]["producer"]["solver"] == "native"
+        }) {
+            return Err(ViewError::NoTimedPopulation {
+                label: labelled.label.into(),
+            });
+        }
         if labels.contains(&labelled.label.to_owned()) {
             return Err(ViewError::Label {
                 label: labelled.label.into(),
@@ -743,6 +762,9 @@ impl fmt::Display for Profile<'_> {
         )?;
         if let Some(seconds) = self.0["time_limit_seconds"].as_u64() {
             write!(f, ", time limit={seconds} s")?;
+        }
+        if let Some(work) = self.0["max_expansion_work"].as_u64() {
+            write!(f, ", expansion work limit={work}")?;
         }
         Ok(())
     }

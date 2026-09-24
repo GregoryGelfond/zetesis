@@ -8,12 +8,12 @@ use std::{
 };
 use zetesis_presentation::Layout;
 use zetesis_validation::{
-    performance::{self, matrix},
+    performance::{self, matrix, scalability},
     selected,
 };
 
 /// Maintained source selections; every cell retains complete selected families.
-#[derive(Clone, Copy, Debug, Default, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub enum Suite {
     /// All 94 verified corpus entries.
     #[default]
@@ -24,6 +24,8 @@ pub enum Suite {
     Queens,
     /// The maintained 22-cell generated/constant workload series.
     Series,
+    /// Nine maintained authored/corpus workloads for thread comparisons.
+    Scalability,
 }
 impl From<Suite> for matrix::Suite {
     fn from(value: Suite) -> Self {
@@ -32,6 +34,7 @@ impl From<Suite> for matrix::Suite {
             Suite::Baseline => Self::Baseline,
             Suite::Queens => Self::Queens,
             Suite::Series => Self::Series,
+            Suite::Scalability => Self::Scalability,
         }
     }
 }
@@ -101,6 +104,12 @@ pub struct CorpusOptions {
     /// Maintained workload selection.
     #[arg(long, value_enum, default_value_t)]
     pub suite: Suite,
+    /// Authored examples root for --suite scalability; defaults to examples.
+    #[arg(long)]
+    pub examples: Option<PathBuf>,
+    /// Include the unchanged Einstein riddle in --suite scalability.
+    #[arg(long)]
+    pub include_einstein: bool,
     /// Native executable; omitted uses this installed executable and `solve`.
     #[arg(long)]
     pub zetesis: Option<PathBuf>,
@@ -127,6 +136,9 @@ pub struct CorpusOptions {
     /// Compare eager and lazy native profiles; clingo only qualifies complete answers.
     #[arg(long, conflicts_with = "grounder")]
     pub compare_grounders: bool,
+    /// Compare native thread counts, for example 1,2,4,8,14; clingo only qualifies.
+    #[arg(long, value_delimiter = ',', num_args = 1.., conflicts_with_all = ["threads", "compare_grounders"])]
+    pub compare_threads: Vec<NonZeroUsize>,
     /// Native candidate/closure workers; auto uses at most four available threads.
     #[arg(long, alias = "workers", value_name = "auto|N", value_parser = crate::options::values::workers, default_value = "auto")]
     pub threads: NonZeroUsize,
@@ -155,6 +167,13 @@ pub struct CorpusOptions {
         help_heading = "Advanced measurement controls"
     )]
     pub batch_size: NonZeroUsize,
+    /// Explicit native grounding expansion ceiling, retained in every profile.
+    #[arg(
+        long,
+        hide_short_help = true,
+        help_heading = "Advanced measurement controls"
+    )]
+    pub max_expansion_work: Option<usize>,
     /// Untimed warmup rounds, separate from the mandatory qualification.
     #[arg(long, default_value_t = 1)]
     pub warmups: usize,
@@ -208,12 +227,21 @@ impl CorpusOptions {
     /// # Errors
     /// Refuses worker counts, dimensions or schedules outside maintained bounds.
     pub fn plan(&self) -> Result<matrix::Plan, performance::Error> {
+        if self.suite != Suite::Scalability && (self.examples.is_some() || self.include_einstein) {
+            return Err(performance::Error::Configuration(
+                "--examples and --include-einstein require --suite scalability",
+            ));
+        }
         let profile = selected::NativeExecution {
             backend: self.device.into(),
             grounder: self.grounder.into(),
             workers: self.threads,
             completion_workers: self.completion_workers,
             batch_size: self.batch_size,
+            formula_joins: (self.suite == Suite::Scalability)
+                .then_some(selected::FormulaJoins::Indexed),
+            search: (self.suite == Suite::Scalability).then_some(selected::SearchMethod::Regions),
+            max_expansion_work: self.max_expansion_work,
             ..selected::NativeExecution::default()
         };
         let profiles = if self.compare_grounders {
@@ -223,6 +251,11 @@ impl CorpusOptions {
                     ..profile
                 })
                 .to_vec()
+        } else if !self.compare_threads.is_empty() {
+            self.compare_threads
+                .iter()
+                .map(|&workers| selected::NativeExecution { workers, ..profile })
+                .collect()
         } else {
             vec![profile]
         };
@@ -234,11 +267,13 @@ impl CorpusOptions {
             self.repetitions,
         )?
         .with_memory(self.memory_runs)?;
-        Ok(if self.compare_grounders {
-            plan.with_reference(matrix::ReferencePolicy::QualificationOnly)
-        } else {
-            plan
-        })
+        Ok(
+            if self.compare_grounders || !self.compare_threads.is_empty() {
+                plan.with_reference(matrix::ReferencePolicy::QualificationOnly)
+            } else {
+                plan
+            },
+        )
     }
 
     /// Actual interface selection. Omission always exercises the explicit solve
@@ -282,21 +317,31 @@ pub(super) fn execute(
         options.report.display()
     )
     .map_err(Error::Io)?;
-    let report = performance::command::run_with_cancellation(
-        &matrix::Request {
-            corpus: &options.root,
-            native: &native,
-            reference: &reference,
-            report: &options.report,
-            plan: options.plan().map_err(Error::Campaign)?,
-            limits,
-            native_answers,
-            max_spelling_bytes: limits.answers.max_input_bytes,
-            helper: (options.memory_runs > 0).then_some(current.as_path()),
-        },
-        options.invocation(),
-        cancelled,
-    )
+    let request = matrix::Request {
+        corpus: &options.root,
+        native: &native,
+        reference: &reference,
+        report: &options.report,
+        plan: options.plan().map_err(Error::Campaign)?,
+        limits,
+        native_answers,
+        max_spelling_bytes: limits.answers.max_input_bytes,
+        helper: (options.memory_runs > 0).then_some(current.as_path()),
+    };
+    let report = if options.suite == Suite::Scalability {
+        scalability::run_with_cancellation(
+            &request,
+            options
+                .examples
+                .as_deref()
+                .unwrap_or_else(|| Path::new("examples")),
+            options.include_einstein,
+            options.invocation(),
+            cancelled,
+        )
+    } else {
+        performance::command::run_with_cancellation(&request, options.invocation(), cancelled)
+    }
     .map_err(Error::Campaign)?;
     report.publish().map_err(Error::Campaign)?;
     super::view::corpus(&report.summary(), options.view.json, layout, output)?;

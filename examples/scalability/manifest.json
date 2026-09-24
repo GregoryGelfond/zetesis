@@ -11,6 +11,9 @@
         "family": "all",
         "satisfiability": "sat",
         "model_count": 92,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
         "notes": [
           "Answer-set count grows steeply with n: n=12 -> 14200, n=13 -> 73712.",
           "Exercises region enumeration and grounding as n rises."
@@ -26,6 +29,9 @@
         "family": "all",
         "satisfiability": "unsat",
         "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
         "notes": [
           "h holes, h+1 pigeons: unsatisfiable by construction.",
           "Measures the work of proving unsatisfiability, not enumeration."

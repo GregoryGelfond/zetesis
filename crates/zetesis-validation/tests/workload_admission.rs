@@ -76,7 +76,7 @@ fn all_queens_variants_have_sealed_parameter_workloads() {
 }
 
 #[test]
-fn content_identity_ignores_noop_edit_metadata() {
+fn noop_edits_preserve_identity_and_contract() {
     let corpus = corpus();
     let path = "standalone/n-queens/variant-01.lp";
     let original = Workload::original(&corpus, path, WorkloadLimits::default()).unwrap();
@@ -89,7 +89,8 @@ fn content_identity_ignores_noop_edit_metadata() {
     .unwrap();
     assert_eq!(original.identity(), unchanged.identity());
     assert!(!original.is_amended());
-    assert!(unchanged.is_amended());
+    assert!(!unchanged.is_amended());
+    assert_eq!(original.contract(), unchanged.contract());
 }
 
 #[test]

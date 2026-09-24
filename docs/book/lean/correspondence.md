@@ -472,15 +472,25 @@ shutdown and idle grants; the certificate regressions compare complete scalar
 and parallel work and reject an insufficient shared allowance. An injected
 worker unwind also checks that idle peers wake and coverage remains incomplete.
 
-The native parallel walk takes worker-owned regions without the pool mutex.
-Its single closure flag is read atomically; closing the frontier, donating a
-region and registering idle workers still synchronize through the pool mutex.
-An active worker retains ownership while copying and transferring children and
-cannot count as idle. Thus the intended frontier consists of pending, local and
-active regions until each is refuted, split or checked. `Pending.Step.perm` and
-`Pending.Walk.exhausted` describe the abstract preservation and exhaustion laws;
-the atomic flag, mutex protocol and absence of lost ownership remain Rust
-refinement obligations. An idle worker that observes cancellation or a deadline
+The native parallel walk keeps one deque per worker. Its owner removes the
+newest region, and an idle worker tries to steal the oldest region from a peer.
+Each deque has its own mutex; a thief skips a busy deque. Payload preparation,
+narrowing and membership checks hold no queue lock. A split first reserves both
+slots fallibly, then raises the unresolved-region count by one before publishing
+either child under the same queue guard. A resolved region decrements the count
+once. Taking or stealing only transfers ownership. Thus pending and active
+regions remain one frontier until refuted, split or checked, and an idle worker
+can establish termination only when the count reaches zero.
+
+`Pending.Step.perm` and `Pending.Walk.exhausted` describe the abstract preservation
+and exhaustion laws; the atomic count, mutex protocol and absence of lost
+ownership remain Rust refinement obligations. Depth-first local order retains
+at most one older sibling per ancestor plus the newest children. Each split
+decides another atom, and stealing starts only with an empty local deque, giving
+at most `atom_count + 1` live entries per deque. Slot capacity grows fallibly as
+needed and is released after joining, including a partially launched worker set.
+This slot reservation does not make region/knowledge payload cloning fallible.
+An idle worker that observes cancellation or a deadline
 records the typed stop before publishing closure. The coordinator may already
 be waiting after its own control poll; channel disconnection must retain that
 stop instead of establishing exhausted coverage. A concurrent close may follow a
@@ -510,7 +520,7 @@ original program or the reduct used to check membership.
 | --- | --- | --- |
 | [`GateRestrictions.answer_set_avoids`, `suffix_region_rejected`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/GateRestrictions.lean) | Source-derived positive gate restrictions and binary seed-region skipping | Each witness uses actual unconditional facts, complete source bindings and the stated gate indices. Possible support alone is insufficient. Rust counter jumps and resource accounting need refinement. |
 | [`Bounds.narrowed_contains_accepted`, `lower_constraint_refutes`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Bounds.lean) | `Candidates::bounded` narrows the undecided region to a fixed point by the region's lower and upper closures (`definite_closure`, `possible_closure`, the `MustGate` and `MayGate` readings of the shared closure rounds), holds the lower closure's gate atoms in every seed, never offers a gate atom outside the upper closure, and offers no seed when a constraint fires in a lower closure | The Rust closures must be the least fixed points of the two consequence operators over the exact admitted program; the counter's enumeration inside a counted region and the restriction plan's treatment of held premises are Rust obligations. Each offered seed is still checked in full. |
-| [The `split` constructor of `Search.CoverageTree`, `Cube.split_partition`, `Cube.split_disjoint`, `CoverageTree.mem_outputs_iff`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Search.lean), [`Bounds.conflicting_atom_refutes`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Bounds.lean) | `zetesis_cpu::regions::Traversal`, the one-worker walk of both routes: a region is narrowed by the caller's narrowing, refuted, offered as one candidate when decided, split on the atom its narrowing preferred or else its highest open atom into the out and in regions, or counted as a flat interval when its narrowing decided nothing beyond the split and the caller counts; the closure route narrows by its two closures, the formula route by the theory's knowledge. Under several workers the formula route walks the same tree in `zetesis_sat`'s parallel regions, a second implementation of the same law: each worker owns a stack of regions and a shared pool offers regions to idle workers | That the Rust split chooses a fresh atom and forms the two cubes of the law, in the traversal and in the parallel walk alike, that the counted interval offers exactly the region's seeds, and that the leaf order is the counter's order when no atom is preferred and one worker walks are Rust obligations; with several workers, [`Pending.Step.perm`, `Pending.Walk.exhausted`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Frontier.lean) is the law: the frontier of pending regions, whoever holds each, and the leaves emitted are together a permutation of the tree's outputs after every step in any interleaving, so a walk that empties the frontier emits every accepted leaf once, in the schedule's order; that the workers' pops, pool offers and stacks form one frontier of the tree is the Rust obligation; the tree's leaves are exactly the accepted seeds only because each leaf seed is checked in full. |
+| [The `split` constructor of `Search.CoverageTree`, `Cube.split_partition`, `Cube.split_disjoint`, `CoverageTree.mem_outputs_iff`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Search.lean), [`Bounds.conflicting_atom_refutes`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Bounds.lean) | `zetesis_cpu::regions::Traversal`, the one-worker walk of both routes: a region is narrowed by the caller's narrowing, refuted, offered as one candidate when decided, split on the atom its narrowing preferred or else its highest open atom into the out and in regions, or counted as a flat interval when its narrowing decided nothing beyond the split and the caller counts; the closure route narrows by its two closures, the formula route by the theory's knowledge. Under several workers the formula route walks the same tree in `zetesis_sat`'s parallel regions, a second implementation of the same law: each worker takes its newest region from a deque and idle workers steal older regions from peers | That the Rust split chooses a fresh atom and forms the two cubes of the law, in the traversal and in the parallel walk alike, that the counted interval offers exactly the region's seeds, and that the leaf order is the counter's order when no atom is preferred and one worker walks are Rust obligations; with several workers, [`Pending.Step.perm`, `Pending.Walk.exhausted`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Frontier.lean) is the law: the frontier of pending regions, whoever holds each, and the leaves emitted are together a permutation of the tree's outputs after every step in any interleaving, so a walk that empties the frontier emits every accepted leaf once, in the schedule's order; that the workers' deque removals, transfers and active regions form one frontier of the tree is the Rust obligation; the tree's leaves are exactly the accepted seeds only because each leaf seed is checked in full. |
 | [`TightPlans.stable_supported`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/TightPlans.lean) | A candidate the complete tight certificate finds with an unsupported present atom is rejected as `Check::Unsupported` without a reduct query; the candidate without that atom is the law's witness | The plan's coverage of the theory's producers is established by its construction, not yet by a proved refinement of that construction; the Rust check's evaluation of producer bodies remains executable evidence. |
 | [`DisjunctiveSupport.answer_set_supported`, `answer_set_supported_with_choices`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DisjunctiveSupport.lean) | Necessary ordinary sole-head support and enabled atomic-choice support | Extraction must cover every asserted root, coalesce repeated ordinary head atoms and recognize exact atomic choices in either operand order using semantic atom identity. Choice bodies remain arbitrary original formulas; they supply permission, not a self-premise. The original theory remains the reduct subject. This is necessary support, not ranked sufficiency; Rust DAG extraction, Boolean encoding and bounded failure remain unproved. |
 | [`PackedQueryLiterals.decode_encode`, `packed_truth`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/PackedQueryLiterals.lean) | Packed classical literals in `Cnf` and borrowed clause views | Admission must establish machine representability and valid offsets, including repeated offsets for empty clauses. Natural-number arithmetic does not prove machine operations or allocation. |
@@ -525,6 +535,21 @@ The [execution chapter](../architecture/execution.md) explains these operations
 in the solver. The [candidate cursor contract](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/docs/candidate-cursor.md)
 and [projection-index contract](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/docs/candidate-pruning.md)
 describe their concrete ownership and failure boundaries.
+
+The packed `Region` stores disjoint held and cut masks over real atoms, while
+`Knowledge` stores sure/never masks separately over nodes and atoms. Its seen
+snapshot denotes the region decisions already incorporated; differencing the
+current decided mask supplies only new decisions, and the completed snapshot
+also includes atoms learned by propagation. `FormulaBounds.known_mono` supplies
+the mathematical ancestor-inheritance law. The Rust API additionally requires
+the same narrower, theory, producer set and frozen truth, and knowledge closed
+for an enclosing region. The law neither proves the packed representation nor
+validates those unchecked caller preconditions. Exact word/index conversion,
+zero unused tail bits, polarity decoding, complete seen snapshots and correct
+child cloning remain Rust obligations. The cross-word original/frozen
+regressions are executable evidence for those boundaries, not formal refinement.
+Retained-byte accounting includes the owned masks; the full seen-mask scan and
+snapshot writes are outside the existing charged-read work counters.
 
 Region candidate preparation and frozen proper-subset queries share one
 immutable index constructed with the exact original `Theory`. Reuse checks

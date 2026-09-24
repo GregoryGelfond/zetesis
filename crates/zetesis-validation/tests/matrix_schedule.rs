@@ -196,3 +196,54 @@ fn matrix_population_has_finite_construction_bounds() {
     assert!(plan(1).slots(0).is_err());
     assert!(plan(1).slots(95).is_err());
 }
+
+#[test]
+fn qualification_plans_schedule_one_census_without_measurements() {
+    let profiles = zetesis_validation::performance::scalability::profiles(None);
+    let plan = Plan::qualification(Suite::Scalability, profiles, NonZeroUsize::MIN).unwrap();
+    let slots = plan.slots(10).unwrap();
+    assert_eq!(slots.len(), 60);
+    for (case, census) in slots.chunks_exact(6).enumerate() {
+        assert!(census.iter().all(|slot| slot.case == case
+            && slot.phase == Phase::Qualification
+            && slot.round == 0));
+        assert_eq!(census[0].producer, Producer::Reference);
+        for (profile, slot) in census[1..].iter().enumerate() {
+            assert_eq!(slot.producer, Producer::Native { profile });
+        }
+    }
+    let encoded = serde_json::to_value(&plan).unwrap();
+    assert_eq!(encoded["warmups"], 0);
+    assert_eq!(encoded["repetitions"], 0);
+    assert_eq!(encoded["memory_runs"], 0);
+    assert!(plan.clone().with_memory(0).is_ok());
+    assert!(plan.with_memory(1).is_err());
+}
+
+#[test]
+fn qualification_and_measurement_share_profile_bounds() {
+    let one = NonZeroUsize::MIN;
+    let excessive = NonZeroUsize::new(257).unwrap();
+    for (profiles, reference) in [
+        (vec![], one),
+        (vec![NativeExecution::default(); 9], one),
+        (
+            vec![NativeExecution {
+                workers: excessive,
+                ..NativeExecution::default()
+            }],
+            one,
+        ),
+        (
+            vec![NativeExecution {
+                completion_workers: excessive,
+                ..NativeExecution::default()
+            }],
+            one,
+        ),
+        (vec![NativeExecution::default()], excessive),
+    ] {
+        assert!(Plan::qualification(Suite::Scalability, profiles.clone(), reference).is_err());
+        assert!(Plan::new(Suite::Scalability, profiles, reference, 0, 1).is_err());
+    }
+}

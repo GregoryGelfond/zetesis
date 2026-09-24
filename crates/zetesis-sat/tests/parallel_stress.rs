@@ -1,17 +1,15 @@
-//! The work-stealing region scheduler returns the exact answer-set family on
-//! every run, whatever the worker count or interleaving.
+//! Repeated region walks preserve the scalar answer-set family across the
+//! selected worker counts.
 //!
-//! N-queens forces genuine region splitting and stealing across many workers.
+//! N-queens supplies a branching region tree for concurrent workers.
 //! This test guards the *family*: a model lost or duplicated by a steal shows as
 //! a family that differs from the scalar walk's or between runs, and a counter
 //! underflow that hangs is caught by the enumeration's deadline. It does NOT
-//! guard the add-before-push ordering property: that race nets the `outstanding`
-//! counter back to zero with exact model and region counts, degrading
-//! parallelism rather than the family, so it is a scaling property (evidenced by
-//! the measured scaling curve) that no family check can see. Each worker count is
-//! run many times so a schedule-dependent family fault has repeated chances to
-//! appear. Model arrival order is the schedule's and is deliberately not
-//! asserted; only the family is.
+//! establish that stealing occurred or qualify scaling: a serialized schedule
+//! can return the same family. The deterministic coordination tests exercise
+//! stealing and split publication separately. Each selected worker count is run
+//! repeatedly to sample interleavings; this is not exhaustive schedule coverage.
+//! Model arrival order is deliberately not asserted; only the family is.
 
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
@@ -22,8 +20,9 @@ use zetesis_sat::{Cancellation, Limits, StableModels};
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 /// A standalone eight-queens encoding: 92 answer sets, enough independent
-/// choices to make the workers split and steal rather than run one subtree.
-const QUEENS: &str = include_str!("../../../examples/correctness/standalone/n-queens/variant-02.lp");
+/// choices to expose a substantial branching tree.
+const QUEENS: &str =
+    include_str!("../../../examples/correctness/standalone/n-queens/variant-02.lp");
 const EXPECTED_MODELS: usize = 92;
 /// Runs per worker count. Large enough to expose a schedule-dependent fault,
 /// small enough to keep the portable suite quick: this test builds unoptimized,
@@ -78,7 +77,7 @@ fn many_workers_return_the_scalar_family_on_every_run() {
     // One worker is the scalar regions walk: the family every schedule must equal.
     let expected = family(&theory, 1);
     assert_eq!(expected.len(), EXPECTED_MODELS);
-    for workers in [8usize, 14] {
+    for workers in [2usize, 4, 8, 14] {
         for run in 0..RUNS {
             assert_eq!(
                 family(&theory, workers),

@@ -16,6 +16,11 @@ For a short introduction or a new measurement, start with
 Reducing stored data or operation counts does not by itself establish a faster
 solve. The tables below keep those measurements separate.
 
+Retained provenance records preserve the paths used at measurement time. Their
+`examples/kr-domains` paths refer to the corpus now stored in
+[`examples/correctness`](../../../examples/correctness/README.md); moving the
+fixtures does not rewrite the original evidence or its hashes.
+
 ## Prepared-grounding CPU comparison
 
 Three compiled sources were measured on arm64 macOS on 14 September 2026.

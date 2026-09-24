@@ -23,7 +23,7 @@ pub use primitives::{Primitive, PrimitiveOptions};
 #[derive(Debug, Subcommand)]
 pub enum BenchCommand {
     /// Compare complete selected answer families, timings and memory with clingo.
-    Corpus(CorpusOptions),
+    Corpus(Box<CorpusOptions>),
     /// Measure matched relation, aggregate, tight or lazy execution primitives.
     Primitives(PrimitiveOptions),
     /// Compare retained reports with matching workload/profile identities.

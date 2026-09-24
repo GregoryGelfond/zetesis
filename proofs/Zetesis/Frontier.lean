@@ -4,13 +4,12 @@ import Zetesis.Search
 # The frontier of a coverage tree walked by several workers
 
 A coverage tree is walked by keeping a frontier: the regions reached and not
-yet visited, each with the subtree that covers it, as a worker's stack and the
-shared pool hold them when several workers walk the tree. A step takes any
-pending region,
+yet resolved, each with the subtree that covers it, including regions waiting
+in worker queues and regions currently held by workers. A step takes any pending region,
 whichever worker holds it, and does what its subtree says: a refuted region is
 dropped, an accepted leaf is emitted, a split region is replaced by its two
 children, a narrowed region by its child. Steps interleave in any order, and a
-region moving between a stack and the pool changes nothing here, since the
+region transferred between workers changes nothing here, since the
 frontier is one list whoever holds its members. The law is that the leaves
 emitted and the leaves still pending are together a permutation of the tree's
 outputs after every step, so a walk that empties the frontier has emitted every
@@ -18,8 +17,8 @@ accepted leaf exactly once, in the schedule's order: the family is exact at any
 worker count, and the order is not a property of the result.
 
 The module rests on `Search.CoverageTree` for the tree and its outputs. That
-the workers' pops, pool offers and stacks together form one frontier of the
-tree, a step being one worker's visit of the region it popped, is the Rust
+the workers' removals, transfers and active regions together form one frontier
+of the tree, a step being one worker's visit of the region it took, is the Rust
 obligation.
 -/
 namespace Zetesis
