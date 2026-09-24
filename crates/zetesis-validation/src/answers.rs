@@ -250,7 +250,7 @@ pub fn clingo_json(bytes: &[u8], limits: Limits) -> Result<ReportedAnswers, Erro
     clingo::parse(text(bytes, limits)?, limits)
 }
 
-/// Check the historical plain native report used by the kr-domains adapter.
+/// Check the historical plain native report used by the correctness adapter.
 ///
 /// `optimized` is the caller's objective contract. Exhausted weighted native
 /// enumeration retains the exact best vector and all ties. This is a legacy

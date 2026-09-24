@@ -23,7 +23,7 @@ use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_
 
 /// A standalone eight-queens encoding: 92 answer sets, enough independent
 /// choices to make the workers split and steal rather than run one subtree.
-const QUEENS: &str = include_str!("../../../examples/kr-domains/standalone/n-queens/variant-02.lp");
+const QUEENS: &str = include_str!("../../../examples/correctness/standalone/n-queens/variant-02.lp");
 const EXPECTED_MODELS: usize = 92;
 /// Runs per worker count. Large enough to expose a schedule-dependent fault,
 /// small enough to keep the portable suite quick: this test builds unoptimized,

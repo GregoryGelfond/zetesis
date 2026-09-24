@@ -67,7 +67,7 @@ struct Options {
     /// Serialized evidence ceiling, including all raw captures.
     #[arg(long, default_value_t = 536_870_912)]
     report_bytes: usize,
-    /// Self-contained clean examples/kr-domains directory.
+    /// Self-contained clean examples/correctness directory.
     root: PathBuf,
     /// Established CPU baseline, all six curated queens encodings, the
     /// instrumented full corpus, or the fixed instrumented series cells.

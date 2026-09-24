@@ -61,7 +61,7 @@ zetesis-bench relation --backend metal --family independent --payload tuple \
   --rows 4096 --queries 32 --workers 4 --warmups 2 --repetitions 6
 zetesis-bench table --case aliased --rows 1024 --queries 32 \
   --workers 4 --warmups 1 --repetitions 3
-zetesis-bench grounding examples/kr-domains/standalone/send-money/send-money.lp \
+zetesis-bench grounding examples/correctness/standalone/send-money/send-money.lp \
   --repetitions 3
 zetesis-bench feedback --check
 zetesis-bench feedback --warmups 1 --repetitions 3

@@ -320,7 +320,7 @@ fn comparison_preserves_a_writer_failure_after_rows() {
 
 #[test]
 fn amended_workloads_have_distinct_human_labels() {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/kr-domains");
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/correctness");
     let corpus = examples::load(&root, examples::Limits::default()).unwrap();
     let entry = "standalone/n-queens/variant-01.lp";
     let workloads: Vec<_> = [10, 11]

@@ -35,7 +35,7 @@ fn executable(path: &Path, body: &str) {
 impl Fixture {
     fn new(native_prefix: &str, mutate: impl Fn(&mut String)) -> Self {
         let directory = tempfile::tempdir().unwrap();
-        let original = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/kr-domains");
+        let original = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/correctness");
         let corpus = directory.path().join("corpus");
         fs::create_dir(&corpus).unwrap();
         for file in ["manifest.json", "LICENSE"] {

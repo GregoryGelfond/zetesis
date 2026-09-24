@@ -59,12 +59,12 @@ impl NativeBackend {
 
 /// A complete comparison request, without publication or progress destinations.
 ///
-/// If neither source override is present, `repo/examples/kr-domains` is used.
+/// If neither source override is present, `repo/examples/correctness` is used.
 /// Either override selects the original-source manifest mode, with the missing
 /// path derived from `repo`. There is no fallback between source views.
 #[derive(Clone, Debug)]
 pub struct Request {
-    /// Repository containing the self-contained examples/kr-domains collection.
+    /// Repository containing the self-contained examples/correctness collection.
     pub repo: PathBuf,
     /// Select an original-source corpus directory using historical manifest mode.
     pub corpus: Option<PathBuf>,

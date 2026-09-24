@@ -51,7 +51,7 @@ pub struct ProcessOptions {
 /// Local corpus comparison request; sources are verified and never downloaded.
 #[derive(Debug, Args)]
 pub struct CorpusOptions {
-    /// Checkout containing examples/kr-domains and its pinned manifest.
+    /// Checkout containing examples/correctness and its pinned manifest.
     #[arg(long, default_value = ".")]
     pub repo: PathBuf,
     /// External clingo executable, resolved through PATH for a bare name.

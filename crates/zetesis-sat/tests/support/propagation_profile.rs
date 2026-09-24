@@ -117,7 +117,7 @@ const CASES: [&str; 8] = [
 #[test]
 #[ignore = "bounded classical-prefix work profile; no elapsed time, objective feedback or reduct checks"]
 fn profile_finite_candidate_prefixes() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/kr-domains");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/correctness");
     for case in CASES {
         let bundle = SourceBundle::load(root.join(case), BundleLimits::default()).unwrap();
         let admitted = admit_bundle_formula(

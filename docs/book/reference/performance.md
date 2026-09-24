@@ -54,7 +54,7 @@ do not replace the full-corpus or Metal measurements.
 From a repository checkout, with zetesis and clingo installed:
 
 ```sh
-zetesis bench corpus examples/kr-domains --suite baseline --report baseline.json
+zetesis bench corpus examples/correctness --suite baseline --report baseline.json
 ```
 
 This small suite runs SEND, queens variant 2 and task allocation. The terminal
@@ -66,10 +66,10 @@ Omit `--suite baseline` to run the full corpus. Select CPU threads or a device
 explicitly when comparing configurations:
 
 ```sh
-zetesis bench corpus examples/kr-domains --threads 2 --report two-threads.json
-zetesis bench corpus examples/kr-domains --device metal --grounder eager \
+zetesis bench corpus examples/correctness --threads 2 --report two-threads.json
+zetesis bench corpus examples/correctness --device metal --grounder eager \
   --report metal.json
-zetesis bench corpus examples/kr-domains --json --report run.json > summary.json
+zetesis bench corpus examples/correctness --json --report run.json > summary.json
 ```
 
 Benchmarks always collect their required statistics. `solve --stats` is useful

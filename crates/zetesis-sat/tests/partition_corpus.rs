@@ -10,12 +10,12 @@ use zetesis_sat::{
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 const SOURCES: [&str; 6] = [
-    include_str!("../../../examples/kr-domains/standalone/n-queens/variant-01.lp"),
-    include_str!("../../../examples/kr-domains/standalone/n-queens/variant-02.lp"),
-    include_str!("../../../examples/kr-domains/standalone/n-queens/variant-03.lp"),
-    include_str!("../../../examples/kr-domains/standalone/n-queens/variant-04.lp"),
-    include_str!("../../../examples/kr-domains/standalone/n-queens/variant-05.lp"),
-    include_str!("../../../examples/kr-domains/standalone/n-queens/variant-06.lp"),
+    include_str!("../../../examples/correctness/standalone/n-queens/variant-01.lp"),
+    include_str!("../../../examples/correctness/standalone/n-queens/variant-02.lp"),
+    include_str!("../../../examples/correctness/standalone/n-queens/variant-03.lp"),
+    include_str!("../../../examples/correctness/standalone/n-queens/variant-04.lp"),
+    include_str!("../../../examples/correctness/standalone/n-queens/variant-05.lp"),
+    include_str!("../../../examples/correctness/standalone/n-queens/variant-06.lp"),
 ];
 
 fn enumerate(theory: &Theory, restrictions: &[Restriction]) -> (BTreeSet<Vec<usize>>, Statistics) {

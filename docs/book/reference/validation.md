@@ -131,7 +131,7 @@ portable diagnostic contract.
 The maintained source collections provide broader regressions:
 
 ```sh
-zetesis-corpus verify-examples examples/kr-domains
+zetesis-corpus verify-examples examples/correctness
 zetesis-corpus verify validation/upstream/clingo-5.8.2/curated
 zetesis test corpus --repo . --report target/corpus-parity.json
 zetesis-corpus compare validation/upstream/clingo-5.8.2/curated \
@@ -147,7 +147,7 @@ C++ files.
 
 | Evidence | What it establishes |
 | --- | --- |
-| kr-domains comparison | Agreement of completed displayed-model multisets, costs, optimum ties and declared corpus contracts. Hidden atoms cannot be reconstructed from `#show`. |
+| correctness comparison | Agreement of completed displayed-model multisets, costs, optimum ties and declared corpus contracts. Hidden atoms cannot be reconstructed from `#show`. |
 | Selected upstream comparison | Full-model agreement for curated fixtures whose contracts exclude projection and objectives. |
 | Lean build and axiom audit | Kernel acceptance of the stated laws under the recorded axiom boundary. |
 | Proof-record check | Consistency of retained sources, theorem locations, audit output, command records and hashes. It does not establish that commands executed. |

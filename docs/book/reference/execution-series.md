@@ -155,7 +155,7 @@ chosen executable, `CLINGO` the reference executable and `REPORT` a new path,
 the CPU command for each leg is:
 
 ```sh
-zetesis-perf examples/kr-domains --suite series --profile cpu-auto \
+zetesis-perf examples/correctness --suite series --profile cpu-auto \
   --workers 4 --completion-workers 4 --clingo-workers 1 --batch-size 64 \
   --warmups 0 --repetitions 2 --memory-runs 1 \
   --timeout-seconds 10 --campaign-seconds 180 \

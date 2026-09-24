@@ -215,7 +215,7 @@ pub struct Slot {
 /// Library-owned experiment request, independent of clap and global I/O.
 #[derive(Debug)]
 pub struct Request<'a> {
-    /// Verified clean examples/kr-domains root.
+    /// Verified clean examples/correctness root.
     pub corpus: &'a Path,
     /// Absolute native executable.
     pub native: &'a Path,

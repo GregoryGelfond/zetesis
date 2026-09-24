@@ -64,7 +64,7 @@ fn original_and_clean_selected_displays_agree() {
         .unwrap();
     let originals = repo.join("validation/corpus/kr-domains");
     let corpus = examples::load(
-        &repo.join("examples/kr-domains"),
+        &repo.join("examples/correctness"),
         examples::Limits::default(),
     )
     .unwrap();

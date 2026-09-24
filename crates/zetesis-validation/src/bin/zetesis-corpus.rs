@@ -17,7 +17,7 @@ struct Options {
 }
 #[derive(Subcommand)]
 enum Action {
-    /// Verify the self-contained kr-domains examples and typed contracts.
+    /// Verify the self-contained correctness examples and typed contracts.
     VerifyExamples {
         /// Clean example directory containing manifest.json and ASP sources.
         root: PathBuf,

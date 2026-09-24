@@ -78,7 +78,7 @@ mod tests {
     #[test]
     fn prepared_workload_identifies_the_n4_source() {
         let corpus = examples::load(
-            &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/kr-domains"),
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/correctness"),
             examples::Limits::default(),
         )
         .unwrap();

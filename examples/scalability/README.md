@@ -1,7 +1,7 @@
 # scalability examples
 
 Parametric ASP programs for measuring solver throughput and scaling, authored for
-this corpus. Where the [correctness](../kr-domains) group covers semantic breadth
+this corpus. Where the [correctness](../correctness) group covers semantic breadth
 on small instances, these carry one scaling knob each so the same encoding spans a
 wide workload — from a quick default up to instances large enough to profile.
 

@@ -184,7 +184,7 @@ zetesis test backend --device metal --stats --report metal-check.json
 
 `test corpus` checks all 94 entries in the repository's pinned clean corpus
 against external clingo. `--repo` defaults to the current directory; it must
-contain `examples/kr-domains` and the maintained manifest. Inputs are verified
+contain `examples/correctness` and the maintained manifest. Inputs are verified
 locally and are never downloaded. The comparison preserves selected displays,
 model multiplicities, optimum ties and costs. It does not recover hidden clingo
 interpretations from a projected display. Clingo remains an external reference,
@@ -239,14 +239,14 @@ and fresh-child RSS receipts. It refuses an unsupported platform explicitly;
 saved-report comparison does not launch children and has no such requirement.
 
 ```sh
-zetesis bench corpus examples/kr-domains --report cpu-run.json
-zetesis bench corpus examples/kr-domains --suite baseline \
+zetesis bench corpus examples/correctness --report cpu-run.json
+zetesis bench corpus examples/correctness --suite baseline \
   --device metal --grounder eager --report metal-run.json
-zetesis bench corpus examples/kr-domains --threads 2 --json \
+zetesis bench corpus examples/correctness --threads 2 --json \
   --report two-thread-run.json > two-thread-summary.json
 ```
 
-The positional directory defaults to `examples/kr-domains` relative to the
+The positional directory defaults to `examples/correctness` relative to the
 current directory. Supply the directory from a repository checkout when running
 elsewhere; the installed command does not fetch or bundle these inputs.
 `--suite corpus` selects all 94 cases. `baseline` selects SEND, queens variant 02
@@ -302,7 +302,7 @@ memory comparison. Without this option, the existing single-profile campaign
 continues to measure clingo in every phase.
 
 ```sh
-zetesis bench corpus examples/kr-domains --suite queens --device cpu \
+zetesis bench corpus examples/correctness --suite queens --device cpu \
   --threads 1 --compare-grounders --repetitions 4 --memory-runs 2 \
   --report grounding-comparison.json
 ```

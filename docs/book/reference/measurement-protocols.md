@@ -40,7 +40,7 @@ solver beside its timing.
 For example, compare three different encodings with complete CPU/eager solves:
 
 ```sh
-zetesis-perf examples/kr-domains \
+zetesis-perf examples/correctness \
   --case standalone/n-queens/variant-02.lp \
   --case standalone/send-money/send-money.lp \
   --case scenarios/task-allocation/variant-04/05-larger-mix.lp \
@@ -80,7 +80,7 @@ Build the client from the checkout root, then run it with explicit paths:
 ```sh
 cargo build --locked -p zetesis-validation --example book-workload
 
-target/debug/examples/book-workload examples/kr-domains \
+target/debug/examples/book-workload examples/correctness \
   /absolute/path/to/zetesis /absolute/path/to/clingo \
   target/queens-n4-comparison.json
 ```
@@ -186,15 +186,15 @@ rendering and capture remain included.
 
 | Case | Previous zetesis, ms | Current zetesis, ms | clingo, ms |
 | --- | ---: | ---: | ---: |
-| [Queens 1, N=8](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/standalone/n-queens/variant-01.lp) | 9.224–9.237 | 9.225–9.239 | 6.160–6.187 |
-| [Queens 2, N=8](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/standalone/n-queens/variant-02.lp) | 93.551–93.741 | 92.266–93.555 | 123.634–125.123 |
-| [Queens 3, N=8](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/standalone/n-queens/variant-03.lp) | 9.325–9.338 | 9.323–9.336 | 6.192–6.227 |
-| [Queens 4, N=8](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/standalone/n-queens/variant-04.lp) | 7.726–7.751 | 7.732–7.753 | 6.157–6.164 |
-| [Queens 5, N=8](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/standalone/n-queens/variant-05.lp) | 10.733–10.743 | 10.735–10.737 | 6.153–6.169 |
-| [Queens 6, N=8](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/standalone/n-queens/variant-06.lp) | 12.236–12.256 | 12.251–12.253 | 6.158–6.173 |
-| [SEND + MORE = MONEY](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/standalone/send-money/send-money.lp) | 40.658–40.839 | 39.393–40.830 | 12.230–13.759 |
-| [Task allocation: scheduling](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/scenarios/task-allocation/variant-04/05-larger-mix.lp) | 123.917–126.926 | 123.913–131.220 | 185.434–194.311 |
-| [Shortest path: layered DAG](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/scenarios/shortest-path/variant-01/06-layered-dag.lp) | 7.884–7.888 | 7.842–7.852 | 6.188–6.241 |
+| [Queens 1, N=8](https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/standalone/n-queens/variant-01.lp) | 9.224–9.237 | 9.225–9.239 | 6.160–6.187 |
+| [Queens 2, N=8](https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/standalone/n-queens/variant-02.lp) | 93.551–93.741 | 92.266–93.555 | 123.634–125.123 |
+| [Queens 3, N=8](https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/standalone/n-queens/variant-03.lp) | 9.325–9.338 | 9.323–9.336 | 6.192–6.227 |
+| [Queens 4, N=8](https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/standalone/n-queens/variant-04.lp) | 7.726–7.751 | 7.732–7.753 | 6.157–6.164 |
+| [Queens 5, N=8](https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/standalone/n-queens/variant-05.lp) | 10.733–10.743 | 10.735–10.737 | 6.153–6.169 |
+| [Queens 6, N=8](https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/standalone/n-queens/variant-06.lp) | 12.236–12.256 | 12.251–12.253 | 6.158–6.173 |
+| [SEND + MORE = MONEY](https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/standalone/send-money/send-money.lp) | 40.658–40.839 | 39.393–40.830 | 12.230–13.759 |
+| [Task allocation: scheduling](https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/task-allocation/variant-04/05-larger-mix.lp) | 123.917–126.926 | 123.913–131.220 | 185.434–194.311 |
+| [Shortest path: layered DAG](https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-01/06-layered-dag.lp) | 7.884–7.888 | 7.842–7.852 | 6.188–6.241 |
 
 These results do not demonstrate a broad application speedup from the columnar
 integration. Most differences are small; one current task-allocation block is
@@ -240,7 +240,7 @@ clingo’s hidden interpretations are unavailable.
 Reproduce each block with the same nine cases and an unused report path:
 
 ```sh
-zetesis-perf examples/kr-domains \
+zetesis-perf examples/correctness \
   --case standalone/n-queens/variant-01.lp \
   --case standalone/n-queens/variant-02.lp \
   --case standalone/n-queens/variant-03.lp \
@@ -301,10 +301,10 @@ are not confidence intervals.
 
 | Case | zetesis `3afaf719`, ms | zetesis `0d287734`, ms | Direct clingo, ms |
 | --- | ---: | ---: | ---: |
-| [Queens 2, N=8](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/standalone/n-queens/variant-02.lp) | 93.173–93.467 | 94.042–94.846 | 126.297–127.296 |
-| [SEND + MORE = MONEY](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/standalone/send-money/send-money.lp) | 40.301–40.653 | 40.719–41.735 | 13.050–14.131 |
-| [Task allocation: scheduling](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/scenarios/task-allocation/variant-04/05-larger-mix.lp) | 125.165–126.981 | 128.198–129.724 | 184.024–192.129 |
-| [Shortest path: layered DAG](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/scenarios/shortest-path/variant-01/06-layered-dag.lp) | 7.933–7.936 | 7.939–8.003 | 6.567–6.598 |
+| [Queens 2, N=8](https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/standalone/n-queens/variant-02.lp) | 93.173–93.467 | 94.042–94.846 | 126.297–127.296 |
+| [SEND + MORE = MONEY](https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/standalone/send-money/send-money.lp) | 40.301–40.653 | 40.719–41.735 | 13.050–14.131 |
+| [Task allocation: scheduling](https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/task-allocation/variant-04/05-larger-mix.lp) | 125.165–126.981 | 128.198–129.724 | 184.024–192.129 |
+| [Shortest path: layered DAG](https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-01/06-layered-dag.lp) | 7.933–7.936 | 7.939–8.003 | 6.567–6.598 |
 
 Separate child peak-RSS observations use three fresh runs per block, giving
 six observations per native revision/case and twelve for clingo. The ranges
@@ -332,7 +332,7 @@ measure lazy or GPU solving.
 Reproduce each block with the same manifest and a new report path:
 
 ```sh
-zetesis-perf examples/kr-domains \
+zetesis-perf examples/correctness \
   --case standalone/n-queens/variant-02.lp \
   --case standalone/send-money/send-money.lp \
   --case scenarios/task-allocation/variant-04/05-larger-mix.lp \
@@ -441,7 +441,7 @@ CLI. Run once per executable in the stated four-block order, choosing a new
 report path for each invocation:
 
 ```sh
-zetesis-perf examples/kr-domains --suite queens \
+zetesis-perf examples/correctness --suite queens \
   --profile metal-eager --profile metal-lazy \
   --workers 4 --completion-workers 4 --clingo-workers 1 --batch-size 64 \
   --zetesis /path/to/zetesis --clingo /path/to/clingo \

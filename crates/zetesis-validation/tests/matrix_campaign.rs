@@ -42,7 +42,7 @@ impl Fixture {
             "printf '%s' '{\"Result\":\"UNSATISFIABLE\",\"Models\":{\"More\":\"no\",\"Number\":0},\"Call\":[{}]}'",
         );
         Self {
-            corpus: Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/kr-domains"),
+            corpus: Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/correctness"),
             report: directory.path().join("matrix.json"),
             native,
             reference,

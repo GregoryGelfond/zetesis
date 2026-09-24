@@ -21,7 +21,7 @@ fn every_queens_variant_accepts_the_same_board_parameter() {
     ])
     .unwrap();
     let root =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/kr-domains/standalone/n-queens");
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/correctness/standalone/n-queens");
     for variant in 1..=6 {
         let source =
             std::fs::read_to_string(root.join(format!("variant-{variant:02}.lp"))).unwrap();

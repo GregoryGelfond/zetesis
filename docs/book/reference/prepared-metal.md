@@ -186,7 +186,7 @@ runner from B. Run the two suites for each block in Q/A/B/B/A/Q order, retaining
 each report under a distinct name. For example:
 
 ```sh
-zetesis-perf examples/kr-domains \
+zetesis-perf examples/correctness \
   --zetesis /path/to/frozen/zetesis --clingo /path/to/direct/clingo \
   --report target/metal-baseline.json --suite baseline \
   --profile cpu-eager --profile metal-eager --formula-joins indexed \

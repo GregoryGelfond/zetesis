@@ -45,7 +45,7 @@ impl Fixture {
             ),
         );
         executable(&reference, &format!("printf '%s' {}", quote(UNSAT)));
-        let corpus = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/kr-domains");
+        let corpus = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/correctness");
         let checked = examples::load(&corpus, examples::Limits::default()).unwrap();
         let path = "standalone/n-queens/variant-01.lp";
         // An amended workload takes its complete family from the independent

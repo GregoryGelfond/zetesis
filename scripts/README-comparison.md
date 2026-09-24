@@ -4,11 +4,11 @@ Use the installed Rust `zetesis-perf` command in a quiet measurement window afte
 qualification. Sources, solver executables and report destinations are explicit:
 
 ```sh
-zetesis-perf examples/kr-domains --suite baseline \
+zetesis-perf examples/correctness --suite baseline \
   --zetesis /path/to/zetesis --clingo /path/to/clingo \
   --report /new/path/baseline.json
 
-zetesis-perf examples/kr-domains \
+zetesis-perf examples/correctness \
   --case scenarios/shortest-path/variant-01/01-basic.lp \
   --case standalone/send-money/send-money.lp \
   --memory-runs 5 --warmups 3 --repetitions 21 \
@@ -64,7 +64,7 @@ record); raw reports are large and stay with their builds. Then derive the
 retained comparison:
 
 ```sh
-zetesis-perf examples/kr-domains --suite series --profile cpu-auto \
+zetesis-perf examples/correctness --suite series --profile cpu-auto \
   --warmups 1 --repetitions 3 --timeout-seconds 30 --campaign-seconds 3600 \
   --zetesis /path/to/zetesis --clingo /path/to/clingo \
   --report /new/path/series-after.json

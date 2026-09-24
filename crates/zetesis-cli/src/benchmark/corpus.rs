@@ -96,7 +96,7 @@ impl From<Grounder> for selected::Grounder {
 #[derive(Debug, Args)]
 pub struct CorpusOptions {
     /// Existing clean corpus directory from the repository; never downloaded.
-    #[arg(default_value = "examples/kr-domains")]
+    #[arg(default_value = "examples/correctness")]
     pub root: PathBuf,
     /// Maintained workload selection.
     #[arg(long, value_enum, default_value_t)]

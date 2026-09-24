@@ -1,4 +1,4 @@
-# kr-domains examples
+# correctness examples
 
 These are ordinary, self-contained ASP examples adapted from
 [kr-domains](https://github.com/GregoryGelfond/kr-domains) at revision
@@ -16,9 +16,9 @@ the upstream MIT license and Gregory Gelfond copyright.
 From the zetesis repository root, using the installed solver:
 
 ```sh
-zetesis examples/kr-domains/scenarios/task-allocation/variant-01/01-basic.lp --models 0
-zetesis examples/kr-domains/scenarios/shortest-path/variant-01/01-basic.lp --stats
-zetesis examples/kr-domains/standalone/n-queens/variant-01.lp --models 0
+zetesis examples/correctness/scenarios/task-allocation/variant-01/01-basic.lp --models 0
+zetesis examples/correctness/scenarios/shortest-path/variant-01/01-basic.lp --stats
+zetesis examples/correctness/standalone/n-queens/variant-01.lp --models 0
 ```
 
 The task-allocation example assigns `a1` to `t1` and `a2` to `t2`, with total
@@ -75,15 +75,15 @@ the external comparison below checks default-instance answer agreement.
 The installed integrity command verifies the clean collection independently:
 
 ```sh
-zetesis-corpus verify-examples examples/kr-domains
-zetesis-corpus verify-examples examples/kr-domains --originals validation/corpus/kr-domains
+zetesis-corpus verify-examples examples/correctness
+zetesis-corpus verify-examples examples/correctness --originals validation/corpus/kr-domains
 ```
 
 The second command also verifies the recorded derivation from preserved originals.
 Neither integrity command runs a solver. For the full native/clingo comparison:
 
 ```sh
-zetesis-validate --repo . --report target/kr-domains-parity.json
+zetesis-validate --repo . --report target/correctness-parity.json
 ```
 
 The validator loads these examples by default. The Rust regression suite is:

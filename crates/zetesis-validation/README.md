@@ -17,7 +17,7 @@ also cover their source-integrity and selected-upstream capabilities:
 | Command | Purpose |
 |---|---|
 | `zetesis-corpus` | Verify curated source collections or compare selected upstream cases. |
-| `zetesis-validate` | Run the self-contained kr-domains regression collection against external clingo and zetesis. |
+| `zetesis-validate` | Run the self-contained correctness regression collection against external clingo and zetesis. |
 | `zetesis-perf` | Compare ordinary runs or measure a grounding/backend matrix. |
 
 The production solver neither invokes nor depends on this validation executable.
@@ -34,13 +34,13 @@ reference with `cargo doc --locked -p zetesis-validation --no-deps --open`.
 From the repository root:
 
 ```sh
-zetesis-corpus verify-examples examples/kr-domains
+zetesis-corpus verify-examples examples/correctness
 zetesis-corpus verify validation/upstream/clingo-5.8.2/curated
 zetesis-validate --repo . --report target/validation-report.json
 zetesis-validate --repo . --reference-only --report target/reference-report.json
 ```
 
-The default kr-domains collection is self-contained and excludes clingcon.
+The default correctness collection is self-contained and excludes clingcon.
 Its manifest records original/cleaned hashes, typed contracts and annotation
 removal provenance. Verification checks integrity; it does not execute a solver.
 The solver receives ordinary ASP and does not interpret elenctic annotations.
@@ -82,7 +82,7 @@ PATH anew for each invocation; the benchmark adapter resolves it once per run.
 
 ## Understand answer parity
 
-The kr-domains comparison checks complete displayed witness multisets, objective
+The correctness comparison checks complete displayed witness multisets, objective
 costs, optimum ties, reported model counts and typed corpus contracts. It retains
 duplicate symbols within a display and duplicate displays across distinct models.
 It cannot reconstruct hidden atoms suppressed by `#show`, so it does not
@@ -148,10 +148,10 @@ See [execution contracts](tests/support/execution_contracts.rs) and
 ## Measure ordinary solves and execution matrices
 
 ```sh
-zetesis-perf examples/kr-domains --zetesis /path/to/zetesis \
+zetesis-perf examples/correctness --zetesis /path/to/zetesis \
   --clingo /path/to/clingo --report target/cpu-comparison.json
 
-zetesis-perf examples/kr-domains --suite corpus \
+zetesis-perf examples/correctness --suite corpus \
   --profile cpu-eager --profile cpu-lazy \
   --profile metal-eager --profile metal-lazy \
   --zetesis /path/to/zetesis --clingo /path/to/clingo \
