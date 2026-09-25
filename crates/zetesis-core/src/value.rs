@@ -1,11 +1,11 @@
 //! Canonical values, predicate signatures, and arity-checked ground atoms.
 
-use std::fmt;
+use std::{cmp::Ordering, fmt};
 
 /// A closed value, with extrema surrounding numeric, string, then symbol
 /// storage order. Each finite class uses its ordinary numeric or UTF-8 lexical
 /// order; classes never coerce. ASP term order is [`Self::compare_terms`].
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Value {
     /// The ASP value `#inf`, strictly below every other term.
     Infimum,
@@ -21,6 +21,28 @@ pub enum Value {
     Supremum,
 }
 
+impl PartialOrd for Value {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for Value {
+    fn cmp(&self, other: &Self) -> Ordering {
+        crate::term_order::value_storage_rank(self)
+            .cmp(&crate::term_order::value_storage_rank(other))
+            .then_with(|| match (self, other) {
+                (Self::Structured(left), Self::Structured(right)) => left.cmp(right),
+                _ => crate::term_order::storage(self.root_view(), other.root_view()),
+            })
+    }
+}
+
+impl std::hash::Hash for Value {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        crate::term_hash::value(self, state);
+    }
+}
+
 impl Value {
     /// Compare closed terms in ASP order: extrema, numbers, signed constants,
     /// strings, then constructor sign, arity, name and ordered argument values.
@@ -31,29 +53,16 @@ impl Value {
     /// This borrows both terms and allocates nothing. Cost includes the visited
     /// node prefix and the compared text bytes; it is not constant in term size.
     #[must_use]
-    pub fn compare_terms(&self, other: &Self) -> std::cmp::Ordering {
-        use std::cmp::Ordering;
-
+    pub fn compare_terms(&self, other: &Self) -> Ordering {
         match (self, other) {
             (Self::Structured(a), Self::Structured(b)) => a
                 .nodes()
                 .iter()
                 .zip(b.nodes())
-                .map(|(a, b)| a.compare(b))
+                .map(|(a, b)| crate::term_order::asp(a.view(), b.view()))
                 .find(|order| !order.is_eq())
                 .unwrap_or_else(|| a.nodes().len().cmp(&b.nodes().len())),
-            (Self::Structured(a), b) => {
-                crate::structured::compare_scalar(b, &a.nodes()[0]).reverse()
-            }
-            (a, Self::Structured(b)) => crate::structured::compare_scalar(a, &b.nodes()[0]),
-            (Self::Infimum, Self::Infimum) | (Self::Supremum, Self::Supremum) => Ordering::Equal,
-            (Self::Infimum, _) | (_, Self::Supremum) => Ordering::Less,
-            (Self::Supremum, _) | (_, Self::Infimum) => Ordering::Greater,
-            (Self::Number(left), Self::Number(right)) => left.cmp(right),
-            (Self::Symbol(left), Self::Symbol(right))
-            | (Self::String(left), Self::String(right)) => left.cmp(right),
-            (Self::Number(_), _) | (Self::Symbol(_), Self::String(_)) => Ordering::Less,
-            (_, Self::Number(_)) | (Self::String(_), Self::Symbol(_)) => Ordering::Greater,
+            _ => crate::term_order::asp(self.root_view(), other.root_view()),
         }
     }
 }
@@ -235,15 +244,6 @@ impl Atom {
         })
     }
 
-    /// Refer to the program's shared name for this atom's predicate; `shared`
-    /// must be equal to the atom's predicate.
-    pub(crate) fn share_predicate(&mut self, shared: Predicate) {
-        debug_assert!(
-            self.predicate == shared,
-            "a shared name spells the same predicate"
-        );
-        self.predicate = shared;
-    }
     pub(crate) fn from_valid_parts(predicate: Predicate, values: Vec<Value>) -> Self {
         Self { predicate, values }
     }

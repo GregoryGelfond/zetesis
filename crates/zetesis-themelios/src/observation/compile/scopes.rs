@@ -7,7 +7,7 @@ use themelios_program::program::{
 use super::{
     Compiler, Condition, DefaultNegation, Error, Feature, Pattern, Relation, Resource, Template,
 };
-use crate::observation::{AggregateElement, AggregateQuery, Guard, Symbol};
+use crate::observation::{AggregateElement, AggregateKey, AggregateQuery, AtomKeyTemplate, Guard};
 
 impl Compiler<'_> {
     pub(super) fn guards(&mut self, aggregate: &Aggregate) -> Result<Vec<Guard>, Error> {
@@ -99,11 +99,6 @@ impl Compiler<'_> {
         condition: Option<&themelios_program::program::Condition>,
     ) -> Result<AggregateElement, Error> {
         self.local(|compiler| {
-            let tag = match negation {
-                DefaultNegation::None => 0,
-                DefaultNegation::Not => 1,
-                DefaultNegation::NotNot => 2,
-            };
             let mut positive = Vec::new();
             let mut conditions = Vec::new();
             if let Some(condition) = condition {
@@ -127,28 +122,32 @@ impl Compiler<'_> {
                 compiler.node(1)?;
                 compiler.text(atom.name.as_str())?;
                 compiler.arity(arguments.len())?;
-                let arguments = arguments
+                let arguments: Vec<_> = arguments
                     .iter()
                     .map(|term| compiler.anonymous_term(term, 1))
                     .collect::<Result<_, _>>()?;
-                let key = Template::Function(atom.sign, atom.name.clone(), arguments);
-                let slot = compiler.generate(key)?;
+                let key = AtomKeyTemplate {
+                    predicate: compiler.signature(
+                        atom.name.as_str(),
+                        arguments.len(),
+                        atom.sign,
+                    )?,
+                    arguments,
+                };
+                let slot = compiler.generate_key(key)?;
                 compiler.node(1)?;
                 conditions.push(Condition::AtomPatternValue(negation, slot));
                 slot
             };
             compiler.node(1)?;
-            let key = Template::Variable(slot);
             let query = compiler.finish(positive, conditions)?;
-            // The tag has both a template node and a ground-symbol node. The
-            // enclosing source set element was charged separately; each expanded
-            // alternative owns exactly one key tuple root, charged here.
+            // Preserve the old key-template/tag-symbol/enclosing-tuple charge
+            // positions; typed key topology retains no synthetic numeric term.
             compiler.node(1)?;
-            let tag = Template::Value(compiler.symbol(&Symbol::Number(tag), 1, false)?);
+            compiler.node(1)?;
             compiler.node(1)?;
             Ok(AggregateElement {
-                tuple: Template::Tuple(vec![tag, key]),
-                atom_pattern_key: negation != DefaultNegation::None,
+                key: AggregateKey::Atom { negation, slot },
                 query,
             })
         })
@@ -187,8 +186,10 @@ impl Compiler<'_> {
                         )?;
                         let query = compiler.finish(positive, conditions)?;
                         Ok(AggregateElement {
-                            tuple: Template::Tuple(tuple),
-                            atom_pattern_key: false,
+                            key: AggregateKey::Tuple(Template::Construct(
+                                compiler.shape(None, super::Sign::Positive, tuple.len())?,
+                                tuple,
+                            )),
                             query,
                         })
                     })?);

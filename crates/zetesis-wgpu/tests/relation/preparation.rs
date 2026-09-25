@@ -29,7 +29,7 @@ fn interrupted_copy(backend: GpuBackendPreference) {
         .map(|row| Atom::new(predicate.clone(), row.map(Value::Number).to_vec()).unwrap());
     let relation = Relation::from_atoms(&predicate, &atoms, Limits::default()).unwrap();
     let queries = [relation
-        .query(&[(0, &Value::Number(0))], Limits::default())
+        .query(&[(0, (&Value::Number(0)).into())], Limits::default())
         .unwrap()];
     let context = executor.context().clone();
     for stop in [Stop::Cancelled, Stop::Deadline] {

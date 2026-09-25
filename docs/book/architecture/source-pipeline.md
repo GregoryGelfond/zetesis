@@ -23,16 +23,17 @@ original source catalog
 
 The arrows describe dependencies, not independent copies of every intermediate
 object. Source identities and parsed origins remain available after preparation.
-The source-expansion budget continues across preparation and grounding. Formula
-work starts at materialization and remains cumulative across its grounding
-phases; preparation retains its configured ceiling.
+Both the source-expansion budget and accepted formula-work charges continue
+across preparation and grounding. Materialization resumes the retained accounting
+under its configured ceilings.
 An analysis projection records its own basis; its classifications do not prove
 properties of source constructs that the projection erased.
 
-Possible support owns one atom catalog. A completed snapshot lends immutable
-relations and column indexes to joins; it does not grant those atoms truth in an
-answer set. Final grounding owns a separate emitted-atom catalog because the
-theory's dense universe is a different object from the possible-support bound.
+Possible support uses one canonical source authority. A completed snapshot lends
+immutable relations and column indexes to joins; it does not grant those atoms
+truth in an answer set. Final grounding publishes a distinct dense occurrence map
+over the same canonical prefix. The theory's universe and possible-support bound
+remain different populations without separately interning their payload.
 Objective queries borrow completed support and own bounded transient formula
 scratch. Their atoms and roots cannot become program producers.
 Projection declarations also borrow that support. They retain a fixed subset of

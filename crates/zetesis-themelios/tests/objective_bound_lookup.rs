@@ -76,6 +76,7 @@ fn shuffled_atoms() -> Vec<Atom> {
 fn shuffled_catalog_bounds_match_independent_mask_costs() {
     let atoms = shuffled_atoms();
     let original = theory(atoms.len());
+    let catalog = zetesis_core::AtomCatalog::new(atoms.clone()).unwrap();
     let mut templates: Vec<_> = atoms
         .iter()
         .enumerate()
@@ -105,7 +106,7 @@ fn shuffled_catalog_bounds_match_independent_mask_costs() {
     let cancellation = Cancellation::default();
     let plan = ObjectivePlan::new(
         &original,
-        &atoms,
+        catalog.atoms(),
         &objectives,
         ObjectivePlanLimits::default(),
         &cancellation,
@@ -131,7 +132,8 @@ fn shuffled_catalog_bounds_match_independent_mask_costs() {
                 .enumerate()
                 .filter(|(index, _)| incumbent_mask & (1 << index) != 0)
                 .map(|(_, atom)| atom.clone()),
-        );
+        )
+        .unwrap();
         let incumbent = evaluate(
             &objectives,
             &incumbent_model,
@@ -177,12 +179,13 @@ fn prepared_work(noise: i32) -> (u64, u64) {
         .collect();
     atoms.push(query.clone());
     let original = theory(atoms.len());
+    let catalog = zetesis_core::AtomCatalog::new(atoms).unwrap();
     let empty = program(vec![]);
     let queries = program(vec![closed(query, 1)]);
     let work = |objectives: &ObjectiveProgram| {
         ObjectivePlan::new(
             &original,
-            &atoms,
+            catalog.atoms(),
             objectives,
             ObjectivePlanLimits::default(),
             &Cancellation::default(),
@@ -215,6 +218,7 @@ fn every_plan_work_cutoff_preserves_its_failure_prefix() {
         atom("q", Sign::Positive, vec![]),
     ];
     let original = theory(atoms.len());
+    let catalog = zetesis_core::AtomCatalog::new(atoms).unwrap();
     let objectives = program(vec![closed(
         atom(
             "p",
@@ -225,12 +229,18 @@ fn every_plan_work_cutoff_preserves_its_failure_prefix() {
     )]);
     let cancellation = Cancellation::default();
     let limits = ObjectivePlanLimits::default();
-    let complete =
-        ObjectivePlan::new(&original, &atoms, &objectives, limits, &cancellation).unwrap();
+    let complete = ObjectivePlan::new(
+        &original,
+        catalog.atoms(),
+        &objectives,
+        limits,
+        &cancellation,
+    )
+    .unwrap();
     for limit in 0..complete.statistics().work {
         let error = ObjectivePlan::new(
             &original,
-            &atoms,
+            catalog.atoms(),
             &objectives,
             ObjectivePlanLimits {
                 max_work: limit,
@@ -247,7 +257,7 @@ fn every_plan_work_cutoff_preserves_its_failure_prefix() {
     }
     let repeated = ObjectivePlan::new(
         &original,
-        &atoms,
+        catalog.atoms(),
         &objectives,
         ObjectivePlanLimits {
             max_work: complete.statistics().work,
@@ -262,10 +272,10 @@ fn every_plan_work_cutoff_preserves_its_failure_prefix() {
 #[test]
 fn duplicate_catalog_atoms_refuse_planning() {
     let atom = atom("p", Sign::Positive, vec![]);
-    let duplicate = [atom.clone(), atom];
+    let duplicate = zetesis_core::AtomCatalog::new(vec![atom.clone(), atom]).unwrap();
     let error = ObjectivePlan::new(
         &theory(2),
-        &duplicate,
+        duplicate.atoms(),
         &program(Vec::new()),
         ObjectivePlanLimits::default(),
         &Cancellation::default(),
@@ -355,10 +365,11 @@ fn joined_cost(mask: usize) -> i64 {
 fn joined_conditions_preserve_exact_bound_costs() {
     let (atoms, objectives) = joined_condition();
     let original = theory(atoms.len());
+    let catalog = zetesis_core::AtomCatalog::new(atoms.clone()).unwrap();
     let cancellation = Cancellation::default();
     let plan = ObjectivePlan::new(
         &original,
-        &atoms,
+        catalog.atoms(),
         &objectives,
         ObjectivePlanLimits::default(),
         &cancellation,
@@ -372,7 +383,8 @@ fn joined_conditions_preserve_exact_bound_costs() {
                     .enumerate()
                     .filter(|(position, _)| mask & (1 << position) != 0)
                     .map(|(_, atom)| atom.clone()),
-            );
+            )
+            .unwrap();
             let evaluated = evaluate(
                 &objectives,
                 &model,
@@ -421,10 +433,11 @@ fn joined_conditions_preserve_exact_bound_costs() {
 fn joined_planning_refuses_every_incomplete_work_prefix() {
     let (atoms, objectives) = joined_condition();
     let original = theory(atoms.len());
+    let catalog = zetesis_core::AtomCatalog::new(atoms).unwrap();
     let run = |max_work| {
         ObjectivePlan::new(
             &original,
-            &atoms,
+            catalog.atoms(),
             &objectives,
             ObjectivePlanLimits {
                 max_work,
@@ -456,10 +469,11 @@ fn joined_planning_refuses_every_incomplete_work_prefix() {
 #[test]
 fn incomplete_catalogs_cannot_supply_original_atom_ids() {
     let atoms = [atom("p", Sign::Positive, vec![])];
+    let catalog = zetesis_core::AtomCatalog::new(atoms.to_vec()).unwrap();
     for atom_count in [0, 2] {
         let error = ObjectivePlan::new(
             &theory(atom_count),
-            &atoms,
+            catalog.atoms(),
             &program(vec![]),
             ObjectivePlanLimits::default(),
             &Cancellation::default(),

@@ -1,7 +1,8 @@
 //! Prepared relation queries retain exact occurrence identities across refusals.
 
+use zetesis_core::catalog::TermRef;
 use zetesis_core::relation::{Failure, Limits, Relation, Resource};
-use zetesis_core::{Atom, Predicate, Value};
+use zetesis_core::{Atom, Predicate, Value, ValueNodeRef};
 
 fn refusal<T>(result: Result<T, Failure>) -> Failure {
     let Err(error) = result else {
@@ -14,7 +15,7 @@ fn assert_occurrences(
     relation: &Relation<'_>,
     source: &[Atom],
     indices: &[usize],
-    before: &[[&Value; 2]],
+    before: &[[TermRef<'_>; 2]],
 ) {
     for (position, &source_index) in indices.iter().enumerate() {
         let row = relation.row(position).unwrap();
@@ -22,16 +23,26 @@ fn assert_occurrences(
         assert_eq!(row.source_index(), source_index);
         for (column, value) in source[source_index].values().iter().enumerate() {
             let representative = row.value(column).unwrap();
-            assert_eq!(representative, value);
-            assert!(std::ptr::eq(representative, before[position][column]));
-            // Equal cells may share a canonical source representative. The
-            // original occurrence identity is retained separately above.
-            assert!(
-                source
-                    .iter()
-                    .flat_map(Atom::values)
-                    .any(|original| std::ptr::eq(representative, original))
-            );
+            assert_eq!(representative, TermRef::from(value));
+            assert_eq!(representative, before[position][column]);
+            // Borrowed text must still reference original source payload;
+            // scalar descriptor views carry the typed value by copy.
+            if let ValueNodeRef::String(text) | ValueNodeRef::Symbol(text) =
+                representative.descriptor()
+            {
+                assert!(source.iter().flat_map(Atom::values).any(|original| {
+                    match original {
+                        Value::String(original) | Value::Symbol(original) => {
+                            std::ptr::eq(text, original.as_str())
+                        }
+                        _ => false,
+                    }
+                }));
+                let previous = before[position][column].descriptor();
+                assert!(
+                    matches!(previous, ValueNodeRef::String(original) | ValueNodeRef::Symbol(original) if std::ptr::eq(text, original))
+                );
+            }
         }
     }
 }
@@ -50,12 +61,14 @@ fn tighter_query_limits_preserve_prepared_occurrences() {
     let indices = [2, 0, 2];
     let relation =
         Relation::from_catalog(&predicate, &source, &indices, Limits::default()).unwrap();
-    let before: [[&Value; 2]; 3] = std::array::from_fn(|position| {
+    let before: [[TermRef<'_>; 2]; 3] = std::array::from_fn(|position| {
         std::array::from_fn(|column| relation.row(position).unwrap().value(column).unwrap())
     });
     let symbol = Value::Symbol("1".into());
     let string = Value::String("1".into());
-    let query = relation.query(&[(1, &symbol)], Limits::default()).unwrap();
+    let query = relation
+        .query(&[(1, TermRef::from(&symbol))], Limits::default())
+        .unwrap();
     let input = relation.all(Limits::default()).unwrap();
     // There are three occurrences, two columns, and exactly three typed values:
     // Number(1), String("1"), Symbol("1"). The unselected source row contributes
@@ -100,7 +113,10 @@ fn tighter_query_limits_preserve_prepared_occurrences() {
             observed,
             limit,
         };
-        assert_eq!(refusal(relation.query(&[(1, &symbol)], limits)), expected);
+        assert_eq!(
+            refusal(relation.query(&[(1, TermRef::from(&symbol))], limits)),
+            expected
+        );
         assert_eq!(refusal(relation.select(&query, &input, limits)), expected);
         assert_eq!(
             refusal(relation.select_mask(&query, &input, limits)),
@@ -114,7 +130,9 @@ fn tighter_query_limits_preserve_prepared_occurrences() {
         assert_eq!(input.positions(), &[0, 1, 2]);
         assert_occurrences(&relation, &source, &indices, &before);
 
-        let resumed = relation.query(&[(1, &symbol)], exact).unwrap();
+        let resumed = relation
+            .query(&[(1, TermRef::from(&symbol))], exact)
+            .unwrap();
         assert!(relation.same_owner(resumed.relation()));
         let selected = relation.select(&resumed, &input, exact).unwrap();
         assert!(relation.same_owner(selected.relation()));
@@ -129,7 +147,9 @@ fn tighter_query_limits_preserve_prepared_occurrences() {
             &[0b101]
         );
 
-        let other = relation.query(&[(1, &string)], exact).unwrap();
+        let other = relation
+            .query(&[(1, TermRef::from(&string))], exact)
+            .unwrap();
         let selected = relation.select(&other, &input, exact).unwrap();
         assert_eq!(selected.positions(), &[1]);
         assert_eq!(selected.row(0).unwrap().source_index(), 0);

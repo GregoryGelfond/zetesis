@@ -1,13 +1,11 @@
-//! Named closure capacity and fallible pending tuple copies.
+//! Named canonical authority and relation-metadata capacity admission.
 //!
-//! A moved tuple's nested payload is charged once, first as pending storage and
-//! then as catalog storage. Shared structural buffers are charged per occurrence.
-//! Tree nodes, allocator metadata, Arc counters and unrelated frames are outside
-//! this named allowance; no inaccessible container node size is guessed.
+//! Payload belongs to the one canonical authority. Relation, pending and dense
+//! metadata are counted separately; no owned tuple copies are made here.
 
 use std::mem::size_of;
 
-use zetesis_core::{Atom, AtomKey, Predicate, Value};
+use zetesis_core::atom_interner::{Failure, Limits};
 
 use super::super::Work;
 use crate::Stop;
@@ -20,8 +18,7 @@ pub(in crate::oracle) fn admit(work: &mut Work<'_>, bytes: u128) -> Result<(), S
     Ok(())
 }
 
-/// Record capacity already admitted or acquired, including allocator slack on a
-/// failed operation. This does not turn a refusal into successful admission.
+/// Record admitted or acquired capacity, including allocator slack on refusal.
 pub(in crate::oracle) fn record(work: &mut Work<'_>, bytes: u128) -> Result<(), Stop> {
     let bytes = usize::try_from(bytes).map_err(|_| Stop::StorageLimit)?;
     work.statistics.peak_closure_bytes = work.statistics.peak_closure_bytes.max(bytes);
@@ -37,114 +34,66 @@ pub(in crate::oracle) fn after_reservation(work: &mut Work<'_>, bytes: u128) -> 
     }
 }
 
-pub(in crate::oracle) fn atom_bytes(atom: &Atom, work: &mut Work<'_>) -> Result<u128, Stop> {
-    for value in atom.values() {
-        inspect(value, work)?;
-    }
-    (size_of::<Atom>() as u128)
-        .checked_add(
-            atom.checked_payload_capacity_bytes()
-                .ok_or(Stop::StorageLimit)?,
-        )
-        .ok_or(Stop::StorageLimit)
-}
-
-fn inspect(value: &Value, work: &mut Work<'_>) -> Result<(), Stop> {
-    work.tick()?;
-    if let Value::Structured(value) = value {
-        work.charge(value.nodes().len())?;
-    }
-    Ok(())
-}
-
-pub(super) fn predicate(
-    predicate: &Predicate,
-    base: u128,
+/// Grow one metadata buffer, admitting old/replacement overlap before reserve.
+/// `live` includes its old capacity; the return value replaces that charge with
+/// actual new capacity. Existing contents remain whole after every refusal.
+pub(super) fn reserve<T>(
+    values: &mut Vec<T>,
+    additional: usize,
+    live: u128,
     work: &mut Work<'_>,
-) -> Result<Predicate, Stop> {
-    let name = text(predicate.name(), base, work)?;
-    Predicate::with_sign(name, predicate.arity(), predicate.sign())
-        .map_err(|_| Stop::InvalidProgram)
-}
-
-fn text(value: &str, base: u128, work: &mut Work<'_>) -> Result<String, Stop> {
-    admit(
-        work,
-        base.checked_add(value.len() as u128)
-            .ok_or(Stop::StorageLimit)?,
-    )?;
-    work.charge(value.len())?;
-    let mut text = String::new();
-    text.try_reserve_exact(value.len())
-        .map_err(|_| Stop::Allocation)?;
-    after_reservation(
-        work,
-        base.checked_add(text.capacity() as u128)
-            .ok_or(Stop::StorageLimit)?,
-    )?;
-    text.push_str(value);
-    Ok(text)
-}
-
-pub(super) fn pending(
-    key: AtomKey<'_>,
-    base: u128,
-    work: &mut Work<'_>,
-) -> Result<(Atom, u128), Stop> {
-    let width = key.predicate().arity();
-    let mut required = size_of::<Atom>() as u128
-        + key.predicate().name().len() as u128
-        + width as u128 * size_of::<Value>() as u128;
-    for column in 0..width {
-        let value = key.value(column).ok_or(Stop::InvalidProgram)?;
-        inspect(value, work)?;
-        let bytes = match value {
-            Value::String(text) | Value::Symbol(text) => text.len() as u128,
-            _ => value
-                .checked_payload_capacity_bytes()
-                .ok_or(Stop::StorageLimit)?,
-        };
-        required = required.checked_add(bytes).ok_or(Stop::StorageLimit)?;
+) -> Result<u128, Stop> {
+    let required = values
+        .len()
+        .checked_add(additional)
+        .ok_or(Stop::StorageLimit)?;
+    if required <= values.capacity() {
+        return Ok(live);
     }
-    admit(work, base.checked_add(required).ok_or(Stop::StorageLimit)?)?;
-    let mut live = base
-        .checked_add(size_of::<Atom>() as u128)
+    let target = required.max(values.capacity().saturating_mul(2));
+    let replacement = (target as u128)
+        .checked_mul(size_of::<T>() as u128)
         .ok_or(Stop::StorageLimit)?;
-    let predicate = predicate(key.predicate(), live, work)?;
-    live = live
-        .checked_add(predicate.name_bytes() as u128)
-        .ok_or(Stop::StorageLimit)?;
-    admit(
-        work,
-        live.checked_add(width as u128 * size_of::<Value>() as u128)
-            .ok_or(Stop::StorageLimit)?,
-    )?;
-    let mut values = Vec::new();
+    let overlap = live.checked_add(replacement).ok_or(Stop::StorageLimit)?;
+    admit(work, overlap)?;
+    super::charge(work, values.len())?;
+    let old = values.capacity() as u128 * size_of::<T>() as u128;
     values
-        .try_reserve_exact(width)
+        .try_reserve_exact(target - values.len())
         .map_err(|_| Stop::Allocation)?;
-    live = live
-        .checked_add(values.capacity() as u128 * size_of::<Value>() as u128)
+    let allocated = values.capacity() as u128 * size_of::<T>() as u128;
+    record(work, live.checked_add(allocated).ok_or(Stop::StorageLimit)?)?;
+    let current = live
+        .checked_sub(old)
+        .and_then(|bytes| bytes.checked_add(allocated))
         .ok_or(Stop::StorageLimit)?;
-    after_reservation(work, live)?;
-    for column in 0..width {
-        work.tick()?;
-        let value = match key.value(column).ok_or(Stop::InvalidProgram)? {
-            Value::String(value) => Value::String(text(value, live, work)?),
-            Value::Symbol(value) => Value::Symbol(text(value, live, work)?),
-            value => value.clone(),
-        };
-        inspect(&value, work)?;
-        live = live
-            .checked_add(
-                value
-                    .checked_payload_capacity_bytes()
-                    .ok_or(Stop::StorageLimit)?,
-            )
-            .ok_or(Stop::StorageLimit)?;
-        after_reservation(work, live)?;
-        values.push(value);
+    after_reservation(work, current)?;
+    Ok(current)
+}
+
+pub(in crate::oracle) fn atom_limits(work: &Work<'_>, other: u128) -> Result<Limits, Stop> {
+    Ok(Limits {
+        // Identity survives truth reset. Its cumulative population is bounded
+        // by named storage; max_derived_atoms bounds current truth separately.
+        max_atoms: usize::MAX,
+        max_bytes: (work.limits.max_closure_bytes as u128)
+            .checked_sub(other)
+            .ok_or(Stop::StorageLimit)?,
+    })
+}
+
+pub(in crate::oracle) fn atom_failure(failure: Failure<Stop>) -> Stop {
+    match failure {
+        Failure::Stopped(stop) => stop,
+        Failure::Bytes { .. } | Failure::Overflow => Stop::StorageLimit,
+        Failure::Atoms { .. } => Stop::DerivedAtomLimit,
+        Failure::Allocation(_) => Stop::Allocation,
+        Failure::Catalog(error) => match error {
+            zetesis_core::catalog::Error::Allocation => Stop::Allocation,
+            zetesis_core::catalog::Error::Storage { .. }
+            | zetesis_core::catalog::Error::Overflow
+            | zetesis_core::catalog::Error::IdExhausted => Stop::StorageLimit,
+            _ => Stop::InvalidProgram,
+        },
     }
-    let atom = Atom::new(predicate, values).map_err(|_| Stop::InvalidProgram)?;
-    Ok((atom, live.checked_sub(base).ok_or(Stop::InvalidProgram)?))
 }

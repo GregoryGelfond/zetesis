@@ -67,6 +67,30 @@ fn constructor_child_order_changes_the_fingerprint() {
 }
 
 #[test]
+fn canonical_values_preserve_the_framed_fingerprint() {
+    let values = [
+        Value::Infimum,
+        Value::Supremum,
+        Value::Number(-9),
+        Value::Symbol("a".into()),
+        Value::String("a\n\t\"\\".into()),
+        structure(vec![
+            ValueNode::Tuple { arity: 2 },
+            ValueNode::Number(2),
+            ValueNode::Number(2),
+        ]),
+        function(Sign::Negative, "f", vec![ValueNode::Symbol("a".into())]),
+    ];
+    for value in values {
+        let expected = digest(|encoding| encoding.value(&value));
+        let atom = Atom::new(Predicate::new("p", 1).unwrap(), vec![value]).unwrap();
+        let catalog = zetesis_core::AtomCatalog::new(vec![atom]).unwrap();
+        let canonical = catalog.atoms().at(0).unwrap().values().get(0).unwrap();
+        assert_eq!(digest(|encoding| encoding.value(canonical)), expected);
+    }
+}
+
+#[test]
 fn text_frames_prevent_adjacent_name_aliases() {
     let left = function(Sign::Positive, "ab", vec![ValueNode::Symbol("c".into())]);
     let right = function(Sign::Positive, "a", vec![ValueNode::Symbol("bc".into())]);

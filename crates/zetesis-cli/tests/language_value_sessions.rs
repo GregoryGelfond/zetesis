@@ -17,7 +17,7 @@ use zetesis_cli::{
     Backend, Completion, Interruption, Options, Oracle, PreparedInput, SearchMethod, Session,
     SolveConfig, run_with_diagnostics,
 };
-use zetesis_core::{Atom, Predicate, Value};
+use zetesis_core::{Atom, Predicate, Value, ValueLimits};
 use zetesis_cpu::Cancellation;
 use zetesis_sat::Incomplete;
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
@@ -207,10 +207,17 @@ fn source_extensions_preserve_complete_session_records() {
                     let mut actual = BTreeSet::new();
                     for result in session.by_ref() {
                         let model = result.unwrap();
-                        assert!(actual.insert((
-                            model.interpretation().atoms().iter().cloned().collect(),
-                            model.score().map(|score| score.costs().to_vec()),
-                        )));
+                        assert!(
+                            actual.insert((
+                                model
+                                    .interpretation()
+                                    .atoms()
+                                    .iter()
+                                    .map(|atom| atom.to_atom(ValueLimits::default()).unwrap())
+                                    .collect(),
+                                model.score().map(|score| score.costs().to_vec()),
+                            ))
+                        );
                     }
                     let outcome = session.outcome().unwrap();
                     assert_eq!(actual, records(expected), "{source}");
@@ -327,10 +334,17 @@ fn stopped_composition_preserves_objective_presence() {
                 let mut actual = BTreeSet::new();
                 for result in session.by_ref() {
                     let model = result.unwrap();
-                    assert!(actual.insert((
-                        model.interpretation().atoms().iter().cloned().collect(),
-                        model.score().map(|score| score.costs().to_vec()),
-                    )));
+                    assert!(
+                        actual.insert((
+                            model
+                                .interpretation()
+                                .atoms()
+                                .iter()
+                                .map(|atom| atom.to_atom(ValueLimits::default()).unwrap())
+                                .collect(),
+                            model.score().map(|score| score.costs().to_vec()),
+                        ))
+                    );
                 }
                 assert_eq!(actual.len(), 1);
                 assert!(actual.is_subset(&expected));

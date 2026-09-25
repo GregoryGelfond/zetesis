@@ -5,7 +5,11 @@ use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::hash::{Hash, Hasher};
 
-use crate::{Atom, AtomPattern, InstantiationError, Predicate, Term, Value};
+use crate::catalog::{AtomRef, Error, PredicateRef, TermRef};
+use crate::{
+    Atom, AtomPattern, InstantiationError, PatternRef, Predicate, TemplateTerm, Value, ValueError,
+    ValueLimits, ValueResource,
+};
 
 /// A complete atom identity borrowed from a pattern and immutable assignment.
 ///
@@ -17,7 +21,7 @@ use crate::{Atom, AtomPattern, InstantiationError, Predicate, Term, Value};
 /// canonical storage order, not ASP term order.
 #[derive(Clone, Copy, Debug)]
 pub struct AtomKey<'a> {
-    pattern: &'a AtomPattern,
+    pattern: PatternRef<'a>,
     values: BindingView<'a>,
 }
 
@@ -33,16 +37,64 @@ enum Values<'a> {
     Complete(&'a [Value]),
     Partial(&'a [Option<Value>]),
     References(&'a [Option<&'a Value>]),
+    Terms(&'a [TermRef<'a>]),
+    PartialTerms(&'a [Option<TermRef<'a>>]),
+    Canonical {
+        read: crate::catalog::TermRead<'a>,
+        values: &'a [Option<crate::catalog::storage::TermId>],
+    },
 }
 
 impl<'a> BindingView<'a> {
-    /// Borrow a present variable value without allocation or substitution.
+    /// Number of source variable slots, including absent slots.
     #[must_use]
-    pub fn get(self, index: usize) -> Option<&'a Value> {
+    pub fn len(self) -> usize {
         match self.0 {
-            Values::Complete(values) => values.get(index),
-            Values::Partial(values) => values.get(index).and_then(Option::as_ref),
-            Values::References(values) => values.get(index).copied().flatten(),
+            Values::Complete(values) => values.len(),
+            Values::Partial(values) => values.len(),
+            Values::References(values) => values.len(),
+            Values::Terms(values) => values.len(),
+            Values::PartialTerms(values) => values.len(),
+            Values::Canonical { values, .. } => values.len(),
+        }
+    }
+    /// Whether this binding view has no source variable slots.
+    #[must_use]
+    pub fn is_empty(self) -> bool {
+        self.len() == 0
+    }
+
+    pub(crate) fn canonical(
+        read: crate::catalog::TermRead<'a>,
+        values: &'a [Option<crate::catalog::storage::TermId>],
+    ) -> Self {
+        Self(Values::Canonical { read, values })
+    }
+    fn is_canonical(self) -> bool {
+        matches!(self.0, Values::Canonical { .. })
+    }
+
+    /// Borrow a present variable value without allocation or substitution.
+    ///
+    /// # Panics
+    /// Panics if a canonical assignment refers outside its checked read prefix.
+    /// Assignment binding validates that prefix before exposing this view.
+    #[must_use]
+    pub fn get(self, index: usize) -> Option<TermRef<'a>> {
+        match self.0 {
+            Values::Complete(values) => values.get(index).map(TermRef::from),
+            Values::Partial(values) => values
+                .get(index)
+                .and_then(Option::as_ref)
+                .map(TermRef::from),
+            Values::References(values) => values.get(index).copied().flatten().map(TermRef::from),
+            Values::Terms(values) => values.get(index).copied(),
+            Values::PartialTerms(values) => values.get(index).copied().flatten(),
+            Values::Canonical { read, values } => values
+                .get(index)
+                .copied()
+                .flatten()
+                .map(|id| read.resolve(id).expect("checked assignment prefix")),
         }
     }
 }
@@ -59,6 +111,17 @@ impl<'a> From<&'a [Option<Value>]> for BindingView<'a> {
 impl<'a> From<&'a [Option<&'a Value>]> for BindingView<'a> {
     fn from(values: &'a [Option<&'a Value>]) -> Self {
         Self(Values::References(values))
+    }
+}
+
+impl<'a> From<&'a [TermRef<'a>]> for BindingView<'a> {
+    fn from(values: &'a [TermRef<'a>]) -> Self {
+        Self(Values::Terms(values))
+    }
+}
+impl<'a> From<&'a [Option<TermRef<'a>>]> for BindingView<'a> {
+    fn from(values: &'a [Option<TermRef<'a>>]) -> Self {
+        Self(Values::PartialTerms(values))
     }
 }
 
@@ -82,22 +145,32 @@ impl AtomPattern {
         &'a self,
         assignment: impl Into<BindingView<'a>>,
     ) -> Result<AtomKey<'a>, InstantiationError> {
+        PatternRef::from(self).key(assignment)
+    }
+}
+
+impl<'a> PatternRef<'a> {
+    /// Borrow a complete substitution over admitted or construction patterns.
+    /// The key retains both borrows and copies no value or argument vector.
+    ///
+    /// # Errors
+    /// Returns the first absent or out-of-range referenced variable.
+    pub fn key(
+        self,
+        assignment: impl Into<BindingView<'a>>,
+    ) -> Result<AtomKey<'a>, InstantiationError> {
         AtomKey::checked(self, assignment.into())
     }
 }
 
 impl<'a> AtomKey<'a> {
     fn checked(
-        pattern: &'a AtomPattern,
+        pattern: PatternRef<'a>,
         values: BindingView<'a>,
     ) -> Result<Self, InstantiationError> {
-        for term in pattern.terms() {
-            if let Term::Variable(variable) = term
-                && values.get(*variable).is_none()
-            {
-                return Err(InstantiationError {
-                    variable: *variable,
-                });
+        for variable in pattern.terms().variables() {
+            if values.get(variable).is_none() {
+                return Err(InstantiationError { variable });
             }
         }
         Ok(Self { pattern, values })
@@ -105,22 +178,43 @@ impl<'a> AtomKey<'a> {
 
     /// Full signed predicate identity.
     #[must_use]
-    pub fn predicate(&self) -> &'a Predicate {
+    pub fn predicate(&self) -> PredicateRef<'a> {
         self.pattern.predicate()
+    }
+
+    pub(crate) fn predicate_with<E>(
+        &self,
+        before: &mut impl FnMut() -> Result<(), E>,
+    ) -> Result<PredicateRef<'a>, E> {
+        if !self.pattern.is_ingress() {
+            before()?;
+        }
+        Ok(self.predicate())
     }
 
     /// Borrow one resolved argument; only an out-of-arity column is absent.
     #[must_use]
-    pub fn value(&self, column: usize) -> Option<&'a Value> {
+    pub fn value(&self, column: usize) -> Option<TermRef<'a>> {
         match self.pattern.terms().get(column)? {
-            Term::Constant(value) => Some(value),
-            Term::Variable(variable) => self.values.get(*variable),
+            TemplateTerm::Constant(value) => Some(value),
+            TemplateTerm::Variable(variable) => self.values.get(variable),
         }
     }
 
     // Internal consumers pass only columns bounded by the checked predicate.
-    pub(crate) fn argument(&self, column: usize) -> &'a Value {
+    pub(crate) fn argument(&self, column: usize) -> TermRef<'a> {
         self.value(column).expect("checked key arity")
+    }
+
+    pub(crate) fn argument_with<E>(
+        &self,
+        column: usize,
+        before: &mut impl FnMut() -> Result<(), E>,
+    ) -> Result<TermRef<'a>, E> {
+        if !self.pattern.is_ingress() || self.values.is_canonical() {
+            before()?;
+        }
+        Ok(self.argument(column))
     }
 
     /// Exact typed comparison with an owned atom, without materialization.
@@ -131,8 +225,9 @@ impl<'a> AtomKey<'a> {
     }
 
     /// Compare complete typed identity without materializing a substitution.
-    /// Charges the same visited descriptors and text prefixes as
-    /// [`Value::compare_identity_with`], including the signed predicate.
+    /// Ingress assignments preserve [`Value::compare_identity_with`]'s visited
+    /// descriptor/text trace, including the signed predicate. Canonical terms
+    /// additionally charge their storage/navigation probes before work.
     ///
     /// # Errors
     /// Returns the first caller refusal before that comparison; no ordering or
@@ -142,7 +237,9 @@ impl<'a> AtomKey<'a> {
         atom: &Atom,
         mut before: impl FnMut() -> Result<(), E>,
     ) -> Result<Ordering, E> {
-        let order = crate::identity::predicate(self.predicate(), atom.predicate(), &mut before)?;
+        let order = self
+            .predicate_with(&mut before)?
+            .compare_identity_with(atom.predicate(), &mut before)?;
         if !order.is_eq() {
             return Ok(order);
         }
@@ -162,13 +259,33 @@ impl<'a> AtomKey<'a> {
     ) -> Result<Ordering, E> {
         for (column, value) in atom.values().iter().enumerate() {
             let order = self
-                .argument(column)
+                .argument_with(column, &mut before)?
                 .compare_identity_with(value, &mut before)?;
             if !order.is_eq() {
                 return Ok(order);
             }
         }
         Ok(Ordering::Equal)
+    }
+
+    /// Compare with a canonical or ingress atom view without materialization.
+    /// Predicate and argument contents determine order across independent stores.
+    #[must_use]
+    pub fn compare_ref(&self, atom: AtomRef<'_>) -> Ordering {
+        compare(self, &atom)
+    }
+
+    /// Checked comparison with a borrowed atom view, in key-versus-atom order.
+    /// Canonical storage/navigation work is charged before each operation.
+    ///
+    /// # Errors
+    /// Returns the first callback refusal without producing an ordering.
+    pub fn compare_ref_with<E>(
+        &self,
+        atom: AtomRef<'_>,
+        before: impl FnMut() -> Result<(), E>,
+    ) -> Result<Ordering, E> {
+        atom.compare_key_with(self, before).map(Ordering::reverse)
     }
 
     /// Find this complete identity in a canonically ordered atom set.
@@ -179,15 +296,49 @@ impl<'a> AtomKey<'a> {
         atoms.get::<dyn View + '_>(self)
     }
 
-    /// Copy the predicate and resolved argument values into one owned atom.
-    /// Unlike borrowing or membership lookup, this allocates the value vector
-    /// and clones value payloads according to [`Value`]'s ownership contract.
-    #[must_use]
-    pub fn to_atom(self) -> Atom {
-        let values = (0..self.predicate().arity())
-            .map(|column| self.argument(column).clone())
-            .collect();
-        Atom::from_valid_parts(self.predicate().clone(), values)
+    /// Explicitly materialize an owned ingress atom for an external boundary.
+    /// This allocates the argument vector and expands each referenced value;
+    /// it is not an execution lookup, interning adapter or implicit clone.
+    /// Node/depth ceilings apply per value; bytes bound the named output and
+    /// temporary value construction after reserving the argument vector.
+    ///
+    /// # Errors
+    /// Refuses construction limits, size overflow or failed buffer reservations.
+    /// No partial atom is returned. Owned constructors retain their existing
+    /// infallible Arc-envelope behavior; universal allocation recovery is not
+    /// promised.
+    pub fn to_atom(self, limits: ValueLimits) -> Result<Atom, Error> {
+        let arity = self.predicate().arity();
+        let requested = arity as u128 * std::mem::size_of::<Value>() as u128
+            + self.predicate().name().len() as u128;
+        materialization_ceiling(requested, limits.max_bytes)?;
+        let mut values = Vec::new();
+        values
+            .try_reserve_exact(arity)
+            .map_err(|_| Error::Allocation)?;
+        let mut name = String::new();
+        name.try_reserve_exact(self.predicate().name().len())
+            .map_err(|_| Error::Allocation)?;
+        let mut bytes = values.capacity() as u128 * std::mem::size_of::<Value>() as u128
+            + name.capacity() as u128;
+        materialization_ceiling(bytes, limits.max_bytes)?;
+        name.push_str(self.predicate().name());
+        for column in 0..arity {
+            let remaining =
+                limits.max_bytes - usize::try_from(bytes).map_err(|_| Error::Overflow)?;
+            let value = self.argument(column).to_value(ValueLimits {
+                max_bytes: remaining,
+                ..limits
+            })?;
+            bytes += value
+                .checked_payload_capacity_bytes()
+                .ok_or(Error::Overflow)?;
+            materialization_ceiling(bytes, limits.max_bytes)?;
+            values.push(value);
+        }
+        let predicate =
+            Predicate::with_sign(name, arity, self.predicate().sign()).map_err(|_| Error::Shape)?;
+        Ok(Atom::from_valid_parts(predicate, values))
     }
 }
 
@@ -231,25 +382,34 @@ impl Ord for AtomKey<'_> {
 // The heterogeneous BTree borrow bridge is private. Only checked core owners
 // implement it, so no caller-supplied comparison can contradict Atom::Ord.
 trait View {
-    fn predicate(&self) -> &Predicate;
-    fn argument(&self, column: usize) -> &Value;
+    fn predicate(&self) -> PredicateRef<'_>;
+    fn argument(&self, column: usize) -> TermRef<'_>;
 }
 impl View for Atom {
-    fn predicate(&self) -> &Predicate {
-        self.predicate()
+    fn predicate(&self) -> PredicateRef<'_> {
+        PredicateRef::from(self.predicate())
     }
-    fn argument(&self, column: usize) -> &Value {
-        &self.values()[column]
+    fn argument(&self, column: usize) -> TermRef<'_> {
+        TermRef::from(&self.values()[column])
     }
 }
 impl View for AtomKey<'_> {
-    fn predicate(&self) -> &Predicate {
+    fn predicate(&self) -> PredicateRef<'_> {
         self.predicate()
     }
-    fn argument(&self, column: usize) -> &Value {
+    fn argument(&self, column: usize) -> TermRef<'_> {
         self.argument(column)
     }
 }
+impl View for AtomRef<'_> {
+    fn predicate(&self) -> PredicateRef<'_> {
+        AtomRef::predicate(*self)
+    }
+    fn argument(&self, column: usize) -> TermRef<'_> {
+        self.values().at(column).expect("admitted atom arity")
+    }
+}
+
 impl<'a> Borrow<dyn View + 'a> for Atom {
     fn borrow(&self) -> &(dyn View + 'a) {
         self
@@ -272,15 +432,28 @@ impl Ord for dyn View + '_ {
     }
 }
 fn compare<L: View + ?Sized, R: View + ?Sized>(left: &L, right: &R) -> Ordering {
-    let predicate = left.predicate().cmp(right.predicate());
+    let predicate = left.predicate().cmp(&right.predicate());
     if !predicate.is_eq() {
         return predicate;
     }
     for column in 0..left.predicate().arity() {
-        let order = left.argument(column).cmp(right.argument(column));
+        let order = left.argument(column).cmp(&right.argument(column));
         if !order.is_eq() {
             return order;
         }
     }
     Ordering::Equal
+}
+
+fn materialization_ceiling(observed: u128, limit: usize) -> Result<(), Error> {
+    if observed > limit as u128 {
+        Err(ValueError::Limit {
+            resource: ValueResource::Bytes,
+            observed,
+            limit,
+        }
+        .into())
+    } else {
+        Ok(())
+    }
 }

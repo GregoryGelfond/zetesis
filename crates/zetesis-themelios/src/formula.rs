@@ -7,7 +7,8 @@ use themelios_base::diagnostic::Diagnostic;
 use themelios_base::source::Source;
 use themelios_base::span::Location;
 use themelios_program::program::{Program as SourceProgram, Statement};
-use zetesis_core::{Atom, AtomCatalog};
+use zetesis_core::AtomCatalog;
+use zetesis_core::catalog::Atoms;
 use zetesis_ferraris::Theory;
 
 use crate::{
@@ -17,7 +18,7 @@ use crate::{
 };
 
 mod preparation;
-use preparation::Preparation;
+pub(crate) use preparation::Preparation;
 pub use preparation::{PreparedFormula, PreparedFormulaBundle};
 
 const DEFAULT_OBJECTIVE_PRESENCE_ENTRIES: usize = 16_384;
@@ -26,12 +27,25 @@ const DEFAULT_OBJECTIVE_PRESENCE_ENTRIES: usize = 16_384;
 /// means unlimited. Source parsing and scalar expansion retain their own limits.
 #[derive(Clone, Copy, Debug)]
 pub struct FormulaLimits {
+    /// Inclusive named storage when publishing a formula atom catalog:
+    /// the shared source authority's canonical text/terms/rows, discovery and
+    /// lookup metadata, current prefix directories and allocation overlap.
+    /// Includes identities outside the published occurrence map; shared payload
+    /// is counted once within the authority. This independent 128 MiB default
+    /// is not cumulative expansion `ScalarBytes`; zero is a real ceiling.
+    /// Excludes unrelated support indexes/query buffers, other formula state,
+    /// allocator bookkeeping and Arc counters. Projection additionally applies
+    /// its retained `max_project_bytes` ceiling.
+    pub max_atom_storage_bytes: usize,
     /// Distinct typed atoms in the completed source projection domain.
     pub max_project_atoms: usize,
-    /// Final retained projection vector capacity and logical atom payload.
-    /// The temporary interner/order envelope is independently derived from
-    /// `max_project_atoms`; new payload copies also consume `ScalarBytes`.
-    /// Excludes source support and allocator metadata; this is not process RSS.
+    /// Complete retained canonical prefix and ordered projection ID-map capacity,
+    /// including prefix identities outside that map.
+    /// Construction indexes, directories and scratch use `max_atom_storage_bytes`
+    /// independently. Fixed empty catalog envelopes are excluded so an empty
+    /// explicit domain remains admissible with zero atoms and bytes.
+    /// Excludes unrelated support indexes/query buffers and allocator metadata;
+    /// this is not process RSS.
     pub max_project_bytes: usize,
     /// Conservative slots for objective-presence plans and shared source
     /// activity used by objectives and projection declarations. Includes
@@ -68,15 +82,20 @@ pub struct FormulaLimits {
     /// Retained row identifiers across bound-column support indexes, plus
     /// distinct variable/value entries in optional prepared finite-table indices.
     pub max_support_index_entries: usize,
-    /// Live support atom-vector cells, equality layout, postings, snapshot
-    /// objects, reusable query-workspace/index capacity and simultaneous row
-    /// masks, including named query frames and operation scratch. Nested atom
-    /// payloads, allocator/tree/control-runtime overhead and other grounding state retain
-    /// separate bounds. This is not a total grounder-memory ceiling.
+    /// Live support canonical payload and identity indexes, current prefix,
+    /// relation/equality metadata, postings, borrowed snapshot objects, reusable
+    /// query-workspace/index capacity and simultaneous row masks, including
+    /// named query frames, aggregate coordinate/cache buffers, contribution
+    /// buffers, operation scratch and growth overlap. The authority
+    /// counts canonical payload once. Allocator/tree/control-runtime overhead
+    /// and other grounding state remain separate; this is not a total-memory
+    /// or process RSS ceiling.
     pub max_support_bytes: usize,
     /// Distinct aggregate/outer-binding entries retained during final grounding.
     pub max_aggregate_cache_rows: usize,
-    /// Retained key value slots/text payload; allocator overhead is excluded.
+    /// Retained aggregate context rows, key-coordinate pool and lookup index
+    /// capacities. Canonical payload is shared with support; allocator overhead
+    /// is excluded. Replacement overlap is checked by `max_support_bytes`.
     pub max_aggregate_cache_key_bytes: usize,
     /// Total coalesced tuple conditions retained by the final grounding cache.
     pub max_aggregate_cache_elements: usize,
@@ -120,10 +139,13 @@ pub struct FormulaLimits {
     pub objective: zetesis_objective::AdmissionLimits,
     /// Independent term observation template ceilings.
     pub observation: crate::observation::AdmissionLimits,
+    /// Independent canonical vocabulary/component capacity for source metadata.
+    pub metadata_storage: crate::MetadataStorageLimits,
 }
 impl Default for FormulaLimits {
     fn default() -> Self {
         Self {
+            max_atom_storage_bytes: 134_217_728,
             max_project_atoms: 1_000_000,
             max_project_bytes: 67_108_864,
             // Match the bounded aggregate-plan row scale; this counts borrowed
@@ -152,6 +174,7 @@ impl Default for FormulaLimits {
             theory: zetesis_ferraris::AdmissionLimits::default(),
             objective: zetesis_objective::AdmissionLimits::default(),
             observation: crate::observation::AdmissionLimits::default(),
+            metadata_storage: crate::MetadataStorageLimits::default(),
             aggregate: zetesis_ferraris::AggregateLimits::default(),
         }
     }
@@ -210,8 +233,8 @@ pub enum FormulaResource {
     ObjectiveFormulaAtoms,
     /// Nodes in one transient objective-body formula.
     ObjectiveFormulaNodes,
-    /// Named atom/interner capacity, bounded by a finite layout-derived envelope
-    /// from the applicable atom ceiling. Nested payload remains under `ScalarBytes`.
+    /// Named canonical atom payload and interner metadata, including reservation
+    /// overlap, bounded independently by `max_atom_storage_bytes`.
     AtomStorageBytes,
     /// Dense semantic atoms.
     Atoms,
@@ -237,6 +260,39 @@ impl fmt::Display for FormulaResource {
 /// A located refusal of finite formula source admission; never semantic UNSAT.
 #[derive(Debug)]
 pub enum FormulaFailure {
+    /// Canonical template metadata could not retain its source authority.
+    TemplateCatalog {
+        /// Exact identity, storage, or incomplete-publication cause.
+        error: zetesis_core::TemplateCatalogFailure,
+        /// Source occurrence whose component admission failed.
+        location: Location,
+    },
+    /// An immutable admitted source lacks a term required by its checker.
+    UnadmittedTerm {
+        /// Source occurrence whose computed value was not admitted.
+        location: Location,
+    },
+    /// Scoped binding metadata could not be resolved or stored.
+    TermAssignment {
+        /// Exact authority, prefix, slot or storage cause.
+        error: zetesis_core::catalog::AssignmentError,
+        /// Source occurrence whose binding operation failed.
+        location: Location,
+    },
+    /// A catalog-backed original-model objective condition is invalid.
+    ObjectiveCondition {
+        /// Exact occurrence, backward-reference or canonical-storage cause.
+        error: zetesis_objective::ConditionError,
+        /// Source occurrence whose query was being constructed.
+        location: Location,
+    },
+    /// Canonical atom storage or representation could not be admitted.
+    AtomCatalog {
+        /// Exact canonical refusal, distinct from logical absence.
+        error: zetesis_core::catalog::Error,
+        /// Source occurrence whose operation required canonical storage.
+        location: Location,
+    },
     /// A cancellable streamed-source operation stopped before completion.
     Interrupted {
         /// Cancellation or deadline observed at a charged work boundary.
@@ -395,6 +451,11 @@ impl FormulaFailure {
             | Self::HybridUnsupported { location, .. }
             | Self::MetadataAllocation { location, .. }
             | Self::AtomAllocation { location, .. }
+            | Self::AtomCatalog { location, .. }
+            | Self::TermAssignment { location, .. }
+            | Self::UnadmittedTerm { location }
+            | Self::ObjectiveCondition { location, .. }
+            | Self::TemplateCatalog { location, .. }
             | Self::SupportRelation { location, .. }
             | Self::SupportTable { location, .. }
             | Self::ChoiceSource { location }
@@ -425,6 +486,13 @@ impl fmt::Display for FormulaFailure {
                 write!(f, "formula metadata storage: {error}")
             }
             Self::AtomAllocation { error, .. } => write!(f, "formula atom storage: {error}"),
+            Self::AtomCatalog { error, .. } => write!(f, "formula canonical atom storage: {error}"),
+            Self::TermAssignment { error, .. } => write!(f, "formula term assignment: {error}"),
+            Self::UnadmittedTerm { .. } => {
+                f.write_str("completed source vocabulary lacks a required computed term")
+            }
+            Self::ObjectiveCondition { error, .. } => error.fmt(f),
+            Self::TemplateCatalog { error, .. } => error.fmt(f),
             Self::SupportRelation { error, .. } => error.fmt(f),
             Self::SupportTable { error, .. } => error.fmt(f),
             Self::ChoiceSource { .. } => {
@@ -470,6 +538,10 @@ impl std::error::Error for FormulaFailure {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Interrupted { reason, .. } => Some(reason),
+            Self::AtomCatalog { error, .. } => Some(error),
+            Self::TermAssignment { error, .. } => Some(error),
+            Self::ObjectiveCondition { error, .. } => Some(error),
+            Self::TemplateCatalog { error, .. } => Some(error),
             Self::MetadataAllocation { error, .. } | Self::AtomAllocation { error, .. } => {
                 Some(error)
             }
@@ -567,7 +639,7 @@ impl AdmittedFormula {
     }
     /// Semantic atom identities in exactly the theory's dense index order.
     #[must_use]
-    pub fn atoms(&self) -> &[Atom] {
+    pub fn atoms(&self) -> Atoms<'_> {
         self.compiled.atoms.atoms()
     }
     /// Shared dense atom owner; selected interpretations retain its payloads
@@ -697,7 +769,7 @@ impl AdmittedFormulaBundle {
     }
     /// Semantic atom identities in theory index order.
     #[must_use]
-    pub fn atoms(&self) -> &[Atom] {
+    pub fn atoms(&self) -> Atoms<'_> {
         self.compiled.atoms.atoms()
     }
     /// Shared dense atom owner used by retained interpretations.
@@ -1021,7 +1093,7 @@ fn prepare_source(
     extended::check_definitions_in(parsed, expansion, &mut BTreeMap::new())?;
     metadata::check_count(parsed, expansion, &mut 0)?;
     formula_ir::check_objectives(parsed, limits, &mut 0)?;
-    let mut metadata = metadata::Builder::default();
+    let mut metadata = metadata::Builder::new(limits.metadata_storage);
     let mut budget = crate::expansion::Budget::new(expansion, options.core_limits.max_templates);
     let mut choices = crate::formula_choice_source::Catalog::default();
     let raised =
@@ -1030,16 +1102,9 @@ fn prepare_source(
         source: source.source().id(),
         span: source.source().span(),
     };
-    let preparation = prepare(
-        &raised,
-        &choices,
-        options,
-        budget,
-        limits,
-        location,
-        &mut metadata,
-    )?;
-    Ok((preparation, metadata.finish()))
+    prepare(
+        &raised, &choices, options, budget, limits, location, metadata,
+    )
 }
 
 /// Admit the same finite formula profile across original include graphs.
@@ -1108,7 +1173,7 @@ fn prepare_bundle(
     let mut definitions = BTreeMap::new();
     let mut metadata_count = 0;
     let mut objective_count = 0;
-    let mut metadata = metadata::Builder::default();
+    let mut metadata = metadata::Builder::new(limits.metadata_storage);
     let mut statements = Vec::new();
     let mut visited = 0;
     let mut budget = crate::expansion::Budget::new(expansion, options.core_limits.max_templates);
@@ -1152,16 +1217,15 @@ fn prepare_bundle(
         max_body_elements: options.max_body_elements,
         ..AdmissionOptions::default()
     };
-    let preparation = prepare(
+    prepare(
         &SourceProgram::of_nodes(statements),
         &choices,
         local,
         budget,
         limits,
         location,
-        &mut metadata,
-    )?;
-    Ok((preparation, metadata.finish()))
+        metadata,
+    )
 }
 
 fn prepare(
@@ -1171,12 +1235,24 @@ fn prepare(
     mut budget: crate::expansion::Budget,
     limits: &FormulaLimits,
     location: Location,
-    metadata: &mut metadata::Builder,
-) -> Result<Preparation, FormulaFailure> {
-    metadata.observations =
-        crate::observation::compile(source, options, limits.observation, &mut budget, location)?;
-    let prepared = formula_ir::prepare(source, choices, options, limits, &mut budget, location)?;
-    Ok(Preparation::new(prepared, budget, limits, location))
+    mut metadata: metadata::Builder,
+) -> Result<(Preparation, SourceMetadata), FormulaFailure> {
+    metadata.compile_observations(source, options, limits.observation, &mut budget, location)?;
+    let metadata = metadata.finish(location)?;
+    let mut catalog = crate::formula_support::SupportCatalog::default();
+    let mut counters = crate::formula_support::Counters::default();
+    let prepared = formula_ir::PreparationContext {
+        options,
+        budget: &mut budget,
+        catalog: &mut catalog,
+        work: crate::formula_support::GroundingWork::new(limits, &mut counters, location),
+    }
+    .prepare(source, metadata.project_selection().clone(), choices)?;
+    let accounting = counters.into_accounting();
+    Ok((
+        Preparation::new(prepared, catalog, accounting, budget, limits, location),
+        metadata,
+    ))
 }
 
 pub(crate) fn ceiling(

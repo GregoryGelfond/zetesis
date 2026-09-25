@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use serde_json::Value as Json;
-use zetesis_core::{Atom, Model, Value};
+use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
 use zetesis_themelios::{
@@ -58,7 +58,8 @@ fn atoms(values: &Json) -> BTreeSet<String> {
 }
 // The fixed source alphabet uses scalar numbers, simple symbols and ordinary
 // quoted strings. Keep infinity and nonnumeric weight identities distinct.
-fn atom_text(atom: &Atom) -> String {
+fn atom_text<'a>(atom: impl Into<zetesis_core::catalog::AtomRef<'a>>) -> String {
+    let atom = atom.into();
     let name = atom.predicate().name();
     if atom.values().is_empty() {
         return name.to_owned();
@@ -66,13 +67,16 @@ fn atom_text(atom: &Atom) -> String {
     let values: Vec<_> = atom
         .values()
         .iter()
-        .map(|value| match value {
-            Value::Number(number) => number.to_string(),
-            Value::Symbol(symbol) => symbol.clone(),
-            Value::String(value) => serde_json::to_string(value).expect("quoted scalar string"),
-            Value::Infimum => "#inf".to_owned(),
-            Value::Supremum => "#sup".to_owned(),
-            Value::Structured(value) => value.to_string(),
+        .map(|value| match value.descriptor() {
+            zetesis_core::ValueNodeRef::Number(number) => number.to_string(),
+            zetesis_core::ValueNodeRef::Symbol(symbol) => symbol.to_owned(),
+            zetesis_core::ValueNodeRef::String(value) => {
+                serde_json::to_string(value).expect("quoted scalar string")
+            }
+            zetesis_core::ValueNodeRef::Infimum => "#inf".to_owned(),
+            zetesis_core::ValueNodeRef::Supremum => "#sup".to_owned(),
+            zetesis_core::ValueNodeRef::Function { .. }
+            | zetesis_core::ValueNodeRef::Tuple { .. } => value.to_string(),
         })
         .collect();
     format!("{name}({})", values.join(","))
@@ -106,11 +110,13 @@ fn exhaustive(input: &AdmittedFormula) -> Records {
         }
         let atoms: BTreeSet<_> = candidate
             .atoms()
-            .map(|atom| input.atoms()[atom].clone())
+            .map(|atom| input.atoms().at(atom).unwrap())
             .collect();
+        let evaluated_model =
+            Model::from_positions(input.atom_catalog(), candidate.atoms()).unwrap();
         let evaluation = zetesis_objective::evaluate(
             input.objectives(),
-            &Model::new(atoms.iter().cloned()),
+            &evaluated_model,
             zetesis_objective::Limits::default(),
             &cancellation,
         )
@@ -120,7 +126,7 @@ fn exhaustive(input: &AdmittedFormula) -> Records {
             .is_present()
             .then(|| score.costs().iter().map(|&(_, value)| value).collect());
         assert!(
-            records.insert((atoms.iter().map(atom_text).collect(), costs)),
+            records.insert((atoms.iter().copied().map(atom_text).collect(), costs)),
             "unique full model identity"
         );
     }

@@ -9,10 +9,10 @@
 //! JavaScript's exact Number range. The version is supplied out of band; it
 //! adds no field to the record.
 
-use std::collections::HashMap;
+use hashbrown::HashMap;
 use std::fmt;
 
-use zetesis_core::{Atom, Model};
+use zetesis_core::{Model, catalog::AtomRef};
 
 pub use super::view::{ViewError as Error, ViewLimits as Limits};
 
@@ -50,16 +50,16 @@ struct Entry {
     position: usize,
 }
 impl Entry {
-    fn atom(&self) -> &Atom {
+    fn atom(&self) -> AtomRef<'_> {
         self.model
             .atoms()
             .at(self.position)
             .expect("an entry refers to a position of the model that spelled it")
     }
 }
-impl std::borrow::Borrow<Atom> for Entry {
-    fn borrow(&self) -> &Atom {
-        self.atom()
+impl hashbrown::Equivalent<Entry> for AtomRef<'_> {
+    fn equivalent(&self, entry: &Entry) -> bool {
+        *self == entry.atom()
     }
 }
 impl PartialEq for Entry {
@@ -104,9 +104,9 @@ impl AtomTable {
     ///
     /// # Errors
     /// Returns [`Error::Allocation`] when the deferred record cannot be indexed.
-    pub fn index(&mut self, atom: &Atom) -> Result<Option<usize>, Error> {
+    pub fn index<'a>(&mut self, atom: impl Into<AtomRef<'a>>) -> Result<Option<usize>, Error> {
         self.flush()?;
-        Ok(self.indices.get(atom).copied())
+        Ok(self.indices.get(&atom.into()).copied())
     }
     /// Take the whole first record as the table: its atoms hold the indices
     /// `0..len` in model order, without indexing them.
@@ -119,12 +119,13 @@ impl AtomTable {
         Ok(())
     }
     fn flush(&mut self) -> Result<(), Error> {
-        let Some(model) = self.deferred.take() else {
+        let Some(model) = self.deferred.as_ref() else {
             return Ok(());
         };
         self.indices
             .try_reserve(model.atoms().len())
             .map_err(|_| Error::Allocation)?;
+        let model = self.deferred.take().expect("reserved deferred model");
         for position in 0..model.atoms().len() {
             self.indices.insert(
                 Entry {
@@ -162,13 +163,13 @@ impl AtomTable {
     /// before the record: the record's deferral when it was the first
     /// record, else the atoms it entered. A later record refused before its
     /// first lookup gave nothing, and the first record's deferral stands.
-    pub(super) fn retract(&mut self, atoms: &[&Atom], deferred: bool) {
+    pub(super) fn retract(&mut self, atoms: &[AtomRef<'_>], deferred: bool) {
         if deferred {
             self.deferred = None;
             return;
         }
         for atom in atoms {
-            self.indices.remove(*atom);
+            self.indices.remove(atom);
         }
     }
 }
@@ -240,7 +241,7 @@ impl std::error::Error for Failure {}
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use hashbrown::HashMap;
     use std::hash::BuildHasherDefault;
 
     /// The table places the atoms by the crate's fixed word hash, the

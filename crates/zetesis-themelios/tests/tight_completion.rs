@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroUsize;
 use std::path::Path;
 
-use zetesis_core::{Atom, Model};
+use zetesis_core::{AtomCatalog, Model};
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
     Theory, TightCheckLimits, TightError, TightPlan, TightPlanLimits, TightVerdict,
@@ -29,7 +29,7 @@ struct Run {
 
 fn run(
     theory: &Theory,
-    atoms: &[Atom],
+    atoms: &AtomCatalog,
     objective: &ObjectiveProgram,
     certificate: Option<&TightPlan>,
     workers: usize,
@@ -79,7 +79,7 @@ fn run(
             .expect("complete candidate batch, including all exact residuals");
         for candidate in batch {
             assert!(candidate.theory().same_instance(theory));
-            let model = Model::new(candidate.atoms().map(|atom| atoms[atom].clone()));
+            let model = Model::from_positions(atoms, candidate.atoms()).unwrap();
             let score = evaluate(
                 objective,
                 &model,
@@ -124,7 +124,7 @@ fn optimum(models: &ScoredModels) -> BTreeSet<Vec<usize>> {
 
 fn compare(
     theory: &Theory,
-    atoms: &[Atom],
+    atoms: &AtomCatalog,
     objectives: &ObjectiveProgram,
     workers: usize,
 ) -> (Run, Run) {
@@ -176,7 +176,7 @@ fn complete_models_scores_ties_and_cyclic_fallback_match_with_one_two_four_worke
         for workers in [1, 2, 4] {
             let (_, actual) = compare(
                 admitted.theory(),
-                admitted.atoms(),
+                admitted.atom_catalog(),
                 admitted.objectives(),
                 workers,
             );
@@ -216,7 +216,7 @@ fn unchanged_corpus_complete_batch_experiment() {
         .unwrap();
         let (baseline, certified) = compare(
             admitted.theory(),
-            admitted.atoms(),
+            admitted.atom_catalog(),
             admitted.objectives(),
             4,
         );

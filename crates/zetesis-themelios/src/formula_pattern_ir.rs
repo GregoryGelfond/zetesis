@@ -1,16 +1,15 @@
 //! Compile positive structural patterns without enumerating constructor values.
 
+use crate::formula_support::components::{Pattern, Term as CoreTerm};
 use themelios_program::program::{Arguments, Atom};
 use themelios_program::term::{Term, UnaryOp, Variable};
-use zetesis_core::{AtomPattern, Predicate, Sign, Term as CoreTerm};
+use zetesis_core::{Sign, ValueNodeRef};
 
 use crate::diagnostic::unsupported;
 use crate::formula::ceiling;
 use crate::formula_ir::{Compiler, Expression, LiteralIr, Operation, Variables};
 use crate::formula_pattern::{ArgumentPattern, PatternAtom, PatternNode, push, reserve};
-use crate::{
-    AdmissionFailure, ExpansionResource, FormulaFailure, FormulaResource, ProfileFeature, compile,
-};
+use crate::{ExpansionResource, FormulaFailure, FormulaResource, ProfileFeature, compile};
 
 impl Compiler<'_> {
     pub(super) fn positive_pattern(
@@ -57,16 +56,16 @@ impl Compiler<'_> {
         atom: &Atom,
         local: &mut Variables,
         bindings: &mut Vec<LiteralIr>,
-    ) -> Result<AtomPattern, FormulaFailure> {
+    ) -> Result<Pattern, FormulaFailure> {
         if let Some(pattern) = self.positive_witness(atom, local, bindings)? {
-            let atom = self.consequent_capture(&pattern.atom)?;
+            let atom = pattern.atom;
             bindings.push(LiteralIr::PatternAtom(pattern));
             Ok(atom)
         } else {
             let atom = self.atom(atom, local, true)?;
             bindings.push(LiteralIr::Atom(
                 themelios_program::program::DefaultNegation::None,
-                self.consequent_capture(&atom)?,
+                atom,
             ));
             Ok(atom)
         }
@@ -109,8 +108,7 @@ impl Compiler<'_> {
                 }
                 Term::Symbolic(symbol) => {
                     let value = compile::scalar(symbol, self.location)?;
-                    self.value(&value)?;
-                    CoreTerm::Constant(value)
+                    CoreTerm::Constant(self.root_scalar(&value)?)
                 }
                 term if checks.is_some() || pattern_candidate(term) => {
                     // Every structured source argument has its own whole-value
@@ -139,20 +137,12 @@ impl Compiler<'_> {
             atom.name.as_str().len() as u128,
             self.location,
         )?;
-        let predicate = Predicate::with_sign(
+        let predicate = self.predicate(
             atom.name.as_str(),
             arguments.len(),
             crate::coherence::core_sign(atom.sign),
-        )
-        .map_err(|error| AdmissionFailure::Construction {
-            error,
-            location: self.location,
-        })?;
-        let atom =
-            AtomPattern::new(predicate, terms).map_err(|error| AdmissionFailure::Construction {
-                error,
-                location: self.location,
-            })?;
+        )?;
+        let atom = self.pattern_from_parts(predicate, &terms)?;
         Ok(Some(PatternAtom {
             atom,
             arguments: patterns,
@@ -182,7 +172,14 @@ impl Compiler<'_> {
                 Term::Tuple(children) => {
                     reserve(&mut pending, children.len(), self.budget, self.location)?;
                     pending.extend(children.iter().rev());
-                    PatternNode::Tuple(children.len())
+                    PatternNode::Constructor(self.source.constructor(
+                        ValueNodeRef::Tuple {
+                            arity: children.len(),
+                        },
+                        self.limits,
+                        self.counters,
+                        self.location,
+                    )?)
                 }
                 Term::Variable(Variable::Anonymous) => PatternNode::Wildcard,
                 Term::Variable(variable) => {
@@ -190,8 +187,7 @@ impl Compiler<'_> {
                 }
                 Term::Symbolic(symbol) => {
                     let value = compile::scalar(symbol, self.location)?;
-                    self.value(&value)?;
-                    PatternNode::Constant(value)
+                    PatternNode::Constant(self.root_scalar(&value)?)
                 }
                 _ => {
                     if let Some((node, children)) = self.function_pattern(term)? {
@@ -243,11 +239,16 @@ impl Compiler<'_> {
             self.location,
         )?;
         Ok(Some((
-            PatternNode::Function {
-                name: name.as_str().to_owned(),
-                sign,
-                arity: arguments.len(),
-            },
+            PatternNode::Constructor(self.source.constructor(
+                ValueNodeRef::Function {
+                    name: name.as_str(),
+                    sign,
+                    arity: arguments.len(),
+                },
+                self.limits,
+                self.counters,
+                self.location,
+            )?),
             arguments,
         )))
     }

@@ -1,8 +1,7 @@
 //! Packed integer closure scans over an explicitly compiled static graph.
 
 use zetesis_core::{
-    AtomId, GroundProgram, GroundRule, Interpretation, ModelError, Program, Seed, SeedView,
-    WordError,
+    AtomId, GroundProgram, GroundRule, Interpretation, Program, Seed, SeedView, WordError,
 };
 
 use crate::{Cancellation, Limits, Stop};
@@ -128,10 +127,8 @@ impl StaticCheck {
 
 fn decoding_stop(error: &WordError) -> Stop {
     match error {
-        WordError::Model(ModelError::Allocation) => Stop::Allocation,
-        WordError::Length { .. }
-        | WordError::TailBits
-        | WordError::Model(ModelError::Position { .. }) => Stop::InvalidProgram,
+        WordError::Model(error) => Stop::model(error),
+        WordError::Length { .. } | WordError::TailBits => Stop::InvalidProgram,
     }
 }
 

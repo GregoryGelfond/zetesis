@@ -1,7 +1,7 @@
 //! Checked ranks in the full symbolic gate carrier, without tuple enumeration.
 
 use super::GateAtom;
-use crate::{Atom, Program};
+use crate::{CarrierAtom, Program, catalog::AtomRef};
 use std::num::NonZeroUsize;
 
 /// Canonical gate-carrier positions for one immutable admitted program.
@@ -61,47 +61,68 @@ impl GateIndex {
         self.cardinality == 0
     }
 
-    /// Bind an owned logical atom to its original canonical carrier position.
-    ///
-    /// The returned token retains this index's program instance and moves the
-    /// supplied payload without copying it. No allocation or enumeration occurs.
-    /// Signature order is the admitted gate order. Within a signature,
-    /// `AtomIter` advances the last coordinate fastest, so the mixed-radix fold
-    /// over domain ranks is exactly that tuple's zero-based position. Adding the
-    /// preceding signatures' cardinalities and one gives the full gate position;
-    /// filtering to a supported subset never renumbers it. Nullary signatures
-    /// have one empty tuple, including when the domain is empty.
+    /// Locate a borrowed atom at its original full-carrier position.
+    /// The token retains only Program-bound tuple coordinates, not the supplied
+    /// payload. No preceding tuple is enumerated; coordinate reservation is
+    /// fallible. Signature order and last-coordinate-fastest mixed radix agree
+    /// with the lazy iterator. Supported-subset filtering never renumbers it.
+    /// Nullary signatures have one tuple even when the domain is empty.
     ///
     /// # Errors
-    /// Refuses a signature or value outside this program's gate carrier, or
-    /// checked position arithmetic that cannot fit usize.
-    pub fn locate(&self, atom: Atom) -> Result<GateAtom, GateIndexError> {
+    /// Refuses outside-carrier input, unavailable coordinate storage or position
+    /// arithmetic that cannot fit usize.
+    pub fn locate<'a>(&self, atom: impl Into<AtomRef<'a>>) -> Result<GateAtom, GateIndexError> {
+        let carrier = self
+            .program
+            .locate_atom(atom, true)
+            .map_err(|_| GateIndexError::Allocation)?
+            .ok_or(GateIndexError::OutsideCarrier)?;
+        match self.locate_carrier_with(carrier, || Ok::<(), std::convert::Infallible>(())) {
+            Ok(atom) => Ok(atom),
+            Err(GateIndexFailure::Index(error)) => Err(error),
+            Err(GateIndexFailure::Stopped(never)) => match never {},
+        }
+    }
+
+    /// Mint the full-carrier position while retaining this token's coordinates.
+    /// No tuple is looked up again or copied. Applicability requires the exact
+    /// admitted Program; equal content from another Program is refused.
+    ///
+    /// # Errors
+    /// Returns an index applicability/arithmetic failure or the first callback
+    /// refusal before the corresponding read, rank step or witness publication.
+    pub fn locate_carrier_with<E>(
+        &self,
+        carrier: CarrierAtom,
+        mut before: impl FnMut() -> Result<(), E>,
+    ) -> Result<GateAtom, GateIndexFailure<E>> {
+        let mut checked = || before().map_err(GateIndexFailure::Stopped);
+        checked()?;
+        if !self.program.same_instance(carrier.program()) {
+            return Err(GateIndexFailure::Index(GateIndexError::OutsideCarrier));
+        }
+        checked()?;
         let signature = self
             .program
             .gate_predicates()
-            .binary_search(atom.predicate())
-            .map_err(|_| GateIndexError::OutsideCarrier)?;
-        let domain = self.program.domain();
-        let mut tuple = 0_usize;
-        for value in atom.values() {
-            let digit = domain
-                .binary_search(value)
-                .map_err(|_| GateIndexError::OutsideCarrier)?;
+            .binary_search_with(carrier.predicate(), &mut checked)?
+            .map_err(|_| GateIndexFailure::Index(GateIndexError::OutsideCarrier))?;
+        let mut tuple = 0usize;
+        for digit in carrier.coordinates() {
+            checked()?;
             tuple = tuple
-                .checked_mul(domain.len())
-                .and_then(|rank| rank.checked_add(digit))
-                .ok_or(GateIndexError::OrdinalOverflow)?;
+                .checked_mul(self.program.domain().len())
+                .and_then(|rank| rank.checked_add(*digit))
+                .ok_or(GateIndexFailure::Index(GateIndexError::OrdinalOverflow))?;
         }
+        checked()?;
         let position = self.offsets[signature]
             .checked_add(tuple)
             .and_then(|rank| rank.checked_add(1))
             .and_then(NonZeroUsize::new)
-            .ok_or(GateIndexError::OrdinalOverflow)?;
-        Ok(GateAtom {
-            program: self.program.clone(),
-            position,
-            atom,
-        })
+            .ok_or(GateIndexFailure::Index(GateIndexError::OrdinalOverflow))?;
+        checked()?;
+        Ok(GateAtom { carrier, position })
     }
 }
 
@@ -119,7 +140,7 @@ fn tuple_count(radix: usize, arity: usize) -> Result<usize, GateIndexError> {
 /// Symbolic gate indexing failed before a positional token was returned.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GateIndexError {
-    /// The per-signature offset vector could not reserve its storage.
+    /// An offset or tuple-coordinate vector could not reserve its storage.
     Allocation,
     /// The supplied atom's signature or a value is outside the gate carrier.
     OutsideCarrier,
@@ -130,7 +151,7 @@ pub enum GateIndexError {
 impl std::fmt::Display for GateIndexError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
-            Self::Allocation => "gate-position index storage could not be reserved",
+            Self::Allocation => "gate-position index or coordinate storage could not be reserved",
             Self::OutsideCarrier => "atom lies outside the program's gate carrier",
             Self::OrdinalOverflow => "gate-carrier position cannot be represented",
         })
@@ -138,3 +159,105 @@ impl std::fmt::Display for GateIndexError {
 }
 
 impl std::error::Error for GateIndexError {}
+
+/// Checked positional lookup stopped without publishing a gate witness.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum GateIndexFailure<E> {
+    /// The index's Program or representable position contract was not met.
+    Index(GateIndexError),
+    /// Caller refusal before an operation.
+    Stopped(E),
+}
+impl<E: std::fmt::Display> std::fmt::Display for GateIndexFailure<E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Index(error) => error.fmt(f),
+            Self::Stopped(error) => error.fmt(f),
+        }
+    }
+}
+impl<E: std::error::Error + 'static> std::error::Error for GateIndexFailure<E> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(match self {
+            Self::Index(error) => error,
+            Self::Stopped(error) => error,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{AdmissionLimits, AtomPattern, Predicate, Template, Term, Value};
+
+    #[test]
+    fn indexed_witness_reuses_coordinate_storage() {
+        let pattern = AtomPattern::new(
+            Predicate::new("p", 1).unwrap(),
+            vec![Term::Constant(Value::Number(7))],
+        )
+        .unwrap();
+        let program = Program::new(
+            vec![Template::new(
+                Some(pattern.clone()),
+                vec![],
+                vec![pattern],
+                vec![],
+                vec![],
+            )],
+            AdmissionLimits::default(),
+        )
+        .unwrap();
+        let carrier = program.gate_atoms().next().unwrap().unwrap();
+        let retained = carrier.clone();
+        let index = GateIndex::new(&program).unwrap();
+        let gate = index
+            .locate_carrier_with(carrier, || Ok::<(), ()>(()))
+            .unwrap();
+        assert_eq!(
+            gate.carrier.coordinates().as_ptr(),
+            retained.coordinates().as_ptr()
+        );
+    }
+
+    #[test]
+    fn checked_witness_refuses_every_callback_cutoff() {
+        let pattern = AtomPattern::new(
+            Predicate::new("p", 1).unwrap(),
+            vec![Term::Constant(Value::Number(7))],
+        )
+        .unwrap();
+        let program = Program::new(
+            vec![Template::new(
+                Some(pattern.clone()),
+                vec![],
+                vec![pattern],
+                vec![],
+                vec![],
+            )],
+            AdmissionLimits::default(),
+        )
+        .unwrap();
+        let carrier = program.gate_atoms().next().unwrap().unwrap();
+        let index = GateIndex::new(&program).unwrap();
+        let mut calls = 0;
+        index
+            .locate_carrier_with(carrier.clone(), || {
+                calls += 1;
+                Ok::<(), usize>(())
+            })
+            .unwrap();
+        for cutoff in 0..calls {
+            let mut admitted = 0;
+            let result = index.locate_carrier_with(carrier.clone(), || {
+                if admitted == cutoff {
+                    return Err(cutoff);
+                }
+                admitted += 1;
+                Ok(())
+            });
+            assert!(matches!(result, Err(GateIndexFailure::Stopped(at)) if at == cutoff));
+            assert_eq!(admitted, cutoff);
+        }
+    }
+}

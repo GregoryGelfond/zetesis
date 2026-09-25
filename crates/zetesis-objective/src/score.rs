@@ -1,18 +1,20 @@
 use std::cmp::Ordering;
 
-use zetesis_core::Value;
+use zetesis_core::catalog::TermRef;
 
 use crate::Statistics;
 
 /// One active globally deduplicated key: priority, numeric weight, then tuple.
 /// Its existence only records a condition satisfied in the supplied relation.
+/// Tuple terms borrow their original program or model authority; retaining this
+/// evidence requires those inputs to remain alive. No value payload is copied.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Contribution {
+pub struct Contribution<'input> {
     pub(crate) priority: i32,
     pub(crate) weight: i32,
-    pub(crate) tuple: Vec<Value>,
+    pub(crate) tuple: Vec<TermRef<'input>>,
 }
-impl Contribution {
+impl<'input> Contribution<'input> {
     /// Objective priority.
     #[must_use]
     pub const fn priority(&self) -> i32 {
@@ -25,7 +27,7 @@ impl Contribution {
     }
     /// Explicit scalar tuple, excluding implicit priority and weight components.
     #[must_use]
-    pub fn tuple(&self) -> &[Value] {
+    pub fn tuple(&self) -> &[TermRef<'input>] {
         &self.tuple
     }
 }
@@ -86,14 +88,15 @@ impl Score {
     }
 }
 
-/// A complete score and its canonical contribution evidence.
+/// A complete score and its borrowed canonical contribution evidence.
+/// The score can be transferred independently with [`Self::into_score`].
 #[derive(Clone, Debug)]
-pub struct Evaluation {
+pub struct Evaluation<'input> {
     pub(crate) score: Score,
-    pub(crate) contributions: Vec<Contribution>,
+    pub(crate) contributions: Vec<Contribution<'input>>,
     pub(crate) statistics: Statistics,
 }
-impl Evaluation {
+impl<'input> Evaluation<'input> {
     /// Fixed-priority costs for the supplied model relation.
     #[must_use]
     pub const fn score(&self) -> &Score {
@@ -109,7 +112,7 @@ impl Evaluation {
     /// Reusing this evaluator on a possible-positive relation discovers keys in
     /// that relation only; the result is not a stable-model or optimization bound.
     #[must_use]
-    pub fn contributions(&self) -> &[Contribution] {
+    pub fn contributions(&self) -> &[Contribution<'input>] {
         &self.contributions
     }
     /// Exact logical accounting for this completed evaluation.

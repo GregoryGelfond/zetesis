@@ -4,7 +4,7 @@
 
 use std::collections::BTreeSet;
 
-use zetesis_core::{Atom, Term};
+use zetesis_core::Atom;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
 use zetesis_themelios::{
@@ -43,7 +43,12 @@ fn exhaustive(input: &AdmittedFormula) -> Models {
                 models.insert(
                     candidate
                         .atoms()
-                        .map(|atom| input.atoms()[atom].clone())
+                        .map(|atom| input
+                            .atoms()
+                            .at(atom)
+                            .unwrap()
+                            .to_atom(zetesis_core::ValueLimits::default())
+                            .unwrap())
                         .collect()
                 )
             );
@@ -63,16 +68,35 @@ fn expected(models: &[&str]) -> Models {
                 .map(|source| {
                     let fact = admit(format!("{source}."), AdmissionOptions::default())
                         .expect("recorded scalar fact");
-                    let head = fact.program().templates()[0].head().expect("fact head");
+                    let head = fact
+                        .program()
+                        .templates()
+                        .at(0)
+                        .unwrap()
+                        .head()
+                        .expect("fact head");
                     let values = head
                         .terms()
                         .iter()
                         .map(|term| match term {
-                            Term::Constant(value) => value.clone(),
-                            Term::Variable(_) => panic!("expected atoms are ground"),
+                            zetesis_core::TemplateTerm::Constant(value) => value
+                                .to_value(zetesis_core::ValueLimits::default())
+                                .unwrap(),
+                            zetesis_core::TemplateTerm::Variable(_) => {
+                                panic!("expected atoms are ground")
+                            }
                         })
                         .collect();
-                    Atom::new(head.predicate().clone(), values).expect("ground atom arity")
+                    Atom::new(
+                        zetesis_core::Predicate::with_sign(
+                            head.predicate().name(),
+                            head.predicate().arity(),
+                            head.predicate().sign(),
+                        )
+                        .unwrap(),
+                        values,
+                    )
+                    .expect("ground atom arity")
                 })
                 .collect()
         })

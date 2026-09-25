@@ -58,7 +58,14 @@ fn answer_sets(program: &Program, candidates: Candidates<'_>) -> BTreeSet<Vec<At
             .unwrap()
         })
         .filter(zetesis_cpu::Check::accepted)
-        .map(|checked| checked.closure().atoms().iter().cloned().collect())
+        .map(|checked| {
+            checked
+                .closure()
+                .atoms()
+                .iter()
+                .map(|atom| atom.to_atom(zetesis_core::ValueLimits::default()).unwrap())
+                .collect()
+        })
         .collect()
 }
 
@@ -268,9 +275,7 @@ fn every_small_positive_constraint_family_keeps_exact_seed_order() {
             }
         }
         let source = program(templates);
-        let actual: Vec<_> = restricted(&source)
-            .map(|seed| seed.unwrap().atoms().clone())
-            .collect();
+        let actual: Vec<_> = restricted(&source).map(Result::unwrap).collect();
         let expected: Vec<_> =
             Candidates::new(&source, CandidateLimits::default(), Cancellation::default())
                 .map(Result::unwrap)
@@ -279,9 +284,14 @@ fn every_small_positive_constraint_family_keeps_exact_seed_order() {
                         .unwrap()
                         .accepted()
                 })
-                .map(|seed| seed.atoms().clone())
                 .collect();
-        assert_eq!(actual, expected, "constraint family {family}");
+        assert_eq!(actual.len(), expected.len(), "constraint family {family}");
+        for (actual, expected) in actual.iter().zip(&expected) {
+            assert!(
+                actual.atoms().iter().eq(expected.atoms().iter()),
+                "constraint family {family}"
+            );
+        }
     }
 }
 
@@ -336,9 +346,14 @@ fn typed_gate_values_do_not_coerce() {
     ]);
     let seeds: Vec<_> = restricted(&source).map(Result::unwrap).collect();
     assert_eq!(seeds.len(), 2);
-    assert_eq!(
-        seeds[1].atoms().iter().next().unwrap().values(),
-        [Value::String("1".into())]
+    let atom = seeds[1].atoms().iter().next().unwrap();
+    assert_eq!(atom.values().len(), 1);
+    assert!(
+        atom.values()
+            .at(0)
+            .unwrap()
+            .compare(&Value::String("1".into()))
+            .is_eq()
     );
 }
 

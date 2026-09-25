@@ -55,11 +55,12 @@ pub struct SolveConfig {
     pub max_optimal_models: usize,
     /// Maximum atoms across retained incumbents.
     pub max_optimal_atoms: usize,
-    /// Maximum canonical incumbent payload bytes: each distinct catalog owner
-    /// once, selected positions per retained model, and one shared best-score
-    /// record. Equal-content separate catalogs count separately. Excludes spare
-    /// vector/hash capacity, owner-index entries, allocator/Arc overhead, subjects,
-    /// execution state and transient old/new replacement overlap; this is not RSS.
+    /// Maximum portable incumbent payload bytes: each distinct occurrence
+    /// catalog's encoding once, selected positions per retained model, and one
+    /// shared best-score record. Equal-content separate catalogs count separately.
+    /// Excludes canonical identities outside occurrence maps, spare vector/hash
+    /// capacity, owner-index entries, allocator/Arc overhead, subjects, execution
+    /// state and transient old/new replacement overlap; this is not RSS.
     pub max_optimal_bytes: usize,
     /// Maximum candidates per owned batch.
     pub batch_size: NonZeroUsize,

@@ -5,37 +5,40 @@
 //! key set R ⊆ S ⊆ P. Shared conditions do not erase source values; original
 //! aggregate equalities determine which values occur in an answer set. Numeric
 //! subset construction can take exponential work and space, bounded by the
-//! assignment-value and work ceilings. Completed values also consume presence
-//! entries and scalar payload; transient sums have their separate value ceiling.
+//! assignment-value, shared storage and work ceilings. Completed carriers select
+//! canonical identities; transient numeric sums retain only scalar metadata.
 
-use std::collections::BTreeSet;
+use std::cmp::Ordering;
 
+use super::super::Predicates;
+use crate::formula_support::components::Term;
 use themelios_program::program::AggregateFunction;
 use themelios_program::term::EvalError;
-use zetesis_core::{Predicate, Term, Value};
+use zetesis_core::catalog::{AssignmentError, TermKey, TermRef};
+use zetesis_core::{TemplateTerm, Value, ValueNodeRef};
 
 use super::{Activity, Context, activity, assignment, transport};
-use crate::expansion::Budget;
 use crate::formula::ceiling;
 use crate::formula_ir::{AggregateKey, LiteralIr, Prepared, RuleIr};
-use crate::formula_support::{Counters, copy};
+use crate::formula_support::{Buffer, Computation, Counters, TermSelection};
 use crate::{ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource};
 
 pub(in super::super) struct Carrier<'a> {
-    pub predicates: BTreeSet<&'a Predicate>,
-    pub values: BTreeSet<Value>,
+    pub predicates: Predicates<'a>,
+    pub values: TermSelection,
 }
 
-pub(in super::super) fn certify<'a>(
-    prepared: &'a Prepared,
-    rule: &'a RuleIr,
-    requested: &BTreeSet<&Predicate>,
+pub(in super::super) fn certify<'source>(
+    prepared: &Prepared,
+    rule: &RuleIr,
+    requested: &Predicates<'source>,
     retained: usize,
+    computation: &mut Computation<'_, 'source>,
     limits: &FormulaLimits,
-    budget: &mut Budget,
     counters: &mut Counters,
-) -> Result<Option<Carrier<'a>>, FormulaFailure> {
+) -> Result<Option<Carrier<'source>>, FormulaFailure> {
     let mut context = Context {
+        computation,
         limits,
         counters,
         location: rule.location,
@@ -45,21 +48,29 @@ pub(in super::super) fn certify<'a>(
     let [LiteralIr::Aggregate(aggregate)] = rule.body.as_slice() else {
         return Ok(None);
     };
-    let Some(head) = assignment(rule, aggregate) else {
+    let Some(head) = assignment(rule, aggregate, &mut context)? else {
         return Ok(None);
     };
+    context.inspect()?;
     let Some(mut predicates) = transport(prepared, head.predicate(), &mut context)? else {
         return Ok(None);
     };
-    for _ in &predicates {
+    let mut kept = 0;
+    for at in 0..predicates.0.len() {
         context.inspect()?;
+        let predicate = predicates.0[at];
+        if requested.contains(predicate, limits, context.counters, context.location)? {
+            context.inspect()?;
+            predicates.0[kept] = predicate;
+            kept += 1;
+        }
     }
-    predicates.retain(|predicate| requested.contains(predicate));
+    predicates.0.truncate(kept);
     if predicates.is_empty() {
         return Ok(None);
     }
-    let mut required = BTreeSet::new();
-    let mut possible = BTreeSet::new();
+    let mut required = Tuples::new(&mut context)?;
+    let mut possible = Tuples::new(&mut context)?;
     for element in &aggregate.elements {
         context.inspect()?;
         let AggregateKey::Tuple(tuple) = &element.key else {
@@ -75,18 +86,34 @@ pub(in super::super) fn certify<'a>(
             return Ok(None);
         };
         if activity != Activity::Absent {
-            context.retain(&mut possible, tuple.as_slice())?;
+            possible.insert(tuple, &mut context)?;
         }
         if activity == Activity::Required {
-            context.retain(&mut required, tuple.as_slice())?;
+            required.insert(tuple, &mut context)?;
         }
     }
-    let value = measure(aggregate.function, &required, budget, &mut context)?;
+    let value = measure(aggregate.function, &required, &mut context)?;
+    let mut optional = Buffer::new(
+        context.computation,
+        context.limits,
+        context.counters,
+        context.location,
+    )?;
+    for tuple in possible.values.iter().copied() {
+        if !required.contains(tuple, &mut context)? {
+            optional.push(
+                tuple,
+                context.computation,
+                context.limits,
+                context.counters,
+                context.location,
+            )?;
+        }
+    }
     let values = complete(
         aggregate.function,
         &value,
-        possible.difference(&required).copied(),
-        budget,
+        optional.iter().copied(),
         &mut context,
     )?;
     Ok(Some(Carrier { predicates, values }))
@@ -96,60 +123,102 @@ pub(in super::super) fn certify<'a>(
 /// eligibility remains responsible for their correlation in an interpretation.
 fn complete<'a>(
     function: AggregateFunction,
-    required: &Value,
+    required: &TermKey,
     optional: impl Iterator<Item = &'a [Term]>,
-    budget: &mut Budget,
-    context: &mut Context<'_>,
-) -> Result<BTreeSet<Value>, FormulaFailure> {
-    let mut values = BTreeSet::new();
+    context: &mut Context<'_, '_, '_>,
+) -> Result<TermSelection, FormulaFailure> {
+    let mut values = TermSelection::new(
+        context.computation,
+        context.limits,
+        context.counters,
+        context.location,
+    )?;
     match function {
         AggregateFunction::Count | AggregateFunction::Sum | AggregateFunction::SumPlus => {
-            let Value::Number(initial) = required else {
+            context.inspect()?;
+            let read = context.computation.read();
+            let required_value = read.term(required).map_err(|error| {
+                crate::formula_binding::assignment(AssignmentError::Read(error), context.location)
+            })?;
+            let ValueNodeRef::Number(initial) = required_value.descriptor() else {
                 unreachable!("numeric aggregate reduction")
             };
-            let mut weights = Vec::new();
+            let mut weights = Buffer::new(
+                context.computation,
+                context.limits,
+                context.counters,
+                context.location,
+            )?;
             for tuple in optional {
                 context.inspect()?;
                 if let Some(weight) = crate::formula_assignment::contribution(
                     function,
-                    first(tuple),
+                    first(tuple, context)?,
                     context.location,
                 )? {
                     context.reserve_entry()?;
-                    weights
-                        .try_reserve(1)
-                        .map_err(|_| FormulaFailure::Objective {
-                            error: zetesis_objective::AdmissionError::Allocation,
-                            location: context.location,
-                        })?;
-                    weights.push(weight);
+                    weights.push(
+                        weight,
+                        context.computation,
+                        context.limits,
+                        context.counters,
+                        context.location,
+                    )?;
                 }
             }
-            for delta in crate::formula_assignment::sums(
-                weights,
+            let sums = crate::formula_assignment::sums(
+                weights.iter().copied(),
+                context.computation,
                 context.limits,
                 context.counters,
                 context.location,
-            )? {
+            )?;
+            for &delta in sums.iter() {
+                context.inspect()?;
                 let total = initial
                     .checked_add(delta)
                     .ok_or(ExpansionFailure::Evaluation {
                         error: EvalError::Overflow,
                         location: context.location,
                     })?;
-                retain_value(&mut values, &Value::Number(total), budget, context)?;
+                let value = context.computation.number(
+                    total,
+                    context.limits,
+                    context.counters,
+                    context.location,
+                )?;
+                retain_value(&mut values, &value, context)?;
             }
         }
         AggregateFunction::Min | AggregateFunction::Max => {
-            retain_value(&mut values, required, budget, context)?;
+            retain_value(&mut values, required, context)?;
             for tuple in optional {
                 context.inspect()?;
-                let optional = first(tuple).expect("admitted nonempty extremum tuple");
-                let order = optional.compare_terms(required);
+                let optional = first(tuple, context)?.expect("admitted nonempty extremum tuple");
+                let order = {
+                    let read = context.computation.read();
+                    let required = read.term(required).map_err(|error| {
+                        crate::formula_binding::assignment(
+                            AssignmentError::Read(error),
+                            context.location,
+                        )
+                    })?;
+                    optional.compare_terms_with(required, || {
+                        context.counters.work(context.limits, context.location)
+                    })?
+                };
                 if (function == AggregateFunction::Min && order.is_lt())
                     || (function == AggregateFunction::Max && order.is_gt())
                 {
-                    retain_value(&mut values, optional, budget, context)?;
+                    context.inspect()?;
+                    let value = context
+                        .computation
+                        .read()
+                        .term_key(optional)
+                        .map_err(|error| {
+                            crate::formula_binding::assignment(error.into(), context.location)
+                        })?;
+                    retain_value(&mut values, &value, context)?;
                 }
             }
         }
@@ -158,13 +227,12 @@ fn complete<'a>(
 }
 
 fn retain_value(
-    values: &mut BTreeSet<Value>,
-    value: &Value,
-    budget: &mut Budget,
-    context: &mut Context<'_>,
+    values: &mut TermSelection,
+    value: &TermKey,
+    context: &mut Context<'_, '_, '_>,
 ) -> Result<(), FormulaFailure> {
     context.inspect()?;
-    if values.contains(value) {
+    if values.contains(value, context.limits, context.counters, context.location)? {
         return Ok(());
     }
     ceiling(
@@ -174,25 +242,32 @@ fn retain_value(
         context.location,
     )?;
     context.reserve_entry()?;
-    let value = copy(value, budget, context.location)?;
-    values.insert(value);
-    Ok(())
+    values.insert(
+        value,
+        FormulaResource::AssignmentValues,
+        context.limits.max_assignment_values,
+        crate::formula_support::Context::new(
+            &*context.computation,
+            context.limits,
+            context.counters,
+            context.location,
+        ),
+    )
 }
 
 fn measure(
     function: AggregateFunction,
-    required: &BTreeSet<&[Term]>,
-    budget: &mut Budget,
-    context: &mut Context<'_>,
-) -> Result<Value, FormulaFailure> {
+    required: &Tuples<'_>,
+    context: &mut Context<'_, '_, '_>,
+) -> Result<TermKey, FormulaFailure> {
     match function {
         AggregateFunction::Count | AggregateFunction::Sum | AggregateFunction::SumPlus => {
             let mut total = 0_i32;
-            for tuple in required {
+            for tuple in required.values.iter().copied() {
                 context.inspect()?;
                 if let Some(weight) = crate::formula_assignment::contribution(
                     function,
-                    first(tuple),
+                    first(tuple, context)?,
                     context.location,
                 )? {
                     total = total
@@ -203,35 +278,152 @@ fn measure(
                         })?;
                 }
             }
-            Ok(Value::Number(total))
+            context
+                .computation
+                .number(total, context.limits, context.counters, context.location)
         }
         AggregateFunction::Min | AggregateFunction::Max => {
-            let empty = if function == AggregateFunction::Min {
-                Value::Supremum
-            } else {
-                Value::Infimum
-            };
-            let mut selected = &empty;
-            for tuple in required {
+            let mut selected = None;
+            for tuple in required.values.iter().copied() {
                 context.inspect()?;
-                let value = first(tuple).expect("admitted nonempty extremum tuple");
-                let order = value.compare_terms(selected);
-                if (function == AggregateFunction::Min && order.is_lt())
-                    || (function == AggregateFunction::Max && order.is_gt())
-                {
-                    selected = value;
+                let value = first(tuple, context)?.expect("admitted nonempty extremum tuple");
+                if let Some(previous) = selected {
+                    let order = value.compare_terms_with(previous, || context.inspect())?;
+                    if (function == AggregateFunction::Min && order.is_lt())
+                        || (function == AggregateFunction::Max && order.is_gt())
+                    {
+                        selected = Some(value);
+                    }
+                } else {
+                    selected = Some(value);
                 }
             }
-            copy(selected, budget, context.location)
+            if let Some(selected) = selected {
+                context.inspect()?;
+                context
+                    .computation
+                    .read()
+                    .term_key(selected)
+                    .map_err(|error| {
+                        crate::formula_binding::assignment(error.into(), context.location)
+                    })
+            } else {
+                let empty = if function == AggregateFunction::Min {
+                    Value::Supremum
+                } else {
+                    Value::Infimum
+                };
+                context.computation.import(
+                    (&empty).into(),
+                    context.limits,
+                    context.counters,
+                    context.location,
+                )
+            }
         }
     }
 }
 
-fn first(tuple: &[Term]) -> Option<&Value> {
-    tuple.first().map(|term| {
-        let Term::Constant(value) = term else {
-            unreachable!("certificate checked every tuple component")
-        };
-        value
-    })
+fn first<'source>(
+    tuple: &[Term],
+    context: &mut Context<'_, '_, 'source>,
+) -> Result<Option<TermRef<'source>>, FormulaFailure> {
+    tuple
+        .first()
+        .map(|term| {
+            let TemplateTerm::Constant(value) = context.term(*term)? else {
+                unreachable!("certificate checked every tuple component");
+            };
+            Ok(value)
+        })
+        .transpose()
 }
+
+/// Sorted borrowed tuple topology. Constant occurrence coordinates are never
+/// semantic keys: equal separately compiled constants must coalesce here.
+struct Tuples<'ir> {
+    values: Buffer<&'ir [Term]>,
+}
+impl<'ir> Tuples<'ir> {
+    fn new(context: &mut Context<'_, '_, '_>) -> Result<Self, FormulaFailure> {
+        Ok(Self {
+            values: Buffer::new(
+                context.computation,
+                context.limits,
+                context.counters,
+                context.location,
+            )?,
+        })
+    }
+    fn search(
+        &self,
+        tuple: &[Term],
+        context: &mut Context<'_, '_, '_>,
+    ) -> Result<Result<usize, usize>, FormulaFailure> {
+        let mut start = 0;
+        let mut end = self.values.len();
+        while start < end {
+            context.inspect()?;
+            let middle = start + (end - start) / 2;
+            match tuple_compare(self.values.slice()[middle], tuple, context)? {
+                Ordering::Less => start = middle + 1,
+                Ordering::Greater => end = middle,
+                Ordering::Equal => return Ok(Ok(middle)),
+            }
+        }
+        Ok(Err(start))
+    }
+    fn contains(
+        &self,
+        tuple: &[Term],
+        context: &mut Context<'_, '_, '_>,
+    ) -> Result<bool, FormulaFailure> {
+        self.search(tuple, context).map(|found| found.is_ok())
+    }
+    fn insert(
+        &mut self,
+        tuple: &'ir [Term],
+        context: &mut Context<'_, '_, '_>,
+    ) -> Result<(), FormulaFailure> {
+        let Err(at) = self.search(tuple, context)? else {
+            return Ok(());
+        };
+        context.reserve_entry()?;
+        context.counters.charge_work(
+            (self.values.len() - at + 1) as u128,
+            context.limits,
+            context.location,
+        )?;
+        self.values.push(
+            tuple,
+            context.computation,
+            context.limits,
+            context.counters,
+            context.location,
+        )?;
+        self.values.slice_mut()[at..].rotate_right(1);
+        Ok(())
+    }
+}
+fn tuple_compare(
+    left: &[Term],
+    right: &[Term],
+    context: &mut Context<'_, '_, '_>,
+) -> Result<Ordering, FormulaFailure> {
+    for (&left, &right) in left.iter().zip(right) {
+        let (TemplateTerm::Constant(left), TemplateTerm::Constant(right)) =
+            (context.term(left)?, context.term(right)?)
+        else {
+            unreachable!("closed source carrier tuples");
+        };
+        let order = left.compare_ref_with(right, || context.inspect())?;
+        if !order.is_eq() {
+            return Ok(order);
+        }
+    }
+    context.inspect()?;
+    Ok(left.len().cmp(&right.len()))
+}
+
+#[cfg(test)]
+mod tests;

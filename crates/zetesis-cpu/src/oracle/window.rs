@@ -7,7 +7,7 @@
 
 use std::{cmp::Ordering, ops::Range};
 
-use zetesis_core::{AtomPattern, Value};
+use zetesis_core::{PatternRef, catalog::TermRef};
 
 use super::relations::{Row, Rows};
 use super::{Work, resolve};
@@ -17,14 +17,14 @@ use crate::Stop;
 /// storage order, and an assignment covering the admitted pattern's variable
 /// slots. Borrows all values; allocates nothing. For n rows and k bound leading
 /// terms, performs O(k * log(n + 1)) value comparisons and at most k + 1 readiness
-/// inspections. Comparison costs include payload bytes. The caller must reopen
+/// inspections. Comparison costs include visited typed descriptors and text prefixes. The caller must reopen
 /// after parent bindings change, and must still check the full pattern and guards
 /// for each returned row.
 pub(super) fn matching_prefix(
-    pattern: &AtomPattern,
+    pattern: PatternRef<'_>,
     rows: Rows<'_>,
     run: usize,
-    assignment: &[Option<&Value>],
+    assignment: &[Option<TermRef<'_>>],
     work: &mut Work<'_>,
 ) -> Result<Range<usize>, Stop> {
     let length = rows.run_len(run);
@@ -46,12 +46,15 @@ pub(super) fn matching_prefix(
         // The bound prefix names one block of positions. Its terms resolved
         // in the count above, so the values are read where they lie.
         work.charge(bound)?;
-        let prefix = pattern.terms()[..bound]
+        let prefix = pattern
+            .terms()
             .iter()
+            .take(bound)
             .map_while(|term| resolve(term, assignment));
-        return Ok(relation.layout().prefix_range(prefix));
+        return relation.layout().prefix_range(prefix, work);
     }
     let compare = |index, work: &mut Work<'_>| {
+        work.tick()?;
         compare_prefix(
             pattern,
             rows.get(run, index).ok_or(Stop::InvalidProgram)?,
@@ -77,9 +80,9 @@ pub(super) struct Window {
 
 impl Window {
     pub(super) fn open(
-        pattern: &AtomPattern,
+        pattern: PatternRef<'_>,
         rows: Rows<'_>,
-        assignment: &[Option<&Value>],
+        assignment: &[Option<TermRef<'_>>],
         work: &mut Work<'_>,
     ) -> Result<Self, Stop> {
         Ok(Self {
@@ -92,9 +95,9 @@ impl Window {
     /// run's window is exhausted.
     pub(super) fn next(
         &mut self,
-        pattern: &AtomPattern,
+        pattern: PatternRef<'_>,
         rows: Rows<'_>,
-        assignment: &[Option<&Value>],
+        assignment: &[Option<TermRef<'_>>],
         work: &mut Work<'_>,
     ) -> Result<Option<(usize, usize)>, Stop> {
         loop {
@@ -131,19 +134,18 @@ fn boundary(
 }
 
 fn compare_prefix(
-    pattern: &AtomPattern,
+    pattern: PatternRef<'_>,
     row: Row<'_>,
-    assignment: &[Option<&Value>],
+    assignment: &[Option<TermRef<'_>>],
     length: usize,
     work: &mut Work<'_>,
 ) -> Result<Ordering, Stop> {
-    for (term, value) in pattern.terms()[..length].iter().zip(row.values()) {
+    let mut values = row.values();
+    for term in pattern.terms().iter().take(length) {
         work.tick()?;
+        let value = values.next().ok_or(Stop::InvalidProgram)?;
         let expected = resolve(term, assignment).ok_or(Stop::InvalidProgram)?;
-        for compared in [value, expected] {
-            work.charge(compared.payload_bytes())?;
-        }
-        let order = value.cmp(expected);
+        let order = value.compare_ref_with(expected, || work.tick())?;
         if !order.is_eq() {
             return Ok(order);
         }

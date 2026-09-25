@@ -3,7 +3,7 @@
 use std::{collections::BTreeSet, convert::Infallible, num::NonZeroUsize};
 
 use zetesis_core::{
-    AdmissionLimits, Atom, AtomPattern, Predicate, Program, Sign, Template, Term, Value,
+    AdmissionLimits, Atom, AtomPattern, Model, Predicate, Program, Sign, Template, Term, Value,
     ValueLimits, ValueNode,
 };
 use zetesis_cpu::{Cancellation, Stop};
@@ -16,7 +16,7 @@ const PERMITTED_CANDIDATES: u64 = 24;
 const ANSWERS: usize = 24;
 const CARRIER_ATOMS: usize = 5;
 
-type Family = BTreeSet<Vec<Atom>>;
+type Family = BTreeSet<Model>;
 
 fn predicate(name: &str, arity: usize, sign: Sign) -> Predicate {
     Predicate::with_sign(name, arity, sign).unwrap()
@@ -93,14 +93,14 @@ impl Fixture {
         Self { program, values }
     }
 
-    fn interpretation(&self, selected: &[(Sign, usize)]) -> Vec<Atom> {
+    fn interpretation(&self, selected: &[(Sign, usize)]) -> Model {
         let mut atoms = BTreeSet::from([atom("anchor", Sign::Positive, vec![])]);
         for &(sign, index) in selected {
             for name in ["p", "echo", "derived"] {
                 atoms.insert(atom(name, sign, vec![self.values[index].clone()]));
             }
         }
-        atoms.into_iter().collect()
+        Model::new(atoms).unwrap()
     }
 
     fn family(&self) -> Family {
@@ -139,7 +139,7 @@ impl ExecutionObserver for Route {
     }
 }
 
-fn run(fixture: &Fixture, config: SolveConfig) -> (Vec<Vec<Atom>>, SemanticOutcome) {
+fn run(fixture: &Fixture, config: SolveConfig) -> (Vec<Model>, SemanticOutcome) {
     let mut route = Route::default();
     let mut session = Session::builder(
         PreparedInput::program(&fixture.program),
@@ -150,15 +150,7 @@ fn run(fixture: &Fixture, config: SolveConfig) -> (Vec<Vec<Atom>>, SemanticOutco
     .unwrap();
     let mut answers = Vec::new();
     while let Some(answer) = session.next_observed(&mut route) {
-        answers.push(
-            answer
-                .unwrap()
-                .interpretation()
-                .atoms()
-                .iter()
-                .cloned()
-                .collect(),
-        );
+        answers.push(answer.unwrap().interpretation().clone());
     }
     assert_eq!(route.0, [(config.grounder, config.workers)]);
     assert!(session.next().is_none());
@@ -310,15 +302,7 @@ fn batch_storage_refusal_preserves_the_already_checked_prefix() {
             .start()
             .unwrap();
             let first = session.next().unwrap().unwrap();
-            assert_eq!(
-                first
-                    .interpretation()
-                    .atoms()
-                    .iter()
-                    .cloned()
-                    .collect::<Vec<_>>(),
-                fixture.interpretation(&[])
-            );
+            assert_eq!(first.interpretation(), &fixture.interpretation(&[]));
             // The first one-candidate batch is complete. The next capacity is
             // unrepresentable, so this does not rely on exhausting host memory.
             if cancel {

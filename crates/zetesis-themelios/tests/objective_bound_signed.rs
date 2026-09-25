@@ -64,9 +64,10 @@ impl Fixture {
             zetesis_objective::AdmissionLimits::default(),
         )
         .unwrap();
+        let catalog = zetesis_core::AtomCatalog::new(atoms.clone()).unwrap();
         let plan = ObjectivePlan::new(
             &original,
-            &atoms,
+            catalog.atoms(),
             &objectives,
             ObjectivePlanLimits::default(),
             &Cancellation::default(),
@@ -88,7 +89,8 @@ impl Fixture {
                 .enumerate()
                 .filter(|(index, _)| mask & (1 << index) != 0)
                 .map(|(_, atom)| atom.clone()),
-        );
+        )
+        .unwrap();
         let score = evaluate(
             &self.objectives,
             &model,
@@ -283,9 +285,10 @@ fn outside_range_ceilings_need_no_threshold_states_and_keep_exact_truth() {
             zetesis_objective::AdmissionLimits::default(),
         )
         .unwrap();
+        let model = Model::new([]).unwrap();
         let incumbent = evaluate(
             &constant,
-            &Model::new([]),
+            &model,
             zetesis_objective::Limits::default(),
             &Cancellation::default(),
         )

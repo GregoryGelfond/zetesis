@@ -22,7 +22,14 @@ fn family(admitted: &AdmittedFormula) -> BTreeSet<BTreeSet<Atom>> {
             result
                 .unwrap()
                 .atoms()
-                .map(|index| admitted.atoms()[index].clone())
+                .map(|index| {
+                    admitted
+                        .atoms()
+                        .at(index)
+                        .unwrap()
+                        .to_atom(zetesis_core::ValueLimits::default())
+                        .unwrap()
+                })
                 .collect()
         })
         .collect();

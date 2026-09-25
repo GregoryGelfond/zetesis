@@ -34,6 +34,22 @@ condition's acyclic references and admission limits. `evaluate` reads the
 supplied model; the caller establishes whether that model is an answer set.
 It uses one contribution-key and priority-ordering contract for all templates.
 
+Admission consumes the owned template descriptions. `ObjectiveTemplateRef`
+borrows weight and tuple terms, positive patterns and filters from the shared
+core `TemplateCatalog` representation. Priorities remain a fixed distinct
+layout, with each original template occurrence naming its slot. This storage is
+independent of rule topology and supplies no logical support.
+
+Closed conditions retain ID-only operations. Owned condition atoms share the
+objective's canonical vocabulary and one published tuple catalog; an already
+canonical condition retains its supplied source catalog. `AdmissionLimits::max_bytes`
+bounds the composed canonical payload and metadata, including admission scratch
+and publication overlap. `max_condition_node_bytes` separately bounds each
+condition's node metadata. Exact shared owners count once; independent prefixes
+may conservatively recount shared segments. Caller construction descriptions
+and allocator bookkeeping are excluded. These are admission contracts, not a
+claim that generated source bindings and displayed symbols share one owner.
+
 At the source boundary, admitted scoped weak constraints use the existing body
 compiler and aggregate operations. Their temporary formulas become closed
 queries over typed atoms; they never become program roots. Source body storage,
@@ -69,11 +85,29 @@ text remain separate output contributions. Consumers may retain typed values
 instead of rendering them.
 
 Atom-channel selection has one implementation for library views, human text and
-JSON. `AtomSelection::signatures()` borrows a sorted, unique slice of signed
-predicate signatures. This replaces its previous `BTreeSet` return type; callers
-can iterate the slice or use `includes` for membership. Name, arity and sign all
-participate in identity. Explicitly empty selection differs from implicit all-atom
-selection, and neither changes the underlying answer set.
+JSON. `AtomSelection::signatures()` returns a borrowed `Signatures` view of
+sorted, unique signed predicates. Use `.iter()` to obtain `PredicateRef` values,
+`.at(position)` for indexed access, or `includes` for atom membership. The view
+replaces the former owned-predicate slice; it does not expose canonical IDs as
+ordering keys. Name, arity and sign all participate in identity. Explicitly empty
+selection differs from implicit all-atom selection, and neither changes the
+underlying answer set.
+
+`SourceMetadata::directives()` similarly returns a borrowed `Directives` view;
+its `.iter()` and `.at(position)` yield located occurrences, including authored
+duplicates. Directives, output and projection signatures, and observation
+constants and constructor names share one immutable metadata vocabulary. Their
+public comparisons use typed contents across independently compiled owners.
+`ObservationProgram` retains that vocabulary with its query topology; evaluation
+can read any supplied full model without requiring the model to share it.
+
+`MetadataStorageLimits::max_bytes` defaults to 64 MiB and bounds the canonical
+vocabulary and component capacities, including their named construction and
+publication overlap. `FormulaLimits::metadata_storage`, `MetadataLimits::storage`
+and `AtomSelectionLimits::storage` configure their respective admission doors.
+Source topology, compiler maps and temporary coordinate vectors retain separate
+logical admission policies. This allowance excludes allocator bookkeeping and
+process RSS; storage refusal publishes no partial metadata policy.
 
 `includes` and `try_includes` use the same binary lookup. The latter accepts a
 fallible work callback and charges before each comparison: one unit plus both
@@ -95,10 +129,11 @@ reuses them across enclosing bindings. The cursor retains source-alternative
 order and canonical row order; repeated variables still match one complete
 tuple. Fixed and generated atom conditions use the same predicate bounds.
 
-For `A` model atoms and `K` relational alternatives, preparation retains `A`
-atom references and `K` ranges, with `O(A + K log A)` work apart from predicate
-name comparisons. Nested queries prepare their ranges when entered. Tuple
-matching examines the product of the relevant relation sizes, rather than the
+For `A` model atoms and `K` relational alternatives, the row view borrows the
+model directly, and each query retains `K` ranges. Range preparation takes
+`O(K (1 + log(A + 1)))` work apart from predicate-name comparisons, without an
+`A`-element reference array. Nested queries prepare their ranges when entered.
+Tuple matching examines the product of the relevant relation sizes, rather than the
 whole-model product. Cartesian products within those relations remain possible.
 Bindings, constructed terms and output sorting incur their own measured work.
 These bounds describe operations and storage; they are not a wall-time claim.
@@ -107,12 +142,25 @@ The implementation is in
 and the [query cursor](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/observation/evaluate/query.rs).
 
 Observation limits separately bound work, completed bindings, constructed
-symbols, local owned payload and output. The local byte budget counts semantic
-nodes and text; it excludes borrowed model values and allocator overhead.
-These are deterministic operation budgets, not process-memory limits. Reached
-undefined arithmetic, cancellation or a resource refusal returns an error,
-without a partial observation. An observation error does not invalidate an
-already verified answer set or complete world view.
+symbols, logical local payload and output. Captured input terms stay borrowed;
+generated values use scoped IDs in one per-operation derived arena. The local
+byte budget still counts semantic nodes and text, independently of physical
+sharing, and releases its charge when a local query or key scope ends.
+
+`Limits::max_term_storage_bytes` defaults to 64 MiB. It bounds the combined named
+capacity of the derived arena and retained typed wildcard-key graph, including
+replacement overlap; it excludes borrowed inputs. Transient ID frames each use
+this ceiling independently, so their combined capacities are not part of this
+receipt. `Statistics::term_storage_bytes` and `peak_term_storage_bytes` report
+the named arena-and-key account. Logical local and construction allowances
+remain independent. Neither account includes allocator overhead or measures RSS.
+Reached undefined arithmetic, cancellation or a resource refusal returns an
+error without a partial observation. An observation error does not invalidate
+an already verified answer set or complete world view.
+Errors retain their typed cause, source location and partial statistics. The
+fixed diagnostic box is allocated only on refusal and follows the standard
+allocator's failure policy; these limits do not promise recovery from every
+process allocation failure.
 
 The [Lean correspondence](../lean/correspondence.md) distinguishes the laws for
 original-model conditions and contribution transport from the remaining source,

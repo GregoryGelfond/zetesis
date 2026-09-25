@@ -53,7 +53,7 @@ fn checked_prefix<'a>(
     .unwrap();
     let answer = session.next(config, cancellation, phases).unwrap().unwrap();
     assert_eq!(
-        answer.atoms().iter().cloned().collect::<Vec<_>>(),
+        answer.atoms().iter().collect::<Vec<_>>(),
         vec![Atom::new(Predicate::new("a", 0).unwrap(), vec![]).unwrap()]
     );
     assert!(session.ready.as_slice().is_empty());

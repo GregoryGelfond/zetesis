@@ -10,23 +10,29 @@ use super::{AdmittedFormula, AdmittedFormulaBundle, Compiled, FormulaBundleFailu
 use crate::{FormulaFailure, FormulaLimits, GroundingObserver, SourceBundle, SourceMetadata};
 use crate::{expansion::Budget, formula_ground, formula_ir, grounding_observer};
 
-pub(super) struct Preparation {
-    program: formula_ir::Prepared,
-    budget: Budget,
-    limits: FormulaLimits,
-    options: crate::grounding_options::Execution,
-    location: Location,
+pub(crate) struct Preparation {
+    pub(crate) catalog: crate::formula_support::SupportCatalog,
+    pub(crate) accounting: crate::formula_support::Accounting,
+    pub(crate) program: formula_ir::Prepared,
+    pub(crate) budget: Budget,
+    pub(crate) limits: FormulaLimits,
+    pub(crate) options: crate::grounding_options::Execution,
+    pub(crate) location: Location,
 }
 
 impl Preparation {
     pub(super) fn new(
         program: formula_ir::Prepared,
+        catalog: crate::formula_support::SupportCatalog,
+        accounting: crate::formula_support::Accounting,
         budget: Budget,
         limits: &FormulaLimits,
         location: Location,
     ) -> Self {
         Self {
             program,
+            catalog,
+            accounting,
             budget,
             // The deferred receipt owns one immutable snapshot; its later
             // compilation and grounding helpers borrow this configuration.
@@ -37,36 +43,19 @@ impl Preparation {
     }
 
     fn ground_hybrid(
-        mut self,
+        self,
         observer: Option<&dyn GroundingObserver>,
     ) -> Result<(Compiled, crate::formula_hybrid::Constraints), FormulaFailure> {
-        grounding_observer::observe(observer, || {
-            formula_ground::ground_hybrid(
-                self.program,
-                &self.limits,
-                &mut self.budget,
-                self.location,
-                observer,
-                self.options,
-            )
-        })
+        grounding_observer::observe(observer, || formula_ground::ground_hybrid(self, observer))
     }
 
     fn ground(
-        mut self,
+        self,
         observer: Option<&dyn GroundingObserver>,
         count_plan: Option<crate::formula_count_plan::Request<'_>>,
     ) -> Result<Compiled, FormulaFailure> {
         grounding_observer::observe(observer, || {
-            formula_ground::ground(
-                self.program,
-                &self.limits,
-                &mut self.budget,
-                self.location,
-                observer,
-                count_plan,
-                self.options,
-            )
+            formula_ground::ground(self, observer, count_plan)
         })
     }
 }
@@ -420,3 +409,6 @@ impl PreparedFormulaBundle {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

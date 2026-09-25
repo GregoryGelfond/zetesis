@@ -3,43 +3,23 @@
 mod schedule;
 
 use super::*;
-use crate::expansion::Budget;
-use crate::formula_support::{SupportCatalog, complete, row_values};
-use crate::{AdmissionOptions, ExpansionLimits, FormulaResource, ParsedSource};
-use zetesis_core::{Atom, Value};
+use crate::FormulaResource;
+use crate::formula::Preparation;
+use crate::formula_support::{GroundingWork, SupportCatalog, complete};
+use zetesis_core::{Atom, Predicate, Value};
 
-fn prepare(source: &str) -> Prepared {
-    let parsed = ParsedSource::new(source.into(), AdmissionOptions::default()).unwrap();
-    let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
-    let mut choices = crate::formula_choice_source::Catalog::default();
-    let raised = crate::formula_choice_source::raise(
-        parsed.parsed(),
-        &mut crate::metadata::Builder::default(),
-        &mut budget,
-        &mut choices,
-    )
-    .unwrap();
-    crate::formula_ir::prepare(
-        &raised,
-        &choices,
-        AdmissionOptions::default(),
-        &FormulaLimits::default(),
-        &mut budget,
-        Location {
-            source: parsed.source().id(),
-            span: parsed.source().span(),
-        },
-    )
-    .unwrap()
+fn prepare(source: &str) -> Preparation {
+    crate::formula_support::testing::prepare(source)
 }
 
 fn location(prepared: &Prepared) -> Location {
     prepared.rules.first().unwrap().location
 }
 
-fn plan(prepared: &Prepared) -> ProducerPlan<'_> {
+fn plan<'a>(prepared: &'a Prepared, catalog: &SupportCatalog) -> ProducerPlan<'a> {
     ProducerPlan::prepare(
         prepared,
+        catalog,
         &FormulaLimits::default(),
         &mut Counters::default(),
         location(prepared),
@@ -56,27 +36,37 @@ fn atom(name: &str, sign: zetesis_core::Sign, values: &[i32]) -> Atom {
     .unwrap()
 }
 
-fn atoms(prepared: &Prepared, selected: Option<ProducerPlan<'_>>) -> Vec<Atom> {
+fn atoms(prepared: Preparation, scheduled: bool) -> Vec<Atom> {
+    let Preparation {
+        catalog,
+        accounting,
+        program: prepared,
+        mut budget,
+        ..
+    } = prepared;
     let limits = FormulaLimits::default();
-    let mut counters = Counters::default();
+    let mut counters = Counters::resume(accounting, crate::grounding_observer::Work::default());
+    let selected = scheduled.then(|| plan(&prepared, &catalog));
     let catalog = complete(
-        prepared,
+        catalog,
+        &prepared,
         selected,
         None,
-        &limits,
-        &mut Budget::new(ExpansionLimits::default(), usize::MAX),
-        &mut counters,
-        location(prepared),
+        &mut budget,
+        GroundingWork::new(&limits, &mut counters, location(&prepared)),
     )
     .unwrap();
     let snapshot = catalog
-        .snapshot(&limits, &mut counters, location(prepared))
+        .snapshot(&limits, &mut counters, location(&prepared))
         .unwrap();
     let mut atoms = Vec::new();
-    for predicate in snapshot.relations.predicates() {
-        for row in snapshot.relations.rows(predicate) {
-            atoms.push(Atom::new(predicate.clone(), row_values(row).cloned().collect()).unwrap());
-        }
+    for (_, source) in snapshot.relations.source_atoms() {
+        // Explicit test-oracle export, outside measured execution.
+        atoms.extend(
+            source
+                .iter()
+                .map(|atom| atom.to_atom(zetesis_core::ValueLimits::default()).unwrap()),
+        );
     }
     atoms.sort();
     atoms
@@ -88,8 +78,9 @@ fn pool_alternatives_keep_distinct_plan_occurrences() {
     // Admitted head pool alternatives instead create two distinct IR occurrences
     // before the separate analyzed program coalesces their equal rules. Body
     // atom pools are outside the current source pool profile.
-    let prepared = prepare("d(0).p(1;1):-d(0).");
-    let plan = plan(&prepared);
+    let owner = prepare("d(0).p(1;1):-d(0).");
+    let prepared = &owner.program;
+    let plan = plan(prepared, &owner.catalog);
     assert_eq!(prepared.rules.len(), 3);
     assert_eq!(prepared.analyzed.statements().count(), 2);
     assert_eq!(plan.rules.len(), 3);
@@ -110,11 +101,10 @@ fn pool_alternatives_keep_distinct_plan_occurrences() {
 
 #[test]
 fn planned_completion_preserves_the_full_support_carrier() {
-    let prepared = prepare(
-        "p(1).p(1).-p(2).p(3,4).r(X):-p(X).s(X):-r(X).r(X):-s(X).t(X,Y):-p(X),p(Y).:-s(7).",
-    );
-    let actual = atoms(&prepared, Some(plan(&prepared)));
-    let reference = atoms(&prepared, None);
+    let source =
+        "p(1).p(1).-p(2).p(3,4).r(X):-p(X).s(X):-r(X).r(X):-s(X).t(X,Y):-p(X),p(Y).:-s(7).";
+    let actual = atoms(prepare(source), true);
+    let reference = atoms(prepare(source), false);
     let mut expected = vec![
         atom("p", zetesis_core::Sign::Positive, &[1]),
         atom("p", zetesis_core::Sign::Negative, &[2]),
@@ -141,20 +131,19 @@ fn pivots(mut variants: Variants<'_, '_>, counters: &mut Counters) -> Vec<Option
 
 #[test]
 fn repeated_schedules_reuse_original_positive_occurrences() {
-    let prepared = prepare("p(1).p(2).r(X,Y):-p(X),p(Y).");
-    let plan = plan(&prepared);
+    let Preparation {
+        mut catalog,
+        program: prepared,
+        accounting,
+        ..
+    } = prepare("p(1).p(2).r(X,Y):-p(X),p(Y).");
+    let plan = plan(&prepared, &catalog);
     let limits = FormulaLimits::default();
-    let mut counters = Counters::default();
-    let mut catalog = SupportCatalog::default();
+    let mut counters = Counters::resume(accounting, crate::grounding_observer::Work::default());
     for value in [1, 2] {
-        if value == 2 {
-            catalog
-                .advance(&limits, &mut counters, location(&prepared))
-                .unwrap();
-        }
         catalog = catalog
             .insert(
-                atom("p", zetesis_core::Sign::Positive, &[value]),
+                &atom("p", zetesis_core::Sign::Positive, &[value]),
                 &limits,
                 &mut counters,
                 location(&prepared),
@@ -181,22 +170,24 @@ fn repeated_schedules_reuse_original_positive_occurrences() {
     }
     // Construction was separate. Each repeated call replaces the two-literal
     // applicability scan with one checked original-owner lookup.
-    assert_eq!(reference.work - planned.work, 8);
+    assert_eq!(reference.accounting.work - planned.accounting.work, 8);
 }
 
 #[test]
 fn foreign_rule_owners_cannot_use_cached_occurrences() {
     let source = "p(1).r(X):-p(X).";
-    let prepared = prepare(source);
-    let foreign = prepare(source);
-    let plan = plan(&prepared);
+    let owner = prepare(source);
+    let prepared = &owner.program;
+    let foreign_owner = prepare(source);
+    let foreign = &foreign_owner.program;
+    let plan = plan(prepared, &owner.catalog);
     let limits = FormulaLimits::default();
-    let catalog = SupportCatalog::default();
     let mut counters = Counters::default();
-    let snapshot = catalog
-        .snapshot(&limits, &mut counters, location(&prepared))
+    let snapshot = owner
+        .catalog
+        .snapshot(&limits, &mut counters, location(prepared))
         .unwrap();
-    let support = Support::indexed(&snapshot, &limits, &counters, location(&prepared)).unwrap();
+    let support = Support::indexed(&snapshot, &limits, &counters, location(prepared)).unwrap();
     let index = foreign.rules.len() - 1;
     let rule = &foreign.rules[index];
     let Err(failure) = plan.variants(index, rule, &support, true, &limits, &mut counters) else {
@@ -214,13 +205,15 @@ fn richer_sources_retain_the_existing_schedule() {
         "p(1).r(X+1):-p(X).",
         "p(1).{r(X)}:-p(X).",
     ] {
-        let prepared = prepare(source);
+        let owner = prepare(source);
+        let prepared = &owner.program;
         assert!(
             ProducerPlan::prepare(
-                &prepared,
+                prepared,
+                &owner.catalog,
                 &FormulaLimits::default(),
                 &mut Counters::default(),
-                location(&prepared)
+                location(prepared)
             )
             .unwrap()
             .is_none(),
@@ -248,59 +241,73 @@ fn a_body_comparison_is_no_producer_input() {
             vec![atom("p", zetesis_core::Sign::Positive, &[1])],
         ),
     ] {
-        let prepared = prepare(source);
-        let planned = plan(&prepared);
+        let owner = prepare(source);
+        let prepared = &owner.program;
+        let planned = plan(prepared, &owner.catalog);
         assert_eq!(planned.rules[1], Some(0..1), "{source}");
-        assert_eq!(atoms(&prepared, Some(planned)), expected, "{source}");
-        assert_eq!(atoms(&prepared, None), expected, "{source}");
+        assert_eq!(atoms(prepare(source), true), expected, "{source}");
+        assert_eq!(atoms(prepare(source), false), expected, "{source}");
     }
 }
 
 #[test]
 fn work_refusals_do_not_publish_partial_plans() {
-    let prepared = prepare("p(1).r(X):-p(X).s(X):-r(X).r(X):-s(X).");
+    let owner = prepare("p(1).r(X):-p(X).s(X):-r(X).r(X):-s(X).");
+    let prepared = &owner.program;
     let mut complete = Counters::default();
     ProducerPlan::prepare(
-        &prepared,
+        prepared,
+        &owner.catalog,
         &FormulaLimits::default(),
         &mut complete,
-        location(&prepared),
+        location(prepared),
     )
     .unwrap()
     .unwrap();
-    assert!(complete.work > 1);
-    for maximum in 0..complete.work {
+    assert!(complete.accounting.work > 1);
+    for maximum in 0..complete.accounting.work {
         let limits = FormulaLimits {
             max_work: maximum,
             ..FormulaLimits::default()
         };
         let mut counters = Counters::default();
-        let Err(error) =
-            ProducerPlan::prepare(&prepared, &limits, &mut counters, location(&prepared))
-        else {
+        let Err(error) = ProducerPlan::prepare(
+            prepared,
+            &owner.catalog,
+            &limits,
+            &mut counters,
+            location(prepared),
+        ) else {
             panic!("a proper charged prefix cannot publish this plan");
         };
         assert!(
             matches!(error, FormulaFailure::Limit { resource: FormulaResource::Work, observed, limit, .. } if observed > limit && limit == u128::from(maximum))
         );
-        assert!(counters.work <= maximum);
+        assert!(counters.accounting.work <= maximum);
     }
 }
 
 #[test]
 fn producer_storage_is_admitted_before_reservation() {
-    let prepared = prepare("p(1).r(X):-p(X).");
+    let owner = prepare("p(1).r(X):-p(X).");
+    let prepared = &owner.program;
+    let required = owner.catalog.bytes(location(prepared)).unwrap() + size_of::<ProducerPlan<'_>>();
     let limits = FormulaLimits {
-        max_support_bytes: size_of::<ProducerPlan<'_>>() - 1,
+        max_support_bytes: required - 1,
         ..FormulaLimits::default()
     };
     let mut counters = Counters::default();
-    let Err(error) = ProducerPlan::prepare(&prepared, &limits, &mut counters, location(&prepared))
-    else {
-        panic!("the producer header alone exceeds this allowance");
+    let Err(error) = ProducerPlan::prepare(
+        prepared,
+        &owner.catalog,
+        &limits,
+        &mut counters,
+        location(prepared),
+    ) else {
+        panic!("the catalog and producer header exceed this allowance");
     };
     assert!(
-        matches!(error, FormulaFailure::Limit { resource: FormulaResource::SupportBytes, observed, limit, .. } if observed == size_of::<ProducerPlan<'_>>() as u128 && limit == limits.max_support_bytes as u128)
+        matches!(error, FormulaFailure::Limit { resource: FormulaResource::SupportBytes, observed, limit, .. } if observed == required as u128 && limit == limits.max_support_bytes as u128)
     );
-    assert!(counters.work > 0);
+    assert!(counters.accounting.work > 0);
 }

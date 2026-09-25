@@ -69,14 +69,11 @@ fn definition_stable(graph: &GroundProgram, interpretation: u32) -> bool {
 }
 
 fn decode(graph: &GroundProgram, mask: u32) -> Model {
-    Model::new(
-        graph
-            .atoms()
-            .iter()
-            .enumerate()
-            .filter(|(index, _)| mask & (1u32 << index) != 0)
-            .map(|(_, atom)| atom.clone()),
+    Model::from_positions(
+        graph.atom_catalog(),
+        (0..graph.atom_count()).filter(|index| mask & (1u32 << index) != 0),
     )
+    .unwrap()
 }
 fn encode_seed(graph: &GroundProgram, seed: &Seed) -> u32 {
     graph
@@ -157,21 +154,14 @@ fn assert_all_small_models(program: &Program) {
         graph.atom_count() <= 2,
         "minimality campaign is deliberately tiny"
     );
-    let expected: BTreeSet<Vec<Atom>> = (0..(1u32 << graph.atom_count()))
+    let expected: BTreeSet<u32> = (0..(1u32 << graph.atom_count()))
         .filter(|interpretation| definition_stable(&graph, *interpretation))
-        .map(|interpretation| {
-            decode(&graph, interpretation)
-                .atoms()
-                .iter()
-                .cloned()
-                .collect()
-        })
         .collect();
     let mut actual = BTreeSet::new();
     let mut seen_seeds = BTreeSet::new();
     for candidate in Candidates::new(program, CandidateLimits::default(), Cancellation::default()) {
         let candidate = candidate.expect("tiny carrier exhausts within budget");
-        let key: Vec<_> = candidate.atoms().iter().cloned().collect();
+        let key = encode_seed(&graph, &candidate);
         assert!(
             seen_seeds.insert(key),
             "candidate enumeration duplicated a seed"
@@ -182,9 +172,8 @@ fn assert_all_small_models(program: &Program) {
                 definition_stable(&graph, closure),
                 "accepted closure must satisfy independent minimality"
             );
-            let model: Vec<_> = decode(&graph, closure).atoms().iter().cloned().collect();
             assert!(
-                actual.insert(model),
+                actual.insert(closure),
                 "two accepted seeds must not reconstruct the same model"
             );
         }
@@ -210,8 +199,7 @@ fn assert_all_small_models(program: &Program) {
         bounded_seeds += 1;
         if assert_seed_matches_static(program, &graph, &candidate) {
             let (closure, _, _) = direct_closure(&graph, encode_seed(&graph, &candidate));
-            let model: Vec<_> = decode(&graph, closure).atoms().iter().cloned().collect();
-            bounded_models.insert(model);
+            bounded_models.insert(closure);
         }
     }
     assert!(bounded_seeds <= seen_seeds.len());

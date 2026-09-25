@@ -654,7 +654,7 @@ mod tests {
 
     #[test]
     fn materialized_static_models_keep_their_owner() {
-        let model = zetesis_core::Model::new([]);
+        let model = zetesis_core::Model::new([]).unwrap();
         let owner = model.catalog().clone();
         let retained = super::materialized(Ok(model)).unwrap().unwrap().unwrap();
         assert!(retained.catalog().same_owner(&owner));

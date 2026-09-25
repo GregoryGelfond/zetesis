@@ -20,10 +20,11 @@ pub struct WorldViewLimits {
     pub max_answer_sets: usize,
     /// Maximum summed atom counts across retained full answer sets.
     pub max_atoms: usize,
-    /// Maximum canonical answer payload bytes: each distinct catalog allocation
-    /// once, plus selected positions and optional score priorities per answer.
-    /// Equal-content separately allocated catalogs count separately. Excludes
-    /// shared subjects, spare vector/hash capacity, owner-index entries,
+    /// Maximum portable answer payload bytes: each distinct occurrence catalog's
+    /// encoding once, plus selected positions and optional score priorities per
+    /// answer. Equal-content separate catalogs count separately. Excludes
+    /// canonical identities outside occurrence maps, shared subjects, spare
+    /// vector/hash capacity, owner-index entries,
     /// allocator/Arc overhead, execution state and the one yielded answer being
     /// considered for admission. This is not an allocated-memory or RSS limit.
     pub max_bytes: usize,

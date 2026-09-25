@@ -26,11 +26,11 @@ fn positive_recursion_remains_a_positive_dependency() {
 #[test]
 fn choice_head_is_a_frozen_true_gate_not_a_positive_antecedent() {
     let input = accepted("{p}.");
-    let template = &input.program().templates()[0];
+    let template = &input.program().templates().at(0).unwrap();
     assert!(template.positive().is_empty());
     assert_eq!(
-        template.gate_true(),
-        &[template.head().expect("choice head").clone()]
+        template.gate_true().iter().collect::<Vec<_>>(),
+        &[template.head().expect("choice head")]
     );
     assert!(template.gate_false().is_empty());
 }
@@ -38,44 +38,54 @@ fn choice_head_is_a_frozen_true_gate_not_a_positive_antecedent() {
 #[test]
 fn default_and_double_default_negation_have_opposite_gate_polarities() {
     let input = accepted("p :- not q, not not r.");
-    let template = &input.program().templates()[0];
-    assert_eq!(template.gate_false()[0].predicate().name(), "q");
-    assert_eq!(template.gate_true()[0].predicate().name(), "r");
+    let template = &input.program().templates().at(0).unwrap();
+    assert_eq!(template.gate_false().at(0).unwrap().predicate().name(), "q");
+    assert_eq!(template.gate_true().at(0).unwrap().predicate().name(), "r");
     assert!(template.positive().is_empty());
 }
 
 #[test]
 fn constraints_share_gates_and_scalar_filters() {
     let input = accepted(":- not p, not not q, 1 != 2.");
-    let template = &input.program().templates()[0];
+    let template = &input.program().templates().at(0).unwrap();
     assert!(template.head().is_none());
     assert_eq!(template.gate_false().len(), 1);
     assert_eq!(template.gate_true().len(), 1);
     assert_eq!(
-        template.filters(),
-        &[Filter::Neq(
+        template.filters().iter().collect::<Vec<_>>(),
+        [Filter::Neq(
             Term::Constant(Value::Number(1)),
             Term::Constant(Value::Number(2))
         )]
+        .iter()
+        .map(zetesis_core::FilterRef::from)
+        .collect::<Vec<_>>()
     );
 }
 
 #[test]
 fn scalar_values_keep_their_types_and_decode_strings() {
     let input = accepted("p(a, \"a\", 12, -7, \"a\\\"b\").");
-    let terms = input.program().templates()[0]
+    let terms = input
+        .program()
+        .templates()
+        .at(0)
+        .unwrap()
         .head()
         .expect("fact head")
         .terms();
     assert_eq!(
-        terms,
-        &[
+        terms.iter().collect::<Vec<_>>(),
+        [
             Term::Constant(Value::Symbol("a".to_owned())),
             Term::Constant(Value::String("a".to_owned())),
             Term::Constant(Value::Number(12)),
             Term::Constant(Value::Number(-7)),
             Term::Constant(Value::String("a\"b".to_owned())),
         ]
+        .iter()
+        .map(zetesis_core::TemplateTerm::from)
+        .collect::<Vec<_>>()
     );
 }
 
@@ -310,17 +320,20 @@ fn scalar_assignments_require_binding_analysis() {
 #[test]
 fn anonymous_occurrences_have_distinct_slots() {
     let input = accepted("p(X) :- r(_,X,_).");
-    let template = &input.program().templates()[0];
-    let terms = template.positive()[0].terms();
-    assert_ne!(terms[0], terms[2]);
+    let template = &input.program().templates().at(0).unwrap();
+    let terms = template.positive().at(0).unwrap().terms();
+    assert_ne!(terms.at(0).unwrap(), terms.at(2).unwrap());
 }
 
 #[test]
 fn named_occurrences_share_slots() {
     let input = accepted("p(X) :- r(_,X,_).");
-    let template = &input.program().templates()[0];
-    let terms = template.positive()[0].terms();
-    assert_eq!(template.head().expect("head").terms()[0], terms[1]);
+    let template = &input.program().templates().at(0).unwrap();
+    let terms = template.positive().at(0).unwrap().terms();
+    assert_eq!(
+        template.head().expect("head").terms().at(0).unwrap(),
+        terms.at(1).unwrap()
+    );
 }
 
 #[test]
@@ -453,10 +466,11 @@ fn closed_function_and_tuple_facts_have_complete_distinct_values() {
     ] {
         let input = admit(source.to_owned(), AdmissionOptions::default()).unwrap();
         assert_eq!(input.program().domain().len(), 1);
-        let value = &input.program().domain()[0];
-        let actual = match value {
-            zetesis_core::Value::Structured(value) => value.to_string(),
-            zetesis_core::Value::Symbol(value) => value.clone(),
+        let value = &input.program().domain().at(0).unwrap();
+        let actual = match value.descriptor() {
+            zetesis_core::ValueNodeRef::Function { .. }
+            | zetesis_core::ValueNodeRef::Tuple { .. } => value.to_string(),
+            zetesis_core::ValueNodeRef::Symbol(value) => value.to_owned(),
             other => panic!("unexpected {other:?}"),
         };
         assert_eq!(actual, spelling);

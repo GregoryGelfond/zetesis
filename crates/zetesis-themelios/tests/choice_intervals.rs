@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::Value as Json;
 use themelios_program::term::EvalError;
-use zetesis_core::{Atom, Model};
+use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Node, Theory};
 use zetesis_themelios::{
@@ -60,14 +60,11 @@ fn holds(theory: &Theory, values: &[bool]) -> bool {
     theory.roots().iter().all(|&root| values[root])
 }
 fn record(admitted: &AdmittedFormula, mask: usize) -> Record {
-    let model = Model::new(
-        admitted
-            .atoms()
-            .iter()
-            .enumerate()
-            .filter(|(index, _)| mask & (1 << index) != 0)
-            .map(|(_, atom)| atom.clone()),
-    );
+    let model = Model::from_positions(
+        admitted.atom_catalog(),
+        (0..admitted.atoms().len()).filter(|index| mask & (1 << index) != 0),
+    )
+    .unwrap();
     let rendered = admitted
         .metadata()
         .observations()
@@ -238,7 +235,11 @@ fn explicit_single_group_expansions_match_complete_models_and_cost_presence() {
     );
 }
 
-fn remap(mask: usize, from: &[Atom], to: &[Atom]) -> usize {
+fn remap(
+    mask: usize,
+    from: zetesis_core::catalog::Atoms<'_>,
+    to: zetesis_core::catalog::Atoms<'_>,
+) -> usize {
     from.iter()
         .enumerate()
         .filter(|(index, _)| mask & (1 << index) != 0)

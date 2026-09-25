@@ -153,6 +153,30 @@ fn nested_terms_use_asp_order_at_each_child() {
 }
 
 #[test]
+fn value_storage_order_keeps_structures_after_symbols() {
+    let ordered = [
+        Value::Infimum,
+        Value::Number(i32::MIN),
+        Value::Number(i32::MAX),
+        Value::String("z".into()),
+        Value::Symbol("z".into()),
+        value(vec![N::Function {
+            name: "f".into(),
+            sign: Sign::Negative,
+            arity: 0,
+        }]),
+        value(vec![fun("g", 1), N::Infimum]),
+        value(vec![N::Tuple { arity: 0 }]),
+        Value::Supremum,
+    ];
+    for (left_position, left) in ordered.iter().enumerate() {
+        for (right_position, right) in ordered.iter().enumerate() {
+            assert_eq!(left.cmp(right), left_position.cmp(&right_position));
+        }
+    }
+}
+
+#[test]
 fn malformed_trees_and_each_exact_construction_limit_refuse_without_partial_values() {
     for nodes in [
         vec![],

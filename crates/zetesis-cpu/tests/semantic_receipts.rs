@@ -28,7 +28,7 @@ fn compile(program: &Program) -> GroundProgram {
 }
 
 fn expected(name: &str) -> Interpretation {
-    Interpretation::new([Atom::new(Predicate::new(name, 0).unwrap(), vec![]).unwrap()])
+    Interpretation::new([Atom::new(Predicate::new(name, 0).unwrap(), vec![]).unwrap()]).unwrap()
 }
 
 #[test]

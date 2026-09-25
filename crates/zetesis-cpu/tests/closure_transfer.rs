@@ -6,6 +6,10 @@ use zetesis_core::{
 use zetesis_cpu::{Cancellation, Limits, check, lazy};
 
 fn source(constraint: bool) -> Program {
+    Program::new(templates(constraint), AdmissionLimits::default()).unwrap()
+}
+
+fn templates(constraint: bool) -> Vec<Template> {
     let head = AtomPattern::new(
         Predicate::new("message", 1).unwrap(),
         vec![Term::Constant(Value::String("retained payload".to_owned()))],
@@ -15,20 +19,25 @@ fn source(constraint: bool) -> Program {
     if constraint {
         rules.push(Template::new(None, vec![], vec![], vec![], vec![]));
     }
-    Program::new(rules, AdmissionLimits::default()).unwrap()
+    rules
 }
 
-fn expected() -> Model {
-    Model::new([Atom::new(
+fn message() -> Atom {
+    Atom::new(
         Predicate::new("message", 1).unwrap(),
         vec![Value::String("retained payload".to_owned())],
     )
-    .unwrap()])
+    .unwrap()
+}
+
+fn expected() -> Model {
+    Model::new([message()]).unwrap()
 }
 
 fn payload(model: &Model) -> &str {
     let atom = model.atoms().first().unwrap();
-    let Value::String(value) = &atom.values()[0] else {
+    let zetesis_core::ValueNodeRef::String(value) = atom.values().at(0).unwrap().descriptor()
+    else {
         panic!("fixture contains one string argument");
     };
     value
@@ -92,7 +101,7 @@ fn rejected_shared_check_retains_its_raw_closure() {
 fn shared_closures_retain_one_finished_catalog() {
     let program = {
         let head = AtomPattern::new(Predicate::new("zchoice", 0).unwrap(), vec![]).unwrap();
-        let mut templates = source(false).templates().to_vec();
+        let mut templates = templates(false);
         templates.push(Template::new(
             Some(head.clone()),
             vec![],
@@ -119,10 +128,7 @@ fn shared_closures_retain_one_finished_catalog() {
     let models: Vec<_> = checks.into_iter().map(lazy::Check::into_closure).collect();
     drop(program);
     assert_eq!(models[0], expected());
-    assert_eq!(
-        models[1],
-        Model::new(expected().atoms().iter().cloned().chain([chosen]))
-    );
+    assert_eq!(models[1], Model::new([message(), chosen]).unwrap());
     assert!(models[0].catalog().same_owner(models[1].catalog()));
     assert_eq!(payload(&models[0]).as_ptr(), payload(&models[1]).as_ptr());
 }

@@ -22,7 +22,7 @@ fn admit(source: &str) -> AdmittedFormula {
 }
 fn rendered(source: &str) -> String {
     let input = admit(source);
-    let model = Model::new(input.atoms().iter().cloned());
+    let model = Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap();
     input
         .metadata()
         .observations()
@@ -85,7 +85,7 @@ fn cardinality_keys_pay_their_complete_admission_cost() {
             )
         };
         let input = run(nodes).unwrap_or_else(|error| panic!("{source}: {error}"));
-        let model = Model::new(input.atoms().iter().cloned());
+        let model = Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap();
         let shown = input
             .metadata()
             .observations()
@@ -198,7 +198,7 @@ fn local_equalities_construct_aggregate_keys() {
 #[test]
 fn independent_aggregate_queries_release_their_keys() {
     let input = admit("p(1). #show. #show x:#count{X:p(X)}=1,#count{Y:p(Y)}=1.");
-    let model = Model::new(input.atoms().iter().cloned());
+    let model = Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap();
     let result = input
         .metadata()
         .observations()
@@ -216,7 +216,7 @@ fn independent_aggregate_queries_release_their_keys() {
 #[test]
 fn aggregate_keys_obey_the_inclusive_local_payload_ceiling() {
     let input = admit("p(1). #show. #show x:#count{X:p(X)}=1.");
-    let model = Model::new(input.atoms().iter().cloned());
+    let model = Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap();
     let run = |max_local_bytes| {
         input.metadata().observations().evaluate(
             &model,
@@ -240,7 +240,7 @@ fn aggregate_keys_obey_the_inclusive_local_payload_ceiling() {
 #[test]
 fn local_substitutions_share_the_binding_ceiling() {
     let input = admit("p(1).p(2). #show. #show x:#count{X:p(X)}=2.");
-    let model = Model::new(input.atoms().iter().cloned());
+    let model = Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap();
     let run = |max_bindings| {
         input.metadata().observations().evaluate(
             &model,
@@ -543,10 +543,12 @@ fn matched_atom_keys_share_the_live_scope_ceiling() {
             write!(facts, "p({value}).").unwrap();
         }
         let input = admit(&format!("{facts} #show. #show N:N={{p((X;10))}}."));
-        let model = Model::new(input.atoms().iter().cloned());
-        // A live p(number) binding costs 33 bytes. Each retained complete
-        // (default-negation tag, p(number)) tuple costs 65 bytes.
-        let exact = 33 + 65 * count;
+        let model = Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap();
+        // The binding and each retained p(number) key charge two semantic
+        // nodes plus the one-byte predicate name. Default negation belongs
+        // to typed key metadata; it does not fabricate an ASP tag/tuple value.
+        let atom_key_bytes = 2 * 16 + 1;
+        let exact = atom_key_bytes * (count + 1);
         let run = |max_local_bytes| {
             input.metadata().observations().evaluate(
                 &model,
@@ -579,7 +581,7 @@ fn matched_atom_key_construction_checks_child_depth() {
         .metadata()
         .observations()
         .evaluate(
-            &Model::new(input.atoms().iter().cloned()),
+            &Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap(),
             Limits {
                 max_symbol_depth: 1,
                 ..Limits::default()

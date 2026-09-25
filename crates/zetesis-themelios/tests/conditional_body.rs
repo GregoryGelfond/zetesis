@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
-use zetesis_core::{Atom, Sign, Value};
+use zetesis_core::Sign;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Node, Theory};
 use zetesis_themelios::{
@@ -64,7 +64,8 @@ fn json_model(values: &Json) -> BTreeSet<String> {
     result
 }
 
-fn atom_text(atom: &Atom) -> String {
+fn atom_text<'a>(atom: impl Into<zetesis_core::catalog::AtomRef<'a>>) -> String {
+    let atom = atom.into();
     let sign = if atom.predicate().sign() == Sign::Negative {
         "-"
     } else {
@@ -77,13 +78,14 @@ fn atom_text(atom: &Atom) -> String {
     let values: Vec<_> = atom
         .values()
         .iter()
-        .map(|value| match value {
-            Value::Number(number) => number.to_string(),
-            Value::Symbol(value) => value.clone(),
-            Value::String(value) => serde_json::to_string(value).unwrap(),
-            Value::Infimum => "#inf".into(),
-            Value::Supremum => "#sup".into(),
-            Value::Structured(value) => value.to_string(),
+        .map(|value| match value.descriptor() {
+            zetesis_core::ValueNodeRef::Number(number) => number.to_string(),
+            zetesis_core::ValueNodeRef::Symbol(value) => value.to_owned(),
+            zetesis_core::ValueNodeRef::String(value) => serde_json::to_string(value).unwrap(),
+            zetesis_core::ValueNodeRef::Infimum => "#inf".into(),
+            zetesis_core::ValueNodeRef::Supremum => "#sup".into(),
+            zetesis_core::ValueNodeRef::Function { .. }
+            | zetesis_core::ValueNodeRef::Tuple { .. } => value.to_string(),
         })
         .collect();
     format!("{name}({})", values.join(","))
@@ -159,7 +161,7 @@ fn native(input: &AdmittedFormula) -> Models {
                 model
                     .unwrap()
                     .atoms()
-                    .map(|index| atom_text(&input.atoms()[index]))
+                    .map(|index| atom_text(input.atoms().at(index).unwrap()))
                     .collect()
             )
         );
@@ -352,7 +354,7 @@ impl Formula {
         }
     }
 }
-fn world(atoms: &[Atom], mask: usize) -> BTreeSet<String> {
+fn world(atoms: zetesis_core::catalog::Atoms<'_>, mask: usize) -> BTreeSet<String> {
     atoms
         .iter()
         .enumerate()
@@ -587,8 +589,8 @@ fn included_conditionals_preserve_original_locations_and_output_selection() {
     let model = search.next().unwrap().unwrap();
     let shown: Vec<_> = model
         .atoms()
-        .map(|index| &program.atoms()[index])
-        .filter(|atom| program.metadata().output().includes(atom))
+        .map(|index| program.atoms().at(index).unwrap())
+        .filter(|atom| program.metadata().output().includes(*atom))
         .map(atom_text)
         .collect();
     assert_eq!(shown, ["q"]);

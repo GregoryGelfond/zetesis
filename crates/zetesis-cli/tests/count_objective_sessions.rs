@@ -15,7 +15,7 @@ use std::num::NonZeroUsize;
 use zetesis_cli::{
     Backend, Completion, Interruption, Oracle, PreparedInput, SearchMethod, Session, SolveConfig,
 };
-use zetesis_core::{Atom, Predicate, Value};
+use zetesis_core::{Atom, Predicate, Value, ValueLimits};
 use zetesis_cpu::Cancellation;
 use zetesis_sat::Incomplete;
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
@@ -132,10 +132,17 @@ fn prepared_sessions_preserve_complete_model_records() {
                     let mut actual = BTreeSet::new();
                     for result in session.by_ref() {
                         let model = result.unwrap();
-                        assert!(actual.insert((
-                            model.interpretation().atoms().iter().cloned().collect(),
-                            model.score().map(|score| score.costs().to_vec()),
-                        )));
+                        assert!(
+                            actual.insert((
+                                model
+                                    .interpretation()
+                                    .atoms()
+                                    .iter()
+                                    .map(|atom| atom.to_atom(ValueLimits::default()).unwrap())
+                                    .collect(),
+                                model.score().map(|score| score.costs().to_vec()),
+                            ))
+                        );
                     }
                     let outcome = session.outcome().unwrap();
                     assert_eq!(outcome.completion(), Some(Completion::Exhausted));
@@ -287,10 +294,17 @@ fn candidate_ceiling_retains_an_unproved_incumbent() {
                 let mut delivered = BTreeSet::new();
                 for result in session.by_ref() {
                     let model = result.unwrap();
-                    assert!(delivered.insert((
-                        model.interpretation().atoms().iter().cloned().collect(),
-                        model.score().map(|score| score.costs().to_vec()),
-                    )));
+                    assert!(
+                        delivered.insert((
+                            model
+                                .interpretation()
+                                .atoms()
+                                .iter()
+                                .map(|atom| atom.to_atom(ValueLimits::default()).unwrap())
+                                .collect(),
+                            model.score().map(|score| score.costs().to_vec()),
+                        ))
+                    );
                 }
                 let outcome = session.outcome().unwrap();
                 assert_eq!(outcome.completion(), Some(Completion::Interrupted));

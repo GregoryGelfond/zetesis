@@ -78,7 +78,7 @@ fn expected(mask: u8) -> (Model, bool, bool, bool) {
         _ => unreachable!(),
     };
     (
-        Model::new(indices.iter().copied().map(atom)),
+        Model::new(indices.iter().copied().map(atom)).unwrap(),
         mask == 1 || mask == 2,
         mask == 0,
         mask == 0 || mask == 3,
@@ -400,7 +400,7 @@ fn shared_view_world_failure_retains_ordered_progress() {
 #[test]
 fn views_preserve_foreign_program_rejection() {
     let program = program();
-    let foreign = Program::new(program.templates().to_vec(), AdmissionLimits::default()).unwrap();
+    let foreign = self::program();
     let selections = selections(&foreign);
     let graph = GroundProgram::compile(&program, StaticLimits::default()).unwrap();
     let cancellation = Cancellation::default();

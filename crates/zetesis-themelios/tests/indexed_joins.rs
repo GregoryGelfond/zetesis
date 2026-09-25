@@ -93,15 +93,19 @@ fn shared_arguments_select_only_matching_rows() {
     let model = search.next().expect("one model").expect("verified model");
     let joined: Vec<_> = model
         .atoms()
-        .map(|index| &input.atoms()[index])
+        .map(|index| input.atoms().at(index).unwrap())
         .filter(|atom| atom.predicate().name() == "r")
         .collect();
     assert_eq!(joined.len(), 200);
     for atom in joined {
-        let [Value::Number(left), Value::Number(right)] = atom.values() else {
+        assert_eq!(atom.values().len(), 2);
+        let (zetesis_core::ValueNodeRef::Number(left), zetesis_core::ValueNodeRef::Number(right)) = (
+            atom.values().at(0).unwrap().descriptor(),
+            atom.values().at(1).unwrap().descriptor(),
+        ) else {
             panic!("numeric relation")
         };
-        assert_eq!(*right, *left + 1);
+        assert_eq!(right, left + 1);
     }
     assert!(search.next().is_none());
     assert!(search.exhausted());
@@ -154,9 +158,12 @@ fn selective_join_work_limit_is_inclusive() {
     assert_eq!(limit, u128::from(low - 1));
     assert_eq!(observed, u128::from(low));
     assert_eq!(location.source, AdmissionOptions::default().source_id);
+    // The last charged operation publishes the shared atom catalog after all
+    // rules and support guards. Its evidence belongs to the complete source,
+    // rather than whichever rule happened to run last.
     assert_eq!(
         &source[location.span.start().get() as usize..location.span.end().get() as usize],
-        JOIN_RULE,
+        source,
     );
     println!("complete_work={low}");
 }
@@ -175,11 +182,14 @@ fn indexed_candidates_still_validate_repeated_variables_and_every_constant() {
     let model = search.next().expect("one model").expect("verified model");
     let joined: Vec<_> = model
         .atoms()
-        .map(|index| &input.atoms()[index])
+        .map(|index| input.atoms().at(index).unwrap())
         .filter(|atom| atom.predicate().name() == "r")
         .collect();
     assert_eq!(joined.len(), 1);
-    assert_eq!(joined[0].values(), &[Value::Number(2)]);
+    assert_eq!(
+        joined[0].values().iter().collect::<Vec<_>>(),
+        &[Value::Number(2)]
+    );
     assert!(search.next().is_none());
     assert!(search.exhausted());
 }
@@ -241,7 +251,7 @@ fn ready_filters_prune_before_later_relations_without_reading_generated_slots() 
     assert_eq!(
         model
             .atoms()
-            .map(|index| &input.atoms()[index])
+            .map(|index| input.atoms().at(index).unwrap())
             .filter(|atom| atom.predicate().name() == "p")
             .count(),
         30
@@ -262,8 +272,12 @@ fn ready_filters_prune_before_later_relations_without_reading_generated_slots() 
     assert!(
         model
             .atoms()
-            .map(|index| &input.atoms()[index])
-            .any(|atom| atom.predicate().name() == "p" && atom.values() == [Value::Number(6)])
+            .map(|index| input.atoms().at(index).unwrap())
+            .any(|atom| atom.predicate().name() == "p"
+                && atom
+                    .values()
+                    .iter()
+                    .eq([zetesis_core::catalog::TermRef::from(&Value::Number(6))]))
     );
     assert!(search.next().is_none());
     assert!(search.exhausted());
@@ -288,11 +302,14 @@ fn invalid_arithmetic_on_unextendable_prefixes_does_not_refuse_the_source() {
         let model = search.next().expect("one model").expect("verified model");
         let outputs: Vec<_> = model
             .atoms()
-            .map(|index| &input.atoms()[index])
+            .map(|index| input.atoms().at(index).unwrap())
             .filter(|atom| atom.predicate().name() == "p")
             .collect();
         assert_eq!(outputs.len(), 1);
-        assert_eq!(outputs[0].values(), &[Value::Number(1)]);
+        assert_eq!(
+            outputs[0].values().iter().collect::<Vec<_>>(),
+            &[Value::Number(1)]
+        );
         assert!(search.next().is_none());
         assert!(search.exhausted());
     }
@@ -314,7 +331,7 @@ fn duplicate_support_heads_do_not_remove_alternative_final_reduct_witnesses() {
         let model = model.expect("verified model");
         let names: Vec<_> = model
             .atoms()
-            .map(|index| input.atoms()[index].predicate().name())
+            .map(|index| input.atoms().at(index).unwrap().predicate().name())
             .collect();
         assert_eq!(names.contains(&"p"), names.contains(&"q"));
         count += 1;
@@ -343,7 +360,15 @@ fn a_false_filter_excludes_the_body_assignment() {
         let mut names: Vec<_> = model
             .expect("verified model")
             .atoms()
-            .map(|index| input.atoms()[index].predicate().name().to_owned())
+            .map(|index| {
+                input
+                    .atoms()
+                    .at(index)
+                    .unwrap()
+                    .predicate()
+                    .name()
+                    .to_owned()
+            })
             .collect();
         names.sort_unstable();
         families.push(names);

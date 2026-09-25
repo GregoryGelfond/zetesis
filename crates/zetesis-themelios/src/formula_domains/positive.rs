@@ -30,11 +30,15 @@ pub(crate) struct PositiveSource<'source> {
 impl<'source> PositiveSource<'source> {
     pub(crate) fn check(
         prepared: &'source Prepared,
+        components: Option<zetesis_core::TemplateComponentsRef<'_>>,
         limits: &FormulaLimits,
         counters: &mut Counters,
         location: Location,
     ) -> Result<Option<Self>, FormulaFailure> {
-        Ok(applicable(prepared, limits, counters, location)?.then_some(Self { prepared }))
+        Ok(
+            applicable(prepared, components, limits, counters, location)?
+                .then_some(Self { prepared }),
+        )
     }
 
     pub(crate) fn prepared(&self) -> &'source Prepared {
@@ -51,6 +55,7 @@ impl<'source> PositiveSource<'source> {
 
 fn applicable(
     prepared: &Prepared,
+    components: Option<zetesis_core::TemplateComponentsRef<'_>>,
     limits: &FormulaLimits,
     counters: &mut Counters,
     location: Location,
@@ -103,7 +108,14 @@ fn applicable(
         match &rule.head {
             HeadIr::Normal(None) => {}
             HeadIr::Normal(Some(head))
-                if flat(head, rule.variables, limits, counters, rule.location)? => {}
+                if flat(
+                    *head,
+                    components,
+                    rule.variables,
+                    limits,
+                    counters,
+                    rule.location,
+                )? => {}
             _ => return Ok(false),
         }
         for literal in &rule.body {
@@ -114,7 +126,14 @@ fn applicable(
             let LiteralIr::Atom(DefaultNegation::None, atom) = literal else {
                 return Ok(false);
             };
-            if !flat(atom, rule.variables, limits, counters, rule.location)? {
+            if !flat(
+                *atom,
+                components,
+                rule.variables,
+                limits,
+                counters,
+                rule.location,
+            )? {
                 return Ok(false);
             }
         }
@@ -163,25 +182,32 @@ fn atomic(symbol: &Symbol) -> bool {
 }
 
 fn flat(
-    pattern: &zetesis_core::AtomPattern,
+    pattern: crate::formula_support::components::Pattern,
+    components: Option<zetesis_core::TemplateComponentsRef<'_>>,
     variables: usize,
     limits: &FormulaLimits,
     counters: &mut Counters,
     location: Location,
 ) -> Result<bool, FormulaFailure> {
-    for term in pattern.terms() {
+    let components =
+        components.ok_or_else(|| crate::formula_support::components::missing(location))?;
+    let pattern = pattern.get(components, limits, counters, location)?;
+    let terms = pattern.terms();
+    for index in 0..terms.len() {
         counters.work(limits, location)?;
+        let term = terms.at(index).expect("checked pattern arity");
         match term {
-            zetesis_core::Term::Variable(slot) if *slot < variables => {}
-            zetesis_core::Term::Constant(value) => match value {
-                zetesis_core::Value::Number(_)
-                | zetesis_core::Value::Infimum
-                | zetesis_core::Value::Supremum => {}
-                zetesis_core::Value::String(text) | zetesis_core::Value::Symbol(text)
+            zetesis_core::TemplateTerm::Variable(slot) if slot < variables => {}
+            zetesis_core::TemplateTerm::Constant(value) => match value.descriptor() {
+                zetesis_core::ValueNodeRef::Number(_)
+                | zetesis_core::ValueNodeRef::Infimum
+                | zetesis_core::ValueNodeRef::Supremum => {}
+                zetesis_core::ValueNodeRef::String(text)
+                | zetesis_core::ValueNodeRef::Symbol(text)
                     if text.len() <= MAX_ATOMIC_BYTES => {}
                 _ => return Ok(false),
             },
-            zetesis_core::Term::Variable(_) => return Ok(false),
+            zetesis_core::TemplateTerm::Variable(_) => return Ok(false),
         }
     }
     Ok(true)

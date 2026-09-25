@@ -230,7 +230,7 @@ fn weak_and_minimize_keys_coalesce_across_original_include_sources() {
             .slice(location.span)
             .expect("original span");
     }
-    let model = Model::new(input.atoms().iter().cloned());
+    let model = Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap();
     let evaluation = zetesis_objective::evaluate(
         input.objectives(),
         &model,

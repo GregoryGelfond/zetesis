@@ -56,17 +56,28 @@ fn seeds(graph: &GroundProgram) -> Vec<Seed> {
     );
     (0..1usize << gates.len())
         .map(|bits| {
-            Seed::new(
+            SeedSelection::from_carrier_atoms(
                 graph.program(),
                 gates
                     .iter()
                     .enumerate()
                     .filter(|(bit, _)| bits & (1 << bit) != 0)
                     .map(|(_, id)| {
-                        graph.atoms()[usize::try_from(*id).expect("dense index")].clone()
+                        graph
+                            .program()
+                            .locate_atom(
+                                graph
+                                    .atoms()
+                                    .at(usize::try_from(*id).expect("dense index"))
+                                    .unwrap(),
+                                true,
+                            )
+                            .expect("carrier lookup")
+                            .expect("gate coordinate")
                     }),
             )
             .expect("program-bound gate seed")
+            .to_seed()
         })
         .collect()
 }
@@ -90,7 +101,7 @@ fn indexed_selections(graph: &GroundProgram, seeds: &[Seed]) -> Vec<SeedSelectio
                 graph.program(),
                 gates
                     .iter()
-                    .filter(|gate| seed.atoms().contains(gate.atom()))
+                    .filter(|gate| seed.contains(gate.atom()))
                     .cloned(),
             )
             .expect("indexed subset of the program's gate carrier")

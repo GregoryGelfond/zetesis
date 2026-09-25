@@ -12,6 +12,7 @@ fn catalog() -> AtomCatalog {
         )
         .unwrap(),
     ])
+    .unwrap()
 }
 
 // u64 catalog length8; nullary a18; hidden("secret")38. The selected record

@@ -12,7 +12,7 @@ use crate::formula_conditional_ir::{
 };
 use crate::formula_ground::{Builder, FALSUM, VERUM, boolean};
 use crate::formula_support::family::Evidence;
-use crate::formula_support::{Join, Support};
+use crate::formula_support::{Context, Join, Support};
 
 /// Arithmetic omission removes the whole local implication. A defined false
 /// consequent, including an empty witness disjunction, remains a formula value.
@@ -31,7 +31,7 @@ impl ConsequentInstance {
     }
 }
 
-impl Builder<'_> {
+impl Builder<'_, '_, '_> {
     pub(super) fn conditional(
         &mut self,
         conditional: &ConditionalIr,
@@ -46,14 +46,23 @@ impl Builder<'_> {
             conditional.variables,
             support,
             self.budget,
-            location,
+            Context::new(
+                &*self.computation,
+                self.limits,
+                &mut self.counters,
+                location,
+            ),
         )?;
         if let Consequent::Guard(guard) = &conditional.consequent {
             bindings.check_guard(guard);
         }
-        while let Some(binding) =
-            bindings.next(self.limits, self.budget, &mut self.counters, location)?
-        {
+        while let Some(binding) = bindings.next(
+            self.computation,
+            self.limits,
+            self.budget,
+            &mut self.counters,
+            location,
+        )? {
             self.work(location)?;
             let condition = self.body(&conditional.condition, &binding, location, support)?;
             let consequent = match &conditional.consequent {
@@ -65,8 +74,8 @@ impl Builder<'_> {
                 }
                 Consequent::Guard(guard) => ConsequentInstance::Defined(boolean(guard.evaluate(
                     &binding,
+                    self.computation,
                     self.limits,
-                    self.budget,
                     &mut self.counters,
                     location,
                 )?)),
@@ -99,14 +108,23 @@ impl Builder<'_> {
                 alternative.variables,
                 support,
                 self.budget,
-                location,
+                Context::new(
+                    &*self.computation,
+                    self.limits,
+                    &mut self.counters,
+                    location,
+                ),
             )?;
-            while let Some(row) =
-                rows.next(self.limits, self.budget, &mut self.counters, location)?
-            {
+            while let Some(row) = rows.next(
+                self.computation,
+                self.limits,
+                self.budget,
+                &mut self.counters,
+                location,
+            )? {
                 self.work(location)?;
                 let mut value = match &alternative.operand {
-                    ConsequentOperand::Atom(atom) => self.atom(atom, &row, location)?,
+                    ConsequentOperand::Atom(atom) => self.atom(*atom, &row, location)?,
                     ConsequentOperand::Projection(projection) => {
                         self.project(projection, &row, support, location)?
                     }
@@ -140,19 +158,28 @@ impl Builder<'_> {
                 alternative.variables,
                 support,
                 self.budget,
-                location,
+                Context::new(
+                    &*self.computation,
+                    self.limits,
+                    &mut self.counters,
+                    location,
+                ),
             )?;
             rows.check_guard(&alternative.guard);
-            while let Some(row) =
-                rows.next(self.limits, self.budget, &mut self.counters, location)?
-            {
+            while let Some(row) = rows.next(
+                self.computation,
+                self.limits,
+                self.budget,
+                &mut self.counters,
+                location,
+            )? {
                 // Every value alternative is evaluated, including those after
                 // a true result: errors cannot disappear.
                 self.work(location)?;
                 value |= alternative.guard.evaluate(
                     &row,
+                    self.computation,
                     self.limits,
-                    self.budget,
                     &mut self.counters,
                     location,
                 )?;

@@ -32,9 +32,21 @@ fn scalar_language_order_agrees_with_pinned_symbol_order_for_every_pair() {
                 zetesis_themelios::ExpansionLimits::default(),
             )
             .unwrap();
-            let value = match &admitted.program().templates()[0].head().unwrap().terms()[0] {
-                zetesis_core::Term::Constant(value) => value.clone(),
-                zetesis_core::Term::Variable(_) => panic!("scalar fact must remain ground"),
+            let value = match &admitted
+                .program()
+                .templates()
+                .at(0)
+                .unwrap()
+                .head()
+                .unwrap()
+                .terms()
+                .at(0)
+                .unwrap()
+            {
+                zetesis_core::TemplateTerm::Constant(value) => value
+                    .to_value(zetesis_core::ValueLimits::default())
+                    .unwrap(),
+                zetesis_core::TemplateTerm::Variable(_) => panic!("scalar fact must remain ground"),
             };
             let parsed = themelios_syntax::parse::parse(
                 &themelios_base::source::Source::new(

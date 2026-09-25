@@ -1,106 +1,15 @@
-//! Canonical interpretations sharing an immutable dense atom catalog.
+//! Canonical interpretations sharing an immutable dense occurrence catalog.
 
 use std::{cmp::Ordering, fmt, iter::FusedIterator, slice, sync::Arc};
 
-use crate::{Atom, Predicate, Value};
+use crate::{
+    Atom,
+    catalog::{self, AtomRef, PredicateRef},
+};
+
+pub use crate::catalog::AtomCatalog;
 
 const LENGTH_BYTES: usize = std::mem::size_of::<u64>();
-const TAG_BYTES: usize = 1;
-const ATOM_HEADER_BYTES: usize = 2 * LENGTH_BYTES + TAG_BYTES;
-
-/// Immutable typed atoms in their original dense index order.
-///
-/// The catalog does not establish truth or program membership. Equal atoms may
-/// occupy different positions; indices retain their supplied meanings. Cloning
-/// shares the vector and its payloads in constant time. Selections retain the
-/// entire catalog, including unselected atoms, until the last owner is dropped.
-#[derive(Clone, Debug)]
-pub struct AtomCatalog(Arc<CatalogData>);
-
-#[derive(Debug)]
-struct CatalogData {
-    atoms: Vec<Atom>,
-    canonical_bytes: Option<usize>,
-}
-
-impl AtomCatalog {
-    /// Retain an existing atom vector without copying or reordering its cells.
-    /// Existing atom/value addresses and vector capacity are preserved. The Arc
-    /// envelope allocation is infallible, not a typed allocation refusal. One
-    /// traversal records a checked canonical payload size for later retention
-    /// admission; this traverses atom/value descriptions but copies no payload.
-    #[must_use]
-    pub fn new(atoms: Vec<Atom>) -> Self {
-        Self(Arc::new(CatalogData {
-            canonical_bytes: canonical_bytes(&atoms),
-            atoms,
-        }))
-    }
-
-    /// Original dense-order atoms. Borrowing and indexing allocate nothing.
-    #[must_use]
-    pub fn atoms(&self) -> &[Atom] {
-        &self.0.atoms
-    }
-
-    /// Retained atom-vector capacity in cells, excluding the Arc envelope and
-    /// nested payload allocations. Sharing does not multiply this capacity.
-    #[must_use]
-    pub fn capacity(&self) -> usize {
-        self.0.atoms.capacity()
-    }
-
-    /// Whether both handles retain the same catalog allocation. This is owner
-    /// identity, not logical equality of atoms or interpretations.
-    #[must_use]
-    pub fn same_owner(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.0, &other.0)
-    }
-
-    /// Canonical payload of the entire catalog, including unselected atoms.
-    /// Recorded by the constructor; returns `None` on arithmetic overflow.
-    /// This portable measure excludes spare capacity, Arc and allocator overhead.
-    #[must_use]
-    pub fn retained_payload_bytes(&self) -> Option<usize> {
-        self.0.canonical_bytes
-    }
-
-    // Only a live retained handle makes this address an allocation identity.
-    // The retention index stores that handle beside the key; it never exposes
-    // addresses as logical identity or keeps a key after releasing its owner.
-    pub(crate) fn owner_key(&self) -> usize {
-        Arc::as_ptr(&self.0).addr()
-    }
-}
-
-impl Default for AtomCatalog {
-    fn default() -> Self {
-        Self::new(Vec::new())
-    }
-}
-
-// u64 list lengths, a predicate-sign byte and typed logical value encodings.
-// This portable admission measure is independent of allocator capacity or RSS.
-fn canonical_bytes(atoms: &[Atom]) -> Option<usize> {
-    let mut bytes = LENGTH_BYTES;
-    for atom in atoms {
-        bytes = bytes
-            .checked_add(ATOM_HEADER_BYTES)?
-            .checked_add(atom.predicate().name().len())?;
-        for value in atom.values() {
-            let payload = match value {
-                Value::Infimum | Value::Supremum => 0,
-                Value::Number(_) => std::mem::size_of::<i32>(),
-                Value::Structured(value) => value.canonical_bytes().checked_sub(TAG_BYTES)?,
-                Value::Symbol(text) | Value::String(text) => {
-                    LENGTH_BYTES.checked_add(text.len())?
-                }
-            };
-            bytes = bytes.checked_add(TAG_BYTES)?.checked_add(payload)?;
-        }
-    }
-    Some(bytes)
-}
 
 /// A canonical true-atom set, also named [`Interpretation`]. Construction
 /// establishes neither derivation, satisfaction nor answer-set membership.
@@ -119,50 +28,119 @@ struct Selected {
 }
 
 impl Model {
-    /// Coalesce supplied owned atoms into canonical set order.
-    /// The iterator must terminate. Construction consumes the atoms, sorts and
-    /// deduplicates them, then selects every remaining atom. It performs
-    /// `O(n log n)` typed atom comparisons and allocates an atom vector plus an
-    /// index vector. Collection and Arc allocation are infallible. Payloads are
-    /// moved, not cloned; comparisons can inspect text and structured values.
+    /// Named private selection header and position-buffer capacity, excluding
+    /// the retained catalog, allocator metadata and Arc reference counters.
+    /// Clones share this allocation; a family ledger counts it once per owner.
     #[must_use]
-    pub fn new(atoms: impl IntoIterator<Item = Atom>) -> Self {
-        let mut atoms: Vec<_> = atoms.into_iter().collect();
-        atoms.sort_unstable();
-        atoms.dedup();
-        let positions = (0..atoms.len()).collect();
-        Self(Arc::new(Selected {
-            catalog: AtomCatalog::new(atoms),
-            positions,
-        }))
+    pub fn selection_bytes(&self) -> u128 {
+        size_of::<Selected>() as u128
+            + self.0.positions.capacity() as u128 * size_of::<usize>() as u128
     }
 
-    /// Adopt atoms already in canonical order, without sorting or
-    /// deduplicating them. This is [`Self::new`] for a producer that holds the
-    /// order already, such as the closure's per-relation catalogs merged in
-    /// predicate order, and it costs only the atom vector and its index.
+    /// Accept an already ordered unique catalog as one interpretation.
+    /// Every adjacent pair is checked in semantic atom order; no sorting or
+    /// payload import is repeated. The selection allowance covers this model's
+    /// header and dense position buffer, separately from its retained catalog.
+    /// Callback admission precedes reservations, occurrence resolution,
+    /// comparisons and publication.
+    ///
+    /// # Errors
+    /// Refuses unordered/duplicate atoms, selection capacity or callback work.
+    /// No interpretation is returned after a partial check.
+    ///
+    /// # Panics
+    /// Panics if the immutable catalog iterator violates its exact length.
+    pub fn from_ordered_catalog_with<E>(
+        catalog: AtomCatalog,
+        max_selection_bytes: usize,
+        mut before: impl FnMut() -> Result<(), E>,
+    ) -> Result<Self, ModelFailure<E>> {
+        let mut checked = || before().map_err(ModelFailure::Stopped);
+        let count = catalog.atoms().len();
+        selection_allowance(count, max_selection_bytes).map_err(ModelFailure::Model)?;
+        checked()?;
+        let mut positions = Vec::new();
+        positions
+            .try_reserve_exact(count)
+            .map_err(|_| ModelFailure::Model(ModelError::Allocation))?;
+        selection_allowance(positions.capacity(), max_selection_bytes)
+            .map_err(ModelFailure::Model)?;
+        let mut previous: Option<AtomRef<'_>> = None;
+        let mut atoms = catalog.atoms().iter();
+        for index in 0..count {
+            checked()?;
+            let atom = atoms
+                .next()
+                .expect("immutable catalog iterator has exact length");
+            if let Some(left) = previous
+                && !left.compare_ref_with(atom, &mut checked)?.is_lt()
+            {
+                return Err(ModelFailure::Model(ModelError::Order { position: index }));
+            }
+            previous = Some(atom);
+            positions.push(index);
+        }
+        checked()?;
+        Ok(Self(Arc::new(Selected { catalog, positions })))
+    }
+
+    /// Import supplied atoms and coalesce them into canonical set order.
+    /// The iterator must terminate. Construction consumes the descriptions,
+    /// sorts and deduplicates them, and imports their typed payload into one
+    /// canonical catalog. It performs `O(n log n)` typed atom comparisons;
+    /// import work includes admitted term structure and exact interning probes.
+    /// Input and selection vector growth is fallible. Arc envelope allocation
+    /// remains infallible on stable Rust. Input addresses are not retained.
+    ///
+    /// # Errors
+    /// Returns a vector reservation or canonical catalog admission refusal.
+    /// No partial interpretation is returned.
+    pub fn new(atoms: impl IntoIterator<Item = Atom>) -> Result<Self, ModelError> {
+        let mut admitted = Vec::new();
+        for atom in atoms {
+            admitted
+                .try_reserve(1)
+                .map_err(|_| ModelError::Allocation)?;
+            admitted.push(atom);
+        }
+        admitted.sort_unstable();
+        admitted.dedup();
+        Self::from_ordered(admitted)
+    }
+
+    /// Import atoms already in canonical order without sorting or deduplication.
+    /// Canonical payload is admitted once; only occurrence and selection indices
+    /// are retained beside it. Input addresses and capacities are not adopted.
     ///
     /// The atoms must be strictly increasing in canonical order; a debug build
     /// checks this, a release build trusts the producer, and a violated
     /// precondition would make membership queries wrong, not merely slow.
-    #[must_use]
-    pub fn from_ordered(atoms: Vec<Atom>) -> Self {
+    ///
+    /// # Errors
+    /// Returns a selection reservation or canonical catalog admission refusal.
+    /// No partial interpretation is returned.
+    pub fn from_ordered(atoms: Vec<Atom>) -> Result<Self, ModelError> {
         debug_assert!(
             atoms.windows(2).all(|pair| pair[0] < pair[1]),
-            "atoms adopted as a model are strictly increasing"
+            "atoms imported as a model are strictly increasing"
         );
-        let positions = (0..atoms.len()).collect();
-        Self(Arc::new(Selected {
-            catalog: AtomCatalog::new(atoms),
+        let mut positions = Vec::new();
+        positions
+            .try_reserve_exact(atoms.len())
+            .map_err(|_| ModelError::Allocation)?;
+        positions.extend(0..atoms.len());
+        Ok(Self(Arc::new(Selected {
+            catalog: AtomCatalog::new(atoms).map_err(ModelError::Catalog)?,
             positions,
-        }))
+        })))
     }
 
     /// Select original catalog positions as a canonical interpretation.
     ///
     /// Every index is checked before access. Duplicate indices and equal logical
     /// atoms coalesce. For `m` input positions, construction uses `O(m log m)`
-    /// typed atom comparisons and `O(m)` index storage; no atom is cloned. The
+    /// typed atom comparisons and `O(m)` index storage; no atom is cloned.
+    /// Comparisons include immutable segment resolution and term traversal. The
     /// iterator must terminate. Index-vector growth is fallible, while the final
     /// Arc envelope allocation is infallible. The whole catalog remains live.
     ///
@@ -186,9 +164,9 @@ impl Model {
                 .map_err(|_| ModelError::Allocation)?;
             selected.push(position);
         }
-        selected
-            .sort_unstable_by(|&left, &right| catalog.atoms()[left].cmp(&catalog.atoms()[right]));
-        selected.dedup_by(|left, right| catalog.atoms()[*left] == catalog.atoms()[*right]);
+        let atoms = catalog.atoms();
+        selected.sort_unstable_by(|&left, &right| atoms.compare_positions(left, right));
+        selected.dedup_by(|left, right| atoms.compare_positions(*left, *right).is_eq());
         Ok(Self(Arc::new(Selected {
             catalog: catalog.clone(),
             positions: selected,
@@ -208,7 +186,7 @@ impl Model {
 
     /// Exact membership with a logarithmic number of typed atom comparisons.
     #[must_use]
-    pub fn contains(&self, atom: &Atom) -> bool {
+    pub fn contains<'query>(&self, atom: impl Into<AtomRef<'query>>) -> bool {
         self.atoms().contains(atom)
     }
 
@@ -218,11 +196,7 @@ impl Model {
     /// and unselected catalog atoms never participate in either search.
     #[must_use]
     pub fn lookup(&self) -> crate::AtomLookup<'_, '_> {
-        crate::AtomLookup {
-            atoms: self.0.catalog.atoms(),
-            keys: &self.0.positions,
-            rows: &self.0.positions,
-        }
+        self.atoms().lookup()
     }
 
     /// Shared original catalog, including its unselected atoms. Access does not
@@ -246,14 +220,15 @@ impl Model {
         self.0.positions.capacity()
     }
 
-    /// Canonical retained payload size: every catalog atom, including unselected
-    /// atoms, plus a u64 selection length and u64 positions. Constant time after
-    /// the catalog's initial traversal. Returns `None` on size overflow.
+    /// Portable encoded payload of every catalog occurrence, including repeats
+    /// and unselected atoms, plus a u64 selection length and u64 positions.
+    /// Constant time after catalog construction. Returns `None` on size overflow.
     ///
     /// Counting this per retained model conservatively recounts shared catalogs.
     /// [`crate::retention::ModelRetention`] accounts shared catalogs once instead.
     /// This is a portable admission measure, not allocated bytes or RSS: spare
-    /// vector capacity, Arc envelopes and allocator bookkeeping are excluded.
+    /// vector capacity, Arc envelopes and allocator bookkeeping are excluded,
+    /// as are canonical identities retained outside the occurrence map.
     #[must_use]
     pub fn retained_payload_bytes(&self) -> Option<usize> {
         self.catalog()
@@ -273,7 +248,10 @@ impl Model {
 
 impl Default for Model {
     fn default() -> Self {
-        Self::new([])
+        Self(Arc::new(Selected {
+            catalog: AtomCatalog::default(),
+            positions: Vec::new(),
+        }))
     }
 }
 impl fmt::Debug for Model {
@@ -313,11 +291,24 @@ pub type Interpretation = Model;
 /// arithmetic term order. No allocation or atom copying occurs during iteration.
 #[derive(Clone, Copy)]
 pub struct ModelAtoms<'a> {
-    atoms: &'a [Atom],
+    atoms: catalog::Atoms<'a>,
     positions: &'a [usize],
 }
 
 impl<'a> ModelAtoms<'a> {
+    /// Borrow the checked lookup over this selection without allocating.
+    /// Only selected occurrences participate; returned row positions address
+    /// the original catalog. The existing semantic order serves both identity
+    /// and predicate searches.
+    #[must_use]
+    pub fn lookup(self) -> crate::AtomLookup<'a, 'a> {
+        crate::AtomLookup {
+            atoms: crate::atom_lookup::Source::Canonical(self.atoms),
+            keys: self.positions,
+            rows: self.positions,
+        }
+    }
+
     /// Number of distinct true atoms. Constant time.
     #[must_use]
     pub const fn len(self) -> usize {
@@ -330,12 +321,13 @@ impl<'a> ModelAtoms<'a> {
         self.positions.is_empty()
     }
 
-    /// The atom at a position of the model's canonical order. Constant time.
+    /// The atom at a position of the model's canonical order. Resolving its
+    /// canonical payload searches the retained immutable segment ranges.
     #[must_use]
-    pub fn at(self, position: usize) -> Option<&'a Atom> {
+    pub fn at(self, position: usize) -> Option<AtomRef<'a>> {
         self.positions
             .get(position)
-            .map(|&index| &self.atoms[index])
+            .and_then(|&index| self.atoms.at(index))
     }
 
     /// Canonical double-ended iteration with an exact remaining length.
@@ -347,30 +339,37 @@ impl<'a> ModelAtoms<'a> {
         }
     }
 
-    /// Least true atom in canonical storage order. Constant time.
+    /// Least true atom in canonical storage order, resolving its retained segment.
     #[must_use]
-    pub fn first(self) -> Option<&'a Atom> {
+    pub fn first(self) -> Option<AtomRef<'a>> {
         self.positions
             .first()
-            .map(|&position| &self.atoms[position])
+            .and_then(|&position| self.atoms.at(position))
     }
 
-    /// Greatest true atom in canonical storage order. Constant time.
+    /// Greatest true atom in canonical storage order, resolving its retained segment.
     #[must_use]
-    pub fn last(self) -> Option<&'a Atom> {
-        self.positions.last().map(|&position| &self.atoms[position])
+    pub fn last(self) -> Option<AtomRef<'a>> {
+        self.positions
+            .last()
+            .and_then(|&position| self.atoms.at(position))
     }
 
     /// The true atoms of one signed predicate, a contiguous sub-view found by
     /// two logarithmic searches; empty when the predicate has none.
     #[must_use]
-    pub fn of_predicate(self, predicate: &Predicate) -> ModelAtoms<'a> {
-        let start = self
-            .positions
-            .partition_point(|&position| self.atoms[position].predicate() < predicate);
+    pub fn of_predicate<'query>(
+        self,
+        predicate: impl Into<PredicateRef<'query>>,
+    ) -> ModelAtoms<'a> {
+        let predicate = predicate.into();
+        let start = self.positions.partition_point(|&position| {
+            self.selected(position).predicate().cmp(&predicate).is_lt()
+        });
         let end = start
-            + self.positions[start..]
-                .partition_point(|&position| self.atoms[position].predicate() == predicate);
+            + self.positions[start..].partition_point(|&position| {
+                self.selected(position).predicate().cmp(&predicate).is_eq()
+            });
         ModelAtoms {
             atoms: self.atoms,
             positions: &self.positions[start..end],
@@ -379,16 +378,23 @@ impl<'a> ModelAtoms<'a> {
 
     /// Borrow the original matching atom using logarithmic typed comparisons.
     #[must_use]
-    pub fn get(self, atom: &Atom) -> Option<&'a Atom> {
+    pub fn get<'query>(self, atom: impl Into<AtomRef<'query>>) -> Option<AtomRef<'a>> {
+        let atom = atom.into();
         self.positions
-            .binary_search_by(|&position| self.atoms[position].cmp(atom))
+            .binary_search_by(|&position| self.selected(position).cmp(&atom))
             .ok()
-            .map(|index| &self.atoms[self.positions[index]])
+            .map(|index| self.selected(self.positions[index]))
+    }
+
+    fn selected(self, position: usize) -> AtomRef<'a> {
+        self.atoms
+            .at(position)
+            .expect("model occurrence is checked")
     }
 
     /// Exact membership using logarithmic typed comparisons.
     #[must_use]
-    pub fn contains(self, atom: &Atom) -> bool {
+    pub fn contains<'query>(self, atom: impl Into<AtomRef<'query>>) -> bool {
         self.get(atom).is_some()
     }
 }
@@ -414,7 +420,7 @@ impl Ord for ModelAtoms<'_> {
     }
 }
 impl<'a> IntoIterator for ModelAtoms<'a> {
-    type Item = &'a Atom;
+    type Item = AtomRef<'a>;
     type IntoIter = ModelIter<'a>;
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
@@ -425,13 +431,17 @@ impl<'a> IntoIterator for ModelAtoms<'a> {
 /// only cursor state. Every yielded atom is borrowed from the original catalog.
 #[derive(Clone, Debug)]
 pub struct ModelIter<'a> {
-    atoms: &'a [Atom],
+    atoms: catalog::Atoms<'a>,
     positions: slice::Iter<'a, usize>,
 }
 impl<'a> Iterator for ModelIter<'a> {
-    type Item = &'a Atom;
+    type Item = AtomRef<'a>;
     fn next(&mut self) -> Option<Self::Item> {
-        self.positions.next().map(|&position| &self.atoms[position])
+        self.positions.next().map(|&position| {
+            self.atoms
+                .at(position)
+                .expect("model occurrence is checked")
+        })
     }
     fn size_hint(&self) -> (usize, Option<usize>) {
         self.positions.size_hint()
@@ -439,17 +449,33 @@ impl<'a> Iterator for ModelIter<'a> {
 }
 impl DoubleEndedIterator for ModelIter<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.positions
-            .next_back()
-            .map(|&position| &self.atoms[position])
+        self.positions.next_back().map(|&position| {
+            self.atoms
+                .at(position)
+                .expect("model occurrence is checked")
+        })
     }
 }
 impl ExactSizeIterator for ModelIter<'_> {}
 impl FusedIterator for ModelIter<'_> {}
 
-/// Interpretation selection failed, without a partial true set.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Interpretation construction failed, without a partial true set.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ModelError {
+    /// A purportedly ordered unique catalog repeats or reverses an atom.
+    Order {
+        /// The second position of the first non-increasing pair.
+        position: usize,
+    },
+    /// Named selection header and index capacity exceed the allowance.
+    Bytes {
+        /// Requested or actual named capacity.
+        required: u128,
+        /// Inclusive selection-storage allowance.
+        limit: usize,
+    },
+    /// Canonical payload admission or representation failed.
+    Catalog(catalog::Error),
     /// A supplied index has no atom in the retained catalog.
     Position {
         /// Refused dense position.
@@ -457,20 +483,72 @@ pub enum ModelError {
         /// Number of atoms in this catalog.
         atoms: usize,
     },
-    /// Selection-vector reservation failed.
+    /// Input or selection-vector reservation failed.
     Allocation,
 }
 impl fmt::Display for ModelError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Order { position } => write!(
+                f,
+                "model catalog is not strictly ordered at position {position}"
+            ),
+            Self::Bytes { required, limit } => write!(
+                f,
+                "model selection requires {required} bytes, allowance is {limit}"
+            ),
+            Self::Catalog(error) => error.fmt(f),
             Self::Position { position, atoms } => {
                 write!(
                     f,
                     "model position {position} is outside a catalog of {atoms} atoms"
                 )
             }
-            Self::Allocation => f.write_str("model selection storage could not be reserved"),
+            Self::Allocation => f.write_str("model construction storage could not be reserved"),
         }
     }
 }
-impl std::error::Error for ModelError {}
+impl std::error::Error for ModelError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Catalog(error) => Some(error),
+            Self::Position { .. } | Self::Order { .. } | Self::Bytes { .. } | Self::Allocation => {
+                None
+            }
+        }
+    }
+}
+
+fn selection_allowance(capacity: usize, limit: usize) -> Result<(), ModelError> {
+    let required = size_of::<Selected>() as u128 + capacity as u128 * size_of::<usize>() as u128;
+    if required > limit as u128 {
+        Err(ModelError::Bytes { required, limit })
+    } else {
+        Ok(())
+    }
+}
+
+/// A model construction stopped without publishing an interpretation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ModelFailure<E> {
+    /// Typed ordering, shape or selection-storage refusal.
+    Model(ModelError),
+    /// The caller refused the next operation.
+    Stopped(E),
+}
+impl<E: fmt::Display> fmt::Display for ModelFailure<E> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Model(error) => error.fmt(f),
+            Self::Stopped(error) => error.fmt(f),
+        }
+    }
+}
+impl<E: std::error::Error + 'static> std::error::Error for ModelFailure<E> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(match self {
+            Self::Model(error) => error,
+            Self::Stopped(error) => error,
+        })
+    }
+}

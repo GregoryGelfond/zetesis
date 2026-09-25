@@ -10,7 +10,8 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::mem::size_of;
 
-use zetesis_core::{AtomPattern, Predicate, Term, Value};
+use zetesis_core::catalog::{PredicateRef, TermRef};
+use zetesis_core::{BindingView, PatternRef, Predicate, TemplateTerm, Value, ValueLimits};
 
 use super::RelationRows;
 
@@ -46,6 +47,7 @@ enum Stop {
     KeyBytes,
     Work,
     CountOverflow,
+    ValueExport,
 }
 
 #[derive(Default, Debug)]
@@ -135,8 +137,8 @@ pub(super) fn begin_support() {
 
 pub(super) fn observe(
     relation: &RelationRows,
-    pattern: &AtomPattern,
-    values: &[Option<Value>],
+    pattern: PatternRef<'_>,
+    values: BindingView<'_>,
     selected: Option<&[usize]>,
 ) {
     ACTIVE.with(|active| {
@@ -153,8 +155,8 @@ impl Observation {
     fn probe(
         &mut self,
         relation: &RelationRows,
-        pattern: &AtomPattern,
-        values: &[Option<Value>],
+        pattern: PatternRef<'_>,
+        values: BindingView<'_>,
         selected: Option<&[usize]>,
     ) -> Result<(), Stop> {
         if self.report.totals.probes == self.limits.probes {
@@ -171,8 +173,8 @@ impl Observation {
         for (position, (column, term)) in relation.columns.iter().zip(pattern.terms()).enumerate() {
             self.tick()?;
             let value = match term {
-                Term::Constant(value) => Some(value),
-                Term::Variable(variable) => values[*variable].as_ref(),
+                TemplateTerm::Constant(value) => Some(value),
+                TemplateTerm::Variable(variable) => values.get(variable),
             };
             if let Some(value) = value {
                 bound.push((position, value));
@@ -181,7 +183,13 @@ impl Observation {
                 let mut id = None;
                 for (row, atom) in relation.atoms.iter().enumerate() {
                     self.tick()?;
-                    if atom.values()[position] == *value {
+                    if atom
+                        .values()
+                        .at(position)
+                        .expect("column")
+                        .compare_ref_with(value, || self.tick())?
+                        .is_eq()
+                    {
                         id = Some(relation.relation.column(position).expect("source column")[row]);
                         break;
                     }
@@ -210,7 +218,12 @@ impl Observation {
             let mut matches = true;
             for &(position, value) in &bound {
                 self.tick()?;
-                matches &= atom.values()[position] == *value;
+                matches &= atom
+                    .values()
+                    .at(position)
+                    .expect("column")
+                    .compare_ref_with(value, || self.tick())?
+                    .is_eq();
             }
             if matches {
                 expected.push(row);
@@ -235,28 +248,47 @@ impl Observation {
 
     fn query(
         &mut self,
-        predicate: &Predicate,
+        predicate: PredicateRef<'_>,
         rows: usize,
-        bound: &[(usize, &Value)],
+        bound: &[(usize, TermRef<'_>)],
     ) -> Result<(), Stop> {
-        // Admission's scalar payload accounting is intentionally not reused:
-        // these copies belong only to the separate diagnostic population.
+        // These explicit exports belong only to this test observation. They do
+        // not supply production rows or bindings, and have a separate byte cap.
         let mut bytes = predicate.name().len();
-        for (_, value) in bound {
+        let remaining = self.limits.key_bytes.saturating_sub(self.report.key_bytes);
+        let mut exported = Vec::new();
+        for &(position, value) in bound {
+            self.tick()?;
             add(&mut bytes, size_of::<(usize, Value)>())?;
+            let available = remaining.checked_sub(bytes).ok_or(Stop::KeyBytes)?;
+            let value = value
+                .to_value(ValueLimits {
+                    max_nodes: usize::MAX,
+                    max_depth: usize::MAX,
+                    max_bytes: available,
+                })
+                .map_err(|error| match error {
+                    zetesis_core::ValueError::Limit {
+                        resource: zetesis_core::ValueResource::Bytes,
+                        ..
+                    } => Stop::KeyBytes,
+                    _ => Stop::ValueExport,
+                })?;
             add(&mut bytes, value.payload_bytes())?;
+            if bytes > remaining {
+                return Err(Stop::KeyBytes);
+            }
+            exported.push((position, value));
         }
-        if bytes > self.limits.key_bytes.saturating_sub(self.report.key_bytes) {
+        if bytes > remaining {
             return Err(Stop::KeyBytes);
         }
         let query = Query {
             support: self.report.support_builds,
-            predicate: predicate.clone(),
+            predicate: Predicate::with_sign(predicate.name(), predicate.arity(), predicate.sign())
+                .expect("observed admitted predicate"),
             rows,
-            bound: bound
-                .iter()
-                .map(|&(position, value)| (position, value.clone()))
-                .collect(),
+            bound: exported,
         };
         if self.queries.contains(&query) {
             add(&mut self.report.totals.repeated_probes, 1)?;

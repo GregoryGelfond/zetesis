@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use zetesis_core::{Atom, Sign, Value};
+use zetesis_core::Sign;
 use zetesis_ferraris::{Node, Theory};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
@@ -107,7 +107,11 @@ fn holds(theory: &Theory, values: &[bool]) -> bool {
     theory.roots().iter().all(|&root| values[root])
 }
 
-fn remap(mask: usize, from: &[Atom], to: &[Atom]) -> usize {
+fn remap(
+    mask: usize,
+    from: zetesis_core::catalog::Atoms<'_>,
+    to: zetesis_core::catalog::Atoms<'_>,
+) -> usize {
     from.iter()
         .enumerate()
         .filter(|(index, _)| mask & (1 << index) != 0)
@@ -116,8 +120,11 @@ fn remap(mask: usize, from: &[Atom], to: &[Atom]) -> usize {
         })
 }
 
-fn atom_text(atom: &Atom) -> String {
-    let [Value::Number(number)] = atom.values() else {
+fn atom_text<'a>(atom: impl Into<zetesis_core::catalog::AtomRef<'a>>) -> String {
+    let atom = atom.into();
+    assert_eq!(atom.values().len(), 1);
+    let zetesis_core::ValueNodeRef::Number(number) = atom.values().at(0).unwrap().descriptor()
+    else {
         panic!("these fixtures have only unary numeric atoms: {atom:?}");
     };
     let sign = if atom.predicate().sign() == Sign::Negative {
@@ -233,7 +240,7 @@ fn native_models(input: &AdmittedFormula) -> Models {
                 model
                     .unwrap()
                     .atoms()
-                    .map(|index| atom_text(&input.atoms()[index]))
+                    .map(|index| atom_text(input.atoms().at(index).unwrap()))
                     .collect()
             )
         );

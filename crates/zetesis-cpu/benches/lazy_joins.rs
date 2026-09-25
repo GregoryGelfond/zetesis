@@ -89,7 +89,7 @@ impl Case {
         Self {
             program,
             seeds: vec![seed; batch],
-            expected: Model::new(expected),
+            expected: Model::new(expected).unwrap(),
         }
     }
 

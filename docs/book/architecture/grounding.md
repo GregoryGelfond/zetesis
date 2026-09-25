@@ -57,6 +57,61 @@ Rust formula construction and execution refinement open. These are obligations
 of zetesis's source bridge and solver; this architectural account is separate
 from teaching themelios's parsing and logical-program APIs.
 
+## Canonical values and independent meanings
+
+Source grounding computes with one canonical term and atom vocabulary. Bindings
+retain term identifiers, relation columns retain those same identifiers, and
+generated arithmetic values and compound terms enter that vocabulary through a
+checked writer. Joins compare identities within the vocabulary; ordered
+comparisons still use ASP term order. Identifier order has no logical meaning.
+
+Preparation admits static constants, signed predicates and constructor names
+before the first support round. Compiled expressions and patterns keep component
+coordinates and variable slots; they do not retain a second copy of those values.
+`TemplateComponents` stores this metadata over the vocabulary used by generated
+terms. A component coordinate identifies an occurrence in one preparation. It is
+neither a portable term identifier nor evidence of semantic equality with another
+occurrence.
+
+Joining and emission borrow descriptions from the committed source prefix while
+the writer admits generated identities. The prefix remains immutable during that
+operation. Work and storage checks cover both retained component metadata and
+temporary argument frames. Preparing and grounding separately carries the same
+resource history across the boundary.
+
+Several views can name the same atom without making the same claim about it:
+
+| View | Meaning of membership |
+| --- | --- |
+| Completed support | The atom belongs to the computed upper bound on possible atoms. |
+| Emitted theory | A local formula coordinate denotes the atom. |
+| Objective condition | A local condition coordinate queries the atom in a candidate. |
+| Projection | The atom participates in the program's projection policy. |
+| Interpretation | The atom is true in this interpretation. |
+
+These views retain their own occurrence maps over shared payload. Creating an
+identity establishes none of these memberships. In particular, admitting a term
+after support completion cannot add a support row, and a support-only atom cannot
+shift the local coordinates of an already emitted formula.
+
+Objective templates likewise retain variable slots, canonical constants and
+pattern metadata over the source vocabulary. Their priorities and contribution
+conditions remain separate semantic data. A constant does not become an active
+contribution merely because its identifier exists.
+
+The source writer is sealed before these views are published. A published view
+keeps the shared prefix alive, including source terms it does not select. This
+avoids payload copying but is a retention tradeoff: releasing eager lookup
+indexes does not necessarily release all unselected source payload. Named storage
+limits count shared payload once and include the live view metadata and
+replacement overlap; they are not bounds on process RSS.
+
+Hybrid checking borrows an immutable lookup over the admitted vocabulary. Each
+checker owns its mutable bindings and workspace accounting. A missing identity
+is an admission/refinement failure, never evidence that a literal is false.
+This makes the remaining completeness obligation explicit: admission must have
+visited every computed identity that the retained source checks can require.
+
 ## Eager and lazy execution
 
 For admitted relational programs, **eager** grounding explicitly compiles a
@@ -280,35 +335,39 @@ these lifetimes to prepared views and execution state.
 
 The final formula catalog uses the shared core
 [`AtomInterner`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/atom_interner.rs).
-It owns each atom once and indexes stable insertion positions with one AVL
-tree per predicate, the trees kept in predicate order. Lookup finds the
+It owns one canonical term/atom authority and indexes stable discovery positions
+with one AVL tree per predicate, the trees kept in predicate order. Lookup finds the
 predicate's tree by a checked binary search over the program's few relations,
 comparing the predicate once, then performs logarithmically many checked node
 probes comparing arguments only; compared descriptors and text prefixes are
 additional charged work.
 Insertion plans links and rotations in reusable scratch, admits capacity and
-publication work, then publishes the new identity. It neither hashes complete
-payloads nor shifts a sorted index. Canonical traversal is separate from the
-dense insertion order.
+publication work, then imports missing canonical components and publishes the
+new discovery position. Canonical interning separately hashes typed components
+and checks exact collisions; the AVL discovery index stores no second payload.
+Canonical traversal is separate from dense discovery order.
 
-A committed prefix supplies the count-plan collector's exact dense atom slice.
-The first commit transfers the pending vector; later commits move only pending
-atoms after borrowed views end. Finalization transfers that sequence into the
-existing immutable `AtomCatalog`. Possible support and emitted atoms retain
+A committed prefix supplies the count-plan collector's exact dense occurrence
+view. The first commit transfers the pending ID map; later commits move only
+pending IDs after borrowed views end. Finalization transfers that mapping and
+shares the canonical prefix with an immutable `AtomCatalog`. Possible support and emitted atoms retain
 distinct populations, and commitment establishes no truth.
 
 The located source
 [adapter](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground/atoms.rs)
-charges lookup, copying, index construction and commit against cumulative formula
-work; exact refusal cutoffs can change with these operations. `Limits::for_atoms`
-derives a finite conservative named-capacity envelope from the applicable atom
-ceiling and actual layouts, including index/scratch and buffer-growth overlap.
-A refusal preserves existing IDs, although capacity already acquired can remain.
-`FormulaResource::AtomStorageBytes` reports that capacity ceiling; allocation
-failure retains the original `TryReserveError` directly in
-`FormulaFailure::AtomAllocation`. Nested payload remains under the separate
-scalar-byte budget. Neither named capacity nor cumulative scalar bytes measure
-process RSS.
+charges lookup, canonical import, index construction and commit against cumulative
+formula work; exact refusal cutoffs can change with these operations.
+`FormulaLimits::max_atom_storage_bytes` independently bounds the shared source
+authority during publication: canonical payload, indexes, current prefix
+directories and scratch, including named growth overlap. Its payload includes
+identities outside the emitted occurrence map; unrelated support indexes and
+query buffers retain their own bound. A refusal preserves existing discovery IDs,
+although complete canonical components and capacity can remain.
+`FormulaResource::AtomStorageBytes` reports this storage ceiling;
+`FormulaFailure::AtomCatalog` preserves canonical faults, while vector reservation
+failure retains its `TryReserveError` in `FormulaFailure::AtomAllocation`.
+The separate scalar-byte budget bounds cumulative source expansion. Neither
+measure is process RSS.
 
 An atom in a **possible support relation** is a witness available to source
 enumeration. It is not thereby true in a candidate, and an aggregate's proposed
@@ -319,7 +378,8 @@ matching does not invert arithmetic or introduce a global guessed value universe
 
 A checked `AtomKey` borrows a pattern and its current binding. Support and delta
 membership use that full typed identity without making a temporary atom. Formula
-interning uses the same key and materializes values only for a new dense ID.
+interning imports the key's borrowed terms into its canonical authority before
+publishing a new discovery ID. Existing canonical components are reused.
 Missing required inputs still produce a located failure; an incomplete head
 prefix defers the membership check. Membership does not discharge authored-body
 validation. Existing support, current delta and formula atoms retain distinct
@@ -731,13 +791,18 @@ bound the assignment, cursor and undo buffers used by its joins, to infer its
 argument bounds and to choose its dense layouts, which every candidate's
 closure shares and admits first. Its preparation work and bytes have
 independent finite limits and a separate receipt. A
-`ClosureWorkspace` retains the actual empty catalog metadata, predicate owners
-and reference-free cursor/undo and old/new ID capacities between candidates. Assignments borrow
-only the current immutable round; no candidate truth survives completion.
-`Catalog::take_atoms` transfers the completed atom vector without copying its
-payload and invalidates its old row/equality IDs. The exported result owns its
-atoms while the empty indexes can serve another candidate. Any failed check
-discards dirty workspace state before reuse. A different program instance retires
+`ClosureWorkspace` retains one Program-scoped canonical tuple authority and
+reusable relation, cursor/undo and old/new ID metadata between candidates.
+Assignments borrow terms only within one immutable round. Per-predicate catalogs
+hold membership and equality/order metadata over that authority; dense relations
+hold coordinate bits over the same frozen Program vocabulary.
+
+Final assembly publishes the selected discovery positions in semantic order,
+then constructs the result `Model` without exporting owned atoms. The workspace
+retains discovered identities and capacity, while resetting relation membership,
+frontiers, dense truth and pending marks. No candidate truth survives completion.
+Previously returned models keep their immutable prefixes. Any failed check
+discards dirty workspace state before reuse. A different Program instance retires
 the old workspace, even when its source text is equal.
 
 The one-shot `check_view` uses the same evaluator and charges preparation plus
@@ -774,26 +839,26 @@ cache, while an empty batch never creates preparation. Final result retention,
 source payload, allocator/tree overhead and worker stacks remain separate. These
 receipts describe bounded ownership and reuse, not timing or process RSS.
 
-`zetesis_cpu::Limits::max_closure_bytes` bounds each scalar closure's
-named predicate/catalog cells, atom and value buffers, nested payload, prepared
-order and old/new ID views, query-owner/assignment/cursor/undo capacities and
-pending tuples, including operation scratch and conservative buffer
-growth overlap. Its default is 128 MiB; zero is a zero-byte allowance. Pending
-atoms use fallible buffer reservation, and moving them into catalogs transfers
-their payload charge rather than counting a second payload owner. The reported
-`peak_closure_bytes` is a maximum for this named envelope. Shared structural
-buffers are conservatively counted per occurrence. Tree-container allocations
-(including vacant slots), allocator metadata, Arc counters and final `Model`
-retention are excluded. Actual allocator slack can exceed the proposed reservation
-before refusal. Completed checks report their observed peak; a scalar refusal
-returns no `Check` or statistics. This is a composable admission allowance, not a bound on all transient
-allocator memory or total RSS. Collective worker admission and result retention
-have separate owners.
-`FormulaLimits::max_support_bytes` bounds the catalog's atom-vector cells,
-equality layout, postings, borrowed snapshot objects and query capacity,
-including construction scratch. Nested atom payloads, allocator/tree overhead
-and unrelated grounding state retain separate bounds; this limit does not
-measure total memory or RSS.
+`zetesis_cpu::Limits::max_closure_bytes` bounds each scalar closure's canonical
+authority, relation indexes/columns and prepared-order runs, dense words, pending
+discovery IDs/marks, query assignment/cursor/undo capacities, and operation scratch
+with conservative growth overlap. The authority counts canonical payload once;
+final catalog and model-selection metadata are admitted while being assembled.
+Its default is 128 MiB; zero is a zero-byte allowance. `peak_closure_bytes` is the
+maximum observed named envelope of a completed check. Earlier results retained
+by the caller, allocator bookkeeping and Arc counters remain outside this
+per-check ledger. A successful allocation can exceed its proposed reservation
+before the actual-capacity check refuses it. A stopped scalar check returns no
+partial `Check` or statistics. Collective worker admission and result retention
+have separate owners; this is not a total process-memory bound.
+
+`FormulaLimits::max_support_bytes` bounds one evolving canonical support authority
+and its current prefix, relation/equality metadata, postings, borrowed snapshot
+objects and query capacity, including scratch and named growth overlap. Terms
+and atoms are counted by that authority once; predicate relations and pending
+rounds retain scoped IDs. Allocator/tree/control-runtime overhead and unrelated
+grounding state remain separate. The independent cumulative source-expansion
+budget still applies, and this support limit is not RSS.
 
 The command-line equivalent is the advanced `--max-support-bytes` option,
 shown by `--help-all` and recorded by `--stats`. It defaults to 128 MiB and
@@ -806,8 +871,8 @@ Combining two column masks means intersecting positions in the same relation
 snapshot; it must not combine values from different tuples. The bounded
 [`relation` library](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/relation.rs)
 provides the immutable column view used by eager formula support and primitive
-experiments. It borrows the
-original atoms and encodes complete typed values through one equality dictionary.
+experiments. It borrows canonical `AtomRef` rows or construction descriptions,
+then encodes complete typed values through a dictionary of borrowed references.
 It preserves row occurrences and their order, including duplicate tuples, and
 keeps original catalog indices distinct from local positions. Explicit predicate
 arity and row count distinguish an empty relation from a nullary tuple.

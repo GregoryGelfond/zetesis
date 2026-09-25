@@ -56,9 +56,12 @@ fn bounded_metadata_preserves_nested_conditions() {
         ],
     };
     for (model, expected) in [
-        (Model::new([data.clone(), enabled.clone()]), vec![expected]),
-        (Model::new([data.clone()]), vec![]),
-        (Model::new([data, enabled, hidden]), vec![]),
+        (
+            Model::new([data.clone(), enabled.clone()]).unwrap(),
+            vec![expected],
+        ),
+        (Model::new([data.clone()]).unwrap(), vec![]),
+        (Model::new([data, enabled, hidden]).unwrap(), vec![]),
     ] {
         let observations = policy
             .observations()

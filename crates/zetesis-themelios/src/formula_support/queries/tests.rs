@@ -2,7 +2,8 @@
 
 use themelios_base::source::SourceId;
 use themelios_base::span::{ByteOffset, Span};
-use zetesis_core::{Atom, Predicate};
+use zetesis_core::catalog::TermRef;
+use zetesis_core::{Atom, AtomPattern, Predicate, Term, Value};
 
 use super::*;
 use crate::grounding_observer::Profile;
@@ -25,7 +26,7 @@ fn catalog() -> super::super::SupportCatalog {
         .unwrap();
         catalog = catalog
             .insert(
-                atom,
+                &atom,
                 &FormulaLimits::default(),
                 &mut Counters::default(),
                 location(),
@@ -82,8 +83,8 @@ fn a_selection_survives_new_cache_entries() {
     let alias = pattern(true);
     let first = support
         .select(
-            PositivePattern::Flat(&flat),
-            &[Some(Value::Number(1)), None],
+            PositivePattern::Flat((&flat).into()),
+            [Some(Value::Number(1)), None].as_slice().into(),
             &limits,
             &mut counters,
             location(),
@@ -92,8 +93,8 @@ fn a_selection_survives_new_cache_entries() {
         .unwrap();
     let second = support
         .select(
-            PositivePattern::Flat(&alias),
-            &[None],
+            PositivePattern::Flat((&alias).into()),
+            [None::<TermRef<'_>>].as_slice().into(),
             &limits,
             &mut counters,
             location(),
@@ -112,8 +113,8 @@ fn a_selection_survives_new_cache_entries() {
     drop(second);
     let restored = support
         .select(
-            PositivePattern::Flat(&flat),
-            &[None, None],
+            PositivePattern::Flat((&flat).into()),
+            [None::<TermRef<'_>>, None].as_slice().into(),
             &limits,
             &mut counters,
             location(),
@@ -150,8 +151,8 @@ fn every_simultaneous_mask_consumes_live_capacity() {
     drop(
         support
             .select(
-                PositivePattern::Flat(&pattern),
-                &[None, None],
+                PositivePattern::Flat((&pattern).into()),
+                [None::<TermRef<'_>>, None].as_slice().into(),
                 &limits,
                 &mut counters,
                 location(),
@@ -160,13 +161,16 @@ fn every_simultaneous_mask_consumes_live_capacity() {
     );
     let observer = Observer::default();
     let profile = Profile::new(Some(&observer));
-    let mut counters = Counters::observed(profile.work());
+    let mut counters = Counters::resume(
+        crate::formula_support::Accounting::default(),
+        profile.work(),
+    );
     let baseline = support.live.get();
     let first = profile
         .phase(GroundingPhase::RuleInstantiation, None, || {
             support.select(
-                PositivePattern::Flat(&pattern),
-                &[None, None],
+                PositivePattern::Flat((&pattern).into()),
+                [None::<TermRef<'_>>, None].as_slice().into(),
                 &limits,
                 &mut counters,
                 location(),
@@ -181,8 +185,8 @@ fn every_simultaneous_mask_consumes_live_capacity() {
         ..limits
     };
     let failed = support.select(
-        PositivePattern::Flat(&pattern),
-        &[None, None],
+        PositivePattern::Flat((&pattern).into()),
+        [None::<TermRef<'_>>, None].as_slice().into(),
         &bounded,
         &mut counters,
         location(),
@@ -197,8 +201,8 @@ fn every_simultaneous_mask_consumes_live_capacity() {
     assert!(
         support
             .select(
-                PositivePattern::Flat(&pattern),
-                &[None, None],
+                PositivePattern::Flat((&pattern).into()),
+                [None::<TermRef<'_>>, None].as_slice().into(),
                 &bounded,
                 &mut counters,
                 location()
@@ -229,40 +233,43 @@ fn failed_selection_retains_its_charged_work_prefix() {
     drop(
         support
             .select(
-                PositivePattern::Flat(&pattern),
-                &values,
+                PositivePattern::Flat((&pattern).into()),
+                values.as_slice().into(),
                 &limits,
                 &mut counters,
                 location(),
             )
             .unwrap(),
     );
-    let before = counters.work;
+    let before = counters.accounting.work;
     drop(
         support
             .select(
-                PositivePattern::Flat(&pattern),
-                &values,
+                PositivePattern::Flat((&pattern).into()),
+                values.as_slice().into(),
                 &limits,
                 &mut counters,
                 location(),
             )
             .unwrap(),
     );
-    let complete = counters.work - before;
+    let complete = counters.accounting.work - before;
     let observer = Observer::default();
     let profile = Profile::new(Some(&observer));
-    let mut checked = Counters::observed(profile.work());
-    checked.work = counters.work;
+    let mut checked = Counters::resume(
+        crate::formula_support::Accounting::default(),
+        profile.work(),
+    );
+    checked.accounting.work = counters.accounting.work;
     let bounded = FormulaLimits {
-        max_work: checked.work + complete - 1,
+        max_work: checked.accounting.work + complete - 1,
         ..limits
     };
     let live = support.live.get();
     let failed = profile.phase(GroundingPhase::RuleInstantiation, None, || {
         support.select(
-            PositivePattern::Flat(&pattern),
-            &values,
+            PositivePattern::Flat((&pattern).into()),
+            values.as_slice().into(),
             &bounded,
             &mut checked,
             location(),
@@ -272,8 +279,8 @@ fn failed_selection_retains_its_charged_work_prefix() {
         matches!(failed, Err(FormulaFailure::Limit { resource: FormulaResource::Work, observed, limit, .. }) if observed > limit)
     );
     assert!(observer.0.get().table_query_work.unwrap() > 0);
-    assert!(checked.work > counters.work);
-    assert!(checked.work <= bounded.max_work);
+    assert!(checked.accounting.work > counters.accounting.work);
+    assert!(checked.accounting.work <= bounded.max_work);
     assert_eq!(support.live.get(), live);
 }
 
@@ -295,7 +302,10 @@ fn refused_capacity_is_not_a_retained_peak() {
     .unwrap();
     let observer = Observer::default();
     let profile = Profile::new(Some(&observer));
-    let mut checked = Counters::observed(profile.work());
+    let mut checked = Counters::resume(
+        crate::formula_support::Accounting::default(),
+        profile.work(),
+    );
     let bounded = FormulaLimits {
         max_support_bytes: support.live.get(),
         ..limits
@@ -303,8 +313,8 @@ fn refused_capacity_is_not_a_retained_peak() {
     let pattern = pattern(false);
     let failed = profile.phase(GroundingPhase::RuleInstantiation, None, || {
         support.select(
-            PositivePattern::Flat(&pattern),
-            &[None, None],
+            PositivePattern::Flat((&pattern).into()),
+            [None::<TermRef<'_>>, None].as_slice().into(),
             &bounded,
             &mut checked,
             location(),
@@ -347,4 +357,254 @@ fn workspace_size_overflow_is_a_typed_failure() {
             ..
         })
     ));
+}
+
+#[test]
+fn canonical_frames_drive_both_query_strategies() {
+    use std::convert::Infallible;
+    use zetesis_core::atom_interner::{AtomInterner, Limits as InternLimits};
+
+    let success = || Ok::<(), Infallible>(());
+    let mut owner = AtomInterner::new();
+    let atom = Atom::new(
+        Predicate::new("binding", 1).unwrap(),
+        vec![Value::Number(1)],
+    )
+    .unwrap();
+    let intern_limits = InternLimits {
+        max_atoms: 1,
+        max_bytes: 1024 * 1024,
+    };
+    let position = owner
+        .entry_atom_with(&atom, intern_limits, success)
+        .unwrap()
+        .insert_with(intern_limits, success)
+        .unwrap();
+    let read = owner.read();
+    let key = read
+        .term_key(owner.get(position).unwrap().values().at(0).unwrap())
+        .unwrap();
+    let mut assignment = read.assignment();
+    assignment.resize_with(2, usize::MAX, success).unwrap();
+    assignment.set_with(0, &key, success).unwrap();
+
+    let catalog = catalog();
+    let limits = FormulaLimits::default();
+    let mut counters = Counters::default();
+    let relations = catalog
+        .snapshot(&limits, &mut counters, location())
+        .unwrap();
+    let support = Support::completed(
+        &relations,
+        JoinStrategy::Table,
+        &limits,
+        &counters,
+        location(),
+    )
+    .unwrap();
+    let pattern = pattern(false);
+    let binding = assignment.as_slice().bind_with(read, success).unwrap();
+    let expected = (1..70).step_by(7).collect::<Vec<_>>();
+    assert_eq!(
+        support
+            .probe(
+                (&pattern).into(),
+                binding,
+                &limits,
+                &mut counters,
+                location()
+            )
+            .unwrap(),
+        Some(expected.as_slice())
+    );
+    let selection = support
+        .select(
+            PositivePattern::Flat((&pattern).into()),
+            binding,
+            &limits,
+            &mut counters,
+            location(),
+        )
+        .unwrap()
+        .unwrap();
+    // Only the query's selection metadata survives the call. Reusing its input
+    // ID frame cannot change the rows already selected from this snapshot.
+    assignment.clear_with(0, success).unwrap();
+    assert_eq!(selection.selection.rows().collect::<Vec<_>>(), expected);
+}
+
+#[test]
+fn out_of_scope_slots_are_not_unrestricted() {
+    let catalog = catalog();
+    let limits = FormulaLimits::default();
+    let mut counters = Counters::default();
+    let relations = catalog
+        .snapshot(&limits, &mut counters, location())
+        .unwrap();
+    let support = Support::completed(
+        &relations,
+        JoinStrategy::Table,
+        &limits,
+        &counters,
+        location(),
+    )
+    .unwrap();
+    let pattern = pattern(false);
+    let values: [Option<TermRef<'_>>; 1] = [None];
+    let binding = values.as_slice().into();
+    assert!(matches!(
+        support.probe(
+            (&pattern).into(),
+            binding,
+            &limits,
+            &mut counters,
+            location()
+        ),
+        Err(FormulaFailure::UnsafeVariable { variable: 1, .. })
+    ));
+    assert!(matches!(
+        support.select(
+            PositivePattern::Flat((&pattern).into()),
+            binding,
+            &limits,
+            &mut counters,
+            location()
+        ),
+        Err(FormulaFailure::UnsafeVariable { variable: 1, .. })
+    ));
+}
+
+#[test]
+fn absent_table_relations_still_admit_lookup_work() {
+    let catalog = catalog();
+    let limits = FormulaLimits::default();
+    let mut counters = Counters::default();
+    let relations = catalog
+        .snapshot(&limits, &mut counters, location())
+        .unwrap();
+    let support = Support::completed(
+        &relations,
+        JoinStrategy::Table,
+        &limits,
+        &counters,
+        location(),
+    )
+    .unwrap();
+    let missing = AtomPattern::new(Predicate::new("missing", 0).unwrap(), Vec::new()).unwrap();
+    let bounded = FormulaLimits {
+        max_work: 0,
+        ..limits
+    };
+    let mut attempt = Counters::default();
+    let values: [Option<Value>; 0] = [];
+    assert!(matches!(
+        support.select(
+            PositivePattern::Flat((&missing).into()),
+            values.as_slice().into(),
+            &bounded,
+            &mut attempt,
+            location()
+        ),
+        Err(FormulaFailure::Limit {
+            resource: FormulaResource::Work,
+            limit: 0,
+            ..
+        })
+    ));
+    assert_eq!(attempt.accounting.work, 0);
+}
+
+/// These patterns have their own canonical vocabulary, distinct from the
+/// relation authority. Equal ID numbers therefore cannot decide a match.
+fn canonical_pattern(pattern: &AtomPattern) -> zetesis_core::TemplateCatalog {
+    let mut owner = zetesis_core::TemplateCatalogBuilder::new(usize::MAX).unwrap();
+    owner.append([], [pattern.into()], []).unwrap();
+    owner.finish().unwrap()
+}
+
+#[test]
+fn canonical_table_patterns_keep_repeated_variables() {
+    let catalog = catalog();
+    let owner = canonical_pattern(&pattern(true));
+    let pattern = owner.at(0).unwrap().patterns().at(0).unwrap();
+    let limits = FormulaLimits::default();
+    let mut counters = Counters::default();
+    let relations = catalog
+        .snapshot(&limits, &mut counters, location())
+        .unwrap();
+    let support = Support::completed(
+        &relations,
+        JoinStrategy::Table,
+        &limits,
+        &counters,
+        location(),
+    )
+    .unwrap();
+    let selected = support
+        .select(
+            PositivePattern::Flat(pattern),
+            [None::<TermRef<'_>>].as_slice().into(),
+            &limits,
+            &mut counters,
+            location(),
+        )
+        .unwrap()
+        .unwrap();
+    let mut next = 0;
+    let mut rows = Vec::new();
+    while let Some(row) = selected
+        .next(next, &limits, &mut counters, location())
+        .unwrap()
+    {
+        rows.push(row);
+        next = row + 1;
+    }
+    // r(N % 7, N) has equal arguments exactly for N in 0..7.
+    assert_eq!(rows, (0..7).collect::<Vec<_>>());
+}
+
+#[test]
+fn canonical_probes_preserve_typed_constants() {
+    let limits = FormulaLimits::default();
+    let mut counters = Counters::default();
+    let predicate = Predicate::new("typed", 1).unwrap();
+    let mut catalog = super::super::SupportCatalog::default();
+    for value in [Value::String("same".into()), Value::Symbol("same".into())] {
+        catalog = catalog
+            .insert(
+                &Atom::new(predicate.clone(), vec![value]).unwrap(),
+                &limits,
+                &mut counters,
+                location(),
+            )
+            .unwrap();
+    }
+    let owner = canonical_pattern(
+        &AtomPattern::new(
+            predicate,
+            vec![Term::Constant(Value::Symbol("same".into()))],
+        )
+        .unwrap(),
+    );
+    let pattern = owner.at(0).unwrap().patterns().at(0).unwrap();
+    let relations = catalog
+        .snapshot(&limits, &mut counters, location())
+        .unwrap();
+    let support = Support::indexed(&relations, &limits, &counters, location()).unwrap();
+    let rows = support
+        .probe(
+            pattern,
+            [None::<TermRef<'_>>; 0].as_slice().into(),
+            &limits,
+            &mut counters,
+            location(),
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+    let selected = support.row(pattern.predicate(), rows[0]).unwrap();
+    assert_eq!(
+        selected.value(0).unwrap().descriptor(),
+        zetesis_core::ValueNodeRef::Symbol("same")
+    );
 }

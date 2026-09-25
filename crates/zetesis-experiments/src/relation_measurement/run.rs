@@ -244,11 +244,11 @@ fn queries<'owner, 'source>(
     let mut peak = base + bytes;
     let mut queries = vector(fixture.queries().len())?;
     for keys in fixture.queries() {
-        let temporary = size_of::<Vec<(usize, &zetesis_core::Value)>>()
-            + keys.len() * size_of::<(usize, &zetesis_core::Value)>();
+        let temporary = size_of::<Vec<(usize, zetesis_core::catalog::TermRef<'_>)>>()
+            + keys.len() * size_of::<(usize, zetesis_core::catalog::TermRef<'_>)>();
         limits(maximum, base + bytes + temporary)?;
         let mut references = vector(keys.len())?;
-        references.extend(keys.iter().map(|(column, value)| (*column, value)));
+        references.extend(keys.iter().map(|(column, value)| (*column, value.into())));
         let query = relation
             .query(
                 &references,
@@ -541,7 +541,7 @@ fn validate(
                 return Err(Error::Parity);
             }
             for (column, value) in frame.fixture.atoms()[position].values().iter().enumerate() {
-                if row.value(column) != Some(value) {
+                if row.value(column) != Some(value.into()) {
                     return Err(Error::Parity);
                 }
             }

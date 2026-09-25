@@ -16,7 +16,7 @@ fn term_model(capacity: usize) -> Model {
         ValueNode::Number(1),
     ]);
     let value = Value::from_nodes(nodes, ValueLimits::default()).unwrap();
-    Model::new([Atom::new(Predicate::new("p", 1).unwrap(), vec![value]).unwrap()])
+    Model::new([Atom::new(Predicate::new("p", 1).unwrap(), vec![value]).unwrap()]).unwrap()
 }
 
 fn observation() -> zetesis_themelios::AdmittedFormula {
@@ -172,7 +172,7 @@ fn template_construction_uses_storage_preflight() {
     assert!(
         program
             .evaluate_with_construction_limits(
-                &Model::new([]),
+                &Model::new([]).unwrap(),
                 Limits::default(),
                 ConstructionLimits {
                     max_bytes: required
@@ -184,7 +184,7 @@ fn template_construction_uses_storage_preflight() {
     assert!(matches!(
         program
             .evaluate_with_construction_limits(
-                &Model::new([]),
+                &Model::new([]).unwrap(),
                 Limits::default(),
                 ConstructionLimits {
                     max_bytes: required - 1
@@ -290,7 +290,8 @@ fn construction_covers_name_validation_copy() {
     let old_bound = required - name.len();
     let model = Model::new([
         Atom::new(Predicate::new("p", 1).unwrap(), vec![Value::Symbol(name)]).unwrap(),
-    ]);
+    ])
+    .unwrap();
     let program = admitted.metadata().observations();
     let result = program.evaluate_with_construction_limits(
         &model,

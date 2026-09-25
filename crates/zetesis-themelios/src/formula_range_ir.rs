@@ -22,26 +22,7 @@ impl Compiler<'_> {
         {
             return self.expression(term, variables);
         }
-        self.value_plan_preflight(term)?;
-        // Reserve the source fold and its leaf plans before cloning. Subsequent
-        // concatenations reserve their own operation storage before allocation.
-        let count = term.subterms().count() as u128;
-        self.budget
-            .charge(ExpansionResource::TermWork, count * 3, self.location)?;
-        let text = term
-            .subterms()
-            .map(|node| match node {
-                Term::Symbolic(symbol) => crate::structural_value::symbol_bytes(symbol),
-                Term::Function { name, .. } => name.as_str().len() as u128,
-                Term::Variable(Variable::Named(name)) => name.as_str().len() as u128,
-                _ => 0,
-            })
-            .sum::<u128>();
-        self.budget.charge(
-            ExpansionResource::ScalarBytes,
-            text + count * (std::mem::size_of::<Term>() + std::mem::size_of::<Operation>()) as u128,
-            self.location,
-        )?;
+        self.ranged_plan_preflight(term)?;
         term.clone().try_fold(|parts| {
             self.budget
                 .charge(ExpansionResource::TermWork, 1, self.location)?;
@@ -76,12 +57,14 @@ impl Compiler<'_> {
                 } => {
                     if operator == UnaryOp::Negate
                         && let Some(Operation::Constructor(constructor)) = argument.nodes.last_mut()
-                        && constructor.name.is_some()
+                        && let Some(shape) = self.source.negate_constructor(
+                            constructor.shape,
+                            self.limits,
+                            self.counters,
+                            self.location,
+                        )?
                     {
-                        constructor.sign = match constructor.sign {
-                            zetesis_core::Sign::Positive => zetesis_core::Sign::Negative,
-                            zetesis_core::Sign::Negative => zetesis_core::Sign::Positive,
-                        };
+                        constructor.shape = shape;
                         return Ok(argument);
                     }
                     (vec![argument], Pending::Unary(operator))
@@ -92,15 +75,59 @@ impl Compiler<'_> {
                     right,
                 } => (vec![left, right], Pending::Binary(operator)),
                 TermParts::Absolute(argument) => (vec![argument], Pending::Absolute),
-                TermParts::Function { name, arguments } => (
-                    arguments,
-                    Pending::Constructor(Some(name.as_str().to_owned())),
-                ),
-                TermParts::Tuple(arguments) => (arguments, Pending::Constructor(None)),
+                TermParts::Function { name, arguments } => {
+                    let shape = self.source.constructor(
+                        zetesis_core::ValueNodeRef::Function {
+                            name: name.as_str(),
+                            sign: zetesis_core::Sign::Positive,
+                            arity: arguments.len(),
+                        },
+                        self.limits,
+                        self.counters,
+                        self.location,
+                    )?;
+                    (arguments, Pending::Constructor(shape))
+                }
+                TermParts::Tuple(arguments) => {
+                    let shape = self.source.constructor(
+                        zetesis_core::ValueNodeRef::Tuple {
+                            arity: arguments.len(),
+                        },
+                        self.limits,
+                        self.counters,
+                        self.location,
+                    )?;
+                    (arguments, Pending::Constructor(shape))
+                }
                 _ => return Err(unsupported(ProfileFeature::Term, self.location).into()),
             };
             self.join_value_plans(children, operation)
         })
+    }
+
+    /// Admit the source fold and leaf-plan storage before cloning the tree.
+    fn ranged_plan_preflight(&mut self, term: &Term) -> Result<(), FormulaFailure> {
+        self.value_plan_preflight(term)?;
+        // Reserve the source fold and its leaf plans before cloning. Subsequent
+        // concatenations reserve their own operation storage before allocation.
+        let count = term.subterms().count() as u128;
+        self.budget
+            .charge(ExpansionResource::TermWork, count * 3, self.location)?;
+        let text = term
+            .subterms()
+            .map(|node| match node {
+                Term::Symbolic(symbol) => crate::structural_value::symbol_bytes(symbol),
+                Term::Function { name, .. } => name.as_str().len() as u128,
+                Term::Variable(Variable::Named(name)) => name.as_str().len() as u128,
+                _ => 0,
+            })
+            .sum::<u128>();
+        self.budget.charge(
+            ExpansionResource::ScalarBytes,
+            text + count * (std::mem::size_of::<Term>() + std::mem::size_of::<Operation>()) as u128,
+            self.location,
+        )?;
+        Ok(())
     }
 
     fn join_value_plans(
@@ -147,10 +174,9 @@ impl Compiler<'_> {
             Pending::Unary(operator) => Operation::Unary(operator, roots[0]),
             Pending::Binary(operator) => Operation::Binary(operator, roots[0], roots[1]),
             Pending::Absolute => Operation::Absolute(roots[0]),
-            Pending::Constructor(name) => {
+            Pending::Constructor(shape) => {
                 Operation::Constructor(Box::new(crate::formula_value::Constructor {
-                    name,
-                    sign: zetesis_core::Sign::Positive,
+                    shape,
                     arguments: roots,
                 }))
             }
@@ -159,9 +185,10 @@ impl Compiler<'_> {
     }
 }
 
+#[derive(Clone, Copy)]
 enum Pending {
     Unary(UnaryOp),
     Binary(themelios_program::term::BinaryOp),
     Absolute,
-    Constructor(Option<String>),
+    Constructor(crate::formula_support::components::Constructor),
 }

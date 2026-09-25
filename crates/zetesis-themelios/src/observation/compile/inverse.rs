@@ -38,7 +38,7 @@ impl Compiler<'_> {
                         *operand = Operand::Inverse { slot, expression };
                     }
                 }
-                Operand::Function(_, _, children) | Operand::Tuple(children) => {
+                Operand::Construct(_, children) => {
                     self.inverse_operands(children, available);
                 }
                 _ => {}

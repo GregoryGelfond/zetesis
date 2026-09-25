@@ -46,7 +46,8 @@ fn closed_conditions_follow_the_original_model() {
                 .enumerate()
                 .filter(|(index, _)| mask & (1 << index) != 0)
                 .map(|(_, name)| atom(name)),
-        );
+        )
+        .unwrap();
         let before = model.clone();
         let result = evaluate(&query, &model, Limits::default(), &Cancellation::default()).unwrap();
         assert_eq!(
@@ -61,9 +62,10 @@ fn closed_conditions_follow_the_original_model() {
 #[test]
 fn absent_queries_retain_zero_priority_slots() {
     let query = program(vec![row(vec![Node::Atom(atom("outside"))])]);
+    let result_model = Model::new([]).unwrap();
     let result = evaluate(
         &query,
-        &Model::new([]),
+        &result_model,
         Limits::default(),
         &Cancellation::default(),
     )
@@ -83,9 +85,10 @@ fn closed_and_lifted_rows_share_complete_keys() {
         vec![],
     );
     let query = program(vec![lifted, row(vec![Node::Atom(atom("q")), Node::Not(0)])]);
+    let result_model = Model::new([atom("p")]).unwrap();
     let result = evaluate(
         &query,
-        &Model::new([atom("p")]),
+        &result_model,
         Limits::default(),
         &Cancellation::default(),
     )
@@ -104,11 +107,12 @@ fn condition_atoms_preserve_signed_value_identity() {
     .unwrap();
     let query = program(vec![row(vec![Node::Atom(negative.clone())])]);
     for (model, expected) in [
-        (Model::new([negative]), 2),
+        (Model::new([negative]).unwrap(), 2),
         (
             Model::new([
                 Atom::new(Predicate::new("p", 1).unwrap(), vec![Value::Number(1)]).unwrap(),
-            ]),
+            ])
+            .unwrap(),
             0,
         ),
         (
@@ -116,7 +120,8 @@ fn condition_atoms_preserve_signed_value_identity() {
                 Predicate::with_sign("p", 1, Sign::Negative).unwrap(),
                 vec![Value::String("1".into())],
             )
-            .unwrap()]),
+            .unwrap()])
+            .unwrap(),
             0,
         ),
     ] {
@@ -173,7 +178,7 @@ fn condition_node_limits_are_inclusive() {
 #[test]
 fn condition_work_refusal_returns_no_score() {
     let query = program(vec![row(vec![Node::Atom(atom("p")), Node::Not(0)])]);
-    let model = Model::new([atom("other")]);
+    let model = Model::new([atom("other")]).unwrap();
     let complete = evaluate(&query, &model, Limits::default(), &Cancellation::default()).unwrap();
     let exact = complete.statistics().work;
     let limits = Limits {

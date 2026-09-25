@@ -1,10 +1,10 @@
 //! Separate outer scopes and independently bound universal-local instances.
 
+use crate::formula_support::components::Pattern as AtomPattern;
 use themelios_program::program::{
     Body, BodyElement, ConditionalLiteral, DefaultNegation, Literal, LiteralInner,
 };
 use themelios_program::term::Term;
-use zetesis_core::AtomPattern;
 
 use crate::formula_guard::Guard;
 use crate::formula_ir::{Compiler, LiteralIr, LocalFamily, Projection, Variables};

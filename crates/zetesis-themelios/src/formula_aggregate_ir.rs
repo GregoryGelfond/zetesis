@@ -13,8 +13,9 @@ use crate::formula_ir::{
     AggregateElementIr, AggregateGuard, AggregateIr, AggregateKey, Compiler, Expression, LiteralIr,
     LocalFamily, Operation, Variables,
 };
+use crate::formula_support::components::Term as CoreTerm;
 use crate::{AdmissionFailure, FormulaFailure, InputLimit, ProfileFeature};
-use zetesis_core::{Term as CoreTerm, Value};
+use zetesis_core::Value;
 
 impl Compiler<'_> {
     pub(super) fn condition(
@@ -122,9 +123,14 @@ impl Compiler<'_> {
         values: &mut Vec<LiteralIr>,
     ) -> Result<Expression, FormulaFailure> {
         if let Some(value) = sentinel(term) {
-            self.value(&value)?;
+            let key = self.value(&value)?;
             return Ok(Expression {
-                nodes: vec![Operation::Constant(value)],
+                nodes: vec![Operation::Constant(self.source.scalar_key(
+                    &key,
+                    self.limits,
+                    self.counters,
+                    self.location,
+                )?)],
             });
         }
         self.ranged_expression(term, variables, values)
@@ -192,15 +198,25 @@ impl Compiler<'_> {
         if !matches!(term, Term::Variable(_) | Term::Symbolic(_)) {
             return Err(unsupported(ProfileFeature::Aggregate, self.location).into());
         }
-        let term = if let Some(value) = sentinel(term) {
-            CoreTerm::Constant(value)
-        } else {
-            self.objective_term(term, variables)?
-        };
-        if let CoreTerm::Constant(value) = &term {
-            self.value(value)?;
+        self.domain_term(term, variables)
+    }
+
+    /// Explicit scalar roots in rule, aggregate and witness contexts. Objective
+    /// fields use `objective_term` instead and do not enlarge this root selection.
+    pub(super) fn domain_term(
+        &mut self,
+        term: &Term,
+        variables: &mut Variables,
+    ) -> Result<CoreTerm, FormulaFailure> {
+        match term {
+            Term::Symbolic(symbol) => {
+                self.budget
+                    .charge(crate::ExpansionResource::TermWork, 1, self.location)?;
+                let value = crate::compile::scalar(symbol, self.location)?;
+                Ok(CoreTerm::Constant(self.root_scalar(&value)?))
+            }
+            _ => self.objective_term(term, variables),
         }
-        Ok(term)
     }
     fn aggregate(
         &mut self,

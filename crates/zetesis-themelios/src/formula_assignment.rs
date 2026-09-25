@@ -1,33 +1,35 @@
-//! Bounded candidate values from complete, full-tuple local joins.
-
-use std::collections::BTreeSet;
-
-use themelios_base::span::Location;
-use themelios_program::program::AggregateFunction;
-use themelios_program::term::EvalError;
-use zetesis_core::Value;
+//! Bounded candidate values from complete, canonical full-tuple local joins.
+mod sums;
+pub(crate) use sums::sums;
 
 use crate::diagnostic::unsupported;
 use crate::expansion::Budget;
-use crate::formula::ceiling;
 use crate::formula_binding::Binding;
-use crate::formula_ir::{AggregateIr, AggregateKey, value_bytes};
-use crate::formula_support::{Counters, Join, Support};
-use crate::{
-    ExpansionFailure, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource,
-    ProfileFeature,
+use crate::formula_ir::{AggregateIr, AggregateKey};
+use crate::formula_support::components::Term;
+use crate::formula_support::{
+    Buffer, Computation, Context, Counters, GroundingWork, Join, Support, TermSelection,
 };
+use crate::{FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature};
+use themelios_base::span::Location;
+use themelios_program::program::AggregateFunction;
+use zetesis_core::catalog::{AssignmentSlice, TermKey, TermRef};
+use zetesis_core::{Value, ValueNodeRef};
 
 pub(crate) fn values(
     aggregate: &AggregateIr,
     assignment: &Binding,
     support: &Support,
-    limits: &FormulaLimits,
     budget: &mut Budget,
-    counters: &mut Counters,
-    location: Location,
-) -> Result<Vec<Value>, FormulaFailure> {
-    let mut tuples = BTreeSet::new();
+    context: Context<'_, &mut Computation<'_, '_>>,
+) -> Result<Binding<'static>, FormulaFailure> {
+    let Context { computation, work } = context;
+    let GroundingWork {
+        limits,
+        counters,
+        location,
+    } = work;
+    let mut tuples = TermSelection::new(computation, limits, counters, location)?;
     for element in &aggregate.elements {
         let mut local = Join::new(
             &element.condition,
@@ -35,60 +37,109 @@ pub(crate) fn values(
             element.variables,
             support,
             budget,
-            location,
+            Context::new(&*computation, limits, counters, location),
         )?;
-        while let Some(binding) = local.next(limits, budget, counters, location)? {
+        while let Some(binding) = local.next(computation, limits, budget, counters, location)? {
             let AggregateKey::Tuple(terms) = &element.key else {
                 unreachable!("assignment is a function aggregate")
             };
-            let mut tuple = Vec::new();
-            for term in terms {
-                counters.work(limits, location)?;
-                let value = binding.resolve(term, location)?;
-                budget.charge(ExpansionResource::ScalarBytes, value_bytes(value), location)?;
-                tuple.push(value.clone());
-            }
-            if !tuples.contains(&tuple) {
-                ceiling(
-                    FormulaResource::AggregateElements,
-                    tuples.len() as u128 + 1,
-                    limits.aggregate.max_elements as u128,
+            let tuple = tuple(terms, &binding, computation, limits, counters, location)?;
+            tuples.insert(
+                &tuple,
+                FormulaResource::AggregateElements,
+                limits.aggregate.max_elements,
+                Context::new(&*computation, limits, counters, location),
+            )?;
+        }
+    }
+    let tuples = tuples.ordered(true, computation, limits, counters, location)?;
+    let mut firsts = Binding::new(computation, limits, counters, location)?;
+    let mut weights = Buffer::new(computation, limits, counters, location)?;
+    for slot in 0..tuples.len() {
+        counters.work(limits, location)?;
+        let read = computation.read();
+        let first = tuples.read(slot, read, location)?.child(0);
+        if matches!(
+            aggregate.function,
+            AggregateFunction::Min | AggregateFunction::Max
+        ) {
+            let first = first.expect("admitted nonempty extremum tuple");
+            extremum_value(first, location)?;
+            let key = read.term_key(first).map_err(|error| {
+                crate::formula_binding::assignment(
+                    zetesis_core::catalog::AssignmentError::Read(error),
                     location,
-                )?;
-                tuples.insert(tuple);
-            }
+                )
+            })?;
+            firsts.extend_scope(slot + 1, computation, limits, counters, location)?;
+            firsts.set(slot, &key, limits, counters, location)?;
+        } else if let Some(weight) = contribution(aggregate.function, first, location)? {
+            weights.push(weight, computation, limits, counters, location)?;
         }
     }
     if matches!(
         aggregate.function,
         AggregateFunction::Min | AggregateFunction::Max
     ) {
-        return extrema_candidates(
+        extrema_candidates(
             aggregate.function,
-            tuples
-                .iter()
-                .map(|tuple| tuple.first().expect("admitted nonempty extremum tuple")),
+            firsts.slots(),
+            computation,
             limits,
-            budget,
             counters,
             location,
-        );
+        )
+    } else {
+        candidates(
+            aggregate.function,
+            weights.iter().copied(),
+            computation,
+            limits,
+            counters,
+            location,
+        )
     }
-    let mut weights = Vec::new();
-    for tuple in tuples {
-        if let Some(weight) = contribution(aggregate.function, tuple.first(), location)? {
-            weights.push(weight);
-        }
-    }
-    candidates(aggregate.function, weights, limits, counters, location)
 }
 
-/// Preserve the independently recorded endpoint profile while extending term
-/// classes. Source endpoint behavior is a separate compatibility obligation.
-pub(crate) fn extremum_value(value: &Value, location: Location) -> Result<(), FormulaFailure> {
-    if let Value::Number(endpoint @ (i32::MIN | i32::MAX)) = value {
+pub(crate) fn tuple(
+    terms: &[Term],
+    binding: &Binding,
+    computation: &mut Computation<'_, '_>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: Location,
+) -> Result<TermKey, FormulaFailure> {
+    let mut fields = Binding::new(computation, limits, counters, location)?;
+    let mut children = Buffer::new(computation, limits, counters, location)?;
+    fields.extend_scope(terms.len(), computation, limits, counters, location)?;
+    for (slot, term) in terms.iter().enumerate() {
+        counters.work(limits, location)?;
+        let key = match term {
+            Term::Constant(value) => computation.static_key(*value, limits, counters, location)?,
+            Term::Variable(variable) => binding.key(*variable, location)?,
+        };
+        fields.set(slot, &key, limits, counters, location)?;
+        children.push(slot, computation, limits, counters, location)?;
+    }
+    // This wrapper identifies an already admitted source tuple. Its added root
+    // is metadata, not a fresh source expression with a new depth ceiling.
+    computation.construct(
+        ValueNodeRef::Tuple { arity: terms.len() },
+        fields.slots(),
+        children.slice(),
+        zetesis_core::catalog::Limits {
+            max_nodes: usize::MAX,
+            max_depth: usize::MAX,
+            max_bytes: usize::MAX,
+        },
+        GroundingWork::new(limits, counters, location),
+    )
+}
+
+pub(crate) fn extremum_value(value: TermRef<'_>, location: Location) -> Result<(), FormulaFailure> {
+    if let ValueNodeRef::Number(endpoint @ (i32::MIN | i32::MAX)) = value.descriptor() {
         return Err(crate::AdmissionFailure::ExtremumEndpoint {
-            value: *endpoint,
+            value: endpoint,
             location,
         }
         .into());
@@ -96,143 +147,109 @@ pub(crate) fn extremum_value(value: &Value, location: Location) -> Result<(), Fo
     Ok(())
 }
 
-/// A completed possible tuple carrier covers every actual selected value.
-/// Storage order is only the deterministic candidate/cache enumeration order.
-pub(crate) fn extrema_candidates<'a>(
+pub(crate) fn extrema_candidates(
     function: AggregateFunction,
-    possible: impl IntoIterator<Item = &'a Value>,
+    possible: AssignmentSlice<'_>,
+    computation: &mut Computation<'_, '_>,
     limits: &FormulaLimits,
-    budget: &mut Budget,
     counters: &mut Counters,
     location: Location,
-) -> Result<Vec<Value>, FormulaFailure> {
+) -> Result<Binding<'static>, FormulaFailure> {
+    let mut values = TermSelection::new(computation, limits, counters, location)?;
     let empty = match function {
         AggregateFunction::Min => Value::Supremum,
         AggregateFunction::Max => Value::Infimum,
         _ => unreachable!("value candidates are extrema only"),
     };
-    ceiling(
+    let empty = computation.import((&empty).into(), limits, counters, location)?;
+    values.insert(
+        &empty,
         FormulaResource::AssignmentValues,
-        1,
-        limits.max_assignment_values as u128,
-        location,
+        limits.max_assignment_values,
+        Context::new(&*computation, limits, counters, location),
     )?;
-    let mut values = BTreeSet::from([empty]);
-    for value in possible {
+    for slot in 0..possible.len() {
         counters.work(limits, location)?;
-        extremum_value(value, location)?;
-        if !values.contains(value) {
-            ceiling(
-                FormulaResource::AssignmentValues,
-                values.len() as u128 + 1,
-                limits.max_assignment_values as u128,
+        let key = possible
+            .key(slot)
+            .map_err(|error| crate::formula_binding::assignment(error, location))?
+            .expect("possible extrema list has no missing entries");
+        let value = computation.read().term(&key).map_err(|error| {
+            crate::formula_binding::assignment(
+                zetesis_core::catalog::AssignmentError::Read(error),
                 location,
-            )?;
-            values.insert(crate::formula_support::copy(value, budget, location)?);
-        }
+            )
+        })?;
+        extremum_value(value, location)?;
+        values.insert(
+            &key,
+            FormulaResource::AssignmentValues,
+            limits.max_assignment_values,
+            Context::new(&*computation, limits, counters, location),
+        )?;
     }
-    Ok(values.into_iter().collect())
+    values.ordered(false, computation, limits, counters, location)
 }
 
-/// Select the numeric contribution before eligibility lowering. Whole tuples
-/// still identify distinct elements; ignored sums never become zero-weight keys.
 pub(crate) fn contribution(
     function: AggregateFunction,
-    first: Option<&Value>,
+    first: Option<TermRef<'_>>,
     location: Location,
 ) -> Result<Option<i32>, FormulaFailure> {
-    match (function, first) {
+    match (function, first.map(TermRef::descriptor)) {
         (AggregateFunction::Count, _) => Ok(Some(1)),
-        (AggregateFunction::SumPlus, Some(Value::Number(weight))) if *weight > 0 => {
-            Ok(Some(*weight))
+        (AggregateFunction::SumPlus, Some(ValueNodeRef::Number(weight))) if weight > 0 => {
+            Ok(Some(weight))
         }
         (AggregateFunction::SumPlus, _) => Ok(None),
-        (_, Some(Value::Number(weight))) => Ok(Some(*weight)),
+        (_, Some(ValueNodeRef::Number(weight))) => Ok(Some(weight)),
         (AggregateFunction::Sum, _) => Ok(None),
         _ => Err(unsupported(ProfileFeature::Aggregate, location).into()),
     }
 }
 
-/// Actual enabled tuples are a subset of the complete possible-key set.
-/// Correlated conditions do not justify deleting candidate values here.
-pub(crate) fn sums(
-    weights: impl IntoIterator<Item = i32>,
-    limits: &FormulaLimits,
-    counters: &mut Counters,
-    location: Location,
-) -> Result<Vec<i32>, FormulaFailure> {
-    let mut sums = BTreeSet::new();
-    ceiling(
-        FormulaResource::AssignmentValues,
-        1,
-        limits.max_assignment_values as u128,
-        location,
-    )?;
-    sums.insert(0_i32);
-    for weight in weights {
-        let mut delta = Vec::new();
-        for sum in &sums {
-            counters.work(limits, location)?;
-            let value = sum
-                .checked_add(weight)
-                .ok_or(ExpansionFailure::Evaluation {
-                    error: EvalError::Overflow,
-                    location,
-                })?;
-            if !sums.contains(&value) {
-                ceiling(
-                    FormulaResource::AssignmentValues,
-                    sums.len() as u128 + delta.len() as u128 + 1,
-                    limits.max_assignment_values as u128,
-                    location,
-                )?;
-                delta.push(value);
-            }
-        }
-        sums.extend(delta);
-    }
-    Ok(sums.into_iter().collect())
-}
-
-/// Extrema range over eligible numeric values plus their genuine empty sentinel.
-/// Count/sum retain the complete finite subset-value upper approximation.
 pub(crate) fn candidates(
     function: AggregateFunction,
     weights: impl IntoIterator<Item = i32>,
+    computation: &mut Computation<'_, '_>,
     limits: &FormulaLimits,
     counters: &mut Counters,
     location: Location,
-) -> Result<Vec<Value>, FormulaFailure> {
-    let empty = match function {
-        AggregateFunction::Count | AggregateFunction::Sum | AggregateFunction::SumPlus => {
-            let weights = weights
+) -> Result<Binding<'static>, FormulaFailure> {
+    if matches!(
+        function,
+        AggregateFunction::Count | AggregateFunction::Sum | AggregateFunction::SumPlus
+    ) {
+        let numbers = sums(
+            weights
                 .into_iter()
-                .filter(|weight| function != AggregateFunction::SumPlus || *weight > 0);
-            return sums(weights, limits, counters, location)
-                .map(|values| values.into_iter().map(Value::Number).collect());
+                .filter(|weight| function != AggregateFunction::SumPlus || *weight > 0),
+            computation,
+            limits,
+            counters,
+            location,
+        )?;
+        let mut result = Binding::new(computation, limits, counters, location)?;
+        result.extend_scope(numbers.len(), computation, limits, counters, location)?;
+        for (slot, &number) in numbers.iter().enumerate() {
+            let key = computation.number(number, limits, counters, location)?;
+            result.set(slot, &key, limits, counters, location)?;
         }
-        AggregateFunction::Min => Value::Supremum,
-        AggregateFunction::Max => Value::Infimum,
-    };
-    ceiling(
-        FormulaResource::AssignmentValues,
-        1,
-        limits.max_assignment_values as u128,
-        location,
-    )?;
-    let mut values = BTreeSet::from([empty]);
-    for weight in weights {
-        counters.work(limits, location)?;
-        let value = Value::Number(weight);
-        if !values.contains(&value) {
-            ceiling(
-                FormulaResource::AssignmentValues,
-                values.len() as u128 + 1,
-                limits.max_assignment_values as u128,
-                location,
-            )?;
-            values.insert(value);
-        }
+        return Ok(result);
     }
-    Ok(values.into_iter().collect())
+    let mut possible = Binding::new(computation, limits, counters, location)?;
+    for weight in weights {
+        let slot = possible.len();
+        possible.extend_scope(slot + 1, computation, limits, counters, location)?;
+        let key = computation.number(weight, limits, counters, location)?;
+        possible.set(slot, &key, limits, counters, location)?;
+    }
+    extrema_candidates(
+        function,
+        possible.slots(),
+        computation,
+        limits,
+        counters,
+        location,
+    )
 }

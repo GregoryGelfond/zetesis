@@ -18,22 +18,20 @@ enum AggregateTarget {
 }
 
 impl Compiler<'_> {
-    fn ready(&self, term: &Template) -> bool {
+    pub(super) fn ready(&self, term: &Template) -> bool {
         self.ready_with(term, &BTreeSet::new())
     }
     pub(super) fn ready_with(&self, term: &Template, available: &BTreeSet<usize>) -> bool {
         match term {
             Template::Variable(slot) => self.safe.contains(slot) || available.contains(slot),
-            Template::Value(_) => true,
+            Template::Constant(_) => true,
             Template::Unary(_, argument) | Template::Absolute(argument) => {
                 self.ready_with(argument, available)
             }
             Template::Binary(_, left, right) | Template::Interval(left, right) => {
                 self.ready_with(left, available) && self.ready_with(right, available)
             }
-            Template::Function(_, _, arguments)
-            | Template::Tuple(arguments)
-            | Template::Pool(arguments) => arguments
+            Template::Construct(_, arguments) | Template::Pool(arguments) => arguments
                 .iter()
                 .all(|argument| self.ready_with(argument, available)),
         }
@@ -153,10 +151,7 @@ impl Compiler<'_> {
                 AggregateFunction::Min | AggregateFunction::Max
             ) {
                 Some((index, AggregateTarget::Structure))
-            } else if matches!(
-                guard.bound,
-                Template::Function(_, _, _) | Template::Tuple(_)
-            ) {
+            } else if matches!(guard.bound, Template::Construct(_, _)) {
                 Some((index, AggregateTarget::NumericMismatch))
             } else {
                 None
@@ -235,11 +230,16 @@ impl Compiler<'_> {
             }
             if let Some(index) = generated
                 .iter()
-                .position(|(_, expression)| self.ready(expression))
+                .position(|(_, expression)| match expression {
+                    super::Generated::Value(term) => self.ready(term),
+                    super::Generated::AtomKey(key) => {
+                        key.arguments.iter().all(|term| self.key_ready(term))
+                    }
+                })
             {
                 let (slot, expression) = generated.remove(index);
                 self.safe.insert(slot);
-                binders.push(Binder::Assign(slot, expression));
+                binders.push(expression.binder(slot));
                 continue;
             }
             if self.bind_ready_alternative(&mut conditions, &mut binders)? {

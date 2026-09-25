@@ -7,7 +7,7 @@ mod objective_dependencies;
 use std::collections::BTreeSet;
 
 use serde_json::Value as Json;
-use zetesis_core::{Atom, Model, Sign, Value};
+use zetesis_core::{Model, Sign};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits as OracleLimits, models, models_reduct};
 use zetesis_sat::{Limits, StableModels};
@@ -33,7 +33,8 @@ fn input(source: &str) -> Result<AdmittedFormula, FormulaFailure> {
         FormulaLimits::default(),
     )
 }
-fn name(atom: &Atom) -> String {
+fn name<'a>(atom: impl Into<zetesis_core::catalog::AtomRef<'a>>) -> String {
+    let atom = atom.into();
     let sign = if atom.predicate().sign() == Sign::Negative {
         "-"
     } else {
@@ -45,13 +46,14 @@ fn name(atom: &Atom) -> String {
     let values: Vec<_> = atom
         .values()
         .iter()
-        .map(|value| match value {
-            Value::Infimum => "#inf".to_owned(),
-            Value::Supremum => "#sup".to_owned(),
-            Value::Structured(value) => value.to_string(),
-            Value::Number(number) => number.to_string(),
-            Value::String(string) => serde_json::to_string(string).unwrap(),
-            Value::Symbol(symbol) => symbol.clone(),
+        .map(|value| match value.descriptor() {
+            zetesis_core::ValueNodeRef::Infimum => "#inf".to_owned(),
+            zetesis_core::ValueNodeRef::Supremum => "#sup".to_owned(),
+            zetesis_core::ValueNodeRef::Function { .. }
+            | zetesis_core::ValueNodeRef::Tuple { .. } => value.to_string(),
+            zetesis_core::ValueNodeRef::Number(number) => number.to_string(),
+            zetesis_core::ValueNodeRef::String(string) => serde_json::to_string(string).unwrap(),
+            zetesis_core::ValueNodeRef::Symbol(symbol) => symbol.to_owned(),
         })
         .collect();
     format!("{sign}{}({})", atom.predicate().name(), values.join(","))
@@ -131,7 +133,10 @@ fn interpretations(input: &AdmittedFormula) -> Vec<Interpretation> {
         .collect()
 }
 fn projected(input: &AdmittedFormula, model: &Interpretation) -> Names {
-    model.atoms().map(|i| name(&input.atoms()[i])).collect()
+    model
+        .atoms()
+        .map(|i| name(input.atoms().at(i).unwrap()))
+        .collect()
 }
 
 #[test]
@@ -257,9 +262,11 @@ fn unrelated_objectives_preserve_presence_priorities_and_tuple_identity() {
         let mut scored = Vec::new();
         for result in search.by_ref() {
             let model = result.unwrap();
+            let evaluated_model =
+                Model::from_positions(admitted.atom_catalog(), model.atoms()).unwrap();
             let evaluated = zetesis_objective::evaluate(
                 admitted.objectives(),
-                &Model::new(model.atoms().map(|i| admitted.atoms()[i].clone())),
+                &evaluated_model,
                 zetesis_objective::Limits::default(),
                 &Cancellation::default(),
             )

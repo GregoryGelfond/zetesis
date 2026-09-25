@@ -5,7 +5,7 @@ use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, AggregateComparison as Comparison, AggregateElement, AggregateExtremum,
     AggregateLimits, Interpretation, Node, Theory, ValueExtremumElement, append_aggregate,
-    append_value_extremum, models, models_reduct,
+    append_value_extremum_refs, models, models_reduct,
     native_aggregate::{self as native, Bound, Function, Group, Guard, Tuple},
 };
 
@@ -80,14 +80,24 @@ fn lowered(group: &Group, comparison: Comparison, bound: &Term) -> Theory {
                 .map(|tuple| {
                     let weight = match group.function() {
                         Function::Count => 1,
-                        Function::Sum => match tuple.key.first() {
-                            Some(Term::Number(value)) => *value,
+                        Function::Sum => match tuple
+                            .key
+                            .first()
+                            .map(zetesis_core::catalog::TermRef::descriptor)
+                        {
+                            Some(zetesis_core::ValueNodeRef::Number(value)) => value,
                             _ => 0,
                         },
-                        Function::SumPlus => match tuple.key.first() {
-                            Some(Term::Number(value)) => (*value).max(0),
-                            _ => 0,
-                        },
+                        Function::SumPlus => {
+                            match tuple
+                                .key
+                                .first()
+                                .map(zetesis_core::catalog::TermRef::descriptor)
+                            {
+                                Some(zetesis_core::ValueNodeRef::Number(value)) => value.max(0),
+                                _ => 0,
+                            }
+                        }
                         Function::Min | Function::Max => unreachable!("numeric fixture"),
                     };
                     AggregateElement {
@@ -113,7 +123,7 @@ fn lowered(group: &Group, comparison: Comparison, bound: &Term) -> Theory {
                 .iter()
                 .filter_map(|tuple| {
                     tuple.key.first().map(|value| ValueExtremumElement {
-                        value: value.clone(),
+                        value,
                         condition: tuple.condition,
                     })
                 })
@@ -123,12 +133,12 @@ fn lowered(group: &Group, comparison: Comparison, bound: &Term) -> Theory {
             } else {
                 AggregateExtremum::Max
             };
-            append_value_extremum(
+            append_value_extremum_refs(
                 &mut nodes,
-                &elements,
+                elements.into_iter(),
                 kind,
                 comparison,
-                bound,
+                bound.into(),
                 AggregateLimits::default(),
                 &Cancellation::default(),
             )

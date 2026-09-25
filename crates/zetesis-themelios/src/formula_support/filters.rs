@@ -1,14 +1,16 @@
 //! Complete-row arithmetic classification. Independent false scalar checks
 //! exclude a row before its retained arithmetic failure is reached.
 
-use super::{Comparisons, Counters, Coverage, Evaluation, Failures, Join, compare, comparison};
-use crate::expansion::Budget;
+use super::{
+    Comparisons, Computation, Counters, Coverage, Evaluation, Failures, Join, compare, comparison,
+};
 use crate::formula_binding::Binding;
 use crate::formula_ir::{Expression, LiteralIr};
 use crate::{ExpansionFailure, FormulaFailure, FormulaLimits};
 use themelios_base::span::Location;
 use themelios_program::program::Relation;
-use zetesis_core::Value;
+use zetesis_core::ValueNodeRef;
+use zetesis_core::catalog::{AssignmentError, CatalogRead, TermKey, TermRef};
 
 pub(super) enum Selection {
     Defined(bool),
@@ -21,8 +23,8 @@ impl Join<'_, '_> {
         &mut self,
         frame: &super::rows::Frame,
         comparisons: Comparisons,
+        computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
-        budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
     ) -> Result<Selection, FormulaFailure> {
@@ -50,8 +52,8 @@ impl Join<'_, '_> {
                 literal,
                 &binding,
                 &mut self.evaluation,
+                computation,
                 limits,
-                budget,
                 counters,
                 location,
             );
@@ -72,9 +74,9 @@ impl Join<'_, '_> {
                 .evaluation
                 .source_expression(
                     expression,
-                    |variable| binding.read(variable, location),
+                    |variable| binding.key(variable, location),
+                    computation,
                     limits,
-                    budget,
                     counters,
                     location,
                 )
@@ -101,8 +103,8 @@ pub(super) fn excludes(
     (literals, decisions): (&[LiteralIr], &super::order::Decisions),
     evaluation: &mut Evaluation,
     binding: &Binding,
+    computation: &mut Computation<'_, '_>,
     limits: &FormulaLimits,
-    budget: &mut Budget,
     counters: &mut Counters,
     location: Location,
 ) -> Result<bool, FormulaFailure> {
@@ -110,7 +112,13 @@ pub(super) fn excludes(
     let mut fatal = None;
     for (index, literal) in literals.iter().enumerate() {
         match pending_check(
-            literal, binding, evaluation, limits, budget, counters, location,
+            literal,
+            binding,
+            evaluation,
+            computation,
+            limits,
+            counters,
+            location,
         ) {
             Ok(passes) => excluded |= !passes && decisions.decides(index),
             Err(FormulaFailure::Expansion(error @ ExpansionFailure::Evaluation { .. })) => {
@@ -151,8 +159,8 @@ fn pending_check(
     literal: &LiteralIr,
     binding: &Binding,
     evaluation: &mut Evaluation,
+    computation: &mut Computation<'_, '_>,
     limits: &FormulaLimits,
-    budget: &mut Budget,
     counters: &mut Counters,
     location: Location,
 ) -> Result<bool, FormulaFailure> {
@@ -161,8 +169,8 @@ fn pending_check(
         let result = evaluation.source_partial(
             left,
             |slot| partial_input(binding, slot, location),
+            computation,
             limits,
-            budget,
             counters,
             location,
         );
@@ -170,26 +178,27 @@ fn pending_check(
         let result = evaluation.source_partial(
             right,
             |slot| partial_input(binding, slot, location),
+            computation,
             limits,
-            budget,
             counters,
             location,
         );
         let right = failures.value(result, evaluation.zero_divisor())?;
         failures.finish(evaluation)?;
-        return Ok(compare(
-            &left.expect("defined left comparison component"),
-            relation,
-            &right.expect("defined right comparison component"),
-        ));
+        let left = left.expect("defined left comparison component");
+        let right = right.expect("defined right comparison component");
+        let read = computation.read();
+        let left = resolve(read, &left, limits, counters, location)?;
+        let right = resolve(read, &right, limits, counters, location)?;
+        return compare(left, relation, right, limits, counters, location);
     }
     let mut failures = Failures::default();
     let mut visit = |expression: &Expression| -> Result<(), FormulaFailure> {
         let result = evaluation.source_partial(
             expression,
             |slot| partial_input(binding, slot, location),
+            computation,
             limits,
-            budget,
             counters,
             location,
         );
@@ -229,27 +238,53 @@ fn pending_check(
     Ok(true)
 }
 
-fn partial_input<'a>(
-    binding: &'a Binding<'_>,
+fn partial_input(
+    binding: &Binding<'_>,
     slot: usize,
     location: Location,
-) -> Result<Option<&'a Value>, FormulaFailure> {
-    binding
-        .slots()
-        .get(slot)
-        .map(Option::as_ref)
-        .ok_or(FormulaFailure::UnsafeVariable {
+) -> Result<Option<TermKey>, FormulaFailure> {
+    binding.slots().key(slot).map_err(|error| match error {
+        AssignmentError::Slot { .. } => FormulaFailure::UnsafeVariable {
             variable: slot,
             location,
-        })
+        },
+        error => crate::formula_binding::assignment(error, location),
+    })
+}
+
+fn resolve<'read>(
+    read: CatalogRead<'read>,
+    key: &TermKey,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: Location,
+) -> Result<TermRef<'read>, FormulaFailure> {
+    counters.work(limits, location)?;
+    read.term(key)
+        .map_err(|error| crate::formula_binding::assignment(AssignmentError::Read(error), location))
+}
+
+fn number(
+    read: CatalogRead<'_>,
+    key: &TermKey,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: Location,
+) -> Result<Option<i32>, FormulaFailure> {
+    let value = resolve(read, key, limits, counters, location)?;
+    counters.work(limits, location)?;
+    Ok(match value.descriptor() {
+        ValueNodeRef::Number(value) => Some(value),
+        _ => None,
+    })
 }
 
 fn check(
     literal: &LiteralIr,
     binding: &Binding,
     evaluation: &mut Evaluation,
+    computation: &mut Computation<'_, '_>,
     limits: &FormulaLimits,
-    budget: &mut Budget,
     counters: &mut Counters,
     location: Location,
 ) -> Result<bool, FormulaFailure> {
@@ -258,9 +293,9 @@ fn check(
         for guard in &aggregate.guards {
             let result = evaluation.source_expression(
                 &guard.bound,
-                |variable| binding.read(variable, location),
+                |variable| binding.key(variable, location),
+                computation,
                 limits,
-                budget,
                 counters,
                 location,
             );
@@ -270,25 +305,28 @@ fn check(
         return Ok(true);
     }
     if let LiteralIr::Guard(guard) = literal {
-        return guard.evaluate_in(binding, evaluation, limits, budget, counters, location);
+        return guard.evaluate_in(binding, evaluation, computation, limits, counters, location);
     }
     if let Some((left, relation, right)) = comparison(literal) {
         let [left, right] = evaluation.source_values(
             [left, right],
-            |variable| binding.read(variable, location),
+            |variable| binding.key(variable, location),
+            computation,
             limits,
-            budget,
             counters,
             location,
         )?;
-        return Ok(compare(&left, relation, &right));
+        let read = computation.read();
+        let left = resolve(read, &left, limits, counters, location)?;
+        let right = resolve(read, &right, limits, counters, location)?;
+        return compare(left, relation, right, limits, counters, location);
     }
     if let LiteralIr::TupleCompare(left, relation, right) = literal {
         let equal = evaluation.source_tuple(
             (left, right),
-            |variable| binding.read(variable, location),
+            |variable| binding.key(variable, location),
+            computation,
             limits,
-            budget,
             counters,
             location,
         )?;
@@ -303,18 +341,22 @@ fn check(
     {
         let [lower, upper] = evaluation.source_values(
             [lower, upper],
-            |variable| binding.read(variable, location),
+            |variable| binding.key(variable, location),
+            computation,
             limits,
-            budget,
             counters,
             location,
         )?;
-        let (Value::Number(lower), Value::Number(upper)) = (lower, upper) else {
+        let read = computation.read();
+        let lower = number(read, &lower, limits, counters, location)?;
+        let upper = number(read, &upper, limits, counters, location)?;
+        let (Some(lower), Some(upper)) = (lower, upper) else {
             return Ok(false);
         };
-        return Ok(
-            matches!(binding.read(*target, location)?, Value::Number(number) if *number >= lower && *number <= upper),
-        );
+        let target = binding.key(*target, location)?;
+        Ok(number(read, &target, limits, counters, location)?
+            .is_some_and(|value| lower <= value && value <= upper))
+    } else {
+        Ok(true)
     }
-    Ok(true)
 }

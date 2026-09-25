@@ -46,16 +46,45 @@ packed device graphs answer different execution questions. Their denotations,
 construction cost and lifetimes should be explicit. Duplicating owned logical
 payload merely to index it requires a separate justification.
 
-Formula instantiation consumes its source IR and retains only the analysis,
-provenance, activated objectives and emitted builder needed by later phases.
-The formula atom builder owns each complete atom once. Its checked AVL
-indexes, one per predicate, store dense IDs and links; complete typed
-comparisons decide identity without copying a second set of keys, the
-predicate compared once per lookup and the arguments along the tree. Insertion fixes first-insertion order, while
-committing a pending suffix preserves those IDs and transfers its ownership.
-Consuming finalization transfers the completed atom vector into the immutable
-catalog and releases the construction index. These operations consume the
-enclosing work budget; catalog membership alone does not establish truth.
+Core construction descriptions (`Value`, `Atom`, `Template`) are distinct from
+admitted execution views. `Program` imports its constants and signed predicates
+into a frozen canonical vocabulary. Its template rows, explicit finite domain
+and signature order retain typed IDs and topology. Interned subterms are not
+thereby members of the substitution domain. `TemplateCatalog` supplies the same
+ordered component storage to rules and objectives without treating an objective
+as a synthetic rule or source of support.
+
+`TemplateRef`, `PatternRef`, `FilterRef` and `TemplateTerm` borrow that storage.
+`ObjectiveTemplateRef` adds objective weight polarity, priority slot and closed
+condition metadata. Owned condition descriptions import into one objective tuple
+authority over the same vocabulary. Conditions already backed by a source catalog
+retain that supplied authority. The objective's aggregate byte allowance counts
+exact shared owners once; different source prefixes can conservatively recount
+shared segments. This boundary does not establish one global authority for all
+source syntax, generated bindings and observation values.
+
+A Program's `CarrierAtom` retains signature and explicit-domain coordinates,
+sharing the canonical vocabulary. Sparse candidates do not enumerate or count
+the complete Cartesian carrier. A positional `GateAtom` additionally witnesses
+a checked rank for that exact Program. Equal logical atoms from separately
+admitted Programs are comparable semantically but cannot exchange applicability
+witnesses. Tuple writers created for the same Program share vocabulary identity
+while retaining independent atom-row scopes and candidate truth.
+
+Formula source preparation admits scalar, constructor, predicate and pattern
+components into one canonical authority. Compiled expressions and patterns retain
+occurrence coordinates and topology; temporary themelios source values remain
+at the admission boundary. Preparation transfers this authority and its accepted
+work/storage receipts into instantiation, which retains the analysis, provenance,
+activated objectives and emitted builder needed by later phases. Its atom builder
+owns the evolving authority; checked AVL indexes store discovery positions and
+links, while exact interning indexes store only
+canonical IDs. First discovery fixes a local position. Committing a pending
+suffix preserves those positions and publishes a readable prefix. Finalization
+transfers the discovery map and shares its immutable payload, then releases the
+construction indexes. A refused operation can retain complete canonical
+components without discovering or selecting them. All checked operations consume
+the enclosing work budget; catalog presence establishes no truth.
 
 The eager formula join owns its current partial binding and undo trails. A
 completed row without a generated body or head suffix lends that binding to its
@@ -74,11 +103,23 @@ work before finishing. Generated continuations have their own finite cursors and
 can finish consuming an owned row independently of that base state.
 
 Lent and owned completion admit the same substitution and checked slot span.
-Only owned copies consume copied scalar payload and record `binding_snapshots`;
-that counter is not an enumeration count. The consumer still owns every emitted
-atom and formula. Lending changes neither positive-row order nor source scopes,
-typed values, comparison meanings, negative gates or required rejected-row
-validation. It does not establish a process memory bound or a measured speedup.
+An owned binding copies only scoped term IDs and explicit absence, retaining one
+vocabulary witness and a capacity lease; it does not copy scalar payload. The
+join's completed base-row copies record `binding_snapshots`, which is not an
+enumeration count. Emitted atom selections retain source-scoped discovery
+coordinates, while formula topology has its own owner. Lending changes neither
+positive-row order nor source scopes, typed values, comparison meanings, negative
+gates or required rejected-row validation. It does not establish a process memory
+bound or a measured speedup.
+
+Compiled observation metadata has its own immutable vocabulary, shared with the
+source bundle's directives and selectors. Evaluation borrows that vocabulary and
+the supplied model as fixed inputs. Captures remain borrowed term views; generated
+values use scoped IDs in a per-operation derived arena. Typed wildcard-key
+metadata is separate from logical ground terms. Only the final observation result
+exports owned themelios symbols. These are the contracts of the source and
+observation boundaries, not a claim that every subsystem shares one physical
+owner or one memory allowance.
 
 ## Shared original narrowing index
 
@@ -259,8 +300,10 @@ The union of positive snapshots supplies possible bindings; each world's own
 packed snapshot and frozen seed determine whether an offered instance contributes
 to that world. Catalog presence alone says neither that the atom is true nor that
 the candidate is stable. World membership and pending consequence masks remain
-separate from the identity index. The source visitor still rebuilds its borrowed
-relation grouping and copies one bounded rule instance for each callback.
+separate from the identity index. The source visitor rebuilds its borrowed
+relation grouping and offers a callback-scoped instance containing checked
+`AtomKey` views. Its key buffers own metadata; they do not copy Atom/Value payload.
+Retaining callback results requires a separate admitted ownership operation.
 
 The following describes the dependency contract, not a second implementation:
 
@@ -280,7 +323,7 @@ Every chunk uses the same round truth. Catalog growth must preserve existing ato
 identities and each world's packed stride. A completed chunk alone cannot commit
 a round. Identity commit also occurs when the last round adds no consequence:
 underived offered heads still belong to the final catalog. Source snapshots drop
-before the committed vector can move. Finalization transfers that vector into
+before the discovery map can move. Finalization transfers that map into
 the shared Model catalog, with a separate selected-position list per world.
 Formula checking similarly preserves the original candidate while
 searching for a proper-subset model of its frozen reduct.
@@ -367,14 +410,22 @@ implementation obligations.
 
 The lazy coordinator's `max_host_bytes` is a mixed, explicitly scoped envelope.
 It includes actual committed/pending catalog, AVL/path and ordered-ID capacities,
-their named growth overlap, nested atom payload measures, and requested packed
-transport, source membership/workspace, copied-instance scratch and final model
+their named growth overlap and canonical payload, plus requested packed
+transport, source membership/workspace, instance-key scratch and final model
 positions. The final position allowance bounds logical selected slots; it
 excludes the extra capacity retained by `Model`'s geometrically growing Vec.
 Other allocator overhead and rounding outside the catalog/ordered-ID capacities,
 Arc envelopes, caller inputs and backend-private transport are also excluded.
 Source work includes initialization, identity lookup/insertion, canonical row
 selection and prefix commits; the quota is shared across the whole batch.
+
+The borrowed source reader has a separate `max_scan_bytes` allowance for its
+row-reference directory, join scratch and current instance-key buffer. It
+includes actual capacities and old/replacement overlap, while borrowing the
+Program and catalog payload. `max_instance_bytes` bounds one instance's logical
+referenced identity; it does not stand in for the scan workspace allowance.
+World masks and callback transport keep their existing accounts. These owners
+can be simultaneously live, so their separate admitted bounds must be composed.
 
 Authored payload bounds exclude any costs their API says they exclude, such as
 allocator metadata or driver allocations. They are not process RSS. Dropping a

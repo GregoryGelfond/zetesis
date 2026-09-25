@@ -2,10 +2,11 @@
 
 use std::cmp::Ordering;
 
-use zetesis_core::Value as Term;
+use zetesis_core::catalog::TermRef;
+use zetesis_core::{Value as Term, ValueNodeRef};
 use zetesis_cpu::Cancellation;
 
-use super::{Bound, Error, ErrorKind, Function, Group, Phase, Statistics, Work, add};
+use super::{Bound, Error, ErrorKind, Function, Group, GroupRef, Phase, Statistics, Work, add};
 use crate::{AggregateComparison, AggregateExtremum};
 
 /// Exact result borrowed from a retained group or an explicit empty endpoint.
@@ -16,25 +17,28 @@ pub enum Value<'a> {
     Integer(i128),
     /// Borrowed ordered ASP term. Group-produced numerical values use `Integer`;
     /// empty extrema use genuine ASP endpoints.
-    Term(&'a Term),
+    Term(TermRef<'a>),
 }
 
 impl Value<'_> {
     /// Compare without narrowing integers or confusing term storage order with
     /// ASP order. This standalone comparison does not charge a work budget;
-    /// group guard evaluation charges both admitted carriers before calling it.
-    /// Cost is linear in the compared flat value carriers, with constant extra
-    /// storage; no recursive logical-tree traversal occurs.
+    /// group guard evaluation uses checked canonical comparison in addition to
+    /// charging both admitted carriers. Term comparisons follow the navigation
+    /// bound of [`TermRef::compare_terms`], with constant cursor space and no
+    /// recursive logical-tree traversal.
     #[must_use]
     pub fn compare(self, other: Self) -> Ordering {
         match (self, other) {
             (Self::Integer(left), Self::Integer(right)) => left.cmp(&right),
-            (Self::Integer(left), Self::Term(right)) => match right {
-                Term::Number(right) => left.cmp(&i128::from(*right)),
-                Term::Infimum => Ordering::Greater,
-                Term::Supremum | Term::String(_) | Term::Symbol(_) | Term::Structured(_) => {
-                    Ordering::Less
-                }
+            (Self::Integer(left), Self::Term(right)) => match right.descriptor() {
+                ValueNodeRef::Number(right) => left.cmp(&i128::from(right)),
+                ValueNodeRef::Infimum => Ordering::Greater,
+                ValueNodeRef::Supremum
+                | ValueNodeRef::String(_)
+                | ValueNodeRef::Symbol(_)
+                | ValueNodeRef::Function { .. }
+                | ValueNodeRef::Tuple { .. } => Ordering::Less,
             },
             (Self::Term(left), Self::Integer(right)) => {
                 Self::Integer(right).compare(Self::Term(left)).reverse()
@@ -117,6 +121,21 @@ impl<'a> Reduction<'a> {
 }
 
 impl Group {
+    /// Reduce ordered masks through the shared canonical aggregate view.
+    /// # Errors
+    /// Refuses shape, checked arithmetic, work or caller control.
+    pub fn reduce(
+        &self,
+        original: &[bool],
+        frozen: Option<&[bool]>,
+        limits: ReductionLimits,
+        cancellation: &Cancellation,
+    ) -> Result<Reduction<'_>, Error> {
+        self.view().reduce(original, frozen, limits, cancellation)
+    }
+}
+
+impl<'a> GroupRef<'a> {
     /// Reduce ordered eligibility occurrences and evaluate every guard.
     ///
     /// Bare masks are observations supplied by the caller, not certified formula
@@ -130,18 +149,19 @@ impl Group {
     /// nothing to extrema; count includes every selected key. Sum-plus retains
     /// neutral keys but ignores zero/negative contributions. Every guard is
     /// evaluated even after an earlier false guard. Comparisons charge the full
-    /// admitted term carriers, although lexicographic comparison may stop early.
+    /// admitted term carriers and permit each canonical navigation/text step,
+    /// although lexicographic comparison may stop early.
     ///
     /// # Errors
     /// Refuses mask shape, arithmetic/work overflow, cancellation or deadline;
     /// no partially evaluated reduction is returned.
     pub fn reduce(
-        &self,
+        self,
         original: &[bool],
         frozen: Option<&[bool]>,
         limits: ReductionLimits,
         cancellation: &Cancellation,
-    ) -> Result<Reduction<'_>, Error> {
+    ) -> Result<Reduction<'a>, Error> {
         let mut work = Work {
             maximum: limits.max_work,
             cancellation,
@@ -158,11 +178,11 @@ impl Group {
     }
 
     fn reduce_checked(
-        &self,
+        self,
         original: &[bool],
         frozen: Option<&[bool]>,
         work: &mut Work<'_>,
-    ) -> Result<(Evaluation<'_>, Option<Evaluation<'_>>), ErrorKind> {
+    ) -> Result<(Evaluation<'a>, Option<Evaluation<'a>>), ErrorKind> {
         work.poll()?;
         self.mask_length(original, Phase::Original)?;
         if let Some(frozen) = frozen {
@@ -175,18 +195,18 @@ impl Group {
     }
 
     fn mask_length(&self, mask: &[bool], phase: Phase) -> Result<(), ErrorKind> {
-        if mask.len() != self.tuples.len() {
+        if mask.len() != self.data.tuples.len() {
             return Err(ErrorKind::Mask {
                 phase,
-                expected: self.tuples.len(),
+                expected: self.data.tuples.len(),
                 actual: mask.len(),
             });
         }
         Ok(())
     }
 
-    fn evaluate(&self, mask: &[bool], work: &mut Work<'_>) -> Result<Evaluation<'_>, ErrorKind> {
-        let (value, cost) = match self.function {
+    fn evaluate(&self, mask: &[bool], work: &mut Work<'_>) -> Result<Evaluation<'a>, ErrorKind> {
+        let (value, cost) = match self.function() {
             Function::Count => (Value::Integer(self.numeric(mask, work, |_| Some(1))?), 1),
             Function::Sum => (Value::Integer(self.numeric(mask, work, number)?), 1),
             Function::SumPlus => (
@@ -197,14 +217,15 @@ impl Group {
             Function::Max => self.extremum(AggregateExtremum::Max, mask, work)?,
         };
         let mut holds = true;
-        for (guard, bound_cost) in self.guards.iter().zip(&self.guard_costs) {
+        for index in 0..self.data.guards.len() {
             work.charge(1)?;
-            work.charge(add(cost, *bound_cost)?)?;
-            let bound = match &guard.bound {
-                Bound::Integer(value) => Value::Integer(*value),
+            work.charge(add(cost, self.data.guard_costs[index])?)?;
+            let guard = self.guard(index).expect("admitted guard extent");
+            let bound = match guard.bound {
+                Bound::Integer(value) => Value::Integer(value),
                 Bound::Term(value) => term(value),
             };
-            holds &= comparison(guard.comparison, value.compare(bound));
+            holds &= comparison(guard.comparison, compare(value, bound, work)?);
         }
         Ok(Evaluation { value, holds })
     }
@@ -213,10 +234,10 @@ impl Group {
         &self,
         mask: &[bool],
         work: &mut Work<'_>,
-        contribution: impl Fn(Option<&Term>) -> Option<i128>,
+        contribution: impl Fn(Option<TermRef<'_>>) -> Option<i128>,
     ) -> Result<i128, ErrorKind> {
         let mut total = 0_i128;
-        for (tuple, selected) in self.tuples.iter().zip(mask) {
+        for (tuple, selected) in self.tuples().iter().zip(mask) {
             work.charge(1)?;
             if !selected {
                 continue;
@@ -234,13 +255,15 @@ impl Group {
         kind: AggregateExtremum,
         mask: &[bool],
         work: &mut Work<'_>,
-    ) -> Result<(Value<'_>, u64), ErrorKind> {
+    ) -> Result<(Value<'a>, u64), ErrorKind> {
         let mut value = match kind {
-            AggregateExtremum::Min => Value::Term(&Term::Supremum),
-            AggregateExtremum::Max => Value::Term(&Term::Infimum),
+            AggregateExtremum::Min => Value::Term((&Term::Supremum).into()),
+            AggregateExtremum::Max => Value::Term((&Term::Infimum).into()),
         };
         let mut cost = 1;
-        for ((tuple, selected), tuple_cost) in self.tuples.iter().zip(mask).zip(&self.first_costs) {
+        for ((tuple, selected), tuple_cost) in
+            self.tuples().iter().zip(mask).zip(&self.data.first_costs)
+        {
             work.charge(1)?;
             if !selected {
                 continue;
@@ -250,7 +273,7 @@ impl Group {
             };
             work.charge(add(cost, *tuple_cost)?)?;
             let candidate = term(first);
-            let order = candidate.compare(value);
+            let order = compare(candidate, value, work)?;
             let replace = match kind {
                 AggregateExtremum::Min => order.is_lt(),
                 AggregateExtremum::Max => order.is_gt(),
@@ -264,21 +287,27 @@ impl Group {
     }
 }
 
-fn term(value: &Term) -> Value<'_> {
-    match value {
-        Term::Number(value) => Value::Integer(i128::from(*value)),
+fn compare(left: Value<'_>, right: Value<'_>, work: &mut Work<'_>) -> Result<Ordering, ErrorKind> {
+    if let (Value::Term(left), Value::Term(right)) = (left, right) {
+        left.compare_terms_with(right, || work.charge(1))
+    } else {
+        work.charge(1)?;
+        Ok(left.compare(right))
+    }
+}
+fn term(value: TermRef<'_>) -> Value<'_> {
+    match value.descriptor() {
+        ValueNodeRef::Number(value) => Value::Integer(i128::from(value)),
         _ => Value::Term(value),
     }
 }
-
-fn number(value: Option<&Term>) -> Option<i128> {
-    match value {
-        Some(Term::Number(value)) => Some(i128::from(*value)),
+fn number(value: Option<TermRef<'_>>) -> Option<i128> {
+    match value.map(TermRef::descriptor) {
+        Some(ValueNodeRef::Number(value)) => Some(i128::from(value)),
         _ => None,
     }
 }
-
-fn positive_number(value: Option<&Term>) -> Option<i128> {
+fn positive_number(value: Option<TermRef<'_>>) -> Option<i128> {
     number(value).filter(|value| *value > 0)
 }
 

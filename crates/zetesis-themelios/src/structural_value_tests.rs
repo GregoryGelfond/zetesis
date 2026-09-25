@@ -156,3 +156,121 @@ fn validation_keeps_typed_constructor_boundaries() {
         assert_eq!(to_symbol(&value).unwrap(), *symbol);
     }
 }
+
+fn deep_tuple_catalog(parents: usize) -> (zetesis_core::AtomCatalog, Symbol) {
+    let mut nodes = vec![ValueNode::Tuple { arity: 1 }; parents];
+    nodes.push(ValueNode::Number(7));
+    let value = Value::from_nodes(nodes, ValueLimits::default()).unwrap();
+    let mut expected = Symbol::Number(7);
+    for _ in 0..parents {
+        expected = Symbol::Tuple(vec![expected]);
+    }
+    let catalog = zetesis_core::AtomCatalog::new(vec![
+        zetesis_core::Atom::new(zetesis_core::Predicate::new("p", 1).unwrap(), vec![value])
+            .unwrap(),
+    ])
+    .unwrap();
+    (catalog, expected)
+}
+
+#[test]
+fn deep_export_retains_exact_frames_within_the_advertised_preflight() {
+    // The previous geometric stack had capacity 64 at this depth, on top of
+    // 33 already reserved Symbol child cells. Count actual returned capacities
+    // and the conversion receipt, rather than only repeating a limit formula.
+    let (catalog, expected) = deep_tuple_catalog(33);
+    let value = catalog.atoms().at(0).unwrap().values().get(0).unwrap();
+    let limit = 2 * value.expanded_nodes() as u128 * size_of::<Symbol>() as u128;
+    let mut storage = ExportStorage::new(limit).unwrap();
+    let mut nodes = value.nodes();
+    let actual = from_nodes(
+        value.expanded_nodes(),
+        value.depth(),
+        &mut storage,
+        |before| nodes.next_with(before),
+        || Ok::<_, ()>(()),
+    )
+    .unwrap();
+    assert_eq!(actual, expected);
+    let output_cells = 1 + actual
+        .subsymbols()
+        .map(|symbol| match symbol {
+            Symbol::Function { arguments, .. } | Symbol::Tuple(arguments) => arguments.capacity(),
+            _ => 0,
+        })
+        .sum::<usize>();
+    let scratch_bytes = storage.retained - output_cells as u128 * size_of::<Symbol>() as u128;
+    assert_eq!(scratch_bytes, 33 * size_of::<Frame<'_>>() as u128);
+    assert!(storage.retained <= limit);
+    assert_eq!(
+        term_symbol_with(value, storage.retained, || Ok::<_, ()>(())).unwrap(),
+        expected
+    );
+    assert!(matches!(
+        term_symbol_with(value, storage.retained - 1, || Ok::<_, ()>(())),
+        Err(BridgeFailure::Bridge(BridgeError::Storage { required, limit }))
+            if required > limit && limit == storage.retained - 1,
+    ));
+}
+
+#[test]
+fn checked_export_refuses_every_stopped_prefix_without_mutating_the_input() {
+    let (catalog, expected) = deep_tuple_catalog(33);
+    let value = catalog.atoms().at(0).unwrap().values().get(0).unwrap();
+    let limit = 2 * value.expanded_nodes() as u128 * size_of::<Symbol>() as u128;
+    let mut permits = 0;
+    assert_eq!(
+        term_symbol_with(value, limit, || {
+            permits += 1;
+            Ok::<_, usize>(())
+        })
+        .unwrap(),
+        expected
+    );
+    for cutoff in 0..permits {
+        let mut used = 0;
+        assert!(matches!(
+            term_symbol_with(value, limit, || {
+                if used == cutoff { Err(cutoff) } else { used += 1; Ok(()) }
+            }),
+            Err(BridgeFailure::Stopped(stopped)) if stopped == cutoff,
+        ));
+        assert_eq!(used, cutoff);
+    }
+    assert_eq!(
+        term_symbol_with(value, limit, || Ok::<_, usize>(())).unwrap(),
+        expected
+    );
+}
+
+#[test]
+fn export_frames_follow_depth_instead_of_wide_node_population() {
+    let symbols = (0..64).map(Symbol::Number).collect::<Vec<_>>();
+    let expected = Symbol::Tuple(symbols);
+    let Value::Structured(value) = from_symbol(&expected).unwrap() else {
+        panic!("tuple fixture")
+    };
+    let limit = 2 * value.nodes().len() as u128 * size_of::<Symbol>() as u128;
+    let mut storage = ExportStorage::new(limit).unwrap();
+    let mut nodes = value.nodes().iter();
+    let actual = from_nodes(
+        value.nodes().len(),
+        value.depth(),
+        &mut storage,
+        |before| {
+            before()?;
+            Ok(nodes.next().map(ValueNode::view))
+        },
+        || Ok::<_, ()>(()),
+    )
+    .unwrap();
+    assert_eq!(actual, expected);
+    let Symbol::Tuple(arguments) = &actual else {
+        panic!("tuple export")
+    };
+    assert_eq!(
+        storage.retained,
+        size_of::<Frame<'_>>() as u128
+            + (arguments.capacity() + 1) as u128 * size_of::<Symbol>() as u128
+    );
+}

@@ -1,14 +1,16 @@
 //! Retained finite aggregate operations over already-coalesced whole tuples.
 //!
-//! A group retains its complete keys, eligibility node indices and immutable
-//! theory identity. Admission checks shape and uniqueness; it does not assert
+//! A group retains canonical keys, eligibility node indices and immutable
+//! theory identity. `Group` owns its vocabulary; `GroupData` retains only metadata
+//! and binds to a caller-owned canonical prefix through `GroupRef`. Admission checks shape and uniqueness; it does not assert
 //! that a source program or theory contains this aggregate. Mask reduction is
 //! separate from acquisition of actual original/frozen formula truth. Neither
 //! operation decides stable-model membership or changes the original theory.
 
 use std::fmt;
 
-use zetesis_core::Value as Term;
+use zetesis_core::catalog::{CatalogRead, TermRef, Vocabulary};
+use zetesis_core::{TemplateComponents, TemplateComponentsRef, TemplateTerm, Value as Term};
 use zetesis_cpu::{Cancellation, Stop};
 
 use crate::{AggregateComparison, Theory};
@@ -36,30 +38,30 @@ pub enum Function {
 
 /// One complete tuple and its already OR-coalesced eligibility formula.
 #[derive(Debug)]
-pub struct Tuple {
+pub struct Tuple<K = Vec<Term>> {
     /// Complete logical key. Equal weights or equal conditions do not identify
     /// equal keys. Empty keys remain present, even for a neutral contribution.
-    pub key: Vec<Term>,
+    pub key: K,
     /// Absolute node index in the group's original immutable theory.
     pub condition: usize,
 }
 
 /// An integer guard can exceed source i32 width without becoming a term sentinel.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Bound {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Bound<T = Term> {
     /// Exact wide integer.
     Integer(i128),
     /// Ordered ASP term, including genuine `#inf` and `#sup` endpoints.
-    Term(Term),
+    Term(T),
 }
 
 /// One aggregate comparison. Several guards are combined by conjunction.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Guard {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Guard<T = Term> {
     /// Aggregate comparison, not default negation of another comparison.
     pub comparison: AggregateComparison,
     /// Right-hand value of the comparison.
-    pub bound: Bound,
+    pub bound: Bound<T>,
 }
 
 /// Bounds on accepting transferred tuple/guard storage and duplicate checking.
@@ -77,6 +79,11 @@ pub struct AdmissionLimits {
     /// duplicate-check scratch. Shared term payload is conservatively charged
     /// per occurrence; allocator overhead and extra string capacity are excluded.
     pub max_bytes: u64,
+    /// Actual named canonical storage, component/tuple/guard metadata and
+    /// simultaneous duplicate-check/publication scratch. Borrowed admission
+    /// excludes its external catalog; owned admission includes its vocabulary.
+    /// Caller ingress and allocator/Arc bookkeeping are excluded; this is not RSS.
+    pub max_storage_bytes: u64,
     /// Charged shape visits, index moves and comparison-carrier operations.
     pub max_work: u64,
 }
@@ -89,6 +96,7 @@ impl Default for AdmissionLimits {
             max_value_nodes: 1_048_576,
             max_guards: 64,
             max_bytes: 64 * 1024 * 1024,
+            max_storage_bytes: 64 * 1024 * 1024,
             max_work: 100_000_000,
         }
     }
@@ -107,6 +115,8 @@ pub enum Resource {
     Guards,
     /// Logical storage payload.
     Bytes,
+    /// Actual named canonical/metadata storage and scratch.
+    StorageBytes,
     /// Charged operation budget.
     Work,
 }
@@ -121,7 +131,7 @@ pub enum Phase {
 }
 
 /// Typed refusal; none denotes aggregate truth, stable membership or UNSAT.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ErrorKind {
     /// An inclusive finite resource ceiling was exceeded.
     Limit(Resource),
@@ -150,6 +160,10 @@ pub enum ErrorKind {
     },
     /// Original/tested interpretation belongs to a different admitted theory.
     WrongTheory,
+    /// Canonical input has a foreign vocabulary, inaccessible prefix or ingress payload.
+    Canonical(zetesis_core::catalog::ReadError),
+    /// Typed canonical representation failure not classified as a capacity/stop.
+    Catalog(zetesis_core::catalog::Error),
     /// Checked integer, dimension or accounting overflow.
     Overflow,
     /// Cancellation, deadline or fallible allocation stopped the operation.
@@ -165,10 +179,19 @@ pub struct Statistics {
     pub resident_bytes: u64,
     /// Planned simultaneous retained and temporary payload; allocation may fail.
     pub peak_bytes: u64,
+    /// Named capacity retained at the last canonical admission observation;
+    /// external borrowed catalogs are excluded. Acquisition and reduction leave
+    /// this field zero and use their existing logical payload fields.
+    pub storage_bytes: u64,
+    /// Greatest observed canonical admission capacity, including simultaneous
+    /// replacement, scratch and successful publication envelopes. A refused
+    /// reservation is not reported as allocated capacity. Zero for acquisition
+    /// and reduction.
+    pub storage_peak_bytes: u64,
 }
 
 /// Incomplete operation retaining typed reason and accounted prefix.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Error {
     kind: ErrorKind,
     statistics: Statistics,
@@ -177,20 +200,20 @@ pub struct Error {
 impl Error {
     /// Typed refusal, separate from a completed false aggregate guard.
     #[must_use]
-    pub const fn kind(self) -> ErrorKind {
-        self.kind
+    pub fn kind(&self) -> ErrorKind {
+        self.kind.clone()
     }
 
     /// Local operation accounting before the refusal.
     #[must_use]
-    pub const fn statistics(self) -> Statistics {
+    pub const fn statistics(&self) -> Statistics {
         self.statistics
     }
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.kind {
+        match &self.kind {
             ErrorKind::Stopped(stop) => stop.fmt(f),
             ErrorKind::Limit(resource) => write!(f, "native aggregate {resource:?} limit reached"),
             ErrorKind::Condition { tuple, node } => {
@@ -211,6 +234,8 @@ impl fmt::Display for Error {
             ErrorKind::WrongTheory => {
                 f.write_str("aggregate interpretation belongs to another theory")
             }
+            ErrorKind::Canonical(error) => error.fmt(f),
+            ErrorKind::Catalog(error) => error.fmt(f),
             ErrorKind::Overflow => {
                 f.write_str("native aggregate arithmetic or accounting overflow")
             }
@@ -219,37 +244,152 @@ impl fmt::Display for Error {
 }
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        if let ErrorKind::Stopped(stop) = &self.kind {
-            Some(stop)
-        } else {
-            None
+        match &self.kind {
+            ErrorKind::Stopped(stop) => Some(stop),
+            ErrorKind::Canonical(error) => Some(error),
+            ErrorKind::Catalog(error) => Some(error),
+            _ => None,
         }
     }
 }
 
-/// Immutable finite operation with transferred keys and checked condition IDs.
-/// Its existence establishes neither source completeness nor theory entailment.
+/// Immutable finite operation owning one canonical vocabulary and ID-only metadata.
+/// Owned descriptions are construction input only; execution borrows canonical terms.
 #[derive(Debug)]
 pub struct Group {
+    vocabulary: Vocabulary,
+    data: GroupData,
+}
+
+/// Complete tuple and guard occurrences over one externally retained vocabulary.
+/// This owns only metadata, never the supplied catalog or a typed value payload.
+/// Bind to a compatible exact prefix before execution; no atom or rule is invented.
+#[derive(Debug)]
+pub struct GroupData {
     theory: Theory,
     function: Function,
-    tuples: Vec<Tuple>,
-    guards: Vec<Guard>,
+    components: TemplateComponents,
+    tuples: Vec<TupleData>,
+    guards: Vec<GuardData>,
     first_costs: Vec<u64>,
     guard_costs: Vec<u64>,
     statistics: Statistics,
 }
+#[derive(Debug)]
+struct TupleData {
+    key: std::ops::Range<usize>,
+    condition: usize,
+}
+#[derive(Clone, Copy, Debug)]
+enum BoundData {
+    Integer(i128),
+    Term(usize),
+}
+#[derive(Clone, Copy, Debug)]
+struct GuardData {
+    comparison: AggregateComparison,
+    bound: BoundData,
+}
+
+/// One checked aggregate metadata owner and canonical read prefix. Copy borrows
+/// the same operation; it does not duplicate keys, guards or vocabulary storage.
+#[derive(Clone, Copy, Debug)]
+pub struct GroupRef<'a> {
+    data: &'a GroupData,
+    components: TemplateComponentsRef<'a>,
+}
+
+/// Ordered complete key values, including a genuine empty key. This view owns
+/// no payload and its coordinates are local occurrences, never canonical IDs.
+#[derive(Clone, Copy, Debug)]
+pub struct Key<'a>(zetesis_core::PatternTerms<'a>);
+impl<'a> Key<'a> {
+    /// Number of original key components.
+    #[must_use]
+    pub fn len(self) -> usize {
+        self.0.len()
+    }
+    /// Whether this is an empty complete key.
+    #[must_use]
+    pub fn is_empty(self) -> bool {
+        self.0.is_empty()
+    }
+    /// Borrow an original component, or None outside the key.
+    /// # Panics
+    /// Panics if internal admission produces a variable in this closed key.
+    /// Public constructors admit constants only.
+    #[must_use]
+    pub fn at(self, index: usize) -> Option<TermRef<'a>> {
+        self.0.at(index).map(closed_term)
+    }
+    /// First component; empty keys remain distinct from any term sentinel.
+    #[must_use]
+    pub fn first(self) -> Option<TermRef<'a>> {
+        self.at(0)
+    }
+    /// Original component order, allocating no storage.
+    /// # Panics
+    /// Panics if internal admission produces a variable in this closed key.
+    /// Public constructors admit constants only.
+    #[must_use]
+    pub fn iter(self) -> impl ExactSizeIterator<Item = TermRef<'a>> + DoubleEndedIterator {
+        self.0.iter().map(closed_term)
+    }
+}
+
+/// Aggregate keys and term guards share the admitted closed-term projection.
+fn closed_term(term: TemplateTerm<'_>) -> TermRef<'_> {
+    match term {
+        TemplateTerm::Constant(value) => value,
+        TemplateTerm::Variable(_) => unreachable!("aggregate components are admitted constants"),
+    }
+}
+
+/// Original tuple occurrences and checked eligibility-node coordinates.
+#[derive(Clone, Copy, Debug)]
+pub struct Tuples<'a>(GroupRef<'a>);
+impl<'a> Tuples<'a> {
+    /// Complete tuple count, including neutral/empty tuples.
+    #[must_use]
+    pub fn len(self) -> usize {
+        self.0.data.tuples.len()
+    }
+    /// Whether no tuples were supplied.
+    #[must_use]
+    pub fn is_empty(self) -> bool {
+        self.0.data.tuples.is_empty()
+    }
+    /// Borrow one tuple by original occurrence position.
+    /// # Panics
+    /// Panics if an internally admitted key range is outside its components.
+    /// Public admission establishes these ranges before publishing the group.
+    #[must_use]
+    pub fn at(self, index: usize) -> Option<Tuple<Key<'a>>> {
+        self.0
+            .data
+            .tuples
+            .get(index)
+            .map(|tuple| self.0.tuple(tuple))
+    }
+    /// Original occurrence order; equal conditions remain separate occurrences.
+    /// # Panics
+    /// Panics if an internally admitted key range is outside its components,
+    /// as described by [`Self::at`].
+    #[must_use]
+    pub fn iter(self) -> impl ExactSizeIterator<Item = Tuple<Key<'a>>> + DoubleEndedIterator {
+        self.0
+            .data
+            .tuples
+            .iter()
+            .map(move |tuple| self.0.tuple(tuple))
+    }
+}
 
 impl Group {
-    /// Accept already-coalesced keys without altering their occurrence order.
-    ///
-    /// Transfers vectors; their prior allocation/construction is the caller's
-    /// cost. Rejects equal full keys even if their conditions are identical.
-    /// Duplicate checking uses two bounded index vectors and a bottom-up merge
-    /// sort; comparisons charge both whole key carriers before term comparison.
-    /// No formula lowering, search, source recognition or key coalescing occurs.
-    /// The retained theory clone shares existing immutable storage.
-    ///
+    /// Import already-coalesced owned keys once into canonical storage.
+    /// Original tuple/guard order is preserved and equal complete keys are refused.
+    /// Existing logical transferred-storage limits remain separate from the new
+    /// named canonical-storage ceiling. Prior input allocation remains the caller's cost.
     /// # Errors
     /// Refuses duplicate keys, condition IDs, resources, control or allocation.
     pub fn new(
@@ -262,35 +402,159 @@ impl Group {
     ) -> Result<Self, Error> {
         admission::build(theory, function, tuples, guards, limits, cancellation)
     }
-
-    /// Immutable formula subject defining all eligibility node identities.
+    /// Borrow the admitted operation without copying logical payload.
+    /// # Panics
+    /// Panics if internal group metadata no longer belongs to the stored
+    /// vocabulary prefix. [`Self::new`] establishes that immutable pairing.
+    #[must_use]
+    pub fn view(&self) -> GroupRef<'_> {
+        self.data
+            .bind_with(self.vocabulary.read(), || {
+                Ok::<_, std::convert::Infallible>(())
+            })
+            .expect("owned aggregate metadata belongs to its sealed vocabulary")
+    }
+    /// Immutable formula subject defining eligibility-node identities.
     #[must_use]
     pub fn theory(&self) -> &Theory {
-        &self.theory
+        &self.data.theory
     }
-
-    /// Original complete keys and condition IDs in exact input occurrence order.
+    /// Original complete keys and condition IDs in input order.
     #[must_use]
-    pub fn tuples(&self) -> &[Tuple] {
-        &self.tuples
+    pub fn tuples(&self) -> Tuples<'_> {
+        self.view().tuples()
     }
-
-    /// Guard occurrences; none are silently removed or reordered.
+    /// Guard occurrences in input order, borrowing term-valued bounds.
+    /// # Panics
+    /// Panics if the internal vocabulary pairing or closed guard coordinates
+    /// violate the invariants established by admission.
     #[must_use]
-    pub fn guards(&self) -> &[Guard] {
-        &self.guards
+    pub fn guards(&self) -> impl ExactSizeIterator<Item = Guard<TermRef<'_>>> {
+        self.view().guards()
     }
-
-    /// Aggregate function used by every reduction of this group.
+    /// Aggregate function used by every reduction.
     #[must_use]
     pub const fn function(&self) -> Function {
-        self.function
+        self.data.function
     }
-
-    /// Completed shape/uniqueness admission accounting.
+    /// Completed admission accounting with logical and named capacity dimensions.
+    #[must_use]
+    pub const fn statistics(&self) -> Statistics {
+        self.data.statistics
+    }
+}
+impl GroupData {
+    /// Admit canonical keys over an existing authority without importing payload.
+    /// `max_bytes` measures a flat logical carrier (exact input key capacities,
+    /// minimal expanded term/spelling lengths); `max_storage_bytes` covers only
+    /// this metadata and duplicate scratch. The caller retains/accounts the catalog.
+    /// # Errors
+    /// Refuses foreign/uninterned terms, prefixes, shape, duplicates or resources.
+    pub fn new<'a>(
+        theory: &Theory,
+        function: Function,
+        read: CatalogRead<'a>,
+        tuples: Vec<Tuple<Vec<TermRef<'a>>>>,
+        guards: Vec<Guard<TermRef<'a>>>,
+        limits: AdmissionLimits,
+        cancellation: &Cancellation,
+    ) -> Result<Self, Error> {
+        admission::borrowed(theory, function, read, tuples, guards, limits, cancellation)
+    }
+    /// Bind scope and exact required prefix before borrowing any values.
+    /// # Errors
+    /// Refuses a foreign/older catalog or preserves the caller's stop value.
+    pub fn bind_with<'a, E>(
+        &'a self,
+        read: CatalogRead<'a>,
+        before: impl FnMut() -> Result<(), E>,
+    ) -> Result<GroupRef<'a>, zetesis_core::TemplateCatalogFailure<E>> {
+        self.components
+            .bind_with(read, before)
+            .map(|components| GroupRef {
+                data: self,
+                components,
+            })
+    }
+    /// Completed admission accounting; borrowed canonical owner is excluded.
     #[must_use]
     pub const fn statistics(&self) -> Statistics {
         self.statistics
+    }
+}
+impl<'a> From<&'a Group> for GroupRef<'a> {
+    fn from(group: &'a Group) -> Self {
+        group.view()
+    }
+}
+impl<'a> GroupRef<'a> {
+    /// Whether two views denote the same complete aggregate occurrence owner.
+    /// Binding already authenticates vocabulary scope and required prefix.
+    #[must_use]
+    pub fn same_group(self, other: Self) -> bool {
+        std::ptr::eq(self.data, other.data)
+    }
+    /// Original immutable theory, not a source-completeness certificate.
+    #[must_use]
+    pub fn theory(self) -> &'a Theory {
+        &self.data.theory
+    }
+    /// Ordered original tuple occurrences.
+    #[must_use]
+    pub fn tuples(self) -> Tuples<'a> {
+        Tuples(self)
+    }
+    /// Borrow one guard occurrence, without an owned term reconstruction.
+    /// # Panics
+    /// Panics if an internally admitted term guard does not name a constant in
+    /// the bound component prefix. Public admission establishes that invariant.
+    #[must_use]
+    pub fn guard(self, index: usize) -> Option<Guard<TermRef<'a>>> {
+        self.data
+            .guards
+            .get(index)
+            .map(|guard| self.guard_data(*guard))
+    }
+    /// Ordered guards, with no owned term reconstruction.
+    /// # Panics
+    /// Panics if an internally admitted term guard does not name a constant,
+    /// as described by [`Self::guard`].
+    #[must_use]
+    pub fn guards(self) -> impl ExactSizeIterator<Item = Guard<TermRef<'a>>> {
+        self.data
+            .guards
+            .iter()
+            .map(move |guard| self.guard_data(*guard))
+    }
+    /// Decode one admitted tuple occurrence for both indexed and sequential reads.
+    fn tuple(self, tuple: &TupleData) -> Tuple<Key<'a>> {
+        Tuple {
+            key: Key(self
+                .components
+                .terms()
+                .slice(tuple.key.clone())
+                .expect("admitted key range")),
+            condition: tuple.condition,
+        }
+    }
+    /// Decode one admitted guard occurrence for both indexed and sequential reads.
+    fn guard_data(self, guard: GuardData) -> Guard<TermRef<'a>> {
+        Guard {
+            comparison: guard.comparison,
+            bound: match guard.bound {
+                BoundData::Integer(value) => Bound::Integer(value),
+                BoundData::Term(index) => Bound::Term(closed_term(
+                    self.components
+                        .term(index)
+                        .expect("admitted guard coordinate"),
+                )),
+            },
+        }
+    }
+    /// Aggregate function shared by every physical execution.
+    #[must_use]
+    pub const fn function(self) -> Function {
+        self.data.function
     }
 }
 

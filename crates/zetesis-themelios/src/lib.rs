@@ -134,9 +134,10 @@ pub use grounding_observer::{
 };
 pub use grounding_options::{DomainLimits, DomainStop, GroundingOptions, JoinStrategy};
 pub use metadata::{
-    AtomSelection, AtomSelectionError, AtomSelectionLimits, LocatedDirective, MetadataError,
-    MetadataFeature, MetadataLimits, MetadataResource, OutputSelection, PreparedProjection,
-    ProjectSelection, SourceDirective, SourceMetadata,
+    AtomSelection, AtomSelectionError, AtomSelectionLimits, Directives, LocatedDirective,
+    MetadataError, MetadataFeature, MetadataLimits, MetadataResource, MetadataStorageError,
+    MetadataStorageLimits, OutputSelection, PreparedProjection, ProjectSelection, Signatures,
+    SourceDirective, SourceMetadata,
 };
 
 /// Explicit host admission ceilings. Zero means that no resource of that kind

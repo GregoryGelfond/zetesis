@@ -53,7 +53,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let answer = session.next_observed(&mut preparation).unwrap()?;
     assert_eq!(
         answer.interpretation(),
-        &Model::new([Atom::new(ready, vec![])?])
+        &Model::new([Atom::new(ready, vec![])?])?
     );
     assert!(session.next_observed(&mut preparation).is_none());
     assert_eq!(

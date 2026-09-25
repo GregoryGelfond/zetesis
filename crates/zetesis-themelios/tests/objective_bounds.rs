@@ -26,14 +26,11 @@ fn input(source: &str) -> AdmittedFormula {
     .unwrap_or_else(|error| panic!("{source}: {error}"))
 }
 fn score(input: &AdmittedFormula, mask: usize) -> Score {
-    let model = Model::new(
-        input
-            .atoms()
-            .iter()
-            .enumerate()
-            .filter(|(index, _)| mask & (1 << index) != 0)
-            .map(|(_, atom)| atom.clone()),
-    );
+    let model = Model::from_positions(
+        input.atom_catalog(),
+        (0..input.atoms().len()).filter(|index| mask & (1 << index) != 0),
+    )
+    .unwrap();
     evaluate(
         input.objectives(),
         &model,
@@ -132,7 +129,7 @@ fn constant_score(priority: i32, weight: i32) -> Score {
     .expect("fixed objective");
     evaluate(
         &objectives,
-        &Model::new([]),
+        &Model::new([]).unwrap(),
         zetesis_objective::Limits::default(),
         &Cancellation::default(),
     )
@@ -194,13 +191,11 @@ fn candidate_restriction_preserves_original_reduct_and_every_optimal_tie() {
         .collect();
     assert!(baseline.exhausted());
     assert_eq!(expected.len(), 2);
-    let model = Model::new(
-        expected
-            .first()
-            .expect("incumbent")
-            .iter()
-            .map(|index| input.atoms()[*index].clone()),
-    );
+    let model = Model::from_positions(
+        input.atom_catalog(),
+        expected.first().expect("incumbent").iter().copied(),
+    )
+    .unwrap();
     let incumbent = evaluate(
         input.objectives(),
         &model,
@@ -351,11 +346,17 @@ fn optional_bound_failures_do_not_poison_the_plan_or_theory() {
             .kind(),
         ObjectiveBoundErrorKind::Control(_)
     ));
-    let duplicates = vec![input.atoms()[0].clone(), input.atoms()[0].clone()];
+    let atom = input
+        .atoms()
+        .at(0)
+        .unwrap()
+        .to_atom(zetesis_core::ValueLimits::default())
+        .unwrap();
+    let duplicates = zetesis_core::AtomCatalog::new(vec![atom.clone(), atom]).unwrap();
     assert_eq!(
         ObjectivePlan::new(
             input.theory(),
-            &duplicates,
+            duplicates.atoms(),
             input.objectives(),
             ObjectivePlanLimits::default(),
             &Cancellation::default()

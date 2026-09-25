@@ -1,10 +1,12 @@
 //! Head membership preserves full identity without establishing body validity.
+use std::collections::BTreeSet;
 use themelios_base::source::SourceId;
 use themelios_base::span::{ByteOffset, Location, Span};
-use zetesis_core::{Predicate, Sign, Term};
+use zetesis_core::{Atom, AtomPattern as InputPattern, Predicate, Sign, Term, Value};
 
 use super::*;
 use crate::ExpansionLimits;
+use crate::formula_support::Context;
 
 fn location() -> Location {
     Location {
@@ -12,8 +14,8 @@ fn location() -> Location {
         span: Span::empty(ByteOffset::new(7)),
     }
 }
-fn pattern(sign: Sign) -> AtomPattern {
-    AtomPattern::new(
+fn pattern(sign: Sign) -> InputPattern {
+    InputPattern::new(
         Predicate::with_sign("p", 2, sign).unwrap(),
         vec![Term::Variable(0), Term::Variable(0)],
     )
@@ -32,19 +34,26 @@ fn probe(existing: Vec<Atom>, delta: &BTreeSet<Atom>, value: Option<Value>) -> b
     let mut catalog = SupportCatalog::default();
     for atom in existing {
         catalog = catalog
-            .insert(atom, &limits, &mut counters, location())
+            .insert(&atom, &limits, &mut counters, location())
             .unwrap();
     }
-    let relations = catalog
-        .snapshot(&limits, &mut counters, location())
-        .unwrap();
-    let support = super::Support::indexed(
-        &relations,
-        &crate::FormulaLimits::default(),
-        &crate::formula_support::Counters::default(),
+    let pattern = testing::admit_pattern(
+        &mut catalog,
+        &pattern(Sign::Negative),
+        &mut counters,
         location(),
-    )
-    .unwrap();
+    );
+    let (relations, mut append) = catalog.split(&limits, &mut counters, location()).unwrap();
+    let support = Support::indexed(&relations, &limits, &counters, location()).unwrap();
+    let mut computation = Computation::new(&mut append, &support);
+    for atom in delta {
+        let discovered = computation
+            .atom_ref(atom.into(), &limits, &mut counters, location())
+            .unwrap();
+        computation
+            .support(&discovered, &limits, &mut counters, location())
+            .unwrap();
+    }
     let mut budget = Budget::new(
         ExpansionLimits {
             max_scalar_bytes: 0,
@@ -52,18 +61,27 @@ fn probe(existing: Vec<Atom>, delta: &BTreeSet<Atom>, value: Option<Value>) -> b
         },
         0,
     );
+    let empty = Binding::new(&computation, &limits, &mut counters, location()).unwrap();
     let mut join = Join::new(
         &[],
-        &Binding::default(),
+        &empty,
         1,
         &support,
         &mut budget,
-        location(),
+        Context::new(&computation, &limits, &mut counters, location()),
     )
     .unwrap();
-    join.values[0] = value;
+    if let Some(value) = value {
+        let key = computation
+            .import((&value).into(), &limits, &mut counters, location())
+            .unwrap();
+        join.values
+            .set(0, &key, &limits, &mut counters, location())
+            .unwrap();
+    }
     join.already_derived(
-        Some((&pattern(Sign::Negative), delta)),
+        Some(pattern),
+        &mut computation,
         &limits,
         &mut counters,
         location(),

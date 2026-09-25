@@ -6,6 +6,7 @@
 //! variables can be installed. This is a finite coverage analysis, not integer
 //! constraint solving. The original whole guard filters the proposed rows.
 
+use crate::formula_support::GroundingWork;
 mod affine;
 
 use std::collections::BTreeSet;
@@ -40,11 +41,20 @@ pub(super) fn binding<'a>(
     literals: impl Iterator<Item = &'a LiteralIr>,
     variables: usize,
     safe: &BTreeSet<usize>,
+    source: &crate::formula_support::components::Admission<'_>,
     budget: &mut Budget,
-    location: Location,
+    work: GroundingWork<'_>,
 ) -> Result<Option<(usize, i32, i32)>, FormulaFailure> {
+    let GroundingWork {
+        limits,
+        counters,
+        location,
+    } = work;
     let mut capture = Capture {
         reader: Reader {
+            source,
+            limits,
+            counters,
             variables,
             budget,
             location,
@@ -113,13 +123,13 @@ pub(super) fn binding<'a>(
     Ok(None)
 }
 
-struct Capture<'a> {
-    reader: Reader<'a>,
+struct Capture<'a, 'source> {
+    reader: Reader<'a, 'source>,
     inequalities: Vec<Inequality>,
     capacity: Option<FormulaFailure>,
 }
 
-impl Capture<'_> {
+impl Capture<'_, '_> {
     fn literal(&mut self, literal: &LiteralIr) -> Result<(), FormulaFailure> {
         self.reader.work(1)?;
         match literal {
@@ -243,7 +253,7 @@ impl Inequality {
         &self,
         target: usize,
         intervals: &[Interval],
-        reader: &mut Reader<'_>,
+        reader: &mut Reader<'_, '_>,
     ) -> Result<Option<Endpoint>, FormulaFailure> {
         let coefficient = self.coefficients[target];
         if coefficient == 0 {

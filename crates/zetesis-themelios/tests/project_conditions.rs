@@ -28,7 +28,7 @@ fn domain_order_applies_the_complete_permutation() {
         .projection()
         .atoms()
         .iter()
-        .map(|atom| atom.values()[0].clone())
+        .map(|atom| atom.values().at(0).unwrap())
         .collect();
     assert_eq!(
         values,

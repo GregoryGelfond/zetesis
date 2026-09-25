@@ -7,7 +7,7 @@ use zetesis_cli::{
     PreparedInput, PublicationConfig, PublicationOutcome, PublicationView, RunError,
     SemanticOutcome, SummaryDelivery, publish_prepared,
 };
-use zetesis_core::{Atom, Model};
+use zetesis_core::{Atom, Model, ValueLimits};
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_themelios::observation::Symbol;
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
@@ -40,7 +40,13 @@ impl AnswerRenderer for Inspect {
         self.answers.push(Seen {
             number: view.number(),
             model: view.model().model().clone(),
-            shown: view.model().shown_atoms().cloned().collect(),
+            // This recorder deliberately owns its exported observation channel
+            // after the callback, independently of the borrowed answer view.
+            shown: view
+                .model()
+                .shown_atoms()
+                .map(|atom| atom.to_atom(ValueLimits::default()).unwrap())
+                .collect(),
             terms: view.model().shown_terms().to_vec(),
             costs: view.model().score().map(|score| score.costs().to_vec()),
         });

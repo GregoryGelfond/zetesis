@@ -29,7 +29,7 @@ fn program(rules: Vec<Template>) -> Program {
     Program::new(rules, AdmissionLimits::default()).unwrap()
 }
 
-fn cartesian(size: i32) -> Program {
+fn cartesian_rules(size: i32) -> Vec<Template> {
     let mut rules = Vec::new();
     for value in 0..size {
         let gate = constant("pick", value);
@@ -51,7 +51,11 @@ fn cartesian(size: i32) -> Program {
             .collect(),
         vec![],
     ));
-    program(rules)
+    rules
+}
+
+fn cartesian(size: i32) -> Program {
+    program(cartesian_rules(size))
 }
 
 fn seeds(program: &Program, choices: &[Vec<i32>]) -> Vec<Seed> {
@@ -171,7 +175,7 @@ fn world_word_boundaries_preserve_membership() {
 
 #[test]
 fn an_existing_atom_can_gain_another_world() {
-    let mut rules = cartesian(2).templates().to_vec();
+    let mut rules = cartesian_rules(2);
     rules.extend([
         rule(Some(constant("shared", 0)), vec![constant("a", 0)], vec![]),
         rule(Some(constant("later", 0)), vec![constant("b", 1)], vec![]),
@@ -234,7 +238,7 @@ fn irregular_chunks_preserve_masked_closures() {
 #[test]
 fn catalog_stride_growth_keeps_the_source_snapshot() {
     for count in [31, 32, 33, 63, 64, 65] {
-        let mut rules = cartesian(2).templates().to_vec();
+        let mut rules = cartesian_rules(2);
         rules.extend((0..count).map(|value| {
             rule(
                 Some(constant("chain", value)),
@@ -324,16 +328,23 @@ fn mask_preparation_can_stop_without_offering_instances() {
 }
 
 #[test]
-fn empty_catalog_preparation_has_an_inclusive_host_cap() {
+fn empty_catalog_completion_has_an_inclusive_host_cap() {
     let program = program(vec![]);
     let seeds = vec![Seed::new(&program, []).unwrap(); 33];
     let fixed = (5 * 33 + 2 * 33 + 4 + 1) * size_of::<u32>() + 33 * size_of::<lazy::Check>();
     let masks = 2 * size_of::<u32>();
+    // The lazy owner shares the admitted input vocabulary. Only its new tuple
+    // authority and discovery metadata belong to this host allocation limit.
+    let owner =
+        zetesis_core::atom_interner::AtomInterner::for_program(&program, usize::MAX).unwrap();
     let catalog =
-        usize::try_from(zetesis_core::atom_interner::AtomInterner::new().storage_bytes()).unwrap();
-    // The empty order-vector envelope is the larger of the two disjoint
-    // preparation stages; the later two-word root membership also fits.
-    let source = size_of::<Vec<usize>>().max(masks);
+        usize::try_from(owner.storage_bytes() - program.shared_vocabulary_bytes()).unwrap();
+    // Ordering and publication are disjoint stages. Final publication adds
+    // the immutable catalog envelope while the root-mask workspace is retained.
+    let publication =
+        usize::try_from(zetesis_core::AtomCatalog::default().publication_bytes()).unwrap();
+    assert!(publication + masks > size_of::<Vec<usize>>());
+    let source = size_of::<Vec<usize>>().max(masks + publication);
     let limits = lazy::Limits {
         max_atoms: 1,
         max_chunk_rules: 1,
@@ -368,8 +379,11 @@ fn empty_catalog_preparation_has_an_inclusive_host_cap() {
         failure.cause,
         lazy::Cause::Source(Stop::Allocation)
     ));
-    assert_eq!(failure.progress.rounds, 0);
-    assert_eq!(failure.progress.peak_mask_bytes, 0);
+    // Source coverage completed; the final immutable catalog could not be
+    // published. This must not return any completed checks.
+    assert_eq!(failure.progress.rounds, 1);
+    assert_eq!(failure.progress.instances, 0);
+    assert_eq!(failure.progress.peak_mask_bytes, masks);
 }
 
 #[test]
@@ -461,7 +475,7 @@ fn default_selection_matches_explicit_union() {
 
 #[test]
 fn frozen_gates_remain_world_local() {
-    let mut rules = cartesian(2).templates().to_vec();
+    let mut rules = cartesian_rules(2);
     rules.extend([
         Template::new(
             Some(constant("enabled", 0)),
@@ -482,7 +496,7 @@ fn frozen_gates_remain_world_local() {
 
 #[test]
 fn empty_positive_constraints_remain_visible() {
-    let mut rules = cartesian(2).templates().to_vec();
+    let mut rules = cartesian_rules(2);
     rules.push(rule(None, vec![], vec![constant("pick", 0)]));
     let program = program(rules);
     let seeds = seeds(&program, &[vec![0], vec![1]]);
@@ -506,7 +520,7 @@ fn masks_never_borrow_truth_from_a_seed() {
 #[test]
 fn bound_prefix_windows_select_the_correct_row_masks() {
     use zetesis_core::Filter;
-    let mut rules = cartesian(3).templates().to_vec();
+    let mut rules = cartesian_rules(3);
     rules.push(Template::new(
         Some(pattern("same", vec![Term::Variable(0)])),
         vec![

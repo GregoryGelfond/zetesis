@@ -118,13 +118,11 @@ fn full_structural_objective_keys_and_candidate_bounds_agree_for_every_model() {
     .unwrap();
     let scores: Vec<_> = (0..1usize << p.atoms().len())
         .map(|bits| {
-            let model = Model::new(
-                p.atoms()
-                    .iter()
-                    .enumerate()
-                    .filter(|(i, _)| bits & (1 << i) != 0)
-                    .map(|(_, a)| a.clone()),
-            );
+            let model = Model::from_positions(
+                p.atom_catalog(),
+                (0..p.atoms().len()).filter(|i| bits & (1 << i) != 0),
+            )
+            .unwrap();
             zetesis_objective::evaluate(
                 p.objectives(),
                 &model,
@@ -251,7 +249,8 @@ fn arbitrary_public_structures_are_bounded_before_observation_and_retry_is_exact
     )
     .unwrap();
     let model =
-        Model::new([Atom::new(Predicate::new("p", 1).unwrap(), vec![value.clone()]).unwrap()]);
+        Model::new([Atom::new(Predicate::new("p", 1).unwrap(), vec![value.clone()]).unwrap()])
+            .unwrap();
     let observation = p.metadata().observations();
     let error = observation
         .render(

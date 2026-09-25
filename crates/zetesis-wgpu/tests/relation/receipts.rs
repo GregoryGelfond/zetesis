@@ -152,7 +152,7 @@ fn tile_receipt_costs_are_inclusively_admitted() {
         let queries = [
             relation.query(&[], relation::Limits::default()).unwrap(),
             relation
-                .query(&[(0, &value)], relation::Limits::default())
+                .query(&[(0, (&value).into())], relation::Limits::default())
                 .unwrap(),
         ];
         let exact = RelationGpuLimits {

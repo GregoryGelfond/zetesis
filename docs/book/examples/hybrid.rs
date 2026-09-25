@@ -48,7 +48,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let name = if x <= cut { "q" } else { "p" };
             atoms.push(Atom::new(Predicate::new(name, 1)?, vec![Value::Number(x)])?);
         }
-        expected.insert(Model::new(atoms));
+        expected.insert(Model::new(atoms)?);
     }
     assert_eq!(family, expected);
     let checked = outcome.hybrid_execution().ok_or("missing hybrid receipt")?;

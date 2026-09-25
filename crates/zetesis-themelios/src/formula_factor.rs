@@ -2,28 +2,36 @@
 
 mod plan;
 
-use std::collections::BTreeSet;
-
-use themelios_program::program::DefaultNegation;
-use zetesis_core::{AtomPattern, Term, Value};
+use zetesis_core::catalog::AssignmentError;
+use zetesis_core::{PatternRef, TemplateTerm as Term};
 use zetesis_ferraris::Node;
 
 use crate::FormulaFailure;
 use crate::formula_binding::Binding;
 use crate::formula_ground::{Builder, FALSUM, VERUM};
 use crate::formula_ir::{HeadIr, LiteralIr, RuleIr};
-use crate::formula_support::{Join, Support, copy};
+use crate::formula_support::{Context, Join, Support};
 
 /// Return false only when the original complete-join path should be used.
 pub(super) fn rule(
-    builder: &mut Builder<'_>,
+    builder: &mut Builder<'_, '_, '_>,
     rule: &RuleIr,
     support: &Support,
 ) -> Result<bool, FormulaFailure> {
     let HeadIr::Normal(head) = &rule.head else {
         return Ok(false);
     };
-    let Some(components) = plan::components(builder, rule, head.as_ref())? else {
+    let head = head
+        .map(|head| {
+            builder.computation.static_pattern(
+                head,
+                builder.limits,
+                &mut builder.counters,
+                rule.location,
+            )
+        })
+        .transpose()?;
+    let Some(components) = plan::components(builder, rule, head)? else {
         return Ok(false);
     };
     if let Some(head) = head {
@@ -36,7 +44,7 @@ pub(super) fn rule(
             }
         }
     } else {
-        let fixed = vec![None; rule.variables];
+        let fixed = fixed_frame(builder, rule)?;
         emit(builder, rule, support, &components, &fixed)?;
     }
     Ok(true)
@@ -44,49 +52,98 @@ pub(super) fn rule(
 
 struct Component {
     literals: Vec<LiteralIr>,
-    used: BTreeSet<usize>,
+    used: Vec<usize>,
 }
 
 fn head_binding(
-    builder: &mut Builder<'_>,
+    builder: &mut Builder<'_, '_, '_>,
     rule: &RuleIr,
-    head: &AtomPattern,
+    head: PatternRef<'_>,
     atom: zetesis_core::relation::Row<'_, '_>,
-) -> Result<Option<Vec<Option<Value>>>, FormulaFailure> {
-    let mut fixed = Vec::with_capacity(rule.variables);
-    for _ in 0..rule.variables {
+) -> Result<Option<Binding<'static>>, FormulaFailure> {
+    let mut fixed = fixed_frame(builder, rule)?;
+    for column in 0..head.terms().len() {
         builder.work(rule.location)?;
-        fixed.push(None);
-    }
-    for (column, term) in head.terms().iter().enumerate() {
+        let term = head.terms().at(column).expect("checked head arity");
         let value = atom.value(column).expect("checked head arity");
-        builder.work(rule.location)?;
         match term {
-            Term::Constant(constant) if constant != value => return Ok(None),
+            Term::Constant(constant) => {
+                if !constant
+                    .compare_ref_with(value, || {
+                        builder.counters.work(builder.limits, rule.location)
+                    })?
+                    .is_eq()
+                {
+                    return Ok(None);
+                }
+            }
             Term::Variable(variable) => {
-                if let Some(previous) = &fixed[*variable] {
-                    if previous != value {
+                if fixed.is_bound(variable, rule.location)? {
+                    let previous =
+                        fixed.read(variable, builder.computation.read(), rule.location)?;
+                    if !previous
+                        .compare_ref_with(value, || {
+                            builder.counters.work(builder.limits, rule.location)
+                        })?
+                        .is_eq()
+                    {
                         return Ok(None);
                     }
                 } else {
-                    fixed[*variable] = Some(copy(value, builder.budget, rule.location)?);
+                    builder.work(rule.location)?;
+                    let key = builder
+                        .computation
+                        .read()
+                        .term_key(value)
+                        .map_err(|error| {
+                            crate::formula_binding::assignment(
+                                AssignmentError::Read(error),
+                                rule.location,
+                            )
+                        })?;
+                    fixed.set(
+                        variable,
+                        &key,
+                        builder.limits,
+                        &mut builder.counters,
+                        rule.location,
+                    )?;
                 }
             }
-            Term::Constant(_) => {}
         }
     }
     Ok(Some(fixed))
 }
 
+fn fixed_frame(
+    builder: &mut Builder<'_, '_, '_>,
+    rule: &RuleIr,
+) -> Result<Binding<'static>, FormulaFailure> {
+    let mut fixed = Binding::new(
+        builder.computation,
+        builder.limits,
+        &mut builder.counters,
+        rule.location,
+    )?;
+    fixed.extend_scope(
+        rule.variables,
+        builder.computation,
+        builder.limits,
+        &mut builder.counters,
+        rule.location,
+    )?;
+    Ok(fixed)
+}
+
 fn emit(
-    builder: &mut Builder<'_>,
+    builder: &mut Builder<'_, '_, '_>,
     rule: &RuleIr,
     support: &Support,
-    components: &[Component],
-    fixed: &[Option<Value>],
+    components: &plan::Plan,
+    fixed: &Binding,
 ) -> Result<(), FormulaFailure> {
     let mut body = VERUM;
-    for component in components {
+    for component in &components.components {
         let mut alternatives = FALSUM;
         let mut bindings = Join::component(
             &component.literals,
@@ -95,9 +152,15 @@ fn emit(
             fixed,
             support,
             builder.budget,
-            rule.location,
+            Context::new(
+                &*builder.computation,
+                builder.limits,
+                &mut builder.counters,
+                rule.location,
+            ),
         )?;
         while let Some(binding) = bindings.next(
+            builder.computation,
             builder.limits,
             builder.budget,
             &mut builder.counters,
@@ -116,14 +179,7 @@ fn emit(
         unreachable!("only normal rules have a component plan");
     };
     let head = if let Some(head) = head {
-        let assignment = Binding::copy_slots(
-            fixed,
-            builder.limits,
-            &mut builder.counters,
-            builder.budget,
-            rule.location,
-        )?;
-        builder.atom(head, &assignment, rule.location)?
+        builder.atom(*head, fixed, rule.location)?
     } else {
         FALSUM
     };
@@ -133,18 +189,4 @@ fn emit(
         builder.producer(head, body, rule)?;
     }
     Ok(())
-}
-
-fn positive_variables(literals: &[LiteralIr]) -> impl Iterator<Item = usize> + '_ {
-    literals
-        .iter()
-        .filter_map(|literal| match literal {
-            LiteralIr::Atom(DefaultNegation::None, pattern) => Some(pattern.terms()),
-            _ => None,
-        })
-        .flatten()
-        .filter_map(|term| match term {
-            Term::Variable(variable) => Some(*variable),
-            Term::Constant(_) => None,
-        })
 }

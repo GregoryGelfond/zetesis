@@ -125,43 +125,25 @@ pub(super) fn catalog(subject: &AdmittedFormulaBundle, limit: usize) -> Result<V
     Ok(atoms)
 }
 
-fn write_atom(output: &mut impl Write, atom: &zetesis_core::Atom) -> std::fmt::Result {
-    use zetesis_core::{Sign, Value};
-    if atom.predicate().sign() == Sign::Negative {
+fn write_atom(
+    output: &mut impl Write,
+    atom: zetesis_core::catalog::AtomRef<'_>,
+) -> std::fmt::Result {
+    if atom.predicate().sign() == zetesis_core::Sign::Negative {
         output.write_char('-')?;
     }
     output.write_str(atom.predicate().name())?;
-    if atom.values().is_empty() {
-        return Ok(());
-    }
-    output.write_char('(')?;
-    for (index, value) in atom.values().iter().enumerate() {
-        if index != 0 {
-            output.write_char(',')?;
-        }
-        match value {
-            Value::Infimum => output.write_str("#inf")?,
-            Value::Supremum => output.write_str("#sup")?,
-            Value::Number(number) => write!(output, "{number}")?,
-            Value::Symbol(symbol) => output.write_str(symbol)?,
-            Value::Structured(value) => write!(output, "{value}")?,
-            Value::String(text) => {
-                output.write_char('"')?;
-                // Source-admitted strings use precisely these three ASP escapes.
-                // Literal tabs stay literal, distinct from Rust Debug spelling.
-                for character in text.chars() {
-                    match character {
-                        '"' => output.write_str("\\\"")?,
-                        '\\' => output.write_str("\\\\")?,
-                        '\n' => output.write_str("\\n")?,
-                        other => output.write_char(other)?,
-                    }
-                }
-                output.write_char('"')?;
+    if !atom.values().is_empty() {
+        output.write_char('(')?;
+        for (index, value) in atom.values().iter().enumerate() {
+            if index != 0 {
+                output.write_char(',')?;
             }
+            write!(output, "{value}")?;
         }
+        output.write_char(')')?;
     }
-    output.write_char(')')
+    Ok(())
 }
 
 pub(super) fn same_subject(a: &AdmittedFormulaBundle, b: &AdmittedFormulaBundle) -> bool {
@@ -171,7 +153,12 @@ pub(super) fn same_subject(a: &AdmittedFormulaBundle, b: &AdmittedFormulaBundle)
         && a.formula_origins() == b.formula_origins()
         && a.objective_origins() == b.objective_origins()
         && a.objective_declarations() == b.objective_declarations()
-        && a.objectives().templates() == b.objectives().templates()
+        && a.objectives().is_present() == b.objectives().is_present()
+        && a.objectives().priorities() == b.objectives().priorities()
+        && a.objectives()
+            .templates()
+            .iter()
+            .eq(b.objectives().templates())
         && a.metadata() == b.metadata()
         && a.projection() == b.projection()
 }
@@ -220,7 +207,7 @@ mod tests {
         )
         .unwrap();
         let mut text = String::new();
-        super::write_atom(&mut text, &atom).unwrap();
+        super::write_atom(&mut text, (&atom).into()).unwrap();
         assert_eq!(text, "-p(#inf,\"#inf\",#sup,\"#sup\",-f(1,(2,3)),a)");
     }
 }

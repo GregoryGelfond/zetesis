@@ -83,7 +83,7 @@ impl Case {
             let seed =
                 Seed::new(&program, selected.iter().map(|value| atom("p", &[*value]))).unwrap();
             let mut closure = facts.clone();
-            closure.extend(seed.atoms().iter().cloned());
+            closure.extend(selected.iter().map(|value| atom("p", &[*value])));
             for left in &selected {
                 for right in &selected {
                     closure.push(atom("pair", &[*left, *right]));
@@ -91,7 +91,7 @@ impl Case {
             }
             let violated = selected.contains(&0) && selected.contains(&1);
             seeds.push(seed);
-            expected.push((Model::new(closure), violated));
+            expected.push((Model::new(closure).unwrap(), violated));
         }
         Self {
             program,

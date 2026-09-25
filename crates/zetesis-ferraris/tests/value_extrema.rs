@@ -4,6 +4,7 @@ use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AggregateComparison as Comparison, AggregateErrorKind as Error, AggregateExtremum as Extremum,
     AggregateLimits, Node, ValueExtremumElement as Element, append_value_extremum,
+    append_value_extremum_refs,
 };
 
 fn ordered() -> Vec<Value> {
@@ -158,6 +159,31 @@ fn verify(elements: &[Element], extremum: Extremum, comparison: Comparison, boun
         &Cancellation::default(),
     )
     .unwrap();
+    let predicate = zetesis_core::Predicate::new("value", 1).unwrap();
+    let mut inputs: Vec<_> = elements
+        .iter()
+        .map(|element| {
+            zetesis_core::Atom::new(predicate.clone(), vec![element.value.clone()]).unwrap()
+        })
+        .collect();
+    inputs.push(zetesis_core::Atom::new(predicate, vec![bound.clone()]).unwrap());
+    let catalog = zetesis_core::AtomCatalog::new(inputs).unwrap();
+    let value = |slot| catalog.atoms().at(slot).unwrap().values().at(0).unwrap();
+    let mut borrowed_nodes = prefix();
+    let borrowed = append_value_extremum_refs(
+        &mut borrowed_nodes,
+        elements.iter().enumerate().map(|(index, element)| Element {
+            value: value(index),
+            condition: element.condition,
+        }),
+        extremum,
+        comparison,
+        value(elements.len()),
+        AggregateLimits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
+    let mut borrowed_root = borrowed.root();
     let (mut specified, expected) = reference(elements, extremum, comparison, bound);
     let mut root = built.root();
     let mut expected_root = expected;
@@ -168,7 +194,15 @@ fn verify(elements: &[Element], extremum: Extremum, comparison: Comparison, boun
                 eval(&nodes, root, outer, None),
                 eval(&specified, expected_root, outer, None)
             );
+            assert_eq!(
+                eval(&borrowed_nodes, borrowed_root, outer, None),
+                eval(&specified, expected_root, outer, None)
+            );
             for inner in 0..4 {
+                assert_eq!(
+                    eval(&borrowed_nodes, borrowed_root, inner, Some(outer)),
+                    eval(&specified, expected_root, inner, Some(outer))
+                );
                 assert_eq!(
                     eval(&nodes, root, inner, Some(outer)),
                     eval(&specified, expected_root, inner, Some(outer)),
@@ -176,6 +210,7 @@ fn verify(elements: &[Element], extremum: Extremum, comparison: Comparison, boun
                 );
             }
         }
+        borrowed_root = push(&mut borrowed_nodes, Node::Implies(borrowed_root, 0));
         root = push(&mut nodes, Node::Implies(root, 0));
         expected_root = push(&mut specified, Node::Implies(expected_root, 0));
     }
@@ -371,4 +406,57 @@ fn bad_inputs_and_cancellation_restore_the_existing_prefix() {
         Error::Control(_)
     ));
     assert_eq!(nodes, prefix());
+}
+
+#[test]
+fn borrowed_elements_cannot_name_newly_appended_nodes() {
+    let value = Value::Number(1);
+    let mut nodes = prefix();
+    let original = nodes.clone();
+    let element = Element {
+        value: (&value).into(),
+        condition: nodes.len(),
+    };
+    let error = append_value_extremum_refs(
+        &mut nodes,
+        std::iter::once(element),
+        Extremum::Min,
+        Comparison::Eq,
+        (&value).into(),
+        AggregateLimits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        error.kind(),
+        Error::InvalidCondition { element: 0 }
+    ));
+    assert_eq!(nodes, original);
+}
+
+#[test]
+fn borrowed_elements_obey_the_actual_element_limit() {
+    let value = Value::Number(1);
+    let mut nodes = prefix();
+    let original = nodes.clone();
+    let elements = (0..2).filter(|_| true).map(|_| Element {
+        value: (&value).into(),
+        condition: 2,
+    });
+    let limits = AggregateLimits {
+        max_elements: 1,
+        ..AggregateLimits::default()
+    };
+    let error = append_value_extremum_refs(
+        &mut nodes,
+        elements,
+        Extremum::Max,
+        Comparison::Eq,
+        (&value).into(),
+        limits,
+        &Cancellation::default(),
+    )
+    .unwrap_err();
+    assert!(matches!(error.kind(), Error::ElementLimit));
+    assert_eq!(nodes, original);
 }

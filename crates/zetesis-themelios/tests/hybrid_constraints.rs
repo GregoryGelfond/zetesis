@@ -36,7 +36,13 @@ fn model(owner: &HybridFormula, selected: &[&str]) -> Model {
         .atoms()
         .iter()
         .enumerate()
-        .filter_map(|(index, atom)| expected.atoms().contains(atom).then_some(index))
+        .filter_map(|(index, atom)| {
+            expected
+                .atoms()
+                .iter()
+                .any(|other| atom == other)
+                .then_some(index)
+        })
         .collect();
     assert_eq!(
         positions.len(),
@@ -88,10 +94,24 @@ fn unsupported_atoms_retain_catalog_positions() {
     let owner = admit(":-not missing.");
     assert_eq!(owner.atom_catalog().atoms().len(), 1);
     assert_eq!(
-        owner.atom_catalog().atoms()[0].predicate().name(),
+        owner
+            .atom_catalog()
+            .atoms()
+            .at(0)
+            .unwrap()
+            .predicate()
+            .name(),
         "missing"
     );
-    assert!(owner.atom_catalog().atoms()[0].values().is_empty());
+    assert!(
+        owner
+            .atom_catalog()
+            .atoms()
+            .at(0)
+            .unwrap()
+            .values()
+            .is_empty()
+    );
     assert!(matches!(
         verdict(&owner, &[]),
         ConstraintVerdict::Violated { .. }
@@ -362,11 +382,11 @@ fn repeated_checks_share_a_cumulative_work_ceiling() {
 }
 
 #[test]
-fn generated_checks_share_a_cumulative_scalar_ceiling() {
-    // Constructed values own payload; an inline numeric result has zero scalar
-    // payload and cannot establish this cumulative copied-storage boundary.
-    let owner = admit("d(1..2). {p(f(1));p(f(2))}. :-d(X),Y=f(X),p(Y),X>1.");
-    let candidate = model(&owner, &["d(1)", "d(2)", "p(f(1))"]);
+fn structural_checks_share_a_cumulative_scalar_ceiling() {
+    // Structural captures reserve delta cells on each scan. Frozen constructor
+    // lookups and binding ID copies do not consume this scalar-byte allowance.
+    let owner = admit("{p(f(1));p(f(2))}. :-p(f(X)),X>1.");
+    let candidate = model(&owner, &["p(f(1))"]);
     let mut baseline = owner.checker(ConstraintCheckLimits::default()).unwrap();
     assert_eq!(
         baseline
@@ -382,7 +402,10 @@ fn generated_checks_share_a_cumulative_scalar_ceiling() {
             ..Default::default()
         })
         .unwrap();
-    checker.check(&candidate, &Cancellation::default()).unwrap();
+    assert_eq!(
+        checker.check(&candidate, &Cancellation::default()).unwrap(),
+        ConstraintVerdict::Satisfied
+    );
     assert_eq!(checker.statistics(), complete);
     let failure = checker
         .check(&candidate, &Cancellation::default())
@@ -390,8 +413,8 @@ fn generated_checks_share_a_cumulative_scalar_ceiling() {
     assert!(
         matches!(failure.cause, ConstraintCheckCause::Source(ref error)
             if matches!(error.as_ref(), FormulaFailure::Expansion(ExpansionFailure::Limit {
-                resource: ExpansionResource::ScalarBytes, ..
-            }))
+                resource: ExpansionResource::ScalarBytes, limit, observed, ..
+            }) if *limit == complete.scalar_bytes as u128 && observed > limit)
         )
     );
     assert_eq!(failure.statistics.scalar_bytes, complete.scalar_bytes);

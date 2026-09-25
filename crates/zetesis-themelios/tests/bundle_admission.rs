@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
-use zetesis_core::{Atom, Program, Term};
+use zetesis_core::{Atom, Program};
 use zetesis_cpu::{Cancellation, CandidateLimits, Candidates, Limits, check};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedBundle, BundleAdmissionError,
@@ -80,7 +80,7 @@ fn native(program: &Program) -> Models {
                         .closure()
                         .atoms()
                         .iter()
-                        .cloned()
+                        .map(|atom| atom.to_atom(zetesis_core::ValueLimits::default()).unwrap())
                         .collect::<BTreeSet<_>>()
                 ),
                 "one seed per model"
@@ -466,16 +466,33 @@ fn oracle_atom(source: &str) -> Atom {
     let input =
         admit(format!("{source}."), AdmissionOptions::default()).expect("oracle scalar atom");
     assert_eq!(input.program().templates().len(), 1);
-    let head = input.program().templates()[0].head().expect("oracle fact");
+    let head = input
+        .program()
+        .templates()
+        .at(0)
+        .unwrap()
+        .head()
+        .expect("oracle fact");
     let values = head
         .terms()
         .iter()
         .map(|term| match term {
-            Term::Constant(value) => value.clone(),
-            Term::Variable(_) => panic!("oracle atom is ground"),
+            zetesis_core::TemplateTerm::Constant(value) => value
+                .to_value(zetesis_core::ValueLimits::default())
+                .unwrap(),
+            zetesis_core::TemplateTerm::Variable(_) => panic!("oracle atom is ground"),
         })
         .collect();
-    Atom::new(head.predicate().clone(), values).expect("oracle arity")
+    Atom::new(
+        zetesis_core::Predicate::with_sign(
+            head.predicate().name(),
+            head.predicate().arity(),
+            head.predicate().sign(),
+        )
+        .unwrap(),
+        values,
+    )
+    .expect("oracle arity")
 }
 
 fn compare(fixture: &Fixture) {

@@ -4,8 +4,8 @@ Use `zetesis_themelios::prepare_formula` to prepare input for zetesis's finite
 formula solver and inspect its retained analysis before materialization.
 `zetesis_themelios` is zetesis's source bridge; this workflow does not require
 constructing an upstream parser or logical program. The returned
-`PreparedFormula` owns source, metadata, checked intermediate representation and
-the remaining expansion budget. `ground(self)` consumes that preparation and
+`PreparedFormula` owns source, metadata, checked intermediate representation,
+the canonical source authority and retained resource accounting. `ground(self)` consumes that preparation and
 produces an `AdmittedFormula`; it computes no answer sets.
 `zetesis_solve::PreparedInput::formula` then borrows that owner for a session.
 
@@ -16,9 +16,20 @@ source → prepare_formula → PreparedFormula → ground → AdmittedFormula
 ```
 
 The preparation can succeed while grounding later refuses arithmetic or a
-resource ceiling. Splitting the calls does not refresh the source expansion
-budget. Keeping the returned owner is therefore part of the contract, not merely
-a convenience for avoiding another parse.
+resource ceiling. Splitting the calls refreshes neither expansion budgets nor
+accepted formula-work charges. Grounding resumes the same authority and workspace
+accounting. Keeping the returned owner is therefore part of the contract, not
+merely a convenience for avoiding another parse. The preparation can move between
+threads; an observer is attached only for the materialization call and reports
+work performed during that call.
+
+Static values, predicates and constructor names are admitted during preparation.
+Patterns, filters and expression instructions retain coordinates into that
+vocabulary. Evaluation borrows their typed views; generated values enter the
+same authority. Pattern argument positions remain distinct from term identities,
+so repeated arguments and variable positions retain their meaning. An empty
+support relation may coexist with a nonempty vocabulary. Neither term admission
+nor a compiled pattern asserts an atom's truth.
 
 ## Stream ordinary constraints
 
@@ -58,6 +69,9 @@ candidates, never to evaluate their frozen reducts.
 
 Support dictionaries and equality indexes are reused. Ordinary joins lend their
 current binding; generators retain their existing owned-row requirements.
+Prepared constraint plans borrow the immutable source components. Each checker
+owns its traversal and query workspace, so retaining a plan retains no candidate
+state or mutable workspace from another checker.
 Candidate truth uses borrowed typed atom keys, with no temporary formula DAG or
 copied atom per instance. Original source-family arithmetic validation completes
 before the hybrid owner is returned, independently of later candidate truth.
@@ -73,8 +87,10 @@ atom guards. `streamed_templates()` counts lowered templates, including pool
 alternatives, and `streamed_instances()` counts scalar-selected instances visited
 during admission; neither is a retained instance store.
 
-`checker(limits)` has its own cumulative work, substitution and copied-scalar-byte
-limits. For parallel composition, create `ConstraintAllowance::new(limits)` and
+`checker(limits)` has its own cumulative work and substitution limits, plus a
+byte allowance for structural capture deltas. ID-only copies and lookups do not
+consume that byte allowance.
+For parallel composition, create `ConstraintAllowance::new(limits)` and
 use `checker_with_allowance(&allowance, &cancellation)` for every worker and final
 checker. Its clones share before-operation charges; no allowance is multiplied
 by the worker count. `allowance.statistics()` is exact after those workers join;
@@ -130,9 +146,11 @@ limits apply to the requested attempt. Formula grounding consumes the resulting
 preparation's remaining budget as before.
 
 Configure eager support storage through `FormulaLimits::max_support_bytes`
-before preparation. The default is 128 MiB of authored catalog, snapshot, index and
-query capacity, including construction scratch; nested atom payloads, allocator/tree
-overhead and unrelated state have separate bounds. The CLI exposes the same
+before preparation. The default is 128 MiB for the support authority's canonical
+payload, identity indexes and current prefix, plus relation metadata, postings,
+borrowed snapshots, query capacity and construction scratch. Canonical support
+payload is counted by its authority once. Allocator/tree/control-runtime overhead
+and unrelated grounding state remain separate; this is not a total-memory bound. The CLI exposes the same
 allowance as `--max-support-bytes` in `--help-all`. This is an admission limit;
 `SolveConfig` applies after the formula owner has already been constructed.
 
@@ -145,9 +163,9 @@ preparation exposes the same method, and the CLI maps `--formula-joins table`
 to it. The choice retains the preparation's source identity and remaining budgets.
 
 The private query workspace owns cached indices and accounts for simultaneous
-selected masks, scratch and cumulative work. Named vector/object capacities are
-distinct from nested atom payloads, allocator/tree/control-runtime overhead and
-other grounding state; the limit is not RSS. An exhausted table operation returns
+selected masks, scratch and cumulative work. These capacities compose with the
+same support authority's payload charge. Allocator/tree/control-runtime overhead
+and other grounding state remain separate; the limit is not RSS. An exhausted table operation returns
 a located failure without silently choosing a different strategy. The existing
 matcher and required authored-body validation remain shared. Choosing table joins
 does not launch ordinary Rayon or GPU grounding; later answer-set execution has
@@ -183,6 +201,15 @@ their existing paths. Global Unknown or Stopped analysis supplies
 no guards. An individually Unknown argument is unrestricted; other finite
 arguments may still contribute restrictions.
 
+Preparation admits the selected domain values once into the source vocabulary.
+Each rule retains scoped term IDs and a range for each variable; an absent
+range is unrestricted, while an empty range is a known empty domain. Unary
+comparisons reuse those IDs. Each completion snapshot resolves the surviving
+values into its own relation dictionaries, whose local IDs are not source term
+IDs. This avoids rebuilding typed values during guard preparation. Candidate
+metadata remains bounded by charged work outside the support-byte allowance;
+canonical payload and guard workspace retain their separate storage accounting.
+
 This complete example compares admitted atoms, nodes, roots and provenance,
 observes an actual typed `Analysis` and positive guard activity, and checks both
 local widening and a stopped analysis. It materializes theories without solving
@@ -214,7 +241,8 @@ bytes. Actual work, including stopped work, consumes the original cumulative
 formula budget. The analyzer uses bounded standard collections with no
 fallible-allocation or caller-control API; its heap is outside
 `FormulaLimits::max_support_bytes`. The guard/query lease separately accounts
-its named headers, scratch, temporary atomic payload and actual vector capacity
+its named headers, scratch, dictionary IDs and actual vector capacity; candidate
+terms remain borrowed from their canonical owner. These capacities are counted
 beside support, table indices and live masks. These contracts give neither a
 hard allocator/RSS limit nor cancellation/deadline polling. Guard preparation
 and membership costs may outweigh avoided probes. See

@@ -73,13 +73,19 @@ pub(super) fn cost_records(source: &str) -> BTreeSet<(BTreeSet<String>, Option<V
     models(source)
         .into_iter()
         .map(|names| {
-            let model = zetesis_core::Model::new(
+            let model = zetesis_core::Model::from_positions(
+                admitted.atom_catalog(),
                 admitted
                     .atoms()
                     .iter()
-                    .filter(|atom| names.contains(&formula::atom_text(atom)))
-                    .cloned(),
-            );
+                    .enumerate()
+                    .filter_map(|(position, atom)| {
+                        names
+                            .contains(&formula::atom_text(atom))
+                            .then_some(position)
+                    }),
+            )
+            .unwrap();
             let evaluation = zetesis_objective::evaluate(
                 admitted.objectives(),
                 &model,

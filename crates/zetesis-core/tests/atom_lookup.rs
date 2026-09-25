@@ -2,6 +2,7 @@
 //! Refused construction/comparison exposes no partial index, range or membership.
 
 use std::{cmp::Ordering, convert::Infallible};
+use zetesis_core::catalog::AtomRef;
 
 use zetesis_core::{
     Atom, AtomCatalog, AtomIndex, AtomIndexError, AtomPattern, Model, Predicate, Sign, Term, Value,
@@ -14,6 +15,27 @@ fn atom(name: &str, sign: Sign, values: Vec<Value>) -> Atom {
         values,
     )
     .unwrap()
+}
+
+// The owned-input index still borrows its ingress payload. Canonical catalogs
+// intentionally have a different physical representation; this helper is used
+// only for AtomIndex::new_with over the original owned slice.
+fn assert_ingress_borrow(actual: AtomRef<'_>, expected: &Atom) {
+    assert_eq!(actual, AtomRef::from(expected));
+    assert_eq!(
+        actual.predicate().name().as_ptr(),
+        expected.predicate().name().as_ptr()
+    );
+    for (actual, expected) in actual.values().iter().zip(expected.values()) {
+        if let Value::String(text) | Value::Symbol(text) = expected {
+            let (zetesis_core::ValueNodeRef::String(borrowed)
+            | zetesis_core::ValueNodeRef::Symbol(borrowed)) = actual.descriptor()
+            else {
+                panic!("typed text fixture")
+            };
+            assert_eq!(borrowed.as_ptr(), text.as_ptr());
+        }
+    }
 }
 
 #[test]
@@ -104,7 +126,7 @@ fn values() -> Vec<Value> {
 }
 
 #[test]
-fn checked_identity_agrees_with_derived_storage_order() {
+fn checked_identity_agrees_with_storage_order() {
     for left in values() {
         for right in values() {
             let mut steps = 0;
@@ -128,6 +150,51 @@ fn checked_identity_agrees_with_derived_storage_order() {
         Ordering::Less
     );
     assert_eq!(string.compare_terms(&symbol), Ordering::Greater);
+}
+
+#[test]
+fn identity_callbacks_cover_structural_self_comparison() {
+    let value = Value::from_nodes(
+        vec![
+            ValueNode::Function {
+                name: "f".into(),
+                sign: Sign::Positive,
+                arity: 2,
+            },
+            ValueNode::Number(1),
+            ValueNode::String("é".into()),
+        ],
+        ValueLimits::default(),
+    )
+    .unwrap();
+    // Root; function descriptor, name byte and name terminator; number;
+    // string descriptor, two UTF-8 bytes and text terminator; node terminator.
+    let mut steps = 0;
+    assert_eq!(
+        value
+            .compare_identity_with(&value, || {
+                steps += 1;
+                Ok::<_, Infallible>(())
+            })
+            .unwrap(),
+        Ordering::Equal
+    );
+    assert_eq!(steps, 10);
+    for limit in 0..10 {
+        let mut spent = 0;
+        let mut calls = 0;
+        let result = value.compare_identity_with(&value, || {
+            calls += 1;
+            if spent == limit {
+                return Err(spent);
+            }
+            spent += 1;
+            Ok(())
+        });
+        assert_eq!(result, Err(limit));
+        assert_eq!(spent, limit);
+        assert_eq!(calls, limit + 1);
+    }
 }
 
 #[test]
@@ -195,7 +262,7 @@ fn predicate_ranges_preserve_original_rows() {
             .predicate_with(query.predicate(), || Ok::<_, Infallible>(()))
             .unwrap()
             .map(|row| {
-                assert!(std::ptr::eq(row.atom(), &raw const atoms[row.position()]));
+                assert_ingress_borrow(row.atom(), &atoms[row.position()]);
                 row.position()
             })
             .collect();
@@ -219,7 +286,7 @@ fn key_lookup_preserves_full_typed_identity() {
             .get_with(query, || Ok::<_, Infallible>(()))
             .unwrap()
             .unwrap();
-        assert!(std::ptr::eq(row.atom(), query));
+        assert_ingress_borrow(row.atom(), query);
         assert_eq!(&atoms[row.position()], query);
     }
     for missing in [
@@ -245,7 +312,7 @@ fn preparation_peak_includes_retained_index_storage() {
 
 #[test]
 fn model_lookup_never_selects_hidden_catalog_atoms() {
-    let atoms = AtomCatalog::new(catalog());
+    let atoms = AtomCatalog::new(catalog()).unwrap();
     let model = Model::from_positions(&atoms, [4, 7, 10, 7]).unwrap();
     let lookup = model.lookup();
     for (position, query) in atoms.atoms().iter().enumerate() {
@@ -266,16 +333,17 @@ fn model_lookup_never_selects_hidden_catalog_atoms() {
         model
             .atoms()
             .iter()
-            .filter(|atom| atom.predicate() == &predicate)
+            .filter(|atom| atom.predicate().compare(&predicate).is_eq())
             .collect::<Vec<_>>()
     );
 }
 
 #[test]
 fn bound_key_lookup_preserves_selected_identity() {
-    let atoms = AtomCatalog::new(catalog());
+    let source = catalog();
+    let atoms = AtomCatalog::new(source.clone()).unwrap();
     let model = Model::from_positions(&atoms, [4, 7, 10]).unwrap();
-    for query in atoms.atoms() {
+    for (position, query) in source.iter().enumerate() {
         let pattern = AtomPattern::new(
             query.predicate().clone(),
             (0..query.values().len()).map(Term::Variable).collect(),
@@ -288,14 +356,16 @@ fn bound_key_lookup_preserves_selected_identity() {
             .unwrap();
         assert_eq!(found.is_some(), model.contains(query));
         if let Some(row) = found {
-            assert!(std::ptr::eq(row.atom(), query));
+            assert_eq!(row.position(), position);
+            assert_eq!(row.atom(), AtomRef::from(query));
+            assert_eq!(row.atom(), atoms.atoms().at(position).unwrap());
         }
     }
 }
 
 #[test]
 fn refused_bound_key_never_reports_absence() {
-    let atoms = AtomCatalog::new(catalog());
+    let atoms = AtomCatalog::new(catalog()).unwrap();
     let model = Model::from_positions(&atoms, 0..atoms.atoms().len()).unwrap();
     let pattern =
         AtomPattern::new(Predicate::new("p", 1).unwrap(), vec![Term::Variable(0)]).unwrap();

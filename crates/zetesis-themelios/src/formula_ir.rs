@@ -11,8 +11,14 @@ mod shared_names_tests;
 #[path = "formula_objective_scope.rs"]
 mod objective_scope;
 
+#[path = "formula_ir/domain.rs"]
+mod domain;
+
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::formula_support::components::{
+    Filter, Pattern as AtomPattern, Predicate, Term as CoreTerm,
+};
 use themelios_base::span::Location;
 use themelios_program::program::{
     Arguments, Body, BodyElement, Choice, DefaultNegation, Direction, HasGuards, Head, Literal,
@@ -25,16 +31,18 @@ use themelios_program::transform::{Rewrite, rewrite};
 use themelios_syntax::ast;
 use themelios_syntax::parse::Parse;
 use themelios_syntax::tree::{AstNode, SyntaxKind};
-use zetesis_core::{AtomPattern, Filter, Predicate, Term as CoreTerm, Value};
-use zetesis_objective::{ObjectiveTemplate, WeightPolarity};
+use zetesis_core::Value;
+use zetesis_objective::{ObjectiveTemplateRef, WeightPolarity};
 
 use crate::diagnostic::unsupported;
 use crate::expansion::Budget;
 use crate::formula::ceiling;
+use crate::formula_support::{Counters, GroundingWork, SupportCatalog, components};
 use crate::{
     AdmissionFailure, AdmissionOptions, ExpansionFailure, ExpansionResource, FormulaFailure,
     FormulaLimits, FormulaResource, ProfileFeature, compile, extended, fact_expansion,
 };
+use zetesis_core::catalog::TermKey;
 
 pub(crate) struct Prepared {
     pub analysis: themelios_analysis::Analysis,
@@ -118,24 +126,6 @@ impl ObjectiveField {
             Self::Term(term) => *term == CoreTerm::Variable(variable),
             Self::Expression(expression) => expression.inputs().any(|input| input == variable),
         }
-    }
-}
-impl ObjectiveIr {
-    /// Preserve the lifted evaluator when every data field is a simple term.
-    pub(super) fn template(&self, priority: i32) -> Option<ObjectiveTemplate> {
-        Some(
-            ObjectiveTemplate::new(
-                self.weight.term()?.clone(),
-                priority,
-                self.tuple
-                    .iter()
-                    .map(|field| field.term().cloned())
-                    .collect::<Option<Vec<_>>>()?,
-                self.positive.clone(),
-                self.filters.clone(),
-            )
-            .with_weight_polarity(self.polarity),
-        )
     }
 }
 pub(crate) struct RuleIr {
@@ -311,10 +301,18 @@ pub(crate) enum Projection {
     },
 }
 impl Projection {
-    pub(crate) fn predicate(&self) -> &Predicate {
+    pub(crate) fn predicate<'a>(
+        &self,
+        view: zetesis_core::TemplateComponentsRef<'a>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: Location,
+    ) -> Result<zetesis_core::catalog::PredicateRef<'a>, FormulaFailure> {
         match self {
-            Self::Arguments { predicate, .. } => predicate,
-            Self::Witnesses { atom, .. } => atom.predicate(),
+            Self::Arguments { predicate, .. } => predicate.get(view, limits, counters, location),
+            Self::Witnesses { atom, .. } => atom
+                .get(view, limits, counters, location)
+                .map(zetesis_core::PatternRef::predicate),
         }
     }
 }
@@ -353,7 +351,7 @@ impl Expression {
     }
 }
 pub(crate) enum Operation {
-    Constant(Value),
+    Constant(components::Scalar),
     Variable(usize),
     Unary(UnaryOp, usize),
     Binary(BinaryOp, usize, usize),
@@ -361,74 +359,114 @@ pub(crate) enum Operation {
     Constructor(Box<crate::formula_value::Constructor>),
 }
 
-pub(crate) fn prepare(
-    source: &SourceProgram,
-    choices: &crate::formula_choice_source::Catalog,
-    options: AdmissionOptions,
-    limits: &FormulaLimits,
-    budget: &mut Budget,
-    fallback: Location,
-) -> Result<Prepared, FormulaFailure> {
-    let constants = extended::resolve(source, budget, fallback)?;
-    let mut parts = Parts::default();
-    let mut compiler = Compiler {
-        options,
-        limits,
-        budget,
-        domain: BTreeSet::new(),
-        predicates: BTreeSet::new(),
-        next_aggregate: 0,
-        dependency_projection: false,
-        location: fallback,
-    };
-    for carrier in choices.statements(source, fallback) {
-        let carrier = carrier?;
-        if matches!(
-            carrier.get(),
-            Statement::Const(_) | Statement::Defined(_) | Statement::Show(_)
-        ) {
-            continue;
+/// Mutable source admission capabilities, borrowed only until the compiled
+/// program is ready to return to its owning preparation receipt.
+pub(crate) struct PreparationContext<'a> {
+    pub(crate) options: AdmissionOptions,
+    pub(crate) budget: &'a mut Budget,
+    pub(crate) catalog: &'a mut SupportCatalog,
+    pub(crate) work: GroundingWork<'a>,
+}
+
+impl PreparationContext<'_> {
+    pub(crate) fn prepare(
+        self,
+        source: &SourceProgram,
+        project_selection: crate::ProjectSelection,
+        choices: &crate::formula_choice_source::Catalog,
+    ) -> Result<Prepared, FormulaFailure> {
+        let Self {
+            options,
+            budget,
+            catalog,
+            work,
+        } = self;
+        let GroundingWork {
+            limits,
+            counters,
+            location: fallback,
+        } = work;
+        let constants = extended::resolve(source, budget, fallback)?;
+        let mut parts = Parts::default();
+        let admission = catalog.component_admission(limits, counters, fallback)?;
+        let domain = domain::Domain::new(&admission, limits, counters, fallback)?;
+        let mut compiler = Compiler {
+            options,
+            limits,
+            budget,
+            source: admission,
+            counters,
+            domain,
+            next_aggregate: 0,
+            dependency_projection: false,
+            location: fallback,
+        };
+        for carrier in choices.statements(source, fallback) {
+            let carrier = carrier?;
+            if matches!(
+                carrier.get(),
+                Statement::Const(_) | Statement::Defined(_) | Statement::Show(_)
+            ) {
+                continue;
+            }
+            compiler.compile(carrier, &constants, &mut parts, fallback)?;
         }
-        compiler.compile(carrier, &constants, &mut parts, fallback)?;
-    }
-    let mut analyzed = SourceProgram::of_nodes(std::mem::take(&mut parts.analyzed));
-    let asked = crate::formula_keys::ask_all(&analyzed, limits, compiler.budget, fallback)?;
-    let keyed_constraints = asked.rules.len();
-    if keyed_constraints > 0 {
-        analyzed = replace_asked(
-            &mut compiler,
-            &constants,
-            &mut parts,
-            &analyzed,
-            asked.rules,
-            fallback,
+        let mut analyzed = SourceProgram::of_nodes(std::mem::take(&mut parts.analyzed));
+        let asked = crate::formula_keys::ask_all(&analyzed, limits, compiler.budget, fallback)?;
+        let keyed_constraints = asked.rules.len();
+        if keyed_constraints > 0 {
+            analyzed = replace_asked(
+                &mut compiler,
+                &constants,
+                &mut parts,
+                &analyzed,
+                asked.rules,
+                fallback,
+            )?;
+        }
+        let analysis =
+            crate::formula_analysis::analyze(&analyzed, limits, compiler.budget, fallback)?;
+        let components = compiler
+            .source
+            .components(limits, compiler.counters, fallback)?;
+        let objective_extrema = crate::formula_objective_dependencies::check(
+            &parts.rules,
+            &mut parts.objectives,
+            &analysis,
+            components,
+            limits,
+            compiler.counters,
         )?;
+        validate_objectives(
+            &parts.objectives,
+            components,
+            limits,
+            compiler.budget,
+            compiler.counters,
+        )?;
+        let analysis_basis = if compiler.dependency_projection {
+            crate::AnalysisBasis::DependencyProjection
+        } else {
+            crate::AnalysisBasis::NormalizedProgram
+        };
+        drop(compiler.domain);
+        compiler
+            .source
+            .finish(limits, compiler.counters, fallback)?;
+        Ok(Prepared {
+            analysis,
+            analysis_basis,
+            analyzed,
+            rules: parts.rules,
+            projection: parts.projection,
+            project_selection,
+            objectives: parts.objectives,
+            objective_declarations: parts.objective_declarations,
+            objective_extrema,
+            keyed_constraints,
+            key_analysis: asked.analysis,
+        })
     }
-    let analysis = crate::formula_analysis::analyze(&analyzed, limits, compiler.budget, fallback)?;
-    let objective_extrema = crate::formula_objective_dependencies::check(
-        &parts.rules,
-        &mut parts.objectives,
-        &analysis,
-    );
-    validate_objectives(&parts.objectives, limits)?;
-    let analysis_basis = if compiler.dependency_projection {
-        crate::AnalysisBasis::DependencyProjection
-    } else {
-        crate::AnalysisBasis::NormalizedProgram
-    };
-    Ok(Prepared {
-        analysis,
-        analysis_basis,
-        analyzed,
-        rules: parts.rules,
-        projection: parts.projection,
-        project_selection: parts.project_selection.finish(),
-        objectives: parts.objectives,
-        objective_declarations: parts.objective_declarations,
-        objective_extrema,
-        keyed_constraints,
-        key_analysis: asked.analysis,
-    })
 }
 
 /// What the statements compile to, in source order: the rules and the
@@ -438,7 +476,6 @@ pub(crate) fn prepare(
 struct Parts {
     rules: Vec<RuleIr>,
     projection: Vec<RuleIr>,
-    project_selection: crate::ProjectSelection,
     analyzed: Vec<WithProvenance<Statement>>,
     pool_projection_nodes: u128,
     objectives: Vec<ObjectiveIr>,
@@ -485,22 +522,45 @@ fn replace_asked(
 
 fn validate_objectives(
     objectives: &[ObjectiveIr],
+    components: zetesis_core::TemplateComponentsRef<'_>,
     limits: &FormulaLimits,
+    budget: &mut Budget,
+    counters: &mut Counters,
 ) -> Result<(), FormulaFailure> {
     for (index, objective) in objectives.iter().enumerate() {
+        let mut positive = Vec::new();
+        crate::formula_pattern::reserve(
+            &mut positive,
+            objective.positive.len(),
+            budget,
+            objective.location,
+        )?;
+        for pattern in &objective.positive {
+            positive.push(pattern.get(components, limits, counters, objective.location)?);
+        }
+        let mut filters = Vec::new();
+        crate::formula_pattern::reserve(
+            &mut filters,
+            objective.filters.len(),
+            budget,
+            objective.location,
+        )?;
+        for filter in &objective.filters {
+            filters.push(filter.get(components, limits, counters, objective.location)?);
+        }
         if let ObjectiveCondition::Body { filters, .. } = objective.condition {
-            ObjectiveTemplate::validate_shape(
+            ObjectiveTemplateRef::validate_shape(
                 objective.tuple.len(),
-                &objective.positive,
+                positive.iter().copied(),
                 filters,
                 limits.objective,
                 index,
             )
         } else {
-            ObjectiveTemplate::validate_scope(
+            ObjectiveTemplateRef::validate_scope(
                 objective.tuple.len(),
-                &objective.positive,
-                &objective.filters,
+                positive.iter().copied(),
+                filters.iter().copied(),
                 limits.objective,
                 index,
             )
@@ -645,26 +705,14 @@ pub(super) struct Compiler<'a> {
     pub(super) options: AdmissionOptions,
     pub(super) limits: &'a FormulaLimits,
     pub(super) budget: &'a mut Budget,
-    pub(super) domain: BTreeSet<Value>,
-    /// The one shared name per predicate this compilation mints patterns for.
-    pub(super) predicates: BTreeSet<Predicate>,
+    pub(super) source: components::Admission<'a>,
+    pub(super) counters: &'a mut Counters,
+    pub(super) domain: domain::Domain,
     pub(super) next_aggregate: usize,
     pub(super) dependency_projection: bool,
     pub(super) location: Location,
 }
 impl Compiler<'_> {
-    /// The compilation's shared name for the predicate: every pattern of one
-    /// predicate refers to one allocation, as an admitted program's do, the
-    /// patterns of an objective scope included, since the scope compiles
-    /// under the lent set.
-    fn shared(&mut self, predicate: Predicate) -> Predicate {
-        if let Some(shared) = self.predicates.get(&predicate) {
-            return shared.clone();
-        }
-        self.predicates.insert(predicate.clone());
-        predicate
-    }
-
     /// Compile one statement into the parts: a projection or objective
     /// declaration, expanded facts, or its rules, after normalizing it.
     fn compile(
@@ -683,7 +731,6 @@ impl Compiler<'_> {
             &origins,
             &mut parts.pool_projection_nodes,
             &mut parts.projection,
-            &mut parts.project_selection,
         )? {
             return Ok(());
         }
@@ -714,7 +761,7 @@ impl Compiler<'_> {
                     statement,
                     self.location,
                 )?);
-                parts.rules.push(self.fact_rule(head, &origins)?);
+                parts.rules.push(self.fact_rule(&head, &origins)?);
             }
         } else {
             self.source_rules(
@@ -752,10 +799,10 @@ impl Compiler<'_> {
 
     fn fact_rule(
         &mut self,
-        head: AtomPattern,
+        head: &zetesis_core::AtomPattern,
         origins: &[Location],
     ) -> Result<RuleIr, FormulaFailure> {
-        self.pattern_domain(&head)?;
+        let head = self.admit_fact_pattern(head)?;
         self.budget.charge(
             ExpansionResource::Origins,
             origins.len() as u128,
@@ -865,7 +912,7 @@ impl Compiler<'_> {
                         negation == DefaultNegation::None,
                     )?;
                     if negation == DefaultNegation::None {
-                        positive.push(pattern.clone());
+                        positive.push(pattern);
                     }
                     condition.push(LiteralIr::Atom(negation, pattern));
                 }
@@ -891,15 +938,18 @@ impl Compiler<'_> {
                     let left = self.objective_term(comparison.get().first(), &mut variables)?;
                     let right = self.objective_term(right, &mut variables)?;
                     condition.push(LiteralIr::Compare(
-                        scalar_expression(&left),
+                        Self::scalar_expression(&left),
                         relation,
-                        scalar_expression(&right),
+                        Self::scalar_expression(&right),
                     ));
-                    filters.push(if relation == Relation::Eq {
-                        Filter::Eq(left, right)
-                    } else {
-                        Filter::Neq(left, right)
-                    });
+                    filters.push(self.source.filter(
+                        relation == Relation::Eq,
+                        left,
+                        right,
+                        self.limits,
+                        self.counters,
+                        self.location,
+                    )?);
                 }
                 LiteralInner::True | LiteralInner::False => {
                     condition.push(self.literal(literal.get(), &mut variables)?);
@@ -940,15 +990,15 @@ impl Compiler<'_> {
         variables: &mut Variables,
     ) -> Result<Expression, FormulaFailure> {
         match priority {
-            None => Ok(scalar_expression(&CoreTerm::Constant(Value::Number(0)))),
-            Some(Term::Symbolic(Symbol::Number(priority))) => Ok(scalar_expression(
-                &CoreTerm::Constant(Value::Number(*priority)),
-            )),
+            None => self.constant_expression(0),
+            Some(Term::Symbolic(Symbol::Number(priority))) => self.constant_expression(*priority),
             Some(Term::Symbolic(Symbol::Infimum)) => {
-                Ok(scalar_expression(&CoreTerm::Constant(Value::Infimum)))
+                let value = self.scalar(&Value::Infimum)?;
+                Ok(Self::scalar_expression(&CoreTerm::Constant(value)))
             }
             Some(Term::Symbolic(Symbol::Supremum)) => {
-                Ok(scalar_expression(&CoreTerm::Constant(Value::Supremum)))
+                let value = self.scalar(&Value::Supremum)?;
+                Ok(Self::scalar_expression(&CoreTerm::Constant(value)))
             }
             Some(term) => self.expression(term, variables),
         }
@@ -966,9 +1016,9 @@ impl Compiler<'_> {
                 self.variable_limit(variables)?;
                 Ok(CoreTerm::Variable(slot))
             }
-            Term::Symbolic(symbol) => {
-                Ok(CoreTerm::Constant(compile::scalar(symbol, self.location)?))
-            }
+            Term::Symbolic(symbol) => Ok(CoreTerm::Constant(
+                self.scalar(&compile::scalar(symbol, self.location)?)?,
+            )),
             _ => Err(unsupported(ProfileFeature::Objective, self.location).into()),
         }
     }
@@ -982,12 +1032,13 @@ impl Compiler<'_> {
             Term::Symbolic(Symbol::Infimum | Symbol::Supremum) => {
                 self.budget
                     .charge(ExpansionResource::TermWork, 1, self.location)?;
+                let value = if matches!(term, Term::Symbolic(Symbol::Infimum)) {
+                    Value::Infimum
+                } else {
+                    Value::Supremum
+                };
                 Ok(ObjectiveField::Term(CoreTerm::Constant(
-                    if matches!(term, Term::Symbolic(Symbol::Infimum)) {
-                        Value::Infimum
-                    } else {
-                        Value::Supremum
-                    },
+                    self.scalar(&value)?,
                 )))
             }
             Term::Variable(_) | Term::Symbolic(_) => self
@@ -1239,29 +1290,17 @@ impl Compiler<'_> {
                 }
                 Term::Symbolic(symbol) => {
                     let value = compile::scalar(symbol, self.location)?;
-                    self.value(&value)?;
-                    CoreTerm::Constant(value)
+                    CoreTerm::Constant(self.root_scalar(&value)?)
                 }
                 _ => return Err(unsupported(ProfileFeature::Term, self.location).into()),
             });
         }
-        let predicate = Predicate::with_sign(
+        let predicate = self.predicate(
             atom.name.as_str(),
             arguments.len(),
             crate::coherence::core_sign(atom.sign),
-        )
-        .map_err(|error| AdmissionFailure::Construction {
-            error,
-            location: self.location,
-        })?;
-        let predicate = self.shared(predicate);
-        AtomPattern::new(predicate, terms).map_err(|error| {
-            AdmissionFailure::Construction {
-                error,
-                location: self.location,
-            }
-            .into()
-        })
+        )?;
+        self.pattern_from_parts(predicate, &terms)
     }
     /// Compile a source term after `prepare`'s bottom-up normalization: closed
     /// arithmetic has already become a value or produced a located failure.
@@ -1281,8 +1320,13 @@ impl Compiler<'_> {
                 let node = match parts {
                     TermParts::Symbolic(symbol) => {
                         let value = compile::scalar(&symbol, self.location)?;
-                        self.value(&value)?;
-                        Operation::Constant(value)
+                        let key = self.value(&value)?;
+                        Operation::Constant(self.source.scalar_key(
+                            &key,
+                            self.limits,
+                            self.counters,
+                            self.location,
+                        )?)
                     }
                     TermParts::Variable(variable) => {
                         let slot = variables.slot(&variable);
@@ -1292,27 +1336,43 @@ impl Compiler<'_> {
                     TermParts::UnaryOperation { operator, argument } => {
                         if operator == UnaryOp::Negate
                             && let Operation::Constructor(constructor) = &mut nodes[argument]
-                            && constructor.name.is_some()
+                            && let Some(shape) = self.source.negate_constructor(
+                                constructor.shape,
+                                self.limits,
+                                self.counters,
+                                self.location,
+                            )?
                         {
-                            constructor.sign = match constructor.sign {
-                                zetesis_core::Sign::Positive => zetesis_core::Sign::Negative,
-                                zetesis_core::Sign::Negative => zetesis_core::Sign::Positive,
-                            };
+                            constructor.shape = shape;
                             return Ok(argument);
                         }
                         Operation::Unary(operator, argument)
                     }
                     TermParts::Function { name, arguments } => {
                         Operation::Constructor(Box::new(crate::formula_value::Constructor {
-                            name: Some(name.as_str().to_owned()),
-                            sign: zetesis_core::Sign::Positive,
+                            shape: self.source.constructor(
+                                zetesis_core::ValueNodeRef::Function {
+                                    name: name.as_str(),
+                                    sign: zetesis_core::Sign::Positive,
+                                    arity: arguments.len(),
+                                },
+                                self.limits,
+                                self.counters,
+                                self.location,
+                            )?,
                             arguments,
                         }))
                     }
                     TermParts::Tuple(arguments) => {
                         Operation::Constructor(Box::new(crate::formula_value::Constructor {
-                            name: None,
-                            sign: zetesis_core::Sign::Positive,
+                            shape: self.source.constructor(
+                                zetesis_core::ValueNodeRef::Tuple {
+                                    arity: arguments.len(),
+                                },
+                                self.limits,
+                                self.counters,
+                                self.location,
+                            )?,
                             arguments,
                         }))
                     }
@@ -1330,38 +1390,131 @@ impl Compiler<'_> {
             })?;
         Ok(Expression { nodes })
     }
-    pub(super) fn pattern_domain(&mut self, pattern: &AtomPattern) -> Result<(), FormulaFailure> {
+    fn admit_fact_pattern(
+        &mut self,
+        pattern: &zetesis_core::AtomPattern,
+    ) -> Result<AtomPattern, FormulaFailure> {
         ceiling(
             FormulaResource::Arity,
             pattern.terms().len() as u128,
             self.options.core_limits.max_predicate_arity as u128,
             self.location,
         )?;
-        for term in pattern.terms() {
-            if let CoreTerm::Constant(value) = term {
-                self.value(value)?;
-            }
-        }
-        Ok(())
+        let terms = pattern
+            .terms()
+            .iter()
+            .map(|term| match term {
+                zetesis_core::Term::Variable(slot) => Ok(CoreTerm::Variable(*slot)),
+                zetesis_core::Term::Constant(value) => {
+                    self.root_scalar(value).map(CoreTerm::Constant)
+                }
+            })
+            .collect::<Result<Vec<_>, FormulaFailure>>()?;
+        let predicate = self.source.predicate(
+            pattern.predicate().into(),
+            self.limits,
+            self.counters,
+            self.location,
+        )?;
+        self.pattern_from_parts(predicate, &terms)
     }
-    pub(super) fn value(&mut self, value: &Value) -> Result<(), FormulaFailure> {
-        if !self.domain.contains(value) {
-            ceiling(
-                FormulaResource::DomainValues,
-                self.domain.len() as u128 + 1,
-                self.limits
-                    .max_domain_values
-                    .min(self.options.core_limits.max_domain_values) as u128,
-                self.location,
-            )?;
+
+    pub(super) fn predicate(
+        &mut self,
+        name: &str,
+        arity: usize,
+        sign: zetesis_core::Sign,
+    ) -> Result<Predicate, FormulaFailure> {
+        let predicate = zetesis_core::Predicate::with_sign(name, arity, sign).map_err(|error| {
+            AdmissionFailure::Construction {
+                error,
+                location: self.location,
+            }
+        })?;
+        self.source.predicate(
+            (&predicate).into(),
+            self.limits,
+            self.counters,
+            self.location,
+        )
+    }
+
+    pub(super) fn pattern_from_parts(
+        &mut self,
+        predicate: Predicate,
+        terms: &[CoreTerm],
+    ) -> Result<AtomPattern, FormulaFailure> {
+        self.source
+            .pattern(predicate, terms, self.limits, self.counters, self.location)
+    }
+
+    pub(super) fn scalar(&mut self, value: &Value) -> Result<components::Scalar, FormulaFailure> {
+        self.source
+            .scalar(value.into(), self.limits, self.counters, self.location)
+    }
+
+    pub(super) fn root_scalar(
+        &mut self,
+        value: &Value,
+    ) -> Result<components::Scalar, FormulaFailure> {
+        let key = self.value(value)?;
+        self.source
+            .scalar_key(&key, self.limits, self.counters, self.location)
+    }
+
+    /// Admit one explicit source root. Interned descendants do not enlarge this
+    /// scope's domain; objective and projection scopes own separate selections.
+    pub(super) fn value(&mut self, value: &Value) -> Result<TermKey, FormulaFailure> {
+        let key = self
+            .source
+            .import(value.into(), self.limits, self.counters, self.location)?;
+        if self.domain.insert(
+            &key,
+            &self.source,
+            self.limits
+                .max_domain_values
+                .min(self.options.core_limits.max_domain_values),
+            self.limits,
+            self.counters,
+            self.location,
+        )? {
             self.budget.charge(
                 ExpansionResource::ScalarBytes,
                 value_bytes(value),
                 self.location,
             )?;
-            self.domain.insert(value.clone());
         }
-        Ok(())
+        Ok(key)
+    }
+
+    pub(super) fn empty_domain(&self) -> Result<domain::Domain, FormulaFailure> {
+        domain::Domain::new(&self.source, self.limits, self.counters, self.location)
+    }
+
+    pub(super) fn scalar_expression(term: &CoreTerm) -> Expression {
+        let node = match term {
+            CoreTerm::Variable(variable) => Operation::Variable(*variable),
+            CoreTerm::Constant(value) => Operation::Constant(*value),
+        };
+        Expression { nodes: vec![node] }
+    }
+
+    pub(super) fn constant_expression(&mut self, value: i32) -> Result<Expression, FormulaFailure> {
+        let scalar = self.scalar(&Value::Number(value))?;
+        Ok(Self::scalar_expression(&CoreTerm::Constant(scalar)))
+    }
+
+    pub(super) fn scalar_number(
+        &mut self,
+        scalar: components::Scalar,
+    ) -> Result<Option<i32>, FormulaFailure> {
+        let value = self
+            .source
+            .scalar_ref(scalar, self.limits, self.counters, self.location)?;
+        Ok(match value.descriptor() {
+            zetesis_core::ValueNodeRef::Number(number) => Some(number),
+            _ => None,
+        })
     }
 }
 
@@ -1370,15 +1523,6 @@ pub(crate) fn value_bytes(value: &Value) -> u128 {
         Value::Infimum | Value::Supremum | Value::Number(_) => 0,
         Value::Structured(value) => value.payload_bytes() as u128,
         Value::String(text) | Value::Symbol(text) => text.len() as u128,
-    }
-}
-
-fn scalar_expression(term: &CoreTerm) -> Expression {
-    Expression {
-        nodes: vec![match term {
-            CoreTerm::Variable(variable) => Operation::Variable(*variable),
-            CoreTerm::Constant(value) => Operation::Constant(value.clone()),
-        }],
     }
 }
 

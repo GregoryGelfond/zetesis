@@ -1,14 +1,14 @@
 //! Complete selective rounds retain exact carriers while avoiding producer work.
 
+use crate::formula_support::GroundingWork as WorkContext;
 use std::cell::Cell;
-use std::collections::BTreeSet;
 use std::fmt::Write;
 
 use super::{atom, location, plan, prepare};
-use crate::expansion::Budget;
-use crate::formula_ir::{HeadIr, Prepared};
+use crate::formula::Preparation;
+use crate::formula_ir::HeadIr;
 use crate::formula_support::producers::ProducerPlan;
-use crate::formula_support::{Counters, complete, row_values};
+use crate::formula_support::{Counters, complete};
 use crate::grounding_observer::Profile;
 use crate::{
     AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
@@ -49,42 +49,57 @@ struct Measured {
 }
 
 fn measure(
-    prepared: &Prepared,
+    source: &str,
     scheduled: bool,
     limits: &FormulaLimits,
 ) -> Result<Measured, FormulaFailure> {
+    let Preparation {
+        catalog,
+        accounting,
+        program: prepared,
+        mut budget,
+        ..
+    } = prepare(source);
     let observer = Observer::default();
     let profile = Profile::new(Some(&observer));
-    let mut counters = Counters::observed(profile.work());
+    let mut counters = Counters::resume(accounting, profile.work());
     let catalog = profile.phase(GroundingPhase::SupportCompletion, None, || {
         let plan = if scheduled {
-            ProducerPlan::prepare(prepared, limits, &mut counters, location(prepared))?
+            ProducerPlan::prepare(
+                &prepared,
+                &catalog,
+                limits,
+                &mut counters,
+                location(&prepared),
+            )?
         } else {
             None
         };
         complete(
-            prepared,
+            catalog,
+            &prepared,
             plan,
             None,
-            limits,
-            &mut Budget::new(ExpansionLimits::default(), usize::MAX),
-            &mut counters,
-            location(prepared),
+            &mut budget,
+            WorkContext::new(limits, &mut counters, location(&prepared)),
         )
     })?;
-    let work = counters.work;
+    let work = counters.accounting.work;
     // Readback is outside the measured completion. It borrows its published
     // catalog under fresh limits and contributes no schedule events.
     let snapshot = catalog.snapshot(
         &FormulaLimits::default(),
         &mut Counters::default(),
-        location(prepared),
+        location(&prepared),
     )?;
     let mut atoms = Vec::new();
-    for predicate in snapshot.relations.predicates() {
-        for row in snapshot.relations.rows(predicate) {
-            atoms.push(Atom::new(predicate.clone(), row_values(row).cloned().collect()).unwrap());
-        }
+    for (_, source) in snapshot.relations.source_atoms() {
+        // Explicit test-oracle export, outside measured execution.
+        atoms.extend(
+            source
+                .iter()
+                .map(|atom| atom.to_atom(zetesis_core::ValueLimits::default()).unwrap()),
+        );
     }
     atoms.sort();
     Ok(Measured {
@@ -94,13 +109,13 @@ fn measure(
     })
 }
 
-fn chain(steps: i32) -> Prepared {
+fn chain(steps: i32) -> String {
     let mut source = String::new();
     for start in 0..steps {
         write!(source, "edge({start},{}).", start + 1).unwrap();
     }
     source.push_str("reach(0).reach(Y):-reach(X),edge(X,Y).left(X):-right(X).right(X):-left(X).");
-    prepare(&source)
+    source
 }
 
 #[test]
@@ -139,9 +154,9 @@ fn affected_rounds_avoid_repeated_producer_visits() {
 
 #[test]
 fn terminal_predicates_avoid_an_unused_final_snapshot() {
-    let prepared = prepare("p(1).p(2).:-p(9).");
-    let reference = measure(&prepared, false, &FormulaLimits::default()).unwrap();
-    let scheduled = measure(&prepared, true, &FormulaLimits::default()).unwrap();
+    let prepared = "p(1).p(2).:-p(9).";
+    let reference = measure(prepared, false, &FormulaLimits::default()).unwrap();
+    let scheduled = measure(prepared, true, &FormulaLimits::default()).unwrap();
     assert_eq!(
         scheduled.atoms,
         vec![
@@ -160,19 +175,27 @@ fn terminal_predicates_avoid_an_unused_final_snapshot() {
 
 #[test]
 fn reverse_postings_preserve_signed_predicate_identity() {
-    let prepared =
+    let owner =
         prepare("p(1).-p(2).p(3,4).a(X):-p(X).b(X):- -p(X).c(X,Y):-p(X,Y).twice(X,Y):-p(X),p(Y).");
-    let mut plan = plan(&prepared);
+    let prepared = &owner.program;
+    let mut plan = plan(prepared, &owner.catalog);
+    let limits = FormulaLimits::default();
+    let mut counters = Counters::default();
+    let components = owner
+        .catalog
+        .component_view(&limits, &mut counters, location(prepared))
+        .unwrap()
+        .unwrap();
     for (changed, expected) in [
         (atom("p", Sign::Negative, &[2]), vec!["b"]),
         (atom("p", Sign::Positive, &[3, 4]), vec!["c"]),
         (atom("p", Sign::Positive, &[1]), vec!["a", "twice"]),
     ] {
         plan.advance(
-            &BTreeSet::from([changed]),
+            std::iter::once((&changed).into()),
             &FormulaLimits::default(),
             &mut Counters::default(),
-            location(&prepared),
+            location(prepared),
         )
         .unwrap();
         let mut schedule = plan.schedule();
@@ -182,7 +205,7 @@ fn reverse_postings_preserve_signed_predicate_identity() {
             .next(
                 &FormulaLimits::default(),
                 &mut Counters::default(),
-                location(&prepared),
+                location(prepared),
             )
             .unwrap()
         {
@@ -191,7 +214,17 @@ fn reverse_postings_preserve_signed_predicate_identity() {
             let HeadIr::Normal(Some(head)) = &prepared.rules[index].head else {
                 panic!("a posting must name a producer")
             };
-            actual.push(head.predicate().name());
+            actual.push(
+                head.get(
+                    components,
+                    &limits,
+                    &mut counters,
+                    prepared.rules[index].location,
+                )
+                .unwrap()
+                .predicate()
+                .name(),
+            );
         }
         actual.sort_unstable();
         assert_eq!(actual, expected);
@@ -251,8 +284,10 @@ fn wake_capacity_shares_the_support_allowance() {
         error,
         FormulaFailure::Limit {
             resource: FormulaResource::SupportBytes,
+            limit,
+            observed,
             ..
-        }
+        } if limit == (peak - 1) as u128 && observed > limit
     ));
 }
 
@@ -272,7 +307,11 @@ fn empty_wake_sets_do_not_discharge_original_constraints() {
         .unwrap()
         .ground_with_observer(Some(&observer))
         .unwrap();
-        assert_eq!(admitted.atoms(), &[atom("p", Sign::Positive, &[1])]);
+        let expected_atom = atom("p", Sign::Positive, &[1]);
+        assert_eq!(
+            admitted.atoms().iter().collect::<Vec<_>>(),
+            [zetesis_core::catalog::AtomRef::from(&expected_atom)]
+        );
         assert_eq!(observer.support.get().support_rounds, Some(2));
         assert_eq!(
             observer.support.get().support_snapshot_preparations,

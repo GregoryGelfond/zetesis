@@ -1,28 +1,40 @@
-//! Mint inseparable program, carrier-position and payload witnesses lazily.
+//! Mint inseparable program, carrier-position and coordinate witnesses lazily.
 
-use crate::{Atom, AtomIter, CarrierError, Program};
+use crate::{AtomIter, CarrierAtom, CarrierError, Program, catalog::AtomRef};
 use std::iter::FusedIterator;
 use std::num::NonZeroUsize;
 
 mod index;
-pub use index::{GateIndex, GateIndexError};
+pub use index::{GateIndex, GateIndexError, GateIndexFailure};
 
 /// An atom minted at its position in this program's canonical gate carrier.
-/// Its private position and owned payload cannot be independently changed.
-/// Sharing the whole token in an Arc preserves both without copying atoms.
+/// Its private position and Program-bound coordinates cannot be independently
+/// changed. Sharing the whole token preserves both without copying payload.
 /// Both [`Program::indexed_gate_atoms`] and [`GateIndex::locate`] establish the
 /// same position; the latter does not enumerate preceding tuples.
 #[derive(Debug)]
 pub struct GateAtom {
-    pub(super) program: Program,
+    pub(super) carrier: CarrierAtom,
     pub(super) position: NonZeroUsize,
-    atom: Atom,
 }
 impl GateAtom {
     /// Borrow the minted logical atom without changing its positional witness.
     #[must_use]
-    pub fn atom(&self) -> &Atom {
-        &self.atom
+    pub fn atom(&self) -> AtomRef<'_> {
+        self.carrier.atom()
+    }
+
+    /// The immutable admitted instance establishing this positional witness.
+    #[must_use]
+    pub fn program(&self) -> &Program {
+        self.carrier.program()
+    }
+
+    /// Share the Program-bound tuple coordinates without its optional fast
+    /// graph-position lookup. No logical payload or coordinate vector is copied.
+    #[must_use]
+    pub fn carrier(&self) -> CarrierAtom {
+        self.carrier.clone()
     }
 }
 
@@ -56,7 +68,6 @@ impl std::error::Error for GateAtomError {
 /// remain fallible; sharing a returned token is an explicit caller operation.
 /// A carrier or position error is returned once and fuses the iterator.
 pub struct GateAtoms<'a> {
-    program: &'a Program,
     atoms: AtomIter<'a>,
     position: Option<NonZeroUsize>,
     failed: bool,
@@ -68,7 +79,6 @@ impl Program {
     #[must_use]
     pub fn indexed_gate_atoms(&self) -> GateAtoms<'_> {
         GateAtoms {
-            program: self,
             atoms: self.gate_atoms(),
             position: NonZeroUsize::new(1),
             failed: false,
@@ -94,8 +104,7 @@ impl Iterator for GateAtoms<'_> {
         };
         self.position = position.get().checked_add(1).and_then(NonZeroUsize::new);
         Some(Ok(GateAtom {
-            program: self.program.clone(),
-            atom,
+            carrier: atom,
             position,
         }))
     }
@@ -105,7 +114,7 @@ impl FusedIterator for GateAtoms<'_> {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{AdmissionLimits, AtomPattern, Predicate, Template, Value};
+    use crate::{AdmissionLimits, AtomPattern, Predicate, Template};
 
     fn program(count: usize) -> Program {
         Program::new(
@@ -145,16 +154,7 @@ mod tests {
         assert!(atoms.next().is_none());
     }
 
-    #[test]
-    fn coordinate_allocation_failure_is_explicit_and_fused() {
-        let program = program(0);
-        let predicates = [Predicate::new("wide", usize::MAX).unwrap()];
-        let values = [Value::Number(0)];
-        let mut atoms = program.indexed_gate_atoms();
-        // Real non-ZST index storage cannot represent this reservation. The
-        // corrupted private source is never minted into a GateAtom token.
-        atoms.atoms = AtomIter::new(&predicates, &values);
-        assert!(matches!(atoms.next(), Some(Err(GateAtomError::Carrier(_)))));
-        assert!(atoms.next().is_none());
-    }
+    // Coordinate allocation is exercised at the Carrier construction boundary.
+    // A private-corruption test cannot supply an impossible admitted predicate
+    // through the real immutable Program vocabulary.
 }

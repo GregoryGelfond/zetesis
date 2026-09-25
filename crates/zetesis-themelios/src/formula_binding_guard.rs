@@ -10,12 +10,10 @@
 mod envelope;
 
 use themelios_program::program::{DefaultNegation, Relation};
-use zetesis_core::Value;
 
 use crate::formula_binding_plan::whole_variable;
 use crate::formula_guard::{Guard, GuardComparison};
 use crate::formula_ir::{Compiler, Expression, LiteralIr, Operation, Variables};
-use crate::formula_support::copy;
 use crate::{ExpansionResource, FormulaFailure};
 
 impl Compiler<'_> {
@@ -31,20 +29,22 @@ impl Compiler<'_> {
             pending.iter().flatten().chain(generated),
             variables.count,
             &variables.safe,
+            &self.source,
             self.budget,
-            self.location,
+            crate::formula_support::GroundingWork::new(self.limits, self.counters, self.location),
         )?;
-        Ok(range.map(|(target, lower, upper)| {
-            (
+        let Some((target, lower, upper)) = range else {
+            return Ok(None);
+        };
+        Ok(Some((
+            target,
+            LiteralIr::Range {
                 target,
-                LiteralIr::Range {
-                    target,
-                    lower: constant(lower),
-                    upper: constant(upper),
-                    binder: true,
-                },
-            )
-        }))
+                lower: self.constant_expression(lower)?,
+                upper: self.constant_expression(upper)?,
+                binder: true,
+            },
+        )))
     }
 
     pub(super) fn guard_binding(
@@ -81,7 +81,7 @@ impl Compiler<'_> {
         for comparison in comparisons {
             self.budget
                 .charge(ExpansionResource::TermWork, 1, self.location)?;
-            let Some((target, _, _)) = numeric_bound(comparison) else {
+            let Some((target, _, _)) = self.numeric_bound(comparison)? else {
                 continue;
             };
             if variables.safe.contains(&target) || !self.only_missing(guard, target, variables)? {
@@ -94,8 +94,8 @@ impl Compiler<'_> {
                     target,
                     LiteralIr::Range {
                         target,
-                        lower: constant(lower),
-                        upper: constant(upper),
+                        lower: self.constant_expression(lower)?,
+                        upper: self.constant_expression(upper)?,
                         binder: true,
                     },
                 )));
@@ -214,7 +214,7 @@ impl Compiler<'_> {
                     .charge(ExpansionResource::TermWork, 1, self.location)?;
                 match literal {
                     LiteralIr::Compare(left, relation, right) => {
-                        bounds.include(target, numeric_parts(left, *relation, right));
+                        bounds.include(target, self.numeric_parts(left, *relation, right)?);
                     }
                     LiteralIr::Guard(
                         guard @ Guard::Comparisons {
@@ -225,7 +225,7 @@ impl Compiler<'_> {
                         for comparison in comparisons {
                             self.budget
                                 .charge(ExpansionResource::TermWork, 1, self.location)?;
-                            bounds.include(target, numeric_bound(comparison));
+                            bounds.include(target, self.numeric_bound(comparison)?);
                         }
                     }
                     _ => {}
@@ -238,8 +238,8 @@ impl Compiler<'_> {
                     target,
                     LiteralIr::Range {
                         target,
-                        lower: constant(lower),
-                        upper: constant(upper),
+                        lower: self.constant_expression(lower)?,
+                        upper: self.constant_expression(upper)?,
                         binder: true,
                     },
                 )));
@@ -254,9 +254,7 @@ impl Compiler<'_> {
             self.budget
                 .charge(ExpansionResource::TermWork, 1, self.location)?;
             nodes.push(match *node {
-                Operation::Constant(ref value) => {
-                    Operation::Constant(copy(value, self.budget, self.location)?)
-                }
+                Operation::Constant(scalar) => Operation::Constant(scalar),
                 Operation::Constructor(ref constructor) => {
                     Operation::Constructor(constructor.copy(self.budget, self.location)?)
                 }
@@ -301,7 +299,7 @@ impl Compiler<'_> {
         for comparison in comparisons {
             self.budget
                 .charge(ExpansionResource::TermWork, 1, self.location)?;
-            bounds.include(target, numeric_bound(comparison));
+            bounds.include(target, self.numeric_bound(comparison)?);
         }
         Ok(bounds.interval())
     }
@@ -341,49 +339,54 @@ impl IntegerBounds {
     }
 }
 
-fn constant(value: i32) -> Expression {
-    Expression {
-        nodes: vec![Operation::Constant(Value::Number(value))],
+impl Compiler<'_> {
+    fn numeric_bound(
+        &mut self,
+        comparison: &GuardComparison,
+    ) -> Result<Option<(usize, bool, i64)>, FormulaFailure> {
+        let GuardComparison::Scalar(left, relation, right) = comparison else {
+            return Ok(None);
+        };
+        self.numeric_parts(left, *relation, right)
     }
-}
 
-fn numeric_bound(comparison: &GuardComparison) -> Option<(usize, bool, i64)> {
-    let GuardComparison::Scalar(left, relation, right) = comparison else {
-        return None;
-    };
-    numeric_parts(left, *relation, right)
-}
-
-fn numeric_parts(
-    left: &Expression,
-    relation: Relation,
-    right: &Expression,
-) -> Option<(usize, bool, i64)> {
-    let (target, relation, number) = if let Some(target) = whole_variable(left) {
-        let [Operation::Constant(Value::Number(number))] = right.nodes.as_slice() else {
-            return None;
+    fn numeric_parts(
+        &mut self,
+        left: &Expression,
+        relation: Relation,
+        right: &Expression,
+    ) -> Result<Option<(usize, bool, i64)>, FormulaFailure> {
+        let (target, relation, scalar) = if let Some(target) = whole_variable(left) {
+            let [Operation::Constant(scalar)] = right.nodes.as_slice() else {
+                return Ok(None);
+            };
+            (target, relation, *scalar)
+        } else {
+            let Some(target) = whole_variable(right) else {
+                return Ok(None);
+            };
+            let [Operation::Constant(scalar)] = left.nodes.as_slice() else {
+                return Ok(None);
+            };
+            let relation = match relation {
+                Relation::Lt => Relation::Gt,
+                Relation::Le => Relation::Ge,
+                Relation::Gt => Relation::Lt,
+                Relation::Ge => Relation::Le,
+                Relation::Eq | Relation::Neq => return Ok(None),
+            };
+            (target, relation, *scalar)
         };
-        (target, relation, *number)
-    } else {
-        let target = whole_variable(right)?;
-        let [Operation::Constant(Value::Number(number))] = left.nodes.as_slice() else {
-            return None;
+        let Some(number) = self.scalar_number(scalar)? else {
+            return Ok(None);
         };
-        let relation = match relation {
-            Relation::Lt => Relation::Gt,
-            Relation::Le => Relation::Ge,
-            Relation::Gt => Relation::Lt,
-            Relation::Ge => Relation::Le,
-            Relation::Eq | Relation::Neq => return None,
-        };
-        (target, relation, *number)
-    };
-    let number = i64::from(number);
-    match relation {
-        Relation::Gt => Some((target, true, number + 1)),
-        Relation::Ge => Some((target, true, number)),
-        Relation::Lt => Some((target, false, number - 1)),
-        Relation::Le => Some((target, false, number)),
-        Relation::Eq | Relation::Neq => None,
+        let number = i64::from(number);
+        Ok(match relation {
+            Relation::Gt => Some((target, true, number + 1)),
+            Relation::Ge => Some((target, true, number)),
+            Relation::Lt => Some((target, false, number - 1)),
+            Relation::Le => Some((target, false, number)),
+            Relation::Eq | Relation::Neq => None,
+        })
     }
 }

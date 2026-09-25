@@ -35,8 +35,12 @@ supply argument coverage; this source-to-implementation bridge remains a review
 and executable-control obligation, not a theorem established by these lemmas.
 
 The analyzed owner and original rule occurrence are checked before guards are
-prepared. Borrowed argument symbols form variable meets; the existing relation
-query resolves them to the completed owner's sole equality dictionary. Each
+prepared. Borrowed argument symbols form variable meets and are admitted once
+into the source vocabulary. Rule-local scoped IDs retain the candidates;
+unary comparisons read their decoded values, not their numeric ID order.
+Each support snapshot resolves those values into its relation-local equality
+dictionaries. Reuse requires the same source authority and a covering prefix;
+it does not assert that source IDs equal dictionary IDs. Each
 surviving row retains its position and passes through the original matcher.
 Guard rejection occurs before binding copies and deeper probes. Complete theory,
 atom order and provenance comparisons check this path against disabled analysis.
@@ -45,7 +49,9 @@ Unsupported profiles and global Unknown/Stopped outcomes use complete fallback.
 Analysis, applicability, conversion, lookup and guard work consume the existing
 cumulative formula budget. Analysis has separate finite logical populations and
 bounded standard allocations; its heap is outside the named support/guard byte
-ceiling. The guard lease accounts its named headers, scratch and actual vector
+ceiling. Candidate ID/range metadata is likewise work-bounded outside that
+ceiling; its canonical payload is counted by the source authority. The guard
+lease accounts its named headers, scratch and actual vector
 capacities beside retained query indices and live masks, including failed
 preparation prefixes. None of these statements gives a hard allocator/RSS cap,
 a caller cancellation contract or equal work cutoffs between strategies.

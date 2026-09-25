@@ -340,6 +340,7 @@ struct SourceLimits {
     max_chunk_rules: usize,
     max_chunk_words: usize,
     max_instance_bytes: usize,
+    max_scan_bytes: usize,
     max_host_bytes: usize,
 }
 

@@ -54,7 +54,7 @@ fn model(noise: i32) -> Model {
         atom("p", Sign::Positive, vec![Value::Number(3)]),
         atom("zz_gate", Sign::Negative, vec![]),
     ]);
-    Model::new(atoms)
+    Model::new(atoms).unwrap()
 }
 
 fn program() -> ObjectiveProgram {
@@ -80,16 +80,18 @@ fn program() -> ObjectiveProgram {
 #[test]
 fn predicate_windows_preserve_objective_contributions() {
     let program = program();
+    let small_model = model(100);
     let small = evaluate(
         &program,
-        &model(100),
+        &small_model,
         Limits::default(),
         &Cancellation::default(),
     )
     .unwrap();
+    let large_model = model(1_000);
     let large = evaluate(
         &program,
-        &model(1_000),
+        &large_model,
         Limits::default(),
         &Cancellation::default(),
     )
@@ -114,9 +116,11 @@ fn predicate_windows_preserve_objective_contributions() {
 #[test]
 fn predicate_windows_retain_duplicate_eligibility() {
     for size in [100, 1_000] {
+        let result_program = program();
+        let result_model = model(size);
         let result = evaluate(
-            &program(),
-            &model(size),
+            &result_program,
+            &result_model,
             Limits::default(),
             &Cancellation::default(),
         )
@@ -130,16 +134,18 @@ fn predicate_windows_retain_duplicate_eligibility() {
 #[test]
 fn lookup_work_avoids_scanning_unrelated_predicates() {
     let program = program();
+    let small_model = model(100);
     let small = evaluate(
         &program,
-        &model(100),
+        &small_model,
         Limits::default(),
         &Cancellation::default(),
     )
     .unwrap();
+    let large_model = model(1_000);
     let large = evaluate(
         &program,
-        &model(1_000),
+        &large_model,
         Limits::default(),
         &Cancellation::default(),
     )

@@ -1,123 +1,93 @@
-//! Located source admission over the shared authoritative atom interner.
+//! Theory and condition coordinates select the shared source authority.
 //!
-//! Only vacant entries copy a checked substitution. First insertion fixes each
-//! dense ID; commits move suffix ownership without reordering or copying payload.
-//! AVL comparisons, path planning, reservations and commit work all use the
-//! enclosing formula counter. Nested payload remains under `ScalarBytes`, while
-//! the finite index-capacity envelope is derived from the applicable atom bound.
+//! First emission fixes a local dense coordinate. Source identity discovery and
+//! support membership are separate; only sparse integer maps live in this owner.
 
 use themelios_base::span::Location;
-use zetesis_core::atom_interner::{AtomEntry, AtomInterner, Failure, Limits};
-use zetesis_core::{Atom, AtomKey};
+use zetesis_core::Sign;
+use zetesis_core::catalog::AtomRef;
 
-use crate::formula_support::Counters;
+use crate::formula_support::{Computation, Counters, SourceAtom, SourceSelection};
 use crate::{FormulaFailure, FormulaLimits, FormulaResource};
 
-#[derive(Default)]
-pub(super) struct Catalog(AtomInterner);
+pub(super) struct Catalog(SourceSelection);
 
 impl Catalog {
+    pub(super) fn new(
+        computation: &Computation<'_, '_>,
+        counters: &Counters,
+        limits: &FormulaLimits,
+        location: Location,
+    ) -> Result<Self, FormulaFailure> {
+        SourceSelection::new(computation, limits, counters, location).map(Self)
+    }
+
     pub(super) fn len(&self) -> usize {
         self.0.len()
     }
-    pub(super) fn get(&self, id: usize) -> Option<&Atom> {
-        self.0.get(id)
-    }
 
-    /// Callers commit before exposing a complete contiguous capture population.
-    pub(super) fn atoms(&self) -> &[Atom] {
-        let committed = self.0.committed();
-        assert_eq!(committed.len(), self.len(), "complete atom capture prefix");
-        committed.as_slice()
-    }
-
-    pub(super) fn entry<'owner, 'key>(
-        &'owner mut self,
-        key: AtomKey<'key>,
-        bound: (FormulaResource, usize),
+    pub(super) fn source(
+        &self,
+        local: usize,
         counters: &mut Counters,
         limits: &FormulaLimits,
         location: Location,
-    ) -> Result<AtomEntry<'owner, 'key>, FormulaFailure> {
-        self.0
-            .entry_key_with(key, Limits::for_atoms(bound.1), || {
-                counters.work(limits, location)
-            })
-            .map_err(|error| failure(error, bound, location))
+    ) -> Result<SourceAtom, FormulaFailure> {
+        self.0.source(local, limits, counters, location)
     }
 
-    pub(super) fn find(
+    pub(super) fn get<'read>(
         &self,
-        atom: &Atom,
-        bound: (FormulaResource, usize),
+        id: usize,
+        computation: &'read Computation<'_, '_>,
+        counters: &mut Counters,
+        limits: &FormulaLimits,
+        location: Location,
+    ) -> Result<AtomRef<'read>, FormulaFailure> {
+        self.0.atom(id, computation, limits, counters, location)
+    }
+
+    pub(super) fn position(
+        &self,
+        atom: &SourceAtom,
         counters: &mut Counters,
         limits: &FormulaLimits,
         location: Location,
     ) -> Result<Option<usize>, FormulaFailure> {
-        self.0
-            .find_atom_with(atom, Limits::for_atoms(bound.1), || {
-                counters.work(limits, location)
-            })
-            .map_err(|error| failure(error, bound, location))
+        self.0.position(atom, limits, counters, location)
     }
 
-    pub(super) fn commit(
+    pub(super) fn insert(
         &mut self,
+        atom: &SourceAtom,
         bound: (FormulaResource, usize),
+        computation: &Computation<'_, '_>,
         counters: &mut Counters,
         limits: &FormulaLimits,
         location: Location,
-    ) -> Result<(), FormulaFailure> {
+    ) -> Result<(usize, bool), FormulaFailure> {
         self.0
-            .commit_with(Limits::for_atoms(bound.1), || {
-                counters.work(limits, location)
-            })
-            .map_err(|error| failure(error, bound, location))
+            .insert(atom, bound, computation, limits, counters, location)
     }
 
-    pub(super) fn into_atoms(
-        self,
-        bound: (FormulaResource, usize),
+    pub(super) fn find(
+        &self,
+        local: usize,
+        sign: Sign,
+        computation: &Computation<'_, '_>,
         counters: &mut Counters,
         limits: &FormulaLimits,
         location: Location,
-    ) -> Result<Vec<Atom>, FormulaFailure> {
-        self.0
-            .into_atoms_with(Limits::for_atoms(bound.1), || {
-                counters.work(limits, location)
-            })
-            .map_err(|error| failure(error, bound, location))
+    ) -> Result<Option<usize>, FormulaFailure> {
+        let source = self.0.source(local, limits, counters, location)?;
+        let Some(other) = computation.signed(&source, sign, limits, counters, location)? else {
+            return Ok(None);
+        };
+        self.0.position(&other, limits, counters, location)
     }
-}
 
-pub(super) fn failure(
-    error: Failure<FormulaFailure>,
-    bound: (FormulaResource, usize),
-    location: Location,
-) -> FormulaFailure {
-    match error {
-        Failure::Stopped(error) => error,
-        Failure::Allocation(error) => FormulaFailure::AtomAllocation { error, location },
-        Failure::Atoms { required, limit } => FormulaFailure::Limit {
-            resource: bound.0,
-            observed: required as u128,
-            limit: limit as u128,
-            location,
-        },
-        Failure::Bytes { required, limit } => FormulaFailure::Limit {
-            resource: FormulaResource::AtomStorageBytes,
-            observed: required,
-            limit,
-            location,
-        },
-        // Interner Overflow denotes a next element count beyond usize: byte
-        // envelopes themselves are computed in u128 from admitted capacities.
-        Failure::Overflow => FormulaFailure::Limit {
-            resource: bound.0,
-            observed: usize::MAX as u128 + 1,
-            limit: bound.1 as u128,
-            location,
-        },
+    pub(super) fn into_selection(self) -> SourceSelection {
+        self.0
     }
 }
 

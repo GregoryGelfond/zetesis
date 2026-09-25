@@ -370,7 +370,7 @@ proptest::proptest! {
         let source = format!("{{a}}.#minimize{{{}@{},k:a;{amount}@{priority},k:a;{amount}@{priority},k:a}}.",
             WEIGHTS[weight], priority + 1);
         let input = admit(&source, &FormulaLimits::default()).unwrap();
-        let model = Model::new(input.atoms().iter().filter(|atom| selected && atom.values().is_empty()).cloned());
+        let model = Model::from_positions(input.atom_catalog(), input.atoms().iter().enumerate().filter_map(|(position, atom)| (selected && atom.values().is_empty()).then_some(position))).unwrap();
         let evaluation = zetesis_objective::evaluate(input.objectives(), &model,
             zetesis_objective::Limits::default(), &Cancellation::default()).unwrap();
         proptest::prop_assert_eq!(evaluation.score().costs(), &[(priority, if selected { i64::from(amount) } else { 0 })]);

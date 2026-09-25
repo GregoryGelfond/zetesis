@@ -101,6 +101,7 @@ fn model(names: &[&str]) -> Model {
             .iter()
             .map(|name| Atom::new(Predicate::new(*name, 0).unwrap(), vec![]).unwrap()),
     )
+    .unwrap()
 }
 
 fn family(view: &WorldView) -> Family {

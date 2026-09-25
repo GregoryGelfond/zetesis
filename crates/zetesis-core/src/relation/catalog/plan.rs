@@ -9,7 +9,7 @@
 use std::{cmp::Ordering, mem::size_of};
 
 use crate::{
-    Atom, Value,
+    catalog::{AtomRef, Atoms, TermRef},
     ordered_index::{Directions, Index, Link, Node, Step, position},
 };
 
@@ -20,7 +20,7 @@ pub(super) struct Plan {
     pub added: Vec<Cell>,
     pub patches: Vec<Step>,
     pub root: Link,
-    pub payload: u128,
+    pub encoding_bytes: u128,
 }
 
 impl Plan {
@@ -38,13 +38,13 @@ impl Plan {
     fn value<'a>(
         &self,
         dictionary: &[Cell],
-        atoms: &'a [Atom],
-        atom: &'a Atom,
+        atoms: Atoms<'a>,
+        atom: AtomRef<'a>,
         id: usize,
-    ) -> Result<&'a Value, Failure> {
+    ) -> Result<TermRef<'a>, Failure> {
         let cell = if let Some(cell) = dictionary.get(id) {
             return atoms
-                .get(cell.row)
+                .at(cell.row)
                 .and_then(|atom| atom.values().get(cell.column))
                 .ok_or(Failure::Dictionary);
         } else {
@@ -59,9 +59,9 @@ impl Plan {
         &self,
         index: &Index,
         dictionary: &[Cell],
-        atoms: &[Atom],
-        atom: &Atom,
-        value: &Value,
+        atoms: Atoms<'_>,
+        atom: AtomRef<'_>,
+        value: TermRef<'_>,
         work: &mut Work,
     ) -> Result<(Option<usize>, Directions), Failure> {
         let mut route = Directions::default();
@@ -143,9 +143,9 @@ impl Plan {
 
 pub(super) fn values(
     layout: &mut Layout,
-    atoms: &[Atom],
-    atom: &Atom,
-    payload: u128,
+    atoms: Atoms<'_>,
+    atom: AtomRef<'_>,
+    encoding_bytes: u128,
     work: &mut Work,
 ) -> Result<Plan, Failure> {
     let Layout {
@@ -160,13 +160,13 @@ pub(super) fn values(
         added: work.reserve(atom.values().len())?,
         patches: Vec::new(),
         root: index.root,
-        payload,
+        encoding_bytes,
     };
     for (column, value) in atom.values().iter().enumerate() {
         work.tick(1)?;
-        plan.payload = plan
-            .payload
-            .checked_add(value.payload_bytes() as u128)
+        plan.encoding_bytes = plan
+            .encoding_bytes
+            .checked_add(value.canonical_bytes_with(|| work.tick(1))? as u128)
             .ok_or(Failure::Overflow)?;
         let (found, route) = plan.locate(index, dictionary, atoms, atom, value, work)?;
         let id = if let Some(id) = found {

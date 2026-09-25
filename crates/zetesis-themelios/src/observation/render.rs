@@ -2,11 +2,12 @@
 
 use themelios_program::symbol::{Name, Sign};
 
-use super::evaluate::{Work, structured_text_bytes, terms};
+use super::evaluate::{Work, terms};
 use super::{
     Cancellation, ConstructionLimits, Error, ErrorKind, Limits, Model, ObservationProgram,
-    Rendered, Resource, Statistics, Symbol, Value,
+    Rendered, Resource, Statistics, Symbol,
 };
+use zetesis_core::{ValueNodeRef, catalog::TermRef};
 
 fn append(out: &mut String, text: &str, work: &mut Work<'_>) -> Result<(), Error> {
     work.step(text.len() as u128 + 1)?;
@@ -43,19 +44,17 @@ fn name(text: &str, output_bytes: usize, work: &mut Work<'_>) -> Result<(), Erro
     Name::new(text.to_owned()).map_err(|_| work.error(ErrorKind::InvalidSymbol))?;
     Ok(())
 }
-fn scalar(out: &mut String, value: &Value, work: &mut Work<'_>) -> Result<(), Error> {
-    match value {
-        Value::Infimum => append(out, "#inf", work),
-        Value::Supremum => append(out, "#sup", work),
-        Value::Number(number) => append(out, &number.to_string(), work),
-        Value::Symbol(text) => {
+fn scalar(out: &mut String, value: TermRef<'_>, work: &mut Work<'_>) -> Result<(), Error> {
+    match value.descriptor() {
+        ValueNodeRef::Infimum => append(out, "#inf", work),
+        ValueNodeRef::Supremum => append(out, "#sup", work),
+        ValueNodeRef::Number(number) => append(out, &number.to_string(), work),
+        ValueNodeRef::Symbol(text) => {
             name(text, out.len(), work)?;
             append(out, text, work)
         }
-        Value::String(text) => quoted(out, text, work),
-        Value::Structured(value) => {
-            use std::fmt::Write as _;
-            work.step(value.nodes().len() as u128 + structured_text_bytes(value) as u128)?;
+        ValueNodeRef::String(text) => quoted(out, text, work),
+        ValueNodeRef::Function { .. } | ValueNodeRef::Tuple { .. } => {
             work.check(
                 Resource::Depth,
                 value.depth() as u128,
@@ -63,28 +62,30 @@ fn scalar(out: &mut String, value: &Value, work: &mut Work<'_>) -> Result<(), Er
             )?;
             work.check(
                 Resource::Nodes,
-                value.nodes().len() as u128,
+                value.expanded_nodes() as u128,
                 work.limits.max_symbol_nodes as u128,
             )?;
-            work.check(
-                Resource::Bytes,
-                structured_text_bytes(value) as u128,
-                work.limits.max_symbol_bytes as u128,
-            )?;
-            for node in value.nodes() {
+            let mut text_bytes = 0_u128;
+            let mut nodes = value.nodes();
+            while let Some(node) = nodes.next_with(|| work.step(1))? {
+                text_bytes += node.text_bytes() as u128;
+                work.check(
+                    Resource::Bytes,
+                    text_bytes,
+                    work.limits.max_symbol_bytes as u128,
+                )?;
+                work.step(node.text_bytes() as u128)?;
                 match node {
-                    zetesis_core::ValueNode::Symbol(text)
-                    | zetesis_core::ValueNode::Function { name: text, .. } => {
+                    ValueNodeRef::Symbol(text) | ValueNodeRef::Function { name: text, .. } => {
                         name(text, out.len(), work)?;
                     }
-                    zetesis_core::ValueNode::String(text) if text.contains('\0') => {
+                    ValueNodeRef::String(text) if text.contains('\0') => {
                         return Err(work.error(ErrorKind::InvalidSymbol));
                     }
                     _ => {}
                 }
             }
             let bytes = value.rendered_bytes();
-            work.step(bytes as u128)?;
             work.check(
                 Resource::OutputBytes,
                 out.len() as u128 + bytes as u128,
@@ -92,7 +93,22 @@ fn scalar(out: &mut String, value: &Value, work: &mut Work<'_>) -> Result<(), Er
             )?;
             out.try_reserve_exact(bytes)
                 .map_err(|_| work.error(ErrorKind::Allocation))?;
-            write!(out, "{value}").map_err(|_| work.error(ErrorKind::Allocation))
+            value
+                .write_with(out, work.construction.max_bytes, |count| work.step(count))
+                .map_err(|error| match error {
+                    zetesis_core::ValueWriteError::Stopped(error) => error,
+                    zetesis_core::ValueWriteError::Storage(zetesis_core::ValueError::Limit {
+                        observed,
+                        limit,
+                        ..
+                    }) => work.error(ErrorKind::Limit {
+                        resource: Resource::ConstructionBytes,
+                        observed,
+                        limit: limit as u128,
+                    }),
+                    zetesis_core::ValueWriteError::Storage(_)
+                    | zetesis_core::ValueWriteError::Writer(_) => work.error(ErrorKind::Allocation),
+                })
         }
     }
 }

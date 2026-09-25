@@ -26,11 +26,11 @@ fn program(rules: Vec<Template>) -> Program {
     Program::new(rules, AdmissionLimits::default()).unwrap()
 }
 fn model(names: &[&str]) -> Model {
-    Model::new(names.iter().map(|name| atom(name)))
+    Model::new(names.iter().map(|name| atom(name))).unwrap()
 }
 
-fn separated_worlds() -> (Program, Vec<Seed>) {
-    let program = program(vec![
+fn separated_rules() -> Vec<Template> {
+    vec![
         rule(Some(nullary("a")), vec![], vec![], vec![nullary("b")]),
         rule(Some(nullary("b")), vec![], vec![], vec![nullary("a")]),
         rule(Some(nullary("x")), vec![nullary("a")], vec![], vec![]),
@@ -42,11 +42,104 @@ fn separated_worlds() -> (Program, Vec<Seed>) {
             vec![],
         ),
         rule(None, vec![nullary("cross")], vec![], vec![]),
-    ]);
+    ]
+}
+fn separated_worlds() -> (Program, Vec<Seed>) {
+    let program = program(separated_rules());
     let seeds = [&["a"][..], &["b"][..], &["a"][..]]
-        .map(|names| Seed::new(&program, model(names).atoms().iter().cloned()).unwrap())
+        .map(|names| Seed::new(&program, names.iter().map(|name| atom(name))).unwrap())
         .to_vec();
     (program, seeds)
+}
+
+#[test]
+fn foreign_ingress_seeds_and_completed_batches_share_the_program_vocabulary() {
+    use zetesis_core::{SeedError, ValueNodeRef};
+
+    let text = "one admitted string".repeat(256);
+    let program = program(vec![
+        rule(
+            Some(pattern(
+                "source",
+                vec![Term::Constant(Value::String(text.clone()))],
+            )),
+            vec![],
+            vec![],
+            vec![],
+        ),
+        rule(
+            Some(pattern("selected", vec![Term::Variable(0)])),
+            vec![pattern("source", vec![Term::Variable(0)])],
+            vec![pattern("selected", vec![Term::Variable(0)])],
+            vec![],
+        ),
+    ]);
+    // Public owned ingress has independent text/name allocations. Candidate
+    // admission must map equal content into the existing symbolic carrier.
+    let ingress = Atom::new(
+        Predicate::new("selected", 1).unwrap(),
+        vec![Value::String(text.clone())],
+    )
+    .unwrap();
+    let ValueNodeRef::String(program_text) = program.domain().get(0).unwrap().descriptor() else {
+        panic!("fixture contains one string value");
+    };
+    let Value::String(ingress_text) = &ingress.values()[0] else {
+        panic!("fixture ingress contains a string");
+    };
+    assert!(!std::ptr::eq(ingress_text.as_str(), program_text));
+    let seeds = [Seed::new(&program, [ingress]).unwrap()];
+    for outside in [
+        Atom::new(
+            Predicate::new("outside", 1).unwrap(),
+            vec![Value::String(text)],
+        )
+        .unwrap(),
+        Atom::new(
+            Predicate::new("selected", 1).unwrap(),
+            vec![Value::String("outside".into())],
+        )
+        .unwrap(),
+    ] {
+        assert!(matches!(
+            Seed::new(&program, [outside]),
+            Err(SeedError::OutsideCarrier { .. })
+        ));
+    }
+    let run = || {
+        lazy::check_with(
+            &program,
+            &seeds,
+            lazy::Limits::default(),
+            &Cancellation::default(),
+            lazy::evaluate,
+        )
+        .unwrap()
+    };
+    let first = run();
+    let second = run();
+    for batch in [&first, &second] {
+        assert!(batch.checks[0].accepted());
+        let model = batch.checks[0].closure();
+        assert_eq!(model.atoms().len(), 2);
+        for atom in model.atoms() {
+            let ValueNodeRef::String(actual) = atom.values().at(0).unwrap().descriptor() else {
+                panic!("both consequences use the admitted string");
+            };
+            assert!(std::ptr::eq(actual, program_text));
+            let predicate = program
+                .predicates()
+                .iter()
+                .find(|candidate| *candidate == atom.predicate())
+                .unwrap();
+            assert!(std::ptr::eq(predicate.name(), atom.predicate().name()));
+        }
+    }
+    let first_catalog = first.checks[0].closure().catalog();
+    let second_catalog = second.checks[0].closure().catalog();
+    assert!(first_catalog.shares_terms(second_catalog));
+    assert!(!first_catalog.same_owner(second_catalog));
+    assert!(!first_catalog.shares_snapshot(second_catalog));
 }
 
 #[test]
@@ -78,7 +171,7 @@ fn union_membership_never_establishes_world_truth() {
 fn chunk_boundaries_preserve_exact_cpu_closures() {
     let (program, _) = separated_worlds();
     let seeds = [&[][..], &["a"], &["b"], &["a", "b"]]
-        .map(|names| Seed::new(&program, model(names).atoms().iter().cloned()).unwrap());
+        .map(|names| Seed::new(&program, names.iter().map(|name| atom(name))).unwrap());
     let graph = GroundProgram::compile(&program, StaticLimits::default()).unwrap();
     for chunk in [1, 2, 3, 5, 6, 7, 32] {
         let limits = lazy::Limits {
@@ -225,8 +318,8 @@ fn fresh_rounds_revisit_newly_derived_rows() {
 
 #[test]
 fn foreign_seed_identity_is_refused_before_execution() {
-    let (program, seeds) = separated_worlds();
-    let other = Program::new(program.templates().to_vec(), AdmissionLimits::default()).unwrap();
+    let (_, seeds) = separated_worlds();
+    let (other, _) = separated_worlds();
     let error = lazy::check_with(
         &other,
         &seeds,
@@ -381,13 +474,16 @@ fn instance_scratch_is_reserved_before_catalog_growth() {
         rule(None, vec![], vec![a.clone(), a], vec![]),
     ]);
     let seeds = [Seed::new(&program, []).unwrap()];
-    let atom_bytes = size_of::<Atom>() + 1;
+    // A source instance retains borrowed key metadata, not owned atoms. Reserve
+    // its header and both repeated nullary key occurrences (including names).
+    let instance_bytes =
+        size_of::<source::Instance<'_>>() + 2 * (size_of::<zetesis_core::AtomKey<'_>>() + 1);
     let fixed_bytes = (5 + 2 + 11 + 2) * size_of::<u32>() + size_of::<lazy::Check>();
     let limits = lazy::Limits {
         max_atoms: 1,
         max_chunk_rules: 2,
         max_chunk_words: 11,
-        max_instance_bytes: 2 * atom_bytes,
+        max_instance_bytes: instance_bytes,
         ..Default::default()
     };
     let completed = lazy::check_with(
@@ -405,8 +501,13 @@ fn instance_scratch_is_reserved_before_catalog_growth() {
         // and order-vector envelopes. There is no remaining Atom payload slot.
         max_host_bytes: fixed_bytes
             + limits.max_instance_bytes
-            + usize::try_from(zetesis_core::atom_interner::AtomInterner::new().storage_bytes())
-                .unwrap()
+            + usize::try_from(
+                zetesis_core::atom_interner::AtomInterner::for_program(&program, usize::MAX)
+                    .unwrap()
+                    .storage_bytes()
+                    - program.shared_vocabulary_bytes(),
+            )
+            .unwrap()
             + size_of::<Vec<usize>>(),
         ..limits
     };
@@ -490,8 +591,7 @@ fn final_check_metadata_is_reserved_before_execution() {
 
 #[test]
 fn catalog_growth_preserves_each_world_interpretation() {
-    let (base, _) = separated_worlds();
-    let mut rules = base.templates().to_vec();
+    let mut rules = separated_rules();
     rules.extend((0..65).map(|n| {
         rule(
             Some(pattern("fact", vec![Term::Constant(Value::Number(n))])),
@@ -675,10 +775,13 @@ fn final_zero_delta_round_keeps_underived_identity_across_word_growth() {
         assert!(widths.contains(&2));
         let check = &result.checks[0];
         assert_eq!(check.closure().catalog().atoms().len(), 34);
-        assert_eq!(check.closure().catalog().atoms()[0], atom("gate"));
+        assert_eq!(
+            check.closure().catalog().atoms().at(0).unwrap(),
+            atom("gate")
+        );
         for id in 0..33 {
             assert_eq!(
-                check.closure().catalog().atoms()[id + 1],
+                check.closure().catalog().atoms().at(id + 1).unwrap(),
                 atom(&format!("head{id:02}"))
             );
         }

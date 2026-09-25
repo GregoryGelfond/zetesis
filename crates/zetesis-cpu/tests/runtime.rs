@@ -255,7 +255,12 @@ fn gates_prune_after_their_arguments_are_bound_before_a_cartesian_join() {
         Vec::new(),
     ));
     templates.push(Template::new(
-        Some(pattern("pair", vec![Term::Variable(0), Term::Variable(1)])),
+        // Repeating Y in the head excludes independent block emission, so the
+        // probe count below specifically observes the ordinary join's pruning.
+        Some(pattern(
+            "pair",
+            vec![Term::Variable(0), Term::Variable(1), Term::Variable(1)],
+        )),
         vec![
             pattern("d", vec![Term::Variable(0)]),
             pattern("d", vec![Term::Variable(1)]),
@@ -293,12 +298,13 @@ fn gates_prune_after_their_arguments_are_bound_before_a_cartesian_join() {
         .expect("complete check");
     assert!(result.accepted());
     assert_eq!(result.closure().atoms().len(), 129);
-    // Compare non-catalog work with the unpruned Cartesian row population.
-    // This includes joins, rounds, gates and emission. Catalog construction
-    // and comparisons now have their own charged schedule.
-    let non_catalog_work = result.statistics().work - result.statistics().catalog_work;
+    assert_eq!(result.statistics().block_steps, 0);
+    // Check relational probes, not total work: checked term navigation and
+    // publication are independent of whether this join visits Cartesian pairs.
+    // Delaying the gate until both arguments are bound requires at least size²
+    // tuple probes; early pruning must avoid that population.
     assert!(
-        non_catalog_work < u64::try_from(size * size).unwrap(),
+        result.statistics().tuple_probes < u64::try_from(size * size).unwrap(),
         "{:?}",
         result.statistics()
     );

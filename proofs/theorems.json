@@ -810,6 +810,76 @@
     "line": 320
   },
   {
+    "name": "Zetesis.CanonicalCatalog.selection_exact",
+    "file": "Zetesis/CanonicalCatalog.lean",
+    "line": 33
+  },
+  {
+    "name": "Zetesis.CanonicalCatalog.normalized_selection_exact",
+    "file": "Zetesis/CanonicalCatalog.lean",
+    "line": 63
+  },
+  {
+    "name": "Zetesis.CanonicalCatalog.append_preserves_interpretation",
+    "file": "Zetesis/CanonicalCatalog.lean",
+    "line": 93
+  },
+  {
+    "name": "Zetesis.CanonicalCatalog.owner_transfer_preserves_interpretation",
+    "file": "Zetesis/CanonicalCatalog.lean",
+    "line": 117
+  },
+  {
+    "name": "Zetesis.CanonicalCatalog.raw_ids_do_not_determine_interpretation",
+    "file": "Zetesis/CanonicalCatalog.lean",
+    "line": 137
+  },
+  {
+    "name": "Zetesis.CanonicalTemplates.read_decodes",
+    "file": "Zetesis/CanonicalTemplates.lean",
+    "line": 51
+  },
+  {
+    "name": "Zetesis.CanonicalTemplates.substitute_decodes",
+    "file": "Zetesis/CanonicalTemplates.lean",
+    "line": 60
+  },
+  {
+    "name": "Zetesis.CanonicalTemplates.substitute_agrees",
+    "file": "Zetesis/CanonicalTemplates.lean",
+    "line": 74
+  },
+  {
+    "name": "Zetesis.CanonicalTemplates.variables_are_scope_reads",
+    "file": "Zetesis/CanonicalTemplates.lean",
+    "line": 93
+  },
+  {
+    "name": "Zetesis.CarrierCoordinates.decode_injective",
+    "file": "Zetesis/CarrierCoordinates.lean",
+    "line": 45
+  },
+  {
+    "name": "Zetesis.CarrierCoordinates.tuple_before_iff",
+    "file": "Zetesis/CarrierCoordinates.lean",
+    "line": 62
+  },
+  {
+    "name": "Zetesis.CarrierCoordinates.decode_before_iff",
+    "file": "Zetesis/CarrierCoordinates.lean",
+    "line": 97
+  },
+  {
+    "name": "Zetesis.CarrierCoordinates.sparse_membership_iff",
+    "file": "Zetesis/CarrierCoordinates.lean",
+    "line": 128
+  },
+  {
+    "name": "Zetesis.CarrierCoordinates.shared_vocabulary_does_not_identify_atoms",
+    "file": "Zetesis/CarrierCoordinates.lean",
+    "line": 150
+  },
+  {
     "name": "Zetesis.CertifiedExecution.ranked_support_verdict_sound",
     "file": "Zetesis/CertifiedExecution.lean",
     "line": 42

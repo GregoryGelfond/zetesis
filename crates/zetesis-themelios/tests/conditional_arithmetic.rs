@@ -34,7 +34,11 @@ fn check(source: &str, warnings: usize, expected: &[&str]) {
     let expected = admit(&facts).unwrap();
     assert_eq!(
         stable_models::stable(&admitted),
-        BTreeSet::from([expected.atoms().iter().cloned().collect()]),
+        BTreeSet::from([expected
+            .atoms()
+            .iter()
+            .map(|atom| atom.to_atom(zetesis_core::ValueLimits::default()).unwrap())
+            .collect()]),
         "{source}",
     );
 }

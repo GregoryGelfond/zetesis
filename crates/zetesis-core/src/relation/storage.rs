@@ -2,7 +2,7 @@
 
 use std::{cmp::Ordering, mem::size_of};
 
-use crate::{Predicate, Value};
+use crate::catalog::{PredicateRef, TermRef};
 
 use super::{
     Cell, DictionaryIndex, Failure, Layout, LayoutOwner, Limits, Relation, Resource, Source,
@@ -10,7 +10,7 @@ use super::{
 };
 
 pub(super) fn build<'source>(
-    predicate: &'source Predicate,
+    predicate: PredicateRef<'source>,
     source: Source<'source>,
     limits: Limits,
 ) -> Result<Relation<'source>, Failure> {
@@ -29,18 +29,17 @@ pub(super) fn build<'source>(
         .checked_mul(predicate.arity())
         .ok_or(Failure::Overflow)?;
     let mapping = match &source {
-        Source::Atoms(_) => 0,
-        Source::Catalog { indices, .. } => indices
+        Source::Atoms(_) | Source::Canonical(_) => 0,
+        Source::Catalog { indices, .. } | Source::CanonicalCatalog { indices, .. } => indices
             .len()
             .checked_mul(size_of::<usize>())
             .ok_or(Failure::Overflow)?,
     };
     let mut work = Work::new(limits, size_of::<Relation<'_>>() as u128)?;
-    let payload = validate(predicate, &source, &mut work)?;
+    let encoding_bytes = validate(predicate, &source, &mut work)?;
     let mut values = work.reserve(cells)?;
     for row in 0..source.len() {
-        let atom = source.atom(row).ok_or(Failure::CatalogIndex)?;
-        for column in 0..atom.values().len() {
+        for column in 0..predicate.arity() {
             work.tick(1)?;
             values.push(Cell { row, column });
         }
@@ -66,8 +65,11 @@ pub(super) fn build<'source>(
         columns,
     };
     for row in 0..source.len() {
+        work.tick(1)?;
         let atom = source.atom(row).ok_or(Failure::CatalogIndex)?;
-        for (column, value) in atom.values().iter().enumerate() {
+        for column in 0..predicate.arity() {
+            work.tick(1)?;
+            let value = atom.values().at(column).ok_or(Failure::Column)?;
             let id = lookup(&layout, &source, value, &mut work)?.ok_or(Failure::Dictionary)?;
             work.tick(1)?;
             layout.columns[column][row] = id;
@@ -80,29 +82,39 @@ pub(super) fn build<'source>(
         storage: Storage {
             retained_bytes: work.live,
             peak_construction_bytes: work.peak,
-            referenced_payload_bytes: payload,
+            referenced_encoding_bytes: encoding_bytes,
             borrowed_mapping_bytes: mapping,
             construction_work: work.used,
         },
     })
 }
 
-fn validate(predicate: &Predicate, source: &Source<'_>, work: &mut Work) -> Result<u128, Failure> {
-    let mut payload = 0_u128;
+fn validate(
+    predicate: PredicateRef<'_>,
+    source: &Source<'_>,
+    work: &mut Work,
+) -> Result<u128, Failure> {
+    let mut encoding_bytes = 0_u128;
     for row in 0..source.len() {
+        work.tick(1)?;
         let atom = source.atom(row).ok_or(Failure::CatalogIndex)?;
-        work.tick(1 + predicate.name().len() as u128 + atom.predicate().name().len() as u128)?;
-        if atom.predicate() != predicate {
+        if !atom
+            .predicate()
+            .compare_ref_with(predicate, || work.tick(1))?
+            .is_eq()
+        {
             return Err(Failure::Predicate);
         }
-        for value in atom.values() {
-            work.tick(1 + value.payload_bytes() as u128)?;
-            payload = payload
-                .checked_add(value.payload_bytes() as u128)
+        for column in 0..predicate.arity() {
+            work.tick(1)?;
+            let value = atom.values().at(column).ok_or(Failure::Column)?;
+            let bytes = value.canonical_bytes_with(|| work.tick(1))?;
+            encoding_bytes = encoding_bytes
+                .checked_add(bytes as u128)
                 .ok_or(Failure::Overflow)?;
         }
     }
-    Ok(payload)
+    Ok(encoding_bytes)
 }
 
 /// Width doubles after each complete pass. Before a pass, adjacent runs of at
@@ -206,7 +218,7 @@ fn differs(
 pub(super) fn lookup(
     layout: &Layout,
     source: &Source<'_>,
-    value: &Value,
+    value: TermRef<'_>,
     work: &mut Work,
 ) -> Result<Option<u32>, Failure> {
     lookup_with(layout, source, value, &mut || work.tick(1))
@@ -216,7 +228,7 @@ pub(super) fn lookup(
 pub(super) fn lookup_with<E: From<Failure>>(
     layout: &Layout,
     source: &Source<'_>,
-    value: &Value,
+    value: TermRef<'_>,
     before: &mut impl FnMut() -> Result<(), E>,
 ) -> Result<Option<u32>, E> {
     match &layout.index {
@@ -229,7 +241,7 @@ pub(super) fn lookup_with<E: From<Failure>>(
                 let id = ordered[middle];
                 match layout.dictionary[id as usize]
                     .value(source)?
-                    .compare_identity_with(value, &mut *before)?
+                    .compare_ref_with(value, &mut *before)?
                 {
                     Ordering::Less => start = middle + 1,
                     Ordering::Equal => return Ok(Some(id)),
@@ -243,7 +255,7 @@ pub(super) fn lookup_with<E: From<Failure>>(
             index.root,
             |id| {
                 before()?;
-                value.compare_identity_with(layout.dictionary[id].value(source)?, &mut *before)
+                value.compare_ref_with(layout.dictionary[id].value(source)?, &mut *before)
             },
             |_| {},
         )?

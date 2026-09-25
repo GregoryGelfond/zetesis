@@ -39,11 +39,16 @@ fn candidates(source: &Program, limits: CandidateLimits) -> Candidates<'_> {
 fn mixed_selection_and_owned_pulls_preserve_the_restricted_sequence() {
     let source = program();
     let expected: Vec<_> = candidates(&source, CandidateLimits::default())
-        .map(|seed| seed.unwrap().atoms().clone())
+        .map(Result::unwrap)
         .collect();
     let names: Vec<Vec<_>> = expected
         .iter()
-        .map(|atoms| atoms.iter().map(|atom| atom.predicate().name()).collect())
+        .map(|seed| {
+            seed.atoms()
+                .iter()
+                .map(|atom| atom.predicate().name())
+                .collect()
+        })
         .collect();
     assert_eq!(
         names,
@@ -63,7 +68,7 @@ fn mixed_selection_and_owned_pulls_preserve_the_restricted_sequence() {
         } else {
             mixed.next().unwrap().unwrap()
         };
-        assert_eq!(actual.atoms(), &expected);
+        assert!(actual.atoms().iter().eq(expected.atoms().iter()));
     }
     assert!(mixed.next_selection().is_none());
     assert!(mixed.next().is_none());
@@ -83,8 +88,17 @@ fn later_carries_and_batches_share_the_original_atom_payload() {
     while let Some(selection) = candidates.next_selection() {
         let selection = selection.unwrap();
         if let Some(stored) = selection.view().atoms().find(|stored| *stored == atom) {
-            assert!(std::ptr::eq(stored, atom));
-            assert_eq!(stored.values().as_ptr(), atom.values().as_ptr());
+            let zetesis_core::ValueNodeRef::String(original) =
+                atom.values().at(0).unwrap().descriptor()
+            else {
+                panic!("string fixture");
+            };
+            let zetesis_core::ValueNodeRef::String(shared) =
+                stored.values().at(0).unwrap().descriptor()
+            else {
+                panic!("string fixture");
+            };
+            assert!(std::ptr::eq(original, shared));
             repeated += 1;
         }
     }
@@ -109,7 +123,7 @@ fn both_candidate_doors_share_inclusive_limits_and_terminal_errors() {
                 .next_selection()
                 .map(|result| result.map(|selection| selection.to_seed()));
             match (a, b) {
-                (Some(Ok(a)), Some(Ok(b))) => assert_eq!(a.atoms(), b.atoms()),
+                (Some(Ok(a)), Some(Ok(b))) => assert!(a.atoms().iter().eq(b.atoms().iter())),
                 (Some(Err(a)), Some(Err(b))) => {
                     assert_eq!(a, b);
                     break;

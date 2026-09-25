@@ -1,8 +1,9 @@
 use themelios_base::source::SourceId;
 use themelios_base::span::{ByteOffset, Location, Span};
-use zetesis_core::{Sign, ValueLimits, ValueNode};
+use zetesis_core::{Sign, Term, ValueLimits, ValueNode, ValueNodeRef};
 
 use super::*;
+use crate::formula_support::{Computation, Support, testing};
 
 fn location() -> Location {
     Location {
@@ -11,7 +12,7 @@ fn location() -> Location {
     }
 }
 
-fn insert(catalog: &mut SupportCatalog, atom: Atom) {
+fn insert(catalog: &mut SupportCatalog, atom: &Atom) {
     *catalog = std::mem::take(catalog)
         .insert(
             atom,
@@ -50,7 +51,7 @@ fn contains(support: &Relations<'_>, atom: &Atom) -> bool {
 fn membership_preserves_append_order() {
     let mut catalog = SupportCatalog::default();
     for value in [3, 1, 2] {
-        insert(&mut catalog, atom(&[value]));
+        insert(&mut catalog, &atom(&[value]));
     }
     {
         let support = catalog
@@ -66,18 +67,18 @@ fn membership_preserves_append_order() {
         assert!(!contains(&support, &atom(&[0])));
         let rows: Vec<_> = support
             .rows(atom(&[0]).predicate())
-            .map(|row| (row.source_index(), row.value(0).unwrap().clone()))
+            .map(|row| (row.source_index(), row.value(0).unwrap().descriptor()))
             .collect();
         assert_eq!(
             rows,
             vec![
-                (0, Value::Number(3)),
-                (1, Value::Number(1)),
-                (2, Value::Number(2))
+                (0, ValueNodeRef::Number(3)),
+                (1, ValueNodeRef::Number(1)),
+                (2, ValueNodeRef::Number(2))
             ]
         );
     }
-    insert(&mut catalog, atom(&[0]));
+    insert(&mut catalog, &atom(&[0]));
     let support = catalog
         .snapshot(
             &FormulaLimits::default(),
@@ -86,12 +87,20 @@ fn membership_preserves_append_order() {
         )
         .unwrap();
     assert_eq!(
-        support.row(atom(&[0]).predicate(), 3).unwrap().value(0),
-        Some(&Value::Number(0))
+        support
+            .row(atom(&[0]).predicate(), 3)
+            .unwrap()
+            .value(0)
+            .map(TermRef::descriptor),
+        Some(ValueNodeRef::Number(0))
     );
     assert_eq!(
-        support.row(atom(&[3]).predicate(), 0).unwrap().value(0),
-        Some(&Value::Number(3))
+        support
+            .row(atom(&[3]).predicate(), 0)
+            .unwrap()
+            .value(0)
+            .map(TermRef::descriptor),
+        Some(ValueNodeRef::Number(3))
     );
 }
 
@@ -99,21 +108,21 @@ fn membership_preserves_append_order() {
 fn snapshots_reuse_columns_without_row_work() {
     let mut catalog = SupportCatalog::default();
     for value in 0..64 {
-        insert(&mut catalog, atom(&[value]));
+        insert(&mut catalog, &atom(&[value]));
     }
     let mut counters = Counters::default();
     let first = catalog
         .snapshot(&FormulaLimits::default(), &mut counters, location())
         .unwrap();
-    let first_work = counters.work;
+    let first_work = counters.accounting.work;
     let second = catalog
         .snapshot(&FormulaLimits::default(), &mut counters, location())
         .unwrap();
     assert_eq!(first_work, 1);
-    assert_eq!(counters.work, 2);
+    assert_eq!(counters.accounting.work, 2);
     let predicate = atom(&[0]);
-    let left = &first.rows[predicate.predicate()];
-    let right = &second.rows[predicate.predicate()];
+    let left = first.find(predicate.predicate().into()).unwrap();
+    let right = second.find(predicate.predicate().into()).unwrap();
     assert!(std::ptr::eq(left.columns, right.columns));
     assert!(std::ptr::eq(
         left.relation.column(0).unwrap(),
@@ -130,7 +139,7 @@ fn nullary_membership_retains_predicate_sign() {
     )
     .unwrap();
     let mut catalog = SupportCatalog::default();
-    insert(&mut catalog, negative.clone());
+    insert(&mut catalog, &negative);
     let support = catalog
         .snapshot(
             &FormulaLimits::default(),
@@ -141,7 +150,7 @@ fn nullary_membership_retains_predicate_sign() {
     assert!(contains(&support, &negative));
     assert!(!contains(&support, &positive));
     let row = support.row(negative.predicate(), 0).unwrap();
-    assert_eq!(row.predicate(), negative.predicate());
+    assert_eq!(row.predicate(), PredicateRef::from(negative.predicate()));
     assert_eq!(row.value(0), None);
     assert_eq!(support.row_count(positive.predicate()), 0);
 }
@@ -154,7 +163,7 @@ fn column_lookup_preserves_the_shortest_posting() {
         .collect();
     let mut catalog = SupportCatalog::default();
     for row in &original {
-        insert(&mut catalog, row.clone());
+        insert(&mut catalog, row);
     }
     let support = catalog
         .snapshot(
@@ -224,7 +233,7 @@ fn column_lookup_retains_whole_typed_keys() {
     for value in &values {
         insert(
             &mut catalog,
-            Atom::new(predicate.clone(), vec![value.clone()]).unwrap(),
+            &Atom::new(predicate.clone(), vec![value.clone()]).unwrap(),
         );
     }
     let support = catalog
@@ -256,7 +265,7 @@ fn column_lookup_retains_whole_typed_keys() {
 fn snapshot_bytes_include_the_borrowed_owner() {
     let mut catalog = SupportCatalog::default();
     for values in [[2, 1], [1, 2], [2, 2]] {
-        insert(&mut catalog, atom(&values));
+        insert(&mut catalog, &atom(&values));
     }
     let support = catalog
         .snapshot(
@@ -296,7 +305,7 @@ fn snapshot_bytes_include_the_borrowed_owner() {
 #[test]
 fn probe_bytes_include_keys_beside_the_query() {
     let mut catalog = SupportCatalog::default();
-    insert(&mut catalog, atom(&[1, 2]));
+    insert(&mut catalog, &atom(&[1, 2]));
     let support = catalog
         .snapshot(
             &FormulaLimits::default(),
@@ -310,18 +319,20 @@ fn probe_bytes_include_keys_beside_the_query() {
     )
     .unwrap();
     let binding = [Some(Value::Number(2))];
-    let keys = [(0, &Value::Number(1)), (1, &Value::Number(2))];
+    let keys = [
+        (0, TermRef::from(&Value::Number(1))),
+        (1, TermRef::from(&Value::Number(2))),
+    ];
     let query = support
         .rows
-        .values()
-        .next()
+        .first()
         .unwrap()
         .relation
         .query(&keys, Limits::default())
         .unwrap();
     let bytes = support.bytes
-        + size_of::<Vec<(usize, &Value)>>()
-        + 2 * size_of::<(usize, &Value)>()
+        + size_of::<Vec<(usize, TermRef<'_>)>>()
+        + 2 * size_of::<(usize, TermRef<'_>)>()
         + query.retained_bytes();
     drop(query);
     let exact = FormulaLimits {
@@ -355,7 +366,7 @@ fn probe_bytes_include_keys_beside_the_query() {
 #[test]
 fn probe_work_includes_typed_query_resolution() {
     let mut catalog = SupportCatalog::default();
-    insert(&mut catalog, atom(&[1, 2]));
+    insert(&mut catalog, &atom(&[1, 2]));
     let support = catalog
         .snapshot(
             &FormulaLimits::default(),
@@ -371,7 +382,10 @@ fn probe_work_includes_typed_query_resolution() {
     let binding = [Some(Value::Number(2))];
     let initial_work = 7;
     let counters_at_entry = || Counters {
-        work: initial_work,
+        accounting: super::super::Accounting {
+            work: initial_work,
+            ..Default::default()
+        },
         ..Counters::default()
     };
     let mut counters = counters_at_entry();
@@ -384,9 +398,9 @@ fn probe_work_includes_typed_query_resolution() {
             location(),
         )
         .unwrap();
-    assert!(counters.work > initial_work + pattern.terms().len() as u64);
+    assert!(counters.accounting.work > initial_work + pattern.terms().len() as u64);
     let exact = FormulaLimits {
-        max_work: counters.work,
+        max_work: counters.accounting.work,
         ..FormulaLimits::default()
     };
     assert_eq!(
@@ -401,7 +415,7 @@ fn probe_work_includes_typed_query_resolution() {
             .unwrap(),
         Some([0].as_slice())
     );
-    for maximum in initial_work..counters.work {
+    for maximum in initial_work..counters.accounting.work {
         let below = FormulaLimits {
             max_work: maximum,
             ..exact
@@ -417,7 +431,7 @@ fn probe_work_includes_typed_query_resolution() {
         // The outer term scan and the inner dictionary prefix are both spent,
         // even though no posting is returned. Mapping must not add the prefix
         // twice to the refusal's original cumulative amount.
-        assert_eq!(failed.work, maximum);
+        assert_eq!(failed.accounting.work, maximum);
     }
 }
 
@@ -437,7 +451,7 @@ fn relation_refusal_retains_the_source_location() {
 #[test]
 fn membership_preserves_cumulative_work_limits() {
     let mut catalog = SupportCatalog::default();
-    insert(&mut catalog, atom(&[3]));
+    insert(&mut catalog, &atom(&[3]));
     let limits = FormulaLimits::default();
     let support = catalog
         .snapshot(&limits, &mut Counters::default(), location())
@@ -448,7 +462,10 @@ fn membership_preserves_cumulative_work_limits() {
     let key = pattern.key(values.as_slice()).unwrap();
     let initial = 7;
     let fresh = || Counters {
-        work: initial,
+        accounting: super::super::Accounting {
+            work: initial,
+            ..Default::default()
+        },
         ..Counters::default()
     };
     let mut counters = fresh();
@@ -457,9 +474,9 @@ fn membership_preserves_cumulative_work_limits() {
             .contains(&key, &limits, &mut counters, location())
             .unwrap()
     );
-    assert!(counters.work > initial);
+    assert!(counters.accounting.work > initial);
     let exact = FormulaLimits {
-        max_work: counters.work,
+        max_work: counters.accounting.work,
         ..limits
     };
     assert!(
@@ -468,11 +485,11 @@ fn membership_preserves_cumulative_work_limits() {
             .unwrap()
     );
     let short = FormulaLimits {
-        max_work: counters.work - 1,
+        max_work: counters.accounting.work - 1,
         ..exact
     };
     assert!(
-        matches!(support.contains(&key, &short, &mut fresh(), location()), Err(FormulaFailure::Limit { resource: FormulaResource::Work, observed, limit, location: found }) if observed == u128::from(counters.work) && limit == u128::from(counters.work - 1) && found == location())
+        matches!(support.contains(&key, &short, &mut fresh(), location()), Err(FormulaFailure::Limit { resource: FormulaResource::Work, observed, limit, location: found }) if observed == u128::from(counters.accounting.work) && limit == u128::from(counters.accounting.work - 1) && found == location())
     );
 }
 
@@ -480,7 +497,7 @@ fn membership_preserves_cumulative_work_limits() {
 fn shared_probe_refusal_preserves_its_dictionary_prefix() {
     let mut catalog = SupportCatalog::default();
     for value in 0..8 {
-        insert(&mut catalog, atom(&[value]));
+        insert(&mut catalog, &atom(&[value]));
     }
     let limits = FormulaLimits::default();
     let support = catalog
@@ -507,10 +524,9 @@ fn shared_probe_refusal_preserves_its_dictionary_prefix() {
             ..
         })
     ));
-    // One outer key visit, then one inner equality inspection; the shared
-    // quota refuses before the dictionary search's next charged read.
-    // Postcharging the complete query would instead retain only the outer 1.
-    assert_eq!(counters.work, 2);
+    // Predicate resolution now precedes the key and dictionary probes.
+    // Every admitted prefix still consumes exactly the shared work allowance.
+    assert_eq!(counters.accounting.work, 2);
     assert_eq!(allowance.statistics().work, 2);
 }
 
@@ -518,7 +534,7 @@ fn shared_probe_refusal_preserves_its_dictionary_prefix() {
 fn shared_probe_matches_local_execution() {
     let mut catalog = SupportCatalog::default();
     for value in 0..8 {
-        insert(&mut catalog, atom(&[value]));
+        insert(&mut catalog, &atom(&[value]));
     }
     let limits = FormulaLimits::default();
     let support = catalog
@@ -541,6 +557,176 @@ fn shared_probe_matches_local_execution() {
         .probe(&pattern, &[], &limits, &mut shared, location())
         .unwrap();
     assert_eq!(actual, expected);
-    assert_eq!(shared.work, local.work);
-    assert_eq!(allowance.statistics().work, local.work);
+    assert_eq!(shared.accounting.work, local.accounting.work);
+    assert_eq!(allowance.statistics().work, local.accounting.work);
 }
+
+#[test]
+fn round_heads_share_one_discovery_without_entering_the_borrowed_snapshot() {
+    let limits = FormulaLimits::default();
+    let mut counters = Counters::default();
+    let mut catalog = SupportCatalog::default();
+    insert(&mut catalog, &atom(&[1]));
+    let predicate = Predicate::new("row", 1).unwrap();
+    let pattern = AtomPattern::new(predicate.clone(), vec![Term::Variable(0)]).unwrap();
+    let values = [Value::Number(2)];
+    let key = pattern.key(values.as_slice()).unwrap();
+    let pattern = testing::admit_pattern(&mut catalog, &pattern, &mut counters, location());
+    {
+        let (relations, mut append) = catalog.split(&limits, &mut counters, location()).unwrap();
+        let support = Support::indexed(&relations, &limits, &counters, location()).unwrap();
+        {
+            let mut computation = Computation::new(&mut append, &support);
+            let pattern = computation
+                .static_pattern(pattern, &limits, &mut counters, location())
+                .unwrap();
+            let binding = testing::binding(
+                &[Some(Value::Number(2))],
+                &mut computation,
+                &mut counters,
+                location(),
+            );
+            let first = computation
+                .atom(pattern, &binding, &limits, &mut counters, location())
+                .unwrap();
+            computation
+                .support(&first, &limits, &mut counters, location())
+                .unwrap();
+            let retained = relations.current_bytes();
+            let repeated = computation
+                .atom(pattern, &binding, &limits, &mut counters, location())
+                .unwrap();
+            computation
+                .support(&repeated, &limits, &mut counters, location())
+                .unwrap();
+            assert_eq!(first.position, repeated.position);
+            assert!(first.scope.same(&repeated.scope));
+            assert_eq!(relations.current_bytes(), retained);
+            assert!(
+                computation
+                    .contains(key, &limits, &mut counters, location())
+                    .unwrap()
+            );
+        }
+        assert_eq!(append.atoms().count(), 1);
+        assert!(
+            !relations
+                .contains(&key, &limits, &mut counters, location())
+                .unwrap()
+        );
+        assert_eq!(relations.row_count(&predicate), 1);
+    }
+    catalog.publish(&limits, &mut counters, location()).unwrap();
+    let relations = catalog
+        .snapshot(&limits, &mut counters, location())
+        .unwrap();
+    assert_eq!(relations.row_count(&predicate), 2);
+    assert_eq!(relations.old_rows(&predicate), 1);
+    assert!(
+        relations
+            .contains(&key, &limits, &mut counters, location())
+            .unwrap()
+    );
+}
+
+#[test]
+fn round_publication_orders_new_rows_by_typed_identity() {
+    let limits = FormulaLimits::default();
+    let mut counters = Counters::default();
+    let mut catalog = SupportCatalog::default();
+    let predicate = Predicate::new("row", 1).unwrap();
+    let pattern = AtomPattern::new(predicate.clone(), vec![Term::Variable(0)]).unwrap();
+    let pattern = testing::admit_pattern(&mut catalog, &pattern, &mut counters, location());
+    {
+        let (relations, mut append) = catalog.split(&limits, &mut counters, location()).unwrap();
+        let support = Support::indexed(&relations, &limits, &counters, location()).unwrap();
+        {
+            let mut computation = Computation::new(&mut append, &support);
+            let pattern = computation
+                .static_pattern(pattern, &limits, &mut counters, location())
+                .unwrap();
+            for value in [3, 1, 2] {
+                let binding = testing::binding(
+                    &[Some(Value::Number(value))],
+                    &mut computation,
+                    &mut counters,
+                    location(),
+                );
+                let head = computation
+                    .atom(pattern, &binding, &limits, &mut counters, location())
+                    .unwrap();
+                computation
+                    .support(&head, &limits, &mut counters, location())
+                    .unwrap();
+            }
+        }
+        append.order(&limits, &mut counters, location()).unwrap();
+    }
+    catalog.publish(&limits, &mut counters, location()).unwrap();
+    let relations = catalog
+        .snapshot(&limits, &mut counters, location())
+        .unwrap();
+    let actual: Vec<_> = relations
+        .rows(&predicate)
+        .map(|row| row.value(0).unwrap().descriptor())
+        .collect();
+    assert_eq!(
+        actual,
+        vec![
+            ValueNodeRef::Number(1),
+            ValueNodeRef::Number(2),
+            ValueNodeRef::Number(3)
+        ]
+    );
+}
+
+#[test]
+fn append_capacity_remains_charged_to_live_snapshot_queries() {
+    let limits = FormulaLimits::default();
+    let mut counters = Counters::default();
+    let mut catalog = SupportCatalog::default();
+    insert(&mut catalog, &atom(&[1]));
+    let predicate = Predicate::new("row", 1).unwrap();
+    let pattern = AtomPattern::new(predicate, vec![Term::Variable(0)]).unwrap();
+    let compiled = testing::admit_pattern(&mut catalog, &pattern, &mut counters, location());
+    let (relations, mut append) = catalog.split(&limits, &mut counters, location()).unwrap();
+    let support = Support::indexed(&relations, &limits, &counters, location()).unwrap();
+    let values = [Value::String("new payload".repeat(100))];
+    let key = pattern.key(values.as_slice()).unwrap();
+    let workspace = support.workspace_bytes();
+    {
+        let mut computation = Computation::new(&mut append, &support);
+        let pattern = computation
+            .static_pattern(compiled, &limits, &mut counters, location())
+            .unwrap();
+        let binding = testing::binding(
+            &[Some(values[0].clone())],
+            &mut computation,
+            &mut counters,
+            location(),
+        );
+        let head = computation
+            .atom(pattern, &binding, &limits, &mut counters, location())
+            .unwrap();
+        computation
+            .support(&head, &limits, &mut counters, location())
+            .unwrap();
+    }
+    // Only retained owner growth remains: transient argument and assignment
+    // frames cannot make the subsequent live-snapshot refusal pass by accident.
+    assert_eq!(support.workspace_bytes(), workspace);
+    assert!(relations.current_bytes() > relations.bytes);
+    let bounded = FormulaLimits {
+        max_support_bytes: relations.bytes,
+        ..limits
+    };
+    assert!(matches!(
+        support.contains(&key, &bounded, &mut counters, location()),
+        Err(FormulaFailure::Limit {
+            resource: FormulaResource::SupportBytes,
+            ..
+        })
+    ));
+}
+
+mod storage;

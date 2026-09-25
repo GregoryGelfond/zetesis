@@ -1,7 +1,7 @@
 //! Hand-derived full answer families for interacting finite source constructs.
 
 use super::{Case, Record, atom};
-use zetesis_core::{Atom, Sign, Value, ValueLimits, ValueNode};
+use zetesis_core::{Atom, Model, Sign, Value, ValueLimits, ValueNode};
 
 fn function(value: i32) -> Value {
     Value::from_nodes(
@@ -25,7 +25,7 @@ fn number(name: &str, value: i32) -> Atom {
 fn record(mut atoms: Vec<Atom>, cost: i64, display: String) -> Record {
     atoms.sort();
     Record {
-        atoms,
+        atoms: Model::new(atoms).unwrap(),
         costs: vec![(1, cost)],
         display,
     }

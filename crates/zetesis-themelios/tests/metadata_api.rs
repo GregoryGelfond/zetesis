@@ -45,6 +45,7 @@ fn model() -> Model {
         .unwrap(),
         Atom::new(Predicate::new("hidden", 0).unwrap(), vec![]).unwrap(),
     ])
+    .unwrap()
 }
 
 #[test]
@@ -77,7 +78,7 @@ fn explicit_selection_matches_source_policy() {
     assert_eq!(
         full.atoms()
             .iter()
-            .filter(|atom| selection.includes(atom))
+            .filter(|atom| selection.includes(*atom))
             .count(),
         1
     );
@@ -91,6 +92,7 @@ fn empty_selection_has_no_atom_channel() {
         AtomSelectionLimits {
             max_signatures: 0,
             max_name_bytes: 0,
+            ..AtomSelectionLimits::default()
         },
     )
     .unwrap();
@@ -121,7 +123,8 @@ fn selection_limits_count_duplicate_inputs() {
             &signatures,
             AtomSelectionLimits {
                 max_signatures: 2,
-                max_name_bytes: 2
+                max_name_bytes: 2,
+                ..AtomSelectionLimits::default()
             }
         )
         .is_ok()
@@ -131,7 +134,8 @@ fn selection_limits_count_duplicate_inputs() {
             &signatures,
             AtomSelectionLimits {
                 max_signatures: 1,
-                max_name_bytes: 2
+                max_name_bytes: 2,
+                ..AtomSelectionLimits::default()
             }
         ),
         Err(AtomSelectionError::Signatures {
@@ -149,7 +153,8 @@ fn selection_text_limit_is_inclusive() {
             &signatures,
             AtomSelectionLimits {
                 max_signatures: 1,
-                max_name_bytes: 4
+                max_name_bytes: 4,
+                ..AtomSelectionLimits::default()
             }
         )
         .is_ok()
@@ -159,7 +164,8 @@ fn selection_text_limit_is_inclusive() {
             &signatures,
             AtomSelectionLimits {
                 max_signatures: 1,
-                max_name_bytes: 3
+                max_name_bytes: 3,
+                ..AtomSelectionLimits::default()
             }
         ),
         Err(AtomSelectionError::NameBytes {
@@ -208,7 +214,7 @@ fn parsed_metadata_retains_duplicate_origins() {
     let (source, shared) = program("#show p/1. #show p/1.");
     let native = SourceMetadata::compile(&shared, MetadataLimits::default(), fallback()).unwrap();
     assert_eq!(native.directives().len(), 2);
-    for directive in native.directives() {
+    for directive in native.directives().iter() {
         assert_eq!(directive.location().source, source.id());
         assert_eq!(source.slice(directive.location().span), Ok("#show p/1."));
     }
@@ -416,7 +422,11 @@ fn metadata_compilation_does_not_admit_rules() {
     assert_eq!(
         native
             .observations()
-            .evaluate(&Model::new([]), Limits::default(), &Cancellation::default())
+            .evaluate(
+                &Model::new([]).unwrap(),
+                Limits::default(),
+                &Cancellation::default()
+            )
             .unwrap()
             .symbols(),
         &[Symbol::Number(1)]
@@ -493,9 +503,13 @@ fn native_metadata_preserves_structured_expression_values() {
             Symbol::Number(1),
         ])],
     );
-    assert_eq!(
-        native.atom_selection().signatures(),
-        &[Predicate::with_sign("p", 1, Sign::Negative).unwrap()],
+    let expected = Predicate::with_sign("p", 1, Sign::Negative).unwrap();
+    assert!(
+        native
+            .atom_selection()
+            .signatures()
+            .iter()
+            .eq([zetesis_core::catalog::PredicateRef::from(&expected)])
     );
 }
 

@@ -59,7 +59,7 @@ fn attempt(
         .unwrap()
         .accepted()
     );
-    let model = Model::new(candidate.atoms().map(|id| planned.atoms()[id].clone()));
+    let model = Model::from_positions(planned.atom_catalog(), candidate.atoms()).unwrap();
     let score = zetesis_objective::evaluate(
         planned.objectives(),
         &model,

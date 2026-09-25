@@ -8,8 +8,8 @@ use themelios_program::program::{
 };
 use themelios_program::provenance::WithProvenance;
 
+use crate::FormulaFailure;
 use crate::formula_ir::{Compiler, RuleIr};
-use crate::{FormulaFailure, ProjectSelection};
 
 impl Compiler<'_> {
     pub(super) fn project_statement(
@@ -18,17 +18,13 @@ impl Compiler<'_> {
         origins: &[Location],
         projection_nodes: &mut u128,
         declarations: &mut Vec<RuleIr>,
-        selection: &mut ProjectSelection,
     ) -> Result<bool, FormulaFailure> {
         let Statement::Project(project) = statement.get() else {
             return Ok(false);
         };
         match project {
-            Project::Signature(signature) => {
-                selection.signature(crate::metadata::predicate(signature, self.location)?);
-            }
+            Project::Signature(_) => {}
             Project::Atom { atom, body } => {
-                selection.atom();
                 let literal = Literal {
                     negation: DefaultNegation::None,
                     inner: LiteralInner::Atom(atom.clone()),
@@ -41,7 +37,8 @@ impl Compiler<'_> {
                 let dependency_projection = self.dependency_projection;
                 // Declaration constants belong to this scope, not the logical
                 // rule domain. Aggregate IDs remain unique across both owners.
-                let domain = std::mem::take(&mut self.domain);
+                let empty = self.empty_domain()?;
+                let domain = std::mem::replace(&mut self.domain, empty);
                 let result = self.source_rules(
                     &rule,
                     origins,

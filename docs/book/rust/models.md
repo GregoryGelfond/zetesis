@@ -8,40 +8,52 @@ Display selection never changes this identity.
 
 ## Catalog and selection
 
-An `AtomCatalog` owns immutable typed atoms in their original dense index order.
-Its constructor consumes a `Vec<Atom>` without copying, reordering or reallocating
-its cells. A `Model` retains that catalog and a canonical selection of positions.
-It validates every position, orders selected handles by complete atom identity
-and coalesces duplicate logical atoms. Different catalogs and index orders can
-therefore denote equal models. Signed predicates, strings, symbols, numbers and
+An `AtomCatalog` retains one immutable canonical store and an original-order
+occurrence map. `AtomCatalog::new(Vec<Atom>)` consumes construction descriptions
+and imports their typed contents; it does not adopt their cells or preserve
+input addresses. Equal terms, subterms and complete atoms share canonical
+identities. Repeated input atoms still retain separate occurrence positions.
+A `Model` adds an ordered selection of those positions. Position validation,
+semantic ordering and duplicate coalescing produce a true set independently of
+the catalog's original order. Signed predicates, strings, symbols, numbers and
 structured values retain their distinct identities.
 
-Admitted formula owners and eager `GroundProgram` values expose both their
-original `atoms()` slice and shared `atom_catalog()`. Formula answers and decoded
-static words select those catalogs without cloning atoms. Shared lazy rounds
-freeze one catalog after their complete no-delta scan; all completed worlds
-then select that same owner. Source carriers can grow before that publication
-point. Scalar closure transfers its owned consequences into the same model representation.
+There are three separate coordinates: a canonical identity within its owner,
+an original occurrence in a catalog, and a selected true position in a model.
+Raw IDs from different owners are not comparable. `AtomCatalog::same_owner`
+checks the exact occurrence owner; `shares_terms` checks only the term authority.
+Neither asserts the same truth selection. Borrowed `Atoms::same_occurrences`
+and relation `Row::occurrence_in` identify an exact source occurrence mapping,
+including duplicate positions, without a semantic search.
 
-Cloning a model shares both the catalog and selected-position vector. A retained
-model remains valid after its source, graph or session is dropped. It keeps the
-**entire catalog** alive, including unselected atoms. This amortizes atom ownership
-across a family, but a lone sparse answer may retain more payload than a separate
-copy containing only its true atoms.
+Admitted formula owners and eager `GroundProgram` values expose an `Atoms` view
+and shared `atom_catalog()`. Formula answers and decoded static words select
+these catalogs. Shared lazy rounds publish one catalog after their complete
+no-delta scan; all completed worlds select that owner. Scalar closure publishes
+its final truth over its workspace's canonical authority. Discovery and
+publication alone do not make an atom true.
+
+Cloning a model shares both the catalog and selected-position allocation. A
+retained model remains valid after its source, graph or session is dropped. It
+keeps the **entire published canonical prefix** alive, including unselected
+atoms and interned subterms; it does not retain later append segments. A sparse
+answer can therefore retain more payload than its selected atoms require.
 
 The implementation is in
-[`zetesis-core::model`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/model.rs).
-The library has one retained model representation; it does not construct a second
-hidden tree for observation or interoperability.
+[`catalog`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/catalog.rs)
+and [`model`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/model.rs).
+One retained model representation serves execution and result consumers. Source
+syntax and explicit output exports have their own ownership boundaries. Scoped
+term workspaces can refer to this catalog without becoming model selections.
 
 ## Building a catalog during grounding
 
-`zetesis_core::atom_interner::AtomInterner` owns distinct atoms in first-insertion
-order. Lookup returns the existing local position or a checked vacant entry;
-only inserting a vacant entry materializes an atom. Its index contains integer
-positions and links, rather than a second collection of atom keys. Complete typed
-identity still decides equality. The index is an execution representation, not
-an alternative meaning for an atom.
+`zetesis_core::atom_interner::AtomInterner` combines one canonical store with
+committed and pending discovery maps. Lookup returns an existing discovery
+position or a checked vacant entry. Insertion imports missing canonical
+components before publishing the new discovery position. Its AVL index contains
+positions and links; canonical interning indexes contain IDs and exact collision
+checks. Neither index retains another collection of logical payloads.
 
 During a synchronous round, `split` lends an immutable committed prefix and a
 disjoint append capability. A source scan can borrow committed atoms while its
@@ -68,15 +80,17 @@ selection and fixed local direction recording; replay admits each node visit and
 path-step write separately. These are operation units, not machine instructions.
 Canonical traversal visits the index once. Fallible reservations and work checks
 precede publication, so a stopped insertion changes neither membership nor old
-links. Already acquired capacity can remain after failure. The builder's byte
-measure covers its documented vector/index/scratch capacities and conservative
-growth overlap. The bounded local direction record and borrowed-view stack
-headers are excluded; nested atom payload and process RSS are separate measures.
+links. Complete canonical components and acquired capacity can remain after a
+later discovery refusal; they assert neither discovery nor truth. The builder's
+byte measure includes canonical payload, indexes, current snapshot directories,
+discovery maps and scratch with conservative growth overlap. The bounded local
+direction record, caller frames, allocator bookkeeping and Arc counters are
+separate. This named-capacity measure is not process RSS.
 
 This unique-builder contract is deliberately narrower than `AtomCatalog::new`.
 The public immutable constructor can retain duplicate dense slots in arbitrary
-order. Consuming an interner transfers its completed vector into that existing
-representation; it does not introduce another retained-model type. Positions
+order. Consuming an interner transfers its discovery map and shares the sealed
+canonical prefix with the immutable catalog; it releases construction indexes. Positions
 belong to their owner and must not be compared across unrelated catalogs as
 semantic identities. The
 [`implementation`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/atom_interner.rs)
@@ -90,16 +104,71 @@ checks typed identities and append rounds, and reports work and storage separate
 `model.atoms()` returns `ModelAtoms`, an immutable semantic collection view.
 It replaces the earlier concrete `&BTreeSet<Atom>` boundary. The view provides
 `iter`, `len`, `is_empty`, `contains`, `get`, `first` and `last`. Its iterator is
-canonical, double-ended, exact-size and fused. Borrowed atoms refer to their
-original catalog entries. Equality and ordering compare logical atom sequences,
-not catalog addresses.
+canonical, double-ended, exact-size and fused. Iteration yields `AtomRef` by
+value; its predicate and arguments yield `PredicateRef` and `TermRef`. These
+small references borrow an immutable owner and contain no copied payload.
+Equality, ordering and hashing use logical contents across independent owners.
 
 Use `model.clone()` to retain an interpretation cheaply. Cloning `ModelAtoms`
 only copies its borrows and cannot extend the owner's lifetime. A caller needing
-an independently owned standard collection can explicitly collect
-`model.atoms().iter().cloned()` into a `BTreeSet<Atom>` or `Vec<Atom>`; that copies
-selected payloads. The [session example](sessions.md) instead retains models and
-compares their logical identities directly.
+an independently owned construction description can call
+`AtomRef::to_atom(ValueLimits)` or `TermRef::to_value(ValueLimits)` and handle its
+explicit refusal. These are export boundaries, not execution lookup adapters.
+`TermRef::nodes` reads descriptors without a flattened copy; `write_with` spells
+a value with checked work and a separate frame-storage allowance. The output
+sink owns its allocation policy, and refusal can leave an output prefix.
+The [session example](sessions.md) retains models and compares their identities.
+
+## Scoped term workspaces
+
+The public `zetesis_core::catalog` APIs also support term processing without
+constructing a logical program. `VocabularyBuilder::new(max_storage_bytes)`
+creates an append authority for typed terms, predicates and constructor shapes.
+Use `import_term_with` for construction descriptions or foreign borrowed values,
+`construct_term_with` for children already in that vocabulary, and the checked
+predicate/constructor declaration methods for metadata. `finish_with` seals a
+`Vocabulary`; cloning it shares its immutable payload and indexes. These
+operations do not discover atoms or select truth. See the
+[`vocabulary API`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/catalog/vocabulary.rs).
+
+`CatalogRead` resolves a particular canonical prefix. Its term-only counterpart,
+`TermRead`, also resolves derived terms. A `TermKey` retains an identity witness,
+not the payload: resolving it requires a live compatible reader containing that
+term. Foreign keys and terms newer than the reader's prefix produce typed
+errors. A read borrowed from a mutable builder or arena must end before another
+append; retaining a key does not retain that read borrow.
+
+Use `read.assignment()` to create a `TermAssignment` of optional variable slots.
+Its checked resize, set and copy operations retain IDs under one scope witness;
+an empty slot denotes an unbound variable. `assignment.as_slice().bind_with`
+validates the selected slots against a live reader and returns a borrowed
+`BindingView` without copying values. This validation visits every selected
+slot. `TermSet` separately records explicitly selected roots; interning a child
+does not make it a domain member, and ID order is not semantic term order.
+The [`scoped metadata API`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/catalog/terms.rs)
+documents each frame's storage allowance and stopped-operation behavior.
+
+For evaluation over existing immutable owners, `DerivedTerms::new_with`
+registers their `CatalogRead` prefixes without copying payload.
+`borrow_with` registers an input term in the arena's fresh identity scope;
+`scalar_with` creates numbers or extrema, and `construct_with` combines local
+child slots using a declared input constructor. Strings and named values must
+come from registered canonical inputs. Equal typed contents coalesce even when
+registered through different inputs or constructed locally. The arena borrows
+its input owners, and its `TermRead` borrows the arena. It does not extend those
+input owners or their atom populations. See
+[`DerivedTerms`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/catalog/storage/derived.rs).
+
+`catalog::Limits` bounds each newly constructed logical value, including repeated
+child occurrences. The builder or arena's named-storage ceiling is separate.
+Vocabulary receipts include retained canonical payload and indexes; derived-arena
+receipts include its own metadata, generated nodes and reservation overlap but
+exclude borrowed input owners. Assignment storage has its own bound. Callers
+combining these capabilities must account for their simultaneously live owners
+and metadata; none of these receipts measures process RSS. Checked callbacks
+admit work, and a refusal can leave complete interned components or reserved
+capacity. These standalone capabilities do not require the source frontend's
+private compilation or grounding machinery.
 
 ## Costs and limits
 
@@ -107,19 +176,25 @@ For `N` catalog atoms and `M` supplied selected positions:
 
 | Operation | Work and ownership |
 | --- | --- |
-| Catalog construction | Moves the vector and traverses atom/value descriptions once to record a checked canonical payload size. No atom payload is copied. |
+| Catalog construction | Imports descriptions into a shared term DAG and canonical atom rows; records original occurrences and a checked portable encoding measure. Work includes structure, text and exact interning probes. |
 | Selection | Checks indices, performs `O(M log M)` typed atom comparisons and retains `O(M)` position cells. Equal logical atoms coalesce. |
 | Model clone | Constant time; shares the selected owner and catalog without allocation. |
-| Complete iteration | `O(M)` borrowed atom visits after duplicate removal. |
+| Complete iteration | `O(M)` borrowed atom visits after duplicate removal; resolving a canonical row also searches its immutable segment directory. |
 | Membership | `O(log M)` typed atom comparisons. |
 | Model equality/order | Lexicographic comparison of selected atom values; identical selected owners compare immediately. |
 
-Typed comparisons can inspect predicate names, tuples and structured values.
+Typed comparisons inspect predicate names, tuples and structured values. The
+constant-space canonical preorder cursor can revisit ancestors, giving quadratic
+work on deep combs; it is not a linear traversal guarantee. Checked comparisons
+admit navigation and compared text. Semantic storage order and ASP term order
+are separate operations.
 `Model::new` consumes an atom iterator, sorts and deduplicates its values, and
-selects its resulting catalog. It remains an infallible allocation door.
-`Model::from_ordered` adopts atoms a producer already holds in canonical order,
-such as the closure's relations merged in predicate order, without sorting; a
-debug build checks the order. `ModelAtoms::of_predicate` borrows one
+selects its resulting catalog. It returns a typed construction or reservation
+error. `Model::from_ordered` imports descriptions already in strict semantic
+order without sorting; a debug build checks that producer precondition.
+`from_ordered_catalog_with` instead validates an already-canonical catalog's
+strict order under caller work and selection-storage bounds, without importing
+payload again. `ModelAtoms::of_predicate` borrows one
 predicate's atoms as the contiguous range they occupy.
 `Model::from_positions` returns a typed invalid-position or selection-reservation
 error without a partial model. Arc envelope allocations remain infallible.
@@ -127,8 +202,9 @@ Neither constructor implicitly grounds or solves a program.
 
 `max_optimal_bytes` and `WorldViewLimits::max_bytes` use the common
 [`ModelRetention`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/retention.rs)
-ledger. It counts each distinct catalog allocation once, including every
-unselected atom, then adds a selected-position record per retained model entry.
+ledger. It counts the portable encoding of each distinct occurrence catalog
+once, including repeated and unselected entries, then adds a selected-position
+record per retained model entry.
 Cloned selections still count per entry. Equal-content catalogs from separate
 allocations remain separate owners; logical equality never establishes sharing.
 World-view collection adds one optional score record per answer. Optimal-tie
@@ -149,12 +225,16 @@ is admitted. Scoring work and verified/scored counts are not undone by a storage
 refusal. The standalone `Model::retained_payload_bytes` still describes one model
 in isolation; summing it does not account for sharing.
 
-This byte measure excludes spare vector/hash capacity, owner-index entries,
-Arc and allocator overhead, shared subject data and execution state. Replacement
+Canonical identities outside an occurrence map are excluded from that measure,
+even when the catalog keeps their shared prefix alive. The measure also excludes
+spare vector/hash capacity, owner-index entries, Arc and allocator overhead,
+shared subject data and execution state. Replacement
 admits the new retained family, not transient overlap with the still-live old
 family. Successful reservations can leave capacity after an abandoned admission.
-It is not RSS. `AtomCatalog::capacity`
-and `Model::selection_capacity` expose retained vector capacities separately.
+It is not RSS. `AtomCatalog::capacity` exposes occurrence-map capacity and
+`Model::selection_capacity` exposes selection capacity. `AtomCatalog::storage`
+measures named canonical-prefix retention, while `publication_bytes` and
+`Model::selection_bytes` isolate metadata for composing shared-owner ledgers.
 No universal memory or solve-time improvement follows from sharing alone.
 
 ## Representation argument
@@ -173,3 +253,10 @@ These representation laws do not establish answer-set membership themselves.
 adds the split/commit correspondence and preservation of an old selection during
 discovery. Unique local IDs require complete atom uniqueness; the laws do not
 assume that arbitrary immutable catalog inputs satisfy that extra premise.
+
+[`CanonicalCatalog`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/CanonicalCatalog.lean)
+adds the two-stage occurrence-to-identity decode, normalized selection,
+old-prefix preservation and owner transfer under explicit decoded agreement.
+It also exhibits equal raw IDs denoting different interpretations under different
+owners. These laws do not prove Rust interning uniqueness, pointer lifetimes,
+checked comparison, allocation or snapshot publication.

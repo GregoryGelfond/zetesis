@@ -1,7 +1,9 @@
+use crate::atom_interner::{AtomInterner, Limits as AtomLimits};
+use crate::catalog::{AtomRef, Atoms, PredicateRef, ReadError, TermRef};
 use proptest::prelude::*;
 
-use super::{Catalog, CatalogFailure};
-use crate::relation::{Failure, Limits, Relation, Resource};
+use super::{Canonical, Catalog, CatalogFailure, Insertion, Lookup, Preparation, Runs};
+use crate::relation::{Failure, Limits, Relation, Resource, Storage};
 use crate::{Atom, Predicate, Sign, Value, ValueLimits, ValueNode};
 
 fn atom(left: i32, right: i32) -> Atom {
@@ -12,22 +14,99 @@ fn atom(left: i32, right: i32) -> Atom {
     .unwrap()
 }
 
-fn owner() -> Catalog {
-    Catalog::new(Predicate::new("pair", 2).unwrap(), Limits::default()).unwrap()
+// Owned descriptions enter only this fixture's shared authority. Every tested
+// relation operation uses canonical references and reports metadata costs alone.
+struct Fixture {
+    authority: AtomInterner,
+    rows: Catalog,
+}
+
+fn atom_limits() -> AtomLimits {
+    AtomLimits::for_atoms(65_536, 64 * 1024 * 1024)
+}
+
+impl Fixture {
+    fn new(predicate: &Predicate, limits: Limits) -> Result<Self, CatalogFailure> {
+        let mut authority = AtomInterner::default();
+        let declared = authority
+            .declare_predicate_with(predicate, atom_limits(), || Ok::<_, ()>(()))
+            .unwrap();
+        let rows = Catalog::new(authority.read(), declared, limits)?;
+        Ok(Self { authority, rows })
+    }
+
+    fn insert(&mut self, atom: &Atom, limits: Limits) -> Result<Insertion, CatalogFailure> {
+        let canonical = self
+            .authority
+            .entry_atom_with(atom, atom_limits(), || Ok::<_, ()>(()))
+            .unwrap()
+            .insert_ref_with(atom_limits(), || Ok::<_, ()>(()))
+            .unwrap();
+        self.rows.insert(canonical, limits)
+    }
+
+    fn atoms(&self) -> Vec<AtomRef<'_>> {
+        self.source().iter().collect()
+    }
+
+    fn source(&self) -> Atoms<'_> {
+        self.rows.atoms(self.authority.read()).unwrap()
+    }
+
+    fn predicate(&self) -> PredicateRef<'_> {
+        self.rows.predicate(self.authority.read()).unwrap()
+    }
+
+    fn view(&self) -> Relation<'_> {
+        self.rows.view(self.authority.read()).unwrap()
+    }
+
+    fn lookup<'a>(
+        &self,
+        atom: impl Into<AtomRef<'a>>,
+        limits: Limits,
+    ) -> Result<Lookup, CatalogFailure> {
+        self.rows.lookup(self.authority.read(), atom.into(), limits)
+    }
+
+    fn canonical(&self, limits: Limits) -> Result<Canonical, CatalogFailure> {
+        self.rows.canonical(self.authority.read(), limits)
+    }
+
+    fn prepare_ordered(&mut self, limits: Limits) -> Result<Preparation<'_>, CatalogFailure> {
+        self.rows.prepare_ordered(self.authority.read(), limits)
+    }
+
+    fn ordered(&self) -> Option<Runs<'_>> {
+        self.rows.ordered()
+    }
+    fn retained_bytes(&self) -> usize {
+        self.rows.retained_bytes()
+    }
+    fn construction(&self) -> Storage {
+        self.rows.construction()
+    }
+    fn clear(&mut self, limits: Limits) -> Result<Storage, CatalogFailure> {
+        self.rows.clear(limits)
+    }
+}
+
+fn owner() -> Fixture {
+    Fixture::new(&Predicate::new("pair", 2).unwrap(), Limits::default()).unwrap()
 }
 
 /// Row IDs of a prepared catalog in canonical order, merged from its runs.
-fn ids(catalog: &Catalog) -> Vec<usize> {
+fn ids(catalog: &Fixture) -> Vec<usize> {
     catalog.canonical(Limits::default()).expect("prepared").ids
 }
 
 #[test]
 fn insertion_preserves_existing_equality_ids() {
     let mut catalog = owner();
-    catalog.insert(atom(9, 3), Limits::default()).unwrap();
+    catalog.insert(&atom(9, 3), Limits::default()).unwrap();
     let before: Vec<Vec<u32>> = catalog.view().columns().map(<[u32]>::to_vec).collect();
     for tuple in [atom(1, 8), atom(8, 1), atom(3, 3), atom(0, 9)] {
-        catalog.insert(tuple, Limits::default()).unwrap();
+        catalog.insert(&tuple, Limits::default()).unwrap();
     }
     let view = catalog.view();
     for (column, previous) in before.iter().enumerate() {
@@ -37,7 +116,7 @@ fn insertion_preserves_existing_equality_ids() {
         for column in 0..2 {
             assert_eq!(
                 view.row(row).unwrap().value(column).unwrap(),
-                &original.values()[column]
+                original.values().at(column).unwrap()
             );
         }
     }
@@ -47,30 +126,30 @@ fn insertion_preserves_existing_equality_ids() {
 fn duplicate_insertion_reuses_the_original_row() {
     let mut catalog = owner();
     assert_eq!(
-        catalog.insert(atom(4, 7), Limits::default()).unwrap().row,
+        catalog.insert(&atom(4, 7), Limits::default()).unwrap().row,
         0
     );
-    let duplicate = catalog.insert(atom(4, 7), Limits::default()).unwrap();
+    let duplicate = catalog.insert(&atom(4, 7), Limits::default()).unwrap();
     assert!(!duplicate.inserted);
     assert_eq!(duplicate.row, 0);
-    assert_eq!(catalog.into_atoms(), [atom(4, 7)]);
+    assert_eq!(catalog.atoms(), [atom(4, 7)]);
 }
 
 #[test]
 fn failed_work_admission_preserves_all_rows() {
     let mut reference = owner();
-    reference.insert(atom(4, 7), Limits::default()).unwrap();
+    reference.insert(&atom(4, 7), Limits::default()).unwrap();
     let required = reference
-        .insert(atom(1, 9), Limits::default())
+        .insert(&atom(1, 9), Limits::default())
         .unwrap()
         .storage
         .construction_work;
     for limit in 0..required {
         let mut catalog = owner();
-        catalog.insert(atom(4, 7), Limits::default()).unwrap();
+        catalog.insert(&atom(4, 7), Limits::default()).unwrap();
         assert!(matches!(
             catalog.insert(
-                atom(1, 9),
+                &atom(1, 9),
                 Limits {
                     max_work: u64::try_from(limit).unwrap(),
                     ..Default::default()
@@ -88,10 +167,13 @@ fn failed_work_admission_preserves_all_rows() {
         let view = catalog.view();
         assert_eq!(view.row_count(), 1);
         assert!(view.columns().all(|column| column.len() == 1));
-        assert_eq!(view.row(0).unwrap().value(0), Some(&Value::Number(4)));
+        assert_eq!(
+            view.row(0).unwrap().value(0),
+            Some(TermRef::from(&Value::Number(4)))
+        );
         assert!(
             catalog
-                .insert(atom(1, 9), Limits::default())
+                .insert(&atom(1, 9), Limits::default())
                 .unwrap()
                 .inserted
         );
@@ -101,10 +183,10 @@ fn failed_work_admission_preserves_all_rows() {
 #[test]
 fn failed_value_admission_publishes_no_dictionary_entries() {
     let mut catalog = owner();
-    catalog.insert(atom(4, 4), Limits::default()).unwrap();
+    catalog.insert(&atom(4, 4), Limits::default()).unwrap();
     assert!(matches!(
         catalog.insert(
-            atom(1, 9),
+            &atom(1, 9),
             Limits {
                 max_values: 2,
                 ..Default::default()
@@ -119,7 +201,7 @@ fn failed_value_admission_publishes_no_dictionary_entries() {
         })
     ));
     assert_eq!(catalog.atoms(), &[atom(4, 4)]);
-    let result = catalog.insert(atom(1, 9), Limits::default()).unwrap();
+    let result = catalog.insert(&atom(1, 9), Limits::default()).unwrap();
     assert_eq!(result.row, 1);
     assert!(result.inserted);
 }
@@ -129,7 +211,7 @@ fn views_do_not_rebuild_the_layout() {
     let mut catalog = owner();
     for value in 0..65 {
         catalog
-            .insert(atom(value, value + 1), Limits::default())
+            .insert(&atom(value, value + 1), Limits::default())
             .unwrap();
     }
     let first = catalog.view();
@@ -156,8 +238,8 @@ fn construction_reports_its_completed_column_work() {
         catalog.construction().retained_bytes,
         catalog.retained_bytes()
     );
-    let Err(failure) = Catalog::new(
-        Predicate::new("pair", 2).unwrap(),
+    let Err(failure) = Fixture::new(
+        &Predicate::new("pair", 2).unwrap(),
         Limits {
             max_work: 1,
             ..Default::default()
@@ -180,7 +262,7 @@ fn construction_reports_its_completed_column_work() {
 #[test]
 fn lookup_reports_inclusive_work_admission() {
     let mut catalog = owner();
-    catalog.insert(atom(4, 7), Limits::default()).unwrap();
+    catalog.insert(&atom(4, 7), Limits::default()).unwrap();
     let receipt = catalog.lookup(&atom(4, 7), Limits::default()).unwrap();
     assert_eq!(receipt.row, Some(0));
     let required = u64::try_from(receipt.storage.construction_work).unwrap();
@@ -219,7 +301,7 @@ fn lookup_reports_inclusive_work_admission() {
 #[test]
 fn borrowed_views_do_not_duplicate_owner_capacity() {
     let mut catalog = owner();
-    catalog.insert(atom(4, 7), Limits::default()).unwrap();
+    catalog.insert(&atom(4, 7), Limits::default()).unwrap();
     let first = catalog.view();
     let second = catalog.view();
     assert_eq!(
@@ -237,7 +319,7 @@ fn borrowed_views_do_not_duplicate_owner_capacity() {
 fn sorted_positions_borrow_the_original_atoms() {
     let mut catalog = owner();
     for value in [9, 2, 5] {
-        catalog.insert(atom(value, 0), Limits::default()).unwrap();
+        catalog.insert(&atom(value, 0), Limits::default()).unwrap();
     }
     catalog.prepare_ordered(Limits::default()).unwrap();
     assert_eq!(ids(&catalog), [1, 2, 0]);
@@ -263,8 +345,8 @@ fn append_dictionary_preserves_complete_value_kinds() {
     for value in &values {
         catalog
             .insert(
-                Atom::new(
-                    catalog.predicate().clone(),
+                &Atom::new(
+                    Predicate::new("pair", 2).unwrap(),
                     vec![value.clone(), value.clone()],
                 )
                 .unwrap(),
@@ -274,17 +356,17 @@ fn append_dictionary_preserves_complete_value_kinds() {
     }
     for (row, value) in values.iter().enumerate() {
         let view = catalog.view();
-        assert_eq!(view.row(row).unwrap().value(0), Some(value));
-        assert_eq!(view.row(row).unwrap().value(1), Some(value));
+        assert_eq!(view.row(row).unwrap().value(0), Some(TermRef::from(value)));
+        assert_eq!(view.row(row).unwrap().value(1), Some(TermRef::from(value)));
         assert_eq!(
             catalog
-                .lookup(&catalog.atoms()[row], Limits::default())
+                .lookup(catalog.atoms()[row], Limits::default())
                 .unwrap()
                 .row,
             Some(row)
         );
     }
-    assert_eq!(catalog.layout.dictionary.len(), values.len());
+    assert_eq!(catalog.rows.layout.dictionary.len(), values.len());
 }
 
 #[test]
@@ -297,10 +379,10 @@ fn opposite_predicate_sign_refuses_without_publication() {
     .unwrap();
     assert_eq!(
         catalog
-            .insert(negative, Limits::default())
+            .insert(&negative, Limits::default())
             .unwrap_err()
             .error,
-        Failure::Predicate
+        Failure::Read(ReadError::Predicate)
     );
     assert!(catalog.atoms().is_empty());
 }
@@ -308,15 +390,10 @@ fn opposite_predicate_sign_refuses_without_publication() {
 #[test]
 fn nullary_append_retains_one_empty_tuple() {
     let predicate = Predicate::new("p", 0).unwrap();
-    let mut catalog = Catalog::new(predicate.clone(), Limits::default()).unwrap();
+    let mut catalog = Fixture::new(&predicate, Limits::default()).unwrap();
     let atom = Atom::new(predicate, vec![]).unwrap();
-    assert!(
-        catalog
-            .insert(atom.clone(), Limits::default())
-            .unwrap()
-            .inserted
-    );
-    assert!(!catalog.insert(atom, Limits::default()).unwrap().inserted);
+    assert!(catalog.insert(&atom, Limits::default()).unwrap().inserted);
+    assert!(!catalog.insert(&atom, Limits::default()).unwrap().inserted);
     assert_eq!(catalog.view().row_count(), 1);
     assert_eq!(catalog.view().columns().len(), 0);
 }
@@ -324,18 +401,18 @@ fn nullary_append_retains_one_empty_tuple() {
 #[test]
 fn insertion_admits_exact_peak_capacity() {
     let mut reference = owner();
-    reference.insert(atom(4, 7), Limits::default()).unwrap();
+    reference.insert(&atom(4, 7), Limits::default()).unwrap();
     let peak = reference
-        .insert(atom(1, 9), Limits::default())
+        .insert(&atom(1, 9), Limits::default())
         .unwrap()
         .storage
         .peak_construction_bytes;
     let mut exact = owner();
-    exact.insert(atom(4, 7), Limits::default()).unwrap();
+    exact.insert(&atom(4, 7), Limits::default()).unwrap();
     assert!(
         exact
             .insert(
-                atom(1, 9),
+                &atom(1, 9),
                 Limits {
                     max_bytes: peak,
                     ..Default::default()
@@ -345,10 +422,10 @@ fn insertion_admits_exact_peak_capacity() {
             .inserted
     );
     let mut short = owner();
-    short.insert(atom(4, 7), Limits::default()).unwrap();
+    short.insert(&atom(4, 7), Limits::default()).unwrap();
     let failure = short
         .insert(
-            atom(1, 9),
+            &atom(1, 9),
             Limits {
                 max_bytes: peak - 1,
                 ..Default::default()
@@ -366,7 +443,7 @@ fn insertion_admits_exact_peak_capacity() {
     assert_eq!(failure.retained_bytes, short.retained_bytes());
     assert!(
         short
-            .insert(atom(1, 9), Limits::default())
+            .insert(&atom(1, 9), Limits::default())
             .unwrap()
             .inserted
     );
@@ -376,13 +453,13 @@ proptest! {
     #[test]
     fn append_views_match_bulk_typed_selection(tuples in prop::collection::vec((-8_i32..8,-8_i32..8),0..48), left in -9_i32..9, right in -9_i32..9) {
         let mut catalog=owner();
-        for (x,y) in tuples { catalog.insert(atom(x,y),Limits::default()).unwrap(); }
-        let expected=catalog.atoms().iter().enumerate().filter_map(|(row,atom)|(atom.values()==[Value::Number(left),Value::Number(right)]).then_some(row)).collect::<Vec<_>>();
+        for (x,y) in tuples { catalog.insert(&atom(x,y),Limits::default()).unwrap(); }
+        let expected=catalog.atoms().iter().enumerate().filter_map(|(row,atom)|(atom.values().iter().eq([Value::Number(left),Value::Number(right)].iter().map(TermRef::from))).then_some(row)).collect::<Vec<_>>();
         let view=catalog.view();
-        let bulk=Relation::from_atoms(catalog.predicate(),catalog.atoms(),Limits::default()).unwrap();
+        let bulk=Relation::from_refs(catalog.predicate(),catalog.source(),Limits::default()).unwrap();
         for relation in [&view,&bulk] {
             let l=Value::Number(left);let r=Value::Number(right);
-            let query=relation.query(&[(0,&l),(1,&r)],Limits::default()).unwrap();
+            let query=relation.query(&[(0,TermRef::from(&l)),(1,TermRef::from(&r))],Limits::default()).unwrap();
             let rows=relation.all(Limits::default()).unwrap();
             let selected = relation.select(&query,&rows,Limits::default()).unwrap();
             prop_assert_eq!(selected.positions(),expected.as_slice());
@@ -394,7 +471,7 @@ proptest! {
 fn prepared_order_reuses_the_published_extent() {
     let mut catalog = owner();
     for value in [9, 2, 5] {
-        catalog.insert(atom(value, 0), Limits::default()).unwrap();
+        catalog.insert(&atom(value, 0), Limits::default()).unwrap();
     }
     assert!(catalog.ordered().is_none());
     let preparation = catalog.prepare_ordered(Limits::default()).unwrap().storage;
@@ -416,11 +493,11 @@ fn prepared_order_reuses_the_published_extent() {
 #[test]
 fn duplicate_insert_preserves_prepared_order() {
     let mut catalog = owner();
-    catalog.insert(atom(2, 9), Limits::default()).unwrap();
+    catalog.insert(&atom(2, 9), Limits::default()).unwrap();
     catalog.prepare_ordered(Limits::default()).unwrap();
     assert!(
         !catalog
-            .insert(atom(2, 9), Limits::default())
+            .insert(&atom(2, 9), Limits::default())
             .unwrap()
             .inserted
     );
@@ -438,12 +515,12 @@ fn duplicate_insert_preserves_prepared_order() {
     );
 }
 
-fn rotation_owner() -> Catalog {
+fn rotation_owner() -> Fixture {
     let predicate = Predicate::new("quad", 4).unwrap();
-    let mut catalog = Catalog::new(predicate.clone(), Limits::default()).unwrap();
+    let mut catalog = Fixture::new(&predicate, Limits::default()).unwrap();
     catalog
         .insert(
-            Atom::new(predicate, vec![Value::Number(40); 4]).unwrap(),
+            &Atom::new(predicate, vec![Value::Number(40); 4]).unwrap(),
             Limits::default(),
         )
         .unwrap();
@@ -463,18 +540,22 @@ fn rotating_tuple() -> Atom {
 fn refused_rotation_preserves_the_published_extent() {
     let mut reference = rotation_owner();
     let required = reference
-        .insert(rotating_tuple(), Limits::default())
+        .insert(&rotating_tuple(), Limits::default())
         .unwrap()
         .storage
         .construction_work;
-    assert_eq!(reference.layout.dictionary.len(), 5);
+    assert_eq!(reference.rows.layout.dictionary.len(), 5);
     for limit in 0..required {
         let mut catalog = rotation_owner();
-        let original = catalog.atoms().to_vec();
+        let original: Vec<Atom> = catalog
+            .atoms()
+            .into_iter()
+            .map(|atom| atom.to_atom(ValueLimits::default()).unwrap())
+            .collect();
         let original_ids: Vec<Vec<u32>> = catalog.view().columns().map(<[u32]>::to_vec).collect();
         let failure = catalog
             .insert(
-                rotating_tuple(),
+                &rotating_tuple(),
                 Limits {
                     max_work: u64::try_from(limit).unwrap(),
                     ..Limits::default()
@@ -486,7 +567,7 @@ fn refused_rotation_preserves_the_published_extent() {
         } if bound == limit && observed > bound));
         assert!(failure.work <= limit);
         assert_eq!(catalog.atoms(), original);
-        assert_eq!(catalog.layout.dictionary.len(), 1);
+        assert_eq!(catalog.rows.layout.dictionary.len(), 1);
         assert_eq!(
             catalog
                 .view()
@@ -512,7 +593,7 @@ fn refused_rotation_preserves_the_published_extent() {
     let mut exact = rotation_owner();
     let insertion = exact
         .insert(
-            rotating_tuple(),
+            &rotating_tuple(),
             Limits {
                 max_work: u64::try_from(required).unwrap(),
                 ..Limits::default()
@@ -534,7 +615,9 @@ fn refused_rotation_preserves_the_published_extent() {
 fn refused_preparation_publishes_no_partial_order() {
     let mut reference = owner();
     for value in [9, 2, 5] {
-        reference.insert(atom(value, 0), Limits::default()).unwrap();
+        reference
+            .insert(&atom(value, 0), Limits::default())
+            .unwrap();
     }
     let required = reference
         .prepare_ordered(Limits::default())
@@ -544,7 +627,7 @@ fn refused_preparation_publishes_no_partial_order() {
     for limit in 0..required {
         let mut catalog = owner();
         for value in [9, 2, 5] {
-            catalog.insert(atom(value, 0), Limits::default()).unwrap();
+            catalog.insert(&atom(value, 0), Limits::default()).unwrap();
         }
         let Err(failure) = catalog.prepare_ordered(Limits {
             max_work: u64::try_from(limit).unwrap(),
@@ -596,15 +679,12 @@ fn nested_capacity_includes_owned_spare_storage() {
 }
 
 #[test]
-fn extraction_starts_a_new_catalog_extent() {
+fn clear_starts_a_new_local_extent() {
     let mut catalog = owner();
-    catalog.insert(atom(9, 3), Limits::default()).unwrap();
-    catalog.insert(atom(1, 8), Limits::default()).unwrap();
+    catalog.insert(&atom(9, 3), Limits::default()).unwrap();
+    catalog.insert(&atom(1, 8), Limits::default()).unwrap();
     catalog.prepare_ordered(Limits::default()).unwrap();
-    let address = catalog.atoms().as_ptr();
-    let extracted = catalog.take_atoms(Limits::default()).unwrap();
-    assert_eq!(extracted.atoms.as_ptr(), address);
-    assert_eq!(extracted.atoms, [atom(9, 3), atom(1, 8)]);
+    let receipt = catalog.clear(Limits::default()).unwrap();
     assert!(catalog.atoms().is_empty());
     assert!(catalog.ordered().unwrap().is_empty());
     assert!(catalog.view().columns().all(<[u32]>::is_empty));
@@ -612,27 +692,28 @@ fn extraction_starts_a_new_catalog_extent() {
         catalog.lookup(&atom(9, 3), Limits::default()).unwrap().row,
         None
     );
-    let empty_capacity = catalog.retained_bytes();
-    assert_eq!(extracted.storage.retained_bytes, empty_capacity);
-    assert!(empty_capacity > owner().retained_bytes());
-    let inserted = catalog.insert(atom(7, 2), Limits::default()).unwrap();
+    assert_eq!(receipt.retained_bytes, catalog.retained_bytes());
+    assert!(catalog.retained_bytes() > owner().retained_bytes());
+    let inserted = catalog.insert(&atom(7, 2), Limits::default()).unwrap();
     assert_eq!(inserted.row, 0);
     assert_eq!(catalog.view().column(0), Some([0].as_slice()));
     assert_eq!(catalog.view().column(1), Some([1].as_slice()));
-    assert_eq!(extracted.atoms, [atom(9, 3), atom(1, 8)]);
+    // Clearing extensional truth neither transfers nor deletes canonical identity.
+    assert_eq!(catalog.authority.get(0).unwrap(), atom(9, 3));
+    assert_eq!(catalog.authority.get(1).unwrap(), atom(1, 8));
 }
 
 #[test]
-fn refused_extraction_preserves_the_prepared_extent() {
+fn refused_clear_preserves_the_prepared_extent() {
     let mut catalog = owner();
-    catalog.insert(atom(9, 3), Limits::default()).unwrap();
+    catalog.insert(&atom(9, 3), Limits::default()).unwrap();
     catalog.prepare_ordered(Limits::default()).unwrap();
     let required = 13;
-    let Err(failure) = catalog.take_atoms(Limits {
+    let Err(failure) = catalog.clear(Limits {
         max_work: required - 1,
         ..Limits::default()
     }) else {
-        panic!("reset must be admitted before moving atoms");
+        panic!("reset must be admitted before clearing membership");
     };
     assert_eq!(
         failure.error,
@@ -646,16 +727,13 @@ fn refused_extraction_preserves_the_prepared_extent() {
     assert_eq!(ids(&catalog), [0]);
     assert_eq!(catalog.view().column(0), Some([0].as_slice()));
     assert_eq!(catalog.view().column(1), Some([1].as_slice()));
-    assert_eq!(
-        catalog
-            .take_atoms(Limits {
-                max_work: required,
-                ..Limits::default()
-            })
-            .unwrap()
-            .atoms,
-        [atom(9, 3)]
-    );
+    catalog
+        .clear(Limits {
+            max_work: required,
+            ..Limits::default()
+        })
+        .unwrap();
+    assert!(catalog.atoms().is_empty());
 }
 
 #[test]
@@ -665,7 +743,7 @@ fn ordered_ids_preserve_rows_when_ranks_move() {
     for (id, value) in [9, 2, 5].into_iter().enumerate() {
         assert_eq!(
             catalog
-                .insert(atom(value, 0), Limits::default())
+                .insert(&atom(value, 0), Limits::default())
                 .unwrap()
                 .row,
             id
@@ -674,7 +752,7 @@ fn ordered_ids_preserve_rows_when_ranks_move() {
     catalog.prepare_ordered(Limits::default()).unwrap();
     assert_eq!(ids(&catalog), [1, 2, 0]);
     assert_eq!(
-        catalog.insert(atom(0, 0), Limits::default()).unwrap().row,
+        catalog.insert(&atom(0, 0), Limits::default()).unwrap().row,
         3
     );
     catalog.prepare_ordered(Limits::default()).unwrap();
@@ -705,7 +783,7 @@ fn ordered_ids_preserve_complete_typed_identity() {
     .unwrap();
     for sign in [Sign::Positive, Sign::Negative] {
         let predicate = Predicate::with_sign("typed", 1, sign).unwrap();
-        let mut catalog = Catalog::new(predicate.clone(), Limits::default()).unwrap();
+        let mut catalog = Fixture::new(&predicate, Limits::default()).unwrap();
         let values = [
             Value::String("1".into()),
             Value::Number(1),
@@ -717,7 +795,7 @@ fn ordered_ids_preserve_complete_typed_identity() {
         for value in &values {
             catalog
                 .insert(
-                    Atom::new(predicate.clone(), vec![value.clone()]).unwrap(),
+                    &Atom::new(predicate.clone(), vec![value.clone()]).unwrap(),
                     Limits::default(),
                 )
                 .unwrap();
@@ -728,22 +806,26 @@ fn ordered_ids_preserve_complete_typed_identity() {
         assert_eq!(ids(&catalog), [4, 1, 0, 3, 2, 5]);
         for id in [4, 1, 0, 3, 2, 5] {
             let atom = &catalog.atoms()[id];
-            assert_eq!(atom.predicate(), &predicate);
-            assert_eq!(atom.values(), &[values[id].clone()]);
+            assert_eq!(atom.predicate(), predicate);
+            assert!(
+                atom.values()
+                    .iter()
+                    .eq(std::iter::once(TermRef::from(&values[id])))
+            );
         }
     }
 }
 
 /// Two rows prepared, then two more appended and prepared: the first view
 /// `[1, 0]` is the one level and the appended rows are the run `[3, 2]`.
-fn prepared_twice() -> Catalog {
+fn prepared_twice() -> Fixture {
     let mut catalog = owner();
     for value in [4, 2] {
-        catalog.insert(atom(value, 0), Limits::default()).unwrap();
+        catalog.insert(&atom(value, 0), Limits::default()).unwrap();
     }
     catalog.prepare_ordered(Limits::default()).unwrap();
     for value in [3, 1] {
-        catalog.insert(atom(value, 0), Limits::default()).unwrap();
+        catalog.insert(&atom(value, 0), Limits::default()).unwrap();
     }
     catalog.prepare_ordered(Limits::default()).unwrap();
     catalog
@@ -753,12 +835,12 @@ fn prepared_twice() -> Catalog {
 fn a_preparation_merges_the_appended_rows_into_the_view() {
     let mut catalog = owner();
     for value in [4, 2] {
-        catalog.insert(atom(value, 0), Limits::default()).unwrap();
+        catalog.insert(&atom(value, 0), Limits::default()).unwrap();
     }
     catalog.prepare_ordered(Limits::default()).unwrap();
     assert_eq!(ids(&catalog), [1, 0]);
     for value in [3, 1] {
-        catalog.insert(atom(value, 0), Limits::default()).unwrap();
+        catalog.insert(&atom(value, 0), Limits::default()).unwrap();
     }
     assert!(catalog.ordered().is_none());
     catalog.prepare_ordered(Limits::default()).unwrap();
@@ -788,7 +870,7 @@ fn a_preparation_with_nothing_appended_keeps_the_view_and_the_runs() {
 fn the_first_preparation_is_one_run_over_nothing() {
     let mut catalog = owner();
     for value in [9, 2, 5] {
-        catalog.insert(atom(value, 0), Limits::default()).unwrap();
+        catalog.insert(&atom(value, 0), Limits::default()).unwrap();
     }
     catalog.prepare_ordered(Limits::default()).unwrap();
     let runs = catalog.ordered().unwrap();
@@ -801,11 +883,11 @@ fn one_append_to_a_large_extent_costs_its_own_run_not_a_copy_of_the_extent() {
     let mut catalog = owner();
     for value in 0..2048 {
         catalog
-            .insert(atom(value * 2, 0), Limits::default())
+            .insert(&atom(value * 2, 0), Limits::default())
             .unwrap();
     }
     catalog.prepare_ordered(Limits::default()).unwrap();
-    catalog.insert(atom(1, 0), Limits::default()).unwrap();
+    catalog.insert(&atom(1, 0), Limits::default()).unwrap();
     let work = catalog
         .prepare_ordered(Limits::default())
         .unwrap()
@@ -828,7 +910,7 @@ fn append_one_at_a_time(count: i32, mut each: impl FnMut(&[Vec<usize>])) -> u128
     let mut work = 0;
     for value in 0..count {
         catalog
-            .insert(atom(value * 7 % count, value), Limits::default())
+            .insert(&atom(value * 7 % count, value), Limits::default())
             .unwrap();
         work += catalog
             .prepare_ordered(Limits::default())
@@ -877,13 +959,13 @@ proptest! {
         let mut merged_from: Vec<usize> = Vec::new();
         let mut runs: Option<(Vec<Vec<usize>>, Vec<usize>)> = None;
         for (index, (left, right)) in rows.iter().enumerate() {
-            incremental.insert(atom(*left, *right), Limits::default()).unwrap();
+            incremental.insert(&atom(*left, *right), Limits::default()).unwrap();
             if prepare[index] {
                 let grew = incremental.ordered().is_none();
                 incremental.prepare_ordered(Limits::default()).unwrap();
                 let mut rebuilt = owner();
                 for (left, right) in &rows[..=index] {
-                    rebuilt.insert(atom(*left, *right), Limits::default()).unwrap();
+                    rebuilt.insert(&atom(*left, *right), Limits::default()).unwrap();
                 }
                 rebuilt.prepare_ordered(Limits::default()).unwrap();
                 prop_assert_eq!(ids(&incremental), ids(&rebuilt));
@@ -931,10 +1013,10 @@ fn the_merge_charges_its_run_slices_and_cursors_to_the_byte_ceiling() {
     // them and the byte ceiling bounds them.
     let mut catalog = owner();
     for value in [9, 2, 5] {
-        catalog.insert(atom(value, 0), Limits::default()).unwrap();
+        catalog.insert(&atom(value, 0), Limits::default()).unwrap();
     }
     catalog.prepare_ordered(Limits::default()).unwrap();
-    catalog.insert(atom(7, 0), Limits::default()).unwrap();
+    catalog.insert(&atom(7, 0), Limits::default()).unwrap();
     catalog.prepare_ordered(Limits::default()).unwrap();
     let runs = catalog.ordered().unwrap().runs().count();
     assert_eq!(runs, 2);
@@ -946,4 +1028,101 @@ fn the_merge_charges_its_run_slices_and_cursors_to_the_byte_ceiling() {
         scratch >= ids + runs * per_run,
         "{scratch} < {ids} + {runs} * {per_run}"
     );
+}
+
+#[test]
+fn empty_signed_predicate_requires_no_atom() {
+    let predicate = Predicate::with_sign("empty", 2, Sign::Negative).unwrap();
+    let catalog = Fixture::new(&predicate, Limits::default()).unwrap();
+    assert!(catalog.authority.is_empty());
+    let view = catalog.view();
+    assert_eq!(view.predicate(), predicate);
+    assert_eq!(view.row_count(), 0);
+    assert_eq!(view.columns().len(), 2);
+}
+
+#[test]
+fn uninterned_ingress_cannot_become_membership() {
+    let mut catalog = owner();
+    let ingress = atom(1, 2);
+    let failure = catalog
+        .rows
+        .insert((&ingress).into(), Limits::default())
+        .unwrap_err();
+    assert_eq!(failure.error, Failure::Read(ReadError::Uninterned));
+    assert!(catalog.rows.is_empty());
+}
+
+#[test]
+fn independent_atom_scopes_cannot_exchange_rows() {
+    let mut first = owner();
+    let mut second = owner();
+    first.insert(&atom(1, 2), Limits::default()).unwrap();
+    second.insert(&atom(3, 4), Limits::default()).unwrap();
+    let foreign = second.authority.get(0).unwrap();
+    let failure = first.rows.insert(foreign, Limits::default()).unwrap_err();
+    assert_eq!(failure.error, Failure::Read(ReadError::ForeignCatalog));
+    assert_eq!(first.atoms(), [atom(1, 2)]);
+    assert!(matches!(
+        first.rows.view(second.authority.read()),
+        Err(Failure::Read(ReadError::ForeignCatalog))
+    ));
+}
+
+#[test]
+fn predicate_declaration_requires_a_covering_prefix() {
+    let mut authority = AtomInterner::default();
+    let (committed, mut appender) = authority.split();
+    let predicate = Predicate::with_sign("later", 0, Sign::Negative).unwrap();
+    let declared = appender
+        .declare_predicate_with(&predicate, atom_limits(), || Ok::<_, ()>(()))
+        .unwrap();
+    let Err(failure) = Catalog::new(committed.read(), declared, Limits::default()) else {
+        panic!("the earlier prefix does not contain the declared predicate");
+    };
+    assert_eq!(failure.error, Failure::Read(ReadError::OutsidePrefix));
+}
+
+#[test]
+fn appended_membership_requires_a_covering_prefix() {
+    let mut authority = AtomInterner::default();
+    let predicate = Predicate::new("pair", 2).unwrap();
+    let declared = authority
+        .declare_predicate_with(&predicate, atom_limits(), || Ok::<_, ()>(()))
+        .unwrap();
+    authority
+        .commit_with(atom_limits(), || Ok::<_, ()>(()))
+        .unwrap();
+    let (committed, mut appender) = authority.split();
+    let mut rows = Catalog::new(committed.read(), declared, Limits::default()).unwrap();
+    let ingress = atom(1, 2);
+    let row = appender
+        .entry_atom_with(&ingress, atom_limits(), || Ok::<_, ()>(()))
+        .unwrap()
+        .insert_ref_with(atom_limits(), || Ok::<_, ()>(()))
+        .unwrap();
+    rows.insert(row, Limits::default()).unwrap();
+    assert!(matches!(
+        rows.view(committed.read()),
+        Err(Failure::Read(ReadError::OutsidePrefix))
+    ));
+    let Err(failure) = rows.prepare_ordered(committed.read(), Limits::default()) else {
+        panic!("the earlier prefix does not cover the appended row");
+    };
+    assert_eq!(failure.error, Failure::Read(ReadError::OutsidePrefix));
+    assert!(rows.ordered().is_none());
+    assert_eq!(rows.view(appender.read()).unwrap().row_count(), 1);
+}
+
+#[test]
+fn existing_identity_can_be_new_relation_truth() {
+    let mut catalog = owner();
+    catalog.insert(&atom(1, 2), Limits::default()).unwrap();
+    catalog.clear(Limits::default()).unwrap();
+    let existing = catalog.authority.get(0).unwrap();
+    let insertion = catalog.rows.insert(existing, Limits::default()).unwrap();
+    assert!(insertion.inserted);
+    assert_eq!(insertion.row, 0);
+    assert_eq!(catalog.authority.len(), 1);
+    assert_eq!(catalog.atoms(), [atom(1, 2)]);
 }

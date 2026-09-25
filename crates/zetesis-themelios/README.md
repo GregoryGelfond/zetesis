@@ -80,11 +80,11 @@ eligibility and aggregate equalities remain in the original formulas and reduct.
 This is eager formula grounding. It is distinct from the candidate-specific
 source joins used by relational lazy execution.
 
-Possible atoms have one authoritative catalog per predicate. Catalogs and
-bound-column postings persist across growth rounds. Immutable snapshots borrow
-them, retaining typed column equality and stable row identities. The complete
-tuple matcher still checks every offered row. Snapshot preparation is per
-predicate; new tuples extend the catalog and postings after the snapshot drops.
+Possible atoms share one canonical source authority. Per-predicate membership
+maps and bound-column postings persist across growth rounds. Immutable snapshots
+borrow these relations, retaining typed column equality and stable row identities.
+The complete tuple matcher still checks every offered row. Snapshot preparation
+is per predicate; new tuples extend membership and postings after the snapshot drops.
 Certified positive producers use disjoint joins containing newly derived rows;
 other producers retain complete round traversal. Final formula emission still
 validates every authored body instance.
@@ -99,11 +99,13 @@ same source applicability check. This is support preparation, not an answer-set
 membership or unique-model certificate; richer source retains its existing
 traversal and final authored-error validation.
 
-`FormulaLimits::max_support_bytes` bounds retained catalog, Atom vector cells,
-postings, producer-plan and wake-set, snapshot and query capacity, including construction scratch. Nested
-atom/value payloads, allocator/tree overhead and unrelated grounding state have
-separate bounds. Construction and lookup consume grounding work; this ceiling
-is not a process-memory measurement.
+`FormulaLimits::max_support_bytes` bounds the shared canonical payload and
+identity indexes, relation metadata, postings, producer plans, snapshots and
+query workspace, including simultaneous scratch and growth allocations. A
+retained plan or snapshot reports its own capacity; admission also includes
+other live owners without adding them to that receipt. Allocator bookkeeping
+and unrelated grounding state remain outside this named bound. Construction and
+lookup consume grounding work; the byte ceiling is not a process-memory measurement.
 
 Prepared formula and bundle values can additionally request
 `with_domain_analysis(Some(DomainLimits { .. }))`, disabled by default. The
@@ -541,11 +543,24 @@ conditions. Relational joins may examine the Cartesian product of their finite
 model relations and source alternatives; generated value products and nested
 queries have independent finite work and storage ceilings. Source structural
 pool products are checked before materialization, and their compiled nodes and
-text remain charged. Runtime generated alternatives, owned bindings and retained
-aggregate keys share `max_local_bytes` (default 8 MiB), measured as 16 bytes per
-semantic node plus UTF-8 text. Borrowed model values, container capacity and
-allocator overhead are excluded. This semantic budget is not RSS; transient
-scope ownership is released separately from retained output payload. See the
+text remain charged. Compiled directives, output/projection signatures and
+observation constants and constructor names share one immutable metadata
+vocabulary. `signatures()` and `directives()` return borrowed views with `.iter()`
+and `.at(position)`, preserving semantic comparison across independent owners.
+`MetadataStorageLimits` defaults to 64 MiB for the canonical vocabulary and
+component capacities, including named construction/publication overlap;
+source topology and compiler scratch retain their separate logical policies.
+
+Runtime input captures remain borrowed, while generated terms use scoped IDs in
+one derived arena. Generated alternatives, bindings and retained aggregate keys
+share the logical `max_local_bytes` allowance (default 8 MiB), measured as 16 bytes
+per semantic node plus UTF-8 text. `max_term_storage_bytes` separately bounds the
+combined derived-arena and retained typed wildcard-key capacities and replacement
+overlap (default 64 MiB), excluding borrowed inputs. Transient ID frames each use
+that ceiling independently; their combined capacities are not part of the arena
+receipt. `term_storage_bytes` and `peak_term_storage_bytes` report that scoped
+physical account. Logical scope charges are released independently of retained
+arena capacity and output payload; neither account promises RSS. See the
 [observation API limits](src/observation.rs) and
 [observation proof guide](../../proofs/guide/observations.md).
 
@@ -673,21 +688,42 @@ CLI builds contain neither this instrument nor an additional option.
 
 ## Formula atom ownership
 
-Emitted formula atoms use the shared core appendable interner. The AVL index
-retains only dense positions and metadata; one payload sequence assigns each
-distinct atom its first-insertion position. A committed prefix supplies exact contiguous count
-capture, and finalization transfers the sequence into the existing immutable
-`AtomCatalog`. Possible positive support remains a separate population; catalog
-presence never establishes truth, source coverage or answer-set membership.
+Emitted formula atoms use the shared core appendable interner. Typed text, terms
+and predicate argument columns form one canonical authority; the AVL index and
+first-insertion sequence retain only IDs. A committed prefix supplies exact count
+capture, and finalization transfers its ID map and immutable prefix directly into
+`AtomCatalog`. Borrowed `Atoms` and `AtomRef` views replace the former atom slices.
+Possible positive support remains a separate population; catalog presence never
+establishes truth, source coverage or answer-set membership.
 
-Lookup, copied scalar descriptors/text, index construction and commit operations
-now consume the cumulative formula work ceiling. Exact work cutoffs can therefore
-change. `Limits::for_atoms` derives a finite index-capacity envelope from the
-applicable atom ceiling; `FormulaResource::AtomStorageBytes` reports that named
-storage refusal. Nested payload remains under the existing scalar-byte budget;
-neither budget is a process RSS ceiling.
+Lookup, typed canonical import, index construction and publication consume the
+cumulative formula work ceiling. Exact work cutoffs can therefore change.
+`FormulaLimits::max_atom_storage_bytes` adds an independent inclusive 128 MiB
+default when publishing a formula atom catalog. It covers the shared source
+authority's canonical payload, discovery/index metadata, current prefix
+directories and allocation overlap, including identities outside the published
+occurrence map. Unrelated support indexes and query buffers are excluded. Zero
+is a real limit. Canonical payload is counted once within the authority; source
+expansion retains its independent cumulative `ScalarBytes` budget. Neither
+measure is process RSS.
 
-This pre-1.0 source API change removes the old `AtomAllocation` enum and its
-hash-table-specific error variant. `FormulaFailure::AtomAllocation` now retains
-the original `std::collections::TryReserveError` directly, with the source
-location. Configured limits and exhausted work remain distinct typed refusals.
+Projection construction uses the same atom-storage ceiling. Its separate
+`max_project_bytes` bound admits the complete retained immutable canonical prefix
+and the sorted projection ID map, excluding discarded construction indexes.
+It includes prefix identities outside that map. Fixed empty catalog envelopes are
+excluded, so an explicit empty projection remains admissible with zero projection
+atoms and bytes. Sorting changes only the map, never term or atom payload.
+
+`FormulaFailure::AtomCatalog` retains a canonical representation/storage cause
+and source location. `FormulaFailure::AtomAllocation` retains an original
+`std::collections::TryReserveError` for index reservations. Caller cancellation,
+work refusal and configured limits remain distinct typed failures.
+
+Source activity keeps one canonical atom authority throughout predicate completion
+and cyclic refinement. Completed truth and each in-progress round are ID-only
+classification vectors over that authority. A discovery outside the completed
+prefix does not establish possible truth. Refinement validates its full carrier
+and preserves established information before publishing Optional-to-Required or
+Optional-to-Absent changes. The shared canonical payload, both classification
+buffers and reservation overlap use `max_support_bytes`; logical presence entries
+and expansion work retain their separate limits.

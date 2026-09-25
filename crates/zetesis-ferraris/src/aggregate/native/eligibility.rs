@@ -3,7 +3,8 @@
 use zetesis_cpu::{Cancellation, Stop};
 
 use super::{
-    Error, ErrorKind, Group, Reduction, ReductionLimits, Resource, Statistics, add, bytes, storage,
+    Error, ErrorKind, Group, GroupRef, Reduction, ReductionLimits, Resource, Statistics, add,
+    bytes, storage,
 };
 use crate::{Interpretation, oracle};
 
@@ -30,7 +31,7 @@ impl Default for EligibilityLimits {
 /// during acquisition and no field asserts stable-model membership.
 #[derive(Debug)]
 pub struct Eligibility<'a> {
-    group: &'a Group,
+    group: GroupRef<'a>,
     candidate: &'a Interpretation,
     tested: Option<&'a Interpretation>,
     original: Vec<bool>,
@@ -41,7 +42,7 @@ pub struct Eligibility<'a> {
 impl<'a> Eligibility<'a> {
     /// Exact retained operation whose ordered condition IDs supplied the masks.
     #[must_use]
-    pub const fn group(&self) -> &'a Group {
+    pub const fn group(&self) -> GroupRef<'a> {
         self.group
     }
 
@@ -91,6 +92,22 @@ impl<'a> Eligibility<'a> {
 }
 
 impl Group {
+    /// Acquire original/frozen formula truth through this canonical group.
+    /// # Errors
+    /// Refuses theory identity, work, allocation, storage or caller control.
+    pub fn eligibility<'a>(
+        &'a self,
+        candidate: &'a Interpretation,
+        tested: Option<&'a Interpretation>,
+        limits: EligibilityLimits,
+        cancellation: &Cancellation,
+    ) -> Result<Eligibility<'a>, Error> {
+        self.view()
+            .eligibility(candidate, tested, limits, cancellation)
+    }
+}
+
+impl<'a> GroupRef<'a> {
     /// Acquire actual original and optional frozen eligibility without lowering
     /// this aggregate or changing the retained theory.
     ///
@@ -104,8 +121,8 @@ impl Group {
     /// # Errors
     /// Refuses foreign M/J identity, storage, work, cancellation or deadline.
     /// No partial observation record escapes an interrupted acquisition.
-    pub fn eligibility<'a>(
-        &'a self,
+    pub fn eligibility(
+        self,
         candidate: &'a Interpretation,
         tested: Option<&'a Interpretation>,
         limits: EligibilityLimits,
@@ -134,18 +151,18 @@ impl Group {
         statistics: &mut Statistics,
     ) -> Result<(Vec<bool>, Option<Vec<bool>>), ErrorKind> {
         cancellation.poll().map_err(ErrorKind::Stopped)?;
-        if !self.theory.same_instance(candidate.theory())
-            || tested.is_some_and(|tested| !self.theory.same_instance(tested.theory()))
+        if !self.data.theory.same_instance(candidate.theory())
+            || tested.is_some_and(|tested| !self.data.theory.same_instance(tested.theory()))
         {
             return Err(ErrorKind::WrongTheory);
         }
         let phases = if tested.is_some() { 2 } else { 1 };
-        statistics.resident_bytes = bytes::<bool>(self.tuples.len())?
+        statistics.resident_bytes = bytes::<bool>(self.data.tuples.len())?
             .checked_mul(phases)
             .ok_or(ErrorKind::Overflow)?;
         statistics.peak_bytes = add(
             statistics.resident_bytes,
-            bytes::<bool>(self.theory.nodes().len())?
+            bytes::<bool>(self.data.theory.nodes().len())?
                 .checked_mul(phases)
                 .ok_or(ErrorKind::Overflow)?,
         )?;
@@ -160,7 +177,7 @@ impl Group {
             cancellation,
             statistics: oracle::Statistics::default(),
         };
-        let result = observations(self, candidate, tested, &mut work);
+        let result = observations(*self, candidate, tested, &mut work);
         statistics.work = work.statistics.work;
         let observations = result?;
         cancellation.poll().map_err(ErrorKind::Stopped)?;
@@ -169,18 +186,25 @@ impl Group {
 }
 
 fn observations(
-    group: &Group,
+    group: GroupRef<'_>,
     candidate: &Interpretation,
     tested: Option<&Interpretation>,
     work: &mut oracle::Work<'_>,
 ) -> Result<(Vec<bool>, Option<Vec<bool>>), ErrorKind> {
-    let mut original_nodes = storage(group.theory.nodes().len())?;
-    oracle::evaluate(&group.theory, candidate, None, &mut original_nodes, work).map_err(stopped)?;
+    let mut original_nodes = storage(group.data.theory.nodes().len())?;
+    oracle::evaluate(
+        &group.data.theory,
+        candidate,
+        None,
+        &mut original_nodes,
+        work,
+    )
+    .map_err(stopped)?;
     let original = project(group, &original_nodes, work)?;
     let frozen = if let Some(tested) = tested {
-        let mut frozen_nodes = storage(group.theory.nodes().len())?;
+        let mut frozen_nodes = storage(group.data.theory.nodes().len())?;
         oracle::evaluate(
-            &group.theory,
+            &group.data.theory,
             tested,
             Some(&original_nodes),
             &mut frozen_nodes,
@@ -195,12 +219,12 @@ fn observations(
 }
 
 fn project(
-    group: &Group,
+    group: GroupRef<'_>,
     nodes: &[bool],
     work: &mut oracle::Work<'_>,
 ) -> Result<Vec<bool>, ErrorKind> {
-    let mut mask = storage(group.tuples.len())?;
-    for tuple in &group.tuples {
+    let mut mask = storage(group.data.tuples.len())?;
+    for tuple in &group.data.tuples {
         work.tick().map_err(stopped)?;
         mask.push(nodes[tuple.condition]);
     }

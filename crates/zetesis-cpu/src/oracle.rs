@@ -1,24 +1,24 @@
 //! Synchronous scalar delta rounds and complete ordered source traversal.
 
-use std::collections::BTreeSet;
-
 use zetesis_core::{
-    Atom, AtomKey, AtomPattern, Filter, Model, ModelAtoms, Program, Seed, SeedView, Template, Term,
-    Value,
+    AtomKey, Model, ModelAtoms, PatternRef, Program, Seed, SeedView, TemplateRef,
+    atom_interner::AtomAppender, catalog::TermRef,
 };
 
 use crate::{Cancellation, Stop};
 
+mod binding;
+use binding::{bind, clear, guards, resolve};
 mod window;
 mod relations;
 mod prepared;
 mod argument_bounds;
 mod bounds;
-pub(crate) use bounds::{Bounds, RegionBounds};
+pub(crate) use bounds::{Bounds, CarrierSet, RegionBounds, model_contains};
 pub use prepared::{ClosureWorkspace, PreparationLimits, PreparationStatistics, PreparedQueries};
 use relations::{
-    Block, Catalogs, Dense, Layouts, PendingMarks, Relational, Relations, Resolution, Row, RowSet,
-    Rows,
+    Block, Catalogs, Dense, Layouts, Pending, PendingMarks, Relational, Relations, Resolution,
+    RoundRead, RowSet, Rows,
 };
 pub(crate) mod restrictions;
 mod block_steps;
@@ -38,22 +38,20 @@ pub struct Limits {
     /// Maximum charged template, tuple-probe, atom-key argument span, gate/filter,
     /// delta-view preparation and output operations.
     /// Lazy joins also charge bound-prefix inspections and ordered comparisons,
-    /// including both compared values' referenced payload bytes. Work counts can
+    /// including visited typed descriptors and text prefixes. Work counts can
     /// change with the execution algorithm; they are not ground-instance counts.
     /// A key charges its complete argument span even when an absent slot defers
     /// a gate. The bounded construction itself polls only at that boundary.
     pub max_work: u64,
     /// Maximum distinct derived atoms, including pending round outputs.
     pub max_derived_atoms: usize,
-    /// Named capacity per scalar closure: predicate/catalog cells and names,
-    /// the tree relations' tuples, indexes, columns and prepared-order runs,
-    /// nested tuple payload, the dense relations' words and the pending marks'
-    /// marks, pending tuples and operation scratch/growth overlap. Shared
-    /// structural buffers are counted per occurrence. Tree-container
-    /// allocations (including vacant slots), allocator metadata and
-    /// Arc-counter overhead, and final `Model` retention are excluded.
-    /// Prepared scalar checks include the preparation's retained bytes and
-    /// assignment/cursor/undo capacities.
+    /// Named capacity of the canonical authority, relation indexes/columns and
+    /// prepared-order runs, dense words, pending discovery IDs/marks, operation
+    /// scratch and growth overlap. Canonical payload is charged once by the
+    /// authority; result catalog/selection metadata is charged during assembly.
+    /// Prepared checks also include preparation and assignment/cursor/undo
+    /// capacities. Prior results retained by the caller, allocator metadata and
+    /// Arc reference counters remain outside this per-check ledger.
     /// Actual allocator slack can exceed the proposed reservation before refusal;
     /// only completed checks publish their observed peak statistics.
     /// This is an independent finite allowance, not a process RSS ceiling.
@@ -85,7 +83,7 @@ pub struct Statistics {
     pub catalog_work: u64,
     /// Largest admitted or actually reserved named scalar closure envelope,
     /// under [`Limits::max_closure_bytes`]. Refused unallocated proposals do not
-    /// increase this maximum. It excludes final output ownership and is not RSS.
+    /// increase this maximum. It includes result assembly and is not RSS.
     pub peak_closure_bytes: usize,
     /// Fully matched enabled/filter-valid bindings visited by the selected round
     /// schedule. Old bindings are not revisited by later scalar delta rounds.
@@ -318,22 +316,29 @@ pub(crate) struct CompletedClosure {
 /// sides are the region's: `must` is the held set, the complement of
 /// `may` the cut set, and the rest is open.
 pub(crate) struct Cube {
-    pub(crate) must: BTreeSet<Atom>,
-    pub(crate) may: Option<BTreeSet<Atom>>,
+    pub(crate) must: bounds::CarrierSet,
+    pub(crate) may: Option<bounds::CarrierSet>,
 }
 impl Cube {
     /// Every atom open: every seed lies in this cube.
     pub(crate) fn all_open() -> Self {
         Self {
-            must: BTreeSet::new(),
+            must: bounds::CarrierSet::new(),
             may: None,
         }
     }
-    fn must_hold(&self, key: &zetesis_core::AtomKey<'_>) -> bool {
-        key.get(&self.must).is_some()
+    fn must_hold(
+        &self,
+        key: &zetesis_core::AtomKey<'_>,
+        work: &mut Work<'_>,
+    ) -> Result<bool, Stop> {
+        self.must.contains_key(key, work)
     }
-    fn may_hold(&self, key: &zetesis_core::AtomKey<'_>) -> bool {
-        self.may.as_ref().is_none_or(|may| key.get(may).is_some())
+    fn may_hold(&self, key: &zetesis_core::AtomKey<'_>, work: &mut Work<'_>) -> Result<bool, Stop> {
+        match &self.may {
+            None => Ok(true),
+            Some(may) => may.contains_key(key, work),
+        }
     }
 }
 
@@ -382,7 +387,7 @@ impl Gates<'_> {
     /// bound: a definite rule needs each `not not` gate in `must` and each
     /// `not` gate outside `may`, which an empty `must` or an unbounded `may`
     /// rules out for the whole template.
-    fn admits(self, template: &Template) -> bool {
+    fn admits(self, template: TemplateRef<'_>) -> bool {
         match self {
             Self::Frozen(_) | Self::Possible(_) | Self::Unjudged => true,
             Self::Definite(cube) => {
@@ -393,15 +398,20 @@ impl Gates<'_> {
     }
     /// Whether the gate `pattern` bound to `key` holds under this reading;
     /// `required` is true for a `not not` gate and false for a `not` gate.
-    fn holds(self, key: &zetesis_core::AtomKey<'_>, required: bool) -> bool {
-        match (self, required) {
+    fn holds(
+        self,
+        key: &zetesis_core::AtomKey<'_>,
+        required: bool,
+        work: &mut Work<'_>,
+    ) -> Result<bool, Stop> {
+        Ok(match (self, required) {
             (Self::Unjudged, _) => true,
-            (Self::Frozen(seed), _) => seed.contains_key(key) == required,
-            (Self::Definite(cube), true) => cube.must_hold(key),
-            (Self::Definite(cube), false) => !cube.may_hold(key),
-            (Self::Possible(cube), true) => cube.may_hold(key),
-            (Self::Possible(cube), false) => !cube.must_hold(key),
-        }
+            (Self::Frozen(seed), _) => seed.contains_key_with(key, || work.tick())? == required,
+            (Self::Definite(cube), true) => cube.must_hold(key, work)?,
+            (Self::Definite(cube), false) => !cube.may_hold(key, work)?,
+            (Self::Possible(cube), true) => cube.may_hold(key, work)?,
+            (Self::Possible(cube), false) => !cube.must_hold(key, work)?,
+        })
     }
 }
 
@@ -509,6 +519,7 @@ fn least_closure_with(
         pending,
         overhead,
     } = workspace;
+    closure.bind_program(program, work)?;
     let mut constraint_violated = false;
     closure.create_dense_relations(layouts, work)?;
     loop {
@@ -531,12 +542,14 @@ fn least_closure_with(
                 work,
             )?;
             closure.set_overhead(overhead.checked_add(bytes).ok_or(Stop::StorageLimit)?, work)?;
-            visit_round(
+            let (round, mut appender) = closure.split()?;
+            let result = visit_round(
                 program,
                 gates,
-                closure,
-                incremental,
+                &round,
+                &mut appender,
                 RoundPlan {
+                    incremental,
                     rules,
                     layouts,
                     block_steps,
@@ -547,11 +560,12 @@ fn least_closure_with(
                     pending: &mut *pending,
                 },
                 work,
-            )?
+            );
+            drop(assignment);
+            result?
         };
         let RoundConsequences {
             atoms: delta,
-            bytes: mut pending_bytes,
             constraint_violated: triggered,
         } = consequences;
         constraint_violated |= triggered;
@@ -563,13 +577,12 @@ fn least_closure_with(
         if schedule == Schedule::Delta {
             closure.advance(work)?;
         }
-        for atom in delta {
-            let bytes = relations::atom_bytes(&atom, work)?;
-            pending_bytes = pending_bytes
-                .checked_sub(bytes)
-                .ok_or(Stop::InvalidProgram)?;
-            closure.insert(atom, pending_bytes, work)?;
+        let pending_bytes = delta.bytes();
+        closure.commit(pending_bytes, work)?;
+        for &identity in delta.ids() {
+            closure.insert(identity, pending_bytes, work)?;
         }
+        drop(delta);
         closure.absorb(pending, layouts, work)?;
     }
     Ok(CompletedClosure {
@@ -581,8 +594,7 @@ fn least_closure_with(
 /// What a round derived for the tree relations, and whether a constraint
 /// fired. Its dense heads are the marks left in the pending marks.
 struct RoundConsequences {
-    atoms: BTreeSet<Atom>,
-    bytes: u128,
+    atoms: Pending,
     constraint_violated: bool,
 }
 
@@ -594,7 +606,7 @@ struct RoundConsequences {
 /// pending marks, which are disjoint, so their sum is what the derived-atom
 /// limit bounds.
 fn atoms_held(
-    closure: &Catalogs,
+    closure: &RoundRead<'_>,
     result: &RoundConsequences,
     pending: &PendingMarks,
 ) -> Result<usize, Stop> {
@@ -619,7 +631,8 @@ fn admits_more(held: usize, more: usize, work: &Work<'_>) -> Result<(), Stop> {
 fn record_head(
     key: AtomKey<'_>,
     dense_head: Option<(usize, &Dense)>,
-    closure: &Catalogs,
+    closure: &RoundRead<'_>,
+    appender: &mut AtomAppender<'_>,
     result: &mut RoundConsequences,
     pending: &mut PendingMarks,
     work: &mut Work<'_>,
@@ -628,35 +641,87 @@ fn record_head(
     if let Some((slot, dense)) = dense_head {
         // The bounds cover every derivable head: a key without a position
         // violates the admitted program's invariant.
-        work.charge(key.predicate().arity())?;
-        let position = dense.position(&key).ok_or(Stop::InvalidProgram)?;
+        let position = dense.position(&key, work)?.ok_or(Stop::InvalidProgram)?;
         if !dense.contains(position) && pending.mark(slot, position) {
             admits_more(held, 1, work)?;
             work.statistics.dense_heads += 1;
         }
-    } else if !closure.contains(&key, result.bytes, work)? && key.get(&result.atoms).is_none() {
-        admits_more(held, 1, work)?;
-        let (atom, bytes) = closure.pending(key, result.bytes, work)?;
-        result.atoms.insert(atom);
-        result.bytes = result.bytes.checked_add(bytes).ok_or(Stop::StorageLimit)?;
+    } else {
+        let pending_bytes = result.atoms.bytes();
+        let transient = appender
+            .storage_bytes()
+            .checked_add(pending_bytes)
+            .ok_or(Stop::StorageLimit)?;
+        if closure.contains(&key, transient, work)? {
+            return Ok(());
+        }
+        let other = closure
+            .base_bytes()
+            .checked_add(pending_bytes)
+            .ok_or(Stop::StorageLimit)?;
+        let limits = relations::storage::atom_limits(work, other)?;
+        appender.restart_storage_peak();
+        let inserted = appender
+            .entry_key_with(key, limits, || relations::charge(work, 1))
+            .and_then(|entry| entry.insert_with(limits, || relations::charge(work, 1)));
+        relations::storage::record(work, other + appender.storage_peak_bytes())?;
+        let identity = inserted.map_err(relations::storage::atom_failure)?;
+        relations::charge(work, 1)?;
+        if !result.atoms.contains(identity) {
+            admits_more(held, 1, work)?;
+            result.atoms.insert(
+                identity,
+                closure.base_bytes() + appender.storage_bytes(),
+                work,
+            )?;
+        }
     }
     Ok(())
 }
 
-/// The prepared parts a round reads and never changes: the rule index of
-/// the incremental rounds, the dense layouts, which name a head's slot, and
-/// the block-step plan.
+/// A round's immutable rule-selection mode and prepared indexes. Dense layouts
+/// name each head's slot; the block-step plan names eligible join occurrences.
 #[derive(Clone, Copy)]
 struct RoundPlan<'a> {
+    incremental: bool,
     rules: &'a prepared::Rules,
     layouts: &'a Layouts,
     block_steps: &'a BlockSteps,
 }
 
+impl RoundPlan<'_> {
+    /// Prepare the exact template sequence before visiting bindings. Bootstrap
+    /// visits source order; incremental rounds sort and coalesce rule indices
+    /// named by new predicates, retaining the existing checked work sequence.
+    fn select_rules(
+        self,
+        program: &Program,
+        closure: &RoundRead<'_>,
+        selected: &mut Vec<usize>,
+        work: &mut Work<'_>,
+    ) -> Result<usize, Stop> {
+        if !self.incremental {
+            return Ok(program.templates().len());
+        }
+        selected.clear();
+        for predicate in closure.predicates_with_new() {
+            work.tick()?;
+            for &index in self.rules.naming(predicate, work)? {
+                work.tick()?;
+                selected.push(index);
+            }
+        }
+        work.charge(selected.len())?;
+        selected.sort_unstable();
+        selected.dedup();
+        Ok(selected.len())
+    }
+}
+
 /// The scratch a round writes: the assignment, the join buffers and the
 /// pending marks, which take a dense head's position.
 struct RoundScratch<'a, 'source> {
-    assignment: &'a mut [Option<&'source Value>],
+    assignment: &'a mut [Option<TermRef<'source>>],
     buffers: &'a mut prepared::Buffers,
     pending: &'a mut PendingMarks,
 }
@@ -667,7 +732,7 @@ struct RoundScratch<'a, 'source> {
 trait Sink<'source, E> {
     fn binding(
         &mut self,
-        assignment: &[Option<&'source Value>],
+        assignment: &[Option<TermRef<'source>>],
         work: &mut Work<'_>,
     ) -> Result<(), E>;
 
@@ -684,7 +749,7 @@ trait Sink<'source, E> {
     fn rows(
         &mut self,
         _rows: Block<'source>,
-        _assignment: &[Option<&'source Value>],
+        _assignment: &[Option<TermRef<'source>>],
         _work: &mut Work<'_>,
     ) -> Result<u64, E> {
         Ok(0)
@@ -693,11 +758,11 @@ trait Sink<'source, E> {
 
 impl<'source, E, F> Sink<'source, E> for F
 where
-    F: FnMut(&[Option<&'source Value>], &mut Work<'_>) -> Result<(), E>,
+    F: FnMut(&[Option<TermRef<'source>>], &mut Work<'_>) -> Result<(), E>,
 {
     fn binding(
         &mut self,
-        assignment: &[Option<&'source Value>],
+        assignment: &[Option<TermRef<'source>>],
         work: &mut Work<'_>,
     ) -> Result<(), E> {
         self(assignment, work)
@@ -705,9 +770,10 @@ where
 }
 
 /// The consumer of one template's joins in a closure round.
-struct RoundSink<'a, 'source> {
-    template: &'a Template,
-    closure: &'source Catalogs,
+struct RoundSink<'a, 'source, 'writer> {
+    template: TemplateRef<'a>,
+    closure: &'source RoundRead<'source>,
+    appender: &'a mut AtomAppender<'writer>,
     /// The head's pending-marks slot and relation, when the head is laid out.
     dense_head: Option<(usize, &'source Dense)>,
     /// The template's block-step plan, by positive occurrence.
@@ -716,10 +782,10 @@ struct RoundSink<'a, 'source> {
     pending: &'a mut PendingMarks,
 }
 
-impl<'source> Sink<'source, Stop> for RoundSink<'_, 'source> {
+impl<'source> Sink<'source, Stop> for RoundSink<'_, 'source, '_> {
     fn binding(
         &mut self,
-        assignment: &[Option<&'source Value>],
+        assignment: &[Option<TermRef<'source>>],
         work: &mut Work<'_>,
     ) -> Result<(), Stop> {
         work.tick()?;
@@ -730,6 +796,7 @@ impl<'source> Sink<'source, Stop> for RoundSink<'_, 'source> {
                 key,
                 self.dense_head,
                 self.closure,
+                self.appender,
                 self.result,
                 self.pending,
                 work,
@@ -751,7 +818,7 @@ impl<'source> Sink<'source, Stop> for RoundSink<'_, 'source> {
     fn rows(
         &mut self,
         rows: Block<'source>,
-        assignment: &[Option<&'source Value>],
+        assignment: &[Option<TermRef<'source>>],
         work: &mut Work<'_>,
     ) -> Result<u64, Stop> {
         let (Some(head), Some((slot, dense))) = (self.template.head(), self.dense_head) else {
@@ -760,10 +827,12 @@ impl<'source> Sink<'source, Stop> for RoundSink<'_, 'source> {
         let bound = head.terms().len().saturating_sub(1);
         work.charge(bound)?;
         let heads = dense.layout().prefix_range(
-            head.terms()[..bound]
+            head.terms()
                 .iter()
+                .take(bound)
                 .map_while(|term| resolve(term, assignment)),
-        );
+            work,
+        )?;
         if heads.len() != rows.len {
             // The head's bounds cover every derivable head: a head prefix
             // outside them derives nothing, so the block holds no row.
@@ -793,74 +862,61 @@ impl<'source> Sink<'source, Stop> for RoundSink<'_, 'source> {
 fn visit_round<'source>(
     program: &Program,
     gates: Gates<'_>,
-    closure: &'source Catalogs,
-    incremental: bool,
+    closure: &'source RoundRead<'source>,
+    appender: &mut AtomAppender<'_>,
     plan: RoundPlan<'_>,
     scratch: RoundScratch<'_, 'source>,
     work: &mut Work<'_>,
 ) -> Result<RoundConsequences, Stop> {
-    let RoundPlan {
-        rules,
-        layouts,
-        block_steps,
-    } = plan;
     let RoundScratch {
         assignment,
         buffers,
         pending,
     } = scratch;
     let mut result = RoundConsequences {
-        atoms: BTreeSet::new(),
-        bytes: 0,
+        atoms: Pending::default(),
         constraint_violated: false,
     };
-    let visited = if incremental {
-        buffers.rules.clear();
-        for predicate in closure.predicates_with_new() {
-            work.tick()?;
-            for &index in rules.naming(predicate) {
-                work.tick()?;
-                buffers.rules.push(index);
-            }
-        }
-        work.charge(buffers.rules.len())?;
-        buffers.rules.sort_unstable();
-        buffers.rules.dedup();
-        buffers.rules.len()
-    } else {
-        program.templates().len()
-    };
+    let live = closure.base_bytes() + appender.storage_bytes() + result.atoms.bytes();
+    relations::storage::admit(work, live)?;
+    relations::storage::record(work, live)?;
+    let visited = plan.select_rules(program, closure, &mut buffers.rules, work)?;
     for position in 0..visited {
-        let index = if incremental {
+        let index = if plan.incremental {
             buffers.rules[position]
         } else {
             position
         };
-        let template = &program.templates()[index];
+        let template = program.templates().at(index).ok_or(Stop::InvalidProgram)?;
         work.tick()?;
         if !gates.admits(template) {
             continue;
         }
         // A laid-out head has its relation from the start of the closure, so
         // both are resolved once for the template, not once per binding.
-        let dense_head = match template
-            .head()
-            .and_then(|head| layouts.slot(head.predicate()).zip(Some(head.predicate())))
-        {
-            Some((slot, predicate)) => {
-                Some((slot, closure.dense(predicate).ok_or(Stop::InvalidProgram)?))
-            }
+        let dense_head = match template.head().and_then(|head| {
+            plan.layouts
+                .slot(head.predicate())
+                .zip(Some(head.predicate()))
+        }) {
+            Some((slot, predicate)) => Some((
+                slot,
+                closure
+                    .dense(predicate, work)?
+                    .ok_or(Stop::InvalidProgram)?,
+            )),
             None => None,
         };
         let mut emit = RoundSink {
             template,
             closure,
+            appender: &mut *appender,
             dense_head,
-            block_steps: block_steps.of(index),
+            block_steps: plan.block_steps.of(index),
             result: &mut result,
             pending: &mut *pending,
         };
-        if incremental {
+        if plan.incremental {
             // Repeated predicates retain distinct occurrences. Earlier Old,
             // this New and later Current rows select the unique first new row.
             for (pivot, pattern) in template.positive().iter().enumerate() {
@@ -898,14 +954,19 @@ fn visit_round<'source>(
             )?;
         }
     }
+    result.atoms.order(
+        appender,
+        closure.base_bytes() + appender.storage_bytes(),
+        work,
+    )?;
     Ok(result)
 }
 
 // Establish closure ∩ gate_carrier = seed in both directions by one merge:
 // the closure's rows of each gate predicate, a contiguous range of the model,
-// walked against the seed's atoms, both in canonical order. Charges one unit
-// per gate predicate, per closure gate row and per seed atom left unmatched,
-// and keeps charging after a mismatch; rejection does not bypass work limits.
+// walked against the seed's atoms, both in canonical order. Predicate windows
+// and atom comparisons use the shared checked lookup and typed comparator.
+// The scan continues after a mismatch; rejection does not bypass work limits.
 // Positive-only atoms do not belong to this comparison's projected carrier.
 fn gate_agreement(
     program: &Program,
@@ -917,20 +978,28 @@ fn gate_agreement(
     let mut seed = seed.atoms().peekable();
     for predicate in program.gate_predicates() {
         work.tick()?;
-        for atom in closure.of_predicate(predicate) {
+        let rows = closure.lookup().predicate_with(predicate, || work.tick())?;
+        for row in rows {
             work.tick()?;
-            while seed.peek().is_some_and(|pending| *pending < atom) {
-                // A seed atom the closure never derived.
-                work.tick()?;
-                seed.next();
-                agreement = false;
+            let atom = row.atom();
+            let mut matched = false;
+            while let Some(pending) = seed.peek() {
+                match pending.compare_ref_with(atom, || work.tick())? {
+                    std::cmp::Ordering::Less => {
+                        // A seed atom the closure never derived.
+                        work.tick()?;
+                        seed.next();
+                        agreement = false;
+                    }
+                    std::cmp::Ordering::Equal => {
+                        seed.next();
+                        matched = true;
+                        break;
+                    }
+                    std::cmp::Ordering::Greater => break,
+                }
             }
-            if seed.peek() == Some(&atom) {
-                seed.next();
-            } else {
-                // A derived gate atom the seed does not hold.
-                agreement = false;
-            }
+            agreement &= matched;
         }
     }
     for _ in seed {
@@ -941,38 +1010,63 @@ fn gate_agreement(
 }
 
 struct Frame<'frame, 'source> {
-    assignment: &'frame mut [Option<&'source Value>],
+    assignment: &'frame mut [Option<TermRef<'source>>],
     buffers: &'frame mut prepared::Buffers,
     selection: Selection,
 }
 
+/// The caller's named retained metadata shares this allowance with one query's
+/// local assignment, cursor and undo buffers. Callback-owned storage has its
+/// own account; the callback receives the live scratch subtotal to compose it.
+#[derive(Clone, Copy)]
+struct QueryStorage {
+    retained_bytes: u128,
+    max_bytes: usize,
+}
+
 fn visit<'source, E: From<Stop>>(
-    template: &Template,
+    template: TemplateRef<'_>,
     relations: &'source impl Relational,
     gates: Gates<'_>,
     membership: Option<&mut worlds::Join<'_>>,
+    storage: QueryStorage,
     work: &mut Work<'_>,
-    mut emit: impl FnMut(&[Option<&'source Value>], &mut Work<'_>) -> Result<(), E>,
-) -> Result<(), E> {
-    let mut assignment = vec![None; template.variable_count()];
-    let mut buffers = prepared::Buffers::local(template.positive().len());
+    mut emit: impl FnMut(&[Option<TermRef<'source>>], u128, &mut Work<'_>) -> Result<(), E>,
+) -> Result<u128, E> {
+    let dimensions = prepared::Dimensions::for_template(template);
+    let previous = work.limits.max_closure_bytes;
+    work.limits.max_closure_bytes = storage.max_bytes;
+    let prepared = (|| {
+        let (assignment, bytes) = prepared::assignment(&dimensions, storage.retained_bytes, work)?;
+        let buffers = prepared::Buffers::local(template, storage.retained_bytes + bytes, work)?;
+        let scratch = bytes + size_of::<prepared::Buffers>() as u128 + buffers.bytes()?;
+        Ok::<_, Stop>((assignment, buffers, scratch))
+    })();
+    // Restore even after a failed reserve. Source consumers can have independent
+    // catalog or chunk admission and must not inherit this scratch allowance.
+    work.limits.max_closure_bytes = previous;
+    let (mut assignment, mut buffers, scratch) = prepared?;
+    let mut borrowed_emit = |assignment: &[Option<TermRef<'source>>], work: &mut Work<'_>| {
+        emit(assignment, scratch, work)
+    };
     visit_with(
         template,
         relations,
         gates,
         membership,
         work,
-        &mut emit,
+        &mut borrowed_emit,
         Frame {
             assignment: &mut assignment,
             buffers: &mut buffers,
             selection: Selection::All,
         },
-    )
+    )?;
+    Ok(scratch)
 }
 
 fn visit_with<'source, E: From<Stop>>(
-    template: &Template,
+    template: TemplateRef<'_>,
     relations: &'source impl Relational,
     gates: Gates<'_>,
     mut membership: Option<&mut worlds::Join<'_>>,
@@ -981,7 +1075,7 @@ fn visit_with<'source, E: From<Stop>>(
     frame: Frame<'_, 'source>,
 ) -> Result<(), E> {
     // Reset all query state before this source occurrence. No binding survives
-    // template reuse; positive matching still returns original borrowed values.
+    // template reuse; positive matching still returns borrowed term references.
     let Frame {
         assignment,
         buffers,
@@ -1030,13 +1124,16 @@ fn visit_with<'source, E: From<Stop>>(
             continue;
         }
         let occurrence = selection.occurrence(depth);
-        let pattern = &template.positive()[occurrence];
+        let pattern = template
+            .positive()
+            .get(occurrence)
+            .ok_or(Stop::InvalidProgram)?;
         // The relation is fixed for the depth: resolve it on first entry and
         // index it on every later probe.
         if resolutions[depth] == Resolution::Unresolved {
             work.tick()?;
             resolutions[depth] = relations
-                .resolve(pattern.predicate())
+                .resolve(pattern.predicate(), work)?
                 .map_or(Resolution::Absent, Resolution::At);
         }
         let tuples = match resolutions[depth] {
@@ -1094,10 +1191,10 @@ fn visit_with<'source, E: From<Stop>>(
 /// was given. The block is that of the bound leading terms, which for such an
 /// occurrence are all but its last.
 fn step_by_blocks<'source, E: From<Stop>>(
-    pattern: &AtomPattern,
+    pattern: PatternRef<'_>,
     tuples: Rows<'source>,
     occurrence: usize,
-    assignment: &[Option<&'source Value>],
+    assignment: &[Option<TermRef<'source>>],
     emit: &mut impl Sink<'source, E>,
     work: &mut Work<'_>,
 ) -> Result<bool, E> {
@@ -1122,88 +1219,6 @@ fn step_by_blocks<'source, E: From<Stop>>(
             work,
         )?;
         work.statistics.bindings += bound;
-    }
-    Ok(true)
-}
-
-fn bind<'source>(
-    pattern: &AtomPattern,
-    row: Row<'source>,
-    assignment: &mut [Option<&'source Value>],
-    undo: &mut Vec<usize>,
-    work: &mut Work<'_>,
-) -> Result<bool, Stop> {
-    for (term, value) in pattern.terms().iter().zip(row.values()) {
-        structural_work(value, work)?;
-        match term {
-            Term::Constant(expected) if expected != value => return Ok(false),
-            Term::Variable(variable) => match assignment[*variable] {
-                Some(expected) if expected != value => return Ok(false),
-                Some(_) => {}
-                None => {
-                    assignment[*variable] = Some(value);
-                    undo.push(*variable);
-                }
-            },
-            Term::Constant(_) => {}
-        }
-    }
-    Ok(true)
-}
-
-fn structural_work(value: &Value, work: &mut Work<'_>) -> Result<(), Stop> {
-    if let Value::Structured(value) = value {
-        work.charge(value.payload_bytes())?;
-    }
-    Ok(())
-}
-
-fn clear(assignment: &mut [Option<&Value>], undo: &mut Vec<usize>) {
-    for variable in undo.drain(..) {
-        assignment[variable] = None;
-    }
-}
-
-fn resolve<'a>(term: &'a Term, assignment: &[Option<&'a Value>]) -> Option<&'a Value> {
-    match term {
-        Term::Constant(value) => Some(value),
-        Term::Variable(variable) => assignment[*variable],
-    }
-}
-
-fn guards(
-    template: &Template,
-    assignment: &[Option<&Value>],
-    gates: Gates<'_>,
-    work: &mut Work<'_>,
-) -> Result<bool, Stop> {
-    for filter in template.filters() {
-        work.tick()?;
-        let (left, right) = filter.terms();
-        if let (Some(left), Some(right)) = (resolve(left, assignment), resolve(right, assignment)) {
-            structural_work(left, work)?;
-            structural_work(right, work)?;
-            let equal = left == right;
-            if matches!(filter, Filter::Eq(..)) != equal {
-                return Ok(false);
-            }
-        }
-    }
-    if matches!(gates, Gates::Unjudged) {
-        return Ok(true);
-    }
-    for (patterns, required) in [(template.gate_true(), true), (template.gate_false(), false)] {
-        for pattern in patterns {
-            work.tick()?;
-            work.charge(pattern.terms().len())?;
-            // An absent referenced slot defers this gate until a later join
-            // supplies it. A complete key borrows the exact lookup tuple.
-            if let Ok(key) = pattern.key(assignment)
-                && !gates.holds(&key, required)
-            {
-                return Ok(false);
-            }
-        }
     }
     Ok(true)
 }

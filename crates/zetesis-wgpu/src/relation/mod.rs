@@ -1,4 +1,11 @@
 //! Bounded equality filtering over a borrowed immutable relation snapshot.
+//!
+//! Uploaded u32 columns use the core Relation's local equality dictionary.
+//! They are derived coordinates, not canonical term IDs or arithmetic values.
+//! The Relation resolves typed query terms (including foreign-catalog terms)
+//! into that dictionary; preparation and filtering require the same Relation
+//! instance. Canonical payload remains with the borrowed source catalog, and
+//! returned mask bits name original row occurrences, including repetitions.
 
 mod device;
 mod packing;

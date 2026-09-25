@@ -507,7 +507,7 @@ fn competition_matches_bounded_completion() {
                     models.insert(
                         model
                             .atoms()
-                            .map(|index| atom_text(&admitted.atoms()[index]))
+                            .map(|index| atom_text(admitted.atoms().at(index).unwrap()))
                             .collect()
                     )
                 );
@@ -537,13 +537,17 @@ fn constructed_keys_retain_objective_contributions() {
     assert_eq!(models.len(), 2);
     let mut costs = Vec::new();
     for names in models {
-        let model = zetesis_core::Model::new(
+        let model = zetesis_core::Model::from_positions(
+            admitted.atom_catalog(),
             admitted
                 .atoms()
                 .iter()
-                .filter(|atom| names.contains(&atom_text(atom)))
-                .cloned(),
-        );
+                .enumerate()
+                .filter_map(|(position, atom)| {
+                    names.contains(&atom_text(atom)).then_some(position)
+                }),
+        )
+        .unwrap();
         let score = zetesis_objective::evaluate(
             admitted.objectives(),
             &model,

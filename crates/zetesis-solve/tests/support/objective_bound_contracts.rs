@@ -52,13 +52,17 @@ fn input(admitted: &AdmittedFormula) -> Input<'_> {
 }
 
 fn score(admitted: &AdmittedFormula, names: &[&str]) -> Score {
-    let model = Model::new(
+    let model = Model::from_positions(
+        admitted.atom_catalog(),
         admitted
             .atoms()
             .iter()
-            .filter(|atom| names.contains(&atom.predicate().name()))
-            .cloned(),
-    );
+            .enumerate()
+            .filter_map(|(position, atom)| {
+                names.contains(&atom.predicate().name()).then_some(position)
+            }),
+    )
+    .unwrap();
     zetesis_objective::evaluate(
         admitted.objectives(),
         &model,

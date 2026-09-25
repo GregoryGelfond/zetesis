@@ -192,10 +192,11 @@ new theorem or existing law certifies the concrete cursor state machine.
 Gate and consequence membership uses a checked `AtomKey` over that borrowed
 assignment. The key denotes the same signed predicate and complete typed tuple
 as materialization. Gate lookup and duplicate-head lookup create no owned atom;
-a new consequence of a catalog is copied into the pending delta, and one of a
-dense relation is a pending bit. Key construction charges
+a new tree consequence retains a discovery ID after canonical import, and a
+dense consequence is a pending coordinate bit. Key construction charges
 the argument span separately from catalog lookup receipts, including a deferred
-gate with a missing slot. Emitted source instances still own their values.
+gate with a missing slot. CPU source instances borrow checked keys for the
+callback lifetime; their buffers own metadata, not logical payload.
 `AtomKeys.tuple_agrees` equates views agreeing on all requested reads;
 `membership_identity` connects successful substitution to extensional tuple
 membership. Rust comparison/hash equivalence, index construction and binding
@@ -247,16 +248,16 @@ these concrete boundaries.
 `SeedSelections.materialization_exact` shows that ordering and coalescing the
 atom denotations of shared handles preserves their exact true set. Distinct
 handles may denote the same atom. The Rust `SeedSelection` owns canonical shared
-handles, while `SeedView` borrows either those handles or an owned `Seed` without
-materialization. Arc lifetime safety, program-instance validation, canonical
+coordinate tokens, while `SeedView` borrows their semantic atom views without
+materializing owned atoms. Arc lifetime safety, program-instance validation, canonical
 comparison and the executable candidate cursor remain separate correspondence
 obligations. This interpretation law does not establish answer-set membership
 or complete candidate coverage.
 
 `GatePositions.atoms_exact` identifies the gate subsequence of an indexed atom
 carrier. `retained_position_exact` relates each gate rank to its original dense
-position and atom. Rust's `GateAtom` retains an opaque program identity, atom and
-checked positive position. `SeedAtom::resolve_in` uses that position in the
+position and atom. Rust's `GateAtom` retains a Program-bound `CarrierAtom`
+coordinate token and checked positive position. `SeedAtom::resolve_in` uses that position in the
 compiled gate table; ordinary CPU and GPU packing share this resolver. The
 implementation must establish the common predicate/domain order, inseparable
 token construction, program identity and checked indices. The Lean laws prove
@@ -271,6 +272,18 @@ product, including signed predicates and typed values. This is executable test
 evidence and a source argument, not a Lean proof of Rust's iterator. Canonical
 carrier ranks remain distinct from append-assigned catalog identities and ASP
 term comparison order.
+
+[`CarrierCoordinates`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/CarrierCoordinates.lean)
+makes the coordinate bridge explicit. `decode_injective` requires unique signed
+signatures and typed domain values. `tuple_before_iff` and `decode_before_iff`
+transport order only when those component decoders preserve and reflect the
+chosen relations; increasing interning IDs do not supply that premise.
+`sparse_membership_iff` identifies a selected atom with its unique coordinate
+without assuming a finite or machine-representable whole carrier.
+`shared_vocabulary_does_not_identify_atoms` separates shared term/signature
+meaning from independent atom-row positions. These laws assume admitted
+coordinate types; Rust still checks arity, bounds, exact Program applicability,
+immutable owner retention and fallible coordinate construction.
 
 `GatePositions.rank_fold_eq_blocks` relates the left-to-right domain-rank fold
 to the sum of lexicographic block offsets. `blockOffset_lt_cardinality` places
@@ -317,18 +330,21 @@ completed decisions survive a later resource stop, while cancellation and
 deadlines retain stopped coverage. These control and allocation properties are
 Rust obligations, not consequences of the representation equality.
 
-The scalar lazy closure retains one typed `Catalog` for each predicate. Every
-round borrows their existing ordered rows; new consequences remain separate
-until that round's complete template scan finishes. Catalogs are consumed once
-to assemble the final interpretation. This preserves the synchronous
-least-closure argument while removing per-round relation reconstruction.
+The scalar lazy closure retains one canonical tuple authority per Program
+workspace. Per-predicate `Catalog` values retain scoped membership and
+ordering/equality metadata. Every round borrows committed rows while a disjoint
+appender admits newly discovered identities. Pending discovery IDs and dense
+coordinate marks remain separate from truth until the complete scan finishes.
+Final result publication selects the completed truth over an immutable prefix;
+reset clears memberships, frontiers and pending marks while retaining identity
+and reusable capacity for the next candidate.
 `RelationExtension` states preservation of old row reconstruction and equality
-selection when row references and dictionary meanings survive extension.
-Concrete insertion rollback, borrowed access order and catalog work accounting
-remain executable obligations. `catalog_work` is a subtotal of oracle work;
-subtracting it leaves the other charged source operations, not a runtime estimate.
-`Cancellation` is polled around each bounded catalog operation. Final `Model`
-canonicalization retains its separate comparison and allocation contract.
+selection when row references and dictionary meanings survive extension. It does
+not establish the new Rust owner/prefix checks, publication protocol or reset
+implementation. `catalog_work` is a subtotal of oracle work; subtracting it
+leaves other charged operations, not a runtime estimate. Existing selection and
+round laws supply the semantic interfaces, while the complete composition with
+canonical tuple storage remains an executable refinement obligation.
 
 [`ModelSelections`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ModelSelections.lean)
 relates selected catalog positions to their interpretation. Canonical ordering
@@ -338,17 +354,20 @@ and a renumbering preserves meaning when the selected atoms agree. Rust
 Static and formula answers share their program catalogs; completed batched lazy
 closures share a catalog frozen after the final complete round. Checked positions,
 logical comparison, ownership and allocation remain executable obligations.
-The common `ModelRetention` ledger charges each distinct catalog allocation once,
-including unselected atoms, then selected-position records per entry and the
-consumer's score records. `StorageOwners.sum_within_component_bounds` supplies
+The common `ModelRetention` ledger charges each distinct occurrence catalog's
+portable encoding once, including repeated and unselected entries, then
+selected-position records per entry and the consumer's score records.
+`StorageOwners.sum_within_component_bounds` supplies
 the finite-sum bound when those canonical components are completely covered
 once. It does not establish the ledger's allocation-identity/hash invariant,
 checked arithmetic or transactional publication. Rust keeps a live catalog
 handle for every private identity key and commits only after both owner-index
 and consumer-slot reservations. Abandoned or refused admissions preserve the
 prior retained family; replacement admits the complete new family before
-dropping the old one. The measure excludes capacity/allocator overhead and
-transient old/new overlap, so it is not an allocated-byte or process-memory bound.
+dropping the old one. The measure excludes canonical identities outside the
+occurrence maps, capacity/allocator overhead and transient old/new overlap.
+It is not an allocated-byte or process-memory bound, even when a retained
+catalog's shared prefix contains those additional identities.
 
 [`AtomCatalogs`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/AtomCatalogs.lean)
 describes a catalog split into a committed prefix and a pending suffix.
@@ -360,6 +379,62 @@ public `AtomCatalog` inputs, which can retain duplicate dense slots. Index
 ordering, transactional publication, allocation, machine bounds and Rust borrows
 remain implementation obligations. These representation laws do not replace the
 reduct or establish answer-set membership.
+
+[`CanonicalCatalog`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/CanonicalCatalog.lean)
+separates original occurrences from canonical IDs. `selection_exact` composes
+those two decoders, including duplicate occurrences; `normalized_selection_exact`
+preserves that interpretation after a specified permutation and duplicate
+removal. `append_preserves_interpretation` requires every selected mapped ID to
+lie in the old prefix, so an invalid old ID cannot silently become a new selected
+atom. `owner_transfer_preserves_interpretation` requires agreement of decoded
+atoms, and `raw_ids_do_not_determine_interpretation` shows why raw equality is
+insufficient. The laws reuse `ModelSelections`; they do not establish DAG
+interning uniqueness, Rust comparison/hash consistency, lifetimes or storage
+accounting.
+
+`TemplateCatalog` stores shared ordered terms, patterns and filters beneath
+separate rule and objective policies. `Program` retains rule topology and its
+explicit domain/signature order; `ObjectiveProgram` retains weight polarity,
+priority slots and ID-only closed conditions. Shared component storage creates
+no synthetic support or objective rule.
+The source compiler uses the same component schema for its constants, predicates,
+patterns and filters. Its private coordinates are valid only with the
+preparation that admitted them. Generated terms extend the vocabulary without
+changing the meaning of the static prefix; truth and support remain separate
+selections. This owner pairing and prefix preservation are concrete Rust
+obligations, not consequences of integer equality.
+[`CanonicalTemplates`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/CanonicalTemplates.lean)
+proves that decoding commutes with substitution of ordered argument tuples,
+including repeated occurrences and absent variables. Its variable-only case
+equals the existing `BindingScopes.readAll` operation. The identity type ranges
+over an available vocabulary: Rust must establish the scope and prefix checks
+that make its decoder total. Refinement of the concrete template storage and
+flat condition-node evaluator to these definitions and
+`ObjectiveConditions.Query` remains an implementation obligation. These laws
+neither prove source compilation nor infer answer-set membership from identity.
+
+`DerivedTerms` gives registered input aliases and newly constructed terms one
+fresh identity scope. Input edges borrow exact immutable catalog prefixes;
+generated compounds retain local child IDs and borrowed constructor names.
+`TermRead` exposes both through the same typed term view. The input payload is
+not copied into the derived arena. Equal terms from different input owners, or
+from an alias and a construction, must receive the same registered identity.
+
+The existing laws state the required semantic boundary.
+`CanonicalCatalog.owner_transfer_preserves_interpretation` requires decoded
+agreement when identities change owners; it does not infer agreement from equal
+integers. `CanonicalTemplates.substitute_decodes` preserves ordered child
+occurrences, including repetitions, once scope and prefix checks establish the
+decoder's domain. `StructuralBindings` and `Observations` then state matching
+and completed-output laws over those decoded values. No new reduct is involved.
+
+Exact alias interning, collision checks, cached expanded measures, borrowed
+lifetimes and preservation of a complete prefix on refusal or a caught callback
+panic remain Rust obligations. So does the absence of copied input payload.
+`StorageOwners` applies only after a complete, disjoint accounting of the shared
+inputs and the arena's own capacities; logical occurrence charges do not measure
+physical sharing. The formula-DAG laws in `DagSharing` do not certify this typed
+term representation or its Rust implementation.
 
 [`PartitionedScan`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/PartitionedScan.lean)
 proves that exact finite partitioning preserves an eligible-atom count and maximum
@@ -394,9 +469,10 @@ observation of asynchronous cancellation between bookkeeping units.
 shares one exact program and records the join dimensions it inspected. Reusing
 that owner does not reuse a reduct or an interpretation. Each candidate starts
 with empty relations; assignments borrow only its current immutable round.
-`Catalog::take_atoms` transfers completed atoms into the result and resets the
-remaining identity metadata. Unlike append, this operation invalidates prior
-row and equality IDs. The next candidate cannot inherit those IDs or their truth.
+Final assembly publishes a selected immutable prefix and resets truth-bearing
+relation memberships, frontiers and pending marks. The canonical authority and
+its discovered identities remain available; their presence supplies no truth to
+the next candidate. Previous results retain their original immutable prefix.
 The required refinement is equality with a fresh full-round closure, including
 constraints and frozen-seed agreement. The scalar and batch reuse controls
 compare those results, retained buffer addresses and failure recovery. They do
@@ -662,7 +738,10 @@ ordinary command requests it. Unknown,
 stopped and inapplicable analysis supply no narrowing. Concrete analyzer
 soundness, source/IR correspondence, dictionary identity, the agreement of the
 guard's comparison verdict with the join's, and recursive matching remain
-unproved implementation bridges. The
+unproved implementation bridges. Prepared candidates now retain scoped source
+term IDs. Each support snapshot decodes them into its own relation dictionaries;
+the preservation premise concerns decoded values, not equality of numeric IDs
+across those authorities. The
 [domain-binding guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/domain-bindings.md)
 also states the separate work, storage and authored-error obligations.
 

@@ -1,4 +1,5 @@
 use super::{Atom, Failure, Limits, Relation, Resource, Value, atoms, limit, predicate};
+use crate::catalog::TermRef;
 
 #[test]
 fn masks_preserve_typed_conjunctions_over_the_input() {
@@ -34,7 +35,10 @@ fn masks_preserve_typed_conjunctions_over_the_input() {
     for left in &values {
         for right in &values {
             let query = relation
-                .query(&[(0, left), (1, right)], Limits::default())
+                .query(
+                    &[(0, TermRef::from(left)), (1, TermRef::from(right))],
+                    Limits::default(),
+                )
                 .unwrap();
             let mask = relation
                 .select_mask(&query, &input, Limits::default())
@@ -93,7 +97,10 @@ fn contradictory_equalities_produce_zero_masks() {
     let input = relation.all(Limits::default()).unwrap();
     let query = relation
         .query(
-            &[(0, &Value::Number(1)), (0, &Value::Number(2))],
+            &[
+                (0, TermRef::from(&Value::Number(1))),
+                (0, TermRef::from(&Value::Number(2))),
+            ],
             Limits::default(),
         )
         .unwrap();
@@ -134,7 +141,7 @@ fn missing_values_still_charge_zero_mask_storage() {
     let relation = Relation::from_atoms(&signature, &source, Limits::default()).unwrap();
     let input = relation.all(Limits::default()).unwrap();
     let query = relation
-        .query(&[(0, &Value::Number(2))], Limits::default())
+        .query(&[(0, TermRef::from(&Value::Number(2)))], Limits::default())
         .unwrap();
     let mask = relation
         .select_mask(&query, &input, Limits::default())
@@ -255,7 +262,7 @@ fn masks_preserve_repeated_catalog_occurrences() {
         Relation::from_catalog(&signature, &source, &indices, Limits::default()).unwrap();
     let input = relation.selection(&[0, 1, 2], Limits::default()).unwrap();
     let query = relation
-        .query(&[(0, &Value::Number(5))], Limits::default())
+        .query(&[(0, TermRef::from(&Value::Number(5)))], Limits::default())
         .unwrap();
     let mask = relation
         .select_mask(&query, &input, Limits::default())
@@ -267,6 +274,9 @@ fn masks_preserve_repeated_catalog_occurrences() {
     assert_eq!(selected.positions(), &[0, 2]);
     for row in 0..2 {
         assert_eq!(selected.row(row).unwrap().source_index(), 1);
-        assert_eq!(selected.row(row).unwrap().predicate(), &signature);
+        assert_eq!(
+            selected.row(row).unwrap().predicate(),
+            crate::catalog::PredicateRef::from(&signature)
+        );
     }
 }

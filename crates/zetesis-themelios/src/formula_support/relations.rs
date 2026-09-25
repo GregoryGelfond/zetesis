@@ -2,15 +2,28 @@
 
 use std::collections::{BTreeMap, btree_map::Entry};
 use std::mem::size_of;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use themelios_base::span::Location;
+use zetesis_core::atom_interner::{self, AtomAppender, AtomInterner};
+use zetesis_core::catalog::{AtomRef, Atoms, CatalogRead, PredicateRef, TermRef};
 use zetesis_core::relation::{Catalog, CatalogFailure, Failure, Limits, Relation, Resource, Row};
-use zetesis_core::{Atom, AtomKey, AtomPattern, Predicate, Term, Value};
+#[cfg(test)]
+use zetesis_core::{Atom, AtomPattern, Predicate, Value};
+use zetesis_core::{
+    AtomKey, BindingView, PatternRef, TemplateComponents, TemplateComponentsRef, TemplateTerm,
+};
 
 use super::Counters;
 use crate::formula::ceiling;
 use crate::grounding_observer::Event;
 use crate::{FormulaFailure, FormulaLimits, FormulaResource};
+
+mod append;
+mod publication;
+pub(super) use append::AssignedAtom;
+pub(super) use append::SupportAppend;
+pub(crate) use append::{SourceAtom, SourceScope};
 
 #[cfg(test)]
 mod tests;
@@ -21,172 +34,428 @@ struct CatalogRows {
     old_rows: usize,
 }
 
-/// The sole owner of possible atoms and appendable equality postings.
-#[derive(Default)]
+/// Canonical payload has one evolving authority. Relations and pending rounds
+/// retain only metadata scoped to that authority; discovery positions never escape.
 pub(crate) struct SupportCatalog {
-    rows: BTreeMap<Predicate, CatalogRows>,
-    atoms: usize,
+    pub(super) owner: AtomInterner,
+    pub(super) components: Option<TemplateComponents>,
+    scope: SourceScope,
+    rows: Vec<CatalogRows>,
+    pending: Vec<usize>,
+    supported: Vec<u64>,
+    // Shared only by a borrowed admission round. Relaxed accounting carries no
+    // publication synchronization; completed snapshots omit this observation.
+    // An atomic reference also preserves movable prepared checker state.
+    growth: AtomicUsize,
     entries: usize,
     index_bytes: usize,
     prepared_bytes: usize,
 }
 
-impl SupportCatalog {
-    /// Borrowed producer metadata coexists with every growing snapshot. It is
-    /// released before this catalog becomes the completed support owner.
-    pub(super) fn with_prepared_bytes(prepared_bytes: usize) -> Self {
+impl Default for SupportCatalog {
+    fn default() -> Self {
         Self {
-            prepared_bytes,
-            ..Self::default()
+            owner: AtomInterner::new(),
+            components: None,
+            scope: SourceScope::new(),
+            rows: Vec::new(),
+            pending: Vec::new(),
+            supported: Vec::new(),
+            growth: AtomicUsize::new(0),
+            entries: 0,
+            index_bytes: size_of::<Self>() - size_of::<AtomInterner>()
+                + SourceScope::shared_bytes(),
+            prepared_bytes: 0,
         }
+    }
+}
+
+impl SupportCatalog {
+    pub(super) fn owner(&self) -> &AtomInterner {
+        &self.owner
+    }
+    pub(super) fn prepared_bytes(&mut self, bytes: usize) {
+        self.prepared_bytes = bytes;
     }
 
     pub(super) fn release_preparation(&mut self) {
         self.prepared_bytes = 0;
     }
 
-    /// Publish the complete owner only after both tuple and posting extension.
-    /// A failed operation consumes its in-progress owner, so a partial index can
-    /// never be reused by another support round.
-    pub(super) fn insert(
-        mut self,
-        atom: Atom,
+    pub(in crate::formula_support) fn bytes(
+        &self,
+        location: Location,
+    ) -> Result<usize, FormulaFailure> {
+        usize::try_from(self.owner.storage_bytes())
+            .ok()
+            .and_then(|owner| owner.checked_add(self.index_bytes))
+            .and_then(|bytes| bytes.checked_add(self.prepared_bytes))
+            .and_then(|bytes| bytes.checked_add(self.component_bytes().ok()?))
+            .and_then(|bytes| bytes.checked_add(self.pending.capacity() * size_of::<usize>()))
+            .and_then(|bytes| bytes.checked_add(self.supported.capacity() * size_of::<u64>()))
+            .ok_or_else(|| failure(Failure::Overflow, location))
+    }
+
+    // The inline Option already belongs to index_bytes. Only capacities beyond
+    // the component header are added here; source payload stays in owner.
+    pub(super) fn component_bytes(&self) -> Result<usize, std::num::TryFromIntError> {
+        usize::try_from(self.components.as_ref().map_or(0, |components| {
+            components.storage_bytes() - size_of::<TemplateComponents>() as u128
+        }))
+    }
+
+    /// The prior snapshot and append capability share one authority. Pending
+    /// positions remain in this catalog throughout derivation and publication.
+    pub(crate) fn split(
+        &mut self,
         limits: &FormulaLimits,
         counters: &mut Counters,
         location: Location,
-    ) -> Result<Self, FormulaFailure> {
-        let mut memory = Memory::new(
-            self.index_bytes + self.prepared_bytes,
-            limits,
-            counters,
-            location,
-        );
-        let source = match self.rows.entry(atom.predicate().clone()) {
-            Entry::Occupied(entry) => entry.into_mut(),
-            Entry::Vacant(entry) => {
-                memory.add(
-                    size_of::<CatalogRows>() - size_of::<Catalog>() + size_of::<Predicate>(),
-                )?;
-                let catalog = Catalog::new(
-                    entry.key().clone(),
-                    relation_limits(limits, counters, entry.key(), memory.remaining()?),
-                )
-                .map_err(|error| {
-                    catalog_failure(error, limits, counters, memory.bytes, location)
-                })?;
-                counters.charge_work(catalog.construction().construction_work, limits, location)?;
-                memory.add(catalog.retained_bytes())?;
-                let mut columns = Vec::new();
-                memory.reserve(&mut columns, entry.key().arity())?;
-                for _ in 0..entry.key().arity() {
-                    counters.work(limits, location)?;
-                    columns.push(BTreeMap::new());
-                }
-                entry.insert(CatalogRows {
-                    catalog,
-                    columns,
-                    old_rows: 0,
-                })
-            }
-        };
-        let old_bytes = source.catalog.retained_bytes();
-        let outer_bytes = memory.bytes - old_bytes;
-        let mut append_limits = relation_limits(
-            limits,
-            counters,
-            source.catalog.predicate(),
-            old_bytes + memory.remaining()?,
-        );
-        // Formula admission bounds retained column/row associations below.
-        // A local dictionary-value ceiling is a different resource and must
-        // not preempt that cumulative, duplicate-aware diagnostic.
-        append_limits.max_values = usize::MAX;
-        let receipt = source
-            .catalog
-            .insert(atom, append_limits)
-            .map_err(|error| catalog_failure(error, limits, counters, outer_bytes, location))?;
-        counters.charge_work(receipt.storage.construction_work, limits, location)?;
-        memory.release(old_bytes);
-        memory.add(receipt.storage.retained_bytes)?;
-        if receipt.inserted {
-            let arity = source.catalog.predicate().arity();
-            ceiling(
-                FormulaResource::SupportIndexEntries,
-                self.entries as u128 + arity as u128,
-                limits.max_support_index_entries as u128,
-                location,
-            )?;
-            source.append_postings(receipt.row, &mut memory, counters)?;
-            self.entries += arity;
-            self.atoms += 1;
-            counters.record(Event::SupportAtom);
+    ) -> Result<(Relations<'_>, SupportAppend<'_>), FormulaFailure> {
+        debug_assert!(self.pending.is_empty());
+        *self.growth.get_mut() = 0;
+        let bytes = self
+            .bytes(location)?
+            .checked_add(size_of::<SupportAppend<'_>>())
+            .ok_or_else(|| failure(Failure::Overflow, location))?;
+        let owner_bytes = self.owner.storage_bytes();
+        let pending_bytes = self.pending.capacity() * size_of::<usize>();
+        let supported_bytes = self.supported.capacity() * size_of::<u64>();
+        let (committed, appender) = self.owner.split();
+        let growth = &self.growth;
+        let relations = SnapshotSource {
+            sources: &self.rows,
+            components: self.components.as_ref(),
+            read: committed.read(),
+            entries: self.entries,
+            bytes,
+            growth: Some(growth),
         }
-        self.index_bytes = memory.bytes - self.prepared_bytes;
-        Ok(self)
+        .build(limits, counters, location)?;
+        let append = SupportAppend::new(
+            appender,
+            &mut self.pending,
+            &mut self.supported,
+            &self.scope,
+            growth,
+            append::Base {
+                bytes: relations.bytes,
+                owner: owner_bytes,
+                pending: pending_bytes,
+                supported: supported_bytes,
+            },
+        );
+        Ok((relations, append))
     }
 
-    /// Freeze the boundary before appending this completed round's new atoms.
-    pub(super) fn advance(
+    /// Publish only this authority's complete round, after every join and wake
+    /// consumer has released its borrow. Failure abandons the whole support build.
+    pub(super) fn publish(
         &mut self,
         limits: &FormulaLimits,
         counters: &mut Counters,
         location: Location,
     ) -> Result<(), FormulaFailure> {
-        for rows in self.rows.values_mut() {
+        for source in &mut self.rows {
             counters.work(limits, location)?;
-            rows.old_rows = rows.catalog.atoms().len();
+            source.old_rows = source.catalog.len();
         }
+        let owner_bytes = self.owner.storage_bytes();
+        let workspace = counters.accounting.workspace.bytes() as u128;
+        let outer = self.bytes(location)? as u128 - owner_bytes + workspace;
+        self.owner.restart_storage_peak();
+        let committed = self
+            .owner
+            .commit_with(owner_limits(limits, outer, location)?, || {
+                counters.work(limits, location)
+            });
+        record_owner_peak(self.owner.storage_peak_bytes(), outer, counters);
+        committed.map_err(|error| atom_failure(error, limits, outer, location))?;
+        *self.growth.get_mut() = 0;
+        for position in 0..self.pending.len() {
+            counters.work(limits, location)?;
+            let discovery = self.pending[position];
+            let mut memory =
+                Memory::new(self.bytes(location)?, workspace, limits, counters, location);
+            let read = self.owner.read();
+            let atom = self
+                .owner
+                .get(discovery)
+                .expect("same authority's pending discovery");
+            let predicate = atom.predicate();
+            let found = find_catalog(&self.rows, read, predicate, limits, counters, location)?;
+            let index = match found {
+                Ok(index) => index,
+                Err(index) => {
+                    let source = CatalogRows::new(read, predicate, &mut memory, counters)?;
+                    counters.charge_work(self.rows.len() as u128, limits, location)?;
+                    memory.reserve(&mut self.rows, 1)?;
+                    self.rows.insert(index, source);
+                    index
+                }
+            };
+            let source = &mut self.rows[index];
+            let old_bytes = source.catalog.retained_bytes();
+            let outer_bytes = memory.outside(old_bytes)?;
+            let mut checked = relation_limits(
+                limits,
+                counters,
+                predicate.arity(),
+                old_bytes + memory.remaining()?,
+            );
+            checked.max_values = usize::MAX;
+            let receipt = source
+                .catalog
+                .insert(atom, checked)
+                .map_err(|error| catalog_failure(error, limits, counters, outer_bytes, location))?;
+            counters.record(Event::SupportPeakBytes(
+                outer_bytes as u128 + receipt.storage.peak_construction_bytes as u128,
+            ));
+            counters.charge_work(receipt.storage.construction_work, limits, location)?;
+            memory.release(old_bytes);
+            memory.add(receipt.storage.retained_bytes)?;
+            if receipt.inserted {
+                ceiling(
+                    FormulaResource::SupportIndexEntries,
+                    self.entries as u128 + predicate.arity() as u128,
+                    limits.max_support_index_entries as u128,
+                    location,
+                )?;
+                source.append_postings(read, receipt.row, &mut memory, counters)?;
+                self.entries += predicate.arity();
+                counters.record(Event::SupportAtom);
+            }
+            self.index_bytes = memory.bytes
+                - usize::try_from(self.owner.storage_bytes())
+                    .map_err(|_| failure(Failure::Overflow, location))?
+                - self.prepared_bytes
+                - self
+                    .component_bytes()
+                    .map_err(|_| failure(Failure::Overflow, location))?
+                - self.pending.capacity() * size_of::<usize>()
+                - self.supported.capacity() * size_of::<u64>();
+        }
+        self.pending.clear();
         Ok(())
     }
 
-    /// Snapshot borrows prevent catalog growth until every join has ended.
-    /// Existing dictionary, columns and postings are reused without a row scan.
     pub(crate) fn snapshot(
         &self,
         limits: &FormulaLimits,
         counters: &mut Counters,
         location: Location,
     ) -> Result<Relations<'_>, FormulaFailure> {
+        SnapshotSource {
+            sources: &self.rows,
+            components: self.components.as_ref(),
+            read: self.owner.read(),
+            entries: self.entries,
+            bytes: self.bytes(location)?,
+            growth: None,
+        }
+        .build(limits, counters, location)
+    }
+
+    #[cfg(test)]
+    pub(super) fn insert(
+        mut self,
+        atom: &Atom,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: Location,
+    ) -> Result<Self, FormulaFailure> {
+        let (_, mut append) = self.split(limits, counters, location)?;
+        append.atom(atom.into(), limits, counters, location)?;
+        self.publish(limits, counters, location)?;
+        Ok(self)
+    }
+}
+
+struct SnapshotSource<'a> {
+    sources: &'a [CatalogRows],
+    components: Option<&'a TemplateComponents>,
+    read: CatalogRead<'a>,
+    entries: usize,
+    bytes: usize,
+    growth: Option<&'a AtomicUsize>,
+}
+impl<'a> SnapshotSource<'a> {
+    fn build(
+        self,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: Location,
+    ) -> Result<Relations<'a>, FormulaFailure> {
+        let components = self
+            .components
+            .map(|components| {
+                components
+                    .bind_with(self.read, || counters.work(limits, location))
+                    .map_err(|error| super::components::failure(error, limits, 0, location))
+            })
+            .transpose()?;
         let mut memory = Memory::new(
-            self.index_bytes + self.prepared_bytes,
+            self.bytes,
+            counters.accounting.workspace.bytes() as u128,
             limits,
             counters,
             location,
         );
         memory.add(size_of::<Relations<'_>>())?;
-        let mut rows = BTreeMap::new();
-        for (predicate, source) in &self.rows {
+        let mut rows = Vec::new();
+        memory.reserve(&mut rows, self.sources.len())?;
+        for source in self.sources {
             counters.work(limits, location)?;
-            memory.add(size_of::<RelationRows<'_>>() + size_of::<&Predicate>())?;
-            rows.insert(
-                predicate,
-                RelationRows {
-                    relation: source.catalog.view(),
-                    columns: &source.columns,
-                    catalog: &source.catalog,
-                    old_rows: source.old_rows,
-                    #[cfg(test)]
-                    atoms: source.catalog.atoms(),
-                },
-            );
+            rows.push(RelationRows {
+                relation: source
+                    .catalog
+                    .view(self.read)
+                    .map_err(|error| failure(error, location))?,
+                columns: &source.columns,
+                catalog: &source.catalog,
+                old_rows: source.old_rows,
+                atoms: source
+                    .catalog
+                    .atoms(self.read)
+                    .map_err(|error| failure(error, location))?,
+            });
         }
         Ok(Relations {
             rows,
-            atoms: self.atoms,
+            components,
+            read: Some(self.read),
             entries: self.entries,
             bytes: memory.bytes,
+            growth: self.growth,
         })
     }
 }
 
+fn find_catalog(
+    rows: &[CatalogRows],
+    read: CatalogRead<'_>,
+    predicate: PredicateRef<'_>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: Location,
+) -> Result<Result<usize, usize>, FormulaFailure> {
+    let mut start = 0;
+    let mut end = rows.len();
+    while start < end {
+        counters.work(limits, location)?;
+        let middle = start + (end - start) / 2;
+        let current = rows[middle]
+            .catalog
+            .predicate(read)
+            .map_err(|error| failure(error, location))?;
+        match current.compare_ref_with(predicate, || counters.work(limits, location))? {
+            std::cmp::Ordering::Less => start = middle + 1,
+            std::cmp::Ordering::Greater => end = middle,
+            std::cmp::Ordering::Equal => return Ok(Ok(middle)),
+        }
+    }
+    Ok(Err(start))
+}
+
+pub(super) fn owner_limits(
+    limits: &FormulaLimits,
+    outer: u128,
+    location: Location,
+) -> Result<atom_interner::Limits, FormulaFailure> {
+    ceiling(
+        FormulaResource::SupportBytes,
+        outer,
+        limits.max_support_bytes as u128,
+        location,
+    )?;
+    Ok(atom_interner::Limits {
+        max_atoms: limits.theory.max_atoms,
+        max_bytes: limits.max_support_bytes as u128 - outer,
+    })
+}
+
+fn record_owner_peak(peak: u128, outer: u128, counters: &Counters) {
+    counters.record(Event::SupportPeakBytes(peak.saturating_add(outer)));
+}
+
+pub(super) fn atom_failure(
+    error: atom_interner::Failure<FormulaFailure>,
+    limits: &FormulaLimits,
+    outer: u128,
+    location: Location,
+) -> FormulaFailure {
+    match error {
+        atom_interner::Failure::Stopped(error) => error,
+        atom_interner::Failure::Catalog(error) => FormulaFailure::AtomCatalog { error, location },
+        atom_interner::Failure::Allocation(error) => {
+            FormulaFailure::AtomAllocation { error, location }
+        }
+        atom_interner::Failure::Atoms { required, limit } => FormulaFailure::Limit {
+            resource: FormulaResource::Atoms,
+            observed: required as u128,
+            limit: limit as u128,
+            location,
+        },
+        atom_interner::Failure::Bytes { required, .. } => FormulaFailure::Limit {
+            resource: FormulaResource::SupportBytes,
+            observed: required.saturating_add(outer),
+            limit: limits.max_support_bytes as u128,
+            location,
+        },
+        atom_interner::Failure::Overflow => failure(Failure::Overflow, location),
+    }
+}
+
 impl CatalogRows {
+    /// Admit the empty relation and its posting lanes before catalog insertion.
+    fn new(
+        read: CatalogRead<'_>,
+        predicate: PredicateRef<'_>,
+        memory: &mut Memory<'_>,
+        counters: &mut Counters,
+    ) -> Result<Self, FormulaFailure> {
+        let limits = memory.limits;
+        let location = memory.location;
+        counters.work(limits, location)?;
+        let declared = read
+            .declare_existing(predicate)
+            .map_err(|_| failure(Failure::Owner, location))?;
+        let outer_bytes = memory.outside(0)?;
+        let catalog = Catalog::new(
+            read,
+            declared,
+            relation_limits(limits, counters, predicate.arity(), memory.remaining()?),
+        )
+        .map_err(|error| catalog_failure(error, limits, counters, outer_bytes, location))?;
+        counters.record(Event::SupportPeakBytes(
+            memory.live_bytes() + catalog.construction().peak_construction_bytes as u128,
+        ));
+        counters.charge_work(catalog.construction().construction_work, limits, location)?;
+        memory.add(catalog.retained_bytes() - size_of::<Catalog>())?;
+        let mut columns = Vec::new();
+        memory.reserve(&mut columns, predicate.arity())?;
+        for _ in 0..predicate.arity() {
+            counters.work(limits, location)?;
+            columns.push(BTreeMap::new());
+        }
+        Ok(Self {
+            catalog,
+            columns,
+            old_rows: 0,
+        })
+    }
+
     fn append_postings(
         &mut self,
+        read: CatalogRead<'_>,
         row: usize,
         memory: &mut Memory<'_>,
         counters: &mut Counters,
     ) -> Result<(), FormulaFailure> {
-        let view = self.catalog.view();
+        let view = self
+            .catalog
+            .view(read)
+            .map_err(|error| failure(error, memory.location))?;
         memory.add(size_of::<Relation<'_>>())?;
         for (column, postings) in self.columns.iter_mut().enumerate() {
             counters.work(memory.limits, memory.location)?;
@@ -219,7 +488,16 @@ fn catalog_failure(
     outer_bytes: usize,
     location: Location,
 ) -> FormulaFailure {
-    let failure = relation_failure(error.error, limits, counters.work, outer_bytes, location);
+    counters.record(Event::SupportPeakBytes(
+        outer_bytes as u128 + error.peak_construction_bytes as u128,
+    ));
+    let failure = relation_failure(
+        error.error,
+        limits,
+        counters.accounting.work,
+        outer_bytes,
+        location,
+    );
     match counters.charge_work(error.work, limits, location) {
         Ok(()) => failure,
         Err(charge) => charge,
@@ -230,8 +508,10 @@ fn catalog_failure(
 /// This view alone establishes neither completion nor current-world truth.
 #[derive(Default)]
 pub(crate) struct Relations<'source> {
-    rows: BTreeMap<&'source Predicate, RelationRows<'source>>,
-    atoms: usize,
+    rows: Vec<RelationRows<'source>>,
+    components: Option<TemplateComponentsRef<'source>>,
+    read: Option<CatalogRead<'source>>,
+    growth: Option<&'source AtomicUsize>,
     pub(super) entries: usize,
     pub(super) bytes: usize,
 }
@@ -241,52 +521,121 @@ pub(super) struct RelationRows<'source> {
     pub(super) columns: &'source [BTreeMap<u32, Vec<usize>>],
     catalog: &'source Catalog,
     old_rows: usize,
-    #[cfg(test)]
-    pub(super) atoms: &'source [Atom],
+    pub(super) atoms: Atoms<'source>,
 }
 
 impl<'source> Relations<'source> {
-    pub(super) fn relation(&self, predicate: &Predicate) -> Option<&Relation<'_>> {
-        self.rows.get(predicate).map(|rows| &rows.relation)
+    pub(super) fn components(&self) -> Option<TemplateComponentsRef<'source>> {
+        self.components
+    }
+    pub(super) fn current_bytes(&self) -> usize {
+        self.bytes
+            + self
+                .growth
+                .map_or(0, |growth| growth.load(Ordering::Relaxed))
     }
 
-    /// Predicates in this snapshot, borrowed from their sole atom owner.
-    pub(crate) fn predicates(&self) -> impl Iterator<Item = &'source Predicate> {
-        self.rows.keys().copied()
+    fn find(&self, predicate: PredicateRef<'_>) -> Option<&RelationRows<'source>> {
+        self.rows
+            .binary_search_by(|rows| rows.relation.predicate().cmp(&predicate))
+            .ok()
+            .map(|index| &self.rows[index])
     }
 
-    /// The catalog occurrence order is also this snapshot's local row order.
-    /// References keep the sole immutable atom owner; this allocates no rows.
+    fn find_with(
+        &self,
+        predicate: PredicateRef<'_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: Location,
+    ) -> Result<Option<&RelationRows<'source>>, FormulaFailure> {
+        self.find_checked(predicate, || counters.work(limits, location))
+    }
+
+    fn find_checked<E>(
+        &self,
+        predicate: PredicateRef<'_>,
+        mut before: impl FnMut() -> Result<(), E>,
+    ) -> Result<Option<&RelationRows<'source>>, E> {
+        let mut start = 0;
+        let mut end = self.rows.len();
+        while start < end {
+            before()?;
+            let middle = start + (end - start) / 2;
+            match self.rows[middle]
+                .relation
+                .predicate()
+                .compare_ref_with(predicate, &mut before)?
+            {
+                std::cmp::Ordering::Less => start = middle + 1,
+                std::cmp::Ordering::Greater => end = middle,
+                std::cmp::Ordering::Equal => return Ok(Some(&self.rows[middle])),
+            }
+        }
+        Ok(None)
+    }
+
+    /// One checked directory lookup for the two source-round populations.
+    /// The caller supplies its own work boundary; no semantic ID ordering is used.
+    pub(super) fn row_counts_with<E>(
+        &self,
+        predicate: PredicateRef<'_>,
+        mut before: impl FnMut() -> Result<(), E>,
+    ) -> Result<(usize, usize), E> {
+        let Some(rows) = self.find_checked(predicate, &mut before)? else {
+            return Ok((0, 0));
+        };
+        before()?;
+        Ok((rows.old_rows, rows.relation.row_count()))
+    }
+
+    pub(super) fn relation_with<'predicate>(
+        &self,
+        predicate: impl Into<PredicateRef<'predicate>>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: Location,
+    ) -> Result<Option<&Relation<'_>>, FormulaFailure> {
+        self.find_with(predicate.into(), limits, counters, location)
+            .map(|rows| rows.map(|rows| &rows.relation))
+    }
+    pub(crate) fn predicates(&self) -> impl Iterator<Item = PredicateRef<'source>> + '_ {
+        self.rows.iter().map(|rows| rows.relation.predicate())
+    }
     pub(super) fn source_atoms(
         &self,
-    ) -> impl Iterator<Item = (&'source Predicate, &'source [Atom])> {
+    ) -> impl Iterator<Item = (PredicateRef<'source>, Atoms<'source>)> + '_ {
         self.rows
-            .values()
-            .map(|rows| (rows.catalog.predicate(), rows.catalog.atoms()))
+            .iter()
+            .map(|rows| (rows.relation.predicate(), rows.atoms))
     }
-
-    pub(super) fn len(&self) -> usize {
-        self.atoms
+    pub(super) fn old_rows<'predicate>(
+        &self,
+        predicate: impl Into<PredicateRef<'predicate>>,
+    ) -> usize {
+        self.find(predicate.into()).map_or(0, |rows| rows.old_rows)
     }
-
-    pub(super) fn old_rows(&self, predicate: &Predicate) -> usize {
-        self.rows.get(predicate).map_or(0, |rows| rows.old_rows)
-    }
-
-    pub(super) fn row_count(&self, predicate: &Predicate) -> usize {
-        self.rows
-            .get(predicate)
+    pub(super) fn row_count<'predicate>(
+        &self,
+        predicate: impl Into<PredicateRef<'predicate>>,
+    ) -> usize {
+        self.find(predicate.into())
             .map_or(0, |rows| rows.relation.row_count())
     }
-
-    pub(crate) fn rows(&self, predicate: &Predicate) -> impl Iterator<Item = Row<'_, '_>> {
-        self.rows.get(predicate).into_iter().flat_map(|rows| {
+    pub(crate) fn rows<'predicate>(
+        &self,
+        predicate: impl Into<PredicateRef<'predicate>>,
+    ) -> impl Iterator<Item = Row<'_, '_>> {
+        self.find(predicate.into()).into_iter().flat_map(|rows| {
             (0..rows.relation.row_count()).map(|row| rows.relation.row(row).expect("bounded row"))
         })
     }
-
-    pub(super) fn row(&self, predicate: &Predicate, position: usize) -> Option<Row<'_, '_>> {
-        self.rows.get(predicate)?.relation.row(position)
+    pub(super) fn row<'predicate>(
+        &self,
+        predicate: impl Into<PredicateRef<'predicate>>,
+        position: usize,
+    ) -> Option<Row<'_, '_>> {
+        self.find(predicate.into())?.relation.row(position)
     }
 
     pub(super) fn contains(
@@ -296,15 +645,24 @@ impl<'source> Relations<'source> {
         counters: &mut Counters,
         location: Location,
     ) -> Result<bool, FormulaFailure> {
-        let Some(rows) = self.rows.get(key.predicate()) else {
+        let Some(rows) = self.find_with(key.predicate(), limits, counters, location)? else {
             return Ok(false);
         };
         let owner_bytes = rows.catalog.retained_bytes();
-        let mut checked = relation_limits(limits, counters, key.predicate(), owner_bytes);
+        let mut checked = relation_limits(limits, counters, key.predicate().arity(), owner_bytes);
         checked.max_values = usize::MAX;
-        let receipt = rows.catalog.lookup_key(key, checked).map_err(|error| {
-            catalog_failure(error, limits, counters, self.bytes - owner_bytes, location)
-        })?;
+        let receipt = rows
+            .catalog
+            .lookup_key(self.read.expect("nonempty snapshot"), key, checked)
+            .map_err(|error| {
+                catalog_failure(
+                    error,
+                    limits,
+                    counters,
+                    self.current_bytes() - owner_bytes,
+                    location,
+                )
+            })?;
         counters.charge_work(receipt.storage.construction_work, limits, location)?;
         Ok(receipt.row.is_some())
     }
@@ -318,37 +676,43 @@ impl<'source> Relations<'source> {
         counters: &mut Counters,
         location: Location,
     ) -> Result<Option<&[usize]>, FormulaFailure> {
-        self.probe_with_bytes(pattern, values, limits, counters, location, 0)
+        self.probe_with_bytes(pattern.into(), values.into(), limits, counters, location, 0)
     }
 
     pub(super) fn probe_with_bytes(
         &self,
-        pattern: &AtomPattern,
-        values: &[Option<Value>],
+        pattern: PatternRef<'_>,
+        values: BindingView<'_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
         location: Location,
         outer_bytes: usize,
     ) -> Result<Option<&[usize]>, FormulaFailure> {
         counters.record(Event::JoinProbe);
-        let Some(rows) = self.rows.get(pattern.predicate()) else {
+        let Some(rows) = self.find_with(pattern.predicate(), limits, counters, location)? else {
             return Ok(Some(&[]));
         };
         let mut memory = Memory::new(
-            self.bytes
-                .checked_add(outer_bytes)
-                .ok_or_else(|| failure(Failure::Overflow, location))?,
+            self.current_bytes(),
+            outer_bytes as u128,
             limits,
             counters,
             location,
         );
-        memory.add(size_of::<Vec<(usize, &Value)>>())?;
+        memory.add(size_of::<Vec<(usize, TermRef<'_>)>>())?;
         let mut keys = Vec::new();
-        for (column, term) in pattern.terms().iter().enumerate() {
+        let terms = pattern.terms();
+        for column in 0..terms.len() {
             counters.work(limits, location)?;
+            let term = terms.at(column).expect("checked pattern arity");
             let value = match term {
-                Term::Constant(value) => Some(value),
-                Term::Variable(variable) => values[*variable].as_ref(),
+                TemplateTerm::Constant(value) => Some(value),
+                TemplateTerm::Variable(variable) => {
+                    if variable >= values.len() {
+                        return Err(FormulaFailure::UnsafeVariable { variable, location });
+                    }
+                    values.get(variable)
+                }
             };
             if let Some(value) = value {
                 memory.reserve(&mut keys, 1)?;
@@ -360,7 +724,7 @@ impl<'source> Relations<'source> {
             super::postings::observe(rows, pattern, values, None);
             return Ok(None);
         }
-        let outer = memory.bytes - rows.relation.storage().retained_bytes;
+        let outer = memory.outside(rows.relation.storage().retained_bytes)?;
         let query = resolve_equalities(
             &rows.relation,
             &keys,
@@ -395,16 +759,16 @@ impl<'source> Relations<'source> {
 /// would race other checkers, and postcharging would omit refused executed work.
 fn resolve_equalities<'owner, 'source>(
     relation: &'owner Relation<'source>,
-    keys: &[(usize, &Value)],
+    keys: &[(usize, TermRef<'_>)],
     limits: &FormulaLimits,
     counters: &mut Counters,
     scoped_bytes: usize,
     outer_bytes: usize,
     location: Location,
 ) -> Result<zetesis_core::relation::Query<'owner, 'source>, FormulaFailure> {
-    let base_work = counters.work;
-    let checked = relation_limits(limits, counters, relation.predicate(), scoped_bytes);
-    let (result, peak_bytes) = if counters.allowance.is_some() {
+    let base_work = counters.accounting.work;
+    let checked = relation_limits(limits, counters, relation.predicate().arity(), scoped_bytes);
+    let (result, peak_bytes) = if counters.accounting.allowance.is_some() {
         let attempt =
             relation.query_attempt_with(keys, checked, || counters.work(limits, location));
         (
@@ -435,15 +799,15 @@ fn resolve_equalities<'owner, 'source>(
 fn relation_limits(
     limits: &FormulaLimits,
     counters: &Counters,
-    predicate: &Predicate,
+    arity: usize,
     bytes: usize,
 ) -> Limits {
     Limits {
         max_rows: limits.theory.max_atoms,
-        max_columns: predicate.arity(),
+        max_columns: arity,
         max_values: limits.max_support_index_entries,
         max_bytes: bytes,
-        max_work: limits.max_work.saturating_sub(counters.work),
+        max_work: limits.max_work.saturating_sub(counters.accounting.work),
     }
 }
 
@@ -494,10 +858,13 @@ pub(super) fn relation_failure(
     )
 }
 
-/// Authored catalog/snapshot/index capacity. Nested atom payloads and
-/// allocator/tree overhead retain separate bounds; this is not total RSS.
+/// Named canonical authority, metadata, snapshot and index capacities.
+/// Allocator/tree overhead is excluded; this is not total RSS.
 pub(super) struct Memory<'limits> {
+    // The accounted span retained by this caller after its scratch is released.
+    // Other simultaneously live owners must never enter this receipt.
     pub(super) bytes: usize,
+    external_bytes: u128,
     limits: &'limits FormulaLimits,
     location: Location,
     observed: crate::grounding_observer::Work,
@@ -506,41 +873,61 @@ pub(super) struct Memory<'limits> {
 impl<'limits> Memory<'limits> {
     pub(super) fn new(
         bytes: usize,
+        external_bytes: u128,
         limits: &'limits FormulaLimits,
         counters: &Counters,
         location: Location,
     ) -> Self {
         Self {
             bytes,
+            external_bytes,
             limits,
             location,
             observed: counters.observed.clone(),
         }
     }
 
+    /// Compose the current span with other live owners exactly once. The
+    /// external amount is a bounded sum of named usize capacities; keeping it
+    /// wide preserves an over-limit requirement before narrowing any receipt.
+    fn live_bytes(&self) -> u128 {
+        self.external_bytes + self.bytes as u128
+    }
+
+    /// Give a child allocator all live bytes outside its already counted span.
+    fn outside(&self, included: usize) -> Result<usize, FormulaFailure> {
+        self.live_bytes()
+            .checked_sub(included as u128)
+            .and_then(|bytes| usize::try_from(bytes).ok())
+            .ok_or_else(|| failure(Failure::Overflow, self.location))
+    }
+
     pub(super) fn add(&mut self, amount: usize) -> Result<(), FormulaFailure> {
         let next = self.bytes as u128 + amount as u128;
+        let live = self.external_bytes + next;
         ceiling(
             FormulaResource::SupportBytes,
-            next,
+            live,
             self.limits.max_support_bytes as u128,
             self.location,
         )?;
         self.bytes =
             usize::try_from(next).map_err(|_| failure(Failure::Overflow, self.location))?;
-        self.observed
-            .record(Event::SupportPeakBytes(self.bytes as u128));
+        self.observed.record(Event::SupportPeakBytes(live));
         Ok(())
     }
 
     fn remaining(&self) -> Result<usize, FormulaFailure> {
         ceiling(
             FormulaResource::SupportBytes,
-            self.bytes as u128,
+            self.live_bytes(),
             self.limits.max_support_bytes as u128,
             self.location,
         )?;
-        Ok(self.limits.max_support_bytes - self.bytes)
+        Ok(
+            usize::try_from(self.limits.max_support_bytes as u128 - self.live_bytes())
+                .expect("admitted remaining bytes fit the usize ceiling"),
+        )
     }
 
     pub(super) fn release(&mut self, amount: usize) {
@@ -560,12 +947,14 @@ impl<'limits> Memory<'limits> {
             return Ok(());
         }
         let proposed = needed.max(values.capacity().saturating_mul(2));
-        let added = (proposed - values.capacity())
+        // Growth admits old and replacement buffers simultaneously. Retained
+        // bytes become only the final capacity after the allocation succeeds.
+        let replacement = proposed
             .checked_mul(size_of::<T>())
             .ok_or_else(|| failure(Failure::Overflow, self.location))?;
         ceiling(
             FormulaResource::SupportBytes,
-            self.bytes as u128 + added as u128,
+            self.live_bytes() + replacement as u128,
             self.limits.max_support_bytes as u128,
             self.location,
         )?;
@@ -573,6 +962,18 @@ impl<'limits> Memory<'limits> {
         values
             .try_reserve_exact(proposed - values.len())
             .map_err(|_| failure(Failure::Allocation, self.location))?;
+        let actual = values
+            .capacity()
+            .checked_mul(size_of::<T>())
+            .ok_or_else(|| failure(Failure::Overflow, self.location))?;
+        let peak = self.live_bytes() + actual as u128;
+        self.observed.record(Event::SupportPeakBytes(peak));
+        ceiling(
+            FormulaResource::SupportBytes,
+            peak,
+            self.limits.max_support_bytes as u128,
+            self.location,
+        )?;
         self.add(
             (values.capacity() - previous)
                 .checked_mul(size_of::<T>())

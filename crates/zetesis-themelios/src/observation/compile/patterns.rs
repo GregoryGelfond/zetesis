@@ -7,8 +7,8 @@
 mod pools;
 
 use super::{
-    Arguments, AtomTest, BTreeSet, Binder, Compiler, Error, ErrorKind, Feature, Name, Operand,
-    Pattern, Predicate, Query, Sign, Term, UnaryOp, Variable,
+    Arguments, AtomTest, BTreeSet, Compiler, Error, Name, Operand, Pattern, Query, Sign, Term,
+    UnaryOp, Variable,
 };
 use themelios_program::program::Atom;
 
@@ -17,7 +17,7 @@ pub(super) fn captures(operand: &Operand, slots: &mut BTreeSet<usize>) {
         Operand::Variable(slot) | Operand::Inverse { slot, .. } => {
             slots.insert(*slot);
         }
-        Operand::Function(_, _, arguments) | Operand::Tuple(arguments) => {
+        Operand::Construct(_, arguments) => {
             for argument in arguments {
                 captures(argument, slots);
             }
@@ -36,9 +36,7 @@ fn provided(pattern: &Pattern) -> BTreeSet<usize> {
 fn evaluated(operand: &Operand) -> bool {
     match operand {
         Operand::Expression(_) | Operand::Inverse { .. } => true,
-        Operand::Function(_, _, arguments) | Operand::Tuple(arguments) => {
-            arguments.iter().any(evaluated)
-        }
+        Operand::Construct(_, arguments) => arguments.iter().any(evaluated),
         _ => false,
     }
 }
@@ -48,13 +46,7 @@ impl Compiler<'_> {
         Ok(match term {
             Term::Variable(Variable::Anonymous) => Operand::Any,
             Term::Variable(variable) => Operand::Variable(self.variable(variable)?),
-            Term::Symbolic(symbol) => {
-                let symbol = self.symbol(symbol, depth, true)?;
-                Operand::Value(
-                    crate::structural_value::from_symbol(&symbol)
-                        .map_err(|_| self.unsupported(Feature::Comparison))?,
-                )
-            }
+            Term::Symbolic(symbol) => Operand::Constant(self.symbol(symbol, depth, true)?),
             Term::Function { name, arguments } => {
                 self.operand_function(name, arguments, bind, depth, Sign::Positive)?
             }
@@ -73,7 +65,7 @@ impl Compiler<'_> {
                 for argument in arguments {
                     values.push(self.operand(argument, bind, depth + 1)?);
                 }
-                Operand::Tuple(values)
+                Operand::Construct(self.shape(None, Sign::Positive, values.len())?, values)
             }
             _ => {
                 let expression = self.template(term, depth)?;
@@ -99,7 +91,10 @@ impl Compiler<'_> {
         for argument in arguments {
             values.push(self.operand(argument, bind, depth + 1)?);
         }
-        Ok(Operand::Function(sign, name.clone(), values))
+        Ok(Operand::Construct(
+            self.shape(Some(name.as_str()), sign, values.len())?,
+            values,
+        ))
     }
 
     pub(super) fn pattern_terms(
@@ -117,12 +112,7 @@ impl Compiler<'_> {
         if bind {
             self.prepare_inverses(&mut terms);
         }
-        let predicate = Predicate::with_sign(
-            atom.name.as_str(),
-            terms.len(),
-            crate::coherence::core_sign(atom.sign),
-        )
-        .map_err(|_| self.error(ErrorKind::InvalidSymbol))?;
+        let predicate = self.signature(atom.name.as_str(), terms.len(), atom.sign)?;
         Ok(Pattern {
             predicate,
             evaluated: terms.iter().any(evaluated),
@@ -156,7 +146,7 @@ impl Compiler<'_> {
             expansion: Query {
                 binders: generated
                     .into_iter()
-                    .map(|(slot, term)| Binder::Assign(slot, term))
+                    .map(|(slot, term)| term.binder(slot))
                     .collect(),
                 conditions: Vec::new(),
                 variables: self.slots,
@@ -175,7 +165,7 @@ impl Compiler<'_> {
     fn operand_ready(&self, operand: &Operand, captures: &BTreeSet<usize>) -> bool {
         match operand {
             Operand::Expression(expression) => self.ready_with(expression, captures),
-            Operand::Function(_, _, arguments) | Operand::Tuple(arguments) => arguments
+            Operand::Construct(_, arguments) => arguments
                 .iter()
                 .all(|argument| self.operand_ready(argument, captures)),
             _ => true,

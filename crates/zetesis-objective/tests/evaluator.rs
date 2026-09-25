@@ -5,7 +5,10 @@ use std::collections::BTreeSet;
 use std::time::{Duration, Instant};
 
 use proptest::prelude::*;
-use zetesis_core::{Atom, AtomPattern, Filter, Model, Predicate, Term, Value};
+use zetesis_core::{
+    Atom, AtomPattern, Filter, Model, Predicate, TemplateTerm, Term, Value, ValueLimits,
+    ValueNodeRef,
+};
 use zetesis_cpu::Cancellation;
 use zetesis_objective::{
     AdmissionError, AdmissionLimits, ErrorKind, Limits, ObjectiveProgram, ObjectiveTemplate, Stop,
@@ -48,7 +51,8 @@ fn extrema_are_distinct_deduplicated_tuple_keys_with_exact_byte_limits() {
     let model = Model::new([
         atom("p", vec![Value::Infimum]),
         atom("p", vec![Value::Supremum]),
-    ]);
+    ])
+    .unwrap();
     let row = template(
         number(1),
         0,
@@ -93,7 +97,8 @@ fn extrema_are_distinct_deduplicated_tuple_keys_with_exact_byte_limits() {
         atom("p", vec![Value::String("#inf".into())]),
         atom("p", vec![Value::Supremum]),
         atom("p", vec![Value::String("#sup".into())]),
-    ]);
+    ])
+    .unwrap();
     compare(&objectives, &spellings);
     assert_eq!(
         evaluate(
@@ -118,7 +123,7 @@ fn extrema_are_distinct_deduplicated_tuple_keys_with_exact_byte_limits() {
         assert_eq!(
             evaluate(
                 &nonnumeric,
-                &Model::new([]),
+                &Model::new([]).unwrap(),
                 Limits::default(),
                 &Cancellation::default()
             )
@@ -138,8 +143,8 @@ fn naive(program: &ObjectiveProgram, model: &Model) -> BTreeSet<Key> {
     let domain: Vec<_> = model
         .atoms()
         .iter()
-        .flat_map(Atom::values)
-        .cloned()
+        .flat_map(zetesis_core::catalog::AtomRef::values)
+        .map(|value| value.to_value(ValueLimits::default()).unwrap())
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect();
@@ -148,9 +153,9 @@ fn naive(program: &ObjectiveProgram, model: &Model) -> BTreeSet<Key> {
         let variables = template
             .positive()
             .iter()
-            .flat_map(AtomPattern::terms)
+            .flat_map(zetesis_core::PatternRef::terms)
             .filter_map(|term| {
-                if let Term::Variable(variable) = term {
+                if let TemplateTerm::Variable(variable) = term {
                     Some(variable + 1)
                 } else {
                     None
@@ -165,26 +170,40 @@ fn naive(program: &ObjectiveProgram, model: &Model) -> BTreeSet<Key> {
                 assignment.push(domain[code % domain.len()].clone());
                 code /= domain.len();
             }
-            if !template
-                .positive()
+            if !template.positive().iter().all(|pattern| {
+                model.contains(
+                    &pattern
+                        .key(assignment.as_slice())
+                        .unwrap()
+                        .to_atom(ValueLimits::default())
+                        .unwrap(),
+                )
+            }) || !template
+                .filters()
                 .iter()
-                .all(|pattern| model.contains(&pattern.instantiate(&assignment).unwrap()))
-                || !template
-                    .filters()
-                    .iter()
-                    .all(|filter| filter.evaluate(&assignment).unwrap())
+                .all(|filter| filter.evaluate(assignment.as_slice()).unwrap())
             {
                 continue;
             }
-            let Value::Number(weight) = template.weight().resolve(&assignment).unwrap() else {
+            let ValueNodeRef::Number(weight) = template
+                .weight()
+                .resolve(assignment.as_slice())
+                .unwrap()
+                .descriptor()
+            else {
                 panic!("numeric test domain");
             };
             let tuple = template
                 .tuple()
                 .iter()
-                .map(|term| term.resolve(&assignment).unwrap().clone())
+                .map(|term| {
+                    term.resolve(assignment.as_slice())
+                        .unwrap()
+                        .to_value(ValueLimits::default())
+                        .unwrap()
+                })
                 .collect();
-            keys.insert((template.priority(), *weight, tuple));
+            keys.insert((template.priority(), weight, tuple));
         }
     }
     keys
@@ -196,7 +215,20 @@ fn compare(program: &ObjectiveProgram, model: &Model) {
     let keys: BTreeSet<_> = actual
         .contributions()
         .iter()
-        .map(|key| (key.priority(), key.weight(), key.tuple().to_vec()))
+        .map(|key| {
+            (
+                key.priority(),
+                key.weight(),
+                key.tuple()
+                    .iter()
+                    .map(|value| {
+                        value
+                            .to_value(zetesis_core::ValueLimits::default())
+                            .unwrap()
+                    })
+                    .collect::<Vec<_>>(),
+            )
+        })
         .collect();
     assert_eq!(keys, expected);
     assert_eq!(actual.statistics().keys, expected.len());
@@ -224,7 +256,8 @@ fn partial_repeated_variable_matches_backtrack_without_leaking_bindings() {
         fact("pair", &[2, 2]),
         fact("next", &[2, 3]),
         fact("next", &[1, 9]),
-    ]);
+    ])
+    .unwrap();
     let program = program(vec![template(
         variable(1),
         0,
@@ -279,7 +312,7 @@ fn global_keys_include_weight_priority_and_scalar_value_class() {
             vec![],
         ),
     ]);
-    let model = Model::new([fact("p", &[1]), fact("p", &[2])]);
+    let model = Model::new([fact("p", &[1]), fact("p", &[2])]).unwrap();
     compare(&program, &model);
     let evaluation = evaluate(
         &program,
@@ -296,42 +329,47 @@ fn global_keys_include_weight_priority_and_scalar_value_class() {
 #[test]
 fn absent_inactive_zero_and_cancelled_objectives_remain_distinguishable() {
     let model = Model::default();
+    let absent_program = ObjectiveProgram::none();
     let absent = evaluate(
-        &ObjectiveProgram::none(),
+        &absent_program,
         &model,
         Limits::default(),
         &Cancellation::default(),
     )
     .unwrap();
+    let empty_program = program(vec![]);
     let empty = evaluate(
-        &program(vec![]),
+        &empty_program,
         &model,
         Limits::default(),
         &Cancellation::default(),
     )
     .unwrap();
+    let zero_program = program(vec![cost(0, 7)]);
     let zero = evaluate(
-        &program(vec![cost(0, 7)]),
+        &zero_program,
         &model,
         Limits::default(),
         &Cancellation::default(),
     )
     .unwrap();
+    let cancellation_program = program(vec![cost(2, 7), cost(-2, 7)]);
     let cancellation = evaluate(
-        &program(vec![cost(2, 7), cost(-2, 7)]),
+        &cancellation_program,
         &model,
         Limits::default(),
         &Cancellation::default(),
     )
     .unwrap();
+    let inactive_program = program(vec![template(
+        number(4),
+        7,
+        vec![],
+        vec![pattern("missing", vec![])],
+        vec![],
+    )]);
     let inactive = evaluate(
-        &program(vec![template(
-            number(4),
-            7,
-            vec![],
-            vec![pattern("missing", vec![])],
-            vec![],
-        )]),
+        &inactive_program,
         &model,
         Limits::default(),
         &Cancellation::default(),
@@ -355,15 +393,17 @@ fn absent_inactive_zero_and_cancelled_objectives_remain_distinguishable() {
 #[test]
 fn higher_priority_costs_dominate_and_missing_priorities_are_zero() {
     let model = Model::default();
+    let left_program = program(vec![cost(2, 9), cost(-100, 1)]);
     let left = evaluate(
-        &program(vec![cost(2, 9), cost(-100, 1)]),
+        &left_program,
         &model,
         Limits::default(),
         &Cancellation::default(),
     )
     .unwrap();
+    let right_program = program(vec![cost(3, 9), cost(-200, 1)]);
     let right = evaluate(
-        &program(vec![cost(3, 9), cost(-200, 1)]),
+        &right_program,
         &model,
         Limits::default(),
         &Cancellation::default(),
@@ -371,8 +411,9 @@ fn higher_priority_costs_dominate_and_missing_priorities_are_zero() {
     .unwrap();
     assert_eq!(left.score().compare_costs(right.score()), Ordering::Less);
     assert_eq!(right.score().compare_costs(left.score()), Ordering::Greater);
+    let missing_program = program(vec![cost(0, 10), cost(2, 9), cost(-100, 1), cost(0, -5)]);
     let missing = evaluate(
-        &program(vec![cost(0, 10), cost(2, 9), cost(-100, 1), cost(0, -5)]),
+        &missing_program,
         &model,
         Limits::default(),
         &Cancellation::default(),
@@ -395,15 +436,16 @@ fn nonnumeric_weights_contribute_no_keys_and_preserve_declared_priorities() {
             vec![],
         ),
     ]);
+    let inactive_model = Model::default();
     let inactive = evaluate(
         &input,
-        &Model::default(),
+        &inactive_model,
         Limits::default(),
         &Cancellation::default(),
     )
     .unwrap();
     assert_eq!(inactive.score().costs(), &[(3, 0), (0, 1)]);
-    let model = Model::new([fact("p", &[1])]);
+    let model = Model::new([fact("p", &[1])]).unwrap();
     let evaluation = evaluate(&input, &model, Limits::default(), &Cancellation::default()).unwrap();
     assert_eq!(evaluation.score().costs(), &[(3, 0), (0, 1)]);
     assert_eq!(evaluation.statistics().keys, 1);
@@ -429,7 +471,7 @@ fn nonnumeric_weights_contribute_no_keys_and_preserve_declared_priorities() {
 
 #[test]
 fn every_runtime_ceiling_is_inclusive_and_duplicates_do_not_consume_key_budget() {
-    let model = Model::new([fact("p", &[1]), fact("p", &[2])]);
+    let model = Model::new([fact("p", &[1]), fact("p", &[2])]).unwrap();
     let distinct = program(vec![template(
         number(1),
         0,
@@ -528,6 +570,9 @@ fn admission_enforces_safe_dense_variables_and_each_shape_bound() {
         max_predicate_arity: 1,
         max_filters: 1,
         max_condition_nodes: 0,
+        // This fixture isolates logical shape bounds; physical storage has
+        // its own admission regressions.
+        ..AdmissionLimits::default()
     };
     assert!(ObjectiveProgram::new(vec![valid.clone()], exact).is_ok());
     for limit in [
@@ -616,9 +661,11 @@ fn cancellation_and_deadlines_precede_evaluation_even_without_templates() {
             Stop::Deadline,
         ),
     ] {
+        let error_program = ObjectiveProgram::none();
+        let error_model = Model::default();
         let error = evaluate(
-            &ObjectiveProgram::none(),
-            &Model::default(),
+            &error_program,
+            &error_model,
             Limits {
                 max_work: 0,
                 ..Limits::default()
@@ -643,9 +690,10 @@ fn deep_positive_joins_use_heap_frames_on_a_small_thread_stack() {
                 vec![pattern("p", vec![variable(0)]); 1_024],
                 vec![],
             )]);
+            let result_model = Model::new([fact("p", &[1])]).unwrap();
             let result = evaluate(
                 &input,
-                &Model::new([fact("p", &[1])]),
+                &result_model,
                 Limits::default(),
                 &Cancellation::default(),
             )
@@ -666,16 +714,18 @@ proptest! {
         first_priority in -3i32..=3,
         second_priority in -3i32..=3,
     ) {
-        let model = Model::new(edges.into_iter().map(|(a,b)| fact("edge", &[a,b])));
+        let model = Model::new(edges.into_iter().map(|(a,b)| fact("edge", &[a,b]))).unwrap();
         let first = template(variable(1), first_priority, vec![variable(0)], vec![pattern("edge", vec![variable(0), variable(1)])], vec![Filter::Neq(variable(0), variable(1))]);
         let second = template(variable(2), second_priority, vec![variable(0), number(17)], vec![pattern("edge", vec![variable(0), variable(1)]), pattern("edge", vec![variable(1), variable(2)])], vec![]);
         let templates = vec![first.clone(), first, second];
         compare(&program(templates.clone()), &model);
         let mut reversed = templates;
         reversed.reverse();
-        let forward = evaluate(&program(reversed.clone()), &model, Limits::default(), &Cancellation::default()).unwrap();
+        let forward_program = program(reversed.clone());
+        let forward = evaluate(&forward_program, &model, Limits::default(), &Cancellation::default()).unwrap();
         reversed.reverse();
-        let backward = evaluate(&program(reversed), &model, Limits::default(), &Cancellation::default()).unwrap();
+        let backward_program = program(reversed);
+        let backward = evaluate(&backward_program, &model, Limits::default(), &Cancellation::default()).unwrap();
         prop_assert_eq!(forward.score(), backward.score());
         prop_assert_eq!(forward.contributions(), backward.contributions());
     }

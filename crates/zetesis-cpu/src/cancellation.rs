@@ -176,6 +176,37 @@ impl fmt::Display for Stop {
 
 impl std::error::Error for Stop {}
 
+impl Stop {
+    /// Canonical construction is an execution refusal, never model absence.
+    /// Identity-space limits remain distinct from invalid admitted shapes.
+    pub(crate) fn catalog(error: &zetesis_core::catalog::Error) -> Self {
+        use zetesis_core::{ValueError, catalog::Error};
+        match error {
+            Error::Allocation
+            | Error::Storage { .. }
+            | Error::Overflow
+            | Error::Value(ValueError::Allocation) => Self::Allocation,
+            Error::IdExhausted | Error::Value(ValueError::Limit { .. }) => Self::CarrierLimit,
+            Error::Shape
+            | Error::FrozenVocabulary
+            | Error::UnindexedVocabulary
+            | Error::VocabularyHasAtoms
+            | Error::Value(ValueError::Shape) => Self::InvalidProgram,
+        }
+    }
+
+    pub(crate) fn model(error: &zetesis_core::ModelError) -> Self {
+        match error {
+            zetesis_core::ModelError::Allocation => Self::Allocation,
+            zetesis_core::ModelError::Bytes { .. } => Self::StorageLimit,
+            zetesis_core::ModelError::Catalog(error) => Self::catalog(error),
+            zetesis_core::ModelError::Position { .. } | zetesis_core::ModelError::Order { .. } => {
+                Self::InvalidProgram
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

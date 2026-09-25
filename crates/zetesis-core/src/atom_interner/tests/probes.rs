@@ -33,11 +33,13 @@ fn queries_borrow_committed_and_pending_identities() {
             Some(id)
         );
     }
-    assert!(std::ptr::eq(
-        committed.get(0).unwrap(),
-        shared.get(0).unwrap()
-    ));
-    assert!(std::ptr::eq(pending, shared.get(3).unwrap()));
+    assert!(
+        committed
+            .get(0)
+            .unwrap()
+            .same_identity(shared.get(0).unwrap())
+    );
+    assert!(pending.same_identity(shared.get(3).unwrap()));
     assert_eq!(committed.len(), 3);
     assert_eq!(shared.len(), 4);
 }
@@ -152,17 +154,19 @@ fn read_only_misses_need_no_mutation_storage() {
 fn probe_work_matches_visited_typed_prefixes() {
     let owner = owner(&[2, 1, 3]);
     let pattern = pattern();
-    // Finding the one relation costs a probe, the predicate descriptor, the
-    // 'p' byte and the terminating name length: four operations, once per
-    // lookup. Each p(number) node visited then costs a node and a numeric
-    // Value descriptor: two operations. p(2) is the root; every other query
-    // below visits exactly two nodes.
+    // Finding p/1 costs query signature resolution, one relation probe, two
+    // compared signature resolutions, one descriptor, the 'p' byte and its
+    // terminator: seven operations. A numeric
+    // node costs three row/arity/argument resolutions and seven comparison
+    // operations through its descriptor; equality also visits both ends and
+    // compares their lengths. Thus unequal nodes cost ten and equal nodes
+    // thirteen. p(2) is the root; the other queries visit two nodes.
     for (value, expected, work) in [
-        (2, Some(0), 6),
-        (1, Some(1), 8),
-        (3, Some(2), 8),
-        (0, None, 8),
-        (4, None, 8),
+        (2, Some(0), 20),
+        (1, Some(1), 30),
+        (3, Some(2), 30),
+        (0, None, 27),
+        (4, None, 27),
     ] {
         let mut spent = 0;
         let actual = owner
@@ -193,7 +197,8 @@ fn query_work_limits_are_inclusive() {
     for value in [3, 4] {
         let values = [Value::Number(value)];
         let key = pattern.key(values.as_slice()).unwrap();
-        for limit in 0..=8 {
+        let total = if value == 3 { 30 } else { 27 };
+        for limit in 0..=total {
             let cause = ("query stopped", limit);
             let mut spent = 0;
             let mut before = || {
@@ -205,14 +210,14 @@ fn query_work_limits_are_inclusive() {
                 }
             };
             let result = owner.find_key_with(key, limits(), &mut before);
-            if limit < 8 {
+            if limit < total {
                 assert!(
                     matches!(result, Err(Failure::Stopped(actual)) if std::ptr::eq(actual, &raw const cause))
                 );
                 assert_eq!(spent, limit);
             } else {
                 assert_eq!(result.unwrap(), (value == 3).then_some(2));
-                assert_eq!(spent, 8);
+                assert_eq!(spent, total);
             }
         }
     }
@@ -257,24 +262,32 @@ fn query_storage_admission_precedes_probing() {
 }
 
 #[test]
-fn empty_queries_perform_no_operations() {
+fn empty_queries_charge_signature_resolution() {
     let owner = AtomInterner::new();
     let atom = Atom::new(Predicate::new("empty", 0).unwrap(), vec![]).unwrap();
     let pattern = AtomPattern::new(atom.predicate().clone(), vec![]).unwrap();
+    let mut atom_work = 0;
     assert_eq!(
         owner
-            .find_atom_with(&atom, limits(), || Err("no node"))
+            .find_atom_with(&atom, limits(), || {
+                atom_work += 1;
+                Ok::<(), Infallible>(())
+            })
             .unwrap(),
         None
     );
+    let mut key_work = 0;
     assert_eq!(
         owner
-            .find_key_with(pattern.key(&[] as &[Value]).unwrap(), limits(), || Err(
-                "no node"
-            ))
+            .find_key_with(pattern.key(&[] as &[Value]).unwrap(), limits(), || {
+                key_work += 1;
+                Ok::<(), Infallible>(())
+            })
             .unwrap(),
         None
     );
+    assert_eq!(atom_work, 1);
+    assert_eq!(key_work, 1);
 }
 
 #[test]
@@ -290,11 +303,10 @@ fn vacant_entries_charge_link_replay() {
         })
         .unwrap();
     assert_eq!(entry.position(), None);
-    // The four-operation relation lookup and two two-operation typed probes
-    // include the local direction recording. Replay costs one node/decode and
-    // one Step write per visited node, without repeating typed comparisons.
-    // Existing capacity needs no growth allowance.
-    assert_eq!(spent, 4 + 2 * 2 + 2 * 2);
+    // Seven signature operations and two ten-operation unequal typed probes
+    // include direction recording. Replay adds a node/decode and Step write
+    // per visited node, without repeating typed comparisons or growing storage.
+    assert_eq!(spent, 7 + 2 * 10 + 2 * 2);
     assert_eq!(
         entry
             .insert_with(limits(), || Ok::<(), Infallible>(()))
@@ -339,10 +351,10 @@ fn full_direction_record_refuses_without_change() {
 
 #[test]
 fn replay_refusal_preserves_published_membership() {
-    // p(4) takes the relation lookup and two typed probes (eight operations),
-    // followed by two replay node/Step pairs. Stop separately before each
-    // replay operation.
-    for limit in 8..12 {
+    // p(4) takes the relation lookup and two unequal typed probes (27
+    // operations), followed by two replay node/Step pairs. Refuse each pair's
+    // node inspection and Step write in turn.
+    for limit in 27..31 {
         let mut owner = owner(&[2, 1, 3]);
         assert!(owner.index.path.capacity() >= 2);
         owner
@@ -367,11 +379,171 @@ fn replay_refusal_preserves_published_membership() {
         assert_eq!(owner.len(), 3);
         assert_eq!(owner.committed.as_ptr(), original);
         for (id, value) in [2, 1, 3].into_iter().enumerate() {
-            assert_eq!(owner.get(id), Some(&atom(value)));
+            assert_eq!(owner.get(id), Some(AtomRef::from(&atom(value))));
         }
         validate(&owner);
         assert_eq!(insert(&mut owner, &added), 3);
-        assert_eq!(owner.get(3), Some(&added));
+        assert_eq!(owner.get(3), Some(AtomRef::from(&added)));
         validate(&owner);
     }
+}
+
+#[test]
+fn empty_lookup_permits_canonical_signature_resolution() {
+    let atom = Atom::new(Predicate::new("empty", 0).unwrap(), vec![]).unwrap();
+    let catalog = AtomCatalog::new(vec![atom]).unwrap();
+    let query = catalog.atoms().at(0).unwrap();
+    let owner = AtomInterner::new();
+    let cause = "signature stopped";
+    let result = owner.find_atom_with(query, limits(), || Err(&cause));
+    assert!(
+        matches!(result, Err(Failure::Stopped(actual)) if std::ptr::eq(actual, &raw const cause))
+    );
+    assert!(owner.is_empty());
+}
+
+#[test]
+fn empty_entry_permits_canonical_signature_resolution() {
+    let atom = Atom::new(Predicate::new("empty", 0).unwrap(), vec![]).unwrap();
+    let catalog = AtomCatalog::new(vec![atom]).unwrap();
+    let query = catalog.atoms().at(0).unwrap();
+    let mut owner = AtomInterner::new();
+    let cause = "signature stopped";
+    let result = owner.entry_atom_with(query, limits(), || Err(&cause));
+    assert!(
+        matches!(result, Err(Failure::Stopped(actual)) if std::ptr::eq(actual, &raw const cause))
+    );
+    assert!(owner.is_empty());
+}
+
+#[test]
+fn appender_lookup_reads_both_prefixes_without_capacity_mutation() {
+    let mut owner = owner(&[2, 1]);
+    owner
+        .commit_with(limits(), || Ok::<(), Infallible>(()))
+        .unwrap();
+    let (_, mut append) = owner.split();
+    append
+        .entry_atom_with(&atom(3), limits(), || Ok::<(), Infallible>(()))
+        .unwrap()
+        .insert_with(limits(), || Ok::<(), Infallible>(()))
+        .unwrap();
+    let before = (append.storage_bytes(), append.storage_peak_bytes());
+    let pattern = pattern();
+    for (value, expected) in [(2, Some(0)), (1, Some(1)), (3, Some(2)), (4, None)] {
+        let values = [Value::Number(value)];
+        let key = pattern.key(values.as_slice()).unwrap();
+        assert_eq!(
+            append
+                .find_key_with(key, limits(), || Ok::<(), Infallible>(()))
+                .unwrap(),
+            expected
+        );
+    }
+    assert_eq!(
+        (append.storage_bytes(), append.storage_peak_bytes()),
+        before
+    );
+}
+
+#[test]
+fn appender_lookup_preserves_each_callback_refusal() {
+    let mut owner = owner(&[2, 1, 3]);
+    let (_, append) = owner.split();
+    let pattern = pattern();
+    let values = [Value::Number(3)];
+    let key = pattern.key(values.as_slice()).unwrap();
+    let mut total = 0;
+    append
+        .find_key_with(key, limits(), || {
+            total += 1;
+            Ok::<(), Infallible>(())
+        })
+        .unwrap();
+    let before = (append.storage_bytes(), append.storage_peak_bytes());
+    for cut in 0..total {
+        let mut calls = 0;
+        assert!(matches!(append.find_key_with(key, limits(), || {
+            if calls == cut { return Err(cut); }
+            calls += 1; Ok(())
+        }), Err(Failure::Stopped(actual)) if actual == cut));
+        assert_eq!(calls, cut);
+        assert_eq!(
+            (append.storage_bytes(), append.storage_peak_bytes()),
+            before
+        );
+    }
+}
+
+#[test]
+fn predicate_import_byte_refusal_reports_the_complete_owner() {
+    let predicate = Predicate::new("long_name".repeat(512), 0).unwrap();
+    let mut measured = owner(&[1]);
+    measured
+        .declare_predicate_with(&predicate, limits(), || Ok::<(), Infallible>(()))
+        .unwrap();
+    let exact = measured.storage_peak_bytes();
+    let mut admitted = owner(&[1]);
+    admitted
+        .declare_predicate_with(
+            &predicate,
+            Limits {
+                max_bytes: exact,
+                ..limits()
+            },
+            || Ok::<(), Infallible>(()),
+        )
+        .unwrap();
+    let mut refused = owner(&[1]);
+    assert!(matches!(refused.declare_predicate_with(&predicate,
+        Limits { max_bytes: exact - 1, ..limits() }, || Ok::<(), Infallible>(())),
+        Err(Failure::Bytes { required, limit }) if required == exact && limit == exact - 1));
+    assert_eq!(refused.len(), 1);
+}
+
+#[test]
+fn publication_byte_refusal_includes_metadata_once() {
+    let mut measured = owner(&[1]);
+    measured.restart_storage_peak();
+    measured
+        .commit_with(limits(), || Ok::<(), Infallible>(()))
+        .unwrap();
+    let exact = measured.storage_peak_bytes();
+    let mut admitted = owner(&[1]);
+    admitted
+        .commit_with(
+            Limits {
+                max_bytes: exact,
+                ..limits()
+            },
+            || Ok::<(), Infallible>(()),
+        )
+        .unwrap();
+    let mut refused = owner(&[1]);
+    assert!(
+        matches!(refused.commit_with(Limits { max_bytes: exact - 1, ..limits() },
+        || Ok::<(), Infallible>(())), Err(Failure::Bytes { required, limit })
+        if required == exact && limit == exact - 1)
+    );
+    assert!(refused.committed().is_empty());
+    assert_eq!(refused.len(), 1);
+}
+
+#[test]
+fn store_representation_limit_is_not_mislabeled_as_owner_exhaustion() {
+    let required = usize::MAX as u128 + 1;
+    let error: Failure<Infallible> = store_failure(
+        storage::Fault::Storage {
+            required,
+            limit: usize::MAX,
+        },
+        7,
+        Limits {
+            max_bytes: u128::MAX,
+            ..limits()
+        },
+    );
+    assert!(matches!(error, Failure::Catalog(storage::Fault::Storage {
+        required: actual, limit: usize::MAX,
+    }) if actual == required));
 }

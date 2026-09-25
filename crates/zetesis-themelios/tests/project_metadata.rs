@@ -59,11 +59,20 @@ fn project_metadata_records_the_explicit_domain() {
     let (original, selected) = selected_pair();
     assert!(!original.projection().is_explicit());
     assert!(selected.projection().is_explicit());
-    assert_eq!(selected.projection().atoms(), &[atom("p", 1)]);
+    assert_eq!(
+        selected.projection().atoms().iter().collect::<Vec<_>>(),
+        &[atom("p", 1)]
+    );
     let policy = selected.metadata().project_selection();
     assert!(policy.is_explicit());
     assert!(policy.has_conditional_atoms());
-    assert_eq!(policy.signatures(), &[Predicate::new("p", 1).unwrap()]);
+    let expected = Predicate::new("p", 1).unwrap();
+    assert!(
+        policy
+            .signatures()
+            .iter()
+            .eq([zetesis_core::catalog::PredicateRef::from(&expected)])
+    );
     assert!(
         selected
             .metadata()
@@ -88,7 +97,7 @@ fn absent_project_heads_leave_an_explicit_empty_domain() {
     .unwrap();
     assert!(result.projection().is_explicit());
     assert!(result.projection().atoms().is_empty());
-    assert_eq!(result.atoms(), &[atom("p", 1)]);
+    assert_eq!(result.atoms().iter().collect::<Vec<_>>(), &[atom("p", 1)]);
 }
 
 #[test]
@@ -107,7 +116,10 @@ fn source_activity_is_fixed_before_any_answer_is_selected() {
 #[test]
 fn pooled_project_declarations_union_into_the_same_fixed_domain() {
     let input = admit("p(1;2).#project p((1;2;3)).#project p/1.");
-    assert_eq!(input.projection().atoms(), &[atom("p", 1), atom("p", 2)]);
+    assert_eq!(
+        input.projection().atoms().iter().collect::<Vec<_>>(),
+        &[atom("p", 1), atom("p", 2)]
+    );
     assert!(input.projection().contains(&atom("p", 1)));
     assert!(!input.projection().contains(&atom("p", 3)));
 }
@@ -169,7 +181,14 @@ fn declaration_bodies_count_authored_occurrences_before_deduplication() {
             ..
         }))
     ));
-    assert_eq!(admit(source).projection().atoms(), &[atom("p", 1)]);
+    assert_eq!(
+        admit(source)
+            .projection()
+            .atoms()
+            .iter()
+            .collect::<Vec<_>>(),
+        &[atom("p", 1)]
+    );
 }
 
 #[test]

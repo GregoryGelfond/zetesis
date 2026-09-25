@@ -133,6 +133,9 @@ import Zetesis.ReductRegions
 import Zetesis.Frontier
 import Zetesis.ModelSelections
 import Zetesis.AtomCatalogs
+import Zetesis.CanonicalCatalog
+import Zetesis.CarrierCoordinates
+import Zetesis.CanonicalTemplates
 import Zetesis.StorageOwners
 import Zetesis.ConditionalHeads
 import Zetesis.ConditionalHeadSupport

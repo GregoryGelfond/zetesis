@@ -2,15 +2,12 @@
 use themelios_base::source::SourceId;
 use themelios_base::span::{ByteOffset, Location, Span};
 use themelios_program::term::{BinaryOp, EvalError, UnaryOp};
-use zetesis_core::Value;
+use zetesis_core::{Value, ValueLimits};
 
-use crate::expansion::Budget;
+use crate::formula_binding::Binding;
 use crate::formula_ir::{Expression, Operation};
-use crate::formula_support::{Counters, Evaluation};
-use crate::{
-    ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits,
-    FormulaResource,
-};
+use crate::formula_support::{Evaluation, testing::Fixture};
+use crate::{ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource};
 
 fn location() -> Location {
     Location {
@@ -19,32 +16,51 @@ fn location() -> Location {
     }
 }
 fn evaluate(
-    nodes: Vec<Operation>,
+    plan: impl FnOnce(&mut Fixture) -> Vec<Operation>,
     work: u64,
-    expansion: ExpansionLimits,
+    extra_storage: Option<usize>,
 ) -> (Result<Value, FormulaFailure>, u64) {
-    let mut budget = Budget::new(expansion, usize::MAX);
-    let mut counters = Counters::default();
-    let binding = crate::formula_binding::Binding::default();
-    // These laws concern strict scalar-plan evaluation. Source families use
-    // the separate mode that continues independent branches after zero division.
-    let result = Evaluation::default().expression(
-        &Expression { nodes },
-        |variable| binding.read(variable, location()),
-        &FormulaLimits {
-            max_work: work,
-            ..Default::default()
-        },
-        &mut budget,
-        &mut counters,
-        location(),
-    );
-    (result, counters.work)
+    let mut fixture = Fixture::default();
+    let nodes = plan(&mut fixture);
+    fixture.with(location(), |_, computation, counters| {
+        let mut limits = FormulaLimits::default();
+        let binding = Binding::new(computation, &limits, counters, location()).unwrap();
+        if let Some(extra) = extra_storage {
+            let observer = computation.lease();
+            let current = limits.max_support_bytes
+                - computation
+                    .allowance(&observer, &limits, location())
+                    .unwrap();
+            limits.max_support_bytes = current + extra;
+        }
+        let before = counters.accounting.work;
+        limits.max_work = before.saturating_add(work);
+        // Strict mode stops at its first failing source node. Export is only
+        // this assertion boundary, after evaluation in the canonical authority.
+        let result = Evaluation::default()
+            .expression(
+                &Expression { nodes },
+                |variable| binding.key(variable, location()),
+                computation,
+                &limits,
+                counters,
+                location(),
+            )
+            .map(|key| {
+                computation
+                    .read()
+                    .term(&key)
+                    .unwrap()
+                    .to_value(ValueLimits::default())
+                    .unwrap()
+            });
+        (result, counters.accounting.work - before)
+    })
 }
-fn simple_plan() -> Vec<Operation> {
+fn simple_plan(fixture: &mut Fixture) -> Vec<Operation> {
     vec![
-        Operation::Constant(Value::Number(1)),
-        Operation::Constant(Value::Number(2)),
+        Operation::Constant(fixture.scalar(&Value::Number(1), location())),
+        Operation::Constant(fixture.scalar(&Value::Number(2), location())),
         Operation::Binary(BinaryOp::Add, 0, 1),
         Operation::Unary(UnaryOp::Negate, 2),
         Operation::Absolute(3),
@@ -52,22 +68,16 @@ fn simple_plan() -> Vec<Operation> {
 }
 
 #[test]
-fn scalar_nodes_keep_their_exact_work_charge() {
-    let (result, work) = evaluate(
-        simple_plan(),
-        5,
-        ExpansionLimits {
-            max_scalar_bytes: 0,
-            ..Default::default()
-        },
-    );
+fn every_scalar_work_cutoff_refuses_without_returning_a_value() {
+    let (result, needed) = evaluate(simple_plan, u64::MAX, None);
     assert_eq!(result.unwrap(), Value::Number(3));
-    assert_eq!(work, 5);
-    let (failure, work) = evaluate(simple_plan(), 4, ExpansionLimits::default());
-    assert_eq!(work, 4);
-    assert!(
-        matches!(failure, Err(FormulaFailure::Limit { resource: FormulaResource::Work, observed: 5, limit: 4, location: found }) if found == location())
-    );
+    assert!(needed > 0);
+    for cutoff in 0..needed {
+        let (failure, spent) = evaluate(simple_plan, cutoff, None);
+        assert!(spent <= cutoff);
+        assert!(matches!(failure, Err(FormulaFailure::Limit {
+            resource: FormulaResource::Work, location: found, .. }) if found == location()));
+    }
 }
 
 #[test]
@@ -76,18 +86,23 @@ fn the_first_failing_node_remains_authoritative() {
         ((0, 1), (1, 2), EvalError::Overflow),
         ((1, 2), (0, 1), EvalError::Undefined),
     ] {
-        let nodes = vec![
-            Operation::Constant(Value::Number(i32::MIN)),
-            Operation::Constant(Value::Number(-1)),
-            Operation::Constant(Value::Number(0)),
-            Operation::Binary(BinaryOp::Div, first.0, first.1),
-            Operation::Binary(BinaryOp::Div, second.0, second.1),
-            Operation::Binary(BinaryOp::Add, 3, 4),
-        ];
-        let (result, work) = evaluate(nodes, u64::MAX, ExpansionLimits::default());
-        assert_eq!(work, 4);
+        let (result, _) = evaluate(
+            |fixture| {
+                vec![
+                    Operation::Constant(fixture.scalar(&Value::Number(i32::MIN), location())),
+                    Operation::Constant(fixture.scalar(&Value::Number(-1), location())),
+                    Operation::Constant(fixture.scalar(&Value::Number(0), location())),
+                    Operation::Binary(BinaryOp::Div, first.0, first.1),
+                    Operation::Binary(BinaryOp::Div, second.0, second.1),
+                    Operation::Binary(BinaryOp::Add, 3, 4),
+                ]
+            },
+            u64::MAX,
+            None,
+        );
         assert!(
-            matches!(result, Err(FormulaFailure::Expansion(ExpansionFailure::Evaluation { error, location: found })) if error == expected && found == location())
+            matches!(result, Err(FormulaFailure::Expansion(ExpansionFailure::Evaluation {
+            error, location: found })) if error == expected && found == location())
         );
     }
 }
@@ -105,53 +120,79 @@ fn nonnumeric_operands_remain_undefined() {
             Operation::Absolute(0),
             Operation::Binary(BinaryOp::Add, 0, 0),
         ] {
-            let (result, work) = evaluate(
-                vec![Operation::Constant(operand.clone()), operation],
+            let (result, _) = evaluate(
+                |fixture| {
+                    vec![
+                        Operation::Constant(fixture.scalar(&operand, location())),
+                        operation,
+                    ]
+                },
                 u64::MAX,
-                ExpansionLimits::default(),
+                None,
             );
-            assert_eq!(work, 2);
             assert!(
-                matches!(result, Err(FormulaFailure::Expansion(ExpansionFailure::Evaluation { error: EvalError::Undefined, location: found })) if found == location())
+                matches!(result, Err(FormulaFailure::Expansion(ExpansionFailure::Evaluation {
+                error: EvalError::Undefined, location: found })) if found == location())
             );
         }
     }
 }
 
 #[test]
-fn operand_payload_refusal_precedes_arithmetic() {
-    let (result, work) = evaluate(
-        vec![
-            Operation::Constant(Value::Symbol("abc".into())),
-            Operation::Unary(UnaryOp::Negate, 0),
-        ],
-        u64::MAX,
-        ExpansionLimits {
-            max_scalar_bytes: 2,
-            ..Default::default()
+fn operand_storage_refusal_precedes_arithmetic() {
+    let (result, _) = evaluate(
+        |fixture| {
+            vec![
+                Operation::Constant(
+                    fixture.scalar(&Value::Symbol("payload".repeat(8192)), location()),
+                ),
+                Operation::Unary(UnaryOp::Negate, 0),
+            ]
         },
+        u64::MAX,
+        // The payload was admitted before the interval. Evaluation still needs
+        // its bounded metadata scratch before applying the unary operator.
+        Some(0),
     );
-    assert_eq!(work, 1);
-    assert!(
-        matches!(result, Err(FormulaFailure::Expansion(ExpansionFailure::Limit { resource: ExpansionResource::ScalarBytes, observed: 3, limit: 2, location: found })) if found == location())
-    );
+    assert!(matches!(result, Err(FormulaFailure::Limit {
+        resource: FormulaResource::SupportBytes, location: found, .. }) if found == location()));
 }
 
 #[test]
-fn node_work_refusal_precedes_operand_copy() {
+fn zero_work_refuses_before_operand_access() {
     let (result, work) = evaluate(
-        vec![
-            Operation::Constant(Value::Symbol("abc".into())),
-            Operation::Unary(UnaryOp::Negate, 0),
-        ],
-        0,
-        ExpansionLimits {
-            max_scalar_bytes: 0,
-            ..Default::default()
+        |fixture| {
+            vec![
+                Operation::Constant(fixture.scalar(&Value::Symbol("abc".into()), location())),
+                Operation::Unary(UnaryOp::Negate, 0),
+            ]
         },
+        0,
+        None,
     );
     assert_eq!(work, 0);
+    assert!(matches!(result, Err(FormulaFailure::Limit {
+        resource: FormulaResource::Work, location: found, .. }) if found == location()));
+}
+
+#[test]
+fn admitted_payload_does_not_expand_evaluation_storage() {
+    let (result, _) = evaluate(
+        |fixture| {
+            vec![
+                Operation::Constant(
+                    fixture.scalar(&Value::Symbol("payload".repeat(8192)), location()),
+                ),
+                Operation::Unary(UnaryOp::Negate, 0),
+            ]
+        },
+        u64::MAX,
+        // This bounds metadata, and is much smaller than the admitted spelling.
+        Some(4096),
+    );
     assert!(
-        matches!(result, Err(FormulaFailure::Limit { resource: FormulaResource::Work, observed: 1, limit: 0, location: found }) if found == location())
+        matches!(result, Err(FormulaFailure::Expansion(ExpansionFailure::Evaluation {
+        error: EvalError::Undefined, location: found,
+    })) if found == location())
     );
 }

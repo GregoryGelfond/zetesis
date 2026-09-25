@@ -1,255 +1,276 @@
-//! Bounded nested matching binds only explicit constructor/tuple variable positions.
+//! Structural matching borrows input subtrees and captures generated local IDs.
 
-use super::{Bound, Error, Metric, Operand, Reference, Resource, Symbol, Value, Work, resolve};
+use super::{Binding, Error, Interpreter, Metric, Operand, Resource, TermRef, Work};
+use zetesis_core::{
+    ValueNodeRef,
+    catalog::{TermKey, TermRead},
+};
+
+pub(super) mod read;
 
 pub(super) fn slots(operand: &Operand) -> usize {
     match operand {
         Operand::Variable(_) | Operand::Inverse { .. } => 1,
-        Operand::Function(_, _, arguments) | Operand::Tuple(arguments) => {
-            arguments.iter().map(slots).sum()
-        }
+        Operand::Construct(_, arguments) => arguments.iter().map(slots).sum(),
         _ => 0,
     }
 }
-pub(super) fn symbol(value: &Value, work: &mut Work<'_>) -> Result<Symbol, Error> {
-    let mut metric = Metric::default();
-    work.measure_reference(Reference::Value(value), 1, &mut metric)?;
-    work.construction_check(metric)?;
-    work.copy_reference(Reference::Value(value))
-}
-pub(super) fn own(value: &Symbol, work: &mut Work<'_>) -> Result<(Symbol, Metric), Error> {
-    let mut metric = Metric::default();
-    work.symbol_check(value, 1, &mut metric)?;
-    work.construction_check(metric)?;
-    work.check(
-        Resource::LocalBytes,
-        work.local_bytes + metric.payload(),
-        work.limits.max_local_bytes as u128,
-    )?;
-    let value = work.copy_symbol(value)?;
-    work.local_bytes += metric.payload();
-    Ok((value, metric))
-}
-type Children<'a> = (&'a [Operand], &'a [Symbol]);
 
-fn children<'a>(
-    pattern: &'a Operand,
-    value: &'a Symbol,
-    work: &mut Work<'_>,
-) -> Result<Option<Children<'a>>, Error> {
-    Ok(match (pattern, value) {
-        (
-            Operand::Function(sign, name, arguments),
-            Symbol::Function {
-                sign: actual_sign,
-                name: actual_name,
-                arguments: values,
-            },
-        ) => {
-            work.step(name.as_str().len() as u128 + actual_name.as_str().len() as u128)?;
-            (*sign == *actual_sign && name == actual_name && arguments.len() == values.len())
-                .then_some((arguments, values))
-        }
-        (Operand::Tuple(arguments), Symbol::Tuple(values)) if arguments.len() == values.len() => {
-            Some((arguments, values))
-        }
-        _ => None,
-    })
+#[derive(Clone, Copy)]
+enum Target<'input, 'key> {
+    Input(TermRef<'input>),
+    Generated(&'key TermKey),
 }
-fn matches_symbol(
-    pattern: &Operand,
-    value: &Symbol,
-    binding: &mut [Option<Bound<'_>>],
-    undo: &mut Vec<usize>,
-    work: &mut Work<'_>,
-) -> Result<bool, Error> {
-    work.step(1)?;
-    if let Some(expected) = resolve(pattern, binding) {
-        return Ok(work
-            .compare_reference(expected, Reference::Symbol(value))?
-            .is_eq());
+enum Child<'input> {
+    Input(TermRef<'input>),
+    Generated(TermKey),
+}
+impl<'input> Child<'input> {
+    fn target(&self) -> Target<'input, '_> {
+        match self {
+            Self::Input(value) => Target::Input(*value),
+            Self::Generated(key) => Target::Generated(key),
+        }
     }
-    match pattern {
-        Operand::Variable(slot) => {
-            let (value, metric) = own(value, work)?;
-            binding[*slot] = Some(Bound::Owned(value, metric));
-            undo.push(*slot);
-            Ok(true)
+}
+impl<'input> Target<'input, '_> {
+    fn value<'read>(self, read: TermRead<'read>) -> TermRef<'read>
+    where
+        'input: 'read,
+    {
+        match self {
+            Self::Input(value) => value,
+            Self::Generated(key) => read
+                .term(key)
+                .expect("interpreter target belongs to its arena"),
         }
-        Operand::Inverse { slot, expression } => {
-            super::inverse::bind(*slot, expression, value, binding, undo, work)
-        }
-        Operand::Any | Operand::Expression(_) => Ok(true),
-        Operand::Function(_, _, _) | Operand::Tuple(_) => {
-            let Some((arguments, values)) = children(pattern, value, work)? else {
-                return Ok(false);
-            };
-            for (argument, value) in arguments.iter().zip(values) {
-                if !matches_symbol(argument, value, binding, undo, work)? {
-                    return Ok(false);
-                }
+    }
+    fn child(
+        self,
+        index: usize,
+        context: &mut Interpreter<'input, '_, '_>,
+    ) -> Result<Child<'input>, Error> {
+        context.work.step(1)?;
+        Ok(match self {
+            Self::Input(value) => {
+                Child::Input(value.child(index).expect("validated pattern child"))
             }
-            Ok(true)
-        }
-        Operand::Value(_) => unreachable!("constant was resolved"),
+            Self::Generated(key) => Child::Generated(
+                context
+                    .child(key, index)?
+                    .expect("validated generated child"),
+            ),
+        })
+    }
+    fn equal_key(
+        self,
+        expected: &TermKey,
+        context: &mut Interpreter<'input, '_, '_>,
+    ) -> Result<bool, Error> {
+        let reader = context.terms.read();
+        let expected = reader.term(expected).expect("constructed comparison key");
+        read::equal(expected, self.value(reader), context.work)
     }
 }
-fn expression_matches(
-    expression: &super::Template,
-    value: &Symbol,
-    binding: &[Option<Bound<'_>>],
+
+fn resolved<'input: 'read, 'read>(
+    operand: &Operand,
+    binding: &'read Binding<'input>,
+    metadata: crate::metadata::Read<'input>,
+    reader: TermRead<'read>,
     work: &mut Work<'_>,
+) -> Result<Option<TermRef<'read>>, Error> {
+    match operand {
+        Operand::Constant(scalar) => {
+            work.step(1)?;
+            Ok(Some(
+                metadata.scalar(*scalar).expect("compiled pattern scalar"),
+            ))
+        }
+        Operand::Variable(slot) => binding.value(*slot, reader, work),
+        _ => Ok(None),
+    }
+}
+
+fn children<'pattern, 'input>(
+    pattern: &'pattern Operand,
+    target: Target<'input, '_>,
+    context: &mut Interpreter<'input, '_, '_>,
+) -> Result<Option<&'pattern [Operand]>, Error> {
+    let Operand::Construct(shape, arguments) = pattern else {
+        return Ok(None);
+    };
+    context.work.step(1)?;
+    let expected = context
+        .metadata
+        .constructor(*shape)
+        .expect("compiled pattern constructor");
+    let actual = read::descriptor(target.value(context.terms.read()), context.work)?;
+    Ok(read::constructor(expected, actual, context.work)?.then_some(arguments.as_slice()))
+}
+
+fn expression_matches<'input>(
+    expression: &super::Template,
+    target: Target<'input, '_>,
+    binding: &Binding<'input>,
+    context: &mut Interpreter<'input, '_, '_>,
 ) -> Result<bool, Error> {
     if expression.multiple() {
         let mut found = false;
-        super::values::each(expression, binding, work, |expected, metric, work| {
-            let mut actual = Metric::default();
-            work.symbol_check(value, 1, &mut actual)?;
-            work.construction_check(Metric {
-                nodes: metric.nodes + actual.nodes,
-                bytes: metric.bytes + actual.bytes,
-            })?;
-            work.step(metric.payload() + actual.payload())?;
-            found |= expected == *value;
+        super::values::each(expression, binding, context, |expected, _, context| {
+            found |= target.equal_key(&expected, context)?;
             Ok(())
         })?;
         return Ok(found);
     }
     let mut metric = Metric::default();
-    work.measure(expression, binding, 1, &mut metric)?;
-    let mut actual = Metric::default();
-    work.symbol_check(value, 1, &mut actual)?;
-    work.construction_check(Metric {
-        nodes: metric.nodes + actual.nodes,
-        bytes: metric.bytes + actual.bytes,
-    })?;
-    let expected = work.construct(expression, binding)?;
-    work.step(metric.payload() + actual.payload())?;
-    Ok(expected == *value)
+    context.measure(expression, binding, 1, &mut metric)?;
+    context.work.construction_check(metric)?;
+    let expected = context.construct(expression, binding)?;
+    target.equal_key(&expected, context)
 }
-fn test_symbol(
+
+fn capture<'input>(
     pattern: &Operand,
-    value: &Symbol,
-    binding: &[Option<Bound<'_>>],
-    work: &mut Work<'_>,
+    target: Target<'input, '_>,
+    binding: &mut Binding<'input>,
+    undo: &mut Vec<usize>,
+    context: &mut Interpreter<'input, '_, '_>,
 ) -> Result<bool, Error> {
-    work.step(1)?;
-    if let Some(expected) = resolve(pattern, binding) {
-        return Ok(work
-            .compare_reference(expected, Reference::Symbol(value))?
-            .is_eq());
+    context.work.step(1)?;
+    let reader = context.terms.read();
+    if let Some(expected) = resolved(pattern, binding, context.metadata, reader, context.work)? {
+        return read::equal(expected, target.value(reader), context.work);
     }
     match pattern {
-        Operand::Any => Ok(true),
-        Operand::Expression(expression) | Operand::Inverse { expression, .. } => {
-            expression_matches(expression, value, binding, work)
+        Operand::Variable(slot) => {
+            // An anonymous atom-pattern key is not an ordinary term value.
+            if binding.is_bound(*slot) {
+                return Ok(false);
+            }
+            match target {
+                Target::Input(value) => binding.capture(*slot, value),
+                Target::Generated(key) => {
+                    let metric = context.metric(key)?;
+                    context.work.check(
+                        Resource::LocalBytes,
+                        context.work.local_bytes + metric.payload(),
+                        context.work.limits.max_local_bytes as u128,
+                    )?;
+                    binding.bind_term(*slot, key, metric, context.work)?;
+                }
+            }
+            undo.push(*slot);
+            Ok(true)
         }
-        Operand::Function(_, _, _) | Operand::Tuple(_) => {
-            let Some((arguments, values)) = children(pattern, value, work)? else {
+        Operand::Inverse { slot, expression } => {
+            let ValueNodeRef::Number(number) =
+                read::descriptor(target.value(context.terms.read()), context.work)?
+            else {
                 return Ok(false);
             };
-            for (argument, value) in arguments.iter().zip(values) {
-                if !test_symbol(argument, value, binding, work)? {
+            super::inverse::bind(*slot, expression, number, binding, undo, context)
+        }
+        Operand::Any | Operand::Expression(_) => Ok(true),
+        Operand::Construct(_, _) => {
+            let Some(arguments) = children(pattern, target, context)? else {
+                return Ok(false);
+            };
+            for (index, argument) in arguments.iter().enumerate() {
+                context.work.step(1)?;
+                if matches!(argument, Operand::Any | Operand::Expression(_)) {
+                    continue;
+                }
+                let child = target.child(index, context)?;
+                if !capture(argument, child.target(), binding, undo, context)? {
                     return Ok(false);
                 }
             }
             Ok(true)
         }
-        Operand::Variable(_) | Operand::Value(_) => unreachable!("safe operand was resolved"),
+        Operand::Constant(_) => unreachable!("compiled constant was resolved"),
     }
 }
 
-/// Capture structural positions before testing arithmetic consumers in the row.
-/// The caller owns every newly captured slot and releases it even on mismatch.
-pub(super) fn bind_symbol(
+fn test<'input>(
     pattern: &Operand,
-    value: &Symbol,
-    binding: &mut [Option<Bound<'_>>],
-    undo: &mut Vec<usize>,
-    work: &mut Work<'_>,
+    target: Target<'input, '_>,
+    binding: &Binding<'input>,
+    context: &mut Interpreter<'input, '_, '_>,
 ) -> Result<bool, Error> {
-    if !matches_symbol(pattern, value, binding, undo, work)? {
-        return Ok(false);
+    context.work.step(1)?;
+    let reader = context.terms.read();
+    if let Some(expected) = resolved(pattern, binding, context.metadata, reader, context.work)? {
+        return read::equal(expected, target.value(reader), context.work);
     }
-    test_symbol(pattern, value, binding, work)
+    match pattern {
+        Operand::Any => Ok(true),
+        Operand::Expression(expression) | Operand::Inverse { expression, .. } => {
+            expression_matches(expression, target, binding, context)
+        }
+        Operand::Construct(_, _) => {
+            let Some(arguments) = children(pattern, target, context)? else {
+                return Ok(false);
+            };
+            for (index, argument) in arguments.iter().enumerate() {
+                context.work.step(1)?;
+                if matches!(argument, Operand::Any) {
+                    continue;
+                }
+                let child = target.child(index, context)?;
+                if !test(argument, child.target(), binding, context)? {
+                    return Ok(false);
+                }
+            }
+            Ok(true)
+        }
+        Operand::Variable(_) => Ok(false),
+        Operand::Constant(_) => unreachable!("compiled constant was resolved"),
+    }
 }
 
-pub(super) fn matches_value(
+/// Only the admitted pattern is recursive. Captured input subtrees stay borrowed
+/// regardless of depth and are not registered or measured merely for matching.
+/// The caller releases every slot in undo, including after mismatch or refusal.
+pub(super) fn matches_value<'input>(
     pattern: &Operand,
-    value: &Value,
-    binding: &mut [Option<Bound<'_>>],
+    value: TermRef<'input>,
+    binding: &mut Binding<'input>,
     undo: &mut Vec<usize>,
     bind: bool,
-    work: &mut Work<'_>,
+    context: &mut Interpreter<'input, '_, '_>,
 ) -> Result<bool, Error> {
-    if matches!(pattern, Operand::Any) || (bind && matches!(pattern, Operand::Expression(_))) {
-        return Ok(true);
-    }
-    let value = symbol(value, work)?;
     if bind {
-        matches_symbol(pattern, &value, binding, undo, work)
+        capture(pattern, Target::Input(value), binding, undo, context)
     } else {
-        test_symbol(pattern, &value, binding, work)
+        test_value(pattern, value, binding, context)
     }
-}
-pub(super) fn test_value(
-    pattern: &Operand,
-    value: &Value,
-    binding: &[Option<Bound<'_>>],
-    work: &mut Work<'_>,
-) -> Result<bool, Error> {
-    if let Some(expected) = resolve(pattern, binding) {
-        return Ok(work
-            .compare_reference(expected, Reference::Value(value))?
-            .is_eq());
-    }
-    if matches!(pattern, Operand::Any) {
-        return Ok(true);
-    }
-    let value = symbol(value, work)?;
-    test_symbol(pattern, &value, binding, work)
 }
 
-/// Copy one matched original atom only after complete payload preflight.
-pub(super) fn own_atom(atom: &super::Atom, work: &mut Work<'_>) -> Result<(Symbol, Metric), Error> {
-    let mut metric = Metric {
-        nodes: 1,
-        bytes: atom.predicate().name().len(),
-    };
-    work.check(Resource::Nodes, 1, work.limits.max_symbol_nodes as u128)?;
-    work.check(Resource::Depth, 1, work.limits.max_symbol_depth as u128)?;
-    work.check(
-        Resource::Bytes,
-        metric.bytes as u128,
-        work.limits.max_symbol_bytes as u128,
-    )?;
-    work.step(metric.payload())?;
-    for value in atom.values() {
-        work.measure_reference(Reference::Value(value), 2, &mut metric)?;
-    }
-    work.construction_check(metric)?;
-    work.check(
-        Resource::LocalBytes,
-        work.local_bytes + metric.payload(),
-        work.limits.max_local_bytes as u128,
-    )?;
-    let mut arguments = work.reserve(atom.values().len())?;
-    for value in atom.values() {
-        arguments.push(work.copy_reference(Reference::Value(value))?);
-    }
-    let name = super::Name::new(atom.predicate().name().to_owned())
-        .map_err(|_| work.error(super::ErrorKind::InvalidSymbol))?;
-    let sign = match atom.predicate().sign() {
-        zetesis_core::Sign::Positive => super::Sign::Positive,
-        zetesis_core::Sign::Negative => super::Sign::Negative,
-    };
-    work.local_bytes += metric.payload();
-    Ok((
-        Symbol::Function {
-            sign,
-            name,
-            arguments,
-        },
-        metric,
-    ))
+pub(super) fn test_value<'input>(
+    pattern: &Operand,
+    value: TermRef<'input>,
+    binding: &Binding<'input>,
+    context: &mut Interpreter<'input, '_, '_>,
+) -> Result<bool, Error> {
+    test(pattern, Target::Input(value), binding, context)
 }
+
+/// Capture structural positions in a generated alternative, then test arithmetic
+/// consumers after all captures exist. Captures retain IDs and logical charges.
+pub(super) fn bind_key<'input>(
+    pattern: &Operand,
+    key: &TermKey,
+    binding: &mut Binding<'input>,
+    undo: &mut Vec<usize>,
+    context: &mut Interpreter<'input, '_, '_>,
+) -> Result<bool, Error> {
+    let target = Target::Generated(key);
+    if !capture(pattern, target, binding, undo, context)? {
+        return Ok(false);
+    }
+    test(pattern, target, binding, context)
+}
+
+#[cfg(test)]
+mod tests;

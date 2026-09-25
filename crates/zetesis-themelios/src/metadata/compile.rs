@@ -24,8 +24,8 @@ pub struct MetadataLimits {
     /// Root-inclusive term/symbol depth, additionally capped at 64.
     pub max_depth: usize,
     /// Cumulative relevant UTF-8 names, variables and strings in the borrowed
-    /// canonical input. Retained directive names repeat per parsed origin, bounded
-    /// separately by origin/metadata-occurrence ceilings; constant expansion has
+    /// canonical input. Logical occurrence accounting repeats per parsed origin,
+    /// while canonical spelling is shared; constant expansion has
     /// its own copied-payload limits. Excludes caller-owned program capacity,
     /// provenance annotations, allocator overhead and RSS.
     pub max_text_bytes: usize,
@@ -35,6 +35,8 @@ pub struct MetadataLimits {
     pub expansion: ExpansionLimits,
     /// Existing safe observation-template compilation ceilings.
     pub observations: crate::observation::AdmissionLimits,
+    /// Named canonical metadata storage, independent of logical source counts.
+    pub storage: super::MetadataStorageLimits,
 }
 impl Default for MetadataLimits {
     fn default() -> Self {
@@ -46,6 +48,7 @@ impl Default for MetadataLimits {
             max_origins: 16_384,
             expansion: ExpansionLimits::default(),
             observations: crate::observation::AdmissionLimits::default(),
+            storage: super::MetadataStorageLimits::default(),
         }
     }
 }
@@ -331,7 +334,7 @@ impl SourceMetadata {
         fallback: Location,
     ) -> Result<Self, MetadataError> {
         validate(program, limits, fallback)?;
-        let mut metadata = super::Builder::default();
+        let mut metadata = super::Builder::new(limits.storage);
         super::collect_profile(program, &mut metadata, true)
             .map_err(|error| MetadataError::Compilation(error.into()))?;
         // Parsed occurrence collection intentionally omits Constructed origins.
@@ -347,7 +350,8 @@ impl SourceMetadata {
             match carrier.get() {
                 Statement::Project(Project::Signature(signature)) => {
                     let location = crate::extended::origin(carrier, fallback);
-                    let predicate = super::predicate(signature, location)
+                    let predicate = metadata
+                        .signature(signature, location)
                         .map_err(|error| MetadataError::Compilation(error.into()))?;
                     metadata.projection.signature(predicate);
                 }
@@ -355,7 +359,8 @@ impl SourceMetadata {
                 Statement::Show(Show::All) => metadata.output.mark_explicit(),
                 Statement::Show(Show::Signature(signature)) => {
                     let location = crate::extended::origin(carrier, fallback);
-                    let predicate = super::predicate(signature, location)
+                    let predicate = metadata
+                        .signature(signature, location)
                         .map_err(|error| MetadataError::Compilation(error.into()))?;
                     metadata.output.include(predicate);
                 }
@@ -382,10 +387,12 @@ impl SourceMetadata {
             },
             ..Default::default()
         };
-        metadata.observations =
-            crate::observation::compile(program, options, observations, &mut budget, fallback)
-                .map_err(MetadataError::Compilation)?;
-        Ok(metadata.finish())
+        metadata
+            .compile_observations(program, options, observations, &mut budget, fallback)
+            .map_err(MetadataError::Compilation)?;
+        metadata
+            .finish(fallback)
+            .map_err(|error| MetadataError::Compilation(error.into()))
     }
 }
 

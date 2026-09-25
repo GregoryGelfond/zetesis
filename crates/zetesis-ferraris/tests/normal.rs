@@ -2,7 +2,7 @@
 
 use proptest::prelude::*;
 use zetesis_core::{
-    AtomPattern, GroundProgram, Model, Predicate, Program, Seed, StaticLimits, Template,
+    AtomPattern, GroundProgram, Model, Predicate, Program, SeedSelection, StaticLimits, Template,
 };
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
@@ -43,22 +43,20 @@ fn compare(program: &Program) {
     let supported = from_ground_program_supported(&ground, AdmissionLimits::default()).unwrap();
     assert_eq!(ground.atom_count(), theory.atom_count());
     for mask in 0usize..(1 << ground.atom_count()) {
-        let atoms = ground
-            .atoms()
-            .iter()
-            .enumerate()
-            .filter(|(index, _)| mask & (1 << index) != 0)
-            .map(|(_, atom)| atom.clone());
-        let model = Model::new(atoms);
-        let seed = Seed::new(
+        let model = Model::from_positions(
+            ground.atom_catalog(),
+            (0..ground.atom_count()).filter(|index| mask & (1 << index) != 0),
+        )
+        .unwrap();
+        let seed = SeedSelection::from_carrier_atoms(
             program,
             model
                 .atoms()
                 .iter()
-                .filter(|atom| program.contains_gate_atom(atom))
-                .cloned(),
+                .filter_map(|atom| program.locate_atom(atom, true).unwrap()),
         )
-        .unwrap();
+        .unwrap()
+        .to_seed();
         let closure = zetesis_cpu::check(
             program,
             &seed,

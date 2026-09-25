@@ -129,7 +129,7 @@ fn composed_profiles_preserve_complete_optimum_answers() {
                         .interpretation()
                         .atoms()
                         .iter()
-                        .cloned()
+                        .map(|atom| atom.to_atom(ValueLimits::default()).unwrap())
                         .collect::<Vec<_>>(),
                 );
             }

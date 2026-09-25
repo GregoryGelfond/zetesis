@@ -565,7 +565,7 @@ fn observation_bindings_preserve_symbol_string_and_infinite_value_identity() {
         (Value::Supremum, "p(#sup) item(#sup)"),
     ] {
         let atom = Atom::new(Predicate::new("p", 1).unwrap(), vec![value]).unwrap();
-        let model = Model::new([atom]);
+        let model = Model::new([atom]).unwrap();
         let original = model.clone();
         let rendered = observations
             .render(
@@ -616,7 +616,8 @@ fn observation_bindings_preserve_symbol_string_and_infinite_value_identity() {
         Predicate::new("p", 1).unwrap(),
         vec![Value::Symbol(String::new())],
     )
-    .unwrap()]);
+    .unwrap()])
+    .unwrap();
     let error = observations
         .evaluate(
             &malformed,

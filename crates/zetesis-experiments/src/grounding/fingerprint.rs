@@ -1,14 +1,17 @@
 //! Versioned, framed execution-subject evidence outside admission timing.
 //!
 //! Hashing borrows the admitted subject and uses fixed-size scratch. Every byte
-//! is charged before hashing; the inclusive encoding ceiling bounds work without
-//! retaining an encoded subject. This is collision-resistant evidence, not an
+//! is charged before hashing; the inclusive encoding ceiling bounds the expanded
+//! subject without retaining it. Canonical preorder navigation can revisit
+//! ancestors, so its worst-case work is quadratic in encoded size on deep combs.
+//! This is collision-resistant evidence, not an
 //! injective mathematical identity or an interchangeable serialized program.
 
 use serde::{Serialize, Serializer};
 use sha2::{Digest, Sha256};
 use themelios_base::span::Location;
-use zetesis_core::{Atom, Predicate, Sign};
+use zetesis_core::Sign;
+use zetesis_core::catalog::{AtomRef, PredicateRef};
 use zetesis_ferraris::{Node, Theory};
 use zetesis_themelios::{
     AdmittedFormulaBundle, PreparedProjection, SourceDirective, SourceMetadata,
@@ -136,12 +139,14 @@ impl Encoding {
             Sign::Negative => 1,
         })
     }
-    fn predicate(&mut self, predicate: &Predicate) -> Result<(), Error> {
+    fn predicate<'a>(&mut self, predicate: impl Into<PredicateRef<'a>>) -> Result<(), Error> {
+        let predicate = predicate.into();
         self.text(predicate.name())?;
         self.count(predicate.arity())?;
         self.sign(predicate.sign())
     }
-    fn atom(&mut self, atom: &Atom) -> Result<(), Error> {
+    fn atom<'a>(&mut self, atom: impl Into<AtomRef<'a>>) -> Result<(), Error> {
+        let atom = atom.into();
         self.predicate(atom.predicate())?;
         self.count(atom.values().len())?;
         for value in atom.values() {
@@ -197,7 +202,7 @@ impl Encoding {
     }
     fn metadata(&mut self, metadata: &SourceMetadata) -> Result<(), Error> {
         self.count(metadata.directives().len())?;
-        for located in metadata.directives() {
+        for located in metadata.directives().iter() {
             match located.directive() {
                 SourceDirective::Defined(predicate) => {
                     self.tag(0)?;
@@ -219,7 +224,7 @@ impl Encoding {
         }
         self.tag(u8::from(metadata.atom_selection().is_explicit()))?;
         self.count(metadata.atom_selection().signatures().len())?;
-        for predicate in metadata.atom_selection().signatures() {
+        for predicate in metadata.atom_selection().signatures().iter() {
             self.predicate(predicate)?;
         }
         self.count(0) // complete term-observation plan count, checked before encoding

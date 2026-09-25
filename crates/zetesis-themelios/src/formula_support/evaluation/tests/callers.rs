@@ -1,351 +1,340 @@
-//! Observe the actual join consumers, independently of evaluator unit tests.
-
-use themelios_program::program::Relation;
-use themelios_program::term::BinaryOp;
-use zetesis_core::Value;
-
-use super::location;
+//! Actual join consumers share one canonical computation and leased scratch.
+use super::{empty, location};
 use crate::expansion::Budget;
-use crate::formula_binding::{Binding, complete};
 use crate::formula_ir::{Expression, LiteralIr, Operation};
-use crate::formula_support::{Comparisons, Counters, Join, Relations, Support};
+use crate::formula_support::{
+    Comparisons, Join,
+    testing::{Fixture, binding},
+};
 use crate::{ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource};
+use themelios_program::{program::Relation, term::BinaryOp};
+use zetesis_core::{Value, ValueNodeRef};
 
-fn number(value: i32) -> Expression {
+use crate::formula_support::Context;
+fn number(fixture: &mut Fixture, value: i32) -> Expression {
     Expression {
-        nodes: vec![Operation::Constant(Value::Number(value))],
+        nodes: vec![Operation::Constant(
+            fixture.scalar(&Value::Number(value), location()),
+        )],
     }
 }
-
-fn increment(variable: usize) -> Expression {
+fn increment(fixture: &mut Fixture, variable: usize) -> Expression {
     Expression {
         nodes: vec![
             Operation::Variable(variable),
-            Operation::Constant(Value::Number(1)),
+            Operation::Constant(fixture.scalar(&Value::Number(1), location())),
             Operation::Binary(BinaryOp::Add, 0, 1),
         ],
     }
 }
-
-#[test]
-fn final_filters_use_the_join_workspace() {
-    // Tuple comparison bypasses prefix arithmetic, so only the final filter can
-    // populate this initially empty workspace.
-    let literals = [LiteralIr::TupleCompare(
-        vec![increment(0)],
-        Relation::Eq,
-        vec![increment(0)],
-    )];
-    let relations = Relations::default();
-    let support = Support::indexed(
-        &relations,
-        &crate::FormulaLimits::default(),
-        &crate::formula_support::Counters::default(),
-        location(),
-    )
-    .unwrap();
-    let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
-    let mut join = Join::new(
-        &literals,
-        &complete([Value::Number(7)]),
-        1,
-        &support,
-        &mut budget,
-        location(),
-    )
-    .unwrap();
-    let result = join
-        .next(
-            &FormulaLimits::default(),
-            &mut budget,
-            &mut Counters::default(),
-            location(),
-        )
-        .unwrap();
-    assert_eq!(result, Some(complete([Value::Number(7)])));
-    assert!(join.evaluation.values.is_empty());
-    assert!(join.evaluation.integers.is_empty());
-    assert!(join.evaluation.integers.capacity() >= 2);
+fn budget() -> Budget {
+    Budget::new(ExpansionLimits::default(), usize::MAX)
 }
 
 #[test]
+fn final_filters_use_the_join_workspace() {
+    let mut fixture = Fixture::default();
+    let literals = [LiteralIr::TupleCompare(
+        vec![increment(&mut fixture, 0)],
+        Relation::Eq,
+        vec![increment(&mut fixture, 0)],
+    )];
+    fixture.with(location(), |support, computation, counters| {
+        let prefix = binding(&[Some(Value::Number(7))], computation, counters, location());
+        let limits = FormulaLimits::default();
+        let mut budget = budget();
+        let mut join = Join::new(
+            &literals,
+            &prefix,
+            1,
+            support,
+            &mut budget,
+            Context::new(computation, &limits, counters, location()),
+        )
+        .unwrap();
+        let result = join
+            .next(computation, &limits, &mut budget, counters, location())
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            result
+                .read(0, computation.read(), location())
+                .unwrap()
+                .descriptor(),
+            ValueNodeRef::Number(7)
+        );
+        assert!(empty(&join.evaluation));
+        assert!(join.evaluation.scratch.integers.capacity() >= 2);
+    });
+}
+#[test]
 fn binding_generators_use_the_join_workspace() {
+    let mut fixture = Fixture::default();
     let literals = [
         LiteralIr::Range {
             target: 0,
-            lower: number(0),
-            upper: number(2),
+            lower: number(&mut fixture, 0),
+            upper: number(&mut fixture, 2),
             binder: true,
         },
         LiteralIr::Bind {
             target: 1,
-            value: increment(0),
+            value: increment(&mut fixture, 0),
         },
     ];
-    let relations = Relations::default();
-    let support = Support::indexed(
-        &relations,
-        &crate::FormulaLimits::default(),
-        &crate::formula_support::Counters::default(),
-        location(),
-    )
-    .unwrap();
-    let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
-    let mut counters = Counters::default();
-    let mut join = Join::new(
-        &literals,
-        &Binding::default(),
-        2,
-        &support,
-        &mut budget,
-        location(),
-    )
-    .unwrap();
-    for value in 0..=2 {
-        assert_eq!(
-            join.next(
-                &FormulaLimits::default(),
-                &mut budget,
-                &mut counters,
-                location(),
-            )
-            .unwrap(),
-            Some(complete([Value::Number(value), Value::Number(value + 1)]))
-        );
-        assert!(join.evaluation.values.is_empty());
-        assert!(join.evaluation.integers.is_empty());
-        assert!(join.evaluation.integers.capacity() >= 2);
-    }
-    assert_eq!(
-        join.next(
-            &FormulaLimits::default(),
+    fixture.with(location(), |support, computation, counters| {
+        let prefix = binding(&[], computation, counters, location());
+        let limits = FormulaLimits::default();
+        let mut budget = budget();
+        let mut join = Join::new(
+            &literals,
+            &prefix,
+            2,
+            support,
             &mut budget,
-            &mut counters,
-            location(),
+            Context::new(computation, &limits, counters, location()),
         )
-        .unwrap(),
-        None
-    );
+        .unwrap();
+        for value in 0..=2 {
+            let row = join
+                .next(computation, &limits, &mut budget, counters, location())
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                row.read(0, computation.read(), location())
+                    .unwrap()
+                    .descriptor(),
+                ValueNodeRef::Number(value)
+            );
+            assert_eq!(
+                row.read(1, computation.read(), location())
+                    .unwrap()
+                    .descriptor(),
+                ValueNodeRef::Number(value + 1)
+            );
+            assert!(empty(&join.evaluation));
+            assert!(join.evaluation.scratch.integers.capacity() >= 2);
+        }
+        assert!(
+            join.next(computation, &limits, &mut budget, counters, location())
+                .unwrap()
+                .is_none()
+        );
+    });
 }
-
 #[test]
 fn range_endpoints_use_the_join_workspace() {
+    let mut fixture = Fixture::default();
     let literals = [LiteralIr::Range {
         target: 1,
-        lower: increment(0),
-        upper: increment(0),
+        lower: increment(&mut fixture, 0),
+        upper: increment(&mut fixture, 0),
         binder: true,
     }];
-    let relations = Relations::default();
-    let support = Support::indexed(
-        &relations,
-        &crate::FormulaLimits::default(),
-        &crate::formula_support::Counters::default(),
-        location(),
-    )
-    .unwrap();
-    let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
-    let mut join = Join::new(
-        &literals,
-        &complete([Value::Number(2)]),
-        2,
-        &support,
-        &mut budget,
-        location(),
-    )
-    .unwrap();
-    assert_eq!(
-        join.next(
-            &FormulaLimits::default(),
+    fixture.with(location(), |support, computation, counters| {
+        let prefix = binding(&[Some(Value::Number(2))], computation, counters, location());
+        let limits = FormulaLimits::default();
+        let mut budget = budget();
+        let mut join = Join::new(
+            &literals,
+            &prefix,
+            2,
+            support,
             &mut budget,
-            &mut Counters::default(),
-            location(),
+            Context::new(computation, &limits, counters, location()),
         )
-        .unwrap(),
-        Some(complete([Value::Number(2), Value::Number(3)]))
-    );
-    assert!(join.evaluation.values.is_empty());
-    assert!(join.evaluation.integers.is_empty());
-    assert!(join.evaluation.integers.capacity() >= 2);
+        .unwrap();
+        let row = join
+            .next(computation, &limits, &mut budget, counters, location())
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            row.read(1, computation.read(), location())
+                .unwrap()
+                .descriptor(),
+            ValueNodeRef::Number(3)
+        );
+        assert!(empty(&join.evaluation));
+        assert!(join.evaluation.scratch.integers.capacity() >= 2);
+    });
 }
-
 #[test]
 fn false_filters_do_not_hide_later_arithmetic_errors() {
+    let mut fixture = Fixture::default();
     let literals = [
-        LiteralIr::TupleCompare(vec![number(0)], Relation::Eq, vec![number(1)]),
+        LiteralIr::TupleCompare(
+            vec![number(&mut fixture, 0)],
+            Relation::Eq,
+            vec![number(&mut fixture, 1)],
+        ),
         LiteralIr::TupleCompare(
             vec![Expression {
                 nodes: vec![
-                    Operation::Constant(Value::Number(1)),
-                    Operation::Constant(Value::Number(0)),
+                    Operation::Constant(fixture.scalar(&Value::Number(1), location())),
+                    Operation::Constant(fixture.scalar(&Value::Number(0), location())),
                     Operation::Binary(BinaryOp::Div, 0, 1),
                 ],
             }],
             Relation::Eq,
-            vec![number(0)],
+            vec![number(&mut fixture, 0)],
         ),
     ];
-    let relations = Relations::default();
-    let support = Support::indexed(
-        &relations,
-        &crate::FormulaLimits::default(),
-        &crate::formula_support::Counters::default(),
-        location(),
-    )
-    .unwrap();
-    let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
-    let mut join = Join::new(
-        &literals,
-        &Binding::default(),
-        0,
-        &support,
-        &mut budget,
-        location(),
-    )
-    .unwrap();
-    assert!(
-        join.next(
-            &FormulaLimits::default(),
+    fixture.with(location(), |support, computation, counters| {
+        let prefix = binding(&[], computation, counters, location());
+        let limits = FormulaLimits::default();
+        let mut budget = budget();
+        let mut join = Join::new(
+            &literals,
+            &prefix,
+            0,
+            support,
             &mut budget,
-            &mut Counters::default(),
-            location(),
+            Context::new(computation, &limits, counters, location()),
         )
-        .unwrap()
-        .is_none()
-    );
-    assert!(matches!(
-        join.take_family().finish(),
-        Err(FormulaFailure::Expansion(
-            ExpansionFailure::Evaluation { .. }
-        ))
-    ));
+        .unwrap();
+        assert!(
+            join.next(computation, &limits, &mut budget, counters, location())
+                .unwrap()
+                .is_none()
+        );
+        assert!(matches!(
+            join.take_family().finish(),
+            Err(FormulaFailure::Expansion(
+                ExpansionFailure::Evaluation { .. }
+            ))
+        ));
+    });
 }
-
 #[test]
 fn stopped_filters_release_live_workspace_values() {
-    let literals = [LiteralIr::Compare(increment(0), Relation::Eq, increment(0))];
-    let relations = Relations::default();
-    let support = Support::indexed(
-        &relations,
-        &crate::FormulaLimits::default(),
-        &crate::formula_support::Counters::default(),
-        location(),
-    )
-    .unwrap();
-    let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
-    let mut join = Join::new(
-        &literals,
-        &Binding::default(),
-        1,
-        &support,
-        &mut budget,
-        location(),
-    )
-    .unwrap();
-    let failure = join.filters(
-        &crate::formula_support::rows::Frame::Owned(complete([Value::Number(3)])),
-        Comparisons::Deferred,
-        &FormulaLimits {
-            max_work: 5,
-            ..Default::default()
-        },
-        &mut budget,
-        &mut Counters::default(),
-        location(),
-    );
-    assert!(matches!(
-        failure,
-        Err(FormulaFailure::Limit {
-            resource: FormulaResource::Work,
-            observed: 6,
-            limit: 5,
-            ..
-        })
-    ));
-    assert!(join.evaluation.values.is_empty());
-    // This exercises a fresh filter call, not resumption of a stopped Join.
-    assert!(matches!(
-        join.filters(
-            &crate::formula_support::rows::Frame::Owned(complete([Value::Number(9)])),
-            Comparisons::Deferred,
-            &FormulaLimits::default(),
+    let mut fixture = Fixture::default();
+    let literals = [LiteralIr::Compare(
+        increment(&mut fixture, 0),
+        Relation::Eq,
+        increment(&mut fixture, 0),
+    )];
+    fixture.with(location(), |support, computation, counters| {
+        let prefix = binding(&[], computation, counters, location());
+        let limits = FormulaLimits::default();
+        let mut budget = budget();
+        let mut join = Join::new(
+            &literals,
+            &prefix,
+            1,
+            support,
             &mut budget,
-            &mut Counters::default(),
-            location(),
+            Context::new(computation, &limits, counters, location()),
         )
-        .unwrap(),
-        crate::formula_support::filters::Selection::Defined(true)
-    ));
-    assert!(join.evaluation.values.is_empty());
+        .unwrap();
+        let frame = crate::formula_support::rows::Frame::Owned(binding(
+            &[Some(Value::Number(3))],
+            computation,
+            counters,
+            location(),
+        ));
+        let bounded = FormulaLimits {
+            max_work: counters.accounting.work + 5,
+            ..limits
+        };
+        assert!(matches!(
+            join.filters(
+                &frame,
+                Comparisons::Deferred,
+                computation,
+                &bounded,
+                counters,
+                location()
+            ),
+            Err(FormulaFailure::Limit {
+                resource: FormulaResource::Work,
+                ..
+            })
+        ));
+        assert!(empty(&join.evaluation));
+        assert!(matches!(
+            join.filters(
+                &frame,
+                Comparisons::Deferred,
+                computation,
+                &limits,
+                counters,
+                location()
+            )
+            .unwrap(),
+            crate::formula_support::filters::Selection::Defined(true)
+        ));
+        assert!(empty(&join.evaluation));
+    });
 }
-
 #[test]
 fn generator_reads_refuse_absent_inputs() {
-    // Deliberately bypass the compiler's dependency plan: the evaluator must
-    // reject the absent input rather than treating it as numeric zero.
+    let mut fixture = Fixture::default();
     let literals = [
         LiteralIr::Bind {
             target: 0,
-            value: increment(1),
+            value: increment(&mut fixture, 1),
         },
         LiteralIr::Bind {
             target: 1,
-            value: number(8),
+            value: number(&mut fixture, 8),
         },
     ];
-    let relations = Relations::default();
-    let support = Support::indexed(
-        &relations,
-        &crate::FormulaLimits::default(),
-        &crate::formula_support::Counters::default(),
-        location(),
-    )
-    .unwrap();
-    let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
-    let mut join = Join::new(
-        &literals,
-        &Binding::default(),
-        2,
-        &support,
-        &mut budget,
-        location(),
-    )
-    .unwrap();
-    assert!(
-        matches!(join.next(&FormulaLimits::default(), &mut budget, &mut Counters::default(), location()), Err(FormulaFailure::UnsafeVariable { variable: 1, location: found }) if found == location())
-    );
+    fixture.with(location(), |support, computation, counters| {
+        let prefix = binding(&[], computation, counters, location());
+        let limits = FormulaLimits::default();
+        let mut budget = budget();
+        let mut join = Join::new(
+            &literals,
+            &prefix,
+            2,
+            support,
+            &mut budget,
+            Context::new(computation, &limits, counters, location()),
+        )
+        .unwrap();
+        assert!(matches!(
+            join.next(computation, &limits, &mut budget, counters, location()),
+            Err(FormulaFailure::UnsafeVariable { variable: 1, .. })
+        ));
+    });
 }
-
 #[test]
 fn component_rows_preserve_excluded_slots() {
-    let literals = [LiteralIr::Compare(number(1), Relation::Eq, number(1))];
-    let relations = Relations::default();
-    let support = Support::indexed(
-        &relations,
-        &crate::FormulaLimits::default(),
-        &crate::formula_support::Counters::default(),
-        location(),
-    )
-    .unwrap();
-    let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
-    let mut join = Join::component(
-        &literals,
-        2,
-        &std::collections::BTreeSet::from([0]),
-        &[Some(Value::Number(0)), None],
-        &support,
-        &mut budget,
-        location(),
-    )
-    .unwrap();
-    let binding = join
-        .next(
-            &FormulaLimits::default(),
-            &mut budget,
-            &mut Counters::default(),
+    let mut fixture = Fixture::default();
+    let literals = [LiteralIr::Compare(
+        number(&mut fixture, 1),
+        Relation::Eq,
+        number(&mut fixture, 1),
+    )];
+    fixture.with(location(), |support, computation, counters| {
+        let fixed = binding(
+            &[Some(Value::Number(0)), None],
+            computation,
+            counters,
             location(),
+        );
+        let limits = FormulaLimits::default();
+        let mut budget = budget();
+        let mut join = Join::component(
+            &literals,
+            2,
+            &[0],
+            &fixed,
+            support,
+            &mut budget,
+            Context::new(computation, &limits, counters, location()),
         )
-        .unwrap()
         .unwrap();
-    assert_eq!(binding.slots(), &[Some(Value::Number(0)), None]);
+        let row = join
+            .next(computation, &limits, &mut budget, counters, location())
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            row.read(0, computation.read(), location())
+                .unwrap()
+                .descriptor(),
+            ValueNodeRef::Number(0)
+        );
+        assert!(!row.is_bound(1, location()).unwrap());
+    });
 }

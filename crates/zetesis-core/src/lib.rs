@@ -25,16 +25,19 @@
 
 mod value;
 mod structured;
+mod term_order;
+mod term_hash;
 mod template;
 mod atom_key;
 mod program;
 mod candidate;
 mod model;
+pub mod catalog;
 pub mod retention;
 mod identity;
 mod ordered_index;
 mod atom_lookup;
-pub mod atom_interner;
+pub use catalog::interner as atom_interner;
 mod carrier;
 mod ground;
 pub mod relation;
@@ -42,16 +45,26 @@ pub mod relation;
 pub use atom_key::{AtomKey, BindingView};
 pub use atom_lookup::{AtomIndex, AtomIndexError, AtomLookup, AtomRow, AtomRows};
 pub use candidate::{
-    GateAtom, GateAtomError, GateAtoms, GateIndex, GateIndexError, Seed, SeedAtom, SeedError,
-    SeedSelection, SeedSelectionError, SeedView,
+    GateAtom, GateAtomError, GateAtoms, GateIndex, GateIndexError, GateIndexFailure, Seed,
+    SeedAtom, SeedAtoms, SeedError, SeedSelection, SeedSelectionError, SeedView,
 };
-pub use carrier::{AtomIter, CarrierError};
+pub use carrier::{AtomIter, CarrierAtom, CarrierError, CarrierFailure};
 pub use ground::{AtomId, GroundProgram, GroundRule, StaticError, StaticLimits, WordError};
-pub use model::{AtomCatalog, Interpretation, Model, ModelAtoms, ModelError, ModelIter};
-pub use program::{AdmissionError, AdmissionLimits, AdmissionResource, Program};
-pub use template::{AtomPattern, Filter, InstantiationError, Template, Term};
+pub use model::{
+    AtomCatalog, Interpretation, Model, ModelAtoms, ModelError, ModelFailure, ModelIter,
+};
+pub use program::{
+    AdmissionError, AdmissionLimits, AdmissionResource, Domain, FilterRef, Filters, PatternRef,
+    PatternTerms, Patterns, Predicates, Program, TemplateRef, TemplateTerm, Templates,
+};
+pub use template::{
+    AtomPattern, Filter, InstantiationError, Template, TemplateCatalog, TemplateCatalogBuilder,
+    TemplateCatalogFailure, TemplateCatalogSelection, TemplateComponents, TemplateComponentsRef,
+    TemplateRow, Term,
+};
 pub use value::{Atom, ConstructionError, Predicate, Sign, Value};
 
 pub use structured::{
     StructuralValue, ValueError, ValueLimits, ValueNode, ValueNodeRef, ValueResource,
+    ValueWriteError,
 };

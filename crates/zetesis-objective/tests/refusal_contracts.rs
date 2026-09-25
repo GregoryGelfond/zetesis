@@ -3,7 +3,9 @@
 use std::error::Error as _;
 use std::time::Instant;
 
-use zetesis_core::{Atom, AtomPattern, Filter, Model, Predicate, Term, Value};
+use zetesis_core::{
+    Atom, AtomPattern, Filter, FilterRef, Model, PatternRef, Predicate, TemplateTerm, Term, Value,
+};
 use zetesis_cpu::Cancellation;
 use zetesis_objective::{
     AdmissionError, AdmissionLimits, AdmissionResource, ErrorKind, Limits, ObjectiveProgram,
@@ -35,6 +37,7 @@ fn model() -> Model {
     Model::new([1, 2].map(|value| {
         Atom::new(Predicate::new("p", 1).unwrap(), vec![Value::Number(value)]).unwrap()
     }))
+    .unwrap()
 }
 
 #[test]
@@ -184,9 +187,10 @@ fn unsafe_and_sparse_variables_remain_attributed_to_the_original_template() {
 
 #[test]
 fn evaluation_limits_keep_downcastable_causes_and_reusable_model_and_program() {
-    let program = ObjectiveProgram::new(vec![template(0)], AdmissionLimits::default()).unwrap();
+    let original = template(0);
+    let program =
+        ObjectiveProgram::new(vec![original.clone()], AdmissionLimits::default()).unwrap();
     let model = model();
-    let original_templates = program.templates().to_vec();
     let original_model = model.clone();
     let exact = evaluate(
         &program,
@@ -233,7 +237,30 @@ fn evaluation_limits_keep_downcastable_causes_and_reusable_model_and_program() {
         );
         assert!(error.to_string().contains("limit"), "{error}");
         assert!(error.statistics().keys <= exact.statistics().keys);
-        assert_eq!(program.templates(), original_templates);
+        assert_eq!(program.templates().len(), 1);
+        let retained = program.templates().at(0).unwrap();
+        assert_eq!(retained.weight(), TemplateTerm::from(original.weight()));
+        assert_eq!(retained.weight_polarity(), original.weight_polarity());
+        assert_eq!(retained.priority(), original.priority());
+        assert!(
+            retained
+                .tuple()
+                .iter()
+                .eq(original.tuple().iter().map(TemplateTerm::from))
+        );
+        assert!(
+            retained
+                .positive()
+                .iter()
+                .eq(original.positive().iter().map(PatternRef::from))
+        );
+        assert!(
+            retained
+                .filters()
+                .iter()
+                .eq(original.filters().iter().map(FilterRef::from))
+        );
+        assert_eq!(retained.condition(), original.condition());
         assert_eq!(model, original_model);
         let retry = evaluate(
             &program,
@@ -260,7 +287,8 @@ fn cancelled_and_expired_scores_have_control_causes_and_zero_work() {
             "deadline expired",
         ),
     ] {
-        let error = evaluate(&program, &model(), Limits::default(), &cancellation).unwrap_err();
+        let error_model = model();
+        let error = evaluate(&program, &error_model, Limits::default(), &cancellation).unwrap_err();
         assert_eq!(error.kind(), ErrorKind::Stopped(reason));
         assert_eq!(
             error.source().unwrap().downcast_ref::<Stop>(),
@@ -280,7 +308,8 @@ fn an_active_unrepresentable_maximize_weight_is_distinct_from_a_missing_binding(
         Predicate::new("p", 1).unwrap(),
         vec![Value::Number(i32::MIN)],
     )
-    .unwrap()]);
+    .unwrap()])
+    .unwrap();
     let error = evaluate(
         &program,
         &extreme,

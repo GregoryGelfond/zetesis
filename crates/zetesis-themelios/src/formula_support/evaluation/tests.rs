@@ -1,19 +1,18 @@
-//! Storage lifetime is tested independently of scalar-operation correctness.
-
+//! Observe live scoped scratch and its cleanup without exposing a test API.
+#[path = "tests/callers.rs"]
 mod callers;
-
+use super::super::{Evaluation, Expression, Operation};
+use super::RETAINED_CELLS;
+use crate::formula_support::testing::{Fixture, binding};
+use crate::{ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource};
 use std::panic::{AssertUnwindSafe, catch_unwind};
-
-use themelios_base::source::SourceId;
-use themelios_base::span::{ByteOffset, Location, Span};
-use themelios_program::term::{BinaryOp, EvalError};
-use zetesis_core::{Sign, Value, ValueLimits, ValueNode};
-
-use super::{Budget, Counters, Evaluation, Expression, Operation, RETAINED_VALUE_CELLS};
-use crate::{
-    ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits,
-    FormulaResource,
+use themelios_base::{
+    source::SourceId,
+    span::{ByteOffset, Location, Span},
 };
+use themelios_program::term::{BinaryOp, EvalError};
+use zetesis_core::catalog::TermAssignment;
+use zetesis_core::{Sign, Value, ValueLimits, ValueNode, ValueNodeRef};
 
 fn location() -> Location {
     Location {
@@ -21,357 +20,425 @@ fn location() -> Location {
         span: Span::empty(ByteOffset::new(23)),
     }
 }
-
 fn evaluate(
     evaluation: &mut Evaluation,
     nodes: Vec<Operation>,
     assignment: &[Value],
+    fixture: &mut Fixture,
 ) -> Result<Value, FormulaFailure> {
-    evaluation.expression(
-        &Expression { nodes },
-        |variable| Ok(&assignment[variable]),
-        &FormulaLimits::default(),
-        &mut Budget::new(ExpansionLimits::default(), usize::MAX),
-        &mut Counters::default(),
-        location(),
-    )
+    fixture.with(location(), |_, computation, counters| {
+        let source: Vec<_> = assignment.iter().cloned().map(Some).collect();
+        let source = binding(&source, computation, counters, location());
+        let key = evaluation.expression(
+            &Expression { nodes },
+            |slot| source.key(slot, location()),
+            computation,
+            &FormulaLimits::default(),
+            counters,
+            location(),
+        )?;
+        // Export is solely the test assertion boundary, after DAG execution.
+        Ok(computation
+            .read()
+            .term(&key)
+            .unwrap()
+            .to_value(ValueLimits::default())
+            .unwrap())
+    })
 }
-
+fn empty(evaluation: &Evaluation) -> bool {
+    evaluation
+        .scratch
+        .terms
+        .as_ref()
+        .is_none_or(TermAssignment::is_empty)
+        && evaluation.scratch.integers.is_empty()
+        && evaluation.scratch.missing.is_empty()
+}
+fn term_capacity(evaluation: &Evaluation) -> usize {
+    evaluation
+        .scratch
+        .terms
+        .as_ref()
+        .map_or(0, TermAssignment::capacity)
+}
 #[test]
 fn reuse_starts_from_the_current_binding() {
+    let mut fixture = Fixture::default();
     let mut evaluation = Evaluation::default();
     for left in -4..4 {
         for right in -4..4 {
-            let result = evaluate(
+            let actual = evaluate(
                 &mut evaluation,
                 vec![
                     Operation::Variable(0),
-                    Operation::Constant(Value::Number(2)),
+                    Operation::Constant(fixture.scalar(&Value::Number(2), location())),
                     Operation::Binary(BinaryOp::Mul, 0, 1),
                     Operation::Variable(1),
                     Operation::Binary(BinaryOp::Sub, 2, 3),
                 ],
                 &[Value::Number(left), Value::Number(right)],
+                &mut fixture,
             )
             .unwrap();
-            assert_eq!(result, Value::Number(2 * left - right));
+            assert_eq!(actual, Value::Number(2 * left - right));
         }
     }
 }
-
 #[test]
-fn leaf_evaluation_needs_no_scratch_cells() {
+fn leaf_evaluation_needs_no_term_cells() {
+    let mut fixture = Fixture::default();
     for value in [Value::Number(7), Value::String("result".into())] {
-        for operation in [Operation::Constant(value.clone()), Operation::Variable(0)] {
+        for operation in [
+            Operation::Constant(fixture.scalar(&value, location())),
+            Operation::Variable(0),
+        ] {
             let mut evaluation = Evaluation::default();
             assert_eq!(
                 evaluate(
                     &mut evaluation,
                     vec![operation],
-                    std::slice::from_ref(&value)
+                    std::slice::from_ref(&value),
+                    &mut fixture
                 )
                 .unwrap(),
                 value
             );
-            assert_eq!(evaluation.values.capacity(), 0);
+            assert_eq!(term_capacity(&evaluation), 0);
         }
     }
 }
-
 #[test]
 fn successful_evaluation_retains_only_empty_cells() {
+    let mut fixture = Fixture::default();
     let mut evaluation = Evaluation::default();
     let result = evaluate(
         &mut evaluation,
         vec![
-            Operation::Constant(Value::Symbol("earlier".into())),
-            Operation::Constant(Value::String("result".into())),
+            Operation::Constant(fixture.scalar(&Value::Symbol("earlier".into()), location())),
+            Operation::Constant(fixture.scalar(&Value::String("result".into()), location())),
         ],
         &[],
+        &mut fixture,
     )
     .unwrap();
     assert_eq!(result, Value::String("result".into()));
-    assert!(evaluation.values.is_empty());
-    assert!((1..=RETAINED_VALUE_CELLS).contains(&evaluation.values.capacity()));
+    assert!(empty(&evaluation));
+    assert!((1..=RETAINED_CELLS).contains(&term_capacity(&evaluation)));
 }
-
 #[test]
 fn failed_evaluation_clears_its_live_prefix() {
+    let mut fixture = Fixture::default();
     let mut evaluation = Evaluation::default();
     let result = evaluate(
         &mut evaluation,
         vec![
-            Operation::Constant(Value::Symbol("earlier".into())),
-            Operation::Constant(Value::Number(0)),
+            Operation::Constant(fixture.scalar(&Value::Symbol("earlier".into()), location())),
+            Operation::Constant(fixture.scalar(&Value::Number(0), location())),
             Operation::Binary(BinaryOp::Div, 1, 1),
         ],
         &[],
+        &mut fixture,
     );
-    assert!(matches!(result, Err(FormulaFailure::Expansion(
-        ExpansionFailure::Evaluation { error: EvalError::Undefined, location: found }
-    )) if found == location()));
-    assert!(evaluation.values.is_empty());
+    assert!(matches!(
+        result,
+        Err(FormulaFailure::Expansion(ExpansionFailure::Evaluation {
+            error: EvalError::Undefined,
+            ..
+        }))
+    ));
+    assert!(empty(&evaluation));
 }
-
 #[test]
 fn unwinding_clears_the_live_prefix() {
+    let mut fixture = Fixture::default();
     let mut evaluation = Evaluation::default();
-    let result = catch_unwind(AssertUnwindSafe(|| {
-        evaluation.expression(
-            &Expression {
-                nodes: vec![
-                    Operation::Constant(Value::String("earlier".into())),
-                    Operation::Variable(0),
-                ],
-            },
-            |_| panic!("injected variable lookup unwind"),
-            &FormulaLimits::default(),
-            &mut Budget::new(ExpansionLimits::default(), usize::MAX),
-            &mut Counters::default(),
-            location(),
-        )
-    }));
-    assert!(result.is_err());
-    assert!(evaluation.values.is_empty());
+    let earlier = fixture.scalar(&Value::String("earlier".into()), location());
+    fixture.with(location(), |_, computation, counters| {
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            evaluation.expression(
+                &Expression {
+                    nodes: vec![Operation::Constant(earlier), Operation::Variable(0)],
+                },
+                |_| panic!("injected variable lookup unwind"),
+                computation,
+                &FormulaLimits::default(),
+                counters,
+                location(),
+            )
+        }));
+        assert!(result.is_err());
+        assert!(empty(&evaluation));
+    });
 }
-
 #[test]
-fn large_evaluations_release_their_workspace() {
+fn large_evaluations_release_term_capacity() {
+    let mut fixture = Fixture::default();
     let mut evaluation = Evaluation::default();
-    let result = evaluate(
+    evaluate(
         &mut evaluation,
-        (0..RETAINED_VALUE_CELLS + 2)
-            .map(|_| Operation::Constant(Value::Symbol("seven".into())))
+        (0..RETAINED_CELLS + 2)
+            .map(|_| {
+                Operation::Constant(fixture.scalar(&Value::Symbol("seven".into()), location()))
+            })
             .collect(),
         &[],
+        &mut fixture,
     )
     .unwrap();
-    assert_eq!(result, Value::Symbol("seven".into()));
-    assert!(evaluation.values.is_empty());
-    assert_eq!(evaluation.values.capacity(), 0);
+    assert!(empty(&evaluation));
+    assert_eq!(term_capacity(&evaluation), 0);
 }
-
 #[test]
 fn root_does_not_extend_the_retained_prefix() {
+    let mut fixture = Fixture::default();
     let mut evaluation = Evaluation::default();
-    let result = evaluate(
+    evaluate(
         &mut evaluation,
-        (0..=RETAINED_VALUE_CELLS)
-            .map(|_| Operation::Constant(Value::Symbol("seven".into())))
+        (0..=RETAINED_CELLS)
+            .map(|_| {
+                Operation::Constant(fixture.scalar(&Value::Symbol("seven".into()), location()))
+            })
             .collect(),
         &[],
+        &mut fixture,
     )
     .unwrap();
-    assert_eq!(result, Value::Symbol("seven".into()));
-    assert!(evaluation.values.is_empty());
-    assert_eq!(evaluation.values.capacity(), RETAINED_VALUE_CELLS);
+    assert!(empty(&evaluation));
+    assert_eq!(term_capacity(&evaluation), RETAINED_CELLS);
 }
-
 #[test]
-fn numeric_plans_hold_no_value_cells() {
-    // A plan over numbers runs in integer cells: the value storage is never
-    // touched, and the integer storage follows the same retention policy.
+fn numeric_plans_hold_no_term_cells() {
+    let mut fixture = Fixture::default();
     let mut evaluation = Evaluation::default();
-    let mut nodes: Vec<Operation> = (0..=RETAINED_VALUE_CELLS)
-        .map(|index| Operation::Constant(Value::Number(i32::try_from(index).unwrap())))
+    let mut nodes: Vec<_> = (0..=RETAINED_CELLS)
+        .map(|index| {
+            Operation::Constant(
+                fixture.scalar(&Value::Number(i32::try_from(index).unwrap()), location()),
+            )
+        })
         .collect();
-    nodes.push(Operation::Binary(BinaryOp::Add, 3, RETAINED_VALUE_CELLS));
-    let result = evaluate(&mut evaluation, nodes, &[]).unwrap();
+    nodes.push(Operation::Binary(BinaryOp::Add, 3, RETAINED_CELLS));
     assert_eq!(
-        result,
-        Value::Number(3 + i32::try_from(RETAINED_VALUE_CELLS).unwrap())
+        evaluate(&mut evaluation, nodes, &[], &mut fixture).unwrap(),
+        Value::Number(3 + i32::try_from(RETAINED_CELLS).unwrap())
     );
-    assert_eq!(evaluation.values.capacity(), 0);
-    assert!(evaluation.integers.is_empty());
-    assert_eq!(evaluation.integers.capacity(), 0);
+    assert_eq!(term_capacity(&evaluation), 0);
+    assert_eq!(evaluation.scratch.integers.capacity(), 0);
 }
-
 #[test]
-fn a_numeric_prefix_moves_into_value_cells_at_the_first_other_value() {
-    // The number is read into an integer cell; the string ends the integer
-    // prefix, and the sum below it is evaluated from the moved value cells.
+fn a_nonnumeric_value_promotes_the_integer_prefix() {
+    let mut fixture = Fixture::default();
     let mut evaluation = Evaluation::default();
-    let result = evaluate(
-        &mut evaluation,
-        vec![
-            Operation::Variable(0),
-            Operation::Constant(Value::Number(2)),
-            Operation::Variable(1),
-            Operation::Binary(BinaryOp::Add, 0, 1),
-        ],
-        &[Value::Number(5), Value::String("marker".into())],
-    )
-    .unwrap();
-    assert_eq!(result, Value::Number(7));
-    assert!(evaluation.values.is_empty());
-    assert!((1..=RETAINED_VALUE_CELLS).contains(&evaluation.values.capacity()));
-}
-
-#[test]
-fn undefined_numeric_arithmetic_clears_the_integer_prefix() {
-    let mut evaluation = Evaluation::default();
-    let result = evaluate(
-        &mut evaluation,
-        vec![
-            Operation::Constant(Value::Number(1)),
-            Operation::Constant(Value::Number(0)),
-            Operation::Binary(BinaryOp::Div, 0, 1),
-        ],
-        &[],
+    assert_eq!(
+        evaluate(
+            &mut evaluation,
+            vec![
+                Operation::Variable(0),
+                Operation::Constant(fixture.scalar(&Value::Number(2), location())),
+                Operation::Variable(1),
+                Operation::Binary(BinaryOp::Add, 0, 1)
+            ],
+            &[Value::Number(5), Value::String("marker".into())],
+            &mut fixture
+        )
+        .unwrap(),
+        Value::Number(7)
     );
-    assert!(matches!(result, Err(FormulaFailure::Expansion(
-        ExpansionFailure::Evaluation { error: EvalError::Undefined, location: found }
-    )) if found == location()));
-    assert!(evaluation.integers.is_empty());
-    assert_eq!(evaluation.values.capacity(), 0);
+    assert!(empty(&evaluation));
+    assert!((1..=RETAINED_CELLS).contains(&term_capacity(&evaluation)));
 }
-
 #[test]
-fn stopped_evaluations_release_large_storage() {
+fn undefined_numeric_arithmetic_clears_integer_cells() {
+    let mut fixture = Fixture::default();
     let mut evaluation = Evaluation::default();
-    let failure = evaluation.expression(
-        &Expression {
-            nodes: (0..RETAINED_VALUE_CELLS + 2)
-                .map(|_| Operation::Constant(Value::Number(7)))
-                .collect(),
-        },
-        |_| unreachable!("the plan has no variables"),
-        &FormulaLimits {
-            max_work: u64::try_from(RETAINED_VALUE_CELLS + 1).unwrap(),
-            ..Default::default()
-        },
-        &mut Budget::new(ExpansionLimits::default(), usize::MAX),
-        &mut Counters::default(),
-        location(),
+    assert!(
+        evaluate(
+            &mut evaluation,
+            vec![
+                Operation::Constant(fixture.scalar(&Value::Number(1), location())),
+                Operation::Constant(fixture.scalar(&Value::Number(0), location())),
+                Operation::Binary(BinaryOp::Div, 0, 1)
+            ],
+            &[],
+            &mut fixture
+        )
+        .is_err()
     );
-    assert!(matches!(failure, Err(FormulaFailure::Limit {
-        resource: crate::FormulaResource::Work, observed, limit, location: found
-    }) if observed == (RETAINED_VALUE_CELLS + 2) as u128
-        && limit == (RETAINED_VALUE_CELLS + 1) as u128 && found == location()));
-    assert!(evaluation.values.is_empty());
-    assert_eq!(evaluation.values.capacity(), 0);
+    assert!(empty(&evaluation));
+    assert_eq!(term_capacity(&evaluation), 0);
 }
-
 #[test]
-fn reuse_charges_each_operand_copy() {
-    let mut evaluation = Evaluation::default();
-    let expression = Expression {
-        nodes: vec![Operation::Variable(0)],
-    };
-    let value = Value::String("abc".into());
-    let mut budget = Budget::new(
-        ExpansionLimits {
-            max_scalar_bytes: 6,
-            ..Default::default()
-        },
-        usize::MAX,
-    );
-    let mut counters = Counters::default();
-    for _ in 0..2 {
-        assert_eq!(
-            evaluation
+fn repeated_reads_reuse_the_same_canonical_payload() {
+    let mut fixture = Fixture::default();
+    fixture.with(location(), |_, computation, counters| {
+        let source = binding(
+            &[Some(Value::String("shared text".into()))],
+            computation,
+            counters,
+            location(),
+        );
+        let mut evaluation = Evaluation::default();
+        for _ in 0..3 {
+            let key = evaluation
                 .expression(
-                    &expression,
-                    |_| Ok(&value),
+                    &Expression {
+                        nodes: vec![Operation::Variable(0)],
+                    },
+                    |slot| source.key(slot, location()),
+                    computation,
                     &FormulaLimits::default(),
-                    &mut budget,
-                    &mut counters,
+                    counters,
                     location(),
                 )
-                .unwrap(),
-            value
-        );
-    }
-    let failure = evaluation.expression(
-        &expression,
-        |_| Ok(&value),
-        &FormulaLimits::default(),
-        &mut budget,
-        &mut counters,
-        location(),
-    );
-    assert!(matches!(failure, Err(FormulaFailure::Expansion(
-        ExpansionFailure::Limit {
-            resource: ExpansionResource::ScalarBytes, observed: 9, limit: 6, location: found
+                .unwrap();
+            let result = computation.read().term(&key).unwrap();
+            let expected = source.read(0, computation.read(), location()).unwrap();
+            let (
+                zetesis_core::ValueNodeRef::String(left),
+                zetesis_core::ValueNodeRef::String(right),
+            ) = (result.descriptor(), expected.descriptor())
+            else {
+                panic!("string leaves")
+            };
+            assert!(std::ptr::eq(left.as_ptr(), right.as_ptr()));
         }
-    )) if found == location()));
-    assert_eq!(counters.work, 3);
+    });
 }
-
 #[test]
-fn root_work_refusal_precedes_operand_access() {
-    let mut evaluation = Evaluation::default();
-    let expression = Expression {
-        nodes: vec![
-            Operation::Constant(Value::Number(7)),
-            Operation::Variable(0),
-        ],
-    };
-    let mut counters = Counters::default();
-    let failure = evaluation.expression(
-        &expression,
-        |_| panic!("the work refusal must precede root operand access"),
-        &FormulaLimits {
-            max_work: 1,
+fn work_refusal_precedes_variable_access() {
+    let mut fixture = Fixture::default();
+    fixture.with(location(), |_, computation, counters| {
+        let mut evaluation = Evaluation::default();
+        let bounded = FormulaLimits {
+            max_work: counters.accounting.work + 1,
             ..Default::default()
-        },
-        &mut Budget::new(ExpansionLimits::default(), usize::MAX),
-        &mut counters,
-        location(),
-    );
-    assert!(matches!(failure, Err(FormulaFailure::Limit {
-        resource: crate::FormulaResource::Work, observed: 2, limit: 1, location: found
-    }) if found == location()));
-    assert_eq!(counters.work, 1);
-    assert!(evaluation.values.is_empty());
-}
-
-#[test]
-fn root_copy_refusal_clears_the_live_prefix() {
-    let mut evaluation = Evaluation::default();
-    let expression = Expression {
-        nodes: vec![
-            Operation::Constant(Value::String("prefix".into())),
-            Operation::Constant(Value::String("root".into())),
-        ],
-    };
-    let failure = evaluation.expression(
-        &expression,
-        |_| unreachable!("the plan has no variables"),
-        &FormulaLimits::default(),
-        &mut Budget::new(
-            ExpansionLimits {
-                max_scalar_bytes: 6,
-                ..Default::default()
+        };
+        let failure = evaluation.expression(
+            &Expression {
+                nodes: vec![Operation::Variable(0)],
             },
-            usize::MAX,
-        ),
-        &mut Counters::default(),
-        location(),
-    );
-    assert!(matches!(failure, Err(FormulaFailure::Expansion(
-        ExpansionFailure::Limit {
-            resource: ExpansionResource::ScalarBytes, observed: 10, limit: 6, location: found
-        }
-    )) if found == location()));
-    assert!(evaluation.values.is_empty());
+            |_| panic!("work must refuse before variable access"),
+            computation,
+            &bounded,
+            counters,
+            location(),
+        );
+        assert!(matches!(
+            failure,
+            Err(FormulaFailure::Limit {
+                resource: FormulaResource::Work,
+                ..
+            })
+        ));
+        assert!(empty(&evaluation));
+    });
 }
-
+fn retry_expression(fixture: &mut Fixture) -> Expression {
+    Expression {
+        nodes: vec![
+            Operation::Constant(fixture.scalar(&Value::String("prefix".into()), location())),
+            Operation::Constant(fixture.scalar(&Value::Number(7), location())),
+            Operation::Constructor(Box::new(crate::formula_value::Constructor {
+                shape: fixture.constructor(
+                    ValueNodeRef::Function {
+                        name: "f",
+                        sign: Sign::Negative,
+                        arity: 3,
+                    },
+                    location(),
+                ),
+                arguments: vec![1, 0, 1],
+            })),
+        ],
+    }
+}
+#[test]
+fn every_work_stop_leaves_scratch_ready_for_retry() {
+    let mut fixture = Fixture::default();
+    let expression = retry_expression(&mut fixture);
+    let needed = fixture.with(location(), |_, computation, counters| {
+        let before = counters.accounting.work;
+        Evaluation::default()
+            .expression(
+                &expression,
+                |_| unreachable!(),
+                computation,
+                &FormulaLimits::default(),
+                counters,
+                location(),
+            )
+            .unwrap();
+        counters.accounting.work - before
+    });
+    for cutoff in 0..needed {
+        let mut fixture = Fixture::default();
+        let expression = retry_expression(&mut fixture);
+        fixture.with(location(), |_, computation, counters| {
+            let mut evaluation = Evaluation::default();
+            let bounded = FormulaLimits {
+                max_work: counters.accounting.work + cutoff,
+                ..Default::default()
+            };
+            assert!(
+                evaluation
+                    .expression(
+                        &expression,
+                        |_| unreachable!(),
+                        computation,
+                        &bounded,
+                        counters,
+                        location()
+                    )
+                    .is_err()
+            );
+            assert!(empty(&evaluation));
+            let key = evaluation
+                .expression(
+                    &expression,
+                    |_| unreachable!(),
+                    computation,
+                    &FormulaLimits::default(),
+                    counters,
+                    location(),
+                )
+                .unwrap();
+            assert_eq!(
+                computation
+                    .read()
+                    .term(&key)
+                    .unwrap()
+                    .child(0)
+                    .unwrap()
+                    .descriptor(),
+                zetesis_core::ValueNodeRef::Number(7)
+            );
+        });
+    }
+}
 #[test]
 fn constructor_root_reads_its_ordered_prefix() {
+    let mut fixture = Fixture::default();
     let mut evaluation = Evaluation::default();
     let actual = evaluate(
         &mut evaluation,
         vec![
-            Operation::Constant(Value::Number(7)),
+            Operation::Constant(fixture.scalar(&Value::Number(7), location())),
             Operation::Variable(0),
             Operation::Constructor(Box::new(crate::formula_value::Constructor {
-                name: Some("f".into()),
-                sign: Sign::Negative,
+                shape: fixture.constructor(
+                    ValueNodeRef::Function {
+                        name: "f",
+                        sign: Sign::Negative,
+                        arity: 3,
+                    },
+                    location(),
+                ),
                 arguments: vec![1, 0, 1],
             })),
         ],
         &[Value::String("argument".into())],
+        &mut fixture,
     )
     .unwrap();
     let expected = Value::from_nodes(
@@ -392,50 +459,36 @@ fn constructor_root_reads_its_ordered_prefix() {
 }
 
 #[test]
-fn a_refused_payload_charge_states_the_whole_requirement() {
-    // The node is admitted for one unit and its payload is then charged at
-    // once. A ceiling of one refuses the payload, and the refusal names what
-    // that charge required, not the ceiling plus one.
-    let value = Value::from_nodes(
-        vec![
-            ValueNode::Function {
-                name: "f".into(),
-                sign: Sign::Positive,
-                arity: 1,
-            },
-            ValueNode::String("argument".into()),
-        ],
-        ValueLimits::default(),
-    )
-    .unwrap();
-    let Value::Structured(structure) = &value else {
-        panic!("a function is a structured value")
-    };
-    let payload = structure.payload_bytes() as u128;
-    assert!(payload > 1);
-    let mut evaluation = Evaluation::default();
-    let error = evaluation
-        .expression(
-            &Expression {
-                nodes: vec![Operation::Constant(value.clone())],
-            },
-            |_| -> Result<&Value, FormulaFailure> { unreachable!("no variable") },
-            &FormulaLimits {
-                max_work: 1,
-                ..FormulaLimits::default()
-            },
-            &mut Budget::new(ExpansionLimits::default(), usize::MAX),
-            &mut Counters::default(),
-            location(),
-        )
-        .unwrap_err();
-    assert!(matches!(
-        error,
-        FormulaFailure::Limit {
-            resource: FormulaResource::Work,
-            observed,
-            limit: 1,
-            ..
-        } if observed == 1 + payload
-    ));
+fn constant_reads_reuse_admitted_payload() {
+    let mut fixture = Fixture::default();
+    let scalar = fixture.scalar(&Value::String("shared constant".into()), location());
+    fixture.with(location(), |_, computation, counters| {
+        let limits = FormulaLimits::default();
+        let expected = computation
+            .static_scalar(scalar, &limits, counters, location())
+            .unwrap();
+        let ValueNodeRef::String(expected) = expected.descriptor() else {
+            unreachable!()
+        };
+        let mut evaluation = Evaluation::default();
+        for _ in 0..3 {
+            let key = evaluation
+                .expression(
+                    &Expression {
+                        nodes: vec![Operation::Constant(scalar)],
+                    },
+                    |_| unreachable!(),
+                    computation,
+                    &limits,
+                    counters,
+                    location(),
+                )
+                .unwrap();
+            let value = computation.read().term(&key).unwrap();
+            let ValueNodeRef::String(actual) = value.descriptor() else {
+                unreachable!()
+            };
+            assert!(std::ptr::eq(expected.as_ptr(), actual.as_ptr()));
+        }
+    });
 }

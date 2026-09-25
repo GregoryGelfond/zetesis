@@ -1,9 +1,11 @@
 //! Immutable query dimensions and reference-free candidate workspaces.
 
-use std::collections::BTreeMap;
 use std::mem::size_of;
 
-use zetesis_core::{Predicate, Program, SeedView, Value};
+use zetesis_core::{
+    Program, SeedView,
+    catalog::{PredicateRef, TermRef},
+};
 
 use super::{
     Check, Limits, Work, argument_bounds,
@@ -92,31 +94,57 @@ pub(super) struct Dimensions {
     rules: usize,
 }
 
+impl Dimensions {
+    pub(super) fn for_template(template: zetesis_core::TemplateRef<'_>) -> Self {
+        Self {
+            variables: template.variable_count(),
+            depth: template.positive().len(),
+            width: template
+                .positive()
+                .iter()
+                .map(|pattern| pattern.terms().len())
+                .max()
+                .unwrap_or(0),
+            rules: 0,
+        }
+    }
+}
+
 /// Which templates a round must revisit when a predicate gains rows: those
 /// whose positive body names it. A template whose body names no predicate
 /// with new rows cannot bind anew, so a round visits only this selection.
-#[derive(Default)]
 pub(super) struct Rules {
-    by_predicate: BTreeMap<Predicate, Vec<usize>>,
+    program: Program,
+    by_predicate: Vec<Vec<usize>>,
 }
 
 impl Rules {
     /// Template indices whose positive body names `predicate`, ascending and
     /// without repetition.
-    pub(super) fn naming(&self, predicate: &Predicate) -> &[usize] {
-        self.by_predicate.get(predicate).map_or(&[], Vec::as_slice)
+    pub(super) fn naming(
+        &self,
+        predicate: PredicateRef<'_>,
+        work: &mut Work<'_>,
+    ) -> Result<&[usize], Stop> {
+        let position = self
+            .program
+            .predicates()
+            .binary_search_with(predicate, || work.tick())?;
+        Ok(position
+            .ok()
+            .and_then(|position| self.by_predicate.get(position))
+            .map_or(&[], Vec::as_slice))
     }
 
     /// Retained bytes; `None` when the sum does not fit.
     fn bytes(&self) -> Option<u128> {
-        self.by_predicate
-            .iter()
-            .try_fold(0u128, |sum, (predicate, indices)| {
+        self.by_predicate.iter().try_fold(
+            self.by_predicate.capacity() as u128 * size_of::<Vec<usize>>() as u128,
+            |sum, indices| {
                 let cells = (indices.capacity() as u128).checked_mul(size_of::<usize>() as u128)?;
-                sum.checked_add(size_of::<Predicate>() as u128)?
-                    .checked_add(predicate.name().len() as u128)?
-                    .checked_add(cells)
-            })
+                sum.checked_add(cells)
+            },
+        )
     }
 }
 
@@ -146,7 +174,21 @@ impl PreparedQueries {
         storage::record(work, size_of::<Self>() as u128)?;
         let before = work.statistics.work;
         let mut dimensions = Dimensions::default();
-        let mut rules = Rules::default();
+        let mut rules = Rules {
+            program: program.clone(),
+            by_predicate: Vec::new(),
+        };
+        let mut live = size_of::<Self>() as u128;
+        reserve(
+            &mut rules.by_predicate,
+            program.predicates().len(),
+            &mut live,
+            work,
+        )?;
+        work.charge(program.predicates().len())?;
+        rules
+            .by_predicate
+            .resize_with(program.predicates().len(), Vec::new);
         for (index, template) in program.templates().iter().enumerate() {
             work.tick()?;
             dimensions.variables = dimensions.variables.max(template.variable_count());
@@ -155,11 +197,21 @@ impl PreparedQueries {
             for pattern in template.positive() {
                 work.tick()?;
                 dimensions.width = dimensions.width.max(pattern.terms().len());
-                let naming = rules
-                    .by_predicate
-                    .entry(pattern.predicate().clone())
-                    .or_default();
+                let position = program
+                    .predicates()
+                    .binary_search_with(pattern.predicate(), || work.tick())?
+                    .map_err(|_| Stop::InvalidProgram)?;
+                let mut live =
+                    size_of::<Self>() as u128 + rules.bytes().ok_or(Stop::StorageLimit)?;
+                let naming = &mut rules.by_predicate[position];
                 if naming.last() != Some(&index) {
+                    reserve(
+                        naming,
+                        naming.len().checked_add(1).ok_or(Stop::StorageLimit)?,
+                        &mut live,
+                        work,
+                    )?;
+                    work.tick()?;
                     naming.push(index);
                 }
             }
@@ -168,9 +220,8 @@ impl PreparedQueries {
         let mut layouts = Layouts::default();
         for predicate in program.predicates() {
             work.tick()?;
-            if let Some(layout) = bounds
-                .bounds(predicate)
-                .and_then(|bounds| Layout::new(predicate, bounds, max_dense_atoms))
+            if let Some(bound) = bounds.bounds(predicate)
+                && let Some(layout) = Layout::new(program, predicate, bound, max_dense_atoms)?
             {
                 layouts.push(layout);
             }
@@ -213,11 +264,12 @@ impl PreparedQueries {
 
     /// Compute a frozen seed's complete reduct closure using reusable capacity.
     ///
-    /// All candidate truth is empty initially. A completed call transfers atom
-    /// payload to its returned `Check`; only empty catalog metadata, predicate
-    /// names, reference-free join and prepared-order capacity, and the dense
-    /// relations' words and pending marks, zeroed, remain. Frontiers and
-    /// all logical ID lengths are reset before another candidate is evaluated.
+    /// All candidate truth is empty initially. A completed call publishes a
+    /// selection over the workspace's canonical authority. The result retains
+    /// its immutable prefix; the workspace retains discovered identities and
+    /// reusable join capacity. Relation membership, frontiers and pending marks
+    /// are cleared before another candidate is evaluated. Retained identity
+    /// never establishes truth in that next candidate.
     /// Assignment references live
     /// within one immutable round. A different program instance retires the old
     /// workspace before reuse. Retained capacity is admitted under the supplied
@@ -350,6 +402,7 @@ impl PreparedQueries {
         // The immutable preparation, its dense layouts included, serves every
         // candidate's closure, so each candidate admits it first.
         let retained = self.statistics.retained_bytes as u128;
+        workspace.catalogs.bind_program(&self.program, work)?;
         let base = workspace
             .catalogs
             .owned_bytes()
@@ -395,11 +448,11 @@ impl PreparedQueries {
 
 /// Reusable empty relation metadata, ordered ID views and join cursor capacity.
 ///
-/// This owner never retains borrowed values or candidate truth after a completed
-/// call. It can be moved between workers. No thread identity, global cache or
-/// shared mutable result storage is involved. Failed or unwound candidates are
-/// discarded before the next use; returned `Check` payload remains independent.
-/// Final atom buffers are transferred to the result and cannot be reused here.
+/// This owner retains canonical identities and reusable metadata, but no
+/// candidate truth after a completed call. It can be moved between workers.
+/// Failed or unwound candidates retire their workspace before reuse. Returned
+/// `Check` values retain immutable prefixes and their own selections; later
+/// appends cannot alter those interpretations.
 pub struct ClosureWorkspace {
     program: Option<Program>,
     catalogs: Catalogs,
@@ -425,9 +478,11 @@ impl ClosureWorkspace {
         (size_of::<Self>() - size_of::<Catalogs>()) as u128
     }
 
-    /// Named retained capacity, including owner headers and empty predicate/index
-    /// storage. Excludes shared source/preparation and final returned models,
-    /// tree-container/allocator overhead and Arc counters. Not a process ceiling.
+    /// Named retained capacity, including the canonical authority's shared
+    /// frozen vocabulary, owner headers and reusable predicate/index storage.
+    /// Other source/preparation storage, separately retained result metadata,
+    /// tree-container/allocator overhead and Arc counters are excluded.
+    /// This is not a process-memory ceiling.
     /// This remains observable for conservative collective cache admission.
     ///
     /// # Errors
@@ -454,16 +509,18 @@ pub(super) struct Buffers {
 }
 
 impl Buffers {
-    pub(super) fn local(depth: usize) -> Self {
-        Self {
-            cursors: vec![None; depth],
-            resolutions: vec![super::relations::Resolution::Unresolved; depth],
-            undo: vec![Vec::new(); depth],
-            rules: Vec::new(),
-        }
+    pub(super) fn local(
+        template: zetesis_core::TemplateRef<'_>,
+        base: u128,
+        work: &mut Work<'_>,
+    ) -> Result<Self, Stop> {
+        let dimensions = Dimensions::for_template(template);
+        let mut buffers = Self::default();
+        buffers.prepare(&dimensions, base + size_of::<Self>() as u128, work)?;
+        Ok(buffers)
     }
 
-    fn bytes(&self) -> Result<u128, Stop> {
+    pub(super) fn bytes(&self) -> Result<u128, Stop> {
         let headers = self.cursors.capacity() as u128
             * size_of::<Option<super::window::Window>>() as u128
             + self.resolutions.capacity() as u128
@@ -509,10 +566,10 @@ pub(super) fn assignment<'source>(
     dimensions: &Dimensions,
     base: u128,
     work: &mut Work<'_>,
-) -> Result<(Vec<Option<&'source Value>>, u128), Stop> {
+) -> Result<(Vec<Option<TermRef<'source>>>, u128), Stop> {
     let mut values = Vec::new();
     let mut live = base
-        .checked_add(size_of::<Vec<Option<&Value>>>() as u128)
+        .checked_add(size_of::<Vec<Option<TermRef<'_>>>>() as u128)
         .ok_or(Stop::StorageLimit)?;
     reserve(&mut values, dimensions.variables, &mut live, work)?;
     work.charge(dimensions.variables)?;

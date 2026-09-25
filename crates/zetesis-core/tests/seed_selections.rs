@@ -49,7 +49,7 @@ fn atoms() -> Vec<Arc<Atom>> {
 }
 
 #[test]
-fn canonicalization_moves_shared_handles_without_copying_payloads() {
+fn canonicalization_retains_only_program_bound_coordinates() {
     let atoms = atoms();
     let source = program(&atoms);
     let selection = SeedSelection::new(&source, atoms.iter().rev().chain(&atoms).cloned()).unwrap();
@@ -59,11 +59,19 @@ fn canonicalization_moves_shared_handles_without_copying_payloads() {
     for atom in &atoms {
         let stored = true_atoms
             .iter()
-            .find(|stored| ***stored == **atom)
+            .copied()
+            .find(|stored| *stored == *atom.as_ref())
             .unwrap();
-        assert!(std::ptr::eq(*stored, atom.as_ref()));
-        assert_eq!(stored.values().as_ptr(), atom.values().as_ptr());
+        assert_eq!(stored, *atom.as_ref());
+        let value = stored.values().at(0).unwrap();
+        let rank = source.domain().binary_search(value).unwrap();
+        assert_eq!(value, source.domain().at(rank).unwrap());
     }
+    let weak: Vec<_> = atoms.iter().map(Arc::downgrade).collect();
+    drop(true_atoms);
+    drop(atoms);
+    assert!(weak.into_iter().all(|atom| atom.upgrade().is_none()));
+    assert_eq!(selection.view().atoms().len(), 8);
 }
 
 #[test]
@@ -79,7 +87,7 @@ fn materialization_and_views_preserve_complete_typed_membership() {
         let pattern = AtomPattern::new(atom.predicate().clone(), vec![Term::Variable(0)]).unwrap();
         let key = pattern.key(atom.values()).unwrap();
         for view in [owned.view(), selection.view()] {
-            assert_eq!(view.contains(atom), index < 5);
+            assert_eq!(view.contains(atom.as_ref()), index < 5);
             assert_eq!(view.contains_key(&key), index < 5);
         }
     }
@@ -96,15 +104,44 @@ fn materialization_and_views_preserve_complete_typed_membership() {
 }
 
 #[test]
+fn canonical_queries_preserve_seed_membership() {
+    let atoms = atoms();
+    let source = program(&atoms);
+    let selection = SeedSelection::new(&source, atoms.iter().take(5).cloned()).unwrap();
+    let owned = selection.to_seed();
+    // Reverse insertion ensures foreign catalog positions have no relation to
+    // seed membership or the selected atoms' semantic order.
+    let catalog = zetesis_core::AtomCatalog::new(
+        atoms
+            .iter()
+            .rev()
+            .map(|atom| atom.as_ref().clone())
+            .collect(),
+    )
+    .unwrap();
+    for atom in catalog.atoms() {
+        let expected = atoms
+            .iter()
+            .take(5)
+            .any(|selected| atom == *selected.as_ref());
+        assert_eq!(owned.contains(atom), expected);
+        assert_eq!(owned.view().contains(atom), expected);
+        assert_eq!(selection.view().contains(atom), expected);
+    }
+}
+
+#[test]
 fn selected_payloads_outlive_their_supplied_handles() {
     let atoms = atoms();
     let source = program(&atoms);
-    let pointer = Arc::as_ptr(&atoms[0]);
+    let weak = Arc::downgrade(&atoms[0]);
+    let expected = atoms[0].as_ref().clone();
     let selection = SeedSelection::new(&source, [Arc::clone(&atoms[0])]).unwrap();
     drop(atoms);
     let copied = selection.clone();
     drop(selection);
-    assert!(std::ptr::eq(copied.view().atoms().next().unwrap(), pointer));
+    assert!(weak.upgrade().is_none());
+    assert_eq!(copied.view().atoms().next().unwrap(), expected);
 }
 
 #[test]
@@ -134,4 +171,35 @@ fn outside_carrier_selection_is_a_typed_construction_refusal() {
         panic!("wrong construction refusal")
     };
     assert!(Arc::ptr_eq(&atom, &foreign));
+}
+
+#[test]
+fn checked_seed_membership_retains_each_refusal() {
+    let atoms = atoms();
+    let source = program(&atoms);
+    let selection = SeedSelection::new(&source, atoms.iter().cloned()).unwrap();
+    let pattern = AtomPattern::new(atoms[2].predicate().clone(), vec![Term::Variable(0)]).unwrap();
+    let key = pattern.key(atoms[2].values()).unwrap();
+    let mut calls = 0;
+    assert!(
+        selection
+            .view()
+            .contains_key_with(&key, || {
+                calls += 1;
+                Ok::<(), usize>(())
+            })
+            .unwrap()
+    );
+    for cutoff in 0..calls {
+        let mut admitted = 0;
+        let result = selection.view().contains_key_with(&key, || {
+            if admitted == cutoff {
+                return Err(cutoff);
+            }
+            admitted += 1;
+            Ok(())
+        });
+        assert_eq!(result, Err(cutoff));
+        assert_eq!(admitted, cutoff);
+    }
 }

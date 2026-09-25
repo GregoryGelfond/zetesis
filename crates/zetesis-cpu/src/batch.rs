@@ -393,8 +393,15 @@ mod tests {
             AdmissionLimits::default(),
         )
         .unwrap();
-        let seeds = [vec!["b"], vec![], vec!["a"], vec!["a", "b"]]
-            .map(|names| Seed::new(&program, model(&names).atoms().iter().cloned()).unwrap());
+        let seeds = [vec!["b"], vec![], vec!["a"], vec!["a", "b"]].map(|names| {
+            Seed::new(
+                &program,
+                names
+                    .iter()
+                    .map(|name| Atom::new(Predicate::new(*name, 0).unwrap(), vec![]).unwrap()),
+            )
+            .unwrap()
+        });
         (
             GroundProgram::compile(&program, StaticLimits::default()).unwrap(),
             seeds.into(),
@@ -407,6 +414,7 @@ mod tests {
                 .iter()
                 .map(|name| Atom::new(Predicate::new(*name, 0).unwrap(), vec![]).unwrap()),
         )
+        .unwrap()
     }
 
     fn exact_results(pool: &BatchOracle, graph: &GroundProgram, seeds: &[Seed]) {

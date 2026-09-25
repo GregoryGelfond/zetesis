@@ -72,8 +72,8 @@ fn equal_theory(source: &str) -> GroundingWork {
     assert_eq!(table.theory().roots(), indexed.theory().roots());
     assert_eq!(table.formula_origins(), indexed.formula_origins());
     assert_eq!(
-        table.objectives().templates(),
-        indexed.objectives().templates()
+        table.objectives().templates().iter().collect::<Vec<_>>(),
+        indexed.objectives().templates().iter().collect::<Vec<_>>()
     );
     assert_eq!(
         table.objectives().priorities(),

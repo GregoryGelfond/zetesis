@@ -31,7 +31,14 @@ fn models(input: &AdmittedFormula) -> Models {
             result
                 .expect("complete search")
                 .atoms()
-                .map(|index| input.atoms()[index].clone())
+                .map(|index| {
+                    input
+                        .atoms()
+                        .at(index)
+                        .unwrap()
+                        .to_atom(zetesis_core::ValueLimits::default())
+                        .unwrap()
+                })
                 .collect()
         })
         .collect();

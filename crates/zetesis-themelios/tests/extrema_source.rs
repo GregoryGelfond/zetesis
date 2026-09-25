@@ -39,7 +39,16 @@ fn empty_assignments_use_real_extrema_and_respect_assignment_cache_limits() {
         let source = format!("m(M) :- M = #{function}{{}}.");
         let input = admit(&source, &FormulaLimits::default()).unwrap();
         assert_eq!(input.atoms().len(), 1);
-        assert_eq!(input.atoms()[0].values(), &[value]);
+        assert_eq!(
+            input
+                .atoms()
+                .at(0)
+                .unwrap()
+                .values()
+                .iter()
+                .collect::<Vec<_>>(),
+            &[value]
+        );
         for limits in [
             FormulaLimits {
                 max_assignment_values: 0,

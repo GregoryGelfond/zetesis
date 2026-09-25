@@ -123,7 +123,7 @@ fn fixture(case: Case) -> Result<AtomCatalog, Box<dyn Error>> {
             )?)
         })
         .collect::<Result<Vec<_>, Box<dyn Error>>>()?;
-    Ok(AtomCatalog::new(atoms))
+    Ok(AtomCatalog::new(atoms)?)
 }
 
 struct Query {
@@ -136,25 +136,43 @@ fn queries(catalog: &AtomCatalog, positions: &[usize]) -> Result<Vec<Query>, Box
     (0..QUERIES)
         .map(|query| {
             let position = query * catalog.atoms().len() / QUERIES;
-            let source = &catalog.atoms()[position];
+            let source = catalog.atoms().at(position).expect("fixture position");
             // Every fourth key is a genuine missing typed value. Its predicate can
             // still have rows; membership and predicate selection are distinct.
             let atom = if query % 4 == 0 {
                 Atom::new(
-                    source.predicate().clone(),
+                    Predicate::with_sign(
+                        source.predicate().name(),
+                        source.predicate().arity(),
+                        source.predicate().sign(),
+                    )?,
                     vec![Value::String("absent".into())],
                 )?
             } else {
-                source.clone()
+                // Independent owned query fixtures are an explicit export,
+                // prepared outside the measured lookup/scan intervals.
+                source.to_atom(ValueLimits::default())?
             };
-            let key = positions
-                .iter()
-                .copied()
-                .find(|&row| catalog.atoms()[row] == atom);
+            let key = positions.iter().copied().find(|&row| {
+                catalog
+                    .atoms()
+                    .at(row)
+                    .expect("reference position")
+                    .compare(&atom)
+                    .is_eq()
+            });
             let rows = positions
                 .iter()
                 .copied()
-                .filter(|&row| catalog.atoms()[row].predicate() == atom.predicate())
+                .filter(|&row| {
+                    catalog
+                        .atoms()
+                        .at(row)
+                        .expect("reference position")
+                        .predicate()
+                        .compare(atom.predicate())
+                        .is_eq()
+                })
                 .collect();
             Ok(Query { atom, key, rows })
         })
@@ -177,7 +195,13 @@ fn checked_queries(
             for (actual, &expected) in rows.zip(&query.rows) {
                 work.tick()?; // Consumer row visits are outside binary lookup.
                 assert_eq!(actual.position(), expected);
-                assert_eq!(actual.atom().predicate(), query.atom.predicate());
+                assert!(
+                    actual
+                        .atom()
+                        .predicate()
+                        .compare(query.atom.predicate())
+                        .is_eq()
+                );
                 selected += 1;
             }
         }
@@ -197,7 +221,13 @@ fn scanned_queries(
             let mut key = None;
             for &row in positions {
                 visits.tick()?;
-                if catalog.atoms()[row] == query.atom {
+                if catalog
+                    .atoms()
+                    .at(row)
+                    .expect("reference position")
+                    .compare(&query.atom)
+                    .is_eq()
+                {
                     key = Some(row);
                     break;
                 }
@@ -206,7 +236,14 @@ fn scanned_queries(
             let mut selected = 0;
             for &row in positions {
                 visits.tick()?;
-                if catalog.atoms()[row].predicate() == query.atom.predicate() {
+                if catalog
+                    .atoms()
+                    .at(row)
+                    .expect("reference position")
+                    .predicate()
+                    .compare(query.atom.predicate())
+                    .is_eq()
+                {
                     assert_eq!(row, query.rows[selected]);
                     selected += 1;
                 }
@@ -214,8 +251,8 @@ fn scanned_queries(
             assert_eq!(selected, query.rows.len());
         }
     }
-    // These are row visits, not descriptor/byte work: the reference deliberately
-    // uses independent derived equality. Do not compare the two numeric units.
+    // These are row visits, not descriptor/byte work. The reference uses an
+    // independent linear scan with shared typed equality; the units differ.
     Ok(visits.0)
 }
 
@@ -266,7 +303,7 @@ impl Prepared<'_> {
             scan_ns,
             self.index.retained_bytes(),
             self.index.preparation_peak_bytes(),
-            self.catalog.capacity() as u128 * size_of::<Atom>() as u128,
+            self.catalog.storage().bytes,
             self.model.selection_capacity() as u128 * size_of::<usize>() as u128,
             self.model
                 .retained_payload_bytes()
@@ -283,7 +320,7 @@ fn run(case: Case, timed: bool, out: &mut impl Write) -> Result<(), Box<dyn Erro
     let model_ns = clock.elapsed();
     let mut work = Work::default();
     let clock = Clock::new(timed);
-    let index = AtomIndex::new_with(catalog.atoms(), || work.tick())?;
+    let index = AtomIndex::from_catalog_with(catalog.atoms(), || work.tick())?;
     let index_ns = clock.elapsed();
     let prepared = Prepared {
         case,
@@ -312,7 +349,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut out = io::BufWriter::new(io::stdout().lock());
     writeln!(
         out,
-        "rows,predicates,depth,route,true_rows,repeats,index_work,index_ns,model_ns,query_work,query_ns,selected_rows,scan_visits,scan_ns,index_retained_bytes,index_peak_bytes,atom_cell_bytes,model_position_bytes,model_conservative_payload_bytes"
+        "rows,predicates,depth,route,true_rows,repeats,index_work,index_ns,model_ns,query_work,query_ns,selected_rows,scan_visits,scan_ns,index_retained_bytes,index_peak_bytes,catalog_storage_bytes,model_position_bytes,model_conservative_payload_bytes"
     )?;
     for case in CASES {
         run(case, timed, &mut out)?;

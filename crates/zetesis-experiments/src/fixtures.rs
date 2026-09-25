@@ -146,7 +146,7 @@ pub(crate) fn seeds(graph: &GroundProgram, count: usize, salt: usize) -> Vec<See
             // Repetition above 256 worlds is deliberate batch-size scaling, not a
             // claim of additional unique candidates. Salt changes content in-place.
             let mask = world.wrapping_add(salt) & 255;
-            Seed::new(
+            zetesis_core::SeedSelection::from_carrier_atoms(
                 graph.program(),
                 gates
                     .iter()
@@ -155,6 +155,7 @@ pub(crate) fn seeds(graph: &GroundProgram, count: usize, salt: usize) -> Vec<See
                     .map(|(_, atom)| atom.clone()),
             )
             .expect("fixture gates belong to their graph")
+            .to_seed()
         })
         .collect()
 }

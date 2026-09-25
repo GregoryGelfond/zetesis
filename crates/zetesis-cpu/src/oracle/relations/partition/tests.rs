@@ -1,7 +1,10 @@
 //! Stable insertion IDs partition canonical rows without another tuple owner.
 
 use super::*;
-use crate::oracle::relations::{Catalogs, Relational};
+use crate::oracle::relations::{
+    Catalogs, Relational,
+    fixtures::{catalogs as fixture, insert},
+};
 use crate::{
     Cancellation,
     oracle::{Limits, Statistics},
@@ -19,14 +22,14 @@ fn work(cancellation: &Cancellation) -> Work<'_> {
 }
 
 fn mixed(work: &mut Work<'_>) -> Catalogs {
-    let mut catalogs = Catalogs::default();
+    let mut catalogs = fixture(&[1, 2, 3, 4, 9].map(atom), work);
     for value in [4, 2] {
-        catalogs.insert(atom(value), 0, work).unwrap();
+        insert(&mut catalogs, &atom(value), work);
     }
     catalogs.prepare_delta(work).unwrap();
     catalogs.advance(work).unwrap();
     for value in [3, 1] {
-        catalogs.insert(atom(value), 0, work).unwrap();
+        insert(&mut catalogs, &atom(value), work);
     }
     // The partition control starts with a real published, canonically ordered
     // extent. It measures only the additional derived old/new ID preparation.
@@ -40,20 +43,18 @@ fn mixed(work: &mut Work<'_>) -> Catalogs {
 /// one sequence.
 fn assert_rows(catalogs: &Catalogs, set: RowSet, ids: &[usize], values: &[i32]) {
     let predicate = Predicate::new("p", 1).unwrap();
-    let source = catalogs.relation(&predicate).catalog().atoms();
+    let read = catalogs.authority.as_ref().unwrap().read();
+    let source = catalogs.relation(&predicate).catalog().atoms(read).unwrap();
     let rows = catalogs.selected(&predicate, set).unwrap();
     let mut seen: Vec<usize> = rows
         .all()
         .into_iter()
         .map(|row| {
             let row = row.atom().unwrap();
-            let id = source
-                .iter()
-                .position(|atom| std::ptr::eq(atom, row))
-                .unwrap();
+            let id = source.iter().position(|atom| atom == row).unwrap();
             assert_eq!(
                 row,
-                &atom(values[ids.iter().position(|&i| i == id).unwrap()])
+                atom(values[ids.iter().position(|&i| i == id).unwrap()])
             );
             id
         })
@@ -63,7 +64,7 @@ fn assert_rows(catalogs: &Catalogs, set: RowSet, ids: &[usize], values: &[i32]) 
     expected.sort_unstable();
     assert_eq!(seen, expected);
     for run in 0..rows.runs() {
-        let run: Vec<&Atom> = (0..rows.run_len(run))
+        let run: Vec<_> = (0..rows.run_len(run))
             .map(|position| rows.get(run, position).unwrap().atom().unwrap())
             .collect();
         assert!(run.windows(2).all(|pair| pair[0] < pair[1]));
@@ -101,15 +102,15 @@ fn a_refused_merge_keeps_the_old_view_and_publishes_no_partial_run() {
     // unavailable, and the merge succeeds once the ceiling is raised.
     let cancellation = Cancellation::default();
     let mut work = work(&cancellation);
-    let mut catalogs = Catalogs::default();
+    let mut catalogs = fixture(&[1, 2, 3, 4, 9].map(atom), &mut work);
     for value in [4, 2] {
-        catalogs.insert(atom(value), 0, &mut work).unwrap();
+        insert(&mut catalogs, &atom(value), &mut work);
     }
     catalogs.prepare_delta(&mut work).unwrap();
     catalogs.advance(&mut work).unwrap();
     let retained = catalogs.owned_bytes();
     for value in [3, 1] {
-        catalogs.insert(atom(value), 0, &mut work).unwrap();
+        insert(&mut catalogs, &atom(value), &mut work);
     }
     let appended = catalogs.owned_bytes();
     work.limits.max_closure_bytes = usize::try_from(appended).unwrap();
@@ -158,20 +159,20 @@ fn an_interrupted_delta_preparation_charges_exactly_its_limit() {
 }
 
 #[test]
-fn extraction_retires_delta_identity_but_retains_empty_capacity() {
+fn publication_resets_truth_and_preserves_retained_models() {
     let cancellation = Cancellation::default();
     let mut work = work(&cancellation);
     let mut catalogs = mixed(&mut work);
     catalogs.prepare_delta(&mut work).unwrap();
     let predicate = Predicate::new("p", 1).unwrap();
     let model = catalogs.take_model(&mut work).unwrap();
-    assert_eq!(model, Model::new([1, 2, 3, 4].map(atom)));
+    assert_eq!(model, Model::new([1, 2, 3, 4].map(atom)).unwrap());
     assert_eq!(catalogs.relation(&predicate).partition().old_end, 0);
-    catalogs.insert(atom(9), 0, &mut work).unwrap();
+    insert(&mut catalogs, &atom(9), &mut work);
     catalogs.prepare_delta(&mut work).unwrap();
     assert_rows(&catalogs, RowSet::Old, &[], &[]);
     assert_rows(&catalogs, RowSet::New, &[0], &[9]);
-    assert_eq!(model, Model::new([1, 2, 3, 4].map(atom)));
+    assert_eq!(model, Model::new([1, 2, 3, 4].map(atom)).unwrap());
 }
 
 #[test]
@@ -197,31 +198,35 @@ fn signed_typed_rows_keep_their_own_partition() {
     ];
     let cancellation = Cancellation::default();
     let mut work = work(&cancellation);
-    let mut catalogs = Catalogs::default();
     let predicates = [Sign::Positive, Sign::Negative]
         .map(|sign| Predicate::with_sign("typed", 1, sign).unwrap());
+    let source: Vec<_> = predicates
+        .iter()
+        .flat_map(|predicate| {
+            values
+                .iter()
+                .map(|value| Atom::new(predicate.clone(), vec![value.clone()]).unwrap())
+        })
+        .collect();
+    let mut catalogs = fixture(&source, &mut work);
     for predicate in &predicates {
         for value in &values[..2] {
-            catalogs
-                .insert(
-                    Atom::new(predicate.clone(), vec![value.clone()]).unwrap(),
-                    0,
-                    &mut work,
-                )
-                .unwrap();
+            insert(
+                &mut catalogs,
+                &Atom::new(predicate.clone(), vec![value.clone()]).unwrap(),
+                &mut work,
+            );
         }
     }
     catalogs.prepare_delta(&mut work).unwrap();
     catalogs.advance(&mut work).unwrap();
     for predicate in &predicates {
         for value in &values[2..] {
-            catalogs
-                .insert(
-                    Atom::new(predicate.clone(), vec![value.clone()]).unwrap(),
-                    0,
-                    &mut work,
-                )
-                .unwrap();
+            insert(
+                &mut catalogs,
+                &Atom::new(predicate.clone(), vec![value.clone()]).unwrap(),
+                &mut work,
+            );
         }
     }
     catalogs.prepare_delta(&mut work).unwrap();
@@ -232,12 +237,17 @@ fn signed_typed_rows_keep_their_own_partition() {
             assert_eq!(all.len(), ids.len());
             for (actual, id) in all.into_iter().zip(ids) {
                 let actual = actual.atom().unwrap();
-                assert_eq!(actual.predicate(), predicate);
-                assert_eq!(actual.values(), &[values[id].clone()]);
-                assert!(std::ptr::eq(
-                    actual,
-                    &raw const catalogs.relation(predicate).catalog().atoms()[id]
-                ));
+                assert_eq!(actual.predicate(), *predicate);
+                assert_eq!(actual.values().at(0).unwrap(), values[id]);
+                let read = catalogs.authority.as_ref().unwrap().read();
+                let stored = catalogs
+                    .relation(predicate)
+                    .catalog()
+                    .atoms(read)
+                    .unwrap()
+                    .at(id)
+                    .unwrap();
+                assert_eq!(actual, stored);
             }
         }
     }

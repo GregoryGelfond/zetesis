@@ -100,6 +100,12 @@ For example, `q(X) :- d(X), p(X+1).` checks the complete supporting `p` atom
 after `d(X)` binds `X`. By contrast, `q(X) :- p(X+1).` requires arithmetic
 inversion and receives the typed `UnboundArgumentInput` refusal.
 
+Comparisons use ASP term order across admitted value types: `5 < a` and
+`"foo" > a` are true, while `5 > a` is false. Thus `X > Y` does not imply
+numeric operands. Arithmetic is evaluated before comparison; defined `X + Y`
+requires numbers and remains subject to the
+[arithmetic refusal policy](#numeric-boundaries-and-refusal-meaning).
+
 The current flat-tuple comparison profile requires tuple operands on both sides
 when a tuple still contains variables after normalization. It cannot bind that
 whole tuple to a variable, even when a positive atom supplies its component bindings:
@@ -650,9 +656,14 @@ and [expression contracts](https://github.com/GregoryGelfond/zetesis/blob/main/c
 retain original source witnesses. Cyclic or unseeded local bindings and missing
 measures in authored extremum elements retain their separate explicit boundaries;
 an empty extremum itself remains valid. Source-template limits bound admitted
-alternatives, while each observation operation has independent work, substitution,
-symbol construction, live local payload and output limits. Those named limits do
-not describe process RSS.
+alternatives; canonical metadata vocabulary and component capacities have a
+separate `MetadataStorageLimits` allowance. Each observation operation has
+independent work, substitution, symbol construction, logical local payload and
+output limits. `max_term_storage_bytes` bounds its derived arena and retained
+typed wildcard-key graph, excluding borrowed inputs. Transient ID frames use
+that ceiling independently; their combined capacities and process RSS are not
+that measure. The [output API guide](../rust/costs-and-output.md) states these
+ownership and accounting boundaries.
 
 ### Projected enumeration
 

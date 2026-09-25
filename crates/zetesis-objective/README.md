@@ -19,7 +19,11 @@ exact `Eq`/`Neq` filters. `with_condition(Condition)` additionally accepts a
 closed query over complete typed atoms. `ConditionNode` represents Boolean
 constants, atom membership, negation, conjunction and disjunction; each operand
 index must precede its operation and the final node is the result. An empty
-query is true. Arithmetic, aggregate and conditional source syntax still needs
+query is true. `Condition::new` accepts owned construction descriptions; program
+admission replaces every atom operand with a canonical catalog occurrence.
+`Condition::from_catalog_with` validates ID-only nodes over an existing catalog
+and shares that authority. `nodes()` returns borrowed logical operations.
+Arithmetic, aggregate and conditional source syntax still needs
 an explicit frontend translation with its own completed eligibility evidence.
 
 A closed condition reads the original supplied model. It owns no semantic atom
@@ -40,7 +44,10 @@ The frontend must establish every expression input's safety independently and
 admit the resolved templates through `ObjectiveProgram::new`; scope validation
 alone does not establish source eligibility, numeric presence or a valid query.
 
-`evaluate(&program, &model, Limits, &Cancellation)` returns an `Evaluation` with:
+`evaluate(&program, &model, Limits, &Cancellation)` returns an `Evaluation` borrowing
+its contribution terms from those two inputs. Keeping evidence keeps these
+borrows alive; `into_score()` transfers the independent score. There is no
+per-contribution copy of text or structural payload. The result exposes:
 
 - `score()`: signed costs at the program's distinct descending priority slots;
 - `contributions()`: canonical active keys sorted by `(priority, weight, tuple)`;
@@ -94,7 +101,16 @@ source priorities a grounder would retain.
 ## Resource contract
 
 Admission bounds templates, tuple width, local variables, positive conditions,
-predicate arity, filters and closed condition nodes. Evaluation separately bounds charged work, complete
+predicate arity, filters and closed condition nodes. The explicit
+`max_condition_node_bytes` (128 MiB by default) bounds each condition's ID-only
+node capacity and header. Objective-wide `max_bytes` admits canonical payload
+and construction metadata once for the shared authority. Already canonical
+condition catalogs retain their supplied authority; exact shared owners are
+counted once, while distinct prefixes may conservatively count shared segments
+more than once. Caller-owned ingress descriptions and allocator bookkeeping
+are excluded. Standalone `Condition::from_catalog_with` retains its full
+supplied-catalog-plus-nodes byte contract. Invalid coordinates and storage
+refusals remain typed and located by template. Evaluation separately bounds charged work, complete
 positive bindings before filters, unique keys and retained canonical key bytes.
 Every ceiling is inclusive; zero is a real ceiling. Duplicate keys consume join
 and lookup work but no additional retained-key or key-byte budget.
@@ -113,11 +129,11 @@ searches and visits that range in canonical model order. The unchanged matcher
 then checks constants and repeated variables on whole typed values. Unselected
 catalog atoms are never exposed as true rows.
 
-The shared `Value::compare_identity_with` operation charges visited descriptors,
+The shared `TermRef::compare_ref_with` operation charges visited descriptors,
 text-byte comparisons and sequence ends before doing that work. This is canonical
 storage identity/order, distinct from ASP term ordering. It replaces both opaque
-structural equality and charges for unused payload suffixes. String copying,
-binding visits, key searches and key insertion shifts remain charged, with
+structural equality and charges for unused payload suffixes. Borrowed binding
+visits, canonical byte measurements, key searches and key insertion shifts remain charged, with
 shared cancellation and deadline polling at charged operations. Counts and
 storage reservations are checked. Input construction and standard allocator
 internals are outside this logical work budget. Numeric work cutoffs can change
@@ -149,7 +165,9 @@ coalescing, negative and zero weights, fixed priority ordering, absent objective
 ignored nonnumeric weights, exact resource ceilings, cancellation, deadlines and
 1,024-condition joins on a small stack. A property test compares joins, key sets
 and costs with independent valuation enumeration on tiny generated relations,
-including reversal of template order. Final signed-cost conversion is checked at
+including reversal of template order. Internal condition tests check shared
+authority, invalid catalog coordinates, deep admitted values, exact storage
+ceilings and every callback cutoff. Final signed-cost conversion is checked at
 both `i64` boundaries. `tests/polarity.rs` separately checks both normalization
 polarities, dynamic weights, normalized cross-direction key identity, ignored
 nonnumeric rows, wide costs, inclusive work ceilings and typed negation overflow.

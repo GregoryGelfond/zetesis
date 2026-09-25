@@ -1,6 +1,7 @@
 //! Directive-local compilation, independent of logical grounding and its carrier.
 
 mod scopes;
+mod admission;
 mod patterns;
 mod plan;
 mod bindings;
@@ -17,13 +18,26 @@ use themelios_program::term::{Term, UnaryOp, Variable};
 
 use super::{
     AdmissionLimits, AtomTest, Binder, Condition, DefaultNegation, Directive, Error, ErrorKind,
-    Feature, ObservationProgram, Operand, Pattern, Predicate, Query, Relation, Resource,
-    Statistics, Template,
+    Feature, Operand, Pattern, Query, Relation, Resource, Statistics, Template,
 };
 use crate::expansion::Budget;
 use crate::{AdmissionOptions, FormulaFailure};
 
+enum Generated {
+    Value(Template),
+    AtomKey(super::AtomKeyTemplate),
+}
+impl Generated {
+    fn binder(self, slot: usize) -> Binder {
+        match self {
+            Self::Value(term) => Binder::Assign(slot, term),
+            Self::AtomKey(key) => Binder::AtomKey(slot, key),
+        }
+    }
+}
+
 struct Compiler<'a> {
+    admission: &'a mut crate::metadata::Admission,
     limits: AdmissionLimits,
     constants: &'a BTreeMap<String, Symbol>,
     location: Location,
@@ -33,7 +47,7 @@ struct Compiler<'a> {
     variables: BTreeMap<String, usize>,
     safe: BTreeSet<usize>,
     slots: usize,
-    generated: Vec<(usize, Template)>,
+    generated: Vec<(usize, Generated)>,
     used: BTreeSet<usize>,
     scope_outer: usize,
     pool_binding: bool,
@@ -41,12 +55,7 @@ struct Compiler<'a> {
 }
 impl Compiler<'_> {
     fn error(&self, kind: ErrorKind) -> Error {
-        Error {
-            source: None,
-            kind,
-            location: Some(self.location),
-            statistics: Statistics::default(),
-        }
+        Error::new(kind, Some(self.location), Statistics::default())
     }
     fn check(&self, resource: Resource, observed: usize, limit: usize) -> Result<(), Error> {
         if observed > limit {
@@ -69,6 +78,15 @@ impl Compiler<'_> {
             self.limits.max_nodes as usize,
         )?;
         self.nodes += 1;
+        Ok(())
+    }
+    fn text_bytes(&mut self, length: usize) -> Result<(), Error> {
+        self.check(
+            Resource::Bytes,
+            self.bytes.saturating_add(length),
+            self.limits.max_bytes as usize,
+        )?;
+        self.bytes += length;
         Ok(())
     }
     fn text(&mut self, value: &str) -> Result<(), Error> {
@@ -110,59 +128,10 @@ impl Compiler<'_> {
         }
         Ok(slot)
     }
-    // Recursion is capped before descent; source depth is also capped before raising.
-    fn symbol(&mut self, value: &Symbol, depth: usize, resolve: bool) -> Result<Symbol, Error> {
-        self.node(depth)?;
-        if resolve
-            && let Symbol::Function {
-                name,
-                arguments,
-                sign: Sign::Positive,
-            } = value
-            && arguments.is_empty()
-            && let Some(replacement) = self.constants.get(name.as_str())
-        {
-            return self.symbol(replacement, depth, false);
-        }
-        Ok(match value {
-            Symbol::Infimum => Symbol::Infimum,
-            Symbol::Supremum => Symbol::Supremum,
-            Symbol::Number(value) => Symbol::Number(*value),
-            Symbol::String(text) => {
-                self.text(text)?;
-                Symbol::String(text.clone())
-            }
-            Symbol::Function {
-                name,
-                arguments,
-                sign,
-            } => {
-                self.text(name.as_str())?;
-                self.arity(arguments.len())?;
-                let mut values = Vec::new();
-                for argument in arguments {
-                    values.push(self.symbol(argument, depth + 1, resolve)?);
-                }
-                Symbol::Function {
-                    name: name.clone(),
-                    arguments: values,
-                    sign: *sign,
-                }
-            }
-            Symbol::Tuple(arguments) => {
-                self.arity(arguments.len())?;
-                let mut values = Vec::new();
-                for argument in arguments {
-                    values.push(self.symbol(argument, depth + 1, resolve)?);
-                }
-                Symbol::Tuple(values)
-            }
-        })
-    }
     fn template(&mut self, term: &Term, depth: usize) -> Result<Template, Error> {
         self.node(depth)?;
         Ok(match term {
-            Term::Symbolic(symbol) => Template::Value(self.symbol(symbol, depth, true)?),
+            Term::Symbolic(symbol) => Template::Constant(self.symbol(symbol, depth, true)?),
             Term::Variable(variable) => Template::Variable(self.variable(variable)?),
             Term::Function { name, arguments } => {
                 self.function(name, arguments, depth, Sign::Positive)?
@@ -202,7 +171,7 @@ impl Compiler<'_> {
                 for argument in arguments {
                     terms.push(self.template(argument, depth + 1)?);
                 }
-                Template::Tuple(terms)
+                Template::Construct(self.shape(None, Sign::Positive, terms.len())?, terms)
             }
             Term::External { .. } => return Err(self.unsupported(Feature::Term)),
         })
@@ -220,7 +189,10 @@ impl Compiler<'_> {
         for argument in arguments {
             terms.push(self.template(argument, depth + 1)?);
         }
-        Ok(Template::Function(sign, name.clone(), terms))
+        Ok(Template::Construct(
+            self.shape(Some(name.as_str()), sign, terms.len())?,
+            terms,
+        ))
     }
     fn lift(&mut self, term: Template) -> Result<Template, Error> {
         if !term.multiple() {
@@ -241,7 +213,7 @@ impl Compiler<'_> {
     }
     fn generate(&mut self, term: Template) -> Result<usize, Error> {
         let slot = self.slot()?;
-        self.generated.push((slot, term));
+        self.generated.push((slot, Generated::Value(term)));
         self.used.insert(slot);
         Ok(slot)
     }
@@ -377,23 +349,26 @@ impl Compiler<'_> {
     }
 }
 
-pub(crate) fn compile(
-    source: &Program,
-    options: AdmissionOptions,
-    limits: AdmissionLimits,
-    budget: &mut Budget,
-    fallback: Location,
-) -> Result<ObservationProgram, FormulaFailure> {
-    if !source.statements().any(|entry| {
+pub(crate) fn has_observations(source: &Program) -> bool {
+    source.statements().any(|entry| {
         matches!(
             entry.get(),
             Statement::Show(Show::Term(_) | Show::TermBody { .. })
         )
-    }) {
-        return Ok(ObservationProgram::default());
-    }
+    })
+}
+
+pub(crate) fn compile(
+    source: &Program,
+    admission: &mut crate::metadata::Admission,
+    options: AdmissionOptions,
+    limits: AdmissionLimits,
+    budget: &mut Budget,
+    fallback: Location,
+) -> Result<Vec<Directive>, FormulaFailure> {
     let constants = crate::extended::resolve(source, budget, fallback)?;
     let mut compiler = Compiler {
+        admission,
         limits: AdmissionLimits {
             max_depth: limits.max_depth.min(64),
             max_body_elements: limits
@@ -421,7 +396,7 @@ pub(crate) fn compile(
         pool_binding: false,
         capture_pools: false,
     };
-    let mut result = ObservationProgram::default();
+    let mut result = Vec::new();
     for entry in source.statements() {
         let (term, body) = match entry.get() {
             Statement::Show(Show::Term(term)) => (term, None),
@@ -432,7 +407,7 @@ pub(crate) fn compile(
         let directive = (|| {
             compiler.check(
                 Resource::Directives,
-                result.directives.len().saturating_add(1),
+                result.len().saturating_add(1),
                 limits.max_directives as usize,
             )?;
             // Count the borrowed evidence before allocating its owned projection.
@@ -450,7 +425,7 @@ pub(crate) fn compile(
             compiler.directive(term, body, crate::extended::parsed_origins(entry))
         })()
         .map_err(|error| FormulaFailure::Observation { error })?;
-        result.directives.push(directive);
+        result.push(directive);
     }
     Ok(result)
 }

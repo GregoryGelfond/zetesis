@@ -1,9 +1,12 @@
 //! Exact denotation, AVL shape, transaction refusal and scoped prefix controls.
 
+#[path = "tests/probes.rs"]
 mod probes;
 
 use super::*;
-use crate::{AtomCatalog, AtomPattern, Predicate, Sign, Term, Value, ValueLimits, ValueNode};
+use crate::{
+    Atom, AtomPattern, Predicate, Sign, Term, Value, ValueLimits, ValueNode, ValueNodeRef,
+};
 use proptest::prelude::*;
 use std::{collections::BTreeSet, convert::Infallible};
 
@@ -23,6 +26,25 @@ fn insert(owner: &mut AtomInterner, atom: &Atom) -> usize {
         .insert_with(limits(), || Ok::<(), Infallible>(()))
         .unwrap()
 }
+fn text_argument(atom: AtomRef<'_>) -> &str {
+    let ValueNodeRef::String(text) = atom.values().at(0).unwrap().descriptor() else {
+        panic!("fixture requires a string argument");
+    };
+    text
+}
+
+fn assert_sequence(owner: &AtomInterner, ids: &[AtomId], expected: &[i32]) {
+    let actual: Vec<_> = ids
+        .iter()
+        .map(|&id| AtomRef::new(&owner.store, id).unwrap())
+        .collect();
+    let expected: Vec<_> = expected.iter().map(|&value| atom(value)).collect();
+    assert_eq!(
+        actual,
+        expected.iter().map(AtomRef::from).collect::<Vec<_>>()
+    );
+}
+
 fn owner(values: &[i32]) -> AtomInterner {
     let mut owner = AtomInterner::new();
     for &value in values {
@@ -34,11 +56,11 @@ fn owner(values: &[i32]) -> AtomInterner {
 // Literal recursive height/order validation is restricted to these small test
 // populations. Production insertion and traversal are iterative.
 fn validate(owner: &AtomInterner) {
-    fn subtree(
-        owner: &AtomInterner,
+    fn subtree<'a>(
+        owner: &'a AtomInterner,
         root: index::Link,
         seen: &mut BTreeSet<usize>,
-    ) -> (i32, Vec<Atom>) {
+    ) -> (i32, Vec<AtomRef<'a>>) {
         let Some(root) = root else {
             return (0, Vec::new());
         };
@@ -48,11 +70,11 @@ fn validate(owner: &AtomInterner) {
         let (left_height, mut left) = subtree(owner, node.children[0], seen);
         let (right_height, right) = subtree(owner, node.children[1], seen);
         let atom = owner.get(id).unwrap();
-        assert!(left.iter().all(|previous| previous < atom));
-        assert!(right.iter().all(|next| atom < next));
+        assert!(left.iter().all(|previous| *previous < atom));
+        assert!(right.iter().all(|next| atom < *next));
         assert!((right_height - left_height).abs() <= 1);
         assert_eq!(i32::from(node.balance), right_height - left_height);
-        left.push(atom.clone());
+        left.push(atom);
         left.extend(right);
         (1 + left_height.max(right_height), left)
     }
@@ -60,20 +82,22 @@ fn validate(owner: &AtomInterner) {
     let mut actual = Vec::new();
     for (index, relation) in owner.subtrees.iter().enumerate() {
         if let Some(previous) = index.checked_sub(1) {
-            assert!(owner.subtrees[previous].predicate < relation.predicate);
+            let previous =
+                AtomRef::new(&owner.store, owner.subtrees[previous].representative).unwrap();
+            let current = AtomRef::new(&owner.store, relation.representative).unwrap();
+            assert!(previous.predicate() < current.predicate());
         }
         let (_, atoms) = subtree(owner, relation.root, &mut seen);
-        assert!(
-            atoms
-                .iter()
-                .all(|atom| *atom.predicate() == relation.predicate)
-        );
+        assert!(atoms.iter().all(|atom| {
+            atom.predicate()
+                == AtomRef::new(&owner.store, relation.representative)
+                    .unwrap()
+                    .predicate()
+        }));
         actual.extend(atoms);
     }
     assert_eq!(seen, (0..owner.len()).collect());
-    let expected: BTreeSet<_> = (0..owner.len())
-        .map(|id| owner.get(id).unwrap().clone())
-        .collect();
+    let expected: BTreeSet<_> = (0..owner.len()).map(|id| owner.get(id).unwrap()).collect();
     assert_eq!(actual, expected.into_iter().collect::<Vec<_>>());
 }
 
@@ -90,13 +114,13 @@ proptest! {
             });
             prop_assert_eq!(id, expected_id);
             validate(&owner);
-            for (id, expected) in expected.iter().enumerate() { prop_assert_eq!(owner.get(id), Some(expected)); }
+            for (id, expected) in expected.iter().enumerate() { prop_assert_eq!(owner.get(id), Some(AtomRef::from(expected))); }
         }
         owner.commit_with(limits(), || Ok::<(), Infallible>(())).unwrap();
         let order = owner.ordered_ids_with(limits(), || Ok::<(), Infallible>(())).unwrap();
-        let actual: Vec<_> = order.iter().map(|&id| owner.get(id).unwrap().clone()).collect();
+        let actual: Vec<_> = order.iter().map(|&id| owner.get(id).unwrap()).collect();
         expected.sort();
-        prop_assert_eq!(actual, expected);
+        prop_assert_eq!(actual, expected.iter().map(AtomRef::from).collect::<Vec<_>>());
     }
 }
 
@@ -115,7 +139,7 @@ fn every_rotation_preserves_original_positions() {
         expected.sort_by_key(|&id| values[id]);
         assert_eq!(order, expected);
         for (id, value) in values.into_iter().enumerate() {
-            assert_eq!(owner.get(id), Some(&atom(value)));
+            assert_eq!(owner.get(id), Some(AtomRef::from(&atom(value))));
         }
     }
 }
@@ -161,7 +185,7 @@ fn refused_insert_preserves_the_published_tree() {
             assert_eq!(spent, limit);
             assert_eq!(owner.len(), initial.len());
             for (id, value) in initial.into_iter().enumerate() {
-                assert_eq!(owner.get(id), Some(&atom(value)));
+                assert_eq!(owner.get(id), Some(AtomRef::from(&atom(value))));
             }
             validate(&owner);
             assert_eq!(insert(&mut owner, &added), initial.len());
@@ -172,13 +196,19 @@ fn refused_insert_preserves_the_published_tree() {
 
 #[test]
 fn committed_rows_survive_pending_growth() {
-    let mut owner = owner(&[17]);
+    let text = Atom::new(
+        Predicate::new("p", 1).unwrap(),
+        vec![Value::String("retained text".into())],
+    )
+    .unwrap();
+    let mut owner = AtomInterner::new();
+    insert(&mut owner, &text);
     owner
         .commit_with(limits(), || Ok::<(), Infallible>(()))
         .unwrap();
     {
         let (committed, mut append) = owner.split();
-        let original = committed.get(0).unwrap();
+        let original = text_argument(committed.get(0).unwrap());
         for value in 0..96 {
             let atom = atom(value);
             let entry = append
@@ -187,17 +217,20 @@ fn committed_rows_survive_pending_growth() {
             let id = entry
                 .insert_with(limits(), || Ok::<(), Infallible>(()))
                 .unwrap();
-            assert_eq!(append.get(id), Some(&atom));
+            assert_eq!(append.get(id), Some(AtomRef::from(&atom)));
             assert_eq!(committed.len(), 1);
-            assert!(std::ptr::eq(original, committed.get(0).unwrap()));
+            assert!(std::ptr::eq(
+                original,
+                text_argument(committed.get(0).unwrap())
+            ));
             assert_eq!(committed.get(1), None);
         }
     }
     owner
         .commit_with(limits(), || Ok::<(), Infallible>(()))
         .unwrap();
-    assert_eq!(owner.len(), 96);
-    assert_eq!(owner.get(0), Some(&atom(17)));
+    assert_eq!(owner.len(), 97);
+    assert_eq!(owner.get(0), Some(AtomRef::from(&text)));
     validate(&owner);
 }
 
@@ -210,13 +243,15 @@ fn final_transfer_keeps_identity_only_tail() {
     insert(&mut owner, &atom(-1));
     assert_eq!(owner.committed.len(), 1);
     let atoms = owner
-        .into_atoms_with(limits(), || Ok::<(), Infallible>(()))
+        .into_catalog_with(limits(), || Ok::<(), Infallible>(()))
         .unwrap();
-    assert_eq!(atoms, [atom(7), atom(-1)]);
-    let pointer = atoms.as_ptr();
-    let catalog = AtomCatalog::new(atoms);
-    assert_eq!(catalog.atoms().as_ptr(), pointer);
-    assert_eq!(catalog.atoms(), [atom(7), atom(-1)]);
+    assert_eq!(
+        atoms.atoms().iter().collect::<Vec<_>>(),
+        [atom(7), atom(-1)]
+            .iter()
+            .map(AtomRef::from)
+            .collect::<Vec<_>>()
+    );
 }
 
 #[test]
@@ -330,7 +365,7 @@ fn borrowed_keys_preserve_structural_signed_identity() {
         for value in &values {
             let assignment = [value.clone(), Value::Number(4)];
             let key = pattern.key(assignment.as_slice()).unwrap();
-            let materialized = key.to_atom();
+            let materialized = key.to_atom(ValueLimits::default()).unwrap();
             let id = owner
                 .entry_key_with(key, limits(), || Ok::<(), Infallible>(()))
                 .unwrap()
@@ -366,12 +401,12 @@ fn borrowed_keys_preserve_structural_signed_identity() {
     let ids = owner
         .ordered_ids_with(limits(), || Ok::<(), Infallible>(()))
         .unwrap();
-    let actual: Vec<_> = ids
-        .iter()
-        .map(|&id| owner.get(id).unwrap().clone())
-        .collect();
+    let actual: Vec<_> = ids.iter().map(|&id| owner.get(id).unwrap()).collect();
     expected.sort();
-    assert_eq!(actual, expected);
+    assert_eq!(
+        actual,
+        expected.iter().map(AtomRef::from).collect::<Vec<_>>()
+    );
     validate(&owner);
 }
 
@@ -398,8 +433,8 @@ fn occupied_entry_rechecks_a_changed_population_limit() {
         })
     ));
     assert_eq!(owner.len(), 2);
-    assert_eq!(owner.get(0), Some(&atom(1)));
-    assert_eq!(owner.get(1), Some(&atom(2)));
+    assert_eq!(owner.get(0), Some(AtomRef::from(&atom(1))));
+    assert_eq!(owner.get(1), Some(AtomRef::from(&atom(2))));
     validate(&owner);
 }
 
@@ -437,13 +472,13 @@ fn refused_commit_keeps_the_original_prefix() {
         });
         assert!(matches!(result, Err(Failure::Stopped(actual)) if actual == limit));
         assert_eq!(spent, limit);
-        assert_eq!(owner.committed, [atom(5), atom(1), atom(9)]);
-        assert_eq!(owner.pending, [atom(7), atom(3), atom(11), atom(0)]);
+        assert_sequence(&owner, &owner.committed, &[5, 1, 9]);
+        assert_sequence(&owner, &owner.pending, &[7, 3, 11, 0]);
         validate(&owner);
         owner
             .commit_with(limits(), || Ok::<(), Infallible>(()))
             .unwrap();
-        assert_eq!(owner.committed, [5, 1, 9, 7, 3, 11, 0].map(atom));
+        assert_sequence(&owner, &owner.committed, &[5, 1, 9, 7, 3, 11, 0]);
         assert!(owner.pending.is_empty());
     }
 }
@@ -481,27 +516,97 @@ fn refused_order_exposes_no_partial_selection() {
                 .unwrap(),
             [1, 0, 2]
         );
-        assert_eq!(owner.committed, [atom(5), atom(1), atom(9)]);
-        assert_eq!(owner.pending, [atom(7), atom(3), atom(11), atom(0)]);
+        assert_sequence(&owner, &owner.committed, &[5, 1, 9]);
+        assert_sequence(&owner, &owner.pending, &[7, 3, 11, 0]);
     }
 }
 
 #[test]
-fn first_commit_transfers_the_pending_buffer() {
+fn first_commit_transfers_the_pending_id_buffer() {
     let mut owner = owner(&[5, 1, 9]);
     let pointer = owner.pending.as_ptr();
     let capacity = owner.pending.capacity();
-    let live = owner.storage_bytes();
-    let bounds = Limits {
-        max_bytes: live,
-        ..limits()
-    };
     owner
-        .commit_with(bounds, || Ok::<(), Infallible>(()))
+        .commit_with(limits(), || Ok::<(), Infallible>(()))
         .unwrap();
     assert_eq!(owner.committed.as_ptr(), pointer);
     assert_eq!(owner.committed.capacity(), capacity);
-    assert_eq!(owner.committed, [atom(5), atom(1), atom(9)]);
+    assert_sequence(&owner, &owner.committed, &[5, 1, 9]);
     assert!(owner.pending.is_empty());
-    assert_eq!(owner.storage_bytes(), live);
+}
+
+#[test]
+fn refused_discovery_retries_one_existing_identity() {
+    let first = Atom::new(Predicate::new("a", 0).unwrap(), vec![]).unwrap();
+    let second = Atom::new(Predicate::new("b", 0).unwrap(), vec![]).unwrap();
+    let mut complete = AtomInterner::new();
+    let mut operations = 0;
+    complete
+        .entry_atom_with(&first, limits(), || {
+            operations += 1;
+            Ok::<(), Infallible>(())
+        })
+        .unwrap()
+        .insert_with(limits(), || {
+            operations += 1;
+            Ok::<(), Infallible>(())
+        })
+        .unwrap();
+    assert!(operations > 0);
+
+    // On this fresh nullary input the last permit precedes the indivisible
+    // discovery publication. Importing its complete canonical row has finished.
+    let mut owner = AtomInterner::new();
+    let mut admitted = 0;
+    let mut before = || {
+        if admitted == operations - 1 {
+            return Err("discovery stopped");
+        }
+        admitted += 1;
+        Ok(())
+    };
+    let result = owner
+        .entry_atom_with(&first, limits(), &mut before)
+        .and_then(|entry| entry.insert_with(limits(), &mut before));
+    assert!(matches!(result, Err(Failure::Stopped("discovery stopped"))));
+    assert_eq!(admitted, operations - 1);
+    assert!(owner.is_empty());
+    assert!(owner.index.nodes.is_empty());
+    assert!(owner.get(0).is_none());
+    assert_eq!(
+        owner
+            .find_atom_with(&first, limits(), || Ok::<(), Infallible>(()))
+            .unwrap(),
+        None
+    );
+    {
+        // Inspect existing canonical contents through a short-lived snapshot;
+        // this performs no import and cannot manufacture the expected row.
+        let snapshot = owner.store.snapshot(0).unwrap();
+        assert_eq!(snapshot.atom_count(), 1);
+    }
+    assert_eq!(insert(&mut owner, &second), 0);
+    assert_eq!(insert(&mut owner, &first), 1);
+    assert!(
+        owner.pending[1] < owner.pending[0],
+        "canonical insertion precedes discovery order"
+    );
+    assert_eq!(insert(&mut owner, &first), 1);
+    assert_eq!(owner.len(), 2);
+    assert_eq!(owner.get(0), Some(AtomRef::from(&second)));
+    assert_eq!(owner.get(1), Some(AtomRef::from(&first)));
+    validate(&owner);
+    owner
+        .commit_with(limits(), || Ok::<(), Infallible>(()))
+        .unwrap();
+    assert_eq!(
+        owner.committed().atoms().iter().collect::<Vec<_>>(),
+        vec![AtomRef::from(&second), AtomRef::from(&first)]
+    );
+    assert_eq!(
+        owner
+            .ordered_ids_with(limits(), || Ok::<(), Infallible>(()))
+            .unwrap(),
+        vec![1, 0]
+    );
 }

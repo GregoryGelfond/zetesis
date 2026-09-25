@@ -323,7 +323,7 @@ fn lower_layer_failures_preserve_typed_causes_at_the_public_cli_boundary() {
 
 #[test]
 fn model_retention_failures_preserve_the_typed_cause() {
-    let catalog = zetesis_core::AtomCatalog::new(Vec::new());
+    let catalog = zetesis_core::AtomCatalog::new(Vec::new()).unwrap();
     let cause = zetesis_core::Model::from_positions(&catalog, [0]).unwrap_err();
     let expected = cause.to_string();
     let error = RunError::from(zetesis_solve::SolveError::Model(cause));

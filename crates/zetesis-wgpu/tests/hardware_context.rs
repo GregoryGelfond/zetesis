@@ -36,7 +36,9 @@ fn compose(backend: physical::Backend) {
     let indices = [1, 0, 0];
     let relation = Relation::from_catalog(&predicate, &atoms, &indices, Limits::default()).unwrap();
     let value = Value::Number(7);
-    let queries = [relation.query(&[(0, &value)], Limits::default()).unwrap()];
+    let queries = [relation
+        .query(&[(0, (&value).into())], Limits::default())
+        .unwrap()];
     let mut prepared = relation_executor
         .prepare(
             &relation,

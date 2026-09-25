@@ -11,12 +11,11 @@
 //!
 //! The source remains borrowed. Columns and dictionary representatives are
 //! either owned by this view or borrowed from an appendable [`Catalog`]; no
-//! complete atom or logical payload is cloned. A catalog mediates every append
-//! and owns its typed tuples once. Other callers retain their authoritative
-//! source and must remove superseded tuple owners when adopting this view.
+//! complete atom or logical payload is cloned. A catalog mediates membership
+//! append and binds rows from a separately charged canonical authority. Other
+//! borrowed-source constructors remain explicit ingress views.
 //! Eager formula support uses columns for typed lookup and
 //! row access; device consumers use the same representation for equality masks.
-//! Structured-value clones already share their payload through `Arc`.
 //!
 //! Ordered access is through the explicit [`Catalog::prepare_ordered`] and
 //! [`Catalog::ordered`] views over sorted runs.
@@ -33,15 +32,14 @@
 
 use std::{fmt, mem::size_of};
 
-use crate::{Atom, Predicate, Value};
+use crate::catalog::{AtomRef, Atoms, PredicateRef, TermRef};
+use crate::{Atom, Predicate};
 
 mod storage;
 mod selection;
 mod catalog;
 
-pub use catalog::{
-    Canonical, Catalog, CatalogFailure, ExtractedAtoms, Insertion, Lookup, Preparation, Runs,
-};
+pub use catalog::{Canonical, Catalog, CatalogFailure, Insertion, Lookup, Preparation, Runs};
 
 pub use selection::{Equality, Mask, Query, QueryAttempt, QueryFailure, Selection};
 
@@ -91,6 +89,8 @@ pub enum Resource {
 /// A relation operation failed without publishing a partial result.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Failure {
+    /// Canonical membership could not bind to the supplied authority/prefix.
+    Read(crate::catalog::ReadError),
     /// A source atom has a different signed predicate or arity.
     Predicate,
     /// An input catalog index is outside the borrowed atom catalog.
@@ -126,6 +126,7 @@ pub enum Failure {
 impl fmt::Display for Failure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Read(error) => error.fmt(f),
             Self::Predicate => f.write_str("relation row has a foreign predicate"),
             Self::CatalogIndex => f.write_str("relation catalog index is out of range"),
             Self::Column => f.write_str("relation equality column is out of range"),
@@ -149,7 +150,14 @@ impl fmt::Display for Failure {
     }
 }
 
-impl std::error::Error for Failure {}
+impl std::error::Error for Failure {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Read(error) => Some(error),
+            _ => None,
+        }
+    }
+}
 
 /// Capacity and work observed during one relation or catalog operation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -160,11 +168,13 @@ pub struct Storage {
     /// Largest operation-scoped capacity envelope, including temporary buffers
     /// and old/replacement capacity overlap when a reservation occurs.
     pub peak_construction_bytes: usize,
-    /// Sum of referenced source-value payload per occurrence, not unique memory.
+    /// Sum of canonical typed encoding bytes per argument occurrence.
     ///
-    /// Repeated values and shared structural payload are counted repeatedly.
-    /// These borrowed bytes are excluded from `retained_bytes`.
-    pub referenced_payload_bytes: u128,
+    /// Repeated terms are counted repeatedly. This is neither unique storage
+    /// nor physical memory and is excluded from `retained_bytes`. The former
+    /// `referenced_payload_bytes` field measured owned source heap payload;
+    /// historical observations under that name are not this encoding measure.
+    pub referenced_encoding_bytes: u128,
     /// Borrowed source catalog-index slice bytes; zero for contiguous rows.
     pub borrowed_mapping_bytes: usize,
     /// Charged construction work; payload comparisons are not unit-cost integers.
@@ -173,13 +183,13 @@ pub struct Storage {
 
 /// One immutable execution view of a signed predicate relation.
 ///
-/// The dictionary refers to whole typed source values; columns hold equality IDs.
+/// The dictionary refers to whole typed source terms; columns hold equality IDs.
 /// Borrowed-source construction owns the layout. A catalog view borrows it.
 /// Local row positions preserve input occurrence order. Catalog indices remain
 /// separately accessible through [`Row::source_index`]. Identity is this live
 /// owner, not its address retained after destruction, contents or dimensions.
 pub struct Relation<'source> {
-    predicate: &'source Predicate,
+    predicate: PredicateRef<'source>,
     source: Source<'source>,
     layout: LayoutOwner<'source>,
     storage: Storage,
@@ -205,7 +215,7 @@ struct Cell {
 }
 
 impl Cell {
-    fn value<'source>(self, source: &Source<'source>) -> Result<&'source Value, Failure> {
+    fn value<'source>(self, source: &Source<'source>) -> Result<TermRef<'source>, Failure> {
         source
             .atom(self.row)
             .and_then(|atom| atom.values().get(self.column))
@@ -234,27 +244,37 @@ enum Source<'source> {
         atoms: &'source [Atom],
         indices: &'source [usize],
     },
+    Canonical(Atoms<'source>),
+    CanonicalCatalog {
+        atoms: Atoms<'source>,
+        indices: &'source [usize],
+    },
 }
 
 impl<'source> Source<'source> {
     fn len(&self) -> usize {
         match self {
             Self::Atoms(atoms) => atoms.len(),
-            Self::Catalog { indices, .. } => indices.len(),
+            Self::Canonical(atoms) => atoms.len(),
+            Self::Catalog { indices, .. } | Self::CanonicalCatalog { indices, .. } => indices.len(),
         }
     }
 
     fn index(&self, row: usize) -> Option<usize> {
         match self {
             Self::Atoms(atoms) => (row < atoms.len()).then_some(row),
-            Self::Catalog { indices, .. } => indices.get(row).copied(),
+            Self::Canonical(atoms) => (row < atoms.len()).then_some(row),
+            Self::Catalog { indices, .. } | Self::CanonicalCatalog { indices, .. } => {
+                indices.get(row).copied()
+            }
         }
     }
 
-    fn atom(&self, row: usize) -> Option<&'source Atom> {
+    fn atom(&self, row: usize) -> Option<AtomRef<'source>> {
         let index = self.index(row)?;
         match self {
-            Self::Atoms(atoms) | Self::Catalog { atoms, .. } => atoms.get(index),
+            Self::Atoms(atoms) | Self::Catalog { atoms, .. } => atoms.get(index).map(AtomRef::from),
+            Self::Canonical(atoms) | Self::CanonicalCatalog { atoms, .. } => atoms.at(index),
         }
     }
 }
@@ -275,7 +295,7 @@ impl<'source> Relation<'source> {
         atoms: &'source [Atom],
         limits: Limits,
     ) -> Result<Self, Failure> {
-        storage::build(predicate, Source::Atoms(atoms), limits)
+        storage::build(PredicateRef::from(predicate), Source::Atoms(atoms), limits)
     }
 
     /// Build an ordered predicate view over explicit original catalog indices.
@@ -294,12 +314,53 @@ impl<'source> Relation<'source> {
         indices: &'source [usize],
         limits: Limits,
     ) -> Result<Self, Failure> {
-        storage::build(predicate, Source::Catalog { atoms, indices }, limits)
+        storage::build(
+            PredicateRef::from(predicate),
+            Source::Catalog { atoms, indices },
+            limits,
+        )
     }
 
-    /// The full signed predicate. Constant-time borrow.
+    /// Build columns over canonical atom occurrences without copying terms.
+    ///
+    /// The explicit predicate identifies empty/nullary relations. Construction
+    /// and occurrence semantics match [`Self::from_atoms`]; comparisons also
+    /// charge canonical descriptor/navigation probes before they occur.
+    ///
+    /// # Errors
+    /// Refuses foreign predicates, exceeded limits, unrepresentable shapes or
+    /// allocation failure without publishing a partial relation.
+    pub fn from_refs(
+        predicate: PredicateRef<'source>,
+        atoms: Atoms<'source>,
+        limits: Limits,
+    ) -> Result<Self, Failure> {
+        storage::build(predicate, Source::Canonical(atoms), limits)
+    }
+
+    /// Build columns over checked canonical occurrence indices.
+    ///
+    /// Arbitrary input order and repeated indices remain distinct occurrences.
+    /// Construction shares [`Self::from_catalog`]'s checked layout operation.
+    ///
+    /// # Errors
+    /// Also refuses out-of-range indices before publishing a relation.
+    pub fn from_catalog_refs(
+        predicate: PredicateRef<'source>,
+        atoms: Atoms<'source>,
+        indices: &'source [usize],
+        limits: Limits,
+    ) -> Result<Self, Failure> {
+        storage::build(
+            predicate,
+            Source::CanonicalCatalog { atoms, indices },
+            limits,
+        )
+    }
+
+    /// The full signed predicate. Constant-time borrowed view.
     #[must_use]
-    pub const fn predicate(&self) -> &Predicate {
+    pub const fn predicate(&self) -> PredicateRef<'source> {
         self.predicate
     }
 
@@ -388,9 +449,24 @@ pub struct Row<'owner, 'source> {
 }
 
 impl<'source> Row<'_, 'source> {
+    /// Borrow this complete source occurrence without copying its arguments.
+    /// The row's checked position resolves through the relation's original
+    /// occurrence map; dictionary order is not atom identity.
+    ///
+    /// # Panics
+    /// Panics if the relation's admitted occurrence map refers outside its source.
+    /// Relation construction checks this map, which cannot change through a row.
+    #[must_use]
+    pub fn atom(&self) -> AtomRef<'source> {
+        self.relation
+            .source
+            .atom(self.position)
+            .expect("a relation row refers to its admitted source occurrence")
+    }
+
     /// The full signed predicate. Constant time.
     #[must_use]
-    pub fn predicate(&self) -> &Predicate {
+    pub fn predicate(&self) -> PredicateRef<'source> {
         self.relation.predicate()
     }
 
@@ -409,13 +485,29 @@ impl<'source> Row<'_, 'source> {
         self.source_index
     }
 
+    /// Locate this occurrence in its exact canonical source mapping. A mapped
+    /// relation returns the original source position, not its local row number.
+    /// An independent equal catalog or owned ingress is not that source.
+    /// Constant time; no atom or predicate comparison is needed.
+    #[must_use]
+    pub fn occurrence_in(&self, atoms: Atoms<'_>) -> Option<usize> {
+        match &self.relation.source {
+            Source::Canonical(source) | Source::CanonicalCatalog { atoms: source, .. }
+                if source.same_occurrences(atoms) =>
+            {
+                Some(self.source_index)
+            }
+            _ => None,
+        }
+    }
+
     /// Decode one argument to an equal borrowed dictionary representative.
     ///
     /// Interning preserves typed value equality, not the address of the original
-    /// occurrence's `Value` cell. [`Self::source_index`] retains its catalog identity.
+    /// occurrence's ingress cell. [`Self::source_index`] retains its catalog identity.
     /// The value borrows the source and can outlive this row and relation view.
     #[must_use]
-    pub fn value(&self, column: usize) -> Option<&'source Value> {
+    pub fn value(&self, column: usize) -> Option<TermRef<'source>> {
         let id = *self.relation.column(column)?.get(self.position)?;
         self.relation
             .layout
@@ -464,8 +556,12 @@ impl Work {
         Ok(())
     }
 
-    fn compare(&mut self, left: &Value, right: &Value) -> Result<std::cmp::Ordering, Failure> {
-        left.compare_identity_with(right, || self.tick(1))
+    fn compare(
+        &mut self,
+        left: TermRef<'_>,
+        right: TermRef<'_>,
+    ) -> Result<std::cmp::Ordering, Failure> {
+        left.compare_ref_with(right, || self.tick(1))
     }
 
     fn include(&mut self, bytes: usize) -> Result<(), Failure> {

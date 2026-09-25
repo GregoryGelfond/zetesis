@@ -25,11 +25,7 @@ fn input(source: &str) -> AdmittedFormula {
     .unwrap()
 }
 fn score(input: &AdmittedFormula, selected: impl IntoIterator<Item = usize>) -> Score {
-    let model = Model::new(
-        selected
-            .into_iter()
-            .map(|index| input.atoms()[index].clone()),
-    );
+    let model = Model::from_positions(input.atom_catalog(), selected).unwrap();
     evaluate(
         input.objectives(),
         &model,

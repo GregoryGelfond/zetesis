@@ -490,8 +490,8 @@ mod tests {
     use crate::{GpuErrorKind, GpuLimits};
     use std::num::NonZeroU32;
     use zetesis_core::{
-        AdmissionLimits, AtomPattern, GroundProgram, Predicate, Program, Seed, StaticLimits,
-        Template,
+        AdmissionLimits, AtomPattern, GroundProgram, Predicate, Program, Seed, SeedSelection,
+        StaticLimits, Template,
     };
 
     fn nullary(name: &str) -> AtomPattern {
@@ -519,11 +519,18 @@ mod tests {
     fn packing_separates_positive_support_gates_and_constraints() {
         let graph = fixture();
         let empty = Seed::new(graph.program(), []).expect("empty seed");
-        let selected = Seed::new(
+        let selected = SeedSelection::from_carrier_atoms(
             graph.program(),
-            [graph.atoms()[0].clone(), graph.atoms()[2].clone()],
+            [0, 2].map(|index| {
+                graph
+                    .program()
+                    .locate_atom(graph.atoms().at(index).unwrap(), true)
+                    .unwrap()
+                    .unwrap()
+            }),
         )
-        .expect("gate seed");
+        .expect("gate seed")
+        .to_seed();
         let plan = BatchPlan::new(&graph, 2, GpuLimits::default(), &wgpu::Limits::default())
             .expect("fits");
         let graph_plan = GraphPlan::new(&graph, &wgpu::Limits::default()).expect("graph fits");

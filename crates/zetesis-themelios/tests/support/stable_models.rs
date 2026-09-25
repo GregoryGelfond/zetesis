@@ -17,7 +17,14 @@ pub fn stable(input: &AdmittedFormula) -> BTreeSet<BTreeSet<Atom>> {
         let atoms = model
             .unwrap()
             .atoms()
-            .map(|index| input.atoms()[index].clone())
+            .map(|index| {
+                input
+                    .atoms()
+                    .at(index)
+                    .unwrap()
+                    .to_atom(zetesis_core::ValueLimits::default())
+                    .unwrap()
+            })
             .collect();
         assert!(result.insert(atoms), "a stable model returned twice");
     }

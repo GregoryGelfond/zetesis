@@ -7,32 +7,38 @@
 //! where the candidates are fewer than the
 //! argument's domain, since a relation offers no value outside its domain.
 
+use crate::formula_support::{Context, GroundingWork};
 #[cfg(test)]
 mod tests;
 
 use std::collections::BTreeSet;
 use std::mem::size_of;
+use std::ops::Range;
 
+use crate::formula_support::components::Pattern;
 use themelios_program::program::{DefaultNegation, Relation as Comparison};
 use themelios_program::symbol::{Sign as SourceSign, Symbol};
+use zetesis_core::catalog::TermAssignment;
 use zetesis_core::relation::{Failure, Relation};
-use zetesis_core::{AtomPattern, Sign, Term, Value};
+use zetesis_core::{Sign, TemplateTerm as Term};
 use zetesis_domain::{Analysis, Domain};
 
 use super::super::evaluation::Evaluation;
 use super::{Counters, Event, FormulaFailure, FormulaLimits, Location, Support};
 use crate::expansion::Budget;
+use crate::formula_binding::Binding;
 use crate::formula_ir::{Expression, LiteralIr, RuleIr};
+use crate::formula_support::Computation;
 use crate::{ExpansionFailure, ExpansionResource};
 
-type Values<'a> = Vec<&'a Symbol>;
+type Symbols<'a> = Vec<&'a Symbol>;
 
 /// One variable argument of a positive body atom: where it occurs, the
 /// variable it names, and the size of the argument's finite domain when the
 /// analysis knows one.
-struct Occurrence<'a> {
+struct Occurrence {
     literal: usize,
-    pattern: &'a AtomPattern,
+    pattern: Pattern,
     column: usize,
     slot: usize,
     width: Option<usize>,
@@ -63,24 +69,26 @@ pub(crate) struct Guards<'a, 'source> {
     bytes: usize,
 }
 
-/// The narrowed candidates of one rule's variables: a property of the rule
-/// and the analysis alone, prepared once and resolved into every completion
-/// snapshot and the final one. Its storage is one reference per candidate
-/// value of each variable of each rule, every reference charged one unit of
-/// the grounding work as it is kept, so the work ceiling bounds it; it is
-/// kept for the whole grounding and lies outside the support allowance.
-pub(crate) struct Candidates<'source> {
-    /// Each variable's candidates, in canonical order; `None` when no
-    /// argument the variable occurs at has a finite domain, so every value
-    /// remains.
-    by_variable: Vec<Option<Values<'source>>>,
-    occurrences: Vec<Occurrence<'source>>,
+/// The narrowed candidates of one rule's variables, prepared from that rule
+/// and its analysis in the source vocabulary, then resolved into every completion
+/// snapshot and the final one. Metadata retains one scoped ID per candidate
+/// value of each variable of each rule, with checked work before keeping each
+/// cell. The work ceiling bounds this metadata; as before, it is kept for the
+/// whole grounding outside the support allowance. Canonical typed payload is
+/// admitted once through the source computation and uses the support allowance.
+pub(crate) struct Candidates {
+    /// Selected cells for each variable; `None` means unrestricted and an empty
+    /// range means no candidate remains. Range order has no ASP ordering role.
+    by_variable: Vec<Option<Range<usize>>>,
+    values: TermAssignment,
+    occurrences: Vec<Occurrence>,
 }
 
-impl<'source> Candidates<'source> {
+impl Candidates {
     pub(crate) fn prepare(
-        rule: &'source RuleIr,
-        analysis: &Analysis<'source>,
+        rule: &RuleIr,
+        analysis: &Analysis<'_>,
+        computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
@@ -93,10 +101,7 @@ impl<'source> Candidates<'source> {
             counters.work(limits, rule.location)?;
             by_variable.push(None);
         }
-        let mut candidates = Self {
-            by_variable,
-            occurrences: Vec::new(),
-        };
+        let mut occurrences = Vec::new();
         for (literal, element) in rule.body.iter().enumerate() {
             // A comparison binds nothing and offers no row; it narrows the
             // candidates below, once every meet is taken.
@@ -106,44 +111,125 @@ impl<'source> Candidates<'source> {
             let LiteralIr::Atom(DefaultNegation::None, pattern) = element else {
                 return Err(failure(Failure::Predicate, rule.location));
             };
-            for (column, term) in pattern.terms().iter().enumerate() {
+            let description =
+                computation.static_pattern(*pattern, limits, counters, rule.location)?;
+            for column in 0..description.terms().len() {
                 counters.work(limits, rule.location)?;
+                let term = description
+                    .terms()
+                    .at(column)
+                    .expect("checked pattern arity");
                 let Term::Variable(slot) = term else {
                     continue;
                 };
                 let domain = argument(
                     analysis,
-                    pattern.predicate(),
+                    description.predicate(),
                     column,
                     limits,
                     counters,
                     rule.location,
                 )?;
-                let variable_candidates = candidates.by_variable.get_mut(*slot).ok_or(
-                    FormulaFailure::UnsafeVariable {
-                        variable: *slot,
-                        location: rule.location,
-                    },
-                )?;
+                let variable_candidates =
+                    by_variable
+                        .get_mut(slot)
+                        .ok_or(FormulaFailure::UnsafeVariable {
+                            variable: slot,
+                            location: rule.location,
+                        })?;
                 if let Some(domain) = domain {
                     meet(variable_candidates, domain, limits, counters, rule.location)?;
                 }
                 counters.work(limits, rule.location)?;
-                candidates
-                    .occurrences
+                occurrences
                     .try_reserve(1)
                     .map_err(|_| failure(Failure::Allocation, rule.location))?;
-                candidates.occurrences.push(Occurrence {
+                occurrences.push(Occurrence {
                     literal,
-                    pattern,
+                    pattern: *pattern,
                     column,
-                    slot: *slot,
+                    slot,
                     width: domain.map(BTreeSet::len),
                 });
             }
         }
-        candidates.narrow(rule, limits, budget, counters)?;
+        let mut candidates = Self::admit(
+            by_variable,
+            occurrences,
+            computation,
+            limits,
+            budget,
+            counters,
+            rule.location,
+        )?;
+        candidates.narrow(rule, computation, limits, counters)?;
         Ok(candidates)
+    }
+
+    /// Replace the analysis's temporary borrowed-symbol sets with one scoped
+    /// canonical selection. The positive-flat certificate excludes constructors
+    /// with children; each borrowed descriptor names exactly one admitted root.
+    fn admit(
+        symbols: Vec<Option<Symbols<'_>>>,
+        occurrences: Vec<Occurrence>,
+        computation: &mut Computation<'_, '_>,
+        limits: &FormulaLimits,
+        budget: &mut Budget,
+        counters: &mut Counters,
+        location: Location,
+    ) -> Result<Self, FormulaFailure> {
+        let mut count = 0_usize;
+        for selected in &symbols {
+            counters.work(limits, location)?;
+            count = count
+                .checked_add(selected.as_ref().map_or(0, Vec::len))
+                .ok_or_else(|| failure(Failure::Overflow, location))?;
+        }
+        let mut by_variable = Vec::new();
+        by_variable
+            .try_reserve_exact(symbols.len())
+            .map_err(|_| failure(Failure::Allocation, location))?;
+        let mut values = computation.read().assignment();
+        // Candidate metadata deliberately retains its existing work-bounded
+        // policy; this is not a second charge against canonical payload storage.
+        values
+            .resize_with(count, usize::MAX, || counters.work(limits, location))
+            .map_err(|error| crate::formula_binding::failure(error, location))?;
+        let empty = computation.read().assignment();
+        let mut end = 0;
+        for selected in symbols {
+            counters.work(limits, location)?;
+            let Some(selected) = selected else {
+                by_variable.push(None);
+                continue;
+            };
+            let start = end;
+            for symbol in selected {
+                counters.charge_work(1 + atomic_bytes(symbol) as u128, limits, location)?;
+                budget.charge(ExpansionResource::TermWork, 1, location)?;
+                let key = computation.construct(
+                    crate::structural_value::view(symbol),
+                    empty.as_slice(),
+                    &[],
+                    zetesis_core::catalog::Limits {
+                        max_nodes: 1,
+                        max_depth: 1,
+                        max_bytes: usize::MAX,
+                    },
+                    GroundingWork::new(limits, counters, location),
+                )?;
+                values
+                    .set_with(end, &key, || counters.work(limits, location))
+                    .map_err(|error| crate::formula_binding::failure(error, location))?;
+                end += 1;
+            }
+            by_variable.push(Some(start..end));
+        }
+        Ok(Self {
+            by_variable,
+            values,
+            occurrences,
+        })
     }
 
     /// Exclude from each variable's candidates every value a comparison over
@@ -153,17 +239,18 @@ impl<'source> Candidates<'source> {
     fn narrow(
         &mut self,
         rule: &RuleIr,
+        computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
-        budget: &mut Budget,
         counters: &mut Counters,
     ) -> Result<(), FormulaFailure> {
         let mut evaluation = Evaluation::default();
+        let mut binding = None;
         for literal in &rule.body {
             counters.work(limits, rule.location)?;
             let Some(comparison) = unary(literal) else {
                 continue;
             };
-            let Some(values) = self.by_variable.get_mut(comparison.slot).ok_or(
+            let Some(selected) = self.by_variable.get_mut(comparison.slot).ok_or(
                 FormulaFailure::UnsafeVariable {
                     variable: comparison.slot,
                     location: rule.location,
@@ -172,29 +259,47 @@ impl<'source> Candidates<'source> {
             else {
                 continue;
             };
-            let mut kept = 0;
-            for index in 0..values.len() {
-                let symbol = values[index];
-                counters.charge_work(1 + atomic_bytes(symbol) as u128, limits, rule.location)?;
-                budget.charge(ExpansionResource::TermWork, 1, rule.location)?;
-                let candidate = crate::compile::scalar(symbol, rule.location)?;
+            if selected.start == selected.end {
+                continue;
+            }
+            if binding.is_none() {
+                let mut frame = Binding::new(computation, limits, counters, rule.location)?;
+                frame.extend_scope(1, computation, limits, counters, rule.location)?;
+                binding = Some(frame);
+            }
+            let binding = binding
+                .as_mut()
+                .expect("nonempty candidates have one binding slot");
+            let mut kept = selected.start;
+            for index in selected.clone() {
+                counters.work(limits, rule.location)?;
+                let key = self
+                    .values
+                    .key(index)
+                    .map_err(|error| crate::formula_binding::assignment(error, rule.location))?
+                    .expect("candidate cells are bound");
+                binding.set(0, &key, limits, counters, rule.location)?;
                 if excludes(
                     &comparison,
-                    &candidate,
+                    binding,
                     &mut evaluation,
+                    computation,
                     limits,
-                    budget,
                     counters,
                     rule.location,
                 )? {
                     counters.record(Event::DomainExcludedValue);
                 } else {
-                    values[kept] = symbol;
+                    self.values
+                        .set_with(kept, &key, || counters.work(limits, rule.location))
+                        .map_err(|error| crate::formula_binding::failure(error, rule.location))?;
                     kept += 1;
                 }
             }
             counters.work(limits, rule.location)?;
-            values.truncate(kept);
+            // Cells outside the narrowed range are inactive metadata. Their
+            // capacity does not own or retain another copy of the typed payload.
+            selected.end = kept;
         }
         Ok(())
     }
@@ -202,7 +307,7 @@ impl<'source> Candidates<'source> {
 
 /// Intersect a variable's candidates with one more argument domain, in place.
 fn meet<'p>(
-    target: &mut Option<Values<'p>>,
+    target: &mut Option<Symbols<'p>>,
     source: &BTreeSet<&'p Symbol>,
     limits: &FormulaLimits,
     counters: &mut Counters,
@@ -250,34 +355,44 @@ fn meet<'p>(
 /// refusal is returned as it is.
 fn excludes(
     comparison: &Unary<'_>,
-    candidate: &Value,
+    candidate: &Binding<'_>,
     evaluation: &mut Evaluation,
+    computation: &mut Computation<'_, '_>,
     limits: &FormulaLimits,
-    budget: &mut Budget,
     counters: &mut Counters,
     location: Location,
 ) -> Result<bool, FormulaFailure> {
     let left = evaluation.expression(
         comparison.left,
-        |_| Ok(candidate),
+        |_| candidate.key(0, location),
+        computation,
         limits,
-        budget,
         counters,
         location,
     );
     let sides = left.and_then(|left| {
         let right = evaluation.expression(
             comparison.right,
-            |_| Ok(candidate),
+            |_| candidate.key(0, location),
+            computation,
             limits,
-            budget,
             counters,
             location,
         )?;
         Ok((left, right))
     });
     match sides {
-        Ok((left, right)) => Ok(!super::super::compare(&left, comparison.relation, &right)),
+        Ok((left, right)) => {
+            let read = computation.read();
+            let left = read
+                .term(&left)
+                .map_err(|error| crate::formula_binding::assignment(error.into(), location))?;
+            let right = read
+                .term(&right)
+                .map_err(|error| crate::formula_binding::assignment(error.into(), location))?;
+            super::super::compare(left, comparison.relation, right, limits, counters, location)
+                .map(|satisfied| !satisfied)
+        }
         Err(FormulaFailure::Expansion(ExpansionFailure::Evaluation { .. })) => Ok(false),
         Err(error) => Err(error),
     }
@@ -287,14 +402,14 @@ impl<'source> Support<'source> {
     pub(crate) fn domain_guards<'a>(
         &'a self,
         rule: &'a RuleIr,
-        candidates: &'a Candidates<'_>,
+        candidates: &'a Candidates,
+        computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
-        budget: &mut Budget,
         counters: &mut Counters,
     ) -> Result<Option<Guards<'a, 'source>>, FormulaFailure> {
-        let before = counters.work;
-        let result = Guards::prepare(self, rule, candidates, limits, budget, counters);
-        counters.record(Event::DomainPrepareWork(counters.work - before));
+        let before = counters.accounting.work;
+        let result = Guards::prepare(self, rule, candidates, computation, limits, counters);
+        counters.record(Event::DomainPrepareWork(counters.accounting.work - before));
         result
     }
 }
@@ -303,9 +418,9 @@ impl<'a, 'source> Guards<'a, 'source> {
     fn prepare(
         support: &'a Support<'source>,
         rule: &'a RuleIr,
-        candidates: &'a Candidates<'_>,
+        candidates: &'a Candidates,
+        computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
-        budget: &mut Budget,
         counters: &mut Counters,
     ) -> Result<Option<Self>, FormulaFailure> {
         if rule.variables == 0 {
@@ -321,18 +436,11 @@ impl<'a, 'source> Guards<'a, 'source> {
             size_of::<Self>()
                 + size_of::<Restriction<'_, '_>>()
                 + size_of::<Vec<Restriction<'_, '_>>>()
-                + size_of::<Vec<u32>>()
-                + size_of::<Value>(),
+                + size_of::<Vec<u32>>(),
             limits,
             counters,
         )?;
-        let restrictions = guards.restrict(
-            &candidates.occurrences,
-            &candidates.by_variable,
-            limits,
-            budget,
-            counters,
-        )?;
+        let restrictions = guards.restrict(candidates, computation, limits, counters)?;
         guards.restrictions = restrictions;
         Ok((!guards.restrictions.is_empty()).then_some(guards))
     }
@@ -341,41 +449,57 @@ impl<'a, 'source> Guards<'a, 'source> {
     /// row of its relation, resolved into that relation's dictionary.
     fn restrict(
         &mut self,
-        occurrences: &[Occurrence<'a>],
-        candidates: &[Option<Values<'_>>],
+        candidates: &Candidates,
+        computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
-        budget: &mut Budget,
         counters: &mut Counters,
     ) -> Result<Vec<Restriction<'a, 'source>>, FormulaFailure> {
         let mut restrictions = Vec::new();
-        self.reserve(&mut restrictions, occurrences.len(), limits, counters)?;
-        for occurrence in occurrences {
+        self.reserve(
+            &mut restrictions,
+            candidates.occurrences.len(),
+            limits,
+            counters,
+        )?;
+        for occurrence in &candidates.occurrences {
             counters.work(limits, self.rule.location)?;
-            let Some(relation) = self
+            let components = self
                 .support
-                .relations
-                .relation(occurrence.pattern.predicate())
+                .components()
+                .ok_or_else(|| crate::formula_support::components::missing(self.rule.location))?;
+            let pattern =
+                occurrence
+                    .pattern
+                    .get(components, limits, counters, self.rule.location)?;
+            let Some(relation) = self.support.relations.relation_with(
+                pattern.predicate(),
+                limits,
+                counters,
+                self.rule.location,
+            )?
             else {
                 continue;
             };
             if relation.column(occurrence.column).is_none() {
                 return Err(failure(Failure::Column, self.rule.location));
             }
-            let Some(values) = &candidates[occurrence.slot] else {
+            let Some(selected) = &candidates.by_variable[occurrence.slot] else {
                 continue;
             };
             // Candidates as many as the argument's domain admit every value
             // the relation can offer; only fewer can reject a row.
-            if occurrence.width.is_some_and(|width| values.len() >= width) {
+            if occurrence
+                .width
+                .is_some_and(|width| selected.len() >= width)
+            {
                 continue;
             }
             let ids = self.resolve(
                 relation,
                 occurrence.column,
-                values,
-                limits,
-                budget,
-                counters,
+                &candidates.values,
+                selected.clone(),
+                Context::new(computation, limits, counters, self.rule.location),
             )?;
             counters.work(limits, self.rule.location)?;
             restrictions.push(Restriction {
@@ -388,53 +512,45 @@ impl<'a, 'source> Guards<'a, 'source> {
         Ok(restrictions)
     }
 
-    /// Convert one borrowed source symbol to a value, charging its payload.
-    /// The caller releases the returned bytes once the value is dropped.
-    fn admit_value(
-        &mut self,
-        symbol: &Symbol,
-        limits: &FormulaLimits,
-        budget: &mut Budget,
-        counters: &mut Counters,
-    ) -> Result<(Value, usize), FormulaFailure> {
-        let payload = atomic_bytes(symbol);
-        self.include(payload, limits, counters)?;
-        counters.charge_work(1 + payload as u128, limits, self.rule.location)?;
-        budget.charge(ExpansionResource::TermWork, 1, self.rule.location)?;
-        let value = crate::compile::scalar(symbol, self.rule.location)?;
-        let actual = match &value {
-            Value::String(text) | Value::Symbol(text) => text.capacity(),
-            _ => 0,
-        };
-        if actual > payload {
-            self.include_actual(actual - payload, limits, counters)?;
-        }
-        Ok((value, actual.max(payload)))
-    }
-
     fn resolve(
         &mut self,
         relation: &'a Relation<'source>,
         column: usize,
-        values: &[&Symbol],
-        limits: &FormulaLimits,
-        budget: &mut Budget,
-        counters: &mut Counters,
+        values: &TermAssignment,
+        selected: Range<usize>,
+        context: Context<'_, &Computation<'_, '_>>,
     ) -> Result<Vec<u32>, FormulaFailure> {
+        let Context {
+            computation,
+            work:
+                GroundingWork {
+                    limits,
+                    counters,
+                    location: _,
+                },
+        } = context;
         let mut ids = Vec::new();
-        self.reserve(&mut ids, values.len(), limits, counters)?;
-        for &symbol in values {
-            let (value, charged) = self.admit_value(symbol, limits, budget, counters)?;
-            let outer = self.support.live.get() - relation.storage().retained_bytes;
-            let base = counters.work;
+        self.reserve(&mut ids, selected.len(), limits, counters)?;
+        for index in selected {
+            counters.work(limits, self.rule.location)?;
+            let key = values
+                .key(index)
+                .map_err(|error| crate::formula_binding::assignment(error, self.rule.location))?
+                .expect("candidate cells are bound");
+            counters.work(limits, self.rule.location)?;
+            let value = computation.read().term(&key).map_err(|error| {
+                crate::formula_binding::assignment(error.into(), self.rule.location)
+            })?;
+            let outer = self.support.live_bytes() - relation.storage().retained_bytes;
+            let base = counters.accounting.work;
             let attempt = relation.query_attempt(
-                &[(column, &value)],
+                &[(column, value)],
                 zetesis_core::relation::Limits {
                     max_rows: limits.theory.max_atoms,
                     max_columns: relation.predicate().arity(),
                     max_values: limits.max_support_index_entries,
                     max_bytes: limits.max_support_bytes - outer,
-                    max_work: limits.max_work - counters.work,
+                    max_work: limits.max_work - counters.accounting.work,
                 },
             );
             counters.charge_work(attempt.work, limits, self.rule.location)?;
@@ -455,8 +571,6 @@ impl<'a, 'source> Guards<'a, 'source> {
                 .first()
                 .map(|equality| equality.value_id());
             drop(query);
-            drop(value);
-            self.release(charged);
             if let Some(id) = id {
                 let mut start = 0;
                 let mut end = ids.len();
@@ -542,7 +656,12 @@ impl<'a, 'source> Guards<'a, 'source> {
             .get()
             .checked_add(bytes)
             .ok_or_else(|| failure(Failure::Overflow, self.rule.location))?;
-        Support::admit(total, limits, counters, self.rule.location)?;
+        Support::admit(
+            self.support.bytes_with_append(total, self.rule.location)?,
+            limits,
+            counters,
+            self.rule.location,
+        )?;
         self.bytes = self
             .bytes
             .checked_add(bytes)
@@ -563,8 +682,7 @@ impl<'a, 'source> Guards<'a, 'source> {
             .ok_or_else(|| failure(Failure::Overflow, self.rule.location))?;
         Support::admit(
             self.support
-                .live
-                .get()
+                .live_bytes()
                 .checked_add(proposed)
                 .ok_or_else(|| failure(Failure::Overflow, self.rule.location))?,
             limits,
@@ -599,13 +717,17 @@ impl<'a, 'source> Guards<'a, 'source> {
             .ok_or_else(|| failure(Failure::Overflow, self.rule.location))?;
         self.bytes = owned;
         self.support.live.set(total);
-        counters.record(Event::SupportPeakBytes(total as u128));
-        Support::admit(total, limits, counters, self.rule.location)
-    }
-
-    fn release(&mut self, bytes: usize) {
-        self.bytes -= bytes;
-        self.support.live.set(self.support.live.get() - bytes);
+        counters.record(Event::SupportPeakBytes(
+            total as u128
+                + self.support.append_bytes() as u128
+                + self.support.workspace.bytes() as u128,
+        ));
+        Support::admit(
+            self.support.bytes_with_append(total, self.rule.location)?,
+            limits,
+            counters,
+            self.rule.location,
+        )
     }
 }
 
@@ -634,7 +756,7 @@ fn unary(literal: &LiteralIr) -> Option<Unary<'_>> {
 
 fn argument<'a, 'p>(
     analysis: &'a Analysis<'p>,
-    predicate: &zetesis_core::Predicate,
+    predicate: zetesis_core::catalog::PredicateRef<'_>,
     column: usize,
     limits: &FormulaLimits,
     counters: &mut Counters,

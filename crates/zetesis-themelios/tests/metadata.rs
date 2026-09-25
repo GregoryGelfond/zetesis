@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
-use zetesis_core::{Atom, Program, Term};
+use zetesis_core::{Atom, Program};
 use zetesis_cpu::{Cancellation, CandidateLimits, Candidates, Limits, check};
 use zetesis_themelios::{
     AdmissionOptions, Admitted, BundleAdmissionError, BundleAdmissionOptions, BundleLimits,
@@ -48,7 +48,7 @@ fn models(program: &Program) -> Models {
                         .closure()
                         .atoms()
                         .iter()
-                        .cloned()
+                        .map(|atom| atom.to_atom(zetesis_core::ValueLimits::default()).unwrap())
                         .collect::<BTreeSet<_>>()
                 )
             );
@@ -62,7 +62,7 @@ fn displays(models: &Models, selection: &OutputSelection) -> Displays {
     for model in models {
         let shown = model
             .iter()
-            .filter(|atom| selection.includes(atom))
+            .filter(|atom| selection.includes(*atom))
             .cloned()
             .collect();
         *displays.entry(shown).or_default() += 1;
@@ -75,7 +75,10 @@ fn defined_signatures_are_located_declarations_without_logical_effects() {
     let source = "#defined missing/3. p(1). {q}. #defined p/1.";
     let accepted = input(source);
     let base = input("p(1). {q}.");
-    assert_eq!(accepted.program().templates(), base.program().templates());
+    assert_eq!(
+        accepted.program().templates().iter().collect::<Vec<_>>(),
+        base.program().templates().iter().collect::<Vec<_>>()
+    );
     assert_eq!(models(accepted.program()), models(base.program()));
     assert!(!accepted.metadata().output().is_explicit());
     assert!(
@@ -85,7 +88,7 @@ fn defined_signatures_are_located_declarations_without_logical_effects() {
             .iter()
             .all(|entry| matches!(entry.directive(), SourceDirective::Defined(_)))
     );
-    let first = &accepted.metadata().directives()[0];
+    let first = accepted.metadata().directives().at(0).unwrap();
     assert_eq!(
         accepted
             .source()
@@ -169,7 +172,7 @@ fn duplicate_metadata_occurrences_keep_their_original_spans() {
         .expect("located metadata");
     assert_eq!(accepted.metadata().directives().len(), 4);
     assert_eq!(accepted.metadata().output().signatures().len(), 1);
-    for entry in accepted.metadata().directives() {
+    for entry in accepted.metadata().directives().iter() {
         assert_eq!(entry.location().source, SourceId::new(91));
         let original = accepted
             .source()
@@ -323,7 +326,7 @@ fn bundle_metadata_unions_global_selection_and_keeps_file_identities() {
         identities,
         BTreeSet::from([SourceId::new(0), SourceId::new(1)])
     );
-    for entry in accepted.metadata().directives() {
+    for entry in accepted.metadata().directives().iter() {
         assert!(
             accepted
                 .bundle()
@@ -357,18 +360,33 @@ fn bundle_metadata_unions_global_selection_and_keeps_file_identities() {
 fn oracle_atom(source: &str) -> Atom {
     let accepted =
         admit(format!("{source}."), AdmissionOptions::default()).expect("whole scalar oracle atom");
-    let head = accepted.program().templates()[0]
+    let head = accepted
+        .program()
+        .templates()
+        .at(0)
+        .unwrap()
         .head()
         .expect("oracle fact");
     let values = head
         .terms()
         .iter()
         .map(|term| match term {
-            Term::Constant(value) => value.clone(),
-            Term::Variable(_) => panic!("ground oracle atom"),
+            zetesis_core::TemplateTerm::Constant(value) => value
+                .to_value(zetesis_core::ValueLimits::default())
+                .unwrap(),
+            zetesis_core::TemplateTerm::Variable(_) => panic!("ground oracle atom"),
         })
         .collect();
-    Atom::new(head.predicate().clone(), values).expect("oracle atom arity")
+    Atom::new(
+        zetesis_core::Predicate::with_sign(
+            head.predicate().name(),
+            head.predicate().arity(),
+            head.predicate().sign(),
+        )
+        .unwrap(),
+        values,
+    )
+    .expect("oracle atom arity")
 }
 
 fn oracle_json(output: &[u8]) -> Displays {

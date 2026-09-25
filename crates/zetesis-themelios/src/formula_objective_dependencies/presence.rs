@@ -15,49 +15,96 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::formula_support::components::Term;
 use themelios_analysis::depend::DependencyGraph;
 use themelios_program::program::AggregateFunction;
 use themelios_program::symbol::Signature;
-use zetesis_core::{Predicate, Term, Value};
+use zetesis_core::catalog::PredicateRef;
+use zetesis_core::{TemplateTerm, ValueNodeRef};
 
 use crate::expansion::Budget;
 use crate::formula::ceiling;
 use crate::formula_binding::Binding;
 use crate::formula_ir::{AggregateIr, AggregateKey, Prepared};
-use crate::formula_support::{Counters, Join, Support};
+use crate::formula_support::{Computation, Counters, Join, Support};
 use crate::{FormulaFailure, FormulaLimits, FormulaResource};
 
-use super::{LiteralIr, ObjectiveIr, RuleIr, dependency_closure, relevant_head, signature};
+use super::{Context, LiteralIr, ObjectiveIr, RuleIr, dependency_closure, relevant_head};
 
 mod flat;
 
 /// Completed exclusions and source carriers over borrowed predicates.
-/// Carrier values are owned once per producer/forwarding family. Membership
+/// Carrier IDs are selected once per producer/forwarding family. Membership
 /// searches these bounded families; it never tests answer-set realizability.
 /// Nonnumeric exclusions apply only to the same unary generated weight. Neither
 /// certificate replaces original equalities or asserts candidate activity.
 #[derive(Default)]
 pub(crate) struct Presence<'a> {
-    nonnumeric: BTreeSet<&'a Predicate>,
+    nonnumeric: Predicates<'a>,
     carriers: Vec<flat::Carrier<'a>>,
     carrier_entries: usize,
 }
 
+/// Predicate ordering is not used by these certificates. Membership uses the
+/// checked comparator; entries own only borrowed prefix views, not names.
+#[derive(Default)]
+pub(super) struct Predicates<'source>(Vec<PredicateRef<'source>>);
+impl<'source> Predicates<'source> {
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+    fn contains(
+        &self,
+        predicate: PredicateRef<'_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: themelios_base::span::Location,
+    ) -> Result<bool, FormulaFailure> {
+        for current in &self.0 {
+            if current
+                .compare_ref_with(predicate, || counters.work(limits, location))?
+                .is_eq()
+            {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+    fn insert(
+        &mut self,
+        predicate: PredicateRef<'source>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: themelios_base::span::Location,
+    ) -> Result<bool, FormulaFailure> {
+        if self.contains(predicate, limits, counters, location)? {
+            return Ok(false);
+        }
+        counters.charge_work(self.0.len() as u128 + 1, limits, location)?;
+        self.0
+            .try_reserve(1)
+            .map_err(|_| FormulaFailure::Objective {
+                error: zetesis_objective::AdmissionError::Allocation,
+                location,
+            })?;
+        self.0.push(predicate);
+        Ok(true)
+    }
+}
+
 impl Presence<'_> {
-    /// Completed storage that coexists with any independently selected query
-    /// certificate. Planning temporaries have already been released.
     pub(crate) fn retained_entries(&self) -> usize {
         self.nonnumeric.len().saturating_add(self.carrier_entries)
     }
 
-    /// A completed proposal row is eligible only when every certified observer
-    /// in it carries a value in its completed source carrier. Predicates without
-    /// an applicable refinement retain their complete possible values. Equalities remain in
-    /// the theory; this filter affects objective specialization only.
     pub(crate) fn eligible(
         &self,
         objective: &ObjectiveIr,
         binding: &Binding,
+        computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
     ) -> Result<bool, FormulaFailure> {
@@ -65,16 +112,30 @@ impl Presence<'_> {
             return Ok(true);
         }
         for atom in &objective.positive {
+            let atom = computation.static_pattern(*atom, limits, counters, objective.location)?;
             counters.work(limits, objective.location)?;
+            let predicate = atom.predicate();
             for carrier in &self.carriers {
-                counters.work(limits, objective.location)?;
-                if carrier.predicates.contains(atom.predicate()) {
-                    let [term] = atom.terms() else {
-                        unreachable!("carrier certificates are unary")
+                if carrier
+                    .predicates
+                    .contains(predicate, limits, counters, objective.location)?
+                {
+                    counters.work(limits, objective.location)?;
+                    let term = atom.terms().at(0).expect("carrier certificates are unary");
+                    let key = match term {
+                        TemplateTerm::Constant(value) => {
+                            counters.work(limits, objective.location)?;
+                            computation.read().term_key(value).map_err(|error| {
+                                crate::formula_binding::assignment(error.into(), objective.location)
+                            })?
+                        }
+                        TemplateTerm::Variable(variable) => {
+                            binding.key(variable, objective.location)?
+                        }
                     };
                     if !carrier
                         .values
-                        .contains(binding.resolve(term, objective.location)?)
+                        .contains(&key, limits, counters, objective.location)?
                     {
                         return Ok(false);
                     }
@@ -83,10 +144,11 @@ impl Presence<'_> {
         }
         Ok(true)
     }
-    /// False proves exclusion; true still requires completed-support activation.
+
     pub(crate) fn may_have_numeric_weight(
         &self,
         objective: &ObjectiveIr,
+        computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
     ) -> Result<bool, FormulaFailure> {
@@ -98,11 +160,18 @@ impl Presence<'_> {
             return Ok(true);
         };
         for atom in &objective.positive {
+            let atom = computation.static_pattern(*atom, limits, counters, objective.location)?;
             counters.work(limits, objective.location)?;
-            if self.nonnumeric.contains(atom.predicate())
-                && atom.terms() == [Term::Variable(*weight)]
+            if self
+                .nonnumeric
+                .contains(atom.predicate(), limits, counters, objective.location)?
             {
-                return Ok(false);
+                counters.work(limits, objective.location)?;
+                if atom.terms().len() == 1
+                    && atom.terms().at(0) == Some(TemplateTerm::Variable(*weight))
+                {
+                    return Ok(false);
+                }
             }
         }
         Ok(true)
@@ -117,51 +186,59 @@ pub(super) fn required(
     objectives: &[ObjectiveIr],
     graph: &DependencyGraph,
     generated: &BTreeMap<Signature, BTreeSet<usize>>,
-) -> BTreeSet<usize> {
+    context: &mut Context<'_, '_>,
+) -> Result<BTreeSet<usize>, FormulaFailure> {
     let mut observed = BTreeSet::new();
     for objective in objectives {
+        context.location = objective.location;
         let Some(Term::Variable(weight)) = objective.weight.term() else {
             continue;
         };
         for atom in &objective.positive {
-            let predicate = signature(atom.predicate());
-            if generated.get(&predicate).is_some_and(|positions| {
-                positions
-                    .iter()
-                    .any(|&position| atom.terms()[position] == Term::Variable(*weight))
-            }) {
-                observed.insert(predicate);
+            let predicate = context.signature(*atom)?;
+            let Some(positions) = generated.get(&predicate) else {
+                continue;
+            };
+            let atom = context.pattern(*atom)?;
+            for &position in positions {
+                if context.term(atom, position)? == TemplateTerm::Variable(*weight) {
+                    observed.insert(predicate);
+                    break;
+                }
             }
         }
     }
     let relevant = dependency_closure(graph, observed);
-    rules
-        .iter()
-        .filter(|rule| relevant_head(&rule.head, &relevant))
-        .flat_map(|rule| &rule.body)
-        .filter_map(|literal| match literal {
-            LiteralIr::Aggregate(aggregate)
-                if matches!(
+    let mut required = BTreeSet::new();
+    for rule in rules {
+        context.location = rule.location;
+        if !relevant_head(&rule.head, &relevant, context)? {
+            continue;
+        }
+        for literal in &rule.body {
+            if let LiteralIr::Aggregate(aggregate) = literal
+                && matches!(
                     aggregate.function,
                     AggregateFunction::Min | AggregateFunction::Max
-                ) =>
+                )
             {
-                Some(aggregate.id)
+                required.insert(aggregate.id);
             }
-            _ => None,
-        })
-        .collect()
+        }
+    }
+    Ok(required)
 }
 
-pub(crate) fn check<'a>(
-    prepared: &'a Prepared,
+pub(crate) fn check<'source>(
+    prepared: &Prepared,
     support: &Support,
+    computation: &mut Computation<'_, 'source>,
     limits: &FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
-) -> Result<Presence<'a>, FormulaFailure> {
+) -> Result<Presence<'source>, FormulaFailure> {
     let mut presence = Presence::default();
-    certify_priorities(prepared, &mut presence, limits, budget, counters)?;
+    certify_priorities(prepared, &mut presence, computation, limits, counters)?;
     if prepared.objective_extrema.is_empty() {
         return Ok(presence);
     }
@@ -173,33 +250,41 @@ pub(crate) fn check<'a>(
             if !prepared.objective_extrema.contains(&aggregate.id) {
                 continue;
             }
-            let mut outer = Join::rule(rule, support, budget)?;
-            while let Some(binding) = outer.next(limits, budget, counters, rule.location)? {
+            let mut outer = Join::rule(rule, support, computation, limits, budget, counters)?;
+            while let Some(binding) =
+                outer.next(computation, limits, budget, counters, rule.location)?
+            {
                 if mixed(
                     aggregate,
                     &rule.body_binding(&binding),
                     support,
-                    limits,
                     budget,
-                    counters,
-                    rule.location,
+                    crate::formula_support::Context::new(
+                        &mut *computation,
+                        limits,
+                        counters,
+                        rule.location,
+                    ),
                 )? {
                     let Some(excluded) = flat::certify(
                         prepared,
                         rule,
                         aggregate,
                         presence.nonnumeric.len() + presence.carrier_entries,
+                        computation,
                         limits,
                         counters,
                     )?
                     else {
                         continue;
                     };
-                    for predicate in excluded {
+                    for predicate in excluded.0 {
                         counters.work(limits, rule.location)?;
                         // Consuming one temporary entry releases its slot before
                         // it is transferred into the completed certificate.
-                        presence.nonnumeric.insert(predicate);
+                        presence
+                            .nonnumeric
+                            .insert(predicate, limits, counters, rule.location)?;
                     }
                 }
             }
@@ -211,26 +296,33 @@ pub(crate) fn check<'a>(
 /// Try applicable flat refinements for requested generated fields. No returned
 /// carrier means no extra exclusion, while an applied operation's errors remain
 /// errors. This never equates unqualified precision with successful proof.
-fn certify_priorities<'a>(
-    prepared: &'a Prepared,
-    presence: &mut Presence<'a>,
+fn certify_priorities<'source>(
+    prepared: &Prepared,
+    presence: &mut Presence<'source>,
+    computation: &mut Computation<'_, 'source>,
     limits: &FormulaLimits,
-    budget: &mut Budget,
     counters: &mut Counters,
 ) -> Result<(), FormulaFailure> {
-    let mut requested = BTreeSet::new();
+    let mut requested = Predicates::default();
     for objective in &prepared.objectives {
         for &index in &objective.priority_sources {
-            let predicate = objective.positive[index].predicate();
+            let atom = computation.static_pattern(
+                objective.positive[index],
+                limits,
+                counters,
+                objective.location,
+            )?;
             counters.work(limits, objective.location)?;
-            if !requested.contains(predicate) {
+            let predicate = atom.predicate();
+            counters.work(limits, objective.location)?;
+            if !requested.contains(predicate, limits, counters, objective.location)? {
                 ceiling(
                     FormulaResource::ObjectivePresenceEntries,
                     requested.len() as u128 + 1,
                     limits.max_objective_presence_entries as u128,
                     objective.location,
                 )?;
-                requested.insert(predicate);
+                requested.insert(predicate, limits, counters, objective.location)?;
             }
         }
     }
@@ -244,8 +336,8 @@ fn certify_priorities<'a>(
             rule,
             &requested,
             requested.len() + presence.carrier_entries,
+            computation,
             limits,
-            budget,
             counters,
         )?
         else {
@@ -276,16 +368,20 @@ fn certify_priorities<'a>(
 /// Distinct raw alternatives with one full key have the same first-value class,
 /// so class inspection needs no tuple store or alternate coalescing algorithm.
 /// Each completed rule binding is inspected independently; all repeated join
-/// work and copied values remain charged through the existing finite budgets.
+/// work and leased binding metadata remain charged through the finite budgets.
 fn mixed(
     aggregate: &AggregateIr,
     binding: &Binding,
     support: &Support,
-    limits: &FormulaLimits,
     budget: &mut Budget,
-    counters: &mut Counters,
-    location: themelios_base::span::Location,
+    context: crate::formula_support::Context<'_, &mut Computation<'_, '_>>,
 ) -> Result<bool, FormulaFailure> {
+    let crate::formula_support::Context { computation, work } = context;
+    let crate::formula_support::GroundingWork {
+        limits,
+        counters,
+        location,
+    } = work;
     let mut numeric = false;
     let mut nonnumeric = false;
     for element in &aggregate.elements {
@@ -299,11 +395,19 @@ fn mixed(
             element.variables,
             support,
             budget,
-            location,
+            crate::formula_support::Context::new(&*computation, limits, counters, location),
         )?;
-        while let Some(row) = local.next(limits, budget, counters, location)? {
+        while let Some(row) = local.next(computation, limits, budget, counters, location)? {
             counters.work(limits, location)?;
-            if matches!(row.resolve(first, location)?, Value::Number(_)) {
+            if matches!(
+                row.resolve(
+                    computation.static_term(*first, limits, counters, location)?,
+                    computation.read(),
+                    location
+                )?
+                .descriptor(),
+                ValueNodeRef::Number(_)
+            ) {
                 numeric = true;
             } else {
                 nonnumeric = true;

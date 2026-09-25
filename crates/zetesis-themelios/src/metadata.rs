@@ -1,12 +1,21 @@
 //! Located source declarations and display selection, separate from semantics.
 
 mod compile;
+#[cfg(test)]
+mod tests;
+mod vocabulary;
+pub(crate) use vocabulary::{
+    Authority as Admission, Constructor, MetadataVocabulary, Read, Scalar,
+};
+pub use vocabulary::{MetadataStorageError, MetadataStorageLimits};
 mod selection;
 mod projection;
 
 pub use projection::{PreparedProjection, ProjectSelection};
 
-pub use selection::{AtomSelection, AtomSelectionError, AtomSelectionLimits, OutputSelection};
+pub use selection::{
+    AtomSelection, AtomSelectionError, AtomSelectionLimits, OutputSelection, Signatures,
+};
 
 pub use compile::{MetadataError, MetadataFeature, MetadataLimits, MetadataResource};
 
@@ -19,7 +28,8 @@ use themelios_program::symbol::Signature;
 use themelios_syntax::ast;
 use themelios_syntax::parse::Parse;
 use themelios_syntax::tree::AstNode;
-use zetesis_core::Predicate;
+pub(crate) use vocabulary::Predicate;
+use zetesis_core::Predicate as OwnedPredicate;
 
 use crate::diagnostic::unsupported;
 use crate::expansion::check;
@@ -27,121 +37,253 @@ use crate::{
     AdmissionFailure, ExpansionFailure, ExpansionLimits, ExpansionResource, ProfileFeature,
 };
 
-/// An accepted metadata directive. These declarations construct no logical
-/// rule or atom. Projection declarations select a separate explicit enumeration
-/// policy only after their fixed original-atom domain has completed.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum SourceDirective {
-    /// `#defined p/n.` declares an intended signature for source diagnostics.
-    Defined(Predicate),
-    /// `#show p/n.` adds this signature to the explicit display selection.
-    ShowSignature(Predicate),
-    /// `#show.` activates explicit display selection without adding a signature.
-    /// It does not remove signatures supplied by other `#show` directives.
+/// An accepted borrowed metadata directive. Signature payload belongs to the
+/// enclosing immutable metadata vocabulary, independent of logical admission.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SourceDirective<'a> {
+    /// Intended signed signature for source diagnostics.
+    Defined(zetesis_core::catalog::PredicateRef<'a>),
+    /// Explicit atom display signature.
+    ShowSignature(zetesis_core::catalog::PredicateRef<'a>),
+    /// Activate explicit atom display without adding a signature.
     ShowEmpty,
-    /// A term-valued observation; it does not activate signature-only output.
+    /// Term-valued observation, separate from atom selection.
     ShowTerm,
-    /// Signed predicate selected for explicit projected enumeration.
-    ProjectSignature(Predicate),
-    /// An atom/body declaration requiring completed source grounding.
+    /// Explicit projected-enumeration signature.
+    ProjectSignature(zetesis_core::catalog::PredicateRef<'a>),
+    /// Atom/body projection requiring complete source grounding.
     ProjectAtom,
 }
-
-/// One original metadata occurrence, before equal directives are deduplicated.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct LocatedDirective {
-    directive: SourceDirective,
+#[derive(Clone, Copy, Debug)]
+enum DirectiveKind {
+    Defined(Predicate),
+    ShowSignature(Predicate),
+    ShowEmpty,
+    ShowTerm,
+    ProjectSignature(Predicate),
+    ProjectAtom,
+}
+#[derive(Clone, Copy, Debug)]
+struct Directive {
+    kind: DirectiveKind,
     location: Location,
 }
-
-impl LocatedDirective {
+/// One original metadata occurrence, including its original source span.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LocatedDirective<'a> {
+    directive: SourceDirective<'a>,
+    location: Location,
+}
+impl<'a> LocatedDirective<'a> {
     /// The interpreted declaration or display control.
     #[must_use]
-    pub fn directive(&self) -> &SourceDirective {
-        &self.directive
+    pub fn directive(self) -> SourceDirective<'a> {
+        self.directive
     }
     /// Original statement span in its original source.
     #[must_use]
-    pub fn location(&self) -> Location {
+    pub fn location(self) -> Location {
         self.location
     }
 }
-
-/// Original declaration/display evidence and the resulting display selection.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// Borrowed original directive occurrences in source-location order.
+#[derive(Clone, Copy)]
+pub struct Directives<'a> {
+    read: Option<Read<'a>>,
+    entries: &'a [Directive],
+}
+impl<'a> Directives<'a> {
+    /// Number of original occurrences, including duplicates.
+    #[must_use]
+    pub fn len(self) -> usize {
+        self.entries.len()
+    }
+    /// Whether no metadata directive was authored.
+    #[must_use]
+    pub fn is_empty(self) -> bool {
+        self.entries.is_empty()
+    }
+    /// Read one original occurrence by its published position.
+    #[must_use]
+    pub fn at(self, index: usize) -> Option<LocatedDirective<'a>> {
+        self.entries.get(index).map(|entry| self.bind(entry))
+    }
+    fn bind(self, entry: &Directive) -> LocatedDirective<'a> {
+        let predicate = |position| {
+            self.read
+                .expect("predicate coordinate has a published vocabulary")
+                .predicate(position)
+                .expect("published coordinate belongs to paired immutable prefix")
+        };
+        let directive = match entry.kind {
+            DirectiveKind::Defined(p) => SourceDirective::Defined(predicate(p)),
+            DirectiveKind::ShowSignature(p) => SourceDirective::ShowSignature(predicate(p)),
+            DirectiveKind::ShowEmpty => SourceDirective::ShowEmpty,
+            DirectiveKind::ShowTerm => SourceDirective::ShowTerm,
+            DirectiveKind::ProjectSignature(p) => SourceDirective::ProjectSignature(predicate(p)),
+            DirectiveKind::ProjectAtom => SourceDirective::ProjectAtom,
+        };
+        LocatedDirective {
+            directive,
+            location: entry.location,
+        }
+    }
+    /// Iterate without cloning any predicate payload.
+    #[must_use]
+    pub fn iter(self) -> impl ExactSizeIterator<Item = LocatedDirective<'a>> + DoubleEndedIterator {
+        self.entries.iter().map(move |entry| self.bind(entry))
+    }
+}
+impl std::fmt::Debug for Directives<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_list().entries(self.iter()).finish()
+    }
+}
+impl PartialEq for Directives<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.iter().eq(other.iter())
+    }
+}
+impl Eq for Directives<'_> {}
+/// Original declaration/display evidence and policies sharing one typed vocabulary.
+#[derive(Clone, Debug, Default)]
 pub struct SourceMetadata {
-    directives: Vec<LocatedDirective>,
+    vocabulary: Option<std::sync::Arc<MetadataVocabulary>>,
+    directives: Vec<Directive>,
     output: OutputSelection,
     observations: crate::observation::ObservationProgram,
     projection: ProjectSelection,
 }
-
-/// Collection state cannot be observed as a completed output policy. Signature
-/// occurrences append in source order and are canonicalized once at publication.
+impl PartialEq for SourceMetadata {
+    fn eq(&self, other: &Self) -> bool {
+        self.directives() == other.directives()
+            && self.output == other.output
+            && self.observations == other.observations
+            && self.projection == other.projection
+    }
+}
+impl Eq for SourceMetadata {}
+/// Unpublished source metadata; only coordinates are retained alongside topology.
 #[derive(Default)]
 pub(crate) struct Builder {
-    directives: Vec<LocatedDirective>,
+    authority: Option<Admission>,
+    storage: MetadataStorageLimits,
+    directives: Vec<Directive>,
     output: selection::Builder,
-    pub(crate) observations: crate::observation::ObservationProgram,
-    pub(crate) projection: ProjectSelection,
+    observations: Vec<crate::observation::Directive>,
+    projection: projection::Builder,
 }
-
 impl SourceMetadata {
-    /// Every original metadata occurrence, ordered by source identity and span.
-    /// Duplicate directives retain their separate locations.
+    /// Every original occurrence in source identity/span order, including duplicates.
+    ///
+    /// # Panics
+    /// Panics if compiled components no longer belong to their paired immutable
+    /// vocabulary, which violates the metadata's internal publication invariant.
     #[must_use]
-    pub fn directives(&self) -> &[LocatedDirective] {
-        &self.directives
+    pub fn directives(&self) -> Directives<'_> {
+        Directives {
+            read: self.vocabulary.as_ref().map(|v| {
+                v.read_with(|| Ok::<_, std::convert::Infallible>(()))
+                    .expect("published immutable component prefix")
+            }),
+            entries: &self.directives,
+        }
     }
-    /// Presentation policy for full, independently enumerated stable models.
+    /// Atom-channel presentation policy, independent of logical semantics.
     #[must_use]
     pub fn output(&self) -> &OutputSelection {
         &self.output
     }
-
-    /// Atom-channel policy; term observations remain a separate channel.
+    /// Atom-channel policy; term observations remain separate.
     #[must_use]
     pub fn atom_selection(&self) -> &AtomSelection {
         &self.output
     }
-
-    /// Source-free atom policy with no directive provenance or term observations.
+    /// Source-free atom policy with no provenance or observations.
     #[must_use]
-    pub fn for_atoms(selection: AtomSelection) -> Self {
+    pub fn for_atoms(output: AtomSelection) -> Self {
         Self {
-            output: selection,
+            output,
             ..Self::default()
         }
     }
-
-    /// Bounded term queries, evaluated separately from full-model semantics.
+    /// Bounded term queries meaningful for any supplied full model.
     #[must_use]
     pub fn observations(&self) -> &crate::observation::ObservationProgram {
         &self.observations
     }
-
-    /// Authored projection policy, separate from display and full answer identity.
-    /// Atom/body declarations are completed only by source grounding.
+    /// Authored projection policy, independent of full answer identity.
     #[must_use]
     pub fn project_selection(&self) -> &ProjectSelection {
         &self.projection
     }
-
     pub(crate) fn into_observations(self) -> crate::observation::ObservationProgram {
         self.observations
     }
 }
-
 impl Builder {
-    pub(crate) fn finish(mut self) -> SourceMetadata {
+    pub(crate) fn new(storage: MetadataStorageLimits) -> Self {
+        Self {
+            storage,
+            ..Self::default()
+        }
+    }
+    fn admission(&mut self) -> Result<&mut Admission, MetadataStorageError> {
+        if self.authority.is_none() {
+            self.authority = Some(Admission::new(self.storage, 0)?);
+        }
+        Ok(self.authority.as_mut().expect("authority admitted above"))
+    }
+    fn signature(
+        &mut self,
+        signature: &Signature,
+        location: Location,
+    ) -> Result<Predicate, AdmissionFailure> {
+        let predicate = predicate(signature, location)?;
+        self.admission()
+            .and_then(|admission| admission.predicate((&predicate).into(), 0))
+            .map_err(|error| AdmissionFailure::Metadata { error, location })
+    }
+    pub(crate) fn compile_observations(
+        &mut self,
+        source: &SourceProgram,
+        options: crate::AdmissionOptions,
+        limits: crate::observation::AdmissionLimits,
+        budget: &mut crate::expansion::Budget,
+        location: Location,
+    ) -> Result<(), crate::FormulaFailure> {
+        if !crate::observation::compile::has_observations(source) {
+            return Ok(());
+        }
+        let admission = self
+            .admission()
+            .map_err(|error| AdmissionFailure::Metadata { error, location })?;
+        let observations =
+            crate::observation::compile(source, admission, options, limits, budget, location)?;
+        self.observations = observations;
+        Ok(())
+    }
+    pub(crate) fn finish(mut self, location: Location) -> Result<SourceMetadata, AdmissionFailure> {
         self.directives
             .sort_by_key(|entry| (entry.location.source, entry.location.span));
-        SourceMetadata {
+        let vocabulary = self
+            .authority
+            .map(|authority| authority.finish(0))
+            .transpose()
+            .map_err(|error| AdmissionFailure::Metadata { error, location })?;
+        let observations = if let Some(owner) = vocabulary.as_ref() {
+            crate::observation::ObservationProgram::publish(owner.clone(), self.observations)
+        } else {
+            assert!(self.observations.is_empty());
+            crate::observation::ObservationProgram::default()
+        };
+        Ok(SourceMetadata {
+            output: self.output.finish(vocabulary.clone()),
+            projection: self.projection.finish(vocabulary.clone()),
+            observations,
             directives: self.directives,
-            output: self.output.finish(),
-            observations: self.observations,
-            projection: self.projection.finish(),
-        }
+            vocabulary,
+        })
     }
 }
 
@@ -244,35 +386,35 @@ fn collect_carriers<'a>(
             };
             let directive = match carrier.get() {
                 Statement::Defined(defined) => {
-                    SourceDirective::Defined(predicate(&defined.signature, *location)?)
+                    DirectiveKind::Defined(metadata.signature(&defined.signature, *location)?)
                 }
                 Statement::Show(Show::Signature(signature)) => {
-                    SourceDirective::ShowSignature(predicate(signature, *location)?)
+                    DirectiveKind::ShowSignature(metadata.signature(signature, *location)?)
                 }
                 // themelios names its faithful `#show.` value `Show::All`;
                 // clingo interprets the empty directive as show nothing.
-                Statement::Show(Show::All) => SourceDirective::ShowEmpty,
+                Statement::Show(Show::All) => DirectiveKind::ShowEmpty,
                 Statement::Project(Project::Signature(signature)) => {
-                    SourceDirective::ProjectSignature(predicate(signature, *location)?)
+                    DirectiveKind::ProjectSignature(metadata.signature(signature, *location)?)
                 }
-                Statement::Project(Project::Atom { .. }) => SourceDirective::ProjectAtom,
-                Statement::Show(_) if formula => SourceDirective::ShowTerm,
+                Statement::Project(Project::Atom { .. }) => DirectiveKind::ProjectAtom,
+                Statement::Show(_) if formula => DirectiveKind::ShowTerm,
                 Statement::Show(_) => return Err(unsupported(ProfileFeature::ShowTerm, *location)),
                 _ => continue,
             };
             match &directive {
-                SourceDirective::Defined(_) | SourceDirective::ShowTerm => {}
-                SourceDirective::ShowSignature(signature) => {
-                    metadata.output.include(signature.clone());
+                DirectiveKind::Defined(_) | DirectiveKind::ShowTerm => {}
+                DirectiveKind::ShowSignature(signature) => {
+                    metadata.output.include(*signature);
                 }
-                SourceDirective::ShowEmpty => metadata.output.mark_explicit(),
-                SourceDirective::ProjectSignature(signature) => {
-                    metadata.projection.signature(signature.clone());
+                DirectiveKind::ShowEmpty => metadata.output.mark_explicit(),
+                DirectiveKind::ProjectSignature(signature) => {
+                    metadata.projection.signature(*signature);
                 }
-                SourceDirective::ProjectAtom => metadata.projection.atom(),
+                DirectiveKind::ProjectAtom => metadata.projection.atom(),
             }
-            metadata.directives.push(LocatedDirective {
-                directive,
+            metadata.directives.push(Directive {
+                kind: directive,
                 location: *location,
             });
         }
@@ -283,10 +425,10 @@ fn collect_carriers<'a>(
 pub(crate) fn predicate(
     signature: &Signature,
     location: Location,
-) -> Result<Predicate, AdmissionFailure> {
+) -> Result<OwnedPredicate, AdmissionFailure> {
     let arity = usize::try_from(signature.arity)
         .expect("supported Rust targets represent u32 arities in usize");
-    Predicate::with_sign(
+    OwnedPredicate::with_sign(
         signature.name.as_str(),
         arity,
         crate::coherence::core_sign(signature.sign),

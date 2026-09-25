@@ -8,8 +8,8 @@
 //! its bits in position order is already in the order the model wants.
 //! Membership is a bit test, insertion a bit set, and the rows matching a
 //! bound prefix of arguments are one contiguous range of positions, so a
-//! window over them is a scan of that range's words. No atom is allocated or
-//! compared by value until the model is assembled.
+//! window over them is a scan of that range's words. Bound values are resolved
+//! through checked canonical comparisons; rows themselves retain only bits.
 //!
 //! The New set of a round is a second bit array, cleared when the cutoff
 //! advances; Old is present and not new. The bounds are an upper domain of
@@ -18,7 +18,10 @@
 
 use std::{mem::size_of, ops::Range, sync::Arc};
 
-use zetesis_core::{Atom, AtomKey, Predicate, Value};
+use zetesis_core::catalog::{PredicateRef, TermRef};
+#[cfg(test)]
+use zetesis_core::{Atom, Predicate, Value};
+use zetesis_core::{AtomKey, Program};
 
 use super::super::argument_bounds::Bound;
 use super::{RowSet, Work, charge};
@@ -27,129 +30,193 @@ use crate::Stop;
 /// The shape of a dense relation: the predicate, each argument's values in
 /// canonical order, and the mixed-radix strides over them.
 pub(in crate::oracle) struct Layout {
-    predicate: Predicate,
-    axes: Vec<Vec<Value>>,
+    program: Program,
+    signature: usize,
+    axes: Vec<Vec<usize>>,
     /// `strides[k]` is the product of the widths of the arguments after `k`.
     strides: Vec<usize>,
     positions: usize,
 }
 
 impl Layout {
-    /// The layout of a predicate whose every argument is bounded and whose
-    /// product of widths fits the ceiling; `None` keeps the tree.
+    /// Keep only domain coordinates from the Program's finite argument bounds.
+    /// Unknown/oversized domains retain the tree route; malformed coordinates
+    /// and allocation failures are typed refusals, never an empty relation.
     pub(in crate::oracle) fn new(
-        predicate: &Predicate,
+        program: &Program,
+        predicate: PredicateRef<'_>,
         bounds: &[Bound],
         ceiling: usize,
-    ) -> Option<Self> {
+    ) -> Result<Option<Self>, Stop> {
         if bounds.len() != predicate.arity() {
-            return None;
+            return Err(Stop::InvalidProgram);
         }
-        let mut axes = Vec::with_capacity(bounds.len());
+        let signature = program
+            .predicates()
+            .binary_search(predicate)
+            .map_err(|_| Stop::InvalidProgram)?;
+        let mut positions = 1_usize;
         for bound in bounds {
-            match bound {
-                Bound::Finite(values) => axes.push(values.clone()),
-                Bound::Unknown => return None,
+            let Bound::Finite(values) = bound else {
+                return Ok(None);
+            };
+            if values
+                .last()
+                .is_some_and(|&id| id >= program.domain().len())
+                || !values.windows(2).all(|pair| pair[0] < pair[1])
+            {
+                return Err(Stop::InvalidProgram);
             }
-        }
-        let mut strides = vec![1; axes.len()];
-        let mut positions = 1usize;
-        for (k, axis) in axes.iter().enumerate().rev() {
-            strides[k] = positions;
-            positions = positions.checked_mul(axis.len())?;
+            let Some(product) = positions.checked_mul(values.len()) else {
+                return Ok(None);
+            };
+            positions = product;
         }
         if positions > ceiling {
-            return None;
+            return Ok(None);
         }
-        Some(Self {
-            predicate: predicate.clone(),
+        let mut axes = Vec::new();
+        axes.try_reserve_exact(bounds.len())
+            .map_err(|_| Stop::Allocation)?;
+        let mut strides = Vec::new();
+        strides
+            .try_reserve_exact(bounds.len())
+            .map_err(|_| Stop::Allocation)?;
+        for bound in bounds {
+            let Bound::Finite(values) = bound else {
+                unreachable!("finite bounds checked");
+            };
+            let mut coordinates = Vec::new();
+            coordinates
+                .try_reserve_exact(values.len())
+                .map_err(|_| Stop::Allocation)?;
+            coordinates.extend_from_slice(values);
+            axes.push(coordinates);
+            strides.push(1);
+        }
+        let mut suffix = 1_usize;
+        for (index, coordinates) in axes.iter().enumerate().rev() {
+            strides[index] = suffix;
+            suffix = suffix
+                .checked_mul(coordinates.len())
+                .ok_or(Stop::InvalidProgram)?;
+        }
+        Ok(Some(Self {
+            program: program.clone(),
+            signature,
             axes,
             strides,
             positions,
-        })
+        }))
     }
 
-    pub(in crate::oracle) fn predicate(&self) -> &Predicate {
-        &self.predicate
+    pub(in crate::oracle) fn predicate(&self) -> PredicateRef<'_> {
+        self.program
+            .predicates()
+            .at(self.signature)
+            .expect("admitted dense signature")
     }
-
-    /// The number of positions: one for each tuple inside the bounds.
+    pub(super) fn program(&self) -> &Program {
+        &self.program
+    }
+    pub(super) fn signature(&self) -> usize {
+        self.signature
+    }
     pub(in crate::oracle) fn positions(&self) -> usize {
         self.positions
     }
-
     fn words(&self) -> usize {
         self.positions.div_ceil(64)
     }
 
-    /// Retained bytes: the value lists and strides. A shared name is counted
-    /// once per layout, as the catalogs count theirs. `None` when the sum
-    /// does not fit.
+    /// Named coordinate/stride metadata; the shared Program is charged once by
+    /// preparation/authority ownership, not once per dense axis occurrence.
     pub(in crate::oracle) fn bytes(&self) -> Option<u128> {
-        let axes = self.axes.iter().try_fold(0u128, |sum, axis| {
-            let positions = (axis.capacity() as u128).checked_mul(size_of::<Value>() as u128)?;
-            let payload = axis.iter().try_fold(0u128, |sum, value| {
-                sum.checked_add(value.checked_payload_capacity_bytes()?)
-            })?;
-            sum.checked_add(positions)?.checked_add(payload)
+        let cells = self.axes.iter().try_fold(0_u128, |bytes, axis| {
+            bytes.checked_add(axis.capacity() as u128 * size_of::<usize>() as u128)
         })?;
         (size_of::<Self>() as u128)
-            .checked_add(self.predicate.name_bytes() as u128)?
-            .checked_add(
-                (self.axes.capacity() as u128).checked_mul(size_of::<Vec<Value>>() as u128)?,
-            )?
-            .checked_add(axes)?
-            .checked_add((self.strides.capacity() as u128).checked_mul(size_of::<usize>() as u128)?)
+            .checked_add(self.axes.capacity() as u128 * size_of::<Vec<usize>>() as u128)?
+            .checked_add(cells)?
+            .checked_add(self.strides.capacity() as u128 * size_of::<usize>() as u128)
     }
 
-    fn rank(&self, argument: usize, value: &Value) -> Option<usize> {
-        self.axes[argument].binary_search(value).ok()
-    }
-
-    /// The position of a tuple, or `None` when a value lies outside its
-    /// argument's bound.
-    pub(in crate::oracle) fn position_of<'v>(
+    fn rank(
         &self,
-        values: impl IntoIterator<Item = &'v Value>,
-    ) -> Option<usize> {
+        argument: usize,
+        value: TermRef<'_>,
+        work: &mut Work<'_>,
+    ) -> Result<Option<usize>, Stop> {
+        let Some(axis) = self.axes.get(argument) else {
+            return Ok(None);
+        };
+        let (mut start, mut end) = (0, axis.len());
+        while start < end {
+            charge(work, 1)?;
+            let middle = start + (end - start) / 2;
+            let candidate = self
+                .program
+                .domain()
+                .at(axis[middle])
+                .ok_or(Stop::InvalidProgram)?;
+            match candidate.compare_ref_with(value, || charge(work, 1))? {
+                std::cmp::Ordering::Equal => return Ok(Some(middle)),
+                std::cmp::Ordering::Less => start = middle + 1,
+                std::cmp::Ordering::Greater => end = middle,
+            }
+        }
+        Ok(None)
+    }
+
+    pub(in crate::oracle) fn position_of<'v, T: Into<TermRef<'v>>>(
+        &self,
+        values: impl IntoIterator<Item = T>,
+        work: &mut Work<'_>,
+    ) -> Result<Option<usize>, Stop> {
         let mut position = 0;
         let mut arguments = 0;
         for (argument, value) in values.into_iter().enumerate() {
-            position += self.rank(argument, value)? * *self.strides.get(argument)?;
+            let Some(rank) = self.rank(argument, value.into(), work)? else {
+                return Ok(None);
+            };
+            position += rank * self.strides[argument];
             arguments += 1;
         }
-        (arguments == self.axes.len()).then_some(position)
+        Ok((arguments == self.axes.len()).then_some(position))
     }
 
-    /// The values of the last argument in canonical order, which index a
-    /// position within a block of a bound prefix; `None` for arity zero.
-    pub(in crate::oracle) fn last_values(&self) -> Option<&[Value]> {
+    /// These ranks compare directly only for layouts of the same Program.
+    pub(in crate::oracle) fn last_coordinates(&self) -> Option<&[usize]> {
         self.axes.last().map(Vec::as_slice)
     }
 
-    /// The value of a position's tuple at an argument.
-    pub(in crate::oracle) fn value(&self, argument: usize, position: usize) -> &Value {
+    pub(super) fn coordinate(&self, argument: usize, position: usize) -> usize {
         let axis = &self.axes[argument];
-        &axis[(position / self.strides[argument]) % axis.len()]
+        axis[(position / self.strides[argument]) % axis.len()]
     }
 
-    /// The positions of the tuples whose first `bound` arguments take the
-    /// given values: one contiguous range, empty when a value lies outside
-    /// its bound.
-    pub(in crate::oracle) fn prefix_range<'v>(
+    pub(in crate::oracle) fn value(&self, argument: usize, position: usize) -> TermRef<'_> {
+        self.program
+            .domain()
+            .at(self.coordinate(argument, position))
+            .expect("admitted dense axis")
+    }
+
+    pub(in crate::oracle) fn prefix_range<'v, T: Into<TermRef<'v>>>(
         &self,
-        prefix: impl IntoIterator<Item = &'v Value>,
-    ) -> Range<usize> {
+        prefix: impl IntoIterator<Item = T>,
+        work: &mut Work<'_>,
+    ) -> Result<Range<usize>, Stop> {
         let mut base = 0;
         let mut block = self.positions;
         for (argument, value) in prefix.into_iter().enumerate() {
-            let Some(rank) = self.rank(argument, value) else {
-                return 0..0;
+            let Some(rank) = self.rank(argument, value.into(), work)? else {
+                return Ok(0..0);
             };
             block = self.strides[argument];
             base += rank * block;
         }
-        base..base + block
+        Ok(base..base + block)
     }
 }
 
@@ -168,15 +235,15 @@ impl Layouts {
         self.0.push(Arc::new(layout));
     }
 
-    pub(in crate::oracle) fn get(&self, predicate: &Predicate) -> Option<&Arc<Layout>> {
+    pub(in crate::oracle) fn get(&self, predicate: PredicateRef<'_>) -> Option<&Arc<Layout>> {
         self.slot(predicate).map(|slot| &self.0[slot])
     }
 
     /// The layout's position among the layouts, which indexes the pending
     /// rows and is fixed for the preparation.
-    pub(in crate::oracle) fn slot(&self, predicate: &Predicate) -> Option<usize> {
+    pub(in crate::oracle) fn slot(&self, predicate: PredicateRef<'_>) -> Option<usize> {
         self.0
-            .binary_search_by(|layout| layout.predicate().cmp(predicate))
+            .binary_search_by(|layout| layout.predicate().cmp(&predicate))
             .ok()
     }
 
@@ -243,7 +310,7 @@ impl Dense {
         &self.layout
     }
 
-    pub(super) fn predicate(&self) -> &Predicate {
+    pub(super) fn predicate(&self) -> PredicateRef<'_> {
         self.layout.predicate()
     }
 
@@ -276,9 +343,15 @@ impl Dense {
 
     /// The position of a complete key, ranking each value once; `None` when
     /// the key is incomplete or a value lies outside its argument's bound.
-    pub(in crate::oracle) fn position(&self, key: &AtomKey<'_>) -> Option<usize> {
-        self.layout
-            .position_of((0..key.predicate().arity()).filter_map(|column| key.value(column)))
+    pub(in crate::oracle) fn position(
+        &self,
+        key: &AtomKey<'_>,
+        work: &mut Work<'_>,
+    ) -> Result<Option<usize>, Stop> {
+        self.layout.position_of(
+            (0..key.predicate().arity()).filter_map(|column| key.value(column)),
+            work,
+        )
     }
 
     /// Move the cutoff to the present extent: nothing is new.
@@ -331,33 +404,9 @@ impl Dense {
         Ok(None)
     }
 
-    /// The present tuples as atoms in position order, which is canonical
-    /// order, leaving the relation empty. Each atom is built, then its bytes
-    /// admitted and recorded against the base before the next is built; a
-    /// refusal leaves the atoms taken so far in `atoms`.
-    pub(super) fn take_atoms(
-        &mut self,
-        atoms: &mut Vec<Atom>,
-        base: u128,
-        work: &mut Work<'_>,
-    ) -> Result<(), Stop> {
-        let mut live = base;
-        let mut range = 0..self.layout.positions;
-        while let Some(position) = self.next_row(RowSet::Current, &mut range, work)? {
-            let values: Vec<Value> = (0..self.layout.axes.len())
-                .map(|argument| self.layout.value(argument, position).clone())
-                .collect();
-            let atom = Atom::new(self.layout.predicate.clone(), values)
-                .map_err(|_| Stop::InvalidProgram)?;
-            live = live
-                .checked_add(super::atom_bytes(&atom, work)?)
-                .ok_or(Stop::StorageLimit)?;
-            super::storage::admit(work, live)?;
-            super::storage::record(work, live)?;
-            atoms.push(atom);
-        }
-        self.reset(work)?;
-        Ok(())
+    /// Actual retained bit-vector capacity; layout metadata is shared preparation.
+    pub(super) fn retained_bytes(&self) -> u128 {
+        (self.present.capacity() as u128 + self.new.capacity() as u128) * size_of::<u64>() as u128
     }
 }
 
@@ -627,60 +676,141 @@ mod tests {
     use super::*;
     use crate::Cancellation;
 
-    fn numbers(values: &[i32]) -> Bound {
-        Bound::Finite(values.iter().map(|&value| Value::Number(value)).collect())
+    // Admit one row per axis value, not the Cartesian product. These are
+    // source descriptions solely for establishing the test Program vocabulary.
+    fn source(name: &str, axes: &[&[i32]]) -> Vec<Atom> {
+        let predicate = Predicate::new(name, axes.len()).unwrap();
+        let base: Vec<_> = axes.iter().map(|axis| Value::Number(axis[0])).collect();
+        axes.iter()
+            .enumerate()
+            .flat_map(|(argument, axis)| {
+                let predicate = &predicate;
+                let base = &base;
+                axis.iter().map(move |&value| {
+                    let mut values = base.clone();
+                    values[argument] = Value::Number(value);
+                    Atom::new(predicate.clone(), values).unwrap()
+                })
+            })
+            .collect()
+    }
+
+    fn numbers(program: &Program, values: &[i32]) -> Bound {
+        Bound::Finite(
+            values
+                .iter()
+                .map(|&value| {
+                    program
+                        .domain()
+                        .iter()
+                        .position(|candidate| candidate == Value::Number(value))
+                        .unwrap()
+                })
+                .collect(),
+        )
     }
 
     fn layout() -> Layout {
+        let program = super::super::fixtures::program(&source("e", &[&[1, 2, 3], &[10, 20]]));
         Layout::new(
-            &Predicate::new("e", 2).unwrap(),
-            &[numbers(&[1, 2, 3]), numbers(&[10, 20])],
+            &program,
+            (&Predicate::new("e", 2).unwrap()).into(),
+            &[numbers(&program, &[1, 2, 3]), numbers(&program, &[10, 20])],
             64,
         )
+        .unwrap()
         .unwrap()
     }
 
     #[test]
     fn positions_are_mixed_radix_with_the_first_argument_most_significant() {
         let layout = layout();
+        let cancellation = Cancellation::default();
+        let mut work = Work::source(&cancellation, u64::MAX);
         assert_eq!(layout.positions(), 6);
-        let index = |a: i32, b: i32| layout.position_of([&Value::Number(a), &Value::Number(b)]);
+        let mut index = |a: i32, b: i32| {
+            layout
+                .position_of([&Value::Number(a), &Value::Number(b)], &mut work)
+                .unwrap()
+        };
         assert_eq!(index(1, 10), Some(0));
         assert_eq!(index(1, 20), Some(1));
         assert_eq!(index(3, 20), Some(5));
         assert_eq!(index(4, 10), None);
-        assert_eq!(*layout.value(0, 5), Value::Number(3));
-        assert_eq!(*layout.value(1, 4), Value::Number(10));
+        assert_eq!(layout.value(0, 5), Value::Number(3));
+        assert_eq!(layout.value(1, 4), Value::Number(10));
     }
 
     #[test]
     fn a_bound_prefix_is_one_contiguous_range() {
         let layout = layout();
-        assert_eq!(layout.prefix_range([]), 0..6);
-        assert_eq!(layout.prefix_range([&Value::Number(2)]), 2..4);
+        let cancellation = Cancellation::default();
+        let mut work = Work::source(&cancellation, u64::MAX);
         assert_eq!(
-            layout.prefix_range([&Value::Number(2), &Value::Number(20)]),
+            layout.prefix_range([] as [&Value; 0], &mut work).unwrap(),
+            0..6
+        );
+        assert_eq!(
+            layout.prefix_range([&Value::Number(2)], &mut work).unwrap(),
+            2..4
+        );
+        assert_eq!(
+            layout
+                .prefix_range([&Value::Number(2), &Value::Number(20)], &mut work)
+                .unwrap(),
             3..4
         );
-        assert_eq!(layout.prefix_range([&Value::Number(9)]), 0..0);
+        assert_eq!(
+            layout.prefix_range([&Value::Number(9)], &mut work).unwrap(),
+            0..0
+        );
     }
 
     #[test]
     fn a_product_above_the_ceiling_keeps_the_tree() {
+        let program = super::super::fixtures::program(&source("e", &[&[1, 2, 3], &[10, 20]]));
         let predicate = Predicate::new("e", 2).unwrap();
-        assert!(Layout::new(&predicate, &[numbers(&[1, 2, 3]), numbers(&[10, 20])], 5).is_none());
+        assert!(
+            Layout::new(
+                &program,
+                (&predicate).into(),
+                &[numbers(&program, &[1, 2, 3]), numbers(&program, &[10, 20])],
+                5
+            )
+            .unwrap()
+            .is_none()
+        );
     }
 
     #[test]
     fn an_unknown_argument_keeps_the_tree() {
+        let program = super::super::fixtures::program(&source("e", &[&[1], &[1]]));
         let predicate = Predicate::new("e", 2).unwrap();
-        assert!(Layout::new(&predicate, &[numbers(&[1]), Bound::Unknown], 64).is_none());
+        assert!(
+            Layout::new(
+                &program,
+                (&predicate).into(),
+                &[numbers(&program, &[1]), Bound::Unknown],
+                64
+            )
+            .unwrap()
+            .is_none()
+        );
     }
 
     #[test]
-    fn bounds_of_another_arity_lay_out_nothing() {
+    fn bounds_of_another_arity_are_refused() {
+        let program = super::super::fixtures::program(&source("e", &[&[1], &[1]]));
         let predicate = Predicate::new("e", 2).unwrap();
-        assert!(Layout::new(&predicate, &[numbers(&[1])], 64).is_none());
+        assert!(matches!(
+            Layout::new(
+                &program,
+                (&predicate).into(),
+                &[numbers(&program, &[1])],
+                64
+            ),
+            Err(Stop::InvalidProgram)
+        ));
     }
 
     #[test]
@@ -808,14 +938,19 @@ mod tests {
         let mut work = Work::source(&cancellation, 100_000);
         work.limits.max_closure_bytes = 1 << 20;
         let last: Vec<i32> = (0..70).collect();
+        let mut sources = source("body", &[&[1, 2, 3], &last]);
+        sources.extend(source("head", &[&[7, 8], &last]));
+        let program = super::super::fixtures::program(&sources);
         let mut layouts = Layouts::default();
         for (name, first) in [("body", &[1, 2, 3][..]), ("head", &[7, 8][..])] {
             layouts.push(
                 Layout::new(
-                    &Predicate::new(name, 2).unwrap(),
-                    &[numbers(first), numbers(&last)],
+                    &program,
+                    (&Predicate::new(name, 2).unwrap()).into(),
+                    &[numbers(&program, first), numbers(&program, &last)],
                     1 << 10,
                 )
+                .unwrap()
                 .unwrap(),
             );
         }
@@ -903,44 +1038,47 @@ mod tests {
         }
     }
 
-    /// The relation holding positions 5, 0 and 3 with its atoms taken.
-    fn taken(work: &mut Work<'_>) -> (Dense, Vec<Atom>) {
+    fn populated(work: &mut Work<'_>) -> Dense {
         work.limits.max_closure_bytes = 1 << 20;
         let (_, mut pending) = pending(work);
         let mut dense = Dense::new(Arc::new(layout())).unwrap();
         insert(&mut dense, &mut pending, &[5, 0, 3], work);
-        let mut atoms = Vec::new();
-        dense.take_atoms(&mut atoms, 0, work).unwrap();
-        (dense, atoms)
+        dense
     }
 
     #[test]
-    fn taken_atoms_are_in_canonical_order() {
+    fn selected_positions_decode_in_canonical_order() {
         let cancellation = Cancellation::default();
         let mut work = Work::source(&cancellation, 10_000);
-        let (_, atoms) = taken(&mut work);
-        let values: Vec<Vec<i32>> = atoms
-            .iter()
-            .map(|atom| {
-                atom.values()
-                    .iter()
-                    .map(|value| match value {
-                        Value::Number(number) => *number,
+        let dense = populated(&mut work);
+        let mut range = 0..dense.layout().positions();
+        let mut values = Vec::new();
+        while let Some(position) = dense
+            .next_row(RowSet::Current, &mut range, &mut work)
+            .unwrap()
+        {
+            let row: Vec<_> = (0..2)
+                .map(
+                    |argument| match dense.layout().value(argument, position).descriptor() {
+                        zetesis_core::ValueNodeRef::Number(number) => number,
                         _ => unreachable!(),
-                    })
-                    .collect()
-            })
-            .collect();
+                    },
+                )
+                .collect();
+            values.push(row);
+        }
         assert_eq!(values, vec![vec![1, 10], vec![2, 20], vec![3, 20]]);
-        assert!(atoms.windows(2).all(|pair| pair[0] < pair[1]));
     }
 
     #[test]
-    fn taking_the_atoms_empties_the_relation() {
+    fn reset_clears_truth_and_keeps_the_layout() {
         let cancellation = Cancellation::default();
         let mut work = Work::source(&cancellation, 10_000);
-        let (dense, _) = taken(&mut work);
+        let mut dense = populated(&mut work);
+        let layout = dense.layout.clone();
+        dense.reset(&mut work).unwrap();
         assert_eq!(dense.len(), 0);
         assert!(!dense.contains(5));
+        assert!(Arc::ptr_eq(&layout, &dense.layout));
     }
 }

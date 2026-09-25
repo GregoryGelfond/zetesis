@@ -5,6 +5,7 @@ use zetesis_core::{Atom, Predicate, Sign, relation::Limits as RelationLimits};
 use super::*;
 
 mod selection;
+mod canonical;
 
 fn atoms(predicate: &Predicate, rows: &[Vec<Value>]) -> Vec<Atom> {
     rows.iter()
@@ -74,8 +75,11 @@ fn assert_reference(
     assert_eq!(actual_positions, positions);
     for (variable, expected) in expected.iter().enumerate() {
         assert_eq!(
-            &actual.domain(variable).unwrap().collect::<BTreeSet<_>>(),
+            actual.domain(variable).unwrap().collect::<BTreeSet<_>>(),
             expected
+                .iter()
+                .map(|value| TermRef::from(*value))
+                .collect::<BTreeSet<_>>()
         );
     }
 }
@@ -187,13 +191,19 @@ fn typed_domains_do_not_conflate_equal_spellings() {
             .map(|value| vec![value])
             .collect::<Vec<_>>(),
     );
-    let relation = Relation::from_atoms(&predicate, &source, RelationLimits::default()).unwrap();
+    let catalog = zetesis_core::AtomCatalog::new(source).unwrap();
+    let relation = Relation::from_refs(
+        (&predicate).into(),
+        catalog.atoms(),
+        RelationLimits::default(),
+    )
+    .unwrap();
     let table =
         Table::prepare(&relation, &[0], Limits::default(), &Cancellation::default()).unwrap();
     for (index, value) in values.iter().enumerate() {
         let selected = table
             .select(
-                &[Domain::Singleton(value)],
+                &[Domain::Singleton(TermRef::from(value))],
                 Limits::default(),
                 &Cancellation::default(),
             )
@@ -213,10 +223,16 @@ fn typed_domains_do_not_conflate_equal_spellings() {
             vec![index]
         );
         let borrowed = projection.domain(0).unwrap().next().unwrap();
-        assert!(std::ptr::eq(
-            borrowed,
-            relation.row(index).unwrap().value(0).unwrap()
-        ));
+        let original = relation.row(index).unwrap().value(0).unwrap();
+        assert_eq!(borrowed, original);
+        if let zetesis_core::ValueNodeRef::String(text) | zetesis_core::ValueNodeRef::Symbol(text) =
+            borrowed.descriptor()
+        {
+            let same = original.descriptor();
+            assert!(
+                matches!(same, zetesis_core::ValueNodeRef::String(value) | zetesis_core::ValueNodeRef::Symbol(value) if std::ptr::eq(text, value))
+            );
+        }
     }
 }
 
@@ -306,11 +322,14 @@ fn supported_domain_projection_preserves_surviving_rows() {
         )
         .unwrap();
     let narrowed: Vec<Vec<_>> = (0..2)
-        .map(|variable| projected.domain(variable).unwrap().cloned().collect())
+        .map(|variable| projected.domain(variable).unwrap().collect())
         .collect();
     let again = table
-        .project(
-            &narrowed.iter().map(Vec::as_slice).collect::<Vec<_>>(),
+        .project_domains(
+            &narrowed
+                .iter()
+                .map(|values| Domain::Finite(values.as_slice().into()))
+                .collect::<Vec<_>>(),
             Limits::default(),
             &Cancellation::default(),
         )
@@ -357,8 +376,8 @@ fn domain_duplicates_have_set_meaning() {
         .unwrap();
     assert_eq!(projection.words(), &[1]);
     assert_eq!(
-        projection.domain(0).unwrap().cloned().collect::<Vec<_>>(),
-        numbers(&[1])
+        projection.domain(0).unwrap().collect::<Vec<_>>(),
+        numbers(&[1]).iter().map(TermRef::from).collect::<Vec<_>>()
     );
 }
 
@@ -681,7 +700,10 @@ fn singleton_domains_match_prepared_equality_queries() {
             let left = Value::Number(left);
             let right = Value::Number(right);
             let query = relation
-                .query(&[(0, &left), (1, &right)], RelationLimits::default())
+                .query(
+                    &[(0, (&left).into()), (1, (&right).into())],
+                    RelationLimits::default(),
+                )
                 .unwrap();
             let expected = relation
                 .select_mask(&query, &input, RelationLimits::default())

@@ -3,12 +3,12 @@
 use super::*;
 use crate::oracle::Gates;
 use zetesis_core::{
-    AdmissionLimits, AtomPattern, GateIndex, Predicate, Sign, Template, Term, Value,
+    AdmissionLimits, Atom, AtomPattern, GateIndex, Predicate, Sign, Template, Term, Value,
 };
 
 struct Fixture {
     program: Program,
-    held: BTreeSet<Atom>,
+    held: CarrierSet,
     root: Vec<Arc<GateAtom>>,
     queries: Vec<AtomPattern>,
 }
@@ -22,7 +22,11 @@ fn pattern(name: &str, sign: Sign, values: &[Value]) -> AtomPattern {
 }
 
 fn owned(pattern: &AtomPattern) -> Atom {
-    pattern.key(&[] as &[Value]).unwrap().to_atom()
+    pattern
+        .key(&[] as &[Value])
+        .unwrap()
+        .to_atom(zetesis_core::ValueLimits::default())
+        .unwrap()
 }
 
 fn fixture() -> Fixture {
@@ -65,15 +69,18 @@ fn fixture() -> Fixture {
     let index = GateIndex::new(&program).unwrap();
     let mut root: Vec<_> = queries
         .iter()
-        .map(|atom| Arc::new(index.locate(owned(atom)).unwrap()))
+        .map(|atom| Arc::new(index.locate(&owned(atom)).unwrap()))
         .collect();
-    root.sort_unstable_by(|left, right| left.atom().cmp(right.atom()));
+    root.sort_unstable_by(|left, right| left.atom().cmp(&right.atom()));
     queries.push(held.clone());
     // This belongs to the symbolic carrier but not the completed supported root.
     queries.push(pattern("p", Sign::Positive, &[Value::Number(1)]));
+    let held = [program.locate_atom(&owned(&held), true).unwrap().unwrap()]
+        .into_iter()
+        .collect();
     Fixture {
         program,
-        held: BTreeSet::from([owned(&held)]),
+        held,
         root,
         queries,
     }
@@ -105,10 +112,10 @@ fn materialize(fixture: &Fixture, region: &Region) -> Cube {
     };
     for (at, gate) in fixture.root.iter().enumerate() {
         if region.is_held(at) {
-            cube.must.insert(gate.atom().clone());
+            cube.must.insert(gate.carrier());
         }
         if !region.is_cut(at) {
-            cube.may.as_mut().unwrap().insert(gate.atom().clone());
+            cube.may.as_mut().unwrap().insert(gate.carrier());
         }
     }
     cube
@@ -117,6 +124,8 @@ fn materialize(fixture: &Fixture, region: &Region) -> Cube {
 #[test]
 fn region_gate_readings_equal_owned_bounds() {
     let fixture = fixture();
+    let cancellation = crate::Cancellation::default();
+    let mut work = Work::source(&cancellation, u64::MAX);
     for region in regions(fixture.root.len()) {
         let cube = materialize(&fixture, &region);
         let indexed = RegionBounds::new(&fixture.held, &fixture.root, &region);
@@ -125,13 +134,21 @@ fn region_gate_readings_equal_owned_bounds() {
             let key = query.key(&[] as &[Value]).unwrap();
             for required in [false, true] {
                 assert_eq!(
-                    Gates::Definite(borrowed).holds(&key, required),
-                    Gates::Definite((&cube).into()).holds(&key, required),
+                    Gates::Definite(borrowed)
+                        .holds(&key, required, &mut work)
+                        .unwrap(),
+                    Gates::Definite((&cube).into())
+                        .holds(&key, required, &mut work)
+                        .unwrap(),
                     "definite {key:?}, required={required}, {region:?}",
                 );
                 assert_eq!(
-                    Gates::Possible(borrowed).holds(&key, required),
-                    Gates::Possible((&cube).into()).holds(&key, required),
+                    Gates::Possible(borrowed)
+                        .holds(&key, required, &mut work)
+                        .unwrap(),
+                    Gates::Possible((&cube).into())
+                        .holds(&key, required, &mut work)
+                        .unwrap(),
                     "possible {key:?}, required={required}, {region:?}",
                 );
             }
@@ -160,8 +177,8 @@ fn region_admission_equals_owned_bounds() {
                 };
                 let template = Template::new(None, vec![], positive, negative, vec![]);
                 assert_eq!(
-                    Gates::Definite(borrowed).admits(&template),
-                    Gates::Definite((&cube).into()).admits(&template),
+                    Gates::Definite(borrowed).admits((&template).into()),
+                    Gates::Definite((&cube).into()).admits((&template).into()),
                     "required={required}, with_held={with_held}, {region:?}",
                 );
             }
@@ -173,16 +190,24 @@ fn region_admission_equals_owned_bounds() {
 fn a_lower_gate_outside_the_root_is_a_conflict() {
     let fixture = fixture();
     let region = Region::all_open(fixture.root.len());
-    let lower = Model::new([owned(fixture.queries.last().unwrap())]);
-    let upper = Model::new(
+    let unexpected = owned(fixture.queries.last().unwrap());
+    let lower = Model::new([unexpected.clone()]).unwrap();
+    let held = owned(
         fixture
-            .held
+            .queries
             .iter()
-            .cloned()
-            .chain(lower.atoms().iter().cloned()),
+            .find(|pattern| pattern.predicate().name() == "held")
+            .unwrap(),
     );
+    let upper = Model::new([held, unexpected]).unwrap();
     let bounds = RegionBounds::new(&fixture.held, &fixture.root, &region);
-    assert!(bounds.conflicts(&fixture.program, &lower, &upper));
+    let cancellation = crate::Cancellation::default();
+    let mut work = Work::source(&cancellation, u64::MAX);
+    assert!(
+        bounds
+            .conflicts(&fixture.program, &lower, &upper, &mut work)
+            .unwrap()
+    );
 }
 
 #[test]
@@ -190,5 +215,16 @@ fn an_old_fixed_hold_missing_from_upper_is_a_conflict() {
     let fixture = fixture();
     let region = Region::all_open(fixture.root.len());
     let bounds = RegionBounds::new(&fixture.held, &fixture.root, &region);
-    assert!(bounds.conflicts(&fixture.program, &Model::default(), &Model::default()));
+    let cancellation = crate::Cancellation::default();
+    let mut work = Work::source(&cancellation, u64::MAX);
+    assert!(
+        bounds
+            .conflicts(
+                &fixture.program,
+                &Model::default(),
+                &Model::default(),
+                &mut work
+            )
+            .unwrap()
+    );
 }

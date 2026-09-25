@@ -10,23 +10,28 @@
 //! the separate `model_query` module constructs original-model objective queries
 //! only after row eligibility. Its retained-node limit does not bound activity.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
+use crate::formula_support::components::Pattern as AtomPattern;
 use themelios_base::span::Location;
 use themelios_program::program::DefaultNegation;
 use themelios_program::symbol::{Name, Signature};
-use zetesis_core::{Atom, AtomPattern, Predicate};
+use zetesis_core::catalog::PredicateRef;
 pub(crate) mod model_query;
 mod cyclic;
 mod possible;
 mod roots;
+mod authority;
 
 use crate::expansion::Budget;
 use crate::formula::ceiling;
 use crate::formula_binding::Binding;
 use crate::formula_ir::{HeadIr, LiteralIr, Prepared, RuleIr};
-use crate::formula_support::{self, CompletedQueries, Counters, Join, Support};
-use crate::{ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
+use crate::formula_support::{
+    self, CompletedQueries, Computation, Counters, Join, SourceAtom, SourceSelection, StorageLease,
+    Support,
+};
+use crate::{FormulaFailure, FormulaLimits, FormulaResource};
 
 fn ordinary(literals: &[LiteralIr]) -> bool {
     literals.iter().all(|literal| {
@@ -68,43 +73,97 @@ impl Activity {
 /// Finite source-atom truth coverage built from completed possible Support.
 /// Optional rows need not be simultaneously realizable. This certificate never
 /// determines answer-set membership or replaces original-model query truth.
-#[derive(Default)]
 pub(crate) struct SourceEligibility {
-    atoms: BTreeMap<Atom, Activity>,
+    atoms: SourceSelection,
+    activity: Vec<Activity>,
+    round: Option<authority::Round>,
+    lease: StorageLease,
 }
 
-pub(crate) struct Context<'a> {
+pub(crate) struct Context<'a, 'terms, 'source> {
+    pub computation: &'a mut Computation<'terms, 'source>,
     pub limits: &'a FormulaLimits,
     pub budget: &'a mut Budget,
     pub counters: &'a mut Counters,
     pub location: Location,
 }
 
-impl Context<'_> {
+impl Context<'_, '_, '_> {
     fn work(&mut self) -> Result<(), FormulaFailure> {
         self.counters.work(self.limits, self.location)
     }
 
-    fn atom(&mut self, pattern: &AtomPattern, binding: &Binding) -> Result<Atom, FormulaFailure> {
+    fn atom(
+        &mut self,
+        pattern: AtomPattern,
+        binding: &Binding<'_>,
+    ) -> Result<SourceAtom, FormulaFailure> {
+        let pattern =
+            self.computation
+                .static_pattern(pattern, self.limits, self.counters, self.location)?;
+        self.computation
+            .atom(pattern, binding, self.limits, self.counters, self.location)
+    }
+
+    fn pattern_matches(
+        &mut self,
+        pattern: AtomPattern,
+        expected: &Signature,
+    ) -> Result<bool, FormulaFailure> {
+        let pattern =
+            self.computation
+                .static_pattern(pattern, self.limits, self.counters, self.location)?;
+        self.matches_signature(pattern.predicate(), expected)
+    }
+
+    /// Compare the canonical predicate to an upstream analysis key without
+    /// copying its spelling into a second execution predicate.
+    fn matches_signature(
+        &mut self,
+        predicate: PredicateRef<'_>,
+        expected: &Signature,
+    ) -> Result<bool, FormulaFailure> {
         self.work()?;
-        let mut values = Vec::new();
-        values
-            .try_reserve_exact(pattern.terms().len())
-            .map_err(|_| self.allocation())?;
-        for term in pattern.terms() {
-            self.work()?;
-            values.push(formula_support::copy(
-                binding.resolve(term, self.location)?,
-                self.budget,
-                self.location,
-            )?);
+        if crate::coherence::source_sign(predicate.sign()) != expected.sign
+            || predicate.arity() != expected.arity as usize
+        {
+            return Ok(false);
         }
-        self.budget.charge(
-            ExpansionResource::ScalarBytes,
-            pattern.predicate().name().len() as u128,
-            self.location,
-        )?;
-        Ok(Atom::new(pattern.predicate().clone(), values).expect("unchanged source arity"))
+        let actual = predicate.name();
+        self.counters
+            .charge_work(actual.len() as u128, self.limits, self.location)?;
+        Ok(actual == expected.name.as_str())
+    }
+
+    fn produces(&mut self, rule: &RuleIr, expected: &Signature) -> Result<bool, FormulaFailure> {
+        match &rule.head {
+            HeadIr::Normal(Some(head)) => self.pattern_matches(*head, expected),
+            HeadIr::Choice(group) => {
+                for element in &group.elements {
+                    self.work()?;
+                    if let Some(head) = element.head.positive_atom()
+                        && self.pattern_matches(*head, expected)?
+                    {
+                        return Ok(true);
+                    }
+                }
+                Ok(false)
+            }
+            HeadIr::Disjunction(_) | HeadIr::ConditionalDisjunction { .. } => {
+                for head in rule
+                    .head
+                    .disjuncts()
+                    .filter_map(|head| head.positive_atom())
+                {
+                    self.work()?;
+                    if self.pattern_matches(*head, expected)? {
+                        return Ok(true);
+                    }
+                }
+                Ok(false)
+            }
+            HeadIr::Normal(None) => Ok(false),
+        }
     }
 
     fn allocation(&self) -> FormulaFailure {
@@ -120,25 +179,47 @@ impl Context<'_> {
                 let left = formula_support::expression(
                     left,
                     binding,
+                    self.computation,
                     self.limits,
-                    self.budget,
                     self.counters,
                     self.location,
                 )?;
                 let right = formula_support::expression(
                     right,
                     binding,
+                    self.computation,
                     self.limits,
-                    self.budget,
                     self.counters,
                     self.location,
                 )?;
-                Ok(formula_support::compare(&left, *relation, &right))
+                let read = self.computation.read();
+                self.counters.work(self.limits, self.location)?;
+                let left = read.term(&left).map_err(|error| {
+                    crate::formula_binding::assignment(
+                        zetesis_core::catalog::AssignmentError::Read(error),
+                        self.location,
+                    )
+                })?;
+                self.counters.work(self.limits, self.location)?;
+                let right = read.term(&right).map_err(|error| {
+                    crate::formula_binding::assignment(
+                        zetesis_core::catalog::AssignmentError::Read(error),
+                        self.location,
+                    )
+                })?;
+                formula_support::compare(
+                    left,
+                    *relation,
+                    right,
+                    self.limits,
+                    self.counters,
+                    self.location,
+                )
             }
             LiteralIr::Guard(guard) => guard.evaluate(
                 binding,
+                self.computation,
                 self.limits,
-                self.budget,
                 self.counters,
                 self.location,
             ),
@@ -208,7 +289,7 @@ impl SourceEligibility {
         completed_support: &CompletedQueries<'_>,
         retained: usize,
         conditions: impl IntoIterator<Item = &'a [LiteralIr]>,
-        context: &mut Context<'_>,
+        context: &mut Context<'_, '_, '_>,
     ) -> Result<Self, FormulaFailure> {
         let support = completed_support.support();
         let graph = prepared.analysis.dependencies();
@@ -219,7 +300,7 @@ impl SourceEligibility {
         context.entries(temporary)?;
         let mut remaining = relevant.clone();
         let mut completed = BTreeSet::<Signature>::new();
-        let mut result = Self::default();
+        let mut result = Self::new(context)?;
         while !remaining.is_empty() {
             let mut ready = None;
             for predicate in &remaining {
@@ -251,53 +332,34 @@ impl SourceEligibility {
         predicate: &Signature,
         support: &Support<'_>,
         temporary: usize,
-        context: &mut Context<'_>,
+        context: &mut Context<'_, '_, '_>,
     ) -> Result<(), FormulaFailure> {
-        let mut derived = Self::default();
-        self.derive_predicate(
-            prepared,
-            predicate,
-            support,
-            temporary.saturating_add(self.atoms.len()),
-            &mut derived,
-            context,
-        )?;
-        // The complete new predicate is published only after its producer
-        // traversal. Moving each entry does not create a second atom payload.
-        for (atom, activity) in derived.atoms {
-            context.work()?;
-            self.atoms.insert(atom, activity);
-        }
-        Ok(())
+        self.round = Some(authority::Round::new(context));
+        let result = self
+            .derive_predicate(
+                prepared,
+                predicate,
+                support,
+                temporary.saturating_add(self.activity.len()),
+                context,
+            )
+            .and_then(|()| self.publish_predicate(context));
+        self.round = None;
+        result
     }
 
     fn derive_predicate(
-        &self,
+        &mut self,
         prepared: &Prepared,
         predicate: &Signature,
         support: &Support<'_>,
         temporary: usize,
-        derived: &mut Self,
-        context: &mut Context<'_>,
+        context: &mut Context<'_, '_, '_>,
     ) -> Result<(), FormulaFailure> {
-        let produces = |rule: &RuleIr| match &rule.head {
-            HeadIr::Normal(Some(head)) => signature(head.predicate()) == *predicate,
-            HeadIr::Choice(group) => group
-                .elements
-                .iter()
-                .filter_map(|element| element.head.positive_atom())
-                .any(|head| signature(head.predicate()) == *predicate),
-            HeadIr::Disjunction(_) | HeadIr::ConditionalDisjunction { .. } => rule
-                .head
-                .disjuncts()
-                .filter_map(|head| head.positive_atom())
-                .any(|head| signature(head.predicate()) == *predicate),
-            HeadIr::Normal(None) => false,
-        };
         let mut precise = true;
         for rule in &prepared.rules {
             context.work()?;
-            if !produces(rule) {
+            if !context.produces(rule, predicate)? {
                 continue;
             }
             context.location = rule.location;
@@ -312,10 +374,10 @@ impl SourceEligibility {
         if precise {
             for rule in &prepared.rules {
                 context.work()?;
-                if !produces(rule) {
+                if !context.produces(rule, predicate)? {
                     continue;
                 }
-                self.rule(rule, predicate, support, temporary, derived, context)?;
+                self.rule(rule, predicate, support, temporary, context)?;
             }
         } else {
             // Unsupported head classification retains completed Support as an
@@ -323,8 +385,8 @@ impl SourceEligibility {
             // the original scoped lowering and independent activity fold.
             for candidate in support.predicates() {
                 context.work()?;
-                if signature(candidate) == *predicate {
-                    derived.possible(candidate, support, temporary, context)?;
+                if context.matches_signature(candidate, predicate)? {
+                    self.possible_into_round(candidate, support, temporary, context)?;
                     break;
                 }
             }
@@ -333,17 +395,24 @@ impl SourceEligibility {
     }
 
     fn rule(
-        &self,
+        &mut self,
         rule: &RuleIr,
         predicate: &Signature,
         support: &Support<'_>,
         temporary: usize,
-        derived: &mut Self,
-        context: &mut Context<'_>,
+        context: &mut Context<'_, '_, '_>,
     ) -> Result<(), FormulaFailure> {
         context.location = rule.location;
-        let mut outer = Join::rule(rule, support, context.budget)?;
+        let mut outer = Join::rule(
+            rule,
+            support,
+            context.computation,
+            context.limits,
+            context.budget,
+            context.counters,
+        )?;
         while let Some(binding) = outer.next(
+            context.computation,
             context.limits,
             context.budget,
             context.counters,
@@ -353,16 +422,16 @@ impl SourceEligibility {
                 self.producer_activity(&rule.body, &rule.body_binding(&binding), support, context)?;
             match &rule.head {
                 HeadIr::Normal(Some(head)) => {
-                    derived.retain(head, &binding, body, temporary, context)?;
+                    self.retain(*head, &binding, body, temporary, context)?;
                 }
                 HeadIr::Disjunction(heads) => {
                     if heads.iter().any(|head| head.positive_atom().is_none()) {
                         return Err(refusal(rule.location));
                     }
                     for head in heads.iter().filter_map(|head| head.positive_atom()) {
-                        if signature(head.predicate()) == *predicate {
-                            derived.retain(
-                                head,
+                        if context.pattern_matches(*head, predicate)? {
+                            self.retain(
+                                *head,
                                 &binding,
                                 body.min(Activity::Optional),
                                 temporary,
@@ -381,7 +450,7 @@ impl SourceEligibility {
                         let Some(head) = element.head.positive_atom() else {
                             continue;
                         };
-                        if signature(head.predicate()) != *predicate {
+                        if !context.pattern_matches(*head, predicate)? {
                             continue;
                         }
                         let mut local = Join::element(
@@ -389,9 +458,15 @@ impl SourceEligibility {
                             &binding,
                             support,
                             context.budget,
-                            rule.location,
+                            crate::formula_support::Context::new(
+                                &*context.computation,
+                                context.limits,
+                                context.counters,
+                                rule.location,
+                            ),
                         )?;
                         while let Some(row) = local.next(
+                            context.computation,
                             context.limits,
                             context.budget,
                             context.counters,
@@ -403,8 +478,8 @@ impl SourceEligibility {
                                 support,
                                 context,
                             )?;
-                            derived.retain(
-                                head,
+                            self.retain(
+                                *head,
                                 &row,
                                 body.min(eligible).min(Activity::Optional),
                                 temporary,
@@ -421,28 +496,19 @@ impl SourceEligibility {
 
     fn retain(
         &mut self,
-        pattern: &AtomPattern,
+        pattern: AtomPattern,
         binding: &Binding,
         activity: Activity,
         temporary: usize,
-        context: &mut Context<'_>,
+        context: &mut Context<'_, '_, '_>,
     ) -> Result<(), FormulaFailure> {
-        // Resolve the complete row before selecting its source activity.
+        // Validate the complete assigned atom even when its producer is absent.
+        // Identity admission changes neither activity nor support membership.
         let atom = context.atom(pattern, binding)?;
         if activity == Activity::Absent {
             return Ok(());
         }
-        if let Some(previous) = self.atoms.get_mut(&atom) {
-            *previous = (*previous).max(activity);
-        } else {
-            context.entries(temporary.saturating_add(self.atoms.len()).saturating_add(1))?;
-            self.atoms.insert(atom, activity);
-        }
-        Ok(())
-    }
-
-    pub(crate) fn atom_activity(&self, atom: &Atom) -> Activity {
-        self.atoms.get(atom).copied().unwrap_or(Activity::Absent)
+        self.stage(&atom, activity, temporary, context)
     }
 
     fn producer_activity(
@@ -450,7 +516,7 @@ impl SourceEligibility {
         literals: &[LiteralIr],
         binding: &Binding,
         support: &Support<'_>,
-        context: &mut Context<'_>,
+        context: &mut Context<'_, '_, '_>,
     ) -> Result<Activity, FormulaFailure> {
         if ordinary(literals) {
             self.activity(literals, binding, context)
@@ -465,15 +531,14 @@ impl SourceEligibility {
         &self,
         literals: &[LiteralIr],
         binding: &Binding,
-        context: &mut Context<'_>,
+        context: &mut Context<'_, '_, '_>,
     ) -> Result<Activity, FormulaFailure> {
         let mut result = Activity::Required;
         for literal in literals {
             context.work()?;
             let activity = match literal {
                 LiteralIr::Atom(negation, pattern) => {
-                    let atom = context.atom(pattern, binding)?;
-                    let activity = self.atom_activity(&atom);
+                    let activity = self.pattern_activity(*pattern, binding, context)?;
                     if *negation == DefaultNegation::Not {
                         activity.negate()
                     } else {
@@ -484,8 +549,7 @@ impl SourceEligibility {
                 | LiteralIr::Conditional(_)
                 | LiteralIr::ProjectedAtom(..) => Activity::Optional,
                 LiteralIr::PatternAtom(pattern) => {
-                    let atom = context.atom(&pattern.atom, binding)?;
-                    self.atom_activity(&atom)
+                    self.pattern_activity(pattern.atom, binding, context)?
                 }
                 // The complete Join already checked these ordinary data filters.
                 LiteralIr::ArgumentCheck { .. } | LiteralIr::TupleCompare(..) => Activity::Required,
@@ -503,7 +567,10 @@ impl SourceEligibility {
     }
 }
 
-pub(crate) fn signature(predicate: &Predicate) -> Signature {
+pub(crate) fn signature<'a>(
+    predicate: impl Into<zetesis_core::catalog::PredicateRef<'a>>,
+) -> Signature {
+    let predicate = predicate.into();
     Signature {
         sign: crate::coherence::source_sign(predicate.sign()),
         name: Name::new(predicate.name()).expect("validated source predicate"),

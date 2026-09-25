@@ -1,6 +1,6 @@
 //! Ordered old/new row views over the sole scalar tuple owner.
 
-use zetesis_core::relation::Catalog;
+use zetesis_core::{catalog::CatalogRead, relation::Catalog};
 
 use super::{RowSet, Rows, Work, charge};
 use crate::Stop;
@@ -47,11 +47,16 @@ impl Partition {
         Ok(())
     }
 
-    pub(super) fn rows<'a>(&'a self, catalog: &'a Catalog, set: RowSet) -> Result<Rows<'a>, Stop> {
+    pub(super) fn rows<'a>(
+        &'a self,
+        catalog: &'a Catalog,
+        read: CatalogRead<'a>,
+        set: RowSet,
+    ) -> Result<Rows<'a>, Stop> {
         let runs = catalog.ordered().ok_or(Stop::InvalidProgram)?;
         let length = runs.len();
         let (first, last) = (self.old_end == 0, self.old_end == length);
-        let atoms = catalog.atoms();
+        let atoms = catalog.atoms(read).map_err(|_| Stop::InvalidProgram)?;
         // An all-old or all-new extent is the whole view or nothing.
         let (levels, tail) = match (set, first, last) {
             (RowSet::Current, _, _) | (RowSet::Old, _, true) | (RowSet::New, true, _) => {

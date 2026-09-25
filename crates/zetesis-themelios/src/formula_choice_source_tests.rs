@@ -453,7 +453,10 @@ fn metadata_matches_collection_from_the_program() {
     .unwrap();
     let mut expected = metadata::Builder::default();
     metadata::collect_profile(&program, &mut expected, true).unwrap();
-    assert_eq!(actual.finish(), expected.finish());
+    assert_eq!(
+        actual.finish(fallback(&source)).unwrap(),
+        expected.finish(fallback(&source)).unwrap()
+    );
 }
 
 #[test]

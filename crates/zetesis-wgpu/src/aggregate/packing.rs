@@ -104,7 +104,7 @@ impl Plan {
         }
         for record in records {
             poll(cancellation)?;
-            if !std::ptr::eq(record.group(), group.group) {
+            if !record.group().same_group(group.group) {
                 return Err(GpuError::new(
                     GpuErrorKind::Seed,
                     "eligibility belongs to a different aggregate Group",

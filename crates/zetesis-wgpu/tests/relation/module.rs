@@ -2,6 +2,7 @@ use super::*;
 use zetesis_core::{Atom, Predicate, Value};
 
 mod allocations;
+mod canonical;
 mod receipts;
 
 #[test]
@@ -285,7 +286,7 @@ fn batch_budgets_are_inclusive() {
     let relation = Relation::from_atoms(&predicate, &atoms, relation::Limits::default()).unwrap();
     let value = Value::Number(1);
     let queries = [relation
-        .query(&[(0, &value)], relation::Limits::default())
+        .query(&[(0, (&value).into())], relation::Limits::default())
         .unwrap()];
     let reference = plan(&relation, &queries);
     let limits = RelationGpuLimits {

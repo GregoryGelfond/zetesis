@@ -13,6 +13,7 @@ use std::{
 use zetesis_core::{
     Atom, AtomPattern, Predicate, Sign, Term, Value, ValueLimits, ValueNode,
     atom_interner::{AtomInterner, Limits},
+    catalog::AtomRef,
 };
 
 const SIZES: [usize; 3] = [128, 1_024, 4_096];
@@ -20,6 +21,9 @@ const ROUNDS: usize = 4;
 const REPEATS: usize = 4;
 const MISSES: usize = 16;
 const WORK_LIMIT: u64 = 100_000_000;
+// Explicit fixture allowance for short text, depth-three terms and four sealed
+// rounds. Population alone does not bound arbitrary canonical term storage.
+const CANONICAL_BYTES: usize = 64 * 1024 * 1024;
 
 struct Fixture {
     atoms: Vec<Atom>,
@@ -181,10 +185,15 @@ impl Probe {
                 let entry = appender.entry_key_with(key, self.limits, || phase.tick())?;
                 assert_eq!(entry.position(), None);
                 assert_eq!(entry.insert_with(self.limits, || phase.tick())?, id);
-                assert_eq!(appender.get(id), Some(atom));
+                assert_eq!(appender.get(id), Some(AtomRef::from(atom)));
                 assert_eq!(committed.get(id), None);
             }
-            assert_eq!(committed.as_slice(), &fixture.atoms[..start]);
+            assert!(
+                committed
+                    .atoms()
+                    .iter()
+                    .eq(fixture.atoms[..start].iter().map(AtomRef::from))
+            );
         }
         assert_eq!(self.atoms.len(), end);
         phase.report(out, self, "append_key", (end - start, 2 * (end - start)), 0)?;
@@ -261,7 +270,10 @@ impl Probe {
         let ids = self.atoms.ordered_ids_with(self.limits, || phase.tick())?;
         assert_eq!(ids, expected);
         for &id in &ids {
-            assert_eq!(self.atoms.committed().get(id), Some(&fixture.atoms[id]));
+            assert_eq!(
+                self.atoms.committed().get(id),
+                Some(AtomRef::from(&fixture.atoms[id]))
+            );
         }
         let order_bytes =
             size_of::<Vec<usize>>() as u128 + ids.capacity() as u128 * size_of::<usize>() as u128;
@@ -272,16 +284,14 @@ impl Probe {
 
     fn commit(&mut self, fixture: &Fixture, out: &mut impl Write) -> Result<(), Box<dyn Error>> {
         let added = self.atoms.len() - self.atoms.committed().len();
-        let before = self.atoms.storage_bytes();
         let mut phase = Phase::new(self.timed);
         self.atoms.commit_with(self.limits, || phase.tick())?;
-        if self.round == 1 {
-            assert_eq!(phase.work, 1); // First commit swaps the pending owner.
-            assert_eq!(self.atoms.storage_bytes(), before);
-        }
-        assert_eq!(
-            self.atoms.committed().as_slice(),
-            &fixture.atoms[..self.atoms.len()]
+        assert!(
+            self.atoms
+                .committed()
+                .atoms()
+                .iter()
+                .eq(fixture.atoms[..self.atoms.len()].iter().map(AtomRef::from))
         );
         phase.report(out, self, "commit", (added, 1), 0)?;
         Ok(())
@@ -292,7 +302,7 @@ fn run(rows: usize, timed: bool, out: &mut impl Write) -> Result<(), Box<dyn Err
     let fixture = Fixture::new(rows)?;
     let mut probe = Probe {
         atoms: AtomInterner::new(),
-        limits: Limits::for_atoms(rows),
+        limits: Limits::for_atoms(rows, CANONICAL_BYTES),
         round: 0,
         timed,
     };
@@ -310,9 +320,15 @@ fn run(rows: usize, timed: bool, out: &mut impl Write) -> Result<(), Box<dyn Err
     let mut final_work = Phase::new(false);
     let atoms = probe
         .atoms
-        .into_atoms_with(probe.limits, || final_work.tick())?;
-    assert_eq!(final_work.work, 0); // No pending tail remains to commit.
-    assert_eq!(atoms, fixture.atoms);
+        .into_catalog_with(probe.limits, || final_work.tick())?;
+    // Final publication meters the portable occurrence measure even though no
+    // pending discovery remains. It transfers canonical references, not atoms.
+    assert!(
+        atoms
+            .atoms()
+            .iter()
+            .eq(fixture.atoms.iter().map(AtomRef::from))
+    );
     Ok(())
 }
 

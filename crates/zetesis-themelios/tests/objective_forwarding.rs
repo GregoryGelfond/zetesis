@@ -131,11 +131,13 @@ fn search_preserves_every_optimum_tie() {
             let interpretation = interpretation.unwrap();
             let atoms: Vec<_> = interpretation
                 .atoms()
-                .map(|index| input.atoms()[index].clone())
+                .map(|index| input.atoms().at(index).unwrap())
                 .collect();
+            let evaluated_model =
+                Model::from_positions(input.atom_catalog(), interpretation.atoms()).unwrap();
             let evaluation = zetesis_objective::evaluate(
                 input.objectives(),
-                &Model::new(atoms.iter().cloned()),
+                &evaluated_model,
                 zetesis_objective::Limits::default(),
                 &Cancellation::default(),
             )
@@ -144,7 +146,7 @@ fn search_preserves_every_optimum_tie() {
             let costs = score
                 .is_present()
                 .then(|| score.costs().iter().map(|&(_, value)| value).collect());
-            assert!(records.insert((atoms.iter().map(canonical).collect(), costs)));
+            assert!(records.insert((atoms.iter().copied().map(canonical).collect(), costs)));
         }
         assert!(search.exhausted(), "{}: complete reduct search", case.name);
         // These fixed-alphabet fixtures have the same priority layout in every

@@ -1,7 +1,7 @@
 //! Finite source-activity refinement starts from complete possible support.
 //!
 //! Each round reads the old atom table and completely aggregates all producer
-//! alternatives into a separately admitted new table. Only Optional entries
+//! alternatives into separately admitted ID-only classification cells. Only Optional entries
 //! become Required or Absent; known information is retained. A changing round
 //! therefore removes at least one Optional entry. At most N changing rounds and
 //! one final no-change round occur for N initially possible source atoms.
@@ -10,7 +10,7 @@
 use std::collections::BTreeSet;
 use themelios_program::symbol::Signature;
 
-use super::{Activity, Context, SourceEligibility, signature};
+use super::{Activity, Context, SourceEligibility, authority::Round, signature};
 use crate::FormulaFailure;
 use crate::formula_ir::Prepared;
 use crate::formula_support::Support;
@@ -22,58 +22,69 @@ impl SourceEligibility {
         support: &Support<'_>,
         unresolved: &BTreeSet<Signature>,
         temporary: usize,
-        context: &mut Context<'_>,
+        context: &mut Context<'_, '_, '_>,
     ) -> Result<(), FormulaFailure> {
         for predicate in support.predicates() {
             context.work()?;
+            context.counters.charge_work(
+                predicate.name().len() as u128,
+                context.limits,
+                context.location,
+            )?;
             if unresolved.contains(&signature(predicate)) {
                 self.possible(predicate, support, temporary, context)?;
             }
         }
         loop {
             context.work()?;
-            let mut derived = Self::default();
-            let overlap = temporary.saturating_add(self.atoms.len());
-            for predicate in unresolved {
-                context.work()?;
-                self.derive_predicate(
-                    prepared,
-                    predicate,
-                    support,
-                    overlap,
-                    &mut derived,
-                    context,
-                )?;
-            }
-            if !self.refine_round(&derived, unresolved, context)? {
+            self.round = Some(Round::new(context));
+            let result = self.derive_round(prepared, support, unresolved, temporary, context);
+            self.round = None;
+            if !result? {
                 return Ok(());
             }
         }
     }
 
-    /// Check the complete round's carrier and information relation before any
-    /// new classifications are published. Work failure still aborts the whole
-    /// source-activity attempt; no partial certificate escapes its constructor.
+    fn derive_round(
+        &mut self,
+        prepared: &Prepared,
+        support: &Support<'_>,
+        unresolved: &BTreeSet<Signature>,
+        temporary: usize,
+        context: &mut Context<'_, '_, '_>,
+    ) -> Result<bool, FormulaFailure> {
+        let overlap = temporary.saturating_add(self.activity.len());
+        for predicate in unresolved {
+            context.work()?;
+            self.derive_predicate(prepared, predicate, support, overlap, context)?;
+        }
+        self.refine_round(unresolved, context)
+    }
+
+    /// Validate the complete carrier and information relation before publishing
+    /// classifications. Work refusal aborts the certificate's constructor.
     fn refine_round(
         &mut self,
-        derived: &Self,
         unresolved: &BTreeSet<Signature>,
-        context: &mut Context<'_>,
+        context: &mut Context<'_, '_, '_>,
     ) -> Result<bool, FormulaFailure> {
-        for atom in derived.atoms.keys() {
+        let round = self.round.as_ref().expect("producer round active");
+        for (id, update) in round.updates.iter().enumerate() {
             context.work()?;
-            if !self.atoms.contains_key(atom) || !unresolved.contains(&signature(atom.predicate()))
+            if update.is_some()
+                && (id >= self.activity.len() || !self.unresolved(id, unresolved, context)?)
             {
                 return Err(FormulaFailure::SourceActivity {
                     location: context.location,
                 });
             }
         }
-        for (atom, activity) in &self.atoms {
+        for (id, activity) in self.activity.iter().enumerate() {
             context.work()?;
-            if unresolved.contains(&signature(atom.predicate()))
-                && *activity != Activity::Optional
-                && derived.atom_activity(atom) != *activity
+            if *activity != Activity::Optional
+                && self.unresolved(id, unresolved, context)?
+                && round.at(id) != *activity
             {
                 return Err(FormulaFailure::SourceActivity {
                     location: context.location,
@@ -81,18 +92,42 @@ impl SourceEligibility {
             }
         }
         let mut changed = false;
-        for (atom, activity) in &mut self.atoms {
+        for id in 0..self.activity.len() {
             context.work()?;
-            if unresolved.contains(&signature(atom.predicate())) && *activity == Activity::Optional
+            if self.activity[id] == Activity::Optional
+                && self.unresolved(id, unresolved, context)?
             {
-                let next = derived.atom_activity(atom);
+                let next = round.at(id);
                 if next != Activity::Optional {
-                    *activity = next;
+                    self.activity[id] = next;
                     changed = true;
                 }
             }
         }
         Ok(changed)
+    }
+
+    fn unresolved(
+        &self,
+        id: usize,
+        unresolved: &BTreeSet<Signature>,
+        context: &mut Context<'_, '_, '_>,
+    ) -> Result<bool, FormulaFailure> {
+        context.work()?;
+        let atom = self.atoms.atom(
+            id,
+            context.computation,
+            context.limits,
+            context.counters,
+            context.location,
+        )?;
+        let predicate = atom.predicate();
+        context.counters.charge_work(
+            predicate.name().len() as u128,
+            context.limits,
+            context.location,
+        )?;
+        Ok(unresolved.contains(&signature(predicate)))
     }
 }
 

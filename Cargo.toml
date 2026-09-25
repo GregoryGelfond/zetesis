@@ -39,6 +39,8 @@ themelios-syntax = { git = "https://github.com/GregoryGelfond/themelios.git", re
 themelios-program = { git = "https://github.com/GregoryGelfond/themelios.git", rev = "4f0275875d624fae1817c4811310525c088a0f42", package = "themelios-program" }
 themelios-analysis = { git = "https://github.com/GregoryGelfond/themelios.git", rev = "4f0275875d624fae1817c4811310525c088a0f42", package = "themelios-analysis", default-features = false }
 rayon = "1.12"
+# Borrowed canonical atom queries use Equivalent rather than an owned key copy.
+hashbrown = { version = "0.17.1", default-features = false }
 wgpu = "30.0.1"
 bytemuck = "1.25"
 pollster = "0.4"

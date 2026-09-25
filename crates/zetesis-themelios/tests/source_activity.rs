@@ -46,8 +46,8 @@ fn contradictory_optional_guards_keep_the_fixed_domain() {
         let admitted = input(&format!("{program}#project p:q,not q."));
         let domain = admitted.projection().atoms();
         assert_eq!(domain.len(), 1, "{program}");
-        assert_eq!(domain[0].predicate().name(), "p");
-        assert!(domain[0].values().is_empty());
+        assert_eq!(domain.at(0).unwrap().predicate().name(), "p");
+        assert!(domain.at(0).unwrap().values().is_empty());
     }
 }
 
@@ -120,7 +120,7 @@ fn negative_cycles_remain_optional_without_correlation() {
     let admitted = input("q:-not r.r:-not q.{p}.#project p:q,not q.");
     let domain = admitted.projection().atoms();
     assert_eq!(domain.len(), 1);
-    assert_eq!(domain[0].predicate().name(), "p");
+    assert_eq!(domain.at(0).unwrap().predicate().name(), "p");
 }
 
 #[test]

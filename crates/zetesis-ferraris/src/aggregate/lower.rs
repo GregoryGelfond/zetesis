@@ -160,20 +160,9 @@ pub(super) fn validate_elements(
     builder: &mut Builder<'_>,
     elements: impl ExactSizeIterator<Item = (usize, i32)>,
 ) -> Result<(bool, i128)> {
-    builder.tick()?;
-    if builder.nodes.len() > builder.limits.max_nodes {
-        return Err(AggregateErrorKind::NodeLimit);
-    }
+    validate_prefix(builder)?;
     if elements.len() > builder.limits.max_elements {
         return Err(AggregateErrorKind::ElementLimit);
-    }
-    for index in 0..builder.nodes.len() {
-        builder.tick()?;
-        if let Node::And(a, b) | Node::Or(a, b) | Node::Implies(a, b) = builder.nodes[index]
-            && (a >= index || b >= index)
-        {
-            return Err(AggregateErrorKind::InvalidPrefix { node: index });
-        }
     }
     let mut nonnegative = true;
     let mut total = 0i128;
@@ -188,6 +177,24 @@ pub(super) fn validate_elements(
             .ok_or(AggregateErrorKind::ArithmeticOverflow)?;
     }
     Ok((nonnegative, total))
+}
+
+/// Validate the existing DAG before any aggregate-specific appends.
+pub(super) fn validate_prefix(builder: &mut Builder<'_>) -> Result<usize> {
+    builder.tick()?;
+    if builder.nodes.len() > builder.limits.max_nodes {
+        return Err(AggregateErrorKind::NodeLimit);
+    }
+    let prefix = builder.nodes.len();
+    for index in 0..prefix {
+        builder.tick()?;
+        if let Node::And(a, b) | Node::Or(a, b) | Node::Implies(a, b) = builder.nodes[index]
+            && (a >= index || b >= index)
+        {
+            return Err(AggregateErrorKind::InvalidPrefix { node: index });
+        }
+    }
+    Ok(prefix)
 }
 
 fn compile(

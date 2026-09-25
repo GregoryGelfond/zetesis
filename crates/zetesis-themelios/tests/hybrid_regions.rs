@@ -268,7 +268,13 @@ fn unheld_rows_do_not_consume_substitutions() {
         .atoms()
         .iter()
         .position(|atom| {
-            atom.predicate().name() == "p" && atom.values() == [zetesis_core::Value::Number(8)]
+            atom.predicate().name() == "p"
+                && atom
+                    .values()
+                    .iter()
+                    .eq([zetesis_core::catalog::TermRef::from(
+                        &zetesis_core::Value::Number(8),
+                    )])
         })
         .unwrap();
     assert!(region.hold(last));
@@ -353,16 +359,15 @@ fn shared_work_limit_covers_later_checker_preparation() {
 }
 
 #[test]
-fn shared_scalar_limit_covers_independent_checkers() {
+fn independent_checkers_reuse_canonical_constructors() {
     let owner = admit("d(1..2). {p(f(1));p(f(2))}. :-d(X),Y=f(X),p(Y),X>1.");
     let cancellation = Cancellation::default();
-    let candidate = completion(&owner, 0);
-    let mut baseline = owner.checker(ConstraintCheckLimits::default()).unwrap();
-    baseline.check(&candidate, &cancellation).unwrap();
-    let bytes = baseline.statistics().scalar_bytes;
-    assert!(bytes > 0, "structured values require copied payload");
+    let candidate =
+        Model::from_positions(owner.atom_catalog(), 0..owner.atom_catalog().atoms().len()).unwrap();
+    // The frozen vocabulary already contains f(1) and f(2). Looking up those
+    // constructors must not rebuild their payload in each independent checker.
     let allowance = ConstraintAllowance::new(ConstraintCheckLimits {
-        max_scalar_bytes: bytes,
+        max_scalar_bytes: 0,
         ..Default::default()
     });
     let mut first = owner
@@ -371,17 +376,18 @@ fn shared_scalar_limit_covers_independent_checkers() {
     let mut second = owner
         .checker_with_allowance(&allowance, &cancellation)
         .unwrap();
-    first.check(&candidate, &cancellation).unwrap();
-    let failure = second.check(&candidate, &cancellation).unwrap_err();
-    assert!(matches!(failure.cause, ConstraintCheckCause::Source(error)
-        if matches!(error.as_ref(), FormulaFailure::Expansion(
-            zetesis_themelios::ExpansionFailure::Limit {
-                resource: zetesis_themelios::ExpansionResource::ScalarBytes, ..
-            }
-        ))
-    ));
-    assert_eq!(failure.statistics.scalar_bytes, 0);
-    assert_eq!(allowance.statistics().scalar_bytes, bytes);
+    for checker in [&mut first, &mut second] {
+        assert!(matches!(
+            checker.check(&candidate, &cancellation).unwrap(),
+            ConstraintVerdict::Violated { .. }
+        ));
+        assert!(
+            checker.statistics().substitutions > 0,
+            "constructor-dependent body was checked"
+        );
+        assert_eq!(checker.statistics().scalar_bytes, 0);
+    }
+    assert_eq!(allowance.statistics().scalar_bytes, 0);
 }
 
 #[test]

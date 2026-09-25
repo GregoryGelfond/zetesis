@@ -87,9 +87,7 @@ fn basis() -> (AdmittedFormula, Vec<Model>) {
         .unwrap()
         .accepted()
         {
-            models.push(Model::new(
-                candidate.atoms().map(|index| input.atoms()[index].clone()),
-            ));
+            models.push(Model::from_positions(input.atom_catalog(), candidate.atoms()).unwrap());
         }
     }
     assert_eq!(models.len(), 16);

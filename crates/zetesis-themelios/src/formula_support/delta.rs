@@ -112,11 +112,17 @@ impl Variants<'_, '_> {
                 counters.work(limits, self.rule.location)?;
                 let literal = &self.rule.body[occurrence];
                 self.next += 1;
-                if let LiteralIr::Atom(DefaultNegation::None, atom) = literal
-                    && self.support.old_rows(atom.predicate())
+                if let LiteralIr::Atom(DefaultNegation::None, atom) = literal {
+                    let components = self
+                        .support
+                        .components()
+                        .ok_or_else(|| super::components::missing(self.rule.location))?;
+                    let atom = atom.get(components, limits, counters, self.rule.location)?;
+                    if self.support.old_rows(atom.predicate())
                         < self.support.row_count(atom.predicate())
-                {
-                    return Ok(Some(Variant::Delta(occurrence)));
+                    {
+                        return Ok(Some(Variant::Delta(occurrence)));
+                    }
                 }
             }
         }

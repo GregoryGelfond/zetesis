@@ -5,7 +5,7 @@
 //! without depending on this one, so the test lives here.
 use std::fmt::Write as _;
 
-use zetesis_core::{Atom, Model, Seed};
+use zetesis_core::{Model, Seed};
 use zetesis_cpu::{Cancellation, ClosureWorkspace, Limits, PreparationLimits, PreparedQueries};
 
 fn edges(name: &str, first: u32, last: u32) -> String {
@@ -65,14 +65,18 @@ fn families() -> Vec<(&'static str, String)> {
 /// The seeds a family is checked under: nothing, every symbolic gate atom,
 /// and every other one of them.
 fn seeds(program: &zetesis_core::Program) -> Vec<Seed> {
-    let gates: Vec<Atom> = program
+    let gates: Vec<_> = program
         .indexed_gate_atoms()
-        .map(|gate| gate.unwrap().atom().clone())
+        .map(|gate| std::sync::Arc::new(gate.unwrap()))
         .collect();
-    let alternate: Vec<Atom> = gates.iter().step_by(2).cloned().collect();
+    let alternate: Vec<_> = gates.iter().step_by(2).cloned().collect();
     [Vec::new(), gates, alternate]
         .into_iter()
-        .map(|atoms| Seed::new(program, atoms).unwrap())
+        .map(|atoms| {
+            zetesis_core::SeedSelection::from_gate_atoms(program, atoms)
+                .unwrap()
+                .to_seed()
+        })
         .collect()
 }
 

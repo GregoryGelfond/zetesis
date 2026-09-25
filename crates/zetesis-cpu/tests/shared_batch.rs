@@ -110,7 +110,7 @@ fn expected(mask: u8) -> Model {
             }
         }
     }
-    Model::new(atoms)
+    Model::new(atoms).unwrap()
 }
 
 #[test]

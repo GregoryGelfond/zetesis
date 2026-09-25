@@ -102,11 +102,37 @@ fn materialization_checks_dynamic_arithmetic() {
 
 #[test]
 fn grounding_resumes_the_expansion_budget() {
-    // This fixture charges 7 selected payload bytes during preparation and 12
-    // during grounding. Membership keys borrow values; they add no copy charge.
-    // Resetting the budget at ground() would wrongly admit 18.
-    let source = "p(\"x\").";
-    let exact_bytes = 19;
+    // Preparation charges source metadata; structural matching then reserves
+    // capture-delta cells. Canonical term lookups do not copy scalar payloads.
+    let source = "p(f(\"x\")). q(X) :- p(f(X)).";
+    let baseline = admit_formula(
+        source.into(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .unwrap();
+    let exact_bytes = baseline.expansion_usage().scalar_bytes;
+    assert!(matches!(
+        prepare_formula(
+            source.into(),
+            AdmissionOptions::default(),
+            ExpansionLimits {
+                max_scalar_bytes: 0,
+                ..ExpansionLimits::default()
+            },
+            FormulaLimits::default(),
+        ),
+        Err(FormulaFailure::Expansion(ExpansionFailure::Limit {
+            resource: ExpansionResource::ScalarBytes,
+            limit: 0,
+            observed: 1..,
+            ..
+        }))
+    ));
+    // Preparation succeeds below the complete charge. Both entry points must
+    // agree at this inclusive boundary; the private handoff regression anchors
+    // an accepted preparation charge independently of this shared baseline.
     let expansion = ExpansionLimits {
         max_scalar_bytes: exact_bytes - 1,
         ..ExpansionLimits::default()
@@ -136,11 +162,11 @@ fn grounding_resumes_the_expansion_budget() {
     else {
         panic!("expected cumulative expansion refusal");
     };
-    assert_eq!(resource, zetesis_themelios::ExpansionResource::ScalarBytes);
+    assert_eq!(resource, ExpansionResource::ScalarBytes);
     assert_eq!(limit, (exact_bytes - 1) as u128);
     assert_eq!(observed, exact_bytes as u128);
     assert_eq!(location.source, AdmissionOptions::default().source_id);
-    prepare_formula(
+    let exact = prepare_formula(
         source.into(),
         AdmissionOptions::default(),
         ExpansionLimits {
@@ -152,6 +178,10 @@ fn grounding_resumes_the_expansion_budget() {
     .unwrap()
     .ground()
     .unwrap();
+    assert_eq!(exact.expansion_usage(), baseline.expansion_usage());
+    assert_eq!(exact.atoms(), baseline.atoms());
+    assert_eq!(exact.theory().nodes(), baseline.theory().nodes());
+    assert_eq!(exact.theory().roots(), baseline.theory().roots());
 }
 
 #[test]

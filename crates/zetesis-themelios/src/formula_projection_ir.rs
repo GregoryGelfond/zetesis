@@ -4,14 +4,15 @@
 //! anonymous-subtree inspection can be quadratic in source depth; every visited
 //! node is charged to the cumulative term-work ceiling before inspection.
 
+use crate::formula_support::components::{Predicate, Term as CoreTerm};
 use themelios_program::program::{Arguments, Atom, DefaultNegation, Relation};
 use themelios_program::term::{Term, Variable};
-use zetesis_core::{AtomPattern, Predicate, Term as CoreTerm};
+use zetesis_core::ValueNodeRef;
 
 use crate::formula::ceiling;
 use crate::formula_ir::{Compiler, Expression, LiteralIr, Operation, Projection, Variables};
 use crate::formula_pattern::{ArgumentPattern, PatternAtom, PatternNode, push, reserve};
-use crate::{AdmissionFailure, ExpansionResource, FormulaFailure, FormulaResource};
+use crate::{ExpansionResource, FormulaFailure, FormulaResource};
 
 impl Compiler<'_> {
     pub(super) fn projected_atom(
@@ -69,15 +70,11 @@ impl Compiler<'_> {
             atom.name.as_str().len() as u128,
             self.location,
         )?;
-        let predicate = Predicate::with_sign(
+        let predicate = self.predicate(
             atom.name.as_str(),
             terms.len(),
             crate::coherence::core_sign(atom.sign),
-        )
-        .map_err(|error| AdmissionFailure::Construction {
-            error,
-            location: self.location,
-        })?;
+        )?;
         let projection = if patterns.is_empty() {
             Projection::Arguments { predicate, terms }
         } else {
@@ -95,11 +92,7 @@ impl Compiler<'_> {
         bindings: &mut Vec<LiteralIr>,
     ) -> Result<CoreTerm, FormulaFailure> {
         if matches!(term, Term::Symbolic(_) | Term::Variable(_)) {
-            let term = self.objective_term(term, variables)?;
-            if let CoreTerm::Constant(value) = &term {
-                self.value(value)?;
-            }
-            return Ok(term);
+            return self.domain_term(term, variables);
         }
         let value = self.ranged_expression(term, variables, bindings)?;
         let target = self.consequent_slot(variables)?;
@@ -146,7 +139,14 @@ impl Compiler<'_> {
                 if let Term::Tuple(children) = term {
                     reserve(&mut pending, children.len(), self.budget, self.location)?;
                     pending.extend(children.iter().rev());
-                    PatternNode::Tuple(children.len())
+                    PatternNode::Constructor(self.source.constructor(
+                        ValueNodeRef::Tuple {
+                            arity: children.len(),
+                        },
+                        self.limits,
+                        self.counters,
+                        self.location,
+                    )?)
                 } else if matches!(term, Term::Function { .. })
                     && let Some((node, children)) = self.function_pattern(term)?
                 {
@@ -207,13 +207,7 @@ impl Compiler<'_> {
                 CoreTerm::Variable(slot)
             });
         }
-        let atom = AtomPattern::new(predicate, captured).map_err(|error| {
-            AdmissionFailure::Construction {
-                error,
-                location: self.location,
-            }
-        })?;
-        let retained = self.consequent_capture(&atom)?;
+        let atom = self.pattern_from_parts(predicate, &captured)?;
         let mut bindings = Vec::new();
         push(
             &mut bindings,
@@ -222,7 +216,7 @@ impl Compiler<'_> {
             self.location,
         )?;
         Ok(Projection::Witnesses {
-            atom: retained,
+            atom,
             bindings,
             variables: count,
             inputs,

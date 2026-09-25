@@ -1,132 +1,199 @@
-//! Finite expression alternatives with an explicit live owned-payload budget.
+//! Finite expression alternatives with one scoped ID frame and logical charges.
 
 use themelios_program::term::{BinaryOp, UnaryOp};
+use zetesis_core::{
+    ValueNodeRef,
+    catalog::{TermAssignment, TermKey},
+};
 
-use super::{Bound, Error, ErrorKind, EvaluationError, Metric, Resource, Symbol, Template, Work};
+use super::{Binding, Error, ErrorKind, EvaluationError, Interpreter, Metric, Resource, Template};
 
-#[derive(Default)]
 pub(super) struct Values {
-    pub values: Vec<(Symbol, Metric)>,
+    terms: TermAssignment,
+    metrics: Vec<Metric>,
     pub bytes: u128,
 }
 impl Values {
-    fn push(
+    fn new(context: &Interpreter<'_, '_, '_>) -> Self {
+        Self {
+            terms: context.terms.read().assignment(),
+            metrics: Vec::new(),
+            bytes: 0,
+        }
+    }
+    pub fn len(&self) -> usize {
+        self.metrics.len()
+    }
+    pub fn metric(&self, index: usize) -> Metric {
+        self.metrics[index]
+    }
+    pub fn key(
+        &self,
+        index: usize,
+        context: &mut Interpreter<'_, '_, '_>,
+    ) -> Result<TermKey, Error> {
+        context.work.step(1)?;
+        self.terms
+            .key(index)
+            .map_err(|error| context.work.error(ErrorKind::TermAssignment(error)))?
+            .ok_or_else(|| context.work.error(ErrorKind::InvalidSymbol))
+    }
+    fn push<'input>(
         &mut self,
         metric: Metric,
-        work: &mut Work<'_>,
-        make: impl FnOnce(&mut Work<'_>) -> Result<Symbol, Error>,
+        context: &mut Interpreter<'input, '_, '_>,
+        make: impl FnOnce(&mut Interpreter<'input, '_, '_>) -> Result<TermKey, Error>,
     ) -> Result<(), Error> {
-        work.check(
+        context.work.check(
             Resource::LocalBytes,
-            work.local_bytes + metric.payload(),
-            work.limits.max_local_bytes as u128,
+            context.work.local_bytes + metric.payload(),
+            context.work.limits.max_local_bytes as u128,
         )?;
-        work.construction_check(metric)?;
-        work.step(1)?;
-        self.values
+        context.work.construction_check(metric)?;
+        context.work.step(1)?;
+        self.metrics
             .try_reserve(1)
-            .map_err(|_| work.error(ErrorKind::Allocation))?;
-        let symbol = make(work)?;
+            .map_err(|_| context.work.error(ErrorKind::Allocation))?;
+        let next = self
+            .len()
+            .checked_add(1)
+            .ok_or_else(|| context.work.error(ErrorKind::Allocation))?;
+        self.terms
+            .resize_with(next, context.work.limits.max_term_storage_bytes, || {
+                context.work.step(1)
+            })
+            .map_err(|error| super::binding::failure(error, context.work))?;
+        let key = make(context)?;
+        self.terms
+            .set_with(self.len(), &key, || context.work.step(1))
+            .map_err(|error| super::binding::failure(error, context.work))?;
         self.bytes += metric.payload();
-        work.local_bytes += metric.payload();
-        self.values.push((symbol, metric));
+        context.work.local_bytes += metric.payload();
+        self.metrics.push(metric);
         Ok(())
     }
-    fn number(&mut self, value: i32, work: &mut Work<'_>) -> Result<(), Error> {
-        let symbol = Symbol::Number(value);
+    fn number(&mut self, value: i32, context: &mut Interpreter<'_, '_, '_>) -> Result<(), Error> {
+        context.work.step(1)?;
         let mut metric = Metric::default();
-        work.symbol_check(&symbol, 1, &mut metric)?;
-        self.push(metric, work, |_| Ok(symbol))
+        context.work.node(&mut metric)?;
+        context.work.check(
+            Resource::Depth,
+            1,
+            context.work.limits.max_symbol_depth as u128,
+        )?;
+        self.push(metric, context, |context| context.number(value))
     }
-    fn append(&mut self, other: &mut Self, work: &mut Work<'_>) -> Result<(), Error> {
-        work.step(other.values.len() as u128)?;
-        self.values
-            .try_reserve(other.values.len())
-            .map_err(|_| work.error(ErrorKind::Allocation))?;
+    fn append(
+        &mut self,
+        other: &mut Self,
+        context: &mut Interpreter<'_, '_, '_>,
+    ) -> Result<(), Error> {
+        context.work.step(other.len() as u128)?;
+        self.metrics
+            .try_reserve(other.len())
+            .map_err(|_| context.work.error(ErrorKind::Allocation))?;
+        let start = self.len();
+        let end = start
+            .checked_add(other.len())
+            .ok_or_else(|| context.work.error(ErrorKind::Allocation))?;
+        self.terms
+            .resize_with(end, context.work.limits.max_term_storage_bytes, || {
+                context.work.step(1)
+            })
+            .map_err(|error| super::binding::failure(error, context.work))?;
+        for index in 0..other.len() {
+            let key = other.key(index, context)?;
+            self.terms
+                .set_with(start + index, &key, || context.work.step(1))
+                .map_err(|error| super::binding::failure(error, context.work))?;
+        }
+        // Until every ID copy succeeds, the original alternative owner retains
+        // all logical charges. Partly filled inactive slots are metadata only.
         self.bytes += other.bytes;
         other.bytes = 0;
-        self.values.append(&mut other.values);
+        self.metrics.append(&mut other.metrics);
         Ok(())
     }
 }
-fn number(value: &Symbol, work: &Work<'_>) -> Result<i32, Error> {
-    if let Symbol::Number(value) = value {
-        Ok(*value)
-    } else {
-        Err(work.error(ErrorKind::Evaluation(EvaluationError::Undefined)))
+fn number(key: &TermKey, context: &Interpreter<'_, '_, '_>) -> Result<i32, Error> {
+    match context.value(key).descriptor() {
+        ValueNodeRef::Number(value) => Ok(value),
+        _ => Err(context
+            .work
+            .error(ErrorKind::Evaluation(EvaluationError::Undefined))),
     }
 }
-pub(super) fn with<T>(
+pub(super) fn with<'input, T>(
     term: &Template,
-    binding: &[Option<Bound<'_>>],
-    work: &mut Work<'_>,
-    action: impl FnOnce(&mut Values, &mut Work<'_>) -> Result<T, Error>,
+    binding: &Binding<'input>,
+    context: &mut Interpreter<'input, '_, '_>,
+    action: impl FnOnce(&mut Values, &mut Interpreter<'input, '_, '_>) -> Result<T, Error>,
 ) -> Result<T, Error> {
-    let mut values = collect(term, binding, work)?;
-    let result = action(&mut values, work);
-    work.local_bytes -= values.bytes;
+    let mut values = collect(term, binding, context)?;
+    let result = action(&mut values, context);
+    context.work.local_bytes -= values.bytes;
     result
 }
-fn unary(
+fn unary<'input>(
     operator: Option<UnaryOp>,
     argument: &Template,
-    binding: &[Option<Bound<'_>>],
+    binding: &Binding<'input>,
     out: &mut Values,
-    work: &mut Work<'_>,
+    context: &mut Interpreter<'input, '_, '_>,
 ) -> Result<(), Error> {
-    with(argument, binding, work, |values, work| {
-        for (symbol, metric) in &values.values {
-            work.step(1)?;
-            if operator == Some(UnaryOp::Negate) && matches!(symbol, Symbol::Function { .. }) {
-                out.push(*metric, work, |work| {
-                    let mut result = work.copy_symbol(symbol)?;
-                    let Symbol::Function { sign, .. } = &mut result else {
-                        unreachable!()
-                    };
-                    *sign = match sign {
-                        super::Sign::Positive => super::Sign::Negative,
-                        super::Sign::Negative => super::Sign::Positive,
-                    };
-                    Ok(result)
+    with(argument, binding, context, |values, context| {
+        for index in 0..values.len() {
+            context.work.step(1)?;
+            let key = values.key(index, context)?;
+            if operator == Some(UnaryOp::Negate)
+                && matches!(
+                    context.value(&key).descriptor(),
+                    ValueNodeRef::Function { .. } | ValueNodeRef::Symbol(_)
+                )
+            {
+                out.push(values.metric(index), context, |context| {
+                    context.negate(&key)
                 })?;
             } else {
-                let value = number(symbol, work)?;
+                let value = number(&key, context)?;
                 let value = match operator {
                     Some(operator) => crate::scalar_arithmetic::unary(operator, value),
                     None => crate::scalar_arithmetic::absolute(value),
                 }
-                .map_err(|cause| work.error(ErrorKind::Evaluation(cause)))?;
-                out.number(value, work)?;
+                .map_err(|cause| context.work.error(ErrorKind::Evaluation(cause)))?;
+                out.number(value, context)?;
             }
         }
         Ok(())
     })
 }
-fn binary(
+fn binary<'input>(
     operator: Option<BinaryOp>,
     left: &Template,
     right: &Template,
-    binding: &[Option<Bound<'_>>],
+    binding: &Binding<'input>,
     out: &mut Values,
-    work: &mut Work<'_>,
+    context: &mut Interpreter<'input, '_, '_>,
 ) -> Result<(), Error> {
-    with(left, binding, work, |left, work| {
-        with(right, binding, work, |right, work| {
-            for (left, _) in &left.values {
-                for (right, _) in &right.values {
-                    work.step(1)?;
-                    let left = number(left, work)?;
-                    let right = number(right, work)?;
+    with(left, binding, context, |left, context| {
+        with(right, binding, context, |right, context| {
+            for left_index in 0..left.len() {
+                for right_index in 0..right.len() {
+                    context.work.step(1)?;
+                    let left_key = left.key(left_index, context)?;
+                    let right_key = right.key(right_index, context)?;
+                    let left = number(&left_key, context)?;
+                    let right = number(&right_key, context)?;
                     if let Some(operator) = operator {
                         let result = crate::scalar_arithmetic::binary(operator, left, right)
-                            .map_err(|cause| work.error(ErrorKind::Evaluation(cause)))?;
-                        out.number(result, work)?;
+                            .map_err(|cause| context.work.error(ErrorKind::Evaluation(cause)))?;
+                        out.number(result, context)?;
                     } else {
                         for value in i64::from(left)..=i64::from(right) {
-                            work.step(1)?;
+                            context.work.step(1)?;
                             out.number(
                                 i32::try_from(value).expect("within source i32 endpoints"),
-                                work,
+                                context,
                             )?;
                         }
                     }
@@ -137,41 +204,61 @@ fn binary(
     })
 }
 fn products(
-    term: &Template,
+    shape: crate::metadata::Constructor,
     arguments: &[Values],
     out: &mut Values,
-    work: &mut Work<'_>,
+    context: &mut Interpreter<'_, '_, '_>,
 ) -> Result<(), Error> {
-    if arguments.iter().any(|values| values.values.is_empty()) {
+    if arguments.iter().any(|values| values.len() == 0) {
         return Ok(());
     }
-    let mut indices = work.reserve(arguments.len())?;
+    let mut indices = context.work.reserve(arguments.len())?;
     indices.resize(arguments.len(), 0);
+    let mut children = context.terms.read().assignment();
+    children
+        .resize_with(
+            arguments.len(),
+            context.work.limits.max_term_storage_bytes,
+            || context.work.step(1),
+        )
+        .map_err(|error| super::binding::failure(error, context.work))?;
+    let mut slots = context.work.reserve(arguments.len())?;
+    slots.extend(0..arguments.len());
     loop {
-        work.step(1 + indices.len() as u128)?;
+        context.work.step(1 + indices.len() as u128)?;
         let mut metric = Metric { nodes: 1, bytes: 0 };
-        work.check(Resource::Nodes, 1, work.limits.max_symbol_nodes as u128)?;
-        work.check(Resource::Depth, 1, work.limits.max_symbol_depth as u128)?;
-        if let Template::Function(_, name, _) = term {
-            work.payload(name.as_str().len(), &mut metric)?;
+        context.work.check(
+            Resource::Nodes,
+            1,
+            context.work.limits.max_symbol_nodes as u128,
+        )?;
+        context.work.check(
+            Resource::Depth,
+            1,
+            context.work.limits.max_symbol_depth as u128,
+        )?;
+        context.work.step(1)?;
+        let descriptor = context
+            .metadata
+            .constructor(shape)
+            .ok_or_else(|| context.work.error(ErrorKind::InvalidSymbol))?;
+        if let ValueNodeRef::Function { name, .. } = descriptor {
+            context.work.payload(name.len(), &mut metric)?;
         }
-        for (values, &index) in arguments.iter().zip(&indices) {
-            work.symbol_check(&values.values[index].0, 2, &mut metric)?;
+        context.work.step(1)?;
+        let declaration = context
+            .metadata
+            .constructor_declaration(shape)
+            .ok_or_else(|| context.work.error(ErrorKind::InvalidSymbol))?;
+        for (position, (values, &index)) in arguments.iter().zip(&indices).enumerate() {
+            let key = values.key(index, context)?;
+            context.measure_key(&key, 2, &mut metric)?;
+            children
+                .set_with(position, &key, || context.work.step(1))
+                .map_err(|error| super::binding::failure(error, context.work))?;
         }
-        out.push(metric, work, |work| {
-            let mut values = work.reserve(arguments.len())?;
-            for (argument, &index) in arguments.iter().zip(&indices) {
-                values.push(work.copy_symbol(&argument.values[index].0)?);
-            }
-            Ok(if let Template::Function(sign, name, _) = term {
-                Symbol::Function {
-                    sign: *sign,
-                    name: name.clone(),
-                    arguments: values,
-                }
-            } else {
-                Symbol::Tuple(values)
-            })
+        out.push(metric, context, |context| {
+            context.build(&declaration, children.as_slice(), &slots)
         })?;
         let mut position = indices.len();
         loop {
@@ -180,64 +267,66 @@ fn products(
             }
             position -= 1;
             indices[position] += 1;
-            if indices[position] < arguments[position].values.len() {
+            if indices[position] < arguments[position].len() {
                 break;
             }
             indices[position] = 0;
         }
     }
 }
-fn constructor(
-    term: &Template,
+fn constructor<'input>(
+    shape: crate::metadata::Constructor,
     arguments: &[Template],
-    binding: &[Option<Bound<'_>>],
+    binding: &Binding<'input>,
     out: &mut Values,
-    work: &mut Work<'_>,
+    context: &mut Interpreter<'input, '_, '_>,
 ) -> Result<(), Error> {
-    let mut values = work.reserve(arguments.len())?;
+    let mut values = context.work.reserve(arguments.len())?;
     let result = (|| {
         for argument in arguments {
-            values.push(collect(argument, binding, work)?);
+            values.push(collect(argument, binding, context)?);
         }
-        products(term, &values, out, work)
+        products(shape, &values, out, context)
     })();
-    work.local_bytes -= values.iter().map(|values| values.bytes).sum::<u128>();
+    context.work.local_bytes -= values.iter().map(|values| values.bytes).sum::<u128>();
     result
 }
-pub(super) fn collect(
+pub(super) fn collect<'input>(
     term: &Template,
-    binding: &[Option<Bound<'_>>],
-    work: &mut Work<'_>,
+    binding: &Binding<'input>,
+    context: &mut Interpreter<'input, '_, '_>,
 ) -> Result<Values, Error> {
-    work.step(1)?;
-    let mut out = Values::default();
+    context.work.step(1)?;
+    let mut out = Values::new(context);
     let result = (|| {
         if !term.multiple() {
             let mut metric = Metric::default();
-            work.measure(term, binding, 1, &mut metric)?;
-            return out.push(metric, work, |work| work.construct(term, binding));
+            context.measure(term, binding, 1, &mut metric)?;
+            return out.push(metric, context, |context| context.construct(term, binding));
         }
         match term {
             Template::Pool(arguments) => {
                 for argument in arguments {
-                    with(argument, binding, work, |values, work| {
-                        out.append(values, work)
+                    with(argument, binding, context, |values, context| {
+                        out.append(values, context)
                     })?;
                 }
                 Ok(())
             }
-            Template::Interval(left, right) => binary(None, left, right, binding, &mut out, work),
+            Template::Interval(left, right) => {
+                binary(None, left, right, binding, &mut out, context)
+            }
             Template::Binary(operator, left, right) => {
-                binary(Some(*operator), left, right, binding, &mut out, work)
+                binary(Some(*operator), left, right, binding, &mut out, context)
             }
             Template::Unary(operator, argument) => {
-                unary(Some(*operator), argument, binding, &mut out, work)
+                unary(Some(*operator), argument, binding, &mut out, context)
             }
-            Template::Absolute(argument) => unary(None, argument, binding, &mut out, work),
-            Template::Function(_, _, arguments) | Template::Tuple(arguments) => {
-                constructor(term, arguments, binding, &mut out, work)
+            Template::Absolute(argument) => unary(None, argument, binding, &mut out, context),
+            Template::Construct(shape, arguments) => {
+                constructor(*shape, arguments, binding, &mut out, context)
             }
-            Template::Value(_) | Template::Variable(_) => {
+            Template::Constant(_) | Template::Variable(_) => {
                 unreachable!("scalar expression handled above")
             }
         }
@@ -245,30 +334,32 @@ pub(super) fn collect(
     match result {
         Ok(()) => Ok(out),
         Err(error) => {
-            work.local_bytes -= out.bytes;
+            context.work.local_bytes -= out.bytes;
             Err(error)
         }
     }
 }
 
-pub(super) fn each(
+pub(super) fn each<'input>(
     term: &Template,
-    binding: &[Option<Bound<'_>>],
-    work: &mut Work<'_>,
-    mut action: impl FnMut(Symbol, Metric, &mut Work<'_>) -> Result<(), Error>,
+    binding: &Binding<'input>,
+    context: &mut Interpreter<'input, '_, '_>,
+    mut action: impl FnMut(TermKey, Metric, &mut Interpreter<'input, '_, '_>) -> Result<(), Error>,
 ) -> Result<(), Error> {
     if !term.multiple() {
         let mut metric = Metric::default();
-        work.measure(term, binding, 1, &mut metric)?;
-        work.construction_check(metric)?;
-        let symbol = work.construct(term, binding)?;
-        return action(symbol, metric, work);
+        context.measure(term, binding, 1, &mut metric)?;
+        context.work.construction_check(metric)?;
+        let key = context.construct(term, binding)?;
+        return action(key, metric, context);
     }
-    with(term, binding, work, |values, work| {
-        for (symbol, metric) in values.values.drain(..) {
+    with(term, binding, context, |values, context| {
+        for index in 0..values.len() {
+            let key = values.key(index, context)?;
+            let metric = values.metric(index);
             values.bytes -= metric.payload();
-            work.local_bytes -= metric.payload();
-            action(symbol, metric, work)?;
+            context.work.local_bytes -= metric.payload();
+            action(key, metric, context)?;
         }
         Ok(())
     })

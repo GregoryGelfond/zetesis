@@ -44,7 +44,7 @@ fn config() -> SolveConfig {
 fn formula_answers_retain_the_original_catalog() {
     let (answers, original_catalog) = {
         let owner = admitted("tag(\"shared\").{p(1);p(\"1\");-q(1)}.");
-        let original = owner.atoms().as_ptr();
+        let original = owner.atom_catalog().clone();
         let mut session = Session::enumerate(
             PreparedInput::formula(&owner),
             config(),
@@ -59,6 +59,17 @@ fn formula_answers_retain_the_original_catalog() {
         assert_eq!(session.outcome().unwrap().verified_models(), 8);
         (answers, original)
     };
+    for answer in &answers {
+        assert!(
+            answer
+                .interpretation()
+                .catalog()
+                .same_owner(&original_catalog)
+        );
+    }
+    // The returned models now retain the catalog without the source owner or
+    // this independent identity witness keeping it alive.
+    drop(original_catalog);
     let choices = [
         atom("p", Sign::Positive, vec![Value::Number(1)]),
         atom("p", Sign::Positive, vec![Value::String("1".into())]),
@@ -76,6 +87,7 @@ fn formula_answers_retain_the_original_catalog() {
                         .map(|(_, atom)| atom.clone()),
                 ),
             )
+            .unwrap()
         })
         .collect();
     let actual: BTreeSet<_> = answers
@@ -83,19 +95,6 @@ fn formula_answers_retain_the_original_catalog() {
         .map(|answer| answer.interpretation().clone())
         .collect();
     assert_eq!(actual, expected);
-    for answer in &answers {
-        let model = answer.interpretation();
-        assert_eq!(model.catalog().atoms().as_ptr(), original_catalog);
-        for selected in model.atoms() {
-            assert!(
-                model
-                    .catalog()
-                    .atoms()
-                    .iter()
-                    .any(|original| std::ptr::eq(selected, original))
-            );
-        }
-    }
 }
 
 #[test]
@@ -105,7 +104,7 @@ fn optimum_bytes_include_unselected_catalog_payload() {
         "a | hidden(\"{hidden}\"). :-hidden(\"{hidden}\"). #minimize{{0:a}}."
     ));
     let a = atom("a", Sign::Positive, vec![]);
-    let selected = owner.atoms().iter().position(|atom| atom == &a).unwrap();
+    let selected = owner.atoms().iter().position(|atom| atom == a).unwrap();
     let model = Model::from_positions(owner.atom_catalog(), [selected]).unwrap();
     assert!(
         owner
@@ -117,7 +116,13 @@ fn optimum_bytes_include_unselected_catalog_payload() {
     // priority-count8, then one i32/i64 priority/cost pair12.
     let required = model.retained_payload_bytes().unwrap() + 21;
     assert!(required > hidden.len());
-    assert!(required > Model::new([a.clone()]).retained_payload_bytes().unwrap());
+    assert!(
+        required
+            > Model::new([a.clone()])
+                .unwrap()
+                .retained_payload_bytes()
+                .unwrap()
+    );
 
     let mut exact = Session::new(
         PreparedInput::formula(&owner),
@@ -130,7 +135,7 @@ fn optimum_bytes_include_unselected_catalog_payload() {
     .unwrap();
     let answers = exact.by_ref().collect::<Result<Vec<_>, _>>().unwrap();
     assert_eq!(answers.len(), 1);
-    assert_eq!(answers[0].interpretation(), &Model::new([a]));
+    assert_eq!(answers[0].interpretation(), &Model::new([a]).unwrap());
     assert!(exact.outcome().unwrap().optimum_proved());
 
     let mut short = Session::new(

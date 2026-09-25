@@ -104,6 +104,14 @@ pub(super) struct Formula {
     objective: zetesis_objective::AdmissionLimits,
     #[serde(with = "Observation")]
     observation: zetesis_themelios::observation::AdmissionLimits,
+    #[serde(with = "MetadataStorage")]
+    metadata_storage: zetesis_themelios::MetadataStorageLimits,
+}
+
+#[derive(Serialize)]
+#[serde(remote = "zetesis_themelios::MetadataStorageLimits")]
+struct MetadataStorage {
+    max_bytes: usize,
 }
 
 #[derive(Serialize)]

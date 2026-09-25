@@ -1,13 +1,14 @@
 //! Optional domains over exactly the normalized positive source and its flat IR.
 
-use themelios_base::span::Location;
+use crate::formula_support::{Context, GroundingWork};
+
 use zetesis_domain::{Analysis, Status};
 
 use crate::expansion::Budget;
 use crate::formula_ir::{Prepared, RuleIr};
-use crate::formula_support::{Candidates, Counters};
+use crate::formula_support::{Candidates, Computation};
 use crate::grounding_observer::{Event, Profile};
-use crate::{DomainLimits, DomainObservation, FormulaFailure, FormulaLimits};
+use crate::{DomainLimits, DomainObservation, FormulaFailure};
 
 mod positive;
 pub(crate) use positive::PositiveSource;
@@ -19,15 +20,15 @@ pub(crate) use positive::PositiveSource;
 pub(crate) struct Domains<'source> {
     analysis: Analysis<'source>,
     source: PositiveSource<'source>,
-    candidates: Vec<Candidates<'source>>,
+    candidates: Vec<Candidates>,
 }
 
-impl<'source> Domains<'source> {
+impl Domains<'_> {
     pub(crate) fn for_rule(
         &self,
         index: usize,
         rule: &RuleIr,
-    ) -> Result<&Candidates<'source>, FormulaFailure> {
+    ) -> Result<&Candidates, FormulaFailure> {
         if self.analysis.belongs_to(&self.source.prepared().analyzed)
             && self.source.contains(index, rule)
             && let Some(candidates) = self.candidates.get(index)
@@ -45,19 +46,32 @@ impl<'source> Domains<'source> {
 pub(crate) fn analyze<'source>(
     prepared: &'source Prepared,
     options: Option<DomainLimits>,
-    limits: &FormulaLimits,
     budget: &mut Budget,
-    counters: &mut Counters,
     profile: &Profile<'_>,
-    location: Location,
+    context: Context<'_, &mut Computation<'_, '_>>,
 ) -> Result<Option<Domains<'source>>, FormulaFailure> {
+    let Context {
+        computation,
+        work:
+            GroundingWork {
+                limits,
+                counters,
+                location,
+            },
+    } = context;
     let Some(mut options) = options else {
         profile.domain_analysis(DomainObservation::Disabled);
         return Ok(None);
     };
-    let before = counters.work;
-    let eligible = PositiveSource::check(prepared, limits, counters, location);
-    counters.record(Event::DomainPrepareWork(counters.work - before));
+    let before = counters.accounting.work;
+    let eligible = PositiveSource::check(
+        prepared,
+        Some(computation.static_components(location)?),
+        limits,
+        counters,
+        location,
+    );
+    counters.record(Event::DomainPrepareWork(counters.accounting.work - before));
     let Some(source) = eligible? else {
         profile.domain_analysis(DomainObservation::Inapplicable);
         return Ok(None);
@@ -65,7 +79,9 @@ pub(crate) fn analyze<'source>(
     // This API has no caller Cancellation. Logical populations and remaining work
     // bound the uninterruptible call; no cancellation/deadline is invented.
     counters.charge_work(0, limits, location)?;
-    options.max_work = options.max_work.min(limits.max_work - counters.work);
+    options.max_work = options
+        .max_work
+        .min(limits.max_work - counters.accounting.work);
     let analysis = zetesis_domain::analyze(&prepared.analyzed, options);
     let work = analysis.statistics().work;
     counters.charge_work(u128::from(work), limits, location)?;
@@ -74,14 +90,19 @@ pub(crate) fn analyze<'source>(
     if analysis.status() != Status::FixedPoint {
         return Ok(None);
     }
-    let before = counters.work;
+    let before = counters.accounting.work;
     let mut candidates = Vec::new();
     for rule in &prepared.rules {
         candidates.push(Candidates::prepare(
-            rule, &analysis, limits, budget, counters,
+            rule,
+            &analysis,
+            computation,
+            limits,
+            budget,
+            counters,
         )?);
     }
-    counters.record(Event::DomainPrepareWork(counters.work - before));
+    counters.record(Event::DomainPrepareWork(counters.accounting.work - before));
     Ok(Some(Domains {
         analysis,
         source,

@@ -13,7 +13,7 @@ pub use family::{
     AggregateFamilyBuild, AggregateFamilyLimits, AggregateGuard, append_aggregate_family,
 };
 pub use lower::append_aggregate;
-pub use value_extremum::{ValueExtremumElement, append_value_extremum};
+pub use value_extremum::{ValueExtremumElement, append_value_extremum, append_value_extremum_refs};
 
 /// One distinct, already coalesced tuple's weight and eligibility formula.
 /// Callers OR every alternative eligibility condition for an equal whole tuple.

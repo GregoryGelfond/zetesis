@@ -25,17 +25,8 @@ fn row(weight: i32, priority: i32, condition: Vec<ConditionNode>) -> ObjectiveTe
     .with_condition(Condition::new(condition))
 }
 
-#[test]
-fn closed_query_bounds_preserve_all_candidate_ties() {
-    let atoms = [atom("a"), atom("b"), atom("c")];
-    let original = Theory::new(
-        3,
-        vec![Node::Atom(0), Node::Atom(1), Node::Atom(2)],
-        vec![],
-        zetesis_ferraris::AdmissionLimits::default(),
-    )
-    .unwrap();
-    let objective = ObjectiveProgram::new(
+fn objective(atoms: &[Atom; 3]) -> ObjectiveProgram {
+    ObjectiveProgram::new(
         vec![
             row(
                 -3,
@@ -71,11 +62,25 @@ fn closed_query_bounds_preserve_all_candidate_ties() {
         ],
         zetesis_objective::AdmissionLimits::default(),
     )
+    .unwrap()
+}
+
+#[test]
+fn closed_query_bounds_preserve_all_candidate_ties() {
+    let atoms = [atom("a"), atom("b"), atom("c")];
+    let original = Theory::new(
+        3,
+        vec![Node::Atom(0), Node::Atom(1), Node::Atom(2)],
+        vec![],
+        zetesis_ferraris::AdmissionLimits::default(),
+    )
     .unwrap();
+    let objective = objective(&atoms);
     let cancellation = Cancellation::default();
+    let catalog = zetesis_core::AtomCatalog::new(atoms.to_vec()).unwrap();
     let plan = ObjectivePlan::new(
         &original,
-        &atoms,
+        catalog.atoms(),
         &objective,
         ObjectivePlanLimits::default(),
         &cancellation,
@@ -89,7 +94,8 @@ fn closed_query_bounds_preserve_all_candidate_ties() {
                     .enumerate()
                     .filter(|(index, _)| mask & (1 << index) != 0)
                     .map(|(_, atom)| atom.clone()),
-            );
+            )
+            .unwrap();
             evaluate(
                 &objective,
                 &model,

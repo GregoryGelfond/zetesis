@@ -5,10 +5,12 @@ use std::{cmp::Ordering, fmt};
 use crate::{Sign, Value};
 
 mod view;
+pub(crate) mod spelling;
+pub use spelling::ValueWriteError;
 pub use view::ValueNodeRef;
 
 /// One preorder node of a closed value. Child nodes immediately follow a head.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ValueNode {
     /// Least ASP value.
     Infimum,
@@ -34,6 +36,23 @@ pub enum ValueNode {
     },
     /// Greatest ASP value.
     Supremum,
+}
+
+impl PartialOrd for ValueNode {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for ValueNode {
+    fn cmp(&self, other: &Self) -> Ordering {
+        crate::term_order::storage(self.view(), other.view())
+    }
+}
+
+impl std::hash::Hash for ValueNode {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        crate::term_hash::descriptor(self.view(), state);
+    }
 }
 
 /// Construction ceilings for one owned value and bounded construction scratch.
@@ -103,13 +122,18 @@ impl fmt::Display for ValueError {
 impl std::error::Error for ValueError {}
 
 /// Private validated preorder storage; integer positions are never semantic identity.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct StructuralValue {
     nodes: std::sync::Arc<Vec<ValueNode>>,
     depth: usize,
     rendered: std::sync::Arc<String>,
     // Depth and spelling are deterministic derivatives of the canonical nodes.
     // Derived traits never compare allocation capacities or pointer addresses.
+}
+impl std::hash::Hash for StructuralValue {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        crate::term_hash::nodes(self.nodes(), state);
+    }
 }
 impl StructuralValue {
     /// Exact canonical preorder nodes. No caller can mutate the validated shape.
@@ -341,13 +365,7 @@ impl ValueNode {
         self.view().rendered_bytes()
     }
     fn canonical_bytes(&self) -> usize {
-        match self {
-            Self::String(text) | Self::Symbol(text) => 9 + text.len(),
-            Self::Function { name, .. } => 18 + name.len(),
-            Self::Tuple { .. } => 9,
-            Self::Number(_) => 5,
-            Self::Infimum | Self::Supremum => 1,
-        }
+        usize::try_from(self.view().canonical_bytes()).expect("admitted node encoding length")
     }
     fn arity(&self) -> usize {
         match self {
@@ -355,52 +373,6 @@ impl ValueNode {
             _ => 0,
         }
     }
-    fn rank(&self) -> u8 {
-        match self {
-            Self::Infimum => 0,
-            Self::Number(_) => 1,
-            Self::Symbol(_) | Self::Tuple { arity: 0 } => 2,
-            Self::Function { arity: 0, .. } => 3,
-            Self::String(_) => 4,
-            Self::Function { .. } | Self::Tuple { .. } => 5,
-            Self::Supremum => 6,
-        }
-    }
-    fn head(&self) -> (Sign, usize, Option<&str>) {
-        match self {
-            Self::Function { name, sign, arity } => (*sign, *arity, Some(name)),
-            Self::Tuple { arity } => (Sign::Positive, *arity, None),
-            Self::Symbol(name) => (Sign::Positive, 0, Some(name)),
-            _ => (Sign::Positive, 0, None),
-        }
-    }
-    pub(crate) fn compare(&self, other: &Self) -> Ordering {
-        self.rank()
-            .cmp(&other.rank())
-            .then_with(|| match (self, other) {
-                (Self::Number(a), Self::Number(b)) => a.cmp(b),
-                (Self::String(a), Self::String(b)) => a.cmp(b),
-                _ => self.head().cmp(&other.head()),
-            })
-    }
-}
-
-/// Scalar comparison against the root of a structural value; equal scalar roots
-/// cannot contain trailing nodes in a validated structural representation.
-pub(crate) fn compare_scalar(value: &Value, other: &ValueNode) -> Ordering {
-    let (rank, number, text) = match value {
-        Value::Infimum => (0, 0, ""),
-        Value::Number(n) => (1, *n, ""),
-        Value::Symbol(s) => (2, 0, s.as_str()),
-        Value::String(s) => (4, 0, s.as_str()),
-        Value::Supremum => (6, 0, ""),
-        Value::Structured(_) => unreachable!("scalar branch"),
-    };
-    rank.cmp(&other.rank()).then_with(|| match other {
-        ValueNode::Number(n) => number.cmp(n),
-        ValueNode::String(s) => text.cmp(s),
-        _ => (Sign::Positive, 0, Some(text)).cmp(&other.head()),
-    })
 }
 
 impl fmt::Display for StructuralValue {
@@ -411,59 +383,14 @@ impl fmt::Display for StructuralValue {
 
 fn render_nodes(
     nodes: &[ValueNode],
-    frames: &mut Vec<(usize, bool, bool)>,
-    f: &mut String,
+    frames: &mut Vec<spelling::Frame>,
+    output: &mut String,
 ) -> fmt::Result {
-    use fmt::Write;
     for node in nodes {
-        if let Some((left, first, _)) = frames.last_mut() {
-            if !*first {
-                f.write_str(",")?;
-            }
-            *first = false;
-            *left -= 1;
-        }
-        match node {
-            ValueNode::Infimum => f.write_str("#inf")?,
-            ValueNode::Supremum => f.write_str("#sup")?,
-            ValueNode::Number(n) => write!(f, "{n}")?,
-            ValueNode::Symbol(s) => f.write_str(s)?,
-            ValueNode::String(s) => {
-                f.write_str("\"")?;
-                for c in s.chars() {
-                    match c {
-                        '\\' => f.write_str("\\\\")?,
-                        '"' => f.write_str("\\\"")?,
-                        '\n' => f.write_str("\\n")?,
-                        c => write!(f, "{c}")?,
-                    }
-                }
-                f.write_str("\"")?;
-            }
-            ValueNode::Function { name, sign, .. } => {
-                if *sign == Sign::Negative {
-                    f.write_str("-")?;
-                }
-                f.write_str(name)?;
-            }
-            ValueNode::Tuple { .. } => {}
-        }
-        if node.arity() != 0 || matches!(node, ValueNode::Tuple { .. }) {
-            f.write_str("(")?;
-            frames.push((
-                node.arity(),
-                true,
-                matches!(node, ValueNode::Tuple { arity: 1 }),
-            ));
-        }
-        while matches!(frames.last(), Some((0, _, _))) {
-            if let Some((_, _, singleton)) = frames.pop() {
-                if singleton {
-                    f.write_str(",")?;
-                }
-                f.write_str(")")?;
-            }
-        }
+        spelling::node(node.view(), frames, output, &mut |_| {
+            Ok::<_, std::convert::Infallible>(())
+        })
+        .map_err(|_| fmt::Error)?;
     }
     Ok(())
 }

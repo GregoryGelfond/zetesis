@@ -92,7 +92,7 @@ fn duplicate_lookup_obeys_the_work_ceiling() {
         },
         0,
     );
-    limits.max_work = counters.work;
+    limits.max_work = counters.accounting.work;
     assert!(matches!(
         metadata.origin(1, location(1, 0), &mut budget, &mut counters, &limits),
         Err(FormulaFailure::Limit {
@@ -133,8 +133,24 @@ impl crate::GroundingObserver for MetadataObserver {
     }
 }
 
+fn atom(name: &str) -> zetesis_core::Atom {
+    zetesis_core::Atom::new(zetesis_core::Predicate::new(name, 0).unwrap(), vec![]).unwrap()
+}
+
+/// Reach a real metadata growth boundary without assuming Vec's growth policy.
+fn fill_metadata_capacity(builder: &mut crate::formula_ground::Builder<'_, '_, '_>) {
+    while builder.metadata.atoms.is_empty()
+        || (builder.metadata.atoms.len() < builder.metadata.atoms.capacity()
+            && builder.metadata.origins.len() < builder.metadata.origins.capacity())
+    {
+        let name = format!("p{}", builder.metadata.atoms.len());
+        builder
+            .atom_ref((&atom(&name)).into(), location(0, 0))
+            .unwrap();
+    }
+}
+
 fn metadata_publication_attempt(additional: Option<u64>) -> (u64, bool) {
-    use crate::formula_binding::Binding;
     use crate::formula_ground::{Builder, Purpose};
     use crate::grounding_observer::Profile;
     use crate::{GroundingOutcome, GroundingPhase};
@@ -143,44 +159,46 @@ fn metadata_publication_attempt(additional: Option<u64>) -> (u64, bool) {
     let profile = Profile::new(Some(&observer));
     let limits = FormulaLimits::default();
     let mut budget = Budget::new(ExpansionLimits::default(), 0);
+    let mut counters = Counters::resume(
+        crate::formula_support::Accounting::default(),
+        profile.work(),
+    );
+    let mut source = crate::formula_support::SupportCatalog::default();
+    let (relations, mut append) = source
+        .split(&limits, &mut counters, location(0, 0))
+        .unwrap();
+    let support =
+        crate::formula_support::Support::indexed(&relations, &limits, &counters, location(0, 0))
+            .unwrap();
+    let mut computation = crate::formula_support::Computation::new(&mut append, &support);
     let mut builder = Builder::empty(
+        &mut computation,
         &limits,
         &mut budget,
-        Counters::observed(profile.work()),
+        &mut counters,
         Purpose::Theory,
         None,
-    );
+        location(0, 0),
+    )
+    .unwrap();
     builder.initialize(location(0, 0)).unwrap();
-    let pattern = |name: &str| {
-        zetesis_core::AtomPattern::new(zetesis_core::Predicate::new(name, 0).unwrap(), vec![])
-            .unwrap()
-    };
-    // Fill an actual arena capacity without assuming Vec's growth policy.
-    while builder.metadata.atoms.is_empty()
-        || (builder.metadata.atoms.len() < builder.metadata.atoms.capacity()
-            && builder.metadata.origins.len() < builder.metadata.origins.capacity())
-    {
-        let name = format!("p{}", builder.metadata.atoms.len());
-        builder
-            .atom(&pattern(&name), &Binding::default(), location(0, 0))
-            .unwrap();
-    }
+    fill_metadata_capacity(&mut builder);
     let before = builder.metadata.atoms.len();
     let origins_before = builder.metadata.origins.len();
     let nodes_before = builder.nodes.len();
     assert_eq!(builder.catalog.len(), before);
     let relocation = growth(&builder.metadata.atoms) + growth(&builder.metadata.origins);
     assert!(relocation > 0);
-    let started = builder.counters.work;
+    let started = builder.counters.accounting.work;
     let limited = FormulaLimits {
         max_work: additional.map_or(limits.max_work, |work| started.checked_add(work).unwrap()),
         ..limits
     };
     builder.limits = &limited;
     let result = profile.phase(GroundingPhase::RuleInstantiation, None, || {
-        builder.atom(&pattern("e"), &Binding::default(), location(0, 0))
+        builder.atom_ref((&atom("e")).into(), location(0, 0))
     });
-    let spent = builder.counters.work - started;
+    let spent = builder.counters.accounting.work - started;
     if additional.is_none() {
         result.unwrap();
         assert_eq!(builder.catalog.len(), before + 1);
@@ -204,18 +222,24 @@ fn metadata_publication_attempt(additional: Option<u64>) -> (u64, bool) {
     }
     assert!(matches!(error, FormulaFailure::Limit {
         resource: FormulaResource::Work, observed, limit, location: found,
-    } if observed == u128::from(builder.counters.work) + relocation
+    } if observed == u128::from(builder.counters.accounting.work) + relocation
         && limit == u128::from(limited.max_work) && found == location(0, 0)));
     let (outcome, work) = observer.0.borrow().unwrap();
     assert_eq!(outcome, GroundingOutcome::Failed);
     assert_eq!(work.atoms_inserted, Some(1));
     assert_eq!(builder.catalog.len(), before + 1);
     assert_eq!(
-        builder.catalog.get(before),
-        Some(
-            &zetesis_core::Atom::new(zetesis_core::Predicate::new("e", 0).unwrap(), vec![])
-                .unwrap()
-        )
+        builder
+            .catalog
+            .get(
+                before,
+                builder.computation,
+                &mut Counters::default(),
+                &limits,
+                location(0, 0)
+            )
+            .unwrap(),
+        zetesis_core::catalog::AtomRef::from(&atom("e"))
     );
     assert_eq!(builder.metadata.atoms.len(), before);
     assert_eq!(builder.metadata.origins.len(), origins_before);
@@ -228,7 +252,7 @@ fn metadata_publication_attempt(additional: Option<u64>) -> (u64, bool) {
 #[test]
 fn origin_allowance_precedes_new_entry_work() {
     let (mut metadata, mut counters, mut limits) = prepared();
-    limits.max_work = counters.work;
+    limits.max_work = counters.accounting.work;
     let mut budget = Budget::new(
         ExpansionLimits {
             max_origin_locations: 0,
@@ -248,7 +272,7 @@ fn origin_work_refusal_preserves_the_chain() {
     let (mut metadata, mut counters, mut limits) = prepared();
     let mut budget = Budget::new(ExpansionLimits::default(), 0);
     let new = location(9, 2);
-    limits.max_work = counters.work + 1;
+    limits.max_work = counters.accounting.work + 1;
     assert!(
         matches!(metadata.origin(1, new, &mut budget, &mut counters, &limits), Err(FormulaFailure::Limit { resource: FormulaResource::Work, location: found, .. }) if found == new)
     );
@@ -266,7 +290,7 @@ fn origin_work_refusal_preserves_the_chain() {
 #[test]
 fn origin_copy_charges_traversal_and_payload() {
     let (metadata, mut counters, mut limits) = prepared();
-    let initial = counters.work;
+    let initial = counters.accounting.work;
     limits.max_work = initial + 1;
     assert!(
         matches!(metadata.copy_origins(1, &mut counters, &limits), Err(FormulaFailure::Limit { resource: FormulaResource::Work, observed, limit, .. }) if observed == u128::from(initial + 2) && limit == u128::from(initial + 1))
@@ -276,7 +300,7 @@ fn origin_copy_charges_traversal_and_payload() {
         metadata.copy_origins(1, &mut counters, &limits).unwrap(),
         [location(1, 0)]
     );
-    assert_eq!(counters.work, initial + 2);
+    assert_eq!(counters.accounting.work, initial + 2);
 }
 
 #[test]

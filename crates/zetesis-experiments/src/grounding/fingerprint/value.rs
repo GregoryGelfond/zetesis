@@ -1,63 +1,65 @@
 //! Closed-value framing reads canonical preorder nodes without recursion.
 
-use zetesis_core::{Value, ValueNode};
+use zetesis_core::ValueNodeRef;
+use zetesis_core::catalog::TermRef;
 
 use super::{Encoding, Error};
 
 impl Encoding {
-    pub(super) fn value(&mut self, value: &Value) -> Result<(), Error> {
-        match value {
-            Value::Infimum => self.tag(0),
-            Value::Number(number) => {
+    pub(super) fn value<'a>(&mut self, value: impl Into<TermRef<'a>>) -> Result<(), Error> {
+        let value = value.into();
+        match value.descriptor() {
+            ValueNodeRef::Infimum => self.tag(0),
+            ValueNodeRef::Number(number) => {
                 self.tag(1)?;
                 self.write(&number.to_be_bytes())
             }
-            Value::String(text) => {
+            ValueNodeRef::String(text) => {
                 self.tag(2)?;
                 self.text(text)
             }
-            Value::Symbol(text) => {
+            ValueNodeRef::Symbol(text) => {
                 self.tag(3)?;
                 self.text(text)
             }
-            Value::Structured(value) => {
+            ValueNodeRef::Function { .. } | ValueNodeRef::Tuple { .. } => {
                 self.tag(4)?;
-                self.count(value.nodes().len())?;
+                self.count(value.expanded_nodes())?;
                 for node in value.nodes() {
                     self.value_node(node)?;
                 }
                 Ok(())
             }
-            Value::Supremum => self.tag(5),
+            ValueNodeRef::Supremum => self.tag(5),
         }
     }
 
-    fn value_node(&mut self, node: &ValueNode) -> Result<(), Error> {
+    fn value_node(&mut self, node: ValueNodeRef<'_>) -> Result<(), Error> {
         match node {
-            ValueNode::Infimum => self.tag(0),
-            ValueNode::Number(number) => {
+            ValueNodeRef::Infimum => self.tag(0),
+            ValueNodeRef::Number(number) => {
                 self.tag(1)?;
                 self.write(&number.to_be_bytes())
             }
-            ValueNode::String(text) => {
+            ValueNodeRef::String(text) => {
                 self.tag(2)?;
                 self.text(text)
             }
-            ValueNode::Symbol(text) => {
+            ValueNodeRef::Symbol(text) => {
                 self.tag(3)?;
                 self.text(text)
             }
-            ValueNode::Function { name, sign, arity } => {
+            ValueNodeRef::Function { name, sign, arity } => {
                 self.tag(4)?;
                 self.text(name)?;
-                self.sign(*sign)?;
-                self.count(*arity)
+                self.sign(sign)?;
+                self.count(arity)
             }
-            ValueNode::Tuple { arity } => {
+            ValueNodeRef::Tuple { arity } => {
                 self.tag(5)?;
-                self.count(*arity)
+                self.count(arity)
             }
-            ValueNode::Supremum => self.tag(6),
+            ValueNodeRef::Supremum => self.tag(6),
         }
     }
 }

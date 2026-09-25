@@ -90,8 +90,8 @@ fn profile_preserves_the_compiled_subject() {
         plain.objective_declarations()
     );
     assert_eq!(
-        measured.objectives().templates(),
-        plain.objectives().templates()
+        measured.objectives().templates().iter().collect::<Vec<_>>(),
+        plain.objectives().templates().iter().collect::<Vec<_>>()
     );
     assert!(!observer.active.get());
 }

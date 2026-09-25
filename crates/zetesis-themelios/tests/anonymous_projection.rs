@@ -25,7 +25,14 @@ fn models(source: &str) -> BTreeSet<BTreeSet<Atom>> {
             model
                 .expect("complete reduct check")
                 .atoms()
-                .map(|index| input.atoms()[index].clone())
+                .map(|index| {
+                    input
+                        .atoms()
+                        .at(index)
+                        .unwrap()
+                        .to_atom(zetesis_core::ValueLimits::default())
+                        .unwrap()
+                })
                 .collect()
         })
         .collect();

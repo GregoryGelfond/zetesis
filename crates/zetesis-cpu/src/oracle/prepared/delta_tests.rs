@@ -41,6 +41,14 @@ fn rule(head: AtomPattern, positive: Vec<AtomPattern>) -> Template {
 }
 
 fn path(edges: i32, labels: i32) -> (Program, Model) {
+    let (templates, expected) = path_input(edges, labels);
+    (
+        Program::new(templates, AdmissionLimits::default()).unwrap(),
+        Model::new(expected).unwrap(),
+    )
+}
+
+fn path_input(edges: i32, labels: i32) -> (Vec<Template>, Vec<Atom>) {
     let mut templates: Vec<_> = (0..edges).map(|x| fact("edge", &[x, x + 1])).collect();
     templates.push(fact("reach", &[0]));
     templates.push(rule(
@@ -65,10 +73,7 @@ fn path(edges: i32, labels: i32) -> (Program, Model) {
         expected.extend((0..labels).map(|x| atom("label", &[x])));
         expected.extend((0..=edges).map(|x| atom("seen", &[x])));
     }
-    (
-        Program::new(templates, AdmissionLimits::default()).unwrap(),
-        Model::new(expected),
-    )
+    (templates, expected)
 }
 
 fn scheduled(
@@ -137,6 +142,47 @@ fn path_delta_avoids_old_row_probes() {
 }
 
 #[test]
+fn an_incremental_round_selects_only_its_readers() {
+    // Unrelated facts enter once at bootstrap. Their identities still change
+    // catalog geometry, so inclusive work is not a producer-visit counter.
+    for edges in [4, 8] {
+        let unrelated = 12;
+        let (chain, mut expected) = path_input(edges, 0);
+        let mut templates: Vec<_> = (0..unrelated).map(|x| fact("unused", &[x])).collect();
+        templates.extend(chain);
+        expected.extend((0..unrelated).map(|x| atom("unused", &[x])));
+        let program = Program::new(templates, AdmissionLimits::default()).unwrap();
+        let recursive = program.templates().len() - 1;
+        let cancellation = Cancellation::default();
+        let prepared =
+            PreparedQueries::new(&program, PreparationLimits::default(), &cancellation).unwrap();
+        let seed = Seed::new(&program, []).unwrap();
+        let mut workspace = ClosureWorkspace::default();
+        let check = scheduled(
+            &prepared,
+            seed.view(),
+            &mut workspace,
+            Schedule::Delta,
+            Limits::default(),
+            &cancellation,
+        )
+        .unwrap();
+        assert_complete(
+            &check,
+            &Model::new(expected).unwrap(),
+            u64::try_from(edges + 2).unwrap(),
+        );
+        assert_eq!(
+            check.statistics().bindings,
+            u64::try_from(2 * edges + 1 + unrelated).unwrap()
+        );
+        // This is the actual template selection used by the final incremental
+        // visit, with a new reach row and no remaining new edge/unused row.
+        assert_eq!(workspace.buffers.rules, [recursive]);
+    }
+}
+
+#[test]
 fn repeated_occurrence_fanout_reduces_inclusive_work() {
     // Positive fanout dimensions preserve the additional seen-consequence round.
     // `rejected` counts the whole-row rejections the fixture's repeated label
@@ -199,7 +245,8 @@ fn moving_rank_and_repeated_predicate_have_one_first_new_binding() {
         atom("step", &[1]),
         atom("hit", &[1]),
         atom("hit", &[2]),
-    ]);
+    ])
+    .unwrap();
     let full = complete(&program, Schedule::Full);
     let delta = complete(&program, Schedule::Delta);
     assert_complete(&full, &expected, 4);
@@ -211,9 +258,8 @@ fn moving_rank_and_repeated_predicate_have_one_first_new_binding() {
 
 #[test]
 fn every_incomplete_delta_prefix_is_retired_before_reuse() {
-    let (path, mut expected) = path(3, 0);
+    let (mut templates, mut expected) = path_input(3, 0);
     let gate = pattern("enabled", vec![]);
-    let mut templates = path.templates().to_vec();
     let recursive = templates.pop().unwrap();
     templates.push(Template::new(
         recursive.head().cloned(),
@@ -230,13 +276,8 @@ fn every_incomplete_delta_prefix_is_retired_before_reuse() {
         vec![],
     ));
     let program = Program::new(templates, AdmissionLimits::default()).unwrap();
-    expected = Model::new(
-        expected
-            .atoms()
-            .iter()
-            .cloned()
-            .chain([atom("enabled", &[])]),
-    );
+    expected.push(atom("enabled", &[]));
+    let expected = Model::new(expected).unwrap();
     let cancellation = Cancellation::default();
     let prepared =
         PreparedQueries::new(&program, PreparationLimits::default(), &cancellation).unwrap();
@@ -383,7 +424,8 @@ fn bootstrap_gates_and_latched_constraints_preserve_rejection() {
         atom("a", &[]),
         atom("b", &[]),
         atom("c", &[]),
-    ]);
+    ])
+    .unwrap();
     let full = complete(&program, Schedule::Full);
     let delta = complete(&program, Schedule::Delta);
     for check in [&full, &delta] {
@@ -399,7 +441,8 @@ fn bootstrap_gates_and_latched_constraints_preserve_rejection() {
     let prepared =
         PreparedQueries::new(&program, PreparationLimits::default(), &cancellation).unwrap();
     let seed = Seed::new(&program, [atom("enabled", &[])]).unwrap();
-    let expected = Model::new(expected.atoms().iter().cloned().chain([atom("gated", &[])]));
+    let expected =
+        Model::new(["enabled", "a", "b", "c", "gated"].map(|name| atom(name, &[]))).unwrap();
     for schedule in [Schedule::Full, Schedule::Delta] {
         let check = scheduled(
             &prepared,

@@ -22,7 +22,7 @@ fn relation(rows: Vec<Vec<Value>>) -> SupportCatalog {
     for row in rows {
         let atom = Atom::new(Predicate::new("row", row.len()).unwrap(), row).unwrap();
         support = support
-            .insert(atom, &FormulaLimits::default(), &mut counters, location())
+            .insert(&atom, &FormulaLimits::default(), &mut counters, location())
             .unwrap();
     }
     support
@@ -58,7 +58,7 @@ fn probe(catalog: &SupportCatalog, values: &[Option<Value>]) -> (Option<Vec<usiz
             location(),
         )
         .unwrap();
-    (rows.map(<[usize]>::to_vec), counters.work)
+    (rows.map(<[usize]>::to_vec), counters.accounting.work)
 }
 
 fn numbers(values: &[i32]) -> Vec<Value> {
@@ -282,6 +282,7 @@ fn observation_preserves_the_compiled_subject() {
         "p(f(1),2). p(f(2),1). q(X) :- p(f(X),X).",
         "p(1,2). p(2,1). q(X) :- p(X,2), not r(X). {r(1)}.",
         "p(1,2). p(2,1). q(X) :- p(X,Y), X+Y=3.",
+        "p(1).p(2).#minimize { X@1,X : p(X) }.",
     ] {
         let compile = || {
             admit_formula(
@@ -301,10 +302,20 @@ fn observation_preserves_the_compiled_subject() {
         assert_eq!(observed.theory().nodes(), plain.theory().nodes());
         assert_eq!(observed.theory().roots(), plain.theory().roots());
         assert_eq!(observed.formula_origins(), plain.formula_origins());
-        assert_eq!(
-            observed.objectives().templates(),
-            plain.objectives().templates()
-        );
+        let observed = observed.objectives();
+        let plain = plain.objectives();
+        assert_eq!(observed.is_present(), plain.is_present());
+        assert_eq!(observed.priorities(), plain.priorities());
+        assert_eq!(observed.templates().len(), plain.templates().len());
+        for (left, right) in observed.templates().iter().zip(plain.templates().iter()) {
+            assert_eq!(left.priority(), right.priority());
+            assert_eq!(left.weight_polarity(), right.weight_polarity());
+            assert_eq!(left.weight(), right.weight());
+            assert!(left.tuple().iter().eq(right.tuple()));
+            assert!(left.positive().iter().eq(right.positive()));
+            assert!(left.filters().iter().eq(right.filters()));
+            assert_eq!(left.condition(), right.condition());
+        }
     }
 }
 

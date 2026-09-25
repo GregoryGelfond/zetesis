@@ -19,7 +19,7 @@ fn check_optimum(
     let mut selected = Session::new(input, config, Cancellation::default())?;
     let optimum = selected.by_ref().collect::<Result<Vec<_>, _>>()?;
     assert_eq!(optimum.len(), 1);
-    assert_eq!(optimum[0].interpretation(), &Model::new([expected]));
+    assert_eq!(optimum[0].interpretation(), &Model::new([expected])?);
     assert_eq!(
         optimum[0].score().expect("active objective").costs(),
         &[(2, 1)]
@@ -68,8 +68,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(
         full_answers,
         BTreeSet::from([
-            (Model::new([a]), vec![(2, 1)]),
-            (Model::new([b]), vec![(2, 2)]),
+            (Model::new([a])?, vec![(2, 1)]),
+            (Model::new([b])?, vec![(2, 2)]),
         ])
     );
     let outcome = all.outcome().expect("finished enumeration");

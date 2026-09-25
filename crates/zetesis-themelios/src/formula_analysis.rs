@@ -49,6 +49,14 @@ pub(crate) fn fact(
                                 crate::structural_value::BridgeError::InvalidName => {
                                     zetesis_core::ValueError::Shape
                                 }
+                                crate::structural_value::BridgeError::Storage {
+                                    required,
+                                    limit,
+                                } => zetesis_core::ValueError::Limit {
+                                    resource: zetesis_core::ValueResource::Bytes,
+                                    observed: required,
+                                    limit: usize::try_from(limit).unwrap_or(usize::MAX),
+                                },
                             }),
                             location,
                         }

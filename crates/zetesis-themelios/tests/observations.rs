@@ -131,7 +131,7 @@ fn complete(input: &AdmittedFormula) -> Vec<Record> {
         {
             continue;
         }
-        let model = Model::new(candidate.atoms().map(|index| input.atoms()[index].clone()));
+        let model = Model::from_positions(input.atom_catalog(), candidate.atoms()).unwrap();
         let rendered = input
             .metadata()
             .observations()
@@ -192,7 +192,8 @@ fn every_outside_profile_source_has_an_explicit_typed_refusal() {
     {
         if case["expected_refusal"] == "Undefined" {
             let input = admit(case["source"].as_str().unwrap()).unwrap();
-            let model = Model::new(input.atoms().iter().cloned());
+            let model =
+                Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap();
             let error = input
                 .metadata()
                 .observations()
@@ -282,7 +283,7 @@ fn metadata_preserves_the_original_formula_and_source_identity() {
 fn paired_observations() -> (AdmittedFormula, Model) {
     let source = "p(1;2). #show. #show pair(X,X):p(X).";
     let input = admit(source).unwrap();
-    let model = Model::new(input.atoms().iter().cloned());
+    let model = Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap();
     (input, model)
 }
 
@@ -416,17 +417,20 @@ fn public_model_spelling_is_validated_before_output() {
     let program = zetesis_themelios::observation::ObservationProgram::default();
     let selection = zetesis_themelios::OutputSelection::default();
     for model in [
-        Model::new([Atom::new(Predicate::new("bad\nAnswer: 9", 0).unwrap(), vec![]).unwrap()]),
+        Model::new([Atom::new(Predicate::new("bad\nAnswer: 9", 0).unwrap(), vec![]).unwrap()])
+            .unwrap(),
         Model::new([Atom::new(
             Predicate::new("p", 1).unwrap(),
             vec![Value::Symbol("bad name".into())],
         )
-        .unwrap()]),
+        .unwrap()])
+        .unwrap(),
         Model::new([Atom::new(
             Predicate::new("p", 1).unwrap(),
             vec![Value::String("bad\0value".into())],
         )
-        .unwrap()]),
+        .unwrap()])
+        .unwrap(),
     ] {
         assert_eq!(
             program
@@ -554,7 +558,7 @@ fn original_bundle_constants_and_duplicate_locations_remain_separate_from_terms(
         FormulaLimits::default(),
     )
     .unwrap();
-    let model = Model::new(input.atoms().iter().cloned());
+    let model = Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap();
     assert_eq!(
         input
             .metadata()
@@ -596,7 +600,8 @@ fn original_bundle_constants_and_duplicate_locations_remain_separate_from_terms(
 fn show_traversal_preserves_closed_logical_values_and_raw_body_limits() {
     for source in ["#show f(1). p(f(1)).", "p(f(1)). #show f(1)."] {
         let program = admit(source).unwrap();
-        let model = Model::new(program.atoms().iter().cloned());
+        let model =
+            Model::from_positions(program.atom_catalog(), 0..program.atoms().len()).unwrap();
         let rendered = program
             .metadata()
             .observations()
@@ -639,7 +644,7 @@ fn shared_prefix_signature_lookups_charge_each_compared_name() {
     let expanded = format!("{source} #show {prefix}b/0. #show {prefix}c/0.");
     let base = admit(&source).unwrap();
     let input = admit(&expanded).unwrap();
-    let model = Model::new(input.atoms().iter().cloned());
+    let model = Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap();
     let render = |input: &AdmittedFormula, limits| {
         input.metadata().observations().render(
             &model,

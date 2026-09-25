@@ -4,24 +4,31 @@ mod objectives;
 mod arithmetic;
 mod scoped_body;
 pub(crate) use scoped_body::source_activity;
-mod atoms;
+pub(crate) mod atoms;
 mod nodes;
 mod metadata;
 mod projection;
+mod cache;
+mod aggregate_order;
 #[cfg(test)]
 mod constants;
 
+use crate::formula_support::family::Warnings;
+use crate::formula_support::{Context, GroundingWork};
+
+use cache::{Contexts, CoordinateMap};
 use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
+use crate::formula_support::components::{self, Pattern as AtomPattern};
 use themelios_base::span::Location;
 use themelios_program::program::{AggregateFunction, DefaultNegation};
-use zetesis_core::{Atom, AtomCatalog, AtomPattern, Value};
+use zetesis_core::catalog::{TermKey, TermRef};
+use zetesis_core::{AtomCatalog, ValueNodeRef};
 use zetesis_ferraris::{
     AggregateComparison, AggregateElement, AggregateExtremum, AggregateFamilyLimits,
     AggregateGuard as NumericGuard, Node, Theory, ValueExtremumElement, append_aggregate,
-    append_aggregate_family, append_value_extremum,
+    append_aggregate_family, append_value_extremum_refs,
 };
 
 use crate::expansion::Budget;
@@ -29,9 +36,9 @@ use crate::formula::{Compiled, ceiling};
 use crate::formula_binding::Binding;
 use crate::formula_ir::{
     AggregateGuard, AggregateIr, AggregateKey, ChoiceIr, HeadElementKey, HeadIr, HeadLiteral,
-    HeadMeasure, HeadOperand, LiteralIr, Prepared, Projection, RuleIr, value_bytes,
+    HeadMeasure, HeadOperand, LiteralIr, Projection, RuleIr,
 };
-use crate::formula_support::{self, Counters, Join, Support};
+use crate::formula_support::{self, Buffer, Computation, Counters, Join, Support, TermTable};
 use crate::grounding_observer::{Event, Profile};
 use crate::{ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
 
@@ -76,56 +83,31 @@ impl Schedule<'_> {
 }
 
 pub(crate) fn ground(
-    prepared: Prepared,
-    limits: &FormulaLimits,
-    budget: &mut Budget,
-    location: Location,
+    preparation: crate::formula::Preparation,
     observer: Option<&dyn crate::GroundingObserver>,
     count_plan: Option<crate::formula_count_plan::Request<'_>>,
-    options: crate::grounding_options::Execution,
 ) -> Result<Compiled, FormulaFailure> {
-    ground_with_schedule(
-        prepared,
-        limits,
-        budget,
-        location,
-        observer,
-        Schedule::Eager(count_plan),
-        options,
-    )
-    .map(|(compiled, _)| compiled)
+    ground_with_schedule(preparation, observer, Schedule::Eager(count_plan))
+        .map(|(compiled, _)| compiled)
 }
 
 pub(crate) fn ground_hybrid(
-    prepared: Prepared,
-    limits: &FormulaLimits,
-    budget: &mut Budget,
-    location: Location,
+    preparation: crate::formula::Preparation,
     observer: Option<&dyn crate::GroundingObserver>,
-    options: crate::grounding_options::Execution,
 ) -> Result<(Compiled, crate::formula_hybrid::Constraints), FormulaFailure> {
-    if let Some(&location) = prepared.objective_declarations.first() {
+    if let Some(&location) = preparation.program.objective_declarations.first() {
         return Err(FormulaFailure::HybridUnsupported {
             feature: crate::HybridFeature::Objectives,
             location,
         });
     }
-    if options.joins != crate::JoinStrategy::Indexed {
+    if preparation.options.joins != crate::JoinStrategy::Indexed {
         return Err(FormulaFailure::HybridUnsupported {
             feature: crate::HybridFeature::TableJoins,
-            location,
+            location: preparation.location,
         });
     }
-    ground_with_schedule(
-        prepared,
-        limits,
-        budget,
-        location,
-        observer,
-        Schedule::Hybrid,
-        options,
-    )
-    .map(|(compiled, constraints)| {
+    ground_with_schedule(preparation, observer, Schedule::Hybrid).map(|(compiled, constraints)| {
         (
             compiled,
             constraints.expect("hybrid schedule retains its constraints"),
@@ -134,22 +116,20 @@ pub(crate) fn ground_hybrid(
 }
 
 fn ground_with_schedule(
-    prepared: Prepared,
-    limits: &FormulaLimits,
-    budget: &mut Budget,
-    location: Location,
+    preparation: crate::formula::Preparation,
     observer: Option<&dyn crate::GroundingObserver>,
     schedule: Schedule<'_>,
-    options: crate::grounding_options::Execution,
 ) -> Result<(Compiled, Option<crate::formula_hybrid::Constraints>), FormulaFailure> {
     use crate::GroundingPhase;
 
     let profile = Profile::new(observer);
-    let keyed_constraints = prepared.keyed_constraints;
-    let key_analysis = prepared.key_analysis;
+    let keyed_constraints = preparation.program.keyed_constraints;
+    let key_analysis = preparation.program.key_analysis;
+    let theory_limits = preparation.limits.theory;
+    let location = preparation.location;
     let Instantiation {
         projection,
-        builder,
+        emission,
         objectives,
         objective_origins,
         analysis_basis,
@@ -158,18 +138,17 @@ fn ground_with_schedule(
         objective_declarations,
         warnings,
         constraints,
-    } = instantiate(
-        prepared, limits, budget, location, &profile, schedule, options,
-    )?;
+        expansion,
+    } = instantiate(preparation, &profile, schedule)?;
     let Emission {
         atoms,
         nodes,
         roots,
         origins,
         count_plan,
-    } = builder.finish(&profile, location)?;
+    } = emission;
     let theory = profile.phase(GroundingPhase::TheoryValidation, None, || {
-        Theory::new(atoms.len(), nodes, roots, limits.theory)
+        Theory::new(atoms.atoms().len(), nodes, roots, theory_limits)
             .map_err(|error| FormulaFailure::Theory { error, location })
     })?;
     let count_plan = count_plan.map_or(
@@ -185,25 +164,26 @@ fn ground_with_schedule(
             analyzed,
             theory,
             count_plan,
-            atoms: AtomCatalog::new(atoms),
+            atoms,
             origins,
             objectives,
             objective_origins,
             objective_declarations,
             keyed_constraints,
             key_analysis,
-            expansion: budget.usage(),
+            expansion,
         },
         constraints,
     ))
 }
 
-/// The builder owns emitted atoms independently of possible support. Eager
-/// construction releases support after joins; hybrid construction additionally
-/// retains its complete owner with the unmaterialized constraint templates.
-struct Instantiation<'a> {
+/// Emitted occurrences and completed support select one canonical source
+/// authority independently. Eager construction releases lookup/support indexes;
+/// hybrid construction retains them with the unmaterialized constraint templates.
+struct Instantiation {
+    expansion: crate::ExpansionUsage,
     projection: crate::PreparedProjection,
-    builder: Builder<'a>,
+    emission: Emission,
     objectives: zetesis_objective::ObjectiveProgram,
     objective_origins: Vec<Vec<Location>>,
     analysis_basis: crate::AnalysisBasis,
@@ -214,36 +194,45 @@ struct Instantiation<'a> {
     constraints: Option<crate::formula_hybrid::Constraints>,
 }
 
-fn instantiate<'a>(
-    prepared: Prepared,
-    limits: &'a FormulaLimits,
-    budget: &'a mut Budget,
-    location: Location,
+fn instantiate(
+    preparation: crate::formula::Preparation,
     profile: &Profile<'_>,
     schedule: Schedule<'_>,
-    options: crate::grounding_options::Execution,
-) -> Result<Instantiation<'a>, FormulaFailure> {
+) -> Result<Instantiation, FormulaFailure> {
     use crate::GroundingPhase;
 
-    let mut counters = Counters::observed(profile.work());
+    let crate::formula::Preparation {
+        program: prepared,
+        catalog: mut source_catalog,
+        accounting,
+        mut budget,
+        limits,
+        location,
+        options,
+    } = preparation;
+    let limits = &limits;
+    let budget = &mut budget;
+    let mut counters = Counters::resume(accounting, profile.work());
     let domains = if options.domains.is_some() {
         profile.phase(GroundingPhase::DomainAnalysis, None, || {
+            let (relations, mut append) = source_catalog.split(limits, &mut counters, location)?;
+            let support = Support::indexed(&relations, limits, &counters, location)?;
+            let mut computation = formula_support::Computation::new(&mut append, &support);
             crate::formula_domains::analyze(
                 &prepared,
                 options.domains,
-                limits,
                 budget,
-                &mut counters,
                 profile,
-                location,
+                Context::new(&mut computation, limits, &mut counters, location),
             )
         })?
     } else {
         profile.domain_analysis(crate::DomainObservation::Disabled);
         None
     };
-    let catalog = profile.phase(GroundingPhase::SupportCompletion, None, || {
+    let mut catalog = profile.phase(GroundingPhase::SupportCompletion, None, || {
         formula_support::build(
+            source_catalog,
             &prepared,
             domains.as_ref(),
             limits,
@@ -252,55 +241,34 @@ fn instantiate<'a>(
             location,
         )
     })?;
-    let completed = profile.phase(GroundingPhase::SupportCompletion, None, || {
-        catalog.snapshot(limits, &mut counters, location)
-    })?;
-    let queries = profile.phase(GroundingPhase::SupportCompletion, None, || {
-        completed.queries(options.joins, limits, &counters, location)
-    })?;
-    let support = queries.support();
-    let mut warnings = profile.phase(GroundingPhase::SupportCompletion, None, || {
-        arithmetic::prepare(&prepared, support, limits, budget, &mut counters)
-    })?;
-    let (objectives, objective_origins) =
-        profile.phase(GroundingPhase::ObjectiveActivation, None, || {
-            objectives::prepare(
-                &prepared,
-                &queries,
-                limits,
-                budget,
-                &mut counters,
-                location,
-                &mut warnings,
-            )
+    let pending = {
+        let (completed, mut append) =
+            profile.phase(GroundingPhase::SupportCompletion, None, || {
+                catalog.split(limits, &mut counters, location)
+            })?;
+        let queries = profile.phase(GroundingPhase::SupportCompletion, None, || {
+            completed.queries(options.joins, limits, &counters, location)
         })?;
-    let projection =
-        projection::prepare(&prepared, &queries, limits, budget, &mut counters, location)?;
-    let mut builder = profile.phase(GroundingPhase::FormulaInitialization, None, || {
-        let mut builder = Builder::empty(
-            limits,
+        let mut computation = Computation::new(&mut append, queries.support());
+        emit(
+            &prepared,
+            &queries,
+            domains.as_ref(),
+            profile,
+            schedule,
             budget,
-            counters,
-            Purpose::Theory,
-            match schedule {
-                Schedule::Eager(request) => request
-                    .map(|request| crate::formula_count_plan::Collector::new(request, location)),
-                Schedule::Hybrid => None,
-            },
-        );
-        builder.initialize(location)?;
-        Ok::<_, FormulaFailure>(builder)
-    })?;
-    let streamed_instances = builder.instantiate_rules(
-        &prepared.rules,
-        domains.as_ref(),
-        support,
-        profile,
-        schedule,
-    )?;
+            Context::new(&mut computation, limits, &mut counters, location),
+        )?
+    };
     drop(domains);
-    drop(queries);
-    drop(completed);
+    let PublishedEmission {
+        projection,
+        emission,
+        objectives,
+        objective_origins,
+        warnings,
+        streamed_instances,
+    } = pending.publish(&mut catalog, limits, location)?;
     let constraints = schedule.retain_constraints(
         prepared.rules,
         catalog,
@@ -309,8 +277,9 @@ fn instantiate<'a>(
         location,
     );
     Ok(Instantiation {
+        expansion: budget.usage(),
         projection,
-        builder,
+        emission,
         objectives,
         objective_origins,
         analysis_basis: prepared.analysis_basis,
@@ -322,21 +291,160 @@ fn instantiate<'a>(
     })
 }
 
+/// Completed support may grow canonical terms during emission. Only owned
+/// selections and the same cumulative account cross into publication.
+struct PendingEmission {
+    projection: projection::PendingProjection,
+    objectives: objectives::PendingProgram,
+    emission: Emission<formula_support::SourceSelection>,
+    warnings: Warnings,
+    streamed_instances: u64,
+    counters: Counters,
+}
+
+fn emit<'source>(
+    prepared: &crate::formula_ir::Prepared,
+    queries: &formula_support::CompletedQueries<'source>,
+    domains: Option<&crate::formula_domains::Domains<'_>>,
+    profile: &Profile<'_>,
+    schedule: Schedule<'_>,
+    budget: &mut Budget,
+    context: Context<'_, &mut Computation<'_, 'source>>,
+) -> Result<PendingEmission, FormulaFailure> {
+    use crate::GroundingPhase;
+    let Context {
+        computation,
+        work:
+            GroundingWork {
+                limits,
+                counters,
+                location,
+            },
+    } = context;
+    let support = queries.support();
+    let mut warnings = profile.phase(GroundingPhase::SupportCompletion, None, || {
+        arithmetic::prepare(prepared, support, computation, limits, budget, counters)
+    })?;
+    let objectives = profile.phase(GroundingPhase::ObjectiveActivation, None, || {
+        objectives::prepare(
+            prepared,
+            queries,
+            budget,
+            &mut warnings,
+            Context::new(&mut *computation, limits, counters, location),
+        )
+    })?;
+    let projection = projection::prepare(
+        prepared,
+        queries,
+        computation,
+        limits,
+        budget,
+        counters,
+        location,
+    )?;
+    let mut builder = profile.phase(GroundingPhase::FormulaInitialization, None, || {
+        let mut builder = Builder::empty(
+            computation,
+            limits,
+            budget,
+            counters,
+            Purpose::Theory,
+            match schedule {
+                Schedule::Eager(request) => request
+                    .map(|request| crate::formula_count_plan::Collector::new(request, location)),
+                Schedule::Hybrid => None,
+            },
+            location,
+        )?;
+        builder.initialize(location)?;
+        Ok::<_, FormulaFailure>(builder)
+    })?;
+    let streamed_instances =
+        builder.instantiate_rules(&prepared.rules, domains, support, profile, schedule)?;
+    let (emission, counters) = builder.finish(profile)?;
+    Ok(PendingEmission {
+        projection,
+        objectives,
+        emission,
+        warnings,
+        streamed_instances,
+        counters,
+    })
+}
+
+struct PublishedEmission {
+    projection: crate::PreparedProjection,
+    emission: Emission,
+    objectives: zetesis_objective::ObjectiveProgram,
+    objective_origins: Vec<Vec<Location>>,
+    warnings: Warnings,
+    streamed_instances: u64,
+}
+
+impl PendingEmission {
+    fn publish(
+        self,
+        catalog: &mut formula_support::CompletedCatalog,
+        limits: &FormulaLimits,
+        location: Location,
+    ) -> Result<PublishedEmission, FormulaFailure> {
+        let Self {
+            projection,
+            objectives,
+            emission,
+            warnings,
+            streamed_instances,
+            mut counters,
+        } = self;
+        let mut publication = formula_support::Publication::new(catalog, &counters, location)?;
+        let projection = projection.publish(&mut publication, limits, &mut counters, location)?;
+        let Emission {
+            atoms,
+            nodes,
+            roots,
+            origins,
+            count_plan,
+        } = emission;
+        let atoms = publication.atoms(atoms, limits, &mut counters, location)?;
+        let (objectives, objective_origins) =
+            objectives.publish(&atoms, &mut publication, limits, &mut counters, location)?;
+        let emission = Emission {
+            atoms,
+            nodes,
+            roots,
+            origins,
+            count_plan,
+        };
+        Ok(PublishedEmission {
+            projection,
+            emission,
+            objectives,
+            objective_origins,
+            warnings,
+            streamed_instances,
+        })
+    }
+}
+
 /// Only these owned vectors and optional premises survive formula construction.
 /// Validation borrows no interning index, producer table or aggregate cache.
-struct Emission {
-    atoms: Vec<Atom>,
+struct Emission<A = AtomCatalog> {
+    atoms: A,
     nodes: Vec<Node>,
     roots: Vec<usize>,
     origins: Vec<Vec<Location>>,
     count_plan: Option<crate::formula_count_plan::Collector>,
 }
 
-pub(super) struct Builder<'a> {
+pub(super) struct Builder<'a, 'terms, 'source> {
+    pub(super) computation: &'a mut Computation<'terms, 'source>,
     purpose: Purpose,
     pub(super) limits: &'a FormulaLimits,
     pub(super) budget: &'a mut Budget,
     catalog: atoms::Catalog,
+    terms: TermTable,
+    aggregate_atoms: formula_support::SourceSelection,
     metadata: metadata::Metadata,
     nodes: Vec<Node>,
     node_indices: nodes::Index,
@@ -344,9 +452,8 @@ pub(super) struct Builder<'a> {
     origins: Vec<Vec<Location>>,
     pub(super) counters: Counters,
     origin_count: usize,
-    aggregate_cache: BTreeMap<AggregateContext, CachedAggregate>,
+    aggregate_cache: Contexts<CachedAggregate>,
     cached_elements: usize,
-    cached_key_bytes: u128,
     cached_roots: usize,
     count_plan: Option<crate::formula_count_plan::Collector>,
 }
@@ -359,23 +466,15 @@ enum Purpose {
     Validation,
 }
 
-/// Original aggregate identity and its scoped outer assignment. Absence is
-/// retained in the key; it cannot alias an ordinary numeric zero.
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
-struct AggregateContext {
-    aggregate: usize,
-    outer: Vec<Option<Value>>,
-}
-
 struct CachedAggregate {
     elements: GroundAggregate,
-    roots: Option<Arc<[(Value, usize)]>>,
+    roots: Option<Arc<CoordinateMap<usize, usize>>>,
 }
 
 #[derive(Clone)]
 enum GroundAggregate {
-    Numeric(Arc<[AggregateElement]>),
-    Extrema(Arc<[ValueExtremumElement]>),
+    Numeric(Arc<Buffer<AggregateElement>>),
+    Extrema(Arc<Buffer<ExtremumElement>>),
 }
 impl GroundAggregate {
     fn len(&self) -> usize {
@@ -385,7 +484,7 @@ impl GroundAggregate {
         }
     }
 }
-impl Builder<'_> {
+impl Builder<'_, '_, '_> {
     fn instantiate_rules(
         &mut self,
         rules: &[RuleIr],
@@ -421,10 +520,21 @@ impl Builder<'_> {
         support: &Support<'_>,
         instances: &mut u64,
     ) -> Result<(), FormulaFailure> {
-        let mut join = Join::rule(rule, support, self.budget)?;
-        while let Some(row) =
-            join.next_row(self.limits, self.budget, &mut self.counters, rule.location)?
-        {
+        let mut join = Join::rule(
+            rule,
+            support,
+            self.computation,
+            self.limits,
+            self.budget,
+            &mut self.counters,
+        )?;
+        while let Some(row) = join.next_row(
+            self.computation,
+            self.limits,
+            self.budget,
+            &mut self.counters,
+            rule.location,
+        )? {
             if row.passes {
                 // Every retained count is bounded by the charged substitution cap.
                 *instances += 1;
@@ -436,19 +546,26 @@ impl Builder<'_> {
                     _ => continue,
                 };
                 if row.passes {
-                    self.atom(pattern, &row.values, rule.location)?;
+                    self.atom(*pattern, &row.values, rule.location)?;
                 } else {
                     // Eager discarded-body validation checks these bindings but
                     // publishes no atoms. All scalar operations were checked by
                     // the shared family admission and join; no local scopes are
                     // eligible here, so atom-key validation completes that duty.
                     self.work(rule.location)?;
-                    pattern.key(row.values.slots()).map_err(|error| {
-                        FormulaFailure::UnsafeVariable {
+                    let view = row.values.view(
+                        self.computation.read(),
+                        self.limits,
+                        &mut self.counters,
+                        rule.location,
+                    )?;
+                    self.computation
+                        .static_pattern(*pattern, self.limits, &mut self.counters, rule.location)?
+                        .key(view)
+                        .map_err(|error| FormulaFailure::UnsafeVariable {
                             variable: error.variable,
                             location: rule.location,
-                        }
-                    })?;
+                        })?;
                 }
             }
         }
@@ -469,17 +586,29 @@ impl Builder<'_> {
             support.domain_guards(
                 rule,
                 domains.for_rule(index, rule)?,
+                self.computation,
                 self.limits,
-                self.budget,
                 &mut self.counters,
             )?
         } else {
             None
         };
-        let mut outer = Join::domain_rule(rule, support, guards.as_ref(), self.budget)?;
-        while let Some(row) =
-            outer.next_row(self.limits, self.budget, &mut self.counters, rule.location)?
-        {
+        let mut outer = Join::domain_rule(
+            rule,
+            support,
+            guards.as_ref(),
+            self.computation,
+            self.limits,
+            self.budget,
+            &mut self.counters,
+        )?;
+        while let Some(row) = outer.next_row(
+            self.computation,
+            self.limits,
+            self.budget,
+            &mut self.counters,
+            rule.location,
+        )? {
             if row.passes {
                 self.rule(rule, &row.values, support)?;
             } else {
@@ -489,31 +618,40 @@ impl Builder<'_> {
         Ok(())
     }
 
-    fn empty<'a>(
+    fn empty<'a, 'terms, 'source>(
+        computation: &'a mut Computation<'terms, 'source>,
         limits: &'a FormulaLimits,
         budget: &'a mut Budget,
-        counters: Counters,
+        counters: &mut Counters,
         purpose: Purpose,
         count_plan: Option<crate::formula_count_plan::Collector>,
-    ) -> Builder<'a> {
-        Builder {
+        location: Location,
+    ) -> Result<Builder<'a, 'terms, 'source>, FormulaFailure> {
+        let catalog = atoms::Catalog::new(computation, counters, limits, location)?;
+        let terms = TermTable::new(computation, limits, counters, location)?;
+        let aggregate_atoms =
+            formula_support::SourceSelection::new(computation, limits, counters, location)?;
+        let aggregate_cache = Contexts::new(computation, limits, counters, location)?;
+        Ok(Builder {
+            computation,
             limits,
             budget,
-            catalog: atoms::Catalog::default(),
+            catalog,
+            terms,
+            aggregate_atoms,
             metadata: metadata::Metadata::default(),
             nodes: Vec::new(),
             node_indices: nodes::Index::default(),
             roots: Vec::new(),
             origins: Vec::new(),
-            counters,
+            counters: std::mem::take(counters),
             origin_count: 0,
-            aggregate_cache: BTreeMap::new(),
+            aggregate_cache,
             cached_elements: 0,
-            cached_key_bytes: 0,
             cached_roots: 0,
             count_plan,
             purpose,
-        }
+        })
     }
     fn node_bound(&self) -> (FormulaResource, usize) {
         match self.purpose {
@@ -551,56 +689,45 @@ impl Builder<'_> {
     fn finish(
         mut self,
         profile: &Profile<'_>,
-        location: Location,
-    ) -> Result<Emission, FormulaFailure> {
+    ) -> Result<(Emission<formula_support::SourceSelection>, Counters), FormulaFailure> {
         use crate::GroundingPhase;
 
-        profile.phase(GroundingPhase::Coherence, None, || {
-            self.commit_atoms(location)?;
-            self.coherence()
-        })?;
+        profile.phase(GroundingPhase::Coherence, None, || self.coherence())?;
         profile.phase(GroundingPhase::SupportGuards, None, || {
             self.support_guards()
         })?;
-        let atom_bound = self.atom_bound();
-        Ok(Emission {
-            atoms: self.catalog.into_atoms(
-                atom_bound,
-                &mut self.counters,
-                self.limits,
-                location,
-            )?,
-            nodes: self.nodes,
-            roots: self.roots,
-            origins: self.origins,
-            count_plan: self.count_plan,
-        })
+        Ok((
+            Emission {
+                atoms: self.catalog.into_selection(),
+                nodes: self.nodes,
+                roots: self.roots,
+                origins: self.origins,
+                count_plan: self.count_plan,
+            },
+            self.counters,
+        ))
     }
 
     // Only the completed atom catalog establishes which opposite tuples can
     // coexist. Reuse its IDs; coherence must create neither atoms nor support.
     fn coherence(&mut self) -> Result<(), FormulaFailure> {
         for index in 0..self.catalog.len() {
-            let atom = self.catalog.get(index).expect("emitted atom position");
+            let location = self.metadata.location(index);
+            let atom = self.catalog.get(
+                index,
+                self.computation,
+                &mut self.counters,
+                self.limits,
+                location,
+            )?;
             if atom.predicate().sign() != zetesis_core::Sign::Negative {
                 continue;
             }
-            let location = self.metadata.location(index);
-            let bytes = atom.predicate().name().len() as u128
-                + atom.values().iter().map(value_bytes).sum::<u128>();
-            self.budget
-                .charge(ExpansionResource::ScalarBytes, bytes, location)?;
-            let opposite = Atom::new(
-                zetesis_core::Predicate::new(atom.predicate().name(), atom.predicate().arity())
-                    .expect("validated nonempty predicate"),
-                atom.values().to_vec(),
-            )
-            .expect("opposite atom keeps the same arity");
-            self.work(location)?;
-            let atom_bound = self.atom_bound();
+            self.counters.work(self.limits, location)?;
             if let Some(other) = self.catalog.find(
-                &opposite,
-                atom_bound,
+                index,
+                zetesis_core::Sign::Positive,
+                self.computation,
                 &mut self.counters,
                 self.limits,
                 location,
@@ -619,12 +746,6 @@ impl Builder<'_> {
             }
         }
         Ok(())
-    }
-
-    pub(super) fn commit_atoms(&mut self, location: Location) -> Result<(), FormulaFailure> {
-        let bound = self.atom_bound();
-        self.catalog
-            .commit(bound, &mut self.counters, self.limits, location)
     }
 
     pub(super) fn work(&mut self, location: Location) -> Result<(), FormulaFailure> {
@@ -723,57 +844,73 @@ impl Builder<'_> {
     }
     pub(super) fn atom(
         &mut self,
-        pattern: &AtomPattern,
+        pattern: AtomPattern,
         assignment: &Binding,
         location: Location,
     ) -> Result<usize, FormulaFailure> {
         self.work(location)?;
-        let key =
-            pattern
-                .key(assignment.slots())
-                .map_err(|error| FormulaFailure::UnsafeVariable {
-                    variable: error.variable,
-                    location,
-                })?;
+        let pattern =
+            self.computation
+                .static_pattern(pattern, self.limits, &mut self.counters, location)?;
+        let atom = self.computation.atom(
+            pattern,
+            assignment,
+            self.limits,
+            &mut self.counters,
+            location,
+        )?;
+        self.atom_identity(&atom, location)
+    }
+
+    fn atom_ref(
+        &mut self,
+        atom: zetesis_core::catalog::AtomRef<'_>,
+        location: Location,
+    ) -> Result<usize, FormulaFailure> {
+        self.work(location)?;
+        let atom = self
+            .computation
+            .atom_ref(atom, self.limits, &mut self.counters, location)?;
+        self.atom_identity(&atom, location)
+    }
+
+    fn atom_identity(
+        &mut self,
+        atom: &formula_support::SourceAtom,
+        location: Location,
+    ) -> Result<usize, FormulaFailure> {
         self.counters.record(Event::AtomLookup);
-        let required = self.catalog.len() as u128 + 1;
-        let (atom_resource, atom_limit) = self.atom_bound();
-        let atom_bound = (atom_resource, atom_limit);
-        let entry =
+        if let Some(index) =
             self.catalog
-                .entry(key, atom_bound, &mut self.counters, self.limits, location)?;
-        let index = if let Some(index) = entry.position() {
-            index
-        } else {
-            ceiling(atom_resource, required, atom_limit as u128, location)?;
-            // A new atom's copied payload, index entry and catalog cell: the
-            // cumulative allowance counts each atom once, not each proposal.
-            let mut bytes = pattern.predicate().name().len() as u128;
-            for term in pattern.terms() {
-                bytes += value_bytes(assignment.resolve(term, location)?);
-            }
-            self.budget.charge(
-                ExpansionResource::ScalarBytes,
-                bytes.saturating_mul(3),
-                location,
-            )?;
-            if matches!(self.purpose, Purpose::Theory) {
-                self.budget
-                    .charge(ExpansionResource::Origins, 1, location)?;
-            }
-            let index = entry
-                .insert_with(
-                    zetesis_core::atom_interner::Limits::for_atoms(atom_limit),
-                    || self.counters.work(self.limits, location),
-                )
-                .map_err(|error| atoms::failure(error, atom_bound, location))?;
-            self.counters.record(Event::AtomInserted);
-            if matches!(self.purpose, Purpose::Theory) {
-                self.metadata
-                    .atom(location, &mut self.counters, self.limits)?;
-            }
-            index
-        };
+                .position(atom, &mut self.counters, self.limits, location)?
+        {
+            return self.node(Node::Atom(index), location);
+        }
+        let bound = self.atom_bound();
+        ceiling(
+            bound.0,
+            self.catalog.len() as u128 + 1,
+            bound.1 as u128,
+            location,
+        )?;
+        if matches!(self.purpose, Purpose::Theory) {
+            self.budget
+                .charge(ExpansionResource::Origins, 1, location)?;
+        }
+        let (index, inserted) = self.catalog.insert(
+            atom,
+            bound,
+            self.computation,
+            &mut self.counters,
+            self.limits,
+            location,
+        )?;
+        debug_assert!(inserted, "exclusive emission selection");
+        self.counters.record(Event::AtomInserted);
+        if matches!(self.purpose, Purpose::Theory) {
+            self.metadata
+                .atom(location, &mut self.counters, self.limits)?;
+        }
         self.node(Node::Atom(index), location)
     }
     /// Validate a rejected complete row without changing the original atom/node
@@ -787,6 +924,7 @@ impl Builder<'_> {
         location: Location,
     ) -> Result<(), FormulaFailure> {
         let mut context = crate::formula_source_activity::Context {
+            computation: self.computation,
             limits: self.limits,
             budget: self.budget,
             counters: &mut self.counters,
@@ -811,7 +949,7 @@ impl Builder<'_> {
         let mut result = VERUM;
         for literal in literals {
             if let LiteralIr::Atom(negation, pattern) = literal {
-                let mut atom = self.atom(pattern, assignment, location)?;
+                let mut atom = self.atom(*pattern, assignment, location)?;
                 if *negation != DefaultNegation::None {
                     atom = self.neg(atom, location)?;
                 }
@@ -820,7 +958,7 @@ impl Builder<'_> {
                 }
                 result = self.and(result, atom, location)?;
             } else if let LiteralIr::PatternAtom(pattern) = literal {
-                let atom = self.atom(&pattern.atom, assignment, location)?;
+                let atom = self.atom(pattern.atom, assignment, location)?;
                 result = self.and(result, atom, location)?;
             } else if let LiteralIr::Aggregate(aggregate) = literal {
                 let aggregate = self.aggregate(aggregate, assignment, support, location)?;
@@ -848,6 +986,12 @@ impl Builder<'_> {
     ) -> Result<usize, FormulaFailure> {
         match projection {
             Projection::Arguments { predicate, terms } => {
+                let predicate = self.computation.static_predicate(
+                    *predicate,
+                    self.limits,
+                    &mut self.counters,
+                    location,
+                )?;
                 self.project_arguments(predicate, terms, assignment, support, location)
             }
             Projection::Witnesses {
@@ -862,14 +1006,23 @@ impl Builder<'_> {
                     *variables,
                     support,
                     self.budget,
-                    location,
+                    Context::new(
+                        &*self.computation,
+                        self.limits,
+                        &mut self.counters,
+                        location,
+                    ),
                 )?;
                 let mut result = FALSUM;
-                while let Some(row) =
-                    rows.next(self.limits, self.budget, &mut self.counters, location)?
-                {
+                while let Some(row) = rows.next(
+                    self.computation,
+                    self.limits,
+                    self.budget,
+                    &mut self.counters,
+                    location,
+                )? {
                     self.work(location)?;
-                    let atom = self.atom(atom, &row, location)?;
+                    let atom = self.atom(*atom, &row, location)?;
                     result = self.or(result, atom, location)?;
                 }
                 Ok(result)
@@ -879,8 +1032,8 @@ impl Builder<'_> {
 
     fn project_arguments(
         &mut self,
-        predicate: &zetesis_core::Predicate,
-        terms: &[Option<zetesis_core::Term>],
+        predicate: zetesis_core::catalog::PredicateRef<'_>,
+        terms: &[Option<components::Term>],
         assignment: &Binding,
         support: &Support,
         location: Location,
@@ -890,30 +1043,23 @@ impl Builder<'_> {
             self.work(location)?;
             let mut matches = true;
             for (column, term) in terms.iter().enumerate() {
-                let value = atom.value(column).expect("checked projection arity");
                 self.work(location)?;
                 if let Some(term) = term {
-                    matches &= assignment.resolve(term, location)? == value;
+                    let value = atom.value(column).expect("checked projection arity");
+                    let term = self.computation.static_term(
+                        *term,
+                        self.limits,
+                        &mut self.counters,
+                        location,
+                    )?;
+                    let expected = assignment.resolve(term, self.computation.read(), location)?;
+                    matches &= expected
+                        .compare_ref_with(value, || self.counters.work(self.limits, location))?
+                        .is_eq();
                 }
             }
             if matches {
-                self.budget.charge(
-                    ExpansionResource::ScalarBytes,
-                    atom.predicate().name().len() as u128
-                        + formula_support::row_values(atom)
-                            .map(value_bytes)
-                            .sum::<u128>(),
-                    location,
-                )?;
-                let pattern = AtomPattern::new(
-                    atom.predicate().clone(),
-                    formula_support::row_values(atom)
-                        .cloned()
-                        .map(zetesis_core::Term::Constant)
-                        .collect(),
-                )
-                .expect("projection retains the source atom arity");
-                let atom = self.atom(&pattern, &Binding::default(), location)?;
+                let atom = self.atom_ref(atom.atom(), location)?;
                 result = self.or(result, atom, location)?;
             }
         }
@@ -938,7 +1084,7 @@ impl Builder<'_> {
         match &rule.head {
             HeadIr::Normal(head) => {
                 let head = match head {
-                    Some(head) => self.atom(head, assignment, rule.location)?,
+                    Some(head) => self.atom(*head, assignment, rule.location)?,
                     None => FALSUM,
                 };
                 let formula = self.node(Node::Implies(body, head), rule.location)?;
@@ -948,29 +1094,7 @@ impl Builder<'_> {
                 }
                 Ok(())
             }
-            HeadIr::Disjunction(heads) => {
-                let mut disjunction = FALSUM;
-                let mut distinct = BTreeSet::new();
-                for head in heads {
-                    let (literal, atom) = self.head_literal(head, assignment, rule.location)?;
-                    if distinct.insert(literal) {
-                        disjunction = self.or(disjunction, literal, rule.location)?;
-                        // Necessary support is the original body for each head,
-                        // not a shifted rule excluding the other disjuncts.
-                        if let Some(atom) = atom {
-                            if head.positive_atom().is_some() {
-                                self.producer(atom, body, rule)?;
-                            } else {
-                                // A negative occurrence contributes provenance for
-                                // its atom's guard, without supplying any support.
-                                self.head_origins(atom, rule)?;
-                            }
-                        }
-                    }
-                }
-                let formula = self.node(Node::Implies(body, disjunction), rule.location)?;
-                self.root(formula, rule)
-            }
+            HeadIr::Disjunction(heads) => self.disjunction(heads, body, assignment, rule),
             HeadIr::ConditionalDisjunction { ordinary, elements } => {
                 let mut disjunction = FALSUM;
                 let mut count = 0;
@@ -986,11 +1110,20 @@ impl Builder<'_> {
                         element.body_variables..element.variables,
                         support,
                         self.budget,
-                        rule.location,
+                        Context::new(
+                            &*self.computation,
+                            self.limits,
+                            &mut self.counters,
+                            rule.location,
+                        ),
                     )?;
-                    while let Some(binding) =
-                        local.next(self.limits, self.budget, &mut self.counters, rule.location)?
-                    {
+                    while let Some(binding) = local.next(
+                        self.computation,
+                        self.limits,
+                        self.budget,
+                        &mut self.counters,
+                        rule.location,
+                    )? {
                         count += 1;
                         ceiling(
                             FormulaResource::DisjunctionElements,
@@ -1015,6 +1148,56 @@ impl Builder<'_> {
             }
             HeadIr::Choice(group) => self.choice(rule, group, body, assignment, support),
         }
+    }
+    fn disjunction(
+        &mut self,
+        heads: &[HeadLiteral],
+        body: usize,
+        assignment: &Binding,
+        rule: &RuleIr,
+    ) -> Result<(), FormulaFailure> {
+        let mut disjunction = FALSUM;
+        let mut distinct = CoordinateMap::new(
+            self.computation,
+            self.limits,
+            &mut self.counters,
+            rule.location,
+        )?;
+        for head in heads {
+            let (literal, atom) = self.head_literal(head, assignment, rule.location)?;
+            if distinct
+                .insert(
+                    literal,
+                    (),
+                    Some((
+                        FormulaResource::DisjunctionElements,
+                        self.limits.max_disjunction_elements,
+                    )),
+                    Context::new(
+                        &*self.computation,
+                        self.limits,
+                        &mut self.counters,
+                        rule.location,
+                    ),
+                )?
+                .is_none()
+            {
+                disjunction = self.or(disjunction, literal, rule.location)?;
+                // Necessary support is the original body for each head,
+                // not a shifted rule excluding the other disjuncts.
+                if let Some(atom) = atom {
+                    if head.positive_atom().is_some() {
+                        self.producer(atom, body, rule)?;
+                    } else {
+                        // A negative occurrence contributes provenance for
+                        // its atom's guard, without supplying any support.
+                        self.head_origins(atom, rule)?;
+                    }
+                }
+            }
+        }
+        let formula = self.node(Node::Implies(body, disjunction), rule.location)?;
+        self.root(formula, rule)
     }
     fn disjunct_instance(
         &mut self,
@@ -1106,15 +1289,17 @@ impl Builder<'_> {
             group,
             assignment,
             support,
-            self.limits,
             self.budget,
-            &mut self.counters,
-            rule.location,
+            Context::new(
+                &mut *self.computation,
+                self.limits,
+                &mut self.counters,
+                rule.location,
+            ),
         )?;
         let keys = if self.count_plan.is_some() && *measure == HeadMeasure::Count {
             keys
         } else {
-            drop(keys);
             None
         };
         let HeadGroup { eligible, activity } = self.head_group(group, assignment, support, rule)?;
@@ -1126,34 +1311,43 @@ impl Builder<'_> {
             HeadMeasure::Max => Some(AggregateExtremum::Max),
             _ => None,
         };
-        let (ordinary, retained) = if retaining {
-            (BTreeMap::new(), Some((eligible, keys)))
-        } else {
-            drop(keys);
-            (eligible, None)
-        };
-        if let Some((eligible, _)) = &retained {
-            self.choice_permissions(
-                eligible.iter().map(|(&head, &entry)| (head, entry)),
-                body,
-                rule,
-            )?;
-        } else {
-            self.choice_permissions(ordinary.into_iter(), body, rule)?;
-        }
+        self.choice_permissions(eligible.iter().copied(), body, rule)?;
+        let retained = retaining.then_some(eligible);
         if !guards.is_empty() {
-            let mut selected = HeadContributions::new(kind);
-            for (key, condition) in activity {
+            let mut selected = HeadContributions::new(
+                kind,
+                activity.len(),
+                self.computation,
+                self.limits,
+                &mut self.counters,
+                rule.location,
+            )?;
+            for entry in activity.iter() {
+                self.work(rule.location)?;
+                let (key, condition) = *entry;
                 if let Some(contribution) = crate::formula_head_aggregate::contribution(
                     *measure,
-                    key.first(),
+                    key.first(&self.terms, self.computation.read(), rule.location)?,
                     rule.location,
                 )? {
-                    selected.push(contribution, condition, self.budget, rule.location)?;
+                    selected.push(
+                        contribution,
+                        condition,
+                        &mut self.terms,
+                        Context::new(
+                            &*self.computation,
+                            self.limits,
+                            &mut self.counters,
+                            rule.location,
+                        ),
+                    )?;
                 }
             }
+            drop(activity);
+            self.work(rule.location)?;
+            let selected = selected.finish();
             let within = self.aggregate_guards_with_capture(
-                &selected.finish(),
+                &selected,
                 guards,
                 assignment,
                 kind,
@@ -1164,22 +1358,16 @@ impl Builder<'_> {
             let violated = self.and(body, outside, rule.location)?;
             let constraint = self.node(Node::Implies(violated, FALSUM), rule.location)?;
             self.root(constraint, rule)?;
-            if self.count_plan.is_some()
-                && retained.as_ref().is_some_and(|(_, keys)| keys.is_some())
-                && count_bounds.is_some()
-            {
-                self.commit_atoms(rule.location)?;
-            }
-            if let (Some(collector), Some((eligible, Some(keys))), Some(bounds)) =
-                (&mut self.count_plan, retained, count_bounds)
+            if let (Some(collector), Some(eligible), Some(keys), Some(bounds)) =
+                (&mut self.count_plan, retained, keys, count_bounds)
             {
                 collector.capture_group(
-                    crate::formula_count_plan::Input {
+                    &crate::formula_count_plan::Input {
                         body,
-                        eligible: &eligible,
-                        tuple_keys: keys,
+                        eligible: eligible.slice(),
+                        bijection: keys,
                         nodes: &self.nodes,
-                        atoms: self.catalog.atoms(),
+                        atom_count: self.catalog.len(),
                         bounds,
                         origins: &rule.origins,
                         location: rule.location,
@@ -1201,7 +1389,7 @@ impl Builder<'_> {
     ) -> Result<(usize, Option<usize>), FormulaFailure> {
         let (mut literal, atom) = match &head.operand {
             HeadOperand::Atom(pattern) => {
-                let atom = self.atom(pattern, assignment, location)?;
+                let atom = self.atom(*pattern, assignment, location)?;
                 (atom, Some(atom))
             }
             HeadOperand::Boolean(value) => (boolean(*value), None),
@@ -1222,14 +1410,41 @@ impl Builder<'_> {
         support: &Support,
         rule: &RuleIr,
     ) -> Result<HeadGroup, FormulaFailure> {
-        let mut result = HeadGroup::default();
+        let mut result = HeadGroup {
+            eligible: CoordinateMap::new(
+                self.computation,
+                self.limits,
+                &mut self.counters,
+                rule.location,
+            )?,
+            activity: CoordinateMap::new(
+                self.computation,
+                self.limits,
+                &mut self.counters,
+                rule.location,
+            )?,
+        };
         let elements = &group.elements;
         for element in elements {
-            let mut local =
-                Join::element(element, assignment, support, self.budget, rule.location)?;
-            while let Some(binding) =
-                local.next(self.limits, self.budget, &mut self.counters, rule.location)?
-            {
+            let mut local = Join::element(
+                element,
+                assignment,
+                support,
+                self.budget,
+                Context::new(
+                    &*self.computation,
+                    self.limits,
+                    &mut self.counters,
+                    rule.location,
+                ),
+            )?;
+            while let Some(binding) = local.next(
+                self.computation,
+                self.limits,
+                self.budget,
+                &mut self.counters,
+                rule.location,
+            )? {
                 let condition = self.body(
                     &element.condition,
                     &element.body_binding(&binding),
@@ -1237,16 +1452,7 @@ impl Builder<'_> {
                     support,
                 )?;
                 let (head, atom) = self.head_literal(&element.head, &binding, rule.location)?;
-                if let Some(atom) = atom {
-                    if element.head.positive_atom().is_some() {
-                        let previous = result.eligible.get(&atom).copied().unwrap_or(FALSUM);
-                        result
-                            .eligible
-                            .insert(atom, self.or(previous, condition, rule.location)?);
-                    } else {
-                        self.head_origins(atom, rule)?;
-                    }
-                }
+                self.head_permission(&mut result, &element.head, atom, condition, rule)?;
                 if !group.guards.is_empty() {
                     let selected = self.and(condition, head, rule.location)?;
                     match &element.key {
@@ -1289,6 +1495,46 @@ impl Builder<'_> {
         Ok(result)
     }
 
+    /// Coalesce positive permissions; negative occurrences add only provenance.
+    fn head_permission(
+        &mut self,
+        result: &mut HeadGroup,
+        head: &HeadLiteral,
+        atom: Option<usize>,
+        condition: usize,
+        rule: &RuleIr,
+    ) -> Result<(), FormulaFailure> {
+        if let Some(atom) = atom {
+            if head.positive_atom().is_some() {
+                let previous = result
+                    .eligible
+                    .find(
+                        &atom,
+                        self.computation,
+                        self.limits,
+                        &mut self.counters,
+                        rule.location,
+                    )?
+                    .unwrap_or(FALSUM);
+                let condition = self.or(previous, condition, rule.location)?;
+                result.eligible.insert(
+                    atom,
+                    condition,
+                    None,
+                    Context::new(
+                        &*self.computation,
+                        self.limits,
+                        &mut self.counters,
+                        rule.location,
+                    ),
+                )?;
+            } else {
+                self.head_origins(atom, rule)?;
+            }
+        }
+        Ok(())
+    }
+
     fn head_activity(
         &mut self,
         group: &mut HeadGroup,
@@ -1296,38 +1542,60 @@ impl Builder<'_> {
         selected: usize,
         location: Location,
     ) -> Result<(), FormulaFailure> {
-        let previous = group.activity.get(&key).copied().unwrap_or(FALSUM);
-        if !group.activity.contains_key(&key) {
-            ceiling(
-                FormulaResource::AggregateElements,
-                group.activity.len() as u128 + 1,
-                self.limits.aggregate.max_elements as u128,
+        let previous = group
+            .activity
+            .find(
+                &key,
+                self.computation,
+                self.limits,
+                &mut self.counters,
                 location,
-            )?;
-        }
+            )?
+            .unwrap_or(FALSUM);
         let activity = self.or(previous, selected, location)?;
-        group.activity.insert(key, activity);
+        group.activity.insert(
+            key,
+            activity,
+            Some((
+                FormulaResource::AggregateElements,
+                self.limits.aggregate.max_elements,
+            )),
+            Context::new(
+                &*self.computation,
+                self.limits,
+                &mut self.counters,
+                location,
+            ),
+        )?;
         Ok(())
     }
 
     fn head_tuple(
         &mut self,
-        terms: &[zetesis_core::Term],
+        terms: &[components::Term],
         assignment: &Binding,
         location: Location,
-    ) -> Result<Vec<Value>, FormulaFailure> {
-        let mut tuple = Vec::new();
-        for term in terms {
-            self.work(location)?;
-            let value = assignment.resolve(term, location)?;
-            self.budget.charge(
-                ExpansionResource::ScalarBytes,
-                size_of::<Value>() as u128 + value_bytes(value),
-                location,
-            )?;
-            tuple.push(value.clone());
-        }
-        Ok(tuple)
+    ) -> Result<usize, FormulaFailure> {
+        let tuple = crate::formula_assignment::tuple(
+            terms,
+            assignment,
+            self.computation,
+            self.limits,
+            &mut self.counters,
+            location,
+        )?;
+        self.term(&tuple, location)
+    }
+
+    fn term(&mut self, key: &TermKey, location: Location) -> Result<usize, FormulaFailure> {
+        self.terms.insert(
+            key,
+            None,
+            self.computation,
+            self.limits,
+            &mut self.counters,
+            location,
+        )
     }
 
     fn choice_permissions(
@@ -1337,6 +1605,7 @@ impl Builder<'_> {
         rule: &RuleIr,
     ) -> Result<(), FormulaFailure> {
         for (head, condition) in eligible {
+            self.work(rule.location)?;
             let antecedent = self.and(body, condition, rule.location)?;
             let negative = self.neg(head, rule.location)?;
             let choice = self.or(head, negative, rule.location)?;
@@ -1352,41 +1621,62 @@ impl Builder<'_> {
 /// by the complete tuple. An ordinary atom choice uses its atom as the implicit
 /// key and default-negation sign; a Boolean choice uses its source occurrence
 /// within this outer group.
-#[derive(Default)]
 struct HeadGroup {
-    eligible: BTreeMap<usize, usize>,
-    activity: BTreeMap<HeadKey, usize>,
+    eligible: CoordinateMap<usize, usize>,
+    activity: CoordinateMap<HeadKey, usize>,
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum HeadKey {
-    Tuple(Vec<Value>),
+    Tuple(usize),
     Atom(DefaultNegation, usize),
     BooleanOccurrence(Location),
 }
 
 impl HeadKey {
-    fn first(&self) -> Option<&Value> {
+    fn first<'a>(
+        &self,
+        terms: &TermTable,
+        read: zetesis_core::catalog::CatalogRead<'a>,
+        location: Location,
+    ) -> Result<Option<TermRef<'a>>, FormulaFailure> {
         match self {
-            Self::Tuple(tuple) => tuple.first(),
-            Self::Atom(..) | Self::BooleanOccurrence(_) => None,
+            Self::Tuple(tuple) => Ok(terms.value(*tuple, read, location)?.child(0)),
+            Self::Atom(..) | Self::BooleanOccurrence(_) => Ok(None),
         }
     }
+}
+
+#[derive(Clone, Copy)]
+struct ExtremumElement {
+    value: usize,
+    condition: usize,
 }
 
 /// One storage family for coalesced tuple contributions. Each entry retains
 /// every selected eligible witness; no candidate truth is assumed here.
 enum HeadContributions {
-    Numeric(Vec<AggregateElement>),
-    Extrema(Vec<ValueExtremumElement>),
+    Numeric(Buffer<AggregateElement>),
+    Extrema(Buffer<ExtremumElement>),
 }
 
 impl HeadContributions {
-    fn new(kind: Option<AggregateExtremum>) -> Self {
+    fn new(
+        kind: Option<AggregateExtremum>,
+        capacity: usize,
+        computation: &Computation<'_, '_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: Location,
+    ) -> Result<Self, FormulaFailure> {
         if kind.is_some() {
-            Self::Extrema(Vec::new())
+            let mut elements = Buffer::new(computation, limits, counters, location)?;
+            elements.reserve(capacity, computation, limits, counters, location)?;
+            Ok(Self::Extrema(elements))
         } else {
-            Self::Numeric(Vec::new())
+            let mut elements = Buffer::new(computation, limits, counters, location)?;
+            elements.reserve(capacity, computation, limits, counters, location)?;
+            Ok(Self::Numeric(elements))
         }
     }
 
@@ -1394,20 +1684,45 @@ impl HeadContributions {
         &mut self,
         contribution: crate::formula_head_aggregate::Contribution<'_>,
         condition: usize,
-        budget: &mut Budget,
-        location: Location,
+        terms: &mut TermTable,
+        context: Context<'_, &Computation<'_, '_>>,
     ) -> Result<(), FormulaFailure> {
         use crate::formula_head_aggregate::Contribution;
 
+        let Context {
+            computation,
+            work:
+                GroundingWork {
+                    limits,
+                    counters,
+                    location,
+                },
+        } = context;
         match (self, contribution) {
             (Self::Numeric(elements), Contribution::Numeric(weight)) => {
-                elements.push(AggregateElement { weight, condition });
+                elements.push(
+                    AggregateElement { weight, condition },
+                    computation,
+                    limits,
+                    counters,
+                    location,
+                )?;
             }
             (Self::Extrema(elements), Contribution::Extremum(value)) => {
-                elements.push(ValueExtremumElement {
-                    value: formula_support::copy(value, budget, location)?,
-                    condition,
-                });
+                let key = computation.read().term_key(value).map_err(|error| {
+                    crate::formula_binding::assignment(
+                        zetesis_core::catalog::AssignmentError::Read(error),
+                        location,
+                    )
+                })?;
+                let value = terms.insert(&key, None, computation, limits, counters, location)?;
+                elements.push(
+                    ExtremumElement { value, condition },
+                    computation,
+                    limits,
+                    counters,
+                    location,
+                )?;
             }
             _ => unreachable!("group measure determines its contribution family"),
         }
@@ -1416,19 +1731,25 @@ impl HeadContributions {
 
     fn finish(self) -> GroundAggregate {
         match self {
-            Self::Numeric(elements) => GroundAggregate::Numeric(elements.into()),
-            Self::Extrema(elements) => GroundAggregate::Extrema(elements.into()),
+            Self::Numeric(elements) => GroundAggregate::Numeric(Arc::new(elements)),
+            Self::Extrema(elements) => GroundAggregate::Extrema(Arc::new(elements)),
         }
     }
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum GroundKey {
-    Tuple(Vec<Value>),
-    Atom(Atom),
+    Tuple(usize),
+    Atom(usize),
 }
 
-impl Builder<'_> {
+#[derive(Clone, Copy)]
+enum Measure {
+    Numeric(i32),
+    Extremum(usize),
+}
+
+impl Builder<'_, '_, '_> {
     fn aggregate(
         &mut self,
         aggregate: &AggregateIr,
@@ -1439,7 +1760,7 @@ impl Builder<'_> {
         if let Some(target) = aggregate.binding {
             return self.assignment_aggregate(aggregate, target, assignment, support, location);
         }
-        let elements = self.cached_aggregate_elements(aggregate, assignment, support, location)?;
+        let elements = self.aggregate_elements(aggregate, assignment, support, location)?;
         let mut result = self.aggregate_guards(
             &elements,
             &aggregate.guards,
@@ -1455,31 +1776,28 @@ impl Builder<'_> {
         }
         Ok(result)
     }
-    fn cached_aggregate_elements(
+    fn cached_aggregate(
         &mut self,
         aggregate: &AggregateIr,
+        key: &Buffer<Option<usize>>,
         assignment: &Binding,
         support: &Support,
         location: Location,
-    ) -> Result<GroundAggregate, FormulaFailure> {
-        let Some(target) = aggregate.binding else {
-            return self.aggregate_elements(aggregate, assignment, support, location);
-        };
-        let (key, bytes) = self.cache_key(aggregate.id, target, assignment, location)?;
-        self.work(location)?;
-        if let Some(cached) = self.aggregate_cache.get(&key) {
-            return Ok(cached.elements.clone());
+    ) -> Result<usize, FormulaFailure> {
+        if let Some(slot) = self.aggregate_cache.find(
+            aggregate.id,
+            key,
+            self.computation,
+            self.limits,
+            &mut self.counters,
+            location,
+        )? {
+            return Ok(slot);
         }
         ceiling(
             FormulaResource::AggregateCacheRows,
             self.aggregate_cache.len() as u128 + 1,
             self.limits.max_aggregate_cache_rows as u128,
-            location,
-        )?;
-        ceiling(
-            FormulaResource::AggregateCacheKeys,
-            self.cached_key_bytes + bytes,
-            self.limits.max_aggregate_cache_key_bytes as u128,
             location,
         )?;
         let elements = self.aggregate_elements(aggregate, assignment, support, location)?;
@@ -1489,17 +1807,27 @@ impl Builder<'_> {
             self.limits.max_aggregate_cache_elements as u128,
             location,
         )?;
-        self.cached_elements += elements.len();
-        self.cached_key_bytes += bytes;
         self.work(location)?;
-        self.aggregate_cache.insert(
+        let count = elements.len();
+        let next = self.aggregate_cache.len();
+        let slot = self.aggregate_cache.insert(
+            aggregate.id,
             key,
             CachedAggregate {
-                elements: elements.clone(),
+                elements,
                 roots: None,
             },
-        );
-        Ok(elements)
+            Context::new(
+                &*self.computation,
+                self.limits,
+                &mut self.counters,
+                location,
+            ),
+        )?;
+        if slot == next {
+            self.cached_elements += count;
+        }
+        Ok(slot)
     }
     fn assignment_aggregate(
         &mut self,
@@ -1509,152 +1837,250 @@ impl Builder<'_> {
         support: &Support,
         location: Location,
     ) -> Result<usize, FormulaFailure> {
-        let (key, _) = self.cache_key(aggregate.id, target, assignment, location)?;
+        let key = self.cache_key(target, assignment, location)?;
+        let slot = self.cached_aggregate(aggregate, &key, assignment, support, location)?;
         self.work(location)?;
         let roots = self
             .aggregate_cache
-            .get(&key)
+            .get(slot)
             .and_then(|cached| cached.roots.as_ref().map(Arc::clone));
         let roots = if let Some(roots) = roots {
             roots
         } else {
-            let elements =
-                self.cached_aggregate_elements(aggregate, assignment, support, location)?;
+            self.work(location)?;
+            let elements = self
+                .aggregate_cache
+                .get(slot)
+                .expect("cache lookup returned a published row")
+                .elements
+                .clone();
             let roots = self.assignment_family(aggregate.function, &elements, location)?;
             self.work(location)?;
             self.aggregate_cache
-                .get_mut(&key)
+                .get_mut(slot)
                 .expect("eligibility cache was populated before family construction")
                 .roots = Some(Arc::clone(&roots));
+            self.cached_roots += roots.len();
             roots
         };
-        let target_value = assignment.read(target, location)?;
-        let index = roots
-            .binary_search_by(|(value, _)| value.cmp(target_value))
+        let target_value = assignment.key(target, location)?;
+        let key = self
+            .terms
+            .find(
+                &target_value,
+                self.computation,
+                self.limits,
+                &mut self.counters,
+                location,
+            )?
             .expect("the complete final-U tuple set covers every assignment proposal");
-        Ok(roots[index].1)
+        Ok(roots
+            .find(
+                &key,
+                self.computation,
+                self.limits,
+                &mut self.counters,
+                location,
+            )?
+            .expect("the complete family has a root for every assignment proposal"))
     }
     fn assignment_family(
         &mut self,
         function: AggregateFunction,
         elements: &GroundAggregate,
         location: Location,
-    ) -> Result<Arc<[(Value, usize)]>, FormulaFailure> {
-        let values = match elements {
-            GroundAggregate::Numeric(elements) => crate::formula_assignment::candidates(
-                function,
-                elements.iter().map(|element| element.weight),
-                self.limits,
-                &mut self.counters,
-                location,
-            )?,
-            GroundAggregate::Extrema(elements) => crate::formula_assignment::extrema_candidates(
-                function,
-                elements.iter().map(|element| &element.value),
-                self.limits,
-                self.budget,
-                &mut self.counters,
-                location,
-            )?,
-        };
+    ) -> Result<Arc<CoordinateMap<usize, usize>>, FormulaFailure> {
+        let values = self.aggregate_candidates(function, elements, location)?;
         ceiling(
             FormulaResource::AggregateCacheRoots,
             self.cached_roots as u128 + values.len() as u128,
             self.limits.max_aggregate_cache_roots as u128,
             location,
         )?;
+        let mut roots =
+            CoordinateMap::new(self.computation, self.limits, &mut self.counters, location)?;
+        roots.reserve(
+            values.len(),
+            self.computation,
+            self.limits,
+            &mut self.counters,
+            location,
+        )?;
         if let GroundAggregate::Extrema(elements) = elements {
             let kind = extremum(function).expect("value aggregate is min/max");
-            let mut roots = Vec::new();
-            for value in values {
+            for slot in 0..values.len() {
                 self.work(location)?;
-                let root =
-                    self.extremum_root(elements, kind, AggregateComparison::Eq, &value, location)?;
-                roots.push((value, root));
+                let key = values.key(slot, location)?;
+                let value = self.term(&key, location)?;
+                let root = self.extremum_root(
+                    elements.slice(),
+                    kind,
+                    AggregateComparison::Eq,
+                    &key,
+                    location,
+                )?;
+                roots.insert(
+                    value,
+                    root,
+                    None,
+                    Context::new(
+                        &*self.computation,
+                        self.limits,
+                        &mut self.counters,
+                        location,
+                    ),
+                )?;
             }
-            self.cached_roots += roots.len();
-            return Ok(Arc::from(roots));
-        }
-        let GroundAggregate::Numeric(elements) = elements else {
-            unreachable!("handled extrema")
-        };
-        let mut guards = Vec::new();
-        for value in &values {
-            self.work(location)?;
-            let Value::Number(value) = value else {
-                unreachable!("count/sum proposals are numeric")
+        } else {
+            let GroundAggregate::Numeric(elements) = elements else {
+                unreachable!("handled extrema");
             };
-            guards.push(NumericGuard {
-                comparison: AggregateComparison::Eq,
-                bound: i64::from(*value),
-            });
+            let guards = self.assignment_guards(&values, location)?;
+            let limits = AggregateFamilyLimits {
+                aggregate: self.aggregate_limits(),
+                max_guards: self.limits.max_assignment_values,
+            };
+            let first = self.nodes.len();
+            let build = append_aggregate_family(
+                &mut self.nodes,
+                elements.slice(),
+                guards.slice(),
+                limits,
+                &zetesis_cpu::Cancellation::default(),
+            )
+            .map_err(|error| FormulaFailure::Aggregate { error, location })?;
+            self.counters.accounting.work += build.statistics().work;
+            let canonical = self.intern_appended(first, location)?;
+            for (slot, root) in build.roots().iter().enumerate() {
+                self.work(location)?;
+                let key = values.key(slot, location)?;
+                let value = self.term(&key, location)?;
+                roots.insert(
+                    value,
+                    remap(*root, first, &canonical),
+                    None,
+                    Context::new(
+                        &*self.computation,
+                        self.limits,
+                        &mut self.counters,
+                        location,
+                    ),
+                )?;
+            }
         }
-        let limits = AggregateFamilyLimits {
-            aggregate: self.aggregate_limits(),
-            max_guards: self.limits.max_assignment_values,
-        };
-        let first = self.nodes.len();
-        let build = append_aggregate_family(
-            &mut self.nodes,
-            elements,
-            &guards,
-            limits,
-            &zetesis_cpu::Cancellation::default(),
-        )
-        .map_err(|error| FormulaFailure::Aggregate { error, location })?;
-        self.counters.work += build.statistics().work;
-        let canonical = self.intern_appended(first, location)?;
-        let mut roots = Vec::new();
-        for (value, root) in values.into_iter().zip(build.roots()) {
+        self.work(location)?;
+        Ok(Arc::new(roots))
+    }
+    /// Pair each numeric proposal with its equality guard in proposal order.
+    fn assignment_guards(
+        &mut self,
+        values: &Binding,
+        location: Location,
+    ) -> Result<Buffer<NumericGuard>, FormulaFailure> {
+        let mut guards = Buffer::new(self.computation, self.limits, &mut self.counters, location)?;
+        guards.reserve(
+            values.len(),
+            self.computation,
+            self.limits,
+            &mut self.counters,
+            location,
+        )?;
+        for slot in 0..values.len() {
             self.work(location)?;
-            roots.push((value, remap(*root, first, &canonical)));
+            let ValueNodeRef::Number(value) = values
+                .read(slot, self.computation.read(), location)?
+                .descriptor()
+            else {
+                unreachable!("count/sum proposals are numeric");
+            };
+            guards.push(
+                NumericGuard {
+                    comparison: AggregateComparison::Eq,
+                    bound: i64::from(value),
+                },
+                self.computation,
+                self.limits,
+                &mut self.counters,
+                location,
+            )?;
         }
-        self.cached_roots += roots.len();
-        Ok(Arc::from(roots))
+        Ok(guards)
+    }
+
+    /// Enumerate the complete assignment proposal family before building roots.
+    fn aggregate_candidates(
+        &mut self,
+        function: AggregateFunction,
+        elements: &GroundAggregate,
+        location: Location,
+    ) -> Result<Binding<'static>, FormulaFailure> {
+        match elements {
+            GroundAggregate::Numeric(elements) => crate::formula_assignment::candidates(
+                function,
+                elements.iter().map(|element| element.weight),
+                self.computation,
+                self.limits,
+                &mut self.counters,
+                location,
+            ),
+            GroundAggregate::Extrema(elements) => {
+                let mut firsts =
+                    Binding::new(self.computation, self.limits, &mut self.counters, location)?;
+                firsts.extend_scope(
+                    elements.len(),
+                    self.computation,
+                    self.limits,
+                    &mut self.counters,
+                    location,
+                )?;
+                for (slot, element) in elements.iter().enumerate() {
+                    self.work(location)?;
+                    let key = self.terms.key(element.value, location)?;
+                    firsts.set(slot, &key, self.limits, &mut self.counters, location)?;
+                }
+                crate::formula_assignment::extrema_candidates(
+                    function,
+                    firsts.slots(),
+                    self.computation,
+                    self.limits,
+                    &mut self.counters,
+                    location,
+                )
+            }
+        }
     }
     fn cache_key(
         &mut self,
-        id: usize,
         target: usize,
         assignment: &Binding,
         location: Location,
-    ) -> Result<(AggregateContext, u128), FormulaFailure> {
-        let bytes = std::mem::size_of::<usize>() as u128
-            + assignment
-                .slots()
-                .iter()
-                .enumerate()
-                .filter(|(index, _)| *index != target)
-                .map(|(_, value)| {
-                    std::mem::size_of::<Option<Value>>() as u128
-                        + value.as_ref().map_or(0, value_bytes)
-                })
-                .sum::<u128>();
-        ceiling(
-            FormulaResource::AggregateCacheKeys,
-            bytes,
-            self.limits.max_aggregate_cache_key_bytes as u128,
+    ) -> Result<Buffer<Option<usize>>, FormulaFailure> {
+        let count = assignment.len() - usize::from(target < assignment.len());
+        let mut outer = Buffer::new(self.computation, self.limits, &mut self.counters, location)?;
+        outer.resize(
+            count,
+            None,
+            self.computation,
+            self.limits,
+            &mut self.counters,
             location,
         )?;
-        let mut outer = Vec::new();
-        for (index, value) in assignment.slots().iter().enumerate() {
+        let mut at = 0;
+        for slot in 0..assignment.len() {
             self.work(location)?;
-            if index != target {
-                self.budget.charge(
-                    ExpansionResource::ScalarBytes,
-                    value.as_ref().map_or(0, value_bytes),
-                    location,
-                )?;
-                outer.push(value.clone());
+            if slot != target {
+                let key = assignment
+                    .slots()
+                    .key(slot)
+                    .map_err(|error| crate::formula_binding::assignment(error, location))?;
+                outer.slice_mut()[at] = key
+                    .as_ref()
+                    .map(|key| self.term(key, location))
+                    .transpose()?;
+                at += 1;
             }
         }
-        Ok((
-            AggregateContext {
-                aggregate: id,
-                outer,
-            },
-            bytes,
-        ))
+        Ok(outer)
     }
     fn aggregate_elements(
         &mut self,
@@ -1664,7 +2090,12 @@ impl Builder<'_> {
         location: Location,
     ) -> Result<GroundAggregate, FormulaFailure> {
         let is_extremum = extremum(aggregate.function).is_some();
-        let mut grouped = BTreeMap::<GroundKey, (Value, usize)>::new();
+        let mut grouped = CoordinateMap::<GroundKey, (Measure, usize)>::new(
+            self.computation,
+            self.limits,
+            &mut self.counters,
+            location,
+        )?;
         for element in &aggregate.elements {
             let mut local = Join::new(
                 &element.condition,
@@ -1672,66 +2103,155 @@ impl Builder<'_> {
                 element.variables,
                 support,
                 self.budget,
-                location,
+                Context::new(
+                    &*self.computation,
+                    self.limits,
+                    &mut self.counters,
+                    location,
+                ),
             )?;
-            while let Some(binding) =
-                local.next(self.limits, self.budget, &mut self.counters, location)?
-            {
+            while let Some(binding) = local.next(
+                self.computation,
+                self.limits,
+                self.budget,
+                &mut self.counters,
+                location,
+            )? {
                 let key = self.aggregate_key(&element.key, &binding, location)?;
                 let weight = match &key {
                     GroundKey::Tuple(tuple) if is_extremum => {
-                        let value = tuple.first().expect("admitted nonempty extremum tuple");
+                        let read = self.computation.read();
+                        let value = self
+                            .terms
+                            .value(*tuple, read, location)?
+                            .child(0)
+                            .expect("admitted nonempty extremum tuple");
                         crate::formula_assignment::extremum_value(value, location)?;
-                        formula_support::copy(value, self.budget, location)?
+                        let key = read.term_key(value).map_err(|error| {
+                            crate::formula_binding::assignment(
+                                zetesis_core::catalog::AssignmentError::Read(error),
+                                location,
+                            )
+                        })?;
+                        Measure::Extremum(self.term(&key, location)?)
                     }
                     GroundKey::Tuple(tuple) => {
+                        let value = self
+                            .terms
+                            .value(*tuple, self.computation.read(), location)?
+                            .child(0);
                         let Some(weight) = crate::formula_assignment::contribution(
                             aggregate.function,
-                            tuple.first(),
+                            value,
                             location,
                         )?
                         else {
                             continue;
                         };
-                        Value::Number(weight)
+                        Measure::Numeric(weight)
                     }
-                    GroundKey::Atom(_) => Value::Number(1),
+                    GroundKey::Atom(_) => Measure::Numeric(1),
                 };
                 let condition = self.body(&element.condition, &binding, location, support)?;
                 let previous = grouped
-                    .get(&key)
-                    .map_or(FALSUM, |(_, condition)| *condition);
-                if !grouped.contains_key(&key) {
-                    ceiling(
-                        FormulaResource::AggregateElements,
-                        grouped.len() as u128 + 1,
-                        self.limits.aggregate.max_elements as u128,
+                    .find(
+                        &key,
+                        self.computation,
+                        self.limits,
+                        &mut self.counters,
                         location,
-                    )?;
-                }
+                    )?
+                    .map_or(FALSUM, |(_, condition)| condition);
                 let condition = self.or(previous, condition, location)?;
-                grouped.insert(key, (weight, condition));
+                grouped.insert(
+                    key,
+                    (weight, condition),
+                    Some((
+                        FormulaResource::AggregateElements,
+                        self.limits.aggregate.max_elements,
+                    )),
+                    Context::new(
+                        &*self.computation,
+                        self.limits,
+                        &mut self.counters,
+                        location,
+                    ),
+                )?;
             }
         }
+        self.coalesced_aggregate(grouped, is_extremum, location)
+    }
+
+    /// Publish the measured contribution family after full tuple coalescing.
+    fn coalesced_aggregate(
+        &mut self,
+        grouped: CoordinateMap<GroundKey, (Measure, usize)>,
+        is_extremum: bool,
+        location: Location,
+    ) -> Result<GroundAggregate, FormulaFailure> {
+        let grouped = aggregate_order::ordered(
+            grouped,
+            &self.terms,
+            &self.aggregate_atoms,
+            Context::new(
+                &*self.computation,
+                self.limits,
+                &mut self.counters,
+                location,
+            ),
+        )?;
         if is_extremum {
-            return Ok(GroundAggregate::Extrema(
-                grouped
-                    .into_values()
-                    .map(|(value, condition)| ValueExtremumElement { value, condition })
-                    .collect::<Vec<_>>()
-                    .into(),
-            ));
-        }
-        let elements: Vec<_> = grouped
-            .into_values()
-            .map(|(value, condition)| {
-                let Value::Number(weight) = value else {
-                    unreachable!("numeric contribution")
+            let mut elements =
+                Buffer::new(self.computation, self.limits, &mut self.counters, location)?;
+            elements.reserve(
+                grouped.len(),
+                self.computation,
+                self.limits,
+                &mut self.counters,
+                location,
+            )?;
+            for entry in grouped.iter() {
+                self.work(location)?;
+                let (_, (value, condition)) = *entry;
+                let Measure::Extremum(value) = value else {
+                    unreachable!("extremum contribution");
                 };
-                AggregateElement { weight, condition }
-            })
-            .collect();
-        Ok(GroundAggregate::Numeric(elements.into()))
+                elements.push(
+                    ExtremumElement { value, condition },
+                    self.computation,
+                    self.limits,
+                    &mut self.counters,
+                    location,
+                )?;
+            }
+            self.work(location)?;
+            return Ok(GroundAggregate::Extrema(Arc::new(elements)));
+        }
+        let mut elements =
+            Buffer::new(self.computation, self.limits, &mut self.counters, location)?;
+        elements.reserve(
+            grouped.len(),
+            self.computation,
+            self.limits,
+            &mut self.counters,
+            location,
+        )?;
+        for entry in grouped.iter() {
+            self.work(location)?;
+            let (_, (value, condition)) = *entry;
+            let Measure::Numeric(weight) = value else {
+                unreachable!("numeric contribution");
+            };
+            elements.push(
+                AggregateElement { weight, condition },
+                self.computation,
+                self.limits,
+                &mut self.counters,
+                location,
+            )?;
+        }
+        self.work(location)?;
+        Ok(GroundAggregate::Numeric(Arc::new(elements)))
     }
     fn aggregate_key(
         &mut self,
@@ -1740,33 +2260,32 @@ impl Builder<'_> {
         location: Location,
     ) -> Result<GroundKey, FormulaFailure> {
         match key {
-            AggregateKey::Tuple(terms) => {
-                let mut values = Vec::new();
-                for term in terms {
-                    self.work(location)?;
-                    let value = assignment.resolve(term, location)?;
-                    self.budget.charge(
-                        ExpansionResource::ScalarBytes,
-                        value_bytes(value),
-                        location,
-                    )?;
-                    values.push(value.clone());
-                }
-                Ok(GroundKey::Tuple(values))
-            }
+            AggregateKey::Tuple(terms) => self
+                .head_tuple(terms, assignment, location)
+                .map(GroundKey::Tuple),
             AggregateKey::Atom(pattern) => {
-                self.work(location)?;
-                let bytes: u128 = pattern
-                    .terms()
-                    .iter()
-                    .map(|term| assignment.resolve(term, location).map(value_bytes))
-                    .sum::<Result<u128, _>>()?;
-                self.budget.charge(
-                    ExpansionResource::ScalarBytes,
-                    bytes + pattern.predicate().name().len() as u128,
+                let pattern = self.computation.static_pattern(
+                    *pattern,
+                    self.limits,
+                    &mut self.counters,
                     location,
                 )?;
-                Ok(GroundKey::Atom(assignment.instantiate(pattern, location)?))
+                let atom = self.computation.atom(
+                    pattern,
+                    assignment,
+                    self.limits,
+                    &mut self.counters,
+                    location,
+                )?;
+                let (position, _) = self.aggregate_atoms.insert(
+                    &atom,
+                    (FormulaResource::Atoms, self.limits.theory.max_atoms),
+                    self.computation,
+                    self.limits,
+                    &mut self.counters,
+                    location,
+                )?;
+                Ok(GroundKey::Atom(position))
             }
         }
     }
@@ -1800,7 +2319,7 @@ impl Builder<'_> {
         limits.max_nodes = limits.max_nodes.min(self.node_bound().1);
         limits.max_work = limits
             .max_work
-            .min(self.limits.max_work - self.counters.work);
+            .min(self.limits.max_work - self.counters.accounting.work);
         limits
     }
     fn aggregate_guards(
@@ -1827,8 +2346,8 @@ impl Builder<'_> {
             let bound = formula_support::expression(
                 &guard.bound,
                 assignment,
+                self.computation,
                 self.limits,
-                self.budget,
                 &mut self.counters,
                 location,
             )?;
@@ -1837,7 +2356,7 @@ impl Builder<'_> {
                     unreachable!("extrema contribution")
                 };
                 let root = self.extremum_root(
-                    elements,
+                    elements.slice(),
                     kind,
                     aggregate_comparison(guard.relation),
                     &bound,
@@ -1849,7 +2368,18 @@ impl Builder<'_> {
             let GroundAggregate::Numeric(elements) = elements else {
                 unreachable!("numeric contribution")
             };
-            let bound = match numeric_comparison(guard.relation, &bound) {
+            let bound = match numeric_comparison(
+                guard.relation,
+                self.computation.read().term(&bound).map_err(|error| {
+                    crate::formula_binding::assignment(
+                        zetesis_core::catalog::AssignmentError::Read(error),
+                        location,
+                    )
+                })?,
+                self.limits,
+                &mut self.counters,
+                location,
+            )? {
                 NumericComparison::Threshold(bound) => bound,
                 NumericComparison::Constant(truth) => {
                     self.work(location)?;
@@ -1867,14 +2397,14 @@ impl Builder<'_> {
             let first = self.nodes.len();
             let build = append_aggregate(
                 &mut self.nodes,
-                elements,
+                elements.slice(),
                 aggregate_comparison(guard.relation),
                 i64::from(bound),
                 limits,
                 &zetesis_cpu::Cancellation::default(),
             )
             .map_err(|error| FormulaFailure::Aggregate { error, location })?;
-            self.counters.work += build.statistics().work;
+            self.counters.accounting.work += build.statistics().work;
             let canonical = self.intern_appended(first, location)?;
             let root = remap(build.root(), first, &canonical);
             result = self.and(result, root, location)?;
@@ -1893,15 +2423,19 @@ enum NumericComparison {
 
 fn numeric_comparison(
     relation: themelios_program::program::Relation,
-    bound: &Value,
-) -> NumericComparison {
-    if let Value::Number(bound) = bound {
-        return NumericComparison::Threshold(*bound);
+    bound: TermRef<'_>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: Location,
+) -> Result<NumericComparison, FormulaFailure> {
+    if let ValueNodeRef::Number(bound) = bound.descriptor() {
+        return Ok(NumericComparison::Threshold(bound));
     }
     // Every integer has the same order against a nonnumeric logical value.
-    // Zero represents that term class only; it neither replaces the measure
-    // nor encodes an extremal value. This comparison borrows and allocates nothing.
-    NumericComparison::Constant(formula_support::compare(&Value::Number(0), relation, bound))
+    // This represents the numeric class, not an extremal or missing value.
+    let zero = zetesis_core::Value::Number(0);
+    formula_support::compare((&zero).into(), relation, bound, limits, counters, location)
+        .map(NumericComparison::Constant)
 }
 
 fn remap(index: usize, first: usize, canonical: &[usize]) -> usize {
@@ -1930,21 +2464,35 @@ fn extremum(function: AggregateFunction) -> Option<AggregateExtremum> {
         _ => None,
     }
 }
-impl Builder<'_> {
+impl Builder<'_, '_, '_> {
     fn extremum_root(
         &mut self,
-        elements: &[ValueExtremumElement],
+        elements: &[ExtremumElement],
         kind: AggregateExtremum,
         comparison: AggregateComparison,
-        bound: &Value,
+        bound: &TermKey,
         location: Location,
     ) -> Result<usize, FormulaFailure> {
+        let read = self.computation.read();
+        let bound = read.term(bound).map_err(|error| {
+            crate::formula_binding::assignment(
+                zetesis_core::catalog::AssignmentError::Read(error),
+                location,
+            )
+        })?;
         crate::formula_assignment::extremum_value(bound, location)?;
         let first = self.nodes.len();
         let limits = self.aggregate_limits();
-        let build = append_value_extremum(
+        let terms = &self.terms;
+        let values = elements.iter().map(|element| ValueExtremumElement {
+            value: terms
+                .value(element.value, read, location)
+                .expect("retained extrema name admitted source terms"),
+            condition: element.condition,
+        });
+        let build = append_value_extremum_refs(
             &mut self.nodes,
-            elements,
+            values,
             kind,
             comparison,
             bound,
@@ -1952,7 +2500,7 @@ impl Builder<'_> {
             &zetesis_cpu::Cancellation::default(),
         )
         .map_err(|error| FormulaFailure::Aggregate { error, location })?;
-        self.counters.work += build.statistics().work;
+        self.counters.accounting.work += build.statistics().work;
         let canonical = self.intern_appended(first, location)?;
         Ok(remap(build.root(), first, &canonical))
     }

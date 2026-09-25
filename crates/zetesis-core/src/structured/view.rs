@@ -1,6 +1,21 @@
 //! Borrowed descriptions share the owned node's spelling and payload measures.
 
-use crate::{Sign, ValueNode};
+use crate::{Sign, Value, ValueNode};
+
+impl Value {
+    /// Borrow the root descriptor. Structural values are validated nonempty
+    /// preorder trees, so a root exists without traversal or allocation.
+    pub(crate) fn root_view(&self) -> ValueNodeRef<'_> {
+        match self {
+            Self::Infimum => ValueNodeRef::Infimum,
+            Self::Number(number) => ValueNodeRef::Number(*number),
+            Self::String(text) => ValueNodeRef::String(text),
+            Self::Symbol(name) => ValueNodeRef::Symbol(name),
+            Self::Structured(value) => value.nodes()[0].view(),
+            Self::Supremum => ValueNodeRef::Supremum,
+        }
+    }
+}
 
 /// One borrowed preorder node, retaining its complete typed description.
 ///
@@ -67,6 +82,21 @@ impl ValueNodeRef<'_> {
                 text.len()
             }
             _ => 0,
+        }
+    }
+
+    /// This node's portable typed encoding length, including its tag but not
+    /// its children. Text lengths and arities use eight-byte fields; sign uses
+    /// one byte. Summing a valid preorder sequence gives its value encoding
+    /// length. Constant work; no allocation, hashing or shape validation occurs.
+    #[must_use]
+    pub fn canonical_bytes(self) -> u128 {
+        match self {
+            Self::Infimum | Self::Supremum => 1,
+            Self::Number(_) => 5,
+            Self::String(text) | Self::Symbol(text) => 9 + text.len() as u128,
+            Self::Function { name, .. } => 18 + name.len() as u128,
+            Self::Tuple { .. } => 9,
         }
     }
 

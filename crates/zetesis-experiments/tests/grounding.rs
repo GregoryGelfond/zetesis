@@ -628,7 +628,7 @@ fn native_limits_are_numeric_json_fields() {
         ("bundle", 5),
         ("admission", 4),
         ("expansion", 7),
-        ("formula", 20),
+        ("formula", 21),
         ("search", 7),
         ("certificate", 4),
         ("capture", 7),
@@ -636,6 +636,10 @@ fn native_limits_are_numeric_json_fields() {
         assert_eq!(encoded[field].as_object().unwrap().len(), count, "{field}");
     }
     assert_eq!(encoded["formula"]["max_work"], config.formula.max_work);
+    assert_eq!(
+        encoded["formula"]["metadata_storage"]["max_bytes"],
+        config.formula.metadata_storage.max_bytes
+    );
     assert_eq!(
         encoded["search"]["reduct_admission"],
         serde_json::json!({"max_variables": 17, "max_clauses": 19, "max_literals": 23})

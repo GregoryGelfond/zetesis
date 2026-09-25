@@ -1,62 +1,50 @@
 //! Sparse complete candidates are instance-bound; results use canonical keys.
 
-use crate::{Atom, Program};
-use std::collections::BTreeSet;
+use crate::{Atom, Program, catalog::AtomRef};
 use std::fmt;
 
 mod selection;
 pub use selection::{
-    GateAtom, GateAtomError, GateAtoms, GateIndex, GateIndexError, SeedAtom, SeedSelection,
-    SeedSelectionError, SeedView,
+    GateAtom, GateAtomError, GateAtoms, GateIndex, GateIndexError, GateIndexFailure, SeedAtom,
+    SeedAtoms, SeedSelection, SeedSelectionError, SeedView,
 };
 
 /// A complete candidate represented only by its finite true atoms. Any atom
 /// absent from this exact set is false; candidate construction never expands S.
 #[derive(Clone, Debug)]
 pub struct Seed {
-    program: Program,
-    atoms: BTreeSet<Atom>,
+    selection: SeedSelection,
 }
 impl Seed {
-    /// Validate true atoms against the program's symbolic gate carrier.
-    /// The input iterator must terminate. Construction consumes its atoms, checks
-    /// signature/domain membership, and canonicalizes them in a tree set; it does
-    /// not enumerate the carrier or ground the program. Comparisons can inspect
-    /// atom/value payload. The program handle is shared; distinct atoms are owned.
-    /// Tree-set allocation is infallible and is not a typed allocation refusal.
+    /// Consume sparse true atoms and locate their coordinates in the Program's
+    /// symbolic gate carrier. Accepted payloads are discarded; the result shares
+    /// canonical Program values and retains only integer tuple coordinates.
+    /// No full-carrier cardinality or enumeration is required. The input iterator
+    /// must terminate. Coordinate and selection buffers reserve fallibly; Arc
+    /// envelopes retain Rust's infallible allocation boundary.
     ///
     /// # Errors
-    /// Returns [`SeedError::OutsideCarrier`] for a foreign predicate or value.
+    /// Refuses an outside-carrier atom or unavailable coordinate/selection storage.
     pub fn new(
         program: &Program,
         atoms: impl IntoIterator<Item = Atom>,
     ) -> Result<Self, SeedError> {
-        let mut true_atoms = BTreeSet::new();
-        for atom in atoms {
-            if !program.contains_gate_atom(&atom) {
-                return Err(SeedError::OutsideCarrier { atom });
-            }
-            true_atoms.insert(atom);
-        }
-        Ok(Self {
-            program: program.clone(),
-            atoms: true_atoms,
-        })
+        SeedSelection::from_owned(program, atoms).map(|selection| Self { selection })
     }
     /// Exact true membership; absence is the complete candidate's false value.
     #[must_use]
-    pub fn contains(&self, atom: &Atom) -> bool {
-        self.atoms.contains(atom)
+    pub fn contains<'query>(&self, atom: impl Into<AtomRef<'query>>) -> bool {
+        self.selection.view().contains(atom)
     }
-    /// True atoms in canonical order; no false tuples are stored.
+    /// True atoms in semantic storage order, borrowing the canonical Program.
     #[must_use]
-    pub fn atoms(&self) -> &BTreeSet<Atom> {
-        &self.atoms
+    pub fn atoms(&self) -> SeedAtoms<'_> {
+        self.selection.view().atom_view()
     }
     /// The admitted instance whose gate carrier owns this seed.
     #[must_use]
     pub fn program(&self) -> &Program {
-        &self.program
+        self.selection.view().program()
     }
 }
 
@@ -72,6 +60,8 @@ pub enum SeedError {
     WrongProgram,
     /// A core-minted position is missing from the graph's complete gate carrier.
     InvalidGatePosition,
+    /// A validated symbolic carrier atom is missing from its complete graph.
+    InvalidCarrierMapping,
     /// Caller-provided word storage has a different graph width.
     WordCount {
         /// Required complete interpretation words.
@@ -92,10 +82,15 @@ impl fmt::Display for SeedError {
             Self::InvalidGatePosition => {
                 f.write_str("candidate gate position violates the complete carrier")
             }
+            Self::InvalidCarrierMapping => {
+                f.write_str("validated carrier atom is missing from the complete graph")
+            }
             Self::WordCount { expected, actual } => {
                 write!(f, "candidate requires {expected} words, received {actual}")
             }
-            Self::Allocation => f.write_str("candidate word storage could not be reserved"),
+            Self::Allocation => {
+                f.write_str("candidate coordinate or selection storage could not be reserved")
+            }
         }
     }
 }

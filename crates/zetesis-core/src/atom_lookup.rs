@@ -2,18 +2,46 @@
 
 use std::{cmp::Ordering, fmt, iter::FusedIterator, slice};
 
-use crate::{Atom, Predicate, identity};
+use crate::{
+    Atom,
+    catalog::{self, AtomRef, PredicateRef},
+};
 
-/// Prepared lookup indices over an immutable, distinct atom catalog.
+/// Transitional borrowed ingress and canonical execution views share one lookup.
+/// Neither variant owns atom payload or materializes query results.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum Source<'a> {
+    Borrowed(&'a [Atom]),
+    Canonical(catalog::Atoms<'a>),
+}
+
+impl<'a> Source<'a> {
+    fn len(self) -> usize {
+        match self {
+            Self::Borrowed(atoms) => atoms.len(),
+            Self::Canonical(atoms) => atoms.len(),
+        }
+    }
+
+    fn at(self, position: usize) -> AtomRef<'a> {
+        match self {
+            Self::Borrowed(atoms) => AtomRef::from(&atoms[position]),
+            Self::Canonical(atoms) => atoms.at(position).expect("indexed occurrence is checked"),
+        }
+    }
+}
+
+/// Prepared lookup indices over immutable, distinct atom occurrences.
 ///
 /// Only original row numbers are owned. The supplied atoms are neither copied
 /// nor reordered; all lookups and rows borrow that same source. A canonical key
 /// index supports membership, while a predicate-grouped index retains original
 /// row order inside each predicate. This second integer order is needed because
-/// original dense IDs need not be canonical atom order.
+/// original dense IDs need not be canonical atom order. Legacy owned atom slices
+/// remain a borrowed ingress bridge; canonical execution uses catalog views.
 #[derive(Debug)]
 pub struct AtomIndex<'a> {
-    atoms: &'a [Atom],
+    atoms: Source<'a>,
     keys: Vec<usize>,
     rows: Vec<usize>,
     peak_bytes: u128,
@@ -62,8 +90,9 @@ impl<'a> AtomIndex<'a> {
     /// caller must admit the input row count before calling; this row-derived
     /// allocation bound does not impose a process memory limit. Every reservation
     /// is fallible and preceded by `before`. No atom payload is allocated.
-    /// Preparation uses O(n log n) descriptor comparisons and integer copies;
-    /// each visited descriptor/text byte and each integer write calls `before`
+    /// Preparation uses O(n log n) atom comparisons and integer copies;
+    /// canonical references additionally resolve immutable segment ranges.
+    /// Each visited descriptor/text byte and each integer write calls `before`
     /// before the operation. There is no uncharged standard sort callback.
     ///
     /// # Errors
@@ -72,6 +101,27 @@ impl<'a> AtomIndex<'a> {
     pub fn new_with<E>(
         atoms: &'a [Atom],
         mut before: impl FnMut() -> Result<(), E>,
+    ) -> Result<Self, AtomIndexError<E>> {
+        Self::prepare(Source::Borrowed(atoms), &mut before)
+    }
+
+    /// Prepare checked integer orders over canonical catalog occurrences.
+    /// Uses the same fallible sorting and comparison boundaries as
+    /// [`Self::new_with`], resolving borrowed canonical references instead of
+    /// retaining an ingress atom slice. Duplicate logical occurrences refuse.
+    ///
+    /// # Errors
+    /// Refuses duplicate atoms, reservation failure or the first caller error.
+    pub fn from_catalog_with<E>(
+        atoms: catalog::Atoms<'a>,
+        mut before: impl FnMut() -> Result<(), E>,
+    ) -> Result<Self, AtomIndexError<E>> {
+        Self::prepare(Source::Canonical(atoms), &mut before)
+    }
+
+    fn prepare<E>(
+        atoms: Source<'a>,
+        before: &mut impl FnMut() -> Result<(), E>,
     ) -> Result<Self, AtomIndexError<E>> {
         let mut checked = || before().map_err(AtomIndexError::Stopped);
         let mut keys = positions(atoms.len(), &mut checked)?;
@@ -85,7 +135,11 @@ impl<'a> AtomIndex<'a> {
             &mut checked,
         )?;
         for pair in keys.windows(2) {
-            if identity::atom(&atoms[pair[0]], &atoms[pair[1]], &mut checked)?.is_eq() {
+            if atoms
+                .at(pair[0])
+                .compare_ref_with(atoms.at(pair[1]), &mut checked)?
+                .is_eq()
+            {
                 return Err(AtomIndexError::Duplicate {
                     first: pair[0],
                     second: pair[1],
@@ -167,7 +221,7 @@ enum SortOrder {
 fn sort<E>(
     values: &mut Vec<usize>,
     scratch: &mut Vec<usize>,
-    atoms: &[Atom],
+    atoms: Source<'_>,
     order: SortOrder,
     before: &mut impl FnMut() -> Result<(), E>,
 ) -> Result<(), E> {
@@ -185,13 +239,13 @@ fn sort<E>(
                 } else if left == middle {
                     false
                 } else {
-                    let left = &atoms[values[left]];
-                    let right = &atoms[values[right]];
+                    let left = atoms.at(values[left]);
+                    let right = atoms.at(values[right]);
                     !match order {
-                        SortOrder::Identity => identity::atom(left, right, before)?,
-                        SortOrder::Predicate => {
-                            identity::predicate(left.predicate(), right.predicate(), before)?
-                        }
+                        SortOrder::Identity => left.compare_ref_with(right, &mut *before)?,
+                        SortOrder::Predicate => left
+                            .predicate()
+                            .compare_ref_with(right.predicate(), &mut *before)?,
                     }
                     .is_gt()
                 };
@@ -218,25 +272,27 @@ fn sort<E>(
 /// The view cannot outlive either its index or the authoritative atom owner.
 #[derive(Clone, Copy, Debug)]
 pub struct AtomLookup<'index, 'source> {
-    pub(crate) atoms: &'source [Atom],
+    pub(crate) atoms: Source<'source>,
     pub(crate) keys: &'index [usize],
     pub(crate) rows: &'index [usize],
 }
 
 impl<'index, 'source> AtomLookup<'index, 'source> {
     /// Select exactly one signed predicate and arity with two binary bounds.
-    /// Uses O(log n) predicate comparisons; compared name bytes are additional.
+    /// Uses O(log n) predicate comparisons; compared name bytes and canonical
+    /// segment resolution are additional.
     /// Calls `before` before each binary probe and descriptor/text comparison.
     /// Returned rows keep the owner's order within the predicate and borrow its
     /// indices; there is no positions vector or tuple copy per query.
     ///
     /// # Errors
     /// Returns the first callback error without publishing a partial range.
-    pub fn predicate_with<E>(
+    pub fn predicate_with<'query, E>(
         self,
-        predicate: &Predicate,
+        predicate: impl Into<PredicateRef<'query>>,
         mut before: impl FnMut() -> Result<(), E>,
     ) -> Result<AtomRows<'index, 'source>, E> {
+        let predicate = predicate.into();
         let low = self.bound(predicate, false, &mut before)?;
         let high = self.bound(predicate, true, &mut before)?;
         Ok(AtomRows {
@@ -247,7 +303,7 @@ impl<'index, 'source> AtomLookup<'index, 'source> {
 
     fn bound<E>(
         self,
-        predicate: &Predicate,
+        predicate: PredicateRef<'_>,
         after: bool,
         before: &mut impl FnMut() -> Result<(), E>,
     ) -> Result<usize, E> {
@@ -255,8 +311,11 @@ impl<'index, 'source> AtomLookup<'index, 'source> {
         while low < high {
             before()?;
             let middle = low + (high - low) / 2;
-            let order =
-                identity::predicate(self.atoms[self.rows[middle]].predicate(), predicate, before)?;
+            let order = self
+                .atoms
+                .at(self.rows[middle])
+                .predicate()
+                .compare_ref_with(predicate, &mut *before)?;
             if order.is_lt() || (after && order.is_eq()) {
                 low = middle + 1;
             } else {
@@ -273,13 +332,14 @@ impl<'index, 'source> AtomLookup<'index, 'source> {
     /// # Errors
     /// Returns a callback error before the refused probe/comparison. A refusal
     /// is never returned as absence; neither the view nor the source changes.
-    pub fn get_with<E>(
+    pub fn get_with<'query, E>(
         self,
-        query: &Atom,
+        query: impl Into<AtomRef<'query>>,
         mut before: impl FnMut() -> Result<(), E>,
     ) -> Result<Option<AtomRow<'source>>, E> {
+        let query = query.into();
         self.find_with(&mut before, |atom, before| {
-            identity::atom(atom, query, before)
+            atom.compare_ref_with(query, before)
         })
     }
 
@@ -296,23 +356,21 @@ impl<'index, 'source> AtomLookup<'index, 'source> {
         mut before: impl FnMut() -> Result<(), E>,
     ) -> Result<Option<AtomRow<'source>>, E> {
         self.find_with(&mut before, |atom, before| {
-            query
-                .compare_identity_with(atom, before)
-                .map(Ordering::reverse)
+            atom.compare_key_with(query, before)
         })
     }
 
     fn find_with<E, F: FnMut() -> Result<(), E>>(
         self,
         before: &mut F,
-        mut compare: impl FnMut(&Atom, &mut F) -> Result<Ordering, E>,
+        mut compare: impl FnMut(AtomRef<'source>, &mut F) -> Result<Ordering, E>,
     ) -> Result<Option<AtomRow<'source>>, E> {
         let (mut low, mut high) = (0, self.keys.len());
         while low < high {
             before()?;
             let middle = low + (high - low) / 2;
             let position = self.keys[middle];
-            let atom = &self.atoms[position];
+            let atom = self.atoms.at(position);
             match compare(atom, before)? {
                 Ordering::Less => low = middle + 1,
                 Ordering::Greater => high = middle,
@@ -328,7 +386,7 @@ impl<'index, 'source> AtomLookup<'index, 'source> {
 #[derive(Clone, Copy, Debug)]
 pub struct AtomRow<'a> {
     position: usize,
-    atom: &'a Atom,
+    atom: AtomRef<'a>,
 }
 impl<'a> AtomRow<'a> {
     /// Original dense catalog position, without reordering or reminting.
@@ -338,18 +396,19 @@ impl<'a> AtomRow<'a> {
     }
     /// Authoritative borrowed atom at that position.
     #[must_use]
-    pub const fn atom(self) -> &'a Atom {
+    pub const fn atom(self) -> AtomRef<'a> {
         self.atom
     }
 }
 
-/// A predicate-local borrowed iterator. Each next/back operation costs one
-/// index access and one atom access, allocates nothing and performs no payload
-/// comparison. The consuming algorithm accounts those visits separately from
+/// A predicate-local borrowed iterator. Each next/back operation reads one
+/// position and resolves one atom reference, searching retained segment ranges
+/// for canonical storage. It allocates nothing and performs no payload
+/// comparison. The consuming algorithm accounts these visits separately from
 /// the range search. Clone copies cursor state only.
 #[derive(Clone, Debug)]
 pub struct AtomRows<'index, 'source> {
-    atoms: &'source [Atom],
+    atoms: Source<'source>,
     positions: slice::Iter<'index, usize>,
 }
 impl<'source> Iterator for AtomRows<'_, 'source> {
@@ -357,7 +416,7 @@ impl<'source> Iterator for AtomRows<'_, 'source> {
     fn next(&mut self) -> Option<Self::Item> {
         self.positions.next().map(|&position| AtomRow {
             position,
-            atom: &self.atoms[position],
+            atom: self.atoms.at(position),
         })
     }
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -368,7 +427,7 @@ impl DoubleEndedIterator for AtomRows<'_, '_> {
     fn next_back(&mut self) -> Option<Self::Item> {
         self.positions.next_back().map(|&position| AtomRow {
             position,
-            atom: &self.atoms[position],
+            atom: self.atoms.at(position),
         })
     }
 }

@@ -98,10 +98,11 @@ pub fn worlds(theory: &Theory) -> Vec<Interpretation> {
 }
 
 pub fn observations<'a>(
-    group: &'a Group,
+    group: impl Into<native::GroupRef<'a>>,
     worlds: &'a [Interpretation],
     count: usize,
 ) -> Vec<Eligibility<'a>> {
+    let group = group.into();
     (0..count)
         .map(|index| {
             group

@@ -1,20 +1,20 @@
-use zetesis_core::Value;
+use zetesis_core::{Value, catalog::TermRef};
 use zetesis_cpu::Cancellation;
 
 use super::extremum::comparison_root;
-use super::lower::{transaction, validate_elements};
+use super::lower::{transaction, validate_prefix};
 use super::{
-    AggregateBuild, AggregateComparison, AggregateError, AggregateExtremum, AggregateLimits,
-    AggregateProfile,
+    AggregateBuild, AggregateComparison, AggregateError, AggregateErrorKind, AggregateExtremum,
+    AggregateLimits, AggregateProfile,
 };
 use crate::Node;
 
 /// One complete tuple's first value and OR-coalesced eligibility formula.
 /// Equal first values do not identify equal complete tuples.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ValueExtremumElement {
+pub struct ValueExtremumElement<V = Value> {
     /// Complete first tuple value, compared using ASP term order.
-    pub value: Value,
+    pub value: V,
     /// Absolute condition index in the existing DAG prefix.
     pub condition: usize,
 }
@@ -27,7 +27,7 @@ pub struct ValueExtremumElement {
 /// This uses the numeric path's reduct-preserving witness connectives, including
 /// implication for not-equal, and introduces no semantic atoms. All appends are
 /// transactional; work, element and node limits and cancellation remain explicit.
-/// Structural comparisons charge both traversed value carriers before comparison.
+/// Structural comparisons charge their visited term components.
 /// No threshold states or subsets are allocated.
 ///
 /// # Errors
@@ -41,24 +41,58 @@ pub fn append_value_extremum(
     limits: AggregateLimits,
     cancellation: &Cancellation,
 ) -> Result<AggregateBuild, AggregateError> {
+    append_value_extremum_refs(
+        nodes,
+        elements.iter().map(|element| ValueExtremumElement {
+            value: (&element.value).into(),
+            condition: element.condition,
+        }),
+        extremum,
+        comparison,
+        bound.into(),
+        limits,
+        cancellation,
+    )
+}
+
+/// Append the same reduct-preserving extremum comparison over borrowed values.
+///
+/// One traversal checks every actual condition against the original DAG prefix
+/// before using it. Borrowed canonical terms share their original authority;
+/// no typed payload is materialized. Prefix validation, element visits and typed
+/// comparison steps consume the aggregate work allowance.
+///
+/// # Errors
+/// Returns the same prefix, condition, resource, allocation and cancellation
+/// failures as [`append_value_extremum`], preserving the original DAG on refusal.
+pub fn append_value_extremum_refs<'a>(
+    nodes: &mut Vec<Node>,
+    elements: impl Iterator<Item = ValueExtremumElement<TermRef<'a>>>,
+    extremum: AggregateExtremum,
+    comparison: AggregateComparison,
+    bound: TermRef<'_>,
+    limits: AggregateLimits,
+    cancellation: &Cancellation,
+) -> Result<AggregateBuild, AggregateError> {
     transaction(nodes, limits, cancellation, |builder| {
-        validate_elements(
-            builder,
-            elements.iter().map(|element| (element.condition, 0)),
-        )?;
+        let prefix = validate_prefix(builder)?;
         let falsum = builder.push(Node::False)?;
         let truth = builder.push(Node::Implies(falsum, falsum))?;
         let empty = match extremum {
             AggregateExtremum::Min => Value::Supremum,
             AggregateExtremum::Max => Value::Infimum,
         };
-        let mut inclusive = (bound == &empty).then_some(truth);
+        let mut inclusive = (bound == TermRef::from(&empty)).then_some(truth);
         let mut strict = None;
-        for element in elements {
-            for _ in 0..comparison_work(&element.value).saturating_add(comparison_work(bound)) {
-                builder.tick()?;
+        for (index, element) in elements.enumerate() {
+            builder.tick()?;
+            if index >= limits.max_elements {
+                return Err(AggregateErrorKind::ElementLimit);
             }
-            let order = element.value.compare_terms(bound);
+            if element.condition >= prefix {
+                return Err(AggregateErrorKind::InvalidCondition { element: index });
+            }
+            let order = element.value.compare_terms_with(bound, || builder.tick())?;
             let order = if extremum == AggregateExtremum::Min {
                 order.reverse()
             } else {
@@ -81,12 +115,4 @@ pub fn append_value_extremum(
         )
         .map(|root| (root, AggregateProfile::Extremum))
     })
-}
-
-fn comparison_work(value: &Value) -> usize {
-    match value {
-        Value::Structured(value) => value.canonical_bytes(),
-        Value::Symbol(value) | Value::String(value) => value.len().saturating_add(1),
-        _ => 1,
-    }
 }

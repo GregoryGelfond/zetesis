@@ -61,7 +61,8 @@ fn signed_lifted_keys_coalesce_across_directions_before_adding_costs() {
         atom("p", vec![Value::Number(-3)]),
         atom("p", vec![Value::String("ignored".into())]),
         atom("q", vec![]),
-    ]);
+    ])
+    .unwrap();
     let result = evaluate(
         &objectives,
         &model,
@@ -111,9 +112,10 @@ fn normalized_signed_costs_use_wide_accumulation_and_preserve_minimize_min() {
         row(number(i32::MAX), 0, "b", vec![]).with_weight_polarity(WeightPolarity::Negated),
         row(number(i32::MIN), 1, "old", vec![]),
     ]);
+    let result_model = Model::new([]).unwrap();
     let result = evaluate(
         &objectives,
-        &Model::new([]),
+        &result_model,
         Limits::default(),
         &Cancellation::default(),
     )
@@ -136,9 +138,10 @@ fn an_eligible_unrepresentable_negation_has_typed_template_evidence() {
         )
         .with_weight_polarity(WeightPolarity::Negated),
     ]);
+    let error_model = Model::new([atom("p", vec![Value::Number(i32::MIN)])]).unwrap();
     let error = evaluate(
         &objectives,
-        &Model::new([atom("p", vec![Value::Number(i32::MIN)])]),
+        &error_model,
         Limits::default(),
         &Cancellation::default(),
     )
@@ -146,9 +149,10 @@ fn an_eligible_unrepresentable_negation_has_typed_template_evidence() {
     assert_eq!(error.kind(), ErrorKind::WeightNormalizationOverflow);
     assert_eq!(error.template_index(), Some(1));
     assert!(error.statistics().work > 0);
+    let empty_model = Model::new([]).unwrap();
     let empty = evaluate(
         &objectives,
-        &Model::new([]),
+        &empty_model,
         Limits::default(),
         &Cancellation::default(),
     )
@@ -156,12 +160,7 @@ fn an_eligible_unrepresentable_negation_has_typed_template_evidence() {
     assert_eq!(empty.score().costs(), [(0, 1)]);
     let cancellation = Cancellation::default();
     cancellation.cancel();
-    let error = evaluate(
-        &objectives,
-        &Model::new([]),
-        Limits::default(),
-        &cancellation,
-    )
-    .unwrap_err();
+    let error_model = Model::new([]).unwrap();
+    let error = evaluate(&objectives, &error_model, Limits::default(), &cancellation).unwrap_err();
     assert!(matches!(error.kind(), ErrorKind::Stopped(Stop::Cancelled)));
 }

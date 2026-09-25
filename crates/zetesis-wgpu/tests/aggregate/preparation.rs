@@ -271,3 +271,43 @@ fn preparation_observes_caller_cancellation() {
         Error::Stopped(Stop::Cancelled)
     );
 }
+
+#[test]
+fn borrowed_canonical_group_uses_numeric_preparation() {
+    let theory = fixtures::theory();
+    let mut builder = zetesis_core::catalog::VocabularyBuilder::new(1 << 20).unwrap();
+    let key = builder
+        .import_term_with(
+            (&Value::Number(-3)).into(),
+            zetesis_core::catalog::Limits::default(),
+            || Ok::<_, ()>(()),
+        )
+        .unwrap();
+    let owner = builder.finish_with(0, || Ok::<_, ()>(())).unwrap();
+    let data = zetesis_ferraris::native_aggregate::GroupData::new(
+        &theory,
+        Function::Sum,
+        owner.read(),
+        vec![zetesis_ferraris::native_aggregate::Tuple {
+            key: vec![owner.read().term(&key).unwrap()],
+            condition: 2,
+        }],
+        vec![],
+        zetesis_ferraris::native_aggregate::AdmissionLimits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
+    let view = data.bind_with(owner.read(), || Ok::<_, ()>(())).unwrap();
+    let plan = AggregateGpuPlan::new(
+        view,
+        AggregateGpuPlanLimits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
+    assert!(plan.group().same_group(view));
+    assert_eq!(plan.numeric.tuple_count, 1);
+    assert_eq!(
+        plan.numeric.tuples,
+        [super::super::preparation::bits(-3), 1]
+    );
+}

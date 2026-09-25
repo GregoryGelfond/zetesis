@@ -6,22 +6,19 @@
 //! consume established bindings. Choice lowering retains every eligibility
 //! formula. Support-table membership is never interpreted as truth.
 
-use std::collections::BTreeMap;
+mod validation;
+pub(crate) use validation::{Bijection, validate_group};
 
+use crate::formula_support::components::Term;
 use themelios_base::span::Location;
 use themelios_program::program::{AggregateFunction, HasGuards, HeadAggregate};
-use zetesis_core::{Atom, Term, Value};
+use zetesis_core::ValueNodeRef;
+use zetesis_core::catalog::TermRef;
 
-use crate::diagnostic::unsupported;
-use crate::expansion::Budget;
-use crate::formula::ceiling;
-use crate::formula_binding::Binding;
 use crate::formula_ir::{
-    ChoiceIr, Compiler, Element, HeadElementKey, HeadLiteral, HeadMeasure, HeadOperand, LiteralIr,
-    LocalFamily, Variables, value_bytes,
+    Compiler, Element, HeadElementKey, HeadMeasure, LiteralIr, LocalFamily, Variables,
 };
-use crate::formula_support::{Counters, Join, Support};
-use crate::{ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature};
+use crate::{ExpansionResource, FormulaFailure};
 
 impl Compiler<'_> {
     pub(super) fn aggregate_head_elements(
@@ -75,6 +72,12 @@ impl Compiler<'_> {
                     if aggregate.left_guard().is_some() || aggregate.right_guard().is_some() {
                         match tuple.first() {
                             Some(Term::Constant(value)) => {
+                                let value = self.source.scalar_ref(
+                                    *value,
+                                    self.limits,
+                                    self.counters,
+                                    self.location,
+                                )?;
                                 contribution(measure, Some(value), self.location)?;
                             }
                             None => {
@@ -114,141 +117,12 @@ impl Compiler<'_> {
     }
 }
 
-/// Validate the entire instantiated group before the caller derives any support
-/// or publishes a formula. The immutable completed support/binding is replayed
-/// afterwards through the ordinary choice path. Both passes charge their work.
-/// A present map certifies the stronger tuple/atom bijection used by optional
-/// count planning. Nonbijective function groups return no certificate; an
-/// ordinary atom choice has implicit atom keys and returns a present empty map.
-/// Signed or Boolean elements never certify the stronger unsigned atom-only contract.
-pub(super) fn validate_group(
-    group: &ChoiceIr,
-    assignment: &Binding,
-    support: &Support,
-    limits: &FormulaLimits,
-    budget: &mut Budget,
-    counters: &mut Counters,
-    location: Location,
-) -> Result<Option<BTreeMap<Atom, Vec<Value>>>, FormulaFailure> {
-    let ChoiceIr {
-        measure, elements, ..
-    } = group;
-    let keyed = elements
-        .first()
-        .is_some_and(|element| element.key.tuple().is_some());
-    // An explicit invariant at the common lowering boundary: groups cannot mix
-    // ordinary atom-counting elements with tuple-keyed function elements.
-    if elements
-        .iter()
-        .any(|element| element.key.tuple().is_some() != keyed)
-    {
-        return Err(unsupported(ProfileFeature::HeadAggregateAlias, location).into());
-    }
-    if !keyed {
-        if *measure != HeadMeasure::Count && !elements.is_empty() {
-            return Err(unsupported(ProfileFeature::HeadAggregateAlias, location).into());
-        }
-        return Ok(elements
-            .iter()
-            .all(|element| element.head.positive_atom().is_some())
-            .then(BTreeMap::new));
-    }
-    let mut tuples = BTreeMap::<Vec<Value>, HeadLiteral<Atom>>::new();
-    let mut atoms = BTreeMap::<Atom, Vec<Value>>::new();
-    let mut bijective = elements
-        .iter()
-        .all(|element| element.head.positive_atom().is_some());
-    for element in elements {
-        let terms = element.key.tuple().expect("uniform tuple group checked");
-        let mut local = Join::element(element, assignment, support, budget, location)?;
-        while let Some(binding) = local.next(limits, budget, counters, location)? {
-            counters.work(limits, location)?;
-            let mut tuple = Vec::new();
-            for term in terms {
-                counters.work(limits, location)?;
-                let value = binding.resolve(term, location)?;
-                budget.charge(
-                    ExpansionResource::ScalarBytes,
-                    2 * (std::mem::size_of::<Value>() as u128 + value_bytes(value)),
-                    location,
-                )?;
-                tuple.push(value.clone());
-            }
-            if !group.guards.is_empty() {
-                contribution(*measure, tuple.first(), location)?;
-            }
-            let head = head_identity(&element.head, &binding, budget, location)?;
-            if tuples.get(&tuple).is_some_and(|previous| *previous != head)
-                || head
-                    .atom()
-                    .and_then(|atom| atoms.get(atom))
-                    .is_some_and(|previous| *previous != tuple)
-            {
-                bijective = false;
-            }
-            if !tuples.contains_key(&tuple) {
-                ceiling(
-                    FormulaResource::AggregateElements,
-                    tuples.len() as u128 + 1,
-                    limits.aggregate.max_elements as u128,
-                    location,
-                )?;
-                tuples.insert(tuple.clone(), head.clone());
-            }
-            if let HeadOperand::Atom(atom) = head.operand {
-                atoms.entry(atom).or_insert(tuple);
-            }
-        }
-    }
-    // This optional certificate is consumed only by CountPlan. All measures'
-    // semantics use the complete tuple activities even without a bijection:
-    // each key contributes once when any eligible occurrence selects its atom.
-    Ok(bijective.then_some(atoms))
-}
-
-/// Resolve the semantic operand while charging copied atom payload. Constants
-/// have no atom identity, and their tuple still passes the complete validation.
-fn head_identity(
-    head: &HeadLiteral,
-    binding: &Binding,
-    budget: &mut Budget,
-    location: Location,
-) -> Result<HeadLiteral<Atom>, FormulaFailure> {
-    let atom = match &head.operand {
-        HeadOperand::Atom(atom) => atom,
-        HeadOperand::Boolean(value) => {
-            return Ok(HeadLiteral {
-                negation: head.negation,
-                operand: HeadOperand::Boolean(*value),
-            });
-        }
-    };
-    let atom_bytes = atom.predicate().name().len() as u128
-        + atom
-            .terms()
-            .iter()
-            .map(|term| {
-                let value = binding.resolve(term, location)?;
-                Ok(std::mem::size_of::<Value>() as u128 + value_bytes(value))
-            })
-            .sum::<Result<u128, FormulaFailure>>()?;
-    budget.charge(
-        ExpansionResource::ScalarBytes,
-        atom_bytes.saturating_mul(2),
-        location,
-    )?;
-    Ok(HeadLiteral {
-        negation: head.negation,
-        operand: HeadOperand::Atom(binding.instantiate(atom, location)?),
-    })
-}
-
 /// A selected tuple contributes either an integer or a complete logical value.
-/// Borrowing preserves allocation-free validation; final lowering charges the
-/// retained extremum value before copying its scalar or structural payload.
+/// Borrowing preserves allocation-free validation. Retained consumers name the
+/// value through the shared computation vocabulary rather than copying payload.
 pub(super) enum Contribution<'a> {
     Numeric(i32),
-    Extremum(&'a Value),
+    Extremum(TermRef<'a>),
 }
 
 /// Contribution is independent of permission to select the head. Count ignores
@@ -259,7 +133,7 @@ pub(super) enum Contribution<'a> {
 /// because it has no measure bound.
 pub(super) fn contribution(
     measure: HeadMeasure,
-    first: Option<&Value>,
+    first: Option<TermRef<'_>>,
     location: Location,
 ) -> Result<Option<Contribution<'_>>, FormulaFailure> {
     if measure == HeadMeasure::Count {
@@ -272,189 +146,11 @@ pub(super) fn contribution(
         crate::formula_assignment::extremum_value(value, location)?;
         return Ok(Some(Contribution::Extremum(value)));
     }
-    let Some(Value::Number(value)) = first else {
+    let Some(ValueNodeRef::Number(value)) = first.map(TermRef::descriptor) else {
         return Ok(None);
     };
-    Ok((measure != HeadMeasure::SumPlus || *value > 0).then_some(Contribution::Numeric(*value)))
+    Ok((measure != HeadMeasure::SumPlus || value > 0).then_some(Contribution::Numeric(value)))
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{
-        Budget, ChoiceIr, Counters, Element, FormulaLimits, HeadElementKey, HeadLiteral,
-        HeadMeasure, HeadOperand, Support, validate_group,
-    };
-    use crate::{AdmissionOptions, ExpansionLimits, FormulaFailure, ProfileFeature};
-    use themelios_base::source::{Source, SourceId};
-    use themelios_base::span::Location;
-    use themelios_program::program::DefaultNegation;
-    use zetesis_core::{AtomPattern, Predicate, Term, Value};
-
-    fn element(keyed: bool) -> Element {
-        Element {
-            family: crate::formula_ir::LocalFamily(0),
-            key: if keyed {
-                HeadElementKey::Tuple(vec![Term::Constant(Value::Number(1))])
-            } else {
-                HeadElementKey::Atom
-            },
-            head: HeadLiteral {
-                negation: DefaultNegation::None,
-                operand: HeadOperand::Atom(
-                    AtomPattern::new(Predicate::new("p", 0).unwrap(), vec![]).unwrap(),
-                ),
-            },
-            condition: vec![],
-            body_variables: 0,
-            variables: 0,
-        }
-    }
-
-    fn validate_measure(
-        measure: HeadMeasure,
-        elements: Vec<Element>,
-    ) -> Result<bool, FormulaFailure> {
-        let source = Source::new(SourceId::new(0), String::new()).unwrap();
-        let location = Location {
-            source: source.id(),
-            span: source.span(),
-        };
-        let mut budget = Budget::new(
-            ExpansionLimits::default(),
-            AdmissionOptions::default().core_limits.max_templates,
-        );
-        validate_group(
-            &ChoiceIr {
-                measure,
-                guards: vec![],
-                elements,
-            },
-            &crate::formula_binding::Binding::default(),
-            &Support::indexed(
-                &crate::formula_support::Relations::default(),
-                &crate::FormulaLimits::default(),
-                &crate::formula_support::Counters::default(),
-                location,
-            )
-            .unwrap(),
-            &FormulaLimits::default(),
-            &mut budget,
-            &mut Counters::default(),
-            location,
-        )
-        .map(|certificate| certificate.is_some())
-    }
-
-    #[test]
-    fn mixed_key_metadata_is_rejected() {
-        for elements in [
-            vec![element(false), element(true)],
-            vec![element(true), element(false)],
-        ] {
-            assert!(matches!(
-                validate_measure(HeadMeasure::Count, elements),
-                Err(FormulaFailure::Expansion(
-                    crate::ExpansionFailure::Admission(crate::AdmissionFailure::Profile {
-                        feature: ProfileFeature::HeadAggregateAlias,
-                        ..
-                    })
-                ))
-            ));
-        }
-    }
-
-    #[test]
-    fn homogeneous_count_groups_satisfy_the_key_invariant() {
-        for elements in [
-            vec![],
-            vec![element(false), element(false)],
-            vec![element(true), element(true)],
-        ] {
-            assert!(validate_measure(HeadMeasure::Count, elements).is_ok());
-        }
-    }
-
-    #[test]
-    fn measured_groups_require_tuple_keys() {
-        for measure in [
-            HeadMeasure::Sum,
-            HeadMeasure::SumPlus,
-            HeadMeasure::Min,
-            HeadMeasure::Max,
-        ] {
-            let error = validate_measure(measure, vec![element(false)]).unwrap_err();
-            assert!(matches!(
-                error,
-                FormulaFailure::Expansion(crate::ExpansionFailure::Admission(
-                    crate::AdmissionFailure::Profile {
-                        feature: ProfileFeature::HeadAggregateAlias,
-                        ..
-                    }
-                ))
-            ));
-        }
-    }
-
-    #[test]
-    fn empty_measured_groups_satisfy_the_key_invariant() {
-        for measure in [
-            HeadMeasure::Sum,
-            HeadMeasure::SumPlus,
-            HeadMeasure::Min,
-            HeadMeasure::Max,
-        ] {
-            validate_measure(measure, vec![]).unwrap();
-        }
-    }
-
-    #[test]
-    fn numeric_aliases_never_certify_a_bijection() {
-        for measure in [
-            HeadMeasure::Count,
-            HeadMeasure::Sum,
-            HeadMeasure::SumPlus,
-            HeadMeasure::Min,
-            HeadMeasure::Max,
-        ] {
-            let mut same_tuple = element(true);
-            same_tuple.head.operand = HeadOperand::Atom(
-                AtomPattern::new(Predicate::new("q", 0).unwrap(), vec![]).unwrap(),
-            );
-            assert!(!validate_measure(measure, vec![element(true), same_tuple]).unwrap());
-            let mut same_atom = element(true);
-            same_atom.key = HeadElementKey::Tuple(vec![Term::Constant(Value::Number(2))]);
-            assert!(!validate_measure(measure, vec![element(true), same_atom]).unwrap());
-        }
-    }
-
-    #[test]
-    fn boolean_elements_never_certify_atom_planning() {
-        for value in [false, true] {
-            let mut ordinary = element(false);
-            ordinary.head.operand = HeadOperand::Boolean(value);
-            assert!(!validate_measure(HeadMeasure::Count, vec![ordinary]).unwrap());
-            for measure in [
-                HeadMeasure::Count,
-                HeadMeasure::Sum,
-                HeadMeasure::SumPlus,
-                HeadMeasure::Min,
-                HeadMeasure::Max,
-            ] {
-                let mut keyed = element(true);
-                keyed.head.operand = HeadOperand::Boolean(value);
-                assert!(!validate_measure(measure, vec![keyed]).unwrap());
-            }
-        }
-    }
-    #[test]
-    fn signed_elements_never_certify_atom_planning() {
-        for negation in [DefaultNegation::Not, DefaultNegation::NotNot] {
-            for keyed in [false, true] {
-                let mut signed = element(keyed);
-                signed.head.negation = negation;
-                assert!(!validate_measure(HeadMeasure::Count, vec![signed]).unwrap());
-                assert!(validate_measure(HeadMeasure::Count, vec![element(keyed)]).unwrap());
-            }
-        }
-    }
-}
+mod tests;

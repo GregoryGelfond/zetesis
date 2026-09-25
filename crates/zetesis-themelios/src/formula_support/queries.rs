@@ -12,7 +12,7 @@ use std::mem::size_of;
 use std::ops::Deref;
 
 use themelios_base::span::Location;
-use zetesis_core::{AtomKey, AtomPattern, Term, Value};
+use zetesis_core::{AtomKey, BindingView, PatternRef, TemplateTerm};
 use zetesis_cpu::table::{self, Cause, Domain, Resource, Selection, Table};
 
 use super::{Counters, PositivePattern, Relations};
@@ -31,6 +31,7 @@ pub(crate) struct Support<'source> {
     tables: Option<TableWorkspace<'source>>,
     live: Cell<usize>,
     entries: Cell<usize>,
+    workspace: super::storage::Workspace,
 }
 
 struct TableWorkspace<'source> {
@@ -48,6 +49,26 @@ impl<'source> Deref for Support<'source> {
 }
 
 impl<'source> Support<'source> {
+    pub(super) fn workspace(&self) -> &super::storage::Workspace {
+        &self.workspace
+    }
+
+    fn append_bytes(&self) -> usize {
+        self.relations.current_bytes() - self.relations.bytes
+    }
+    pub(super) fn live_bytes(&self) -> usize {
+        self.live.get() + self.append_bytes() + self.workspace.bytes()
+    }
+    fn bytes_with_append(&self, base: usize, location: Location) -> Result<usize, FormulaFailure> {
+        base.checked_add(self.append_bytes())
+            .and_then(|bytes| bytes.checked_add(self.workspace.bytes()))
+            .ok_or_else(|| allocation(Cause::Overflow, location))
+    }
+    /// Query descriptors and active guard/index leases, excluding canonical growth.
+    pub(super) fn workspace_bytes(&self) -> usize {
+        self.live.get() - self.relations.bytes + self.workspace.bytes()
+    }
+
     pub(crate) fn indexed(
         relations: &'source Relations<'source>,
         limits: &FormulaLimits,
@@ -68,15 +89,19 @@ impl<'source> Support<'source> {
             .bytes
             .checked_add(size_of::<Self>())
             .ok_or_else(|| allocation(Cause::Overflow, location))?;
+        let live = bytes
+            .checked_add(counters.accounting.workspace.bytes())
+            .ok_or_else(|| allocation(Cause::Overflow, location))?;
         ceiling(
             FormulaResource::SupportBytes,
-            bytes as u128,
+            live as u128,
             limits.max_support_bytes as u128,
             location,
         )?;
-        counters.record(Event::SupportPeakBytes(bytes as u128));
+        counters.record(Event::SupportPeakBytes(live as u128));
         Ok(Self {
             relations,
+            workspace: counters.accounting.workspace.clone(),
             tables: (strategy == JoinStrategy::Table).then(|| TableWorkspace {
                 indices: RefCell::new(Vec::new()),
                 cancellation: zetesis_cpu::Cancellation::default(),
@@ -101,13 +126,13 @@ impl<'source> Support<'source> {
 
     pub(super) fn probe(
         &self,
-        pattern: &AtomPattern,
-        values: &[Option<Value>],
+        pattern: PatternRef<'_>,
+        values: BindingView<'_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
         location: Location,
     ) -> Result<Option<&[usize]>, FormulaFailure> {
-        Self::admit(self.live.get(), limits, counters, location)?;
+        Self::admit(self.live_bytes(), limits, counters, location)?;
         counters.record(Event::IndexedProbe);
         self.relations.probe_with_bytes(
             pattern,
@@ -115,7 +140,7 @@ impl<'source> Support<'source> {
             limits,
             counters,
             location,
-            self.live.get() - self.relations.bytes,
+            self.live_bytes() - self.relations.current_bytes(),
         )
     }
 
@@ -125,9 +150,9 @@ impl<'source> Support<'source> {
         counters: &Counters,
         location: Location,
     ) -> Result<FormulaLimits, FormulaFailure> {
-        Self::admit(self.live.get(), limits, counters, location)?;
+        Self::admit(self.live_bytes(), limits, counters, location)?;
         let mut scoped = *limits;
-        scoped.max_support_bytes -= self.live.get() - self.relations.bytes;
+        scoped.max_support_bytes -= self.live_bytes() - self.relations.current_bytes();
         Ok(scoped)
     }
 
@@ -139,7 +164,7 @@ impl<'source> Support<'source> {
                 limit,
                 location,
             } => {
-                let outer = (self.live.get() - self.relations.bytes) as u128;
+                let outer = (self.live_bytes() - self.relations.current_bytes()) as u128;
                 FormulaFailure::Limit {
                     resource: FormulaResource::SupportBytes,
                     observed: observed + outer,
@@ -156,7 +181,7 @@ impl<'source> Support<'source> {
     pub(super) fn select(
         &self,
         pattern: PositivePattern<'_>,
-        values: &[Option<Value>],
+        values: BindingView<'_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
         location: Location,
@@ -169,11 +194,14 @@ impl<'source> Support<'source> {
             counters.record(Event::TableInapplicableProbe);
             return Ok(None);
         };
-        let Some(relation) = self.relations.relation(pattern.predicate()) else {
+        let Some(relation) =
+            self.relations
+                .relation_with(pattern.predicate(), limits, counters, location)?
+        else {
             counters.record(Event::TableInapplicableProbe);
             return Ok(None);
         };
-        Self::admit(self.live.get(), limits, counters, location)?;
+        Self::admit(self.live_bytes(), limits, counters, location)?;
         let mut scratch = Scratch::new(self, limits, counters, location)?;
         let bound = bind_domains(pattern, values, &mut scratch, counters)?;
         let mut tables = workspace.indices.borrow_mut();
@@ -183,7 +211,7 @@ impl<'source> Support<'source> {
             index
         } else {
             self.reserve_tables(&mut tables, limits, counters, location)?;
-            let outer = self.live.get() - relation.storage().retained_bytes;
+            let outer = self.live_bytes() - relation.storage().retained_bytes;
             let table_limits = self.table_limits(limits, counters, outer, location)?;
             let prepared = Table::prepare(relation, &bound.scope, table_limits, cancellation);
             let table = self.result(prepared, true, outer, limits, counters, location)?;
@@ -198,9 +226,10 @@ impl<'source> Support<'source> {
             index
         };
         let table = &tables[index];
-        let outer =
-            self.live.get() - relation.storage().retained_bytes - table.statistics().retained_bytes
-                + ROW_LEASE_BYTES;
+        let outer = self.live_bytes()
+            - relation.storage().retained_bytes
+            - table.statistics().retained_bytes
+            + ROW_LEASE_BYTES;
         let mut table_limits = self.table_limits(limits, counters, outer, location)?;
         // The existing table already owns these admitted entries; selection
         // checks the input's count, rather than adding entries to the cache.
@@ -225,13 +254,13 @@ impl<'source> Support<'source> {
         outer: usize,
         location: Location,
     ) -> Result<table::Limits, FormulaFailure> {
-        Self::admit(self.live.get(), limits, counters, location)?;
+        Self::admit(self.live_bytes(), limits, counters, location)?;
         Ok(table::Limits {
             max_entries: limits
                 .max_support_index_entries
                 .saturating_sub(self.entries.get()),
             max_bytes: limits.max_support_bytes - outer,
-            max_work: limits.max_work.saturating_sub(counters.work),
+            max_work: limits.max_work.saturating_sub(counters.accounting.work),
         })
     }
 
@@ -244,7 +273,7 @@ impl<'source> Support<'source> {
         counters: &mut Counters,
         location: Location,
     ) -> Result<T, FormulaFailure> {
-        let base_work = counters.work;
+        let base_work = counters.accounting.work;
         let (work, peak) = match &result {
             Ok(value) => (value.receipt().work, value.receipt().peak_bytes),
             Err(error) => (error.work, error.peak_bytes),
@@ -334,8 +363,7 @@ impl<'source> Support<'source> {
             .checked_mul(size_of::<Table<'_, '_>>())
             .ok_or_else(|| allocation(Cause::Overflow, location))?;
         let peak = self
-            .live
-            .get()
+            .live_bytes()
             .checked_add(next)
             .ok_or_else(|| allocation(Cause::Overflow, location))?;
         Self::admit(peak, limits, counters, location)?;
@@ -345,8 +373,7 @@ impl<'source> Support<'source> {
             .map_err(|_| allocation(Cause::Allocation, location))?;
         let actual = tables.capacity() * size_of::<Table<'_, '_>>();
         let peak = self
-            .live
-            .get()
+            .live_bytes()
             .checked_add(actual)
             .ok_or_else(|| allocation(Cause::Overflow, location))?;
         self.live.set(self.live.get() - old + actual);
@@ -365,8 +392,8 @@ struct BoundDomains<'value> {
 /// The descriptors borrow whole values only for this call. None means an
 /// unbound valid slot, whereas an out-of-range source slot is a typed failure.
 fn bind_domains<'value>(
-    pattern: &'value AtomPattern,
-    values: &'value [Option<Value>],
+    pattern: PatternRef<'value>,
+    values: BindingView<'value>,
     scratch: &mut Scratch<'_, '_>,
     counters: &mut Counters,
 ) -> Result<BoundDomains<'value>, FormulaFailure> {
@@ -376,14 +403,17 @@ fn bind_domains<'value>(
     let mut domains = Vec::new();
     scratch.reserve(&mut scope, pattern.terms().len(), counters)?;
     scratch.reserve(&mut domains, pattern.terms().len(), counters)?;
-    for (column, term) in pattern.terms().iter().enumerate() {
+    let terms = pattern.terms();
+    for column in 0..terms.len() {
         counters.work(limits, location)?;
+        let term = terms.at(column).expect("checked pattern arity");
         let mut alias = None;
-        if let Term::Variable(variable) = term {
-            for (previous, other) in pattern.terms()[..column].iter().enumerate() {
+        if let TemplateTerm::Variable(variable) = term {
+            for (previous, prior_scope) in scope.iter().enumerate().take(column) {
                 counters.work(limits, location)?;
-                if other == &Term::Variable(*variable) {
-                    alias = Some(scope[previous]);
+                let other = terms.at(previous).expect("checked pattern prefix");
+                if other == TemplateTerm::Variable(variable) {
+                    alias = Some(*prior_scope);
                     break;
                 }
             }
@@ -392,14 +422,13 @@ fn bind_domains<'value>(
         scope.push(variable);
         if alias.is_none() {
             let value = match term {
-                Term::Constant(value) => Some(value),
-                Term::Variable(variable) => values
-                    .get(*variable)
-                    .ok_or(FormulaFailure::UnsafeVariable {
-                        variable: *variable,
-                        location,
-                    })?
-                    .as_ref(),
+                TemplateTerm::Constant(value) => Some(value),
+                TemplateTerm::Variable(variable) => {
+                    if variable >= values.len() {
+                        return Err(FormulaFailure::UnsafeVariable { variable, location });
+                    }
+                    values.get(variable)
+                }
             };
             domains.push(value.map_or(Domain::Unrestricted, Domain::Singleton));
         }
@@ -409,7 +438,7 @@ fn bind_domains<'value>(
 
 fn find_table(
     tables: &[Table<'_, '_>],
-    pattern: &AtomPattern,
+    pattern: PatternRef<'_>,
     scope: &[usize],
     limits: &FormulaLimits,
     counters: &mut Counters,
@@ -490,7 +519,12 @@ impl<'a, 'source> Scratch<'a, 'source> {
             .get()
             .checked_add(bytes)
             .ok_or_else(|| allocation(Cause::Overflow, location))?;
-        Support::admit(total, limits, counters, location)?;
+        Support::admit(
+            support.bytes_with_append(total, location)?,
+            limits,
+            counters,
+            location,
+        )?;
         support.live.set(total);
         Ok(Self {
             support,
@@ -514,7 +548,12 @@ impl<'a, 'source> Scratch<'a, 'source> {
             .get()
             .checked_add(bytes)
             .ok_or_else(|| allocation(Cause::Overflow, self.location))?;
-        Support::admit(proposed, self.limits, counters, self.location)?;
+        Support::admit(
+            self.support.bytes_with_append(proposed, self.location)?,
+            self.limits,
+            counters,
+            self.location,
+        )?;
         values
             .try_reserve_exact(count)
             .map_err(|_| allocation(Cause::Allocation, self.location))?;
@@ -534,8 +573,17 @@ impl<'a, 'source> Scratch<'a, 'source> {
             .ok_or_else(|| allocation(Cause::Overflow, self.location))?;
         self.bytes = owned;
         self.support.live.set(total);
-        counters.record(Event::SupportPeakBytes(total as u128));
-        Support::admit(total, self.limits, counters, self.location)
+        counters.record(Event::SupportPeakBytes(
+            total as u128
+                + self.support.append_bytes() as u128
+                + self.support.workspace.bytes() as u128,
+        ));
+        Support::admit(
+            self.support.bytes_with_append(total, self.location)?,
+            self.limits,
+            counters,
+            self.location,
+        )
     }
 }
 impl Drop for Scratch<'_, '_> {

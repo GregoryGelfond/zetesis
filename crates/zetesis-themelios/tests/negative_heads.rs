@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use serde_json::Value as Json;
-use zetesis_core::{Atom, Sign, Value};
+use zetesis_core::Sign;
 use zetesis_ferraris::{Node, Theory};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
@@ -42,16 +42,22 @@ fn limited(
 ) -> Result<AdmittedFormula, FormulaFailure> {
     admit_formula(source.into(), options, expansion, *limits)
 }
-fn name(atom: &Atom) -> String {
+fn name<'a>(atom: impl Into<zetesis_core::catalog::AtomRef<'a>>) -> String {
+    let atom = atom.into();
     let sign = if atom.predicate().sign() == Sign::Negative {
         "-"
     } else {
         ""
     };
     let base = format!("{sign}{}", atom.predicate().name());
-    match atom.values() {
-        [] => base,
-        [Value::Number(number)] => format!("{base}({number})"),
+    match (
+        atom.values().len(),
+        atom.values()
+            .at(0)
+            .map(zetesis_core::catalog::TermRef::descriptor),
+    ) {
+        (0, _) => base,
+        (1, Some(zetesis_core::ValueNodeRef::Number(number))) => format!("{base}({number})"),
         _ => panic!("fixture has nullary or numeric unary atoms: {atom:?}"),
     }
 }

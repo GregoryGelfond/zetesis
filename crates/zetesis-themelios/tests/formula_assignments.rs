@@ -31,7 +31,14 @@ fn models(input: &AdmittedFormula) -> Models {
             model
                 .expect("complete search")
                 .atoms()
-                .map(|index| input.atoms()[index].clone())
+                .map(|index| {
+                    input
+                        .atoms()
+                        .at(index)
+                        .unwrap()
+                        .to_atom(zetesis_core::ValueLimits::default())
+                        .unwrap()
+                })
                 .collect()
         })
         .collect();
@@ -178,7 +185,7 @@ fn direct_observers_use_structural_positions_and_score_verified_models() {
     assert!(input.objectives().is_present());
     assert_eq!(input.objectives().priorities(), &[3, 1]);
     for model in models(&input) {
-        let model = Model::new(model);
+        let model = Model::new(model).unwrap();
         let evaluation = zetesis_objective::evaluate(
             input.objectives(),
             &model,
@@ -229,7 +236,7 @@ fn generated_positions_union_across_producers_without_changing_full_model_identi
         .map(|model| {
             zetesis_objective::evaluate(
                 input.objectives(),
-                &Model::new(model),
+                &Model::new(model).unwrap(),
                 zetesis_objective::Limits::default(),
                 &Cancellation::default(),
             )
@@ -273,7 +280,7 @@ fn bundle_optimum(input: &zetesis_themelios::AdmittedFormulaBundle) -> (Vec<i64>
     let mut optimal = 0;
     for model in search.by_ref() {
         let model = model.expect("complete layered DAG search");
-        let atoms = Model::new(model.atoms().map(|index| input.atoms()[index].clone()));
+        let atoms = Model::from_positions(input.atom_catalog(), model.atoms()).unwrap();
         let evaluation = zetesis_objective::evaluate(
             input.objectives(),
             &atoms,

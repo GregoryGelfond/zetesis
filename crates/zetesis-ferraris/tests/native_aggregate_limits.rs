@@ -88,8 +88,8 @@ proptest! {
             Ok(group) => {
                 prop_assert!(!duplicate);
                 let retained: Vec<_> = group.tuples().iter().map(|tuple| {
-                    tuple.key.iter().map(|value| match value {
-                        Term::Number(value) => *value,
+                    tuple.key.iter().map(|value| match value.descriptor() {
+                        zetesis_core::ValueNodeRef::Number(value) => value,
                         _ => unreachable!("integer fixture"),
                     }).collect::<Vec<_>>()
                 }).collect();
@@ -187,7 +187,20 @@ fn equal_first_components_do_not_merge_distinct_keys() {
         &Cancellation::default(),
     )
     .unwrap();
-    assert_eq!(group.tuples()[0].key, [Term::Number(3), Term::Number(2)]);
+    assert_eq!(
+        group
+            .tuples()
+            .at(0)
+            .unwrap()
+            .key
+            .iter()
+            .map(zetesis_core::catalog::TermRef::descriptor)
+            .collect::<Vec<_>>(),
+        [
+            zetesis_core::ValueNodeRef::Number(3),
+            zetesis_core::ValueNodeRef::Number(2)
+        ]
+    );
     let value = group
         .reduce(
             &[true, true],
@@ -357,9 +370,15 @@ fn every_guard_is_charged_even_after_a_false_guard() {
         )
         .unwrap();
     assert!(!full.original().holds());
-    // 3+1 original mask/contribution visits; 3 frozen visits. Each phase evaluates
-    // both guards, including the ordered symbol comparison after the first guard.
-    assert_eq!(full.statistics().work, 21);
+    // Both phases visit three mask cells, with one original contribution. Each
+    // phase charges both guard visits, their full carriers (2 and 3), and one
+    // checked comparison step apiece, even after the first guard is false.
+    let mask_and_contribution_work = 3 + 1 + 3;
+    let guard_work_per_phase = (1 + 2 + 1) + (1 + 3 + 1);
+    assert_eq!(
+        full.statistics().work,
+        mask_and_contribution_work + 2 * guard_work_per_phase
+    );
     for maximum in 0..=full.statistics().work {
         let result = group.reduce(
             &[false, true, false],

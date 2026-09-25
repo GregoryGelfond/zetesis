@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-use zetesis_core::{Atom, Predicate, Value};
+use zetesis_core::{Atom, Model, Predicate, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     AnswerSelection, AnswerSet, Backend, Completion, ExecutionResources, Grounder, Oracle,
@@ -28,14 +28,14 @@ const CLEANUP_TIMEOUT: Duration = Duration::from_secs(1);
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct Record {
-    atoms: Vec<Atom>,
+    atoms: Model,
     costs: Vec<(i32, i64)>,
     display: String,
 }
 
 fn record(atoms: &[&str], priority: i32, cost: i64, display: &str) -> Record {
     Record {
-        atoms: atoms.iter().map(|name| atom(name, vec![])).collect(),
+        atoms: Model::new(atoms.iter().map(|name| atom(name, vec![]))).unwrap(),
         costs: vec![(priority, cost)],
         display: display.into(),
     }
@@ -103,11 +103,12 @@ fn cases() -> Vec<Case> {
             reference_difference: None,
             answers: [(1, 2, "chosen(11)"), (2, 4, "chosen(12)")]
                 .map(|(choice, cost, display)| Record {
-                    atoms: vec![
+                    atoms: Model::new([
                         atom("data", vec![Value::Number(1)]),
                         atom("data", vec![Value::Number(2)]),
                         atom("pick", vec![Value::Number(choice)]),
-                    ],
+                    ])
+                    .unwrap(),
                     costs: vec![(1, cost)],
                     display: display.into(),
                 })
@@ -127,7 +128,7 @@ fn cases() -> Vec<Case> {
                 (&["a", "b"][..], [(2, 2), (1, 1)], "score(2)"),
             ]
             .map(|(atoms, costs, display)| Record {
-                atoms: atoms.iter().map(|name| atom(name, vec![])).collect(),
+                atoms: Model::new(atoms.iter().map(|name| atom(name, vec![]))).unwrap(),
                 costs: costs.into(),
                 display: display.into(),
             })
@@ -156,12 +157,12 @@ fn filtered_priority() -> Case {
         reference_difference: None,
         answers: BTreeSet::from([
             Record {
-                atoms: vec![atom("n", vec![Value::Number(0)])],
+                atoms: Model::new([atom("n", vec![Value::Number(0)])]).unwrap(),
                 costs: vec![(1, 0)],
                 display: "score(1)".into(),
             },
             Record {
-                atoms: vec![atom("a", vec![]), atom("n", vec![Value::Number(1)])],
+                atoms: Model::new([atom("a", vec![]), atom("n", vec![Value::Number(1)])]).unwrap(),
                 costs: vec![(1, 1)],
                 display: "score(2)".into(),
             },
@@ -195,7 +196,7 @@ fn recursive_alternatives() -> Case {
             }
             atoms.sort();
             Record {
-                atoms,
+                atoms: Model::new(atoms).unwrap(),
                 costs: vec![(1, cost)],
                 display: left
                     .iter()
@@ -242,7 +243,7 @@ fn cyclic_observer() -> Case {
                     atoms.insert(0, atom("a", vec![]));
                 }
                 Record {
-                    atoms,
+                    atoms: Model::new(atoms).unwrap(),
                     costs: vec![(2, 1), (1, i64::from(count))],
                     display: display.into(),
                 }
@@ -267,7 +268,7 @@ fn independent_objectives() -> Case {
             ),
         ]
         .map(|(atoms, costs, display)| Record {
-            atoms: atoms.iter().map(|name| atom(name, vec![])).collect(),
+            atoms: Model::new(atoms.iter().map(|name| atom(name, vec![]))).unwrap(),
             costs: costs.into(),
             display: display.into(),
         })
@@ -300,7 +301,7 @@ fn config(workers: usize, batch: usize) -> SolveConfig {
 
 fn capture(owner: &AdmittedFormula, answer: &AnswerSet) -> Record {
     let model = answer.interpretation();
-    let atoms = model.atoms().iter().cloned().collect();
+    let atoms = model.clone();
     let score = answer.score().expect("the numeric objective is present");
     assert!(score.is_present());
     let display = owner
@@ -477,10 +478,7 @@ fn observation_failure_preserves_the_complete_family() {
                 error.kind(),
                 &observation::ErrorKind::Evaluation(observation::EvaluationError::Undefined)
             );
-            (
-                model.atoms().iter().cloned().collect(),
-                answer.score().unwrap().costs().to_vec(),
-            )
+            (model.clone(), answer.score().unwrap().costs().to_vec())
         })
         .collect();
     assert_eq!(actual, expected);

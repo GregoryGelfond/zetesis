@@ -1,25 +1,24 @@
 //! Completed presence from facts and optional closed choices.
 //!
-//! Shared optional conditions and constraints never erase possible witnesses.
-//! A required value dominating all numbers excludes numeric presence. The source
-//! measure carrier ranges over all complete key sets between the required and
-//! possible keys. It does not assert independent eligibility in actual models.
+//! Source carriers never assert independent realizability in an answer set.
 
 mod carrier;
-
 pub(super) use carrier::{Carrier, certify as carrier};
 
+use super::Predicates;
+use crate::formula::ceiling;
+use crate::formula_ir::{AggregateIr, AggregateKey, HeadIr, LiteralIr, Prepared, RuleIr};
+use crate::formula_support::{
+    Computation, Counters,
+    components::{Pattern, Term},
+};
+use crate::{FormulaFailure, FormulaLimits, FormulaResource};
 use std::collections::BTreeSet;
-
 use themelios_base::span::Location;
 use themelios_program::program::{AggregateFunction, DefaultNegation};
 use themelios_program::symbol::Signature;
-use zetesis_core::{AtomPattern, Predicate, Term, Value};
-
-use crate::formula::ceiling;
-use crate::formula_ir::{AggregateIr, AggregateKey, HeadIr, LiteralIr, Prepared, RuleIr};
-use crate::formula_support::Counters;
-use crate::{FormulaFailure, FormulaLimits, FormulaResource};
+use zetesis_core::catalog::{PredicateRef, TermRef};
+use zetesis_core::{PatternRef, TemplateTerm, ValueNodeRef};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Activity {
@@ -28,17 +27,14 @@ enum Activity {
     Required,
 }
 
-/// Conservatively reserve planning slots through one certificate, including
-/// caller-held exclusions. A helper's released temporaries need not reclaim its
-/// reservation. Every insertion is checked before allocation. Scalar payload
-/// and transient numeric subsets have separate bounds.
-struct Context<'a> {
+struct Context<'a, 'terms, 'source> {
+    computation: &'a mut Computation<'terms, 'source>,
     limits: &'a FormulaLimits,
     counters: &'a mut Counters,
     location: Location,
     entries: usize,
 }
-impl Context<'_> {
+impl<'source> Context<'_, '_, 'source> {
     fn inspect(&mut self) -> Result<(), FormulaFailure> {
         self.counters.work(self.limits, self.location)
     }
@@ -51,6 +47,18 @@ impl Context<'_> {
         set.insert(value);
         Ok(())
     }
+    fn retain_predicate(
+        &mut self,
+        set: &mut Predicates<'source>,
+        value: PredicateRef<'source>,
+    ) -> Result<(), FormulaFailure> {
+        if set.contains(value, self.limits, self.counters, self.location)? {
+            return Ok(());
+        }
+        self.reserve_entry()?;
+        set.insert(value, self.limits, self.counters, self.location)?;
+        Ok(())
+    }
     fn reserve_entry(&mut self) -> Result<(), FormulaFailure> {
         ceiling(
             FormulaResource::ObjectivePresenceEntries,
@@ -61,21 +69,69 @@ impl Context<'_> {
         self.entries += 1;
         Ok(())
     }
-    fn closed(&mut self, atom: &AtomPattern) -> Result<bool, FormulaFailure> {
-        for term in atom.terms() {
+    fn pattern(&mut self, atom: Pattern) -> Result<PatternRef<'source>, FormulaFailure> {
+        self.computation
+            .static_pattern(atom, self.limits, self.counters, self.location)
+    }
+    fn term(&mut self, term: Term) -> Result<TemplateTerm<'source>, FormulaFailure> {
+        self.computation
+            .static_term(term, self.limits, self.counters, self.location)
+    }
+    fn closed(&mut self, atom: PatternRef<'_>) -> Result<bool, FormulaFailure> {
+        for column in 0..atom.terms().len() {
             self.inspect()?;
-            if !matches!(term, Term::Constant(_)) {
+            if !matches!(atom.terms().at(column), Some(TemplateTerm::Constant(_))) {
                 return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+    fn same_predicate(
+        &mut self,
+        left: PredicateRef<'_>,
+        right: PredicateRef<'_>,
+    ) -> Result<bool, FormulaFailure> {
+        left.compare_ref_with(right, || self.inspect())
+            .map(std::cmp::Ordering::is_eq)
+    }
+    fn same_atom(
+        &mut self,
+        left: PatternRef<'_>,
+        right: PatternRef<'_>,
+    ) -> Result<bool, FormulaFailure> {
+        self.inspect()?;
+        if !self.same_predicate(left.predicate(), right.predicate())? {
+            return Ok(false);
+        }
+        for column in 0..left.terms().len() {
+            self.inspect()?;
+            let (left, right) = (
+                left.terms().at(column).unwrap(),
+                right.terms().at(column).unwrap(),
+            );
+            match (left, right) {
+                (TemplateTerm::Variable(left), TemplateTerm::Variable(right)) if left == right => {}
+                (TemplateTerm::Constant(left), TemplateTerm::Constant(right)) => {
+                    if !left.compare_ref_with(right, || self.inspect())?.is_eq() {
+                        return Ok(false);
+                    }
+                }
+                _ => return Ok(false),
             }
         }
         Ok(true)
     }
     fn matches(
         &mut self,
-        predicate: &Predicate,
+        predicate: PredicateRef<'_>,
         signature: &Signature,
     ) -> Result<bool, FormulaFailure> {
         self.inspect()?;
+        self.counters.charge_work(
+            predicate.name().len().min(signature.name.as_str().len()) as u128,
+            self.limits,
+            self.location,
+        )?;
         Ok(
             crate::coherence::source_sign(predicate.sign()) == signature.sign
                 && predicate.name() == signature.name.as_str()
@@ -84,7 +140,7 @@ impl Context<'_> {
     }
     fn relevant(
         &mut self,
-        predicate: &Predicate,
+        predicate: PredicateRef<'_>,
         cone: &BTreeSet<&Signature>,
     ) -> Result<bool, FormulaFailure> {
         for signature in cone {
@@ -96,24 +152,23 @@ impl Context<'_> {
     }
 }
 
-/// None denotes an unqualified carrier. An empty set denotes a qualified
-/// carrier whose possible numeric witnesses remain retained.
-pub(super) fn certify<'a>(
-    prepared: &'a Prepared,
-    rule: &'a RuleIr,
+pub(super) fn certify<'source>(
+    prepared: &Prepared,
+    rule: &RuleIr,
     aggregate: &AggregateIr,
     retained: usize,
+    computation: &mut Computation<'_, 'source>,
     limits: &FormulaLimits,
     counters: &mut Counters,
-) -> Result<Option<BTreeSet<&'a Predicate>>, FormulaFailure> {
+) -> Result<Option<Predicates<'source>>, FormulaFailure> {
     let mut context = Context {
+        computation,
         limits,
         counters,
         location: rule.location,
         entries: retained,
     };
-    context.inspect()?;
-    let Some(head) = assignment(rule, aggregate) else {
+    let Some(head) = assignment(rule, aggregate, &mut context)? else {
         return Ok(None);
     };
     let mut blocked = false;
@@ -131,39 +186,59 @@ pub(super) fn certify<'a>(
         let Some(activity) = activity(prepared, &element.condition, &mut context)? else {
             return Ok(None);
         };
-        let Some(Term::Constant(value)) = tuple.first() else {
+        let Some(first) = tuple.first() else {
             return Ok(None);
         };
+        let TemplateTerm::Constant(value) = context.term(*first)? else {
+            return Ok(None);
+        };
+        context.inspect()?;
         blocked |= activity == Activity::Required && dominates_numbers(aggregate.function, value);
     }
+    context.inspect()?;
     let Some(descendants) = transport(prepared, head.predicate(), &mut context)? else {
         return Ok(None);
     };
     Ok(Some(if blocked {
         descendants
     } else {
-        BTreeSet::new()
+        Predicates::default()
     }))
 }
 
-/// A total unary observer contains exactly its original aggregate equality.
-fn assignment<'a>(rule: &'a RuleIr, aggregate: &AggregateIr) -> Option<&'a AtomPattern> {
+fn assignment<'source>(
+    rule: &RuleIr,
+    aggregate: &AggregateIr,
+    context: &mut Context<'_, '_, 'source>,
+) -> Result<Option<PatternRef<'source>>, FormulaFailure> {
+    context.inspect()?;
     let (HeadIr::Normal(Some(head)), [LiteralIr::Aggregate(only)]) =
         (&rule.head, rule.body.as_slice())
     else {
-        return None;
+        return Ok(None);
     };
-    let target = aggregate.binding?;
-    (only.id == aggregate.id && head.terms() == [Term::Variable(target)]).then_some(head)
+    let Some(target) = aggregate.binding else {
+        return Ok(None);
+    };
+    let head = context.pattern(*head)?;
+    context.inspect()?;
+    Ok((only.id == aggregate.id
+        && head.terms().len() == 1
+        && head.terms().at(0) == Some(TemplateTerm::Variable(target)))
+    .then_some(head))
 }
 
-fn dominates_numbers(function: AggregateFunction, value: &Value) -> bool {
+fn dominates_numbers(function: AggregateFunction, value: TermRef<'_>) -> bool {
     matches!(
-        (function, value),
-        (AggregateFunction::Min, Value::Infimum)
+        (function, value.descriptor()),
+        (AggregateFunction::Min, ValueNodeRef::Infimum)
             | (
                 AggregateFunction::Max,
-                Value::String(_) | Value::Symbol(_) | Value::Structured(_) | Value::Supremum
+                ValueNodeRef::String(_)
+                    | ValueNodeRef::Symbol(_)
+                    | ValueNodeRef::Function { .. }
+                    | ValueNodeRef::Tuple { .. }
+                    | ValueNodeRef::Supremum
             )
     )
 }
@@ -171,23 +246,31 @@ fn dominates_numbers(function: AggregateFunction, value: &Value) -> bool {
 fn activity(
     prepared: &Prepared,
     condition: &[LiteralIr],
-    context: &mut Context<'_>,
+    context: &mut Context<'_, '_, '_>,
 ) -> Result<Option<Activity>, FormulaFailure> {
     context.inspect()?;
     let atom = match condition {
         [] => return Ok(Some(Activity::Required)),
-        [LiteralIr::Atom(DefaultNegation::None, atom)] if context.closed(atom)? => atom,
+        [LiteralIr::Atom(DefaultNegation::None, atom)] => context.pattern(*atom)?,
         _ => return Ok(None),
     };
+    if !context.closed(atom)? {
+        return Ok(None);
+    }
     let mut activity = Activity::Absent;
     for producer in &prepared.rules {
         context.inspect()?;
         match &producer.head {
-            HeadIr::Normal(Some(head)) if head.predicate() == atom.predicate() => {
+            HeadIr::Normal(Some(head)) => {
+                let head = context.pattern(*head)?;
+                context.inspect()?;
+                if !context.same_predicate(head.predicate(), atom.predicate())? {
+                    continue;
+                }
                 if !producer.body.is_empty() || !context.closed(head)? {
                     return Ok(None);
                 }
-                if head == atom {
+                if context.same_atom(head, atom)? {
                     activity = Activity::Required;
                 }
             }
@@ -197,7 +280,9 @@ fn activity(
                     let Some(head) = element.head.positive_atom() else {
                         continue;
                     };
-                    if head.predicate() != atom.predicate() {
+                    let head = context.pattern(*head)?;
+                    context.inspect()?;
+                    if !context.same_predicate(head.predicate(), atom.predicate())? {
                         continue;
                     }
                     if !producer.body.is_empty()
@@ -208,42 +293,39 @@ fn activity(
                     {
                         return Ok(None);
                     }
-                    if head == atom && activity != Activity::Required {
+                    if context.same_atom(head, atom)? && activity != Activity::Required {
                         activity = Activity::Optional;
                     }
                 }
             }
-            // Objective dependency admission has already excluded every signed
-            // or default-negated disjunctive producer in this observed cone.
             HeadIr::Disjunction(_) | HeadIr::ConditionalDisjunction { .. } => {
                 for head in producer.head.disjuncts() {
-                    context.inspect()?;
-                    if head
-                        .positive_atom()
-                        .is_some_and(|head| head.predicate() == atom.predicate())
-                    {
-                        return Ok(None);
+                    if let Some(head) = head.positive_atom() {
+                        let head = context.pattern(*head)?;
+                        context.inspect()?;
+                        if context.same_predicate(head.predicate(), atom.predicate())? {
+                            return Ok(None);
+                        }
                     }
                 }
             }
-            HeadIr::Normal(_) => {}
+            HeadIr::Normal(None) => {}
         }
     }
     Ok(Some(activity))
 }
 
-/// Borrow the objective dependency cone rather than cloning graph names.
 fn cone<'a>(
     prepared: &'a Prepared,
-    context: &mut Context<'_>,
+    context: &mut Context<'_, '_, '_>,
 ) -> Result<BTreeSet<&'a Signature>, FormulaFailure> {
     let graph = prepared.analysis.dependencies();
     let mut relevant = BTreeSet::new();
     for objective in &prepared.objectives {
-        context.inspect()?;
         for atom in &objective.positive {
-            context.inspect()?;
+            let atom = context.pattern(*atom)?;
             for predicate in graph.predicates() {
+                context.inspect()?;
                 if context.matches(atom.predicate(), predicate)? {
                     context.retain(&mut relevant, predicate)?;
                 }
@@ -266,21 +348,17 @@ fn cone<'a>(
     }
 }
 
-/// Each successful round adds a source predicate. Only unique unary renamings
-/// inherit the completed carrier; finite scans never recurse. Qualification of
-/// another observed descendant cannot invalidate this predicate's certificate.
-/// Nonqualifying descendants keep their independent source-support carrier.
-fn transport<'a>(
-    prepared: &'a Prepared,
-    predicate: &'a Predicate,
-    context: &mut Context<'_>,
-) -> Result<Option<BTreeSet<&'a Predicate>>, FormulaFailure> {
+fn transport<'source>(
+    prepared: &Prepared,
+    predicate: PredicateRef<'source>,
+    context: &mut Context<'_, '_, 'source>,
+) -> Result<Option<Predicates<'source>>, FormulaFailure> {
     if !unique(prepared, predicate, context)? {
         return Ok(None);
     }
     let relevant = cone(prepared, context)?;
-    let mut reachable = BTreeSet::new();
-    context.retain(&mut reachable, predicate)?;
+    let mut reachable = Predicates::default();
+    context.retain_predicate(&mut reachable, predicate)?;
     loop {
         let previous = reachable.len();
         for rule in &prepared.rules {
@@ -288,22 +366,39 @@ fn transport<'a>(
             let HeadIr::Normal(Some(head)) = &rule.head else {
                 continue;
             };
-            if reachable.contains(head.predicate())
-                || !context.relevant(head.predicate(), &relevant)?
+            let head = context.pattern(*head)?;
+            context.inspect()?;
+            let predicate = head.predicate();
+            if reachable.contains(
+                predicate,
+                context.limits,
+                context.counters,
+                context.location,
+            )? || !context.relevant(predicate, &relevant)?
             {
                 continue;
             }
             let [LiteralIr::Atom(DefaultNegation::None, body)] = rule.body.as_slice() else {
                 continue;
             };
+            let body = context.pattern(*body)?;
             context.inspect()?;
-            if !matches!((head.terms(), body.terms()), ([Term::Variable(left)], [Term::Variable(right)]) if left == right)
-                || !reachable.contains(body.predicate())
-                || !unique(prepared, head.predicate(), context)?
+            let agrees = head.terms().len() == 1
+                && body.terms().len() == 1
+                && matches!((head.terms().at(0), body.terms().at(0)),
+                    (Some(TemplateTerm::Variable(left)), Some(TemplateTerm::Variable(right))) if left == right);
+            if !agrees
+                || !reachable.contains(
+                    body.predicate(),
+                    context.limits,
+                    context.counters,
+                    context.location,
+                )?
+                || !unique(prepared, predicate, context)?
             {
                 continue;
             }
-            context.retain(&mut reachable, head.predicate())?;
+            context.retain_predicate(&mut reachable, predicate)?;
         }
         if reachable.len() == previous {
             break;
@@ -314,38 +409,43 @@ fn transport<'a>(
 
 fn unique(
     prepared: &Prepared,
-    predicate: &Predicate,
-    context: &mut Context<'_>,
+    predicate: PredicateRef<'_>,
+    context: &mut Context<'_, '_, '_>,
 ) -> Result<bool, FormulaFailure> {
     let mut occurrences = 0;
     for rule in &prepared.rules {
         context.inspect()?;
         match &rule.head {
-            HeadIr::Normal(Some(head)) if head.predicate() == predicate => occurrences += 1,
+            HeadIr::Normal(Some(head)) => {
+                let head = context.pattern(*head)?;
+                context.inspect()?;
+                if context.same_predicate(head.predicate(), predicate)? {
+                    occurrences += 1;
+                }
+            }
             HeadIr::Choice(group) => {
                 for element in &group.elements {
-                    context.inspect()?;
-                    if element
-                        .head
-                        .positive_atom()
-                        .is_some_and(|head| head.predicate() == predicate)
-                    {
-                        return Ok(false);
+                    if let Some(head) = element.head.positive_atom() {
+                        let head = context.pattern(*head)?;
+                        context.inspect()?;
+                        if context.same_predicate(head.predicate(), predicate)? {
+                            return Ok(false);
+                        }
                     }
                 }
             }
             HeadIr::Disjunction(_) | HeadIr::ConditionalDisjunction { .. } => {
                 for head in rule.head.disjuncts() {
-                    context.inspect()?;
-                    if head
-                        .positive_atom()
-                        .is_some_and(|head| head.predicate() == predicate)
-                    {
-                        return Ok(false);
+                    if let Some(head) = head.positive_atom() {
+                        let head = context.pattern(*head)?;
+                        context.inspect()?;
+                        if context.same_predicate(head.predicate(), predicate)? {
+                            return Ok(false);
+                        }
                     }
                 }
             }
-            HeadIr::Normal(_) => {}
+            HeadIr::Normal(None) => {}
         }
     }
     Ok(occurrences == 1)

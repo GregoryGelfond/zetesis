@@ -44,7 +44,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .projection()
             .atoms()
             .iter()
-            .filter(|atom| answer.interpretation().contains(atom))
+            .filter(|atom| answer.interpretation().contains(*atom))
             .collect();
         assert!(keys.insert(key));
     }

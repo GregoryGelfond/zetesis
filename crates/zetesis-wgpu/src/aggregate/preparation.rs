@@ -5,11 +5,11 @@ use super::{
     capacity, poll,
 };
 use std::sync::Arc;
-use zetesis_core::Value;
+use zetesis_core::ValueNodeRef;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AggregateComparison,
-    native_aggregate::{Bound, Function, Group},
+    native_aggregate::{Bound, Function, GroupRef},
 };
 
 /// Opaque numeric view of one exact retained group. Cloning shares wire storage
@@ -18,7 +18,7 @@ use zetesis_ferraris::{
 /// establish source completeness or aggregate head permission.
 #[derive(Clone, Debug)]
 pub struct AggregateGpuPlan<'g> {
-    pub(super) group: &'g Group,
+    pub(super) group: GroupRef<'g>,
     pub(super) numeric: Arc<Numeric>,
 }
 
@@ -51,11 +51,12 @@ impl<'g> AggregateGpuPlan<'g> {
     /// failures. These never change source admission; callers may use the native
     /// CPU reduction. No partially prepared plan escapes.
     pub fn new(
-        group: &'g Group,
+        group: impl Into<GroupRef<'g>>,
         limits: AggregateGpuPlanLimits,
         cancellation: &Cancellation,
     ) -> Result<Self, Error> {
         poll(cancellation)?;
+        let group = group.into();
         let tuples = group.tuples().len();
         let guards = group.guards().len();
         let work = u64::try_from(tuples)
@@ -109,7 +110,7 @@ impl<'g> AggregateGpuPlan<'g> {
     }
     /// Complete retained operation supplying tuple order and eligibility identity.
     #[must_use]
-    pub const fn group(&self) -> &'g Group {
+    pub const fn group(&self) -> GroupRef<'g> {
         self.group
     }
     /// Requested retained numeric wire bytes, including empty-binding padding.
@@ -125,20 +126,25 @@ impl<'g> AggregateGpuPlan<'g> {
 }
 
 impl Numeric {
-    fn pack(&mut self, group: &Group, cancellation: &Cancellation) -> Result<(), Error> {
+    fn pack(&mut self, group: GroupRef<'_>, cancellation: &Cancellation) -> Result<(), Error> {
         for (index, tuple) in group.tuples().iter().enumerate() {
             poll(cancellation)?;
-            let first = tuple.key.first();
+            let first = tuple
+                .key
+                .first()
+                .map(zetesis_core::catalog::TermRef::descriptor);
             let (value, present) = match self.function {
                 Function::Count => (1, true),
                 Function::Sum | Function::SumPlus => match first {
-                    Some(Value::Number(value)) if self.function == Function::Sum || *value > 0 => {
-                        (*value, true)
+                    Some(ValueNodeRef::Number(value))
+                        if self.function == Function::Sum || value > 0 =>
+                    {
+                        (value, true)
                     }
                     _ => (0, true),
                 },
                 Function::Min | Function::Max => match first {
-                    Some(Value::Number(value)) => (*value, true),
+                    Some(ValueNodeRef::Number(value)) => (value, true),
                     None => (0, false),
                     _ => {
                         return Err(Error::Capability(Capability::NonNumericExtremum {
@@ -150,17 +156,20 @@ impl Numeric {
             self.carrier(value)?;
             self.tuples.extend([bits(value), u32::from(present)]);
         }
-        for (index, guard) in group.guards().iter().enumerate() {
+        for index in 0..group.guards().len() {
             poll(cancellation)?;
-            let value = match &guard.bound {
-                Bound::Integer(value) => i32::try_from(*value)
+            let guard = group.guard(index).expect("admitted guard extent");
+            let value = match guard.bound {
+                Bound::Integer(value) => i32::try_from(value)
                     .map_err(|_| Error::Capability(Capability::GuardRange { guard: index }))?,
-                Bound::Term(Value::Number(value)) => *value,
-                Bound::Term(_) => {
-                    return Err(Error::Capability(Capability::NonNumericGuard {
-                        guard: index,
-                    }));
-                }
+                Bound::Term(value) => match value.descriptor() {
+                    ValueNodeRef::Number(value) => value,
+                    _ => {
+                        return Err(Error::Capability(Capability::NonNumericGuard {
+                            guard: index,
+                        }));
+                    }
+                },
             };
             self.guards
                 .extend([comparison(guard.comparison), bits(value)]);

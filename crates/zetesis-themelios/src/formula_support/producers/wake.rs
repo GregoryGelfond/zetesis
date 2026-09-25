@@ -1,12 +1,14 @@
 //! Borrowed signed dependency postings and a packed original-rule wake set.
 
-use std::collections::BTreeSet;
 use std::mem::size_of;
 use std::ops::Range;
 
 use themelios_base::span::Location;
 use themelios_program::symbol::Signature;
-use zetesis_core::{Atom, Predicate, relation::Failure};
+use zetesis_core::{
+    catalog::{AtomRef, PredicateRef},
+    relation::Failure,
+};
 
 use super::{Node, find, invalid};
 use crate::formula_ir::{HeadIr, RuleIr};
@@ -130,9 +132,9 @@ impl<'source> Wake<'source> {
         }
     }
 
-    pub(super) fn advance(
+    pub(super) fn advance<'atoms>(
         &mut self,
-        delta: &BTreeSet<Atom>,
+        mut delta: impl Iterator<Item = AtomRef<'atoms>>,
         limits: &FormulaLimits,
         counters: &mut Counters,
         location: Location,
@@ -143,8 +145,12 @@ impl<'source> Wake<'source> {
         }
         // Atom order groups each exact signed predicate. Resolve a changed
         // predicate once, without cloning a key or allocating another set.
-        let mut previous: Option<&Predicate> = None;
-        for atom in delta {
+        let mut previous: Option<PredicateRef<'_>> = None;
+        loop {
+            counters.work(limits, location)?;
+            let Some(atom) = delta.next() else {
+                break;
+            };
             let predicate = atom.predicate();
             let bytes = previous.map_or(0, |previous| previous.name().len());
             counters.charge_work(

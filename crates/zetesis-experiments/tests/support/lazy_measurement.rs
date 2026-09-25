@@ -48,14 +48,16 @@ fn fixture() -> (fixture::Fixture, Configuration) {
 fn varied_checks() -> [Check; 4] {
     let (fixture, configuration) = fixture();
     let mut checks = scalar(&fixture, &configuration).unwrap();
-    let dense = zetesis_core::Seed::new(
+    let dense = zetesis_core::SeedSelection::from_carrier_atoms(
         &fixture.program,
         fixture
-            .seeds
-            .iter()
-            .flat_map(|seed| seed.atoms().iter().cloned()),
+            .program
+            .gate_atoms()
+            .map(|atom| atom.expect("finite fixture carrier"))
+            .filter(|atom| fixture.seeds.iter().any(|seed| seed.contains(atom.atom()))),
     )
-    .unwrap();
+    .unwrap()
+    .to_seed();
     checks.push(
         zetesis_cpu::check(
             &fixture.program,

@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use serde_json::Value as Json;
-use zetesis_core::{Atom, Model, Sign, Value};
+use zetesis_core::{Model, Sign};
 use zetesis_cpu::{Cancellation, CandidateLimits, Candidates};
 use zetesis_ferraris::{Node, Theory};
 use zetesis_themelios::{
@@ -85,14 +85,13 @@ fn stable_models(input: &AdmittedFormula) -> Vec<Model> {
             }
         }
         if !countermodel {
-            result.push(Model::new(
-                input
-                    .atoms()
-                    .iter()
-                    .enumerate()
-                    .filter(|(index, _)| mask & (1 << index) != 0)
-                    .map(|(_, atom)| atom.clone()),
-            ));
+            result.push(
+                Model::from_positions(
+                    input.atom_catalog(),
+                    (0..input.atoms().len()).filter(|index| mask & (1 << index) != 0),
+                )
+                .unwrap(),
+            );
         }
     }
     result
@@ -100,7 +99,8 @@ fn stable_models(input: &AdmittedFormula) -> Vec<Model> {
 
 // Full-model records do not use the production output renderer. Numeric minus
 // belongs to a value; a predicate sign is serialized before its name.
-fn atom_text(atom: &Atom) -> String {
+fn atom_text<'a>(atom: impl Into<zetesis_core::catalog::AtomRef<'a>>) -> String {
+    let atom = atom.into();
     let sign = if atom.predicate().sign() == Sign::Negative {
         "-"
     } else {
@@ -111,13 +111,14 @@ fn atom_text(atom: &Atom) -> String {
         let args: Vec<_> = atom
             .values()
             .iter()
-            .map(|value| match value {
-                Value::Number(number) => number.to_string(),
-                Value::String(value) => serde_json::to_string(value).unwrap(),
-                Value::Symbol(value) => value.clone(),
-                Value::Infimum => "#inf".into(),
-                Value::Supremum => "#sup".into(),
-                Value::Structured(value) => value.to_string(),
+            .map(|value| match value.descriptor() {
+                zetesis_core::ValueNodeRef::Number(number) => number.to_string(),
+                zetesis_core::ValueNodeRef::String(value) => serde_json::to_string(value).unwrap(),
+                zetesis_core::ValueNodeRef::Symbol(value) => value.to_owned(),
+                zetesis_core::ValueNodeRef::Infimum => "#inf".into(),
+                zetesis_core::ValueNodeRef::Supremum => "#sup".into(),
+                zetesis_core::ValueNodeRef::Function { .. }
+                | zetesis_core::ValueNodeRef::Tuple { .. } => value.to_string(),
             })
             .collect();
         text.push('(');
@@ -243,7 +244,13 @@ fn independent_reduct_models_match_signed_reference_models_costs_and_displays() 
         let mut unique = BTreeSet::new();
         for model in &models {
             assert!(
-                unique.insert(model.atoms().iter().cloned().collect::<BTreeSet<_>>()),
+                unique.insert(
+                    model
+                        .atoms()
+                        .iter()
+                        .map(|atom| atom.to_atom(zetesis_core::ValueLimits::default()).unwrap())
+                        .collect::<BTreeSet<_>>()
+                ),
                 "unique full models"
             );
             for atom in model.atoms() {
@@ -338,7 +345,13 @@ fn ordinary_and_extended_closure_routes_enforce_the_same_signed_coherence() {
     ] {
         let expected: BTreeSet<_> = stable_models(&input(source).unwrap())
             .into_iter()
-            .map(|model| model.atoms().iter().cloned().collect::<BTreeSet<_>>())
+            .map(|model| {
+                model
+                    .atoms()
+                    .iter()
+                    .map(|atom| atom.to_atom(zetesis_core::ValueLimits::default()).unwrap())
+                    .collect::<BTreeSet<_>>()
+            })
             .collect();
         for admitted in [
             admit(source.into(), AdmissionOptions::default()).unwrap(),
@@ -369,7 +382,9 @@ fn ordinary_and_extended_closure_routes_enforce_the_same_signed_coherence() {
                                 .closure()
                                 .atoms()
                                 .iter()
-                                .cloned()
+                                .map(|atom| atom
+                                    .to_atom(zetesis_core::ValueLimits::default())
+                                    .unwrap())
                                 .collect::<BTreeSet<_>>()
                         )
                     );

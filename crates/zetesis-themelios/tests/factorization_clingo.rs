@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use serde_json::Value as Json;
-use zetesis_core::{Atom, Model, Value};
+use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
 use zetesis_sat::{Limits as SearchLimits, StableModels};
@@ -66,7 +66,8 @@ fn cases() -> Vec<Case> {
         .collect()
 }
 
-fn atom_text(atom: &Atom) -> String {
+fn atom_text<'a>(atom: impl Into<zetesis_core::catalog::AtomRef<'a>>) -> String {
+    let atom = atom.into();
     let predicate = atom.predicate().name();
     if atom.values().is_empty() {
         return predicate.to_owned();
@@ -74,13 +75,14 @@ fn atom_text(atom: &Atom) -> String {
     let values: Vec<_> = atom
         .values()
         .iter()
-        .map(|value| match value {
-            Value::Infimum => "#inf".to_owned(),
-            Value::Supremum => "#sup".to_owned(),
-            Value::Structured(value) => value.to_string(),
-            Value::Number(value) => value.to_string(),
-            Value::Symbol(value) => value.clone(),
-            Value::String(value) => serde_json::to_string(value).unwrap(),
+        .map(|value| match value.descriptor() {
+            zetesis_core::ValueNodeRef::Infimum => "#inf".to_owned(),
+            zetesis_core::ValueNodeRef::Supremum => "#sup".to_owned(),
+            zetesis_core::ValueNodeRef::Function { .. }
+            | zetesis_core::ValueNodeRef::Tuple { .. } => value.to_string(),
+            zetesis_core::ValueNodeRef::Number(value) => value.to_string(),
+            zetesis_core::ValueNodeRef::Symbol(value) => value.to_owned(),
+            zetesis_core::ValueNodeRef::String(value) => serde_json::to_string(value).unwrap(),
         })
         .collect();
     format!("{predicate}({})", values.join(","))
@@ -88,7 +90,7 @@ fn atom_text(atom: &Atom) -> String {
 
 fn record(input: &AdmittedFormula, model: &Interpretation) -> Record {
     assert!(model.theory().same_instance(input.theory()));
-    let model = Model::new(model.atoms().map(|index| input.atoms()[index].clone()));
+    let model = Model::from_positions(input.atom_catalog(), model.atoms()).unwrap();
     let evaluation = zetesis_objective::evaluate(
         input.objectives(),
         &model,

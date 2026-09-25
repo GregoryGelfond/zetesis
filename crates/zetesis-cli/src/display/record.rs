@@ -5,9 +5,17 @@
 //! pass. The second reserves the admitted length once and reproduces those bytes.
 //! No external sink is touched here. Time is two spelling/selection traversals;
 //! retained record storage is its admitted length, subject to allocator rounding.
+//! Compound spelling also uses fallible temporary frames proportional to depth;
+//! the record byte ceiling does not bound those frames.
 
-use std::io::{self, Write};
+use std::{
+    convert::Infallible,
+    fmt,
+    io::{self, Write},
+};
 
+use zetesis_core::ValueWriteError;
+use zetesis_core::catalog::{AtomRef, TermRef};
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_objective::Score;
 use zetesis_themelios::observation::ModelView;
@@ -120,7 +128,7 @@ impl Write for Length<'_> {
 
 fn write_atoms<'a>(
     output: &mut impl Write,
-    atoms: impl Iterator<Item = &'a zetesis_core::Atom>,
+    atoms: impl Iterator<Item = AtomRef<'a>>,
 ) -> io::Result<()> {
     for (index, atom) in atoms.enumerate() {
         if index != 0 {
@@ -136,14 +144,7 @@ fn write_atoms<'a>(
                 if position != 0 {
                     write!(output, ",")?;
                 }
-                match value {
-                    zetesis_core::Value::Infimum => write!(output, "#inf")?,
-                    zetesis_core::Value::Supremum => write!(output, "#sup")?,
-                    zetesis_core::Value::Number(number) => write!(output, "{number}")?,
-                    zetesis_core::Value::Symbol(symbol) => write!(output, "{symbol}")?,
-                    zetesis_core::Value::String(string) => write_string(output, string)?,
-                    zetesis_core::Value::Structured(value) => write!(output, "{value}")?,
-                }
+                write_term(output, value)?;
             }
             write!(output, ")")?;
         }
@@ -151,20 +152,36 @@ fn write_atoms<'a>(
     writeln!(output)
 }
 
-fn write_string(output: &mut impl Write, value: &str) -> io::Result<()> {
-    // The admitted clingo string dialect has exactly these three escapes.
-    // Other admitted characters, including literal tabs, retain their bytes;
-    // Rust Debug's \t and \u{...} spellings are not clingo string escapes.
-    write!(output, "\"")?;
-    for character in value.chars() {
-        match character {
-            '"' => write!(output, "\\\"")?,
-            '\\' => write!(output, "\\\\")?,
-            '\n' => write!(output, "\\n")?,
-            other => write!(output, "{other}")?,
+fn write_term(output: &mut impl Write, value: TermRef<'_>) -> io::Result<()> {
+    let mut sink = TermSink {
+        output,
+        failure: None,
+    };
+    // The record ceiling bounds emitted bytes, independently of traversal
+    // frames. Use the fallible spelling API so frame allocation failure remains
+    // an output error instead of becoming an unreported formatting failure.
+    match value.write_with(&mut sink, usize::MAX, |_| Ok::<_, Infallible>(())) {
+        Ok(()) => Ok(()),
+        Err(ValueWriteError::Storage(error)) => Err(io::Error::other(error)),
+        Err(ValueWriteError::Stopped(never)) => match never {},
+        Err(ValueWriteError::Writer(error)) => {
+            Err(sink.failure.unwrap_or_else(|| io::Error::other(error)))
         }
     }
-    write!(output, "\"")
+}
+
+struct TermSink<'a, W> {
+    output: &'a mut W,
+    failure: Option<io::Error>,
+}
+
+impl<W: Write> fmt::Write for TermSink<'_, W> {
+    fn write_str(&mut self, text: &str) -> fmt::Result {
+        self.output.write_all(text.as_bytes()).map_err(|error| {
+            self.failure = Some(error);
+            fmt::Error
+        })
+    }
 }
 
 #[cfg(test)]
@@ -184,7 +201,8 @@ mod value_output_tests {
             values
                 .into_iter()
                 .map(|value| Atom::new(Predicate::new("p", 1).unwrap(), vec![value]).unwrap()),
-        );
+        )
+        .unwrap();
         let mut output = Vec::new();
         write_atoms(&mut output, model.atoms().iter()).unwrap();
         assert_eq!(
@@ -226,7 +244,8 @@ mod value_output_tests {
             )
             .unwrap(),
             Atom::new(Predicate::new("a", 0).unwrap(), vec![]).unwrap(),
-        ]);
+        ])
+        .unwrap();
         let expected =
             "a -p(#inf,-7,\"quote\\\" backslash\\\\ newline\\n tab\tλ\",s,-f((2,)),#sup) z\n";
         let mut complete = Vec::new();

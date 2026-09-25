@@ -57,15 +57,30 @@ fn join_bindings_borrow_their_source_values() {
     let mut work = work(&cancellation, Limits::default().max_work);
     let mut visited = 0;
     super::visit(
-        &template,
+        (&template).into(),
         &relations,
         super::Gates::Unjudged,
         None,
+        super::QueryStorage {
+            retained_bytes: relations.retained_bytes(),
+            max_bytes: Limits::default().max_closure_bytes,
+        },
         &mut work,
-        |assignment, _| -> Result<(), Stop> {
+        |assignment, _, _| -> Result<(), Stop> {
             let bound = assignment[0].expect("the positive row binds its variable");
             let original = &rows[visited].values()[0];
-            assert!(std::ptr::eq(bound, original));
+            assert_eq!(bound, *original);
+            let (zetesis_core::ValueNodeRef::String(actual)
+            | zetesis_core::ValueNodeRef::Symbol(actual)) = bound.descriptor()
+            else {
+                unreachable!("typed text fixture")
+            };
+            let expected = match original {
+                Value::String(text) | Value::Symbol(text) => text.as_str(),
+                _ => unreachable!(),
+            };
+            assert!(std::ptr::eq(actual.as_ptr(), expected.as_ptr()));
+            assert_eq!(actual.len(), expected.len());
             visited += 1;
             Ok(())
         },
@@ -78,15 +93,14 @@ fn join_bindings_borrow_their_source_values() {
 fn gate_agreement_requires_every_derived_gate_atom() {
     let program = choices();
     let seed = Seed::new(&program, []).unwrap();
-    let closure = Model::new([atom("a")]);
+    let closure = Model::new([atom("a")]).unwrap();
     let cancellation = Cancellation::default();
-    // Two gate predicates and one derived gate row: three units.
     assert!(
         !gate_agreement(
             &program,
             seed.view(),
             closure.atoms(),
-            &mut work(&cancellation, 3)
+            &mut work(&cancellation, u64::MAX)
         )
         .unwrap()
     );
@@ -97,13 +111,12 @@ fn gate_agreement_requires_every_seed_atom() {
     let program = choices();
     let seed = Seed::new(&program, [atom("a")]).unwrap();
     let cancellation = Cancellation::default();
-    // Two gate predicates and one seed atom left unmatched: three units.
     assert!(
         !gate_agreement(
             &program,
             seed.view(),
             Model::default().atoms(),
-            &mut work(&cancellation, 3)
+            &mut work(&cancellation, u64::MAX)
         )
         .unwrap()
     );
@@ -123,7 +136,7 @@ fn gate_agreement_ignores_positive_only_atoms() {
     )
     .unwrap();
     let seed = Seed::new(&program, []).unwrap();
-    let closure = Model::new([atom("a")]);
+    let closure = Model::new([atom("a")]).unwrap();
     let cancellation = Cancellation::default();
     assert!(
         gate_agreement(
@@ -140,7 +153,7 @@ fn gate_agreement_ignores_positive_only_atoms() {
 fn gate_mismatch_does_not_truncate_charged_scans() {
     let program = choices();
     let seed = Seed::new(&program, [atom("a")]).unwrap();
-    let closure = Model::new([atom("b")]);
+    let closure = Model::new([atom("b")]).unwrap();
     let cancellation = Cancellation::default();
     assert_eq!(
         gate_agreement(
@@ -151,11 +164,23 @@ fn gate_mismatch_does_not_truncate_charged_scans() {
         ),
         Err(Stop::WorkLimit)
     );
-    // One unit per gate predicate (a, b), one for the closure's row b, and
-    // one for the seed's a, which the walk passes without a match.
-    let mut exact = work(&cancellation, 4);
+    // A mismatch is an accumulated result, not permission to skip the
+    // remaining predicate, row and seed comparisons. Every admitted boundary
+    // before the complete scan must still refuse when it is the last permit.
+    let mut complete = work(&cancellation, u64::MAX);
+    assert!(!gate_agreement(&program, seed.view(), closure.atoms(), &mut complete).unwrap());
+    let needed = complete.statistics.work;
+    for limit in 0..needed {
+        let mut bounded = work(&cancellation, limit);
+        assert_eq!(
+            gate_agreement(&program, seed.view(), closure.atoms(), &mut bounded),
+            Err(Stop::WorkLimit)
+        );
+        assert_eq!(bounded.statistics.work, limit);
+    }
+    let mut exact = work(&cancellation, needed);
     assert!(!gate_agreement(&program, seed.view(), closure.atoms(), &mut exact).unwrap());
-    assert_eq!(exact.statistics.work, 4);
+    assert_eq!(exact.statistics.work, needed);
 }
 
 fn chain(constraint: Template) -> Program {
@@ -202,7 +227,7 @@ fn violated_constraints_preserve_complete_closure() {
     let mut work = work(&cancellation, Limits::default().max_work);
     let completed = least_closure(&program, seed.view(), &mut work).unwrap();
     assert!(completed.constraint_violated);
-    assert_eq!(completed.atoms, Model::new([atom("a"), atom("b")]));
+    assert_eq!(completed.atoms, Model::new([atom("a"), atom("b")]).unwrap());
     assert_eq!(work.statistics.rounds, 3);
 }
 
@@ -251,7 +276,8 @@ fn capacity_program() -> (Program, Model) {
             .clone()
             .into_iter()
             .map(move |value| Atom::new(predicate.clone(), vec![value]).unwrap())
-    }));
+    }))
+    .unwrap();
     (
         Program::new(templates, AdmissionLimits::default()).unwrap(),
         expected,
@@ -334,18 +360,23 @@ fn tuple_probes_include_whole_row_rejections() {
     let mut work = work(&cancellation, Limits::default().max_work);
     let mut bound = Vec::new();
     super::visit(
-        &template,
+        (&template).into(),
         &relations,
         super::Gates::Unjudged,
         None,
+        super::QueryStorage {
+            retained_bytes: relations.retained_bytes(),
+            max_bytes: Limits::default().max_closure_bytes,
+        },
         &mut work,
-        |assignment, _| -> Result<(), Stop> {
-            bound.push(assignment[0].unwrap().clone());
+        |assignment, _, _| -> Result<(), Stop> {
+            bound.push(assignment[0].unwrap());
             Ok(())
         },
     )
     .unwrap();
-    assert_eq!(bound, [Value::Number(2)]);
+    assert_eq!(bound[0], Value::Number(2));
+    assert_eq!(bound.len(), 1);
     assert_eq!(work.statistics.tuple_probes, 2);
     assert_eq!(work.statistics.bindings, 1);
     assert!(work.statistics.tuple_probes <= work.statistics.work);
@@ -371,12 +402,16 @@ fn a_join_that_judges_no_gates_charges_no_gate_work() {
         let mut work = work(&cancellation, Limits::default().max_work);
         let mut bindings = 0;
         super::visit(
-            &template,
+            (&template).into(),
             &relations,
             gates,
             None,
+            super::QueryStorage {
+                retained_bytes: relations.retained_bytes(),
+                max_bytes: Limits::default().max_closure_bytes,
+            },
             &mut work,
-            |_, _| -> Result<(), Stop> {
+            |_, _, _| -> Result<(), Stop> {
                 bindings += 1;
                 Ok(())
             },

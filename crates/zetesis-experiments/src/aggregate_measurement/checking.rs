@@ -1,6 +1,6 @@
 use super::{Activity, Error, Outcome, Value, reserve, view::Evaluation};
 use rayon::prelude::*;
-use zetesis_core::Value as Term;
+use zetesis_core::ValueNodeRef;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::native_aggregate as native;
 use zetesis_wgpu::{AggregateGpuEvaluation, AggregateGpuReduction, AggregateGpuValue};
@@ -39,7 +39,7 @@ pub(super) fn cpu(
                 value.statistics().work
             }
             Err(error) => {
-                failure.get_or_insert(*error);
+                failure.get_or_insert_with(|| error.clone());
                 error.statistics().work
             }
         };
@@ -70,9 +70,11 @@ fn native_outcome(value: native::Reduction<'_>) -> Result<Outcome, Error> {
 fn native_evaluation(value: native::Evaluation<'_>) -> Result<Evaluation, Error> {
     let measure = match value.value() {
         native::Value::Integer(value) => Value::Integer(value),
-        native::Value::Term(Term::Infimum) => Value::Infimum,
-        native::Value::Term(Term::Supremum) => Value::Supremum,
-        native::Value::Term(_) => return Err(Error::Parity),
+        native::Value::Term(term) => match term.descriptor() {
+            ValueNodeRef::Infimum => Value::Infimum,
+            ValueNodeRef::Supremum => Value::Supremum,
+            _ => return Err(Error::Parity),
+        },
     };
     Ok(Evaluation {
         value: measure,

@@ -3,16 +3,19 @@
 #[path = "support/stable_models.rs"]
 mod stable_models;
 
+use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
 use stable_models::stable;
+use themelios_base::span::Location;
 use zetesis_core::{Atom, Predicate, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, models, models_reduct};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, FormulaResource,
-    admit_formula,
+    GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork, admit_formula,
+    admit_formula_with_grounding_observer,
 };
 
 fn input(source: &str) -> AdmittedFormula {
@@ -27,7 +30,7 @@ fn input(source: &str) -> AdmittedFormula {
 
 fn interpretation(
     input: &AdmittedFormula,
-    indices: &BTreeMap<Atom, usize>,
+    indices: &BTreeMap<zetesis_core::catalog::AtomRef<'_>, usize>,
     mask: usize,
 ) -> Interpretation {
     Interpretation::new(
@@ -36,7 +39,7 @@ fn interpretation(
             .atoms()
             .iter()
             .enumerate()
-            .filter_map(|(index, atom)| (mask & (1 << indices[atom]) != 0).then_some(index)),
+            .filter_map(|(index, atom)| (mask & (1 << indices[&atom]) != 0).then_some(index)),
     )
     .expect("same-theory atom indices")
 }
@@ -44,8 +47,8 @@ fn interpretation(
 fn equivalent(left: &str, right: &str) {
     let left = input(left);
     let right = input(right);
-    let universe: BTreeSet<_> = left.atoms().iter().cloned().collect();
-    assert_eq!(universe, right.atoms().iter().cloned().collect());
+    let universe: BTreeSet<_> = left.atoms().iter().collect();
+    assert_eq!(universe, right.atoms().iter().collect());
     assert!(universe.len() <= 6);
     let indices = universe
         .into_iter()
@@ -206,30 +209,78 @@ fn a_false_component_filter_excludes_the_substitution() {
     assert_eq!(stable(&input(source)), expected);
 }
 
+const CARTESIAN_SOURCE: &str = "a(1..40). b(1..40). h:-a(X),b(Y).";
+
+#[derive(Default)]
+struct InstantiationRows(Cell<u64>);
+
+impl GroundingObserver for InstantiationRows {
+    fn enter(&self) {}
+    fn exit(&self) {}
+
+    fn details_enabled(&self) -> bool {
+        true
+    }
+
+    fn phase_exit(
+        &self,
+        phase: GroundingPhase,
+        _: Option<Location>,
+        outcome: GroundingOutcome,
+        work: GroundingWork,
+    ) {
+        if phase == GroundingPhase::RuleInstantiation {
+            assert_eq!(outcome, GroundingOutcome::Completed);
+            self.0.set(
+                self.0
+                    .get()
+                    .checked_add(work.join_rows.expect("finite component row visits"))
+                    .unwrap(),
+            );
+        }
+    }
+}
+
 #[test]
-fn factored_cartesian_bodies_fit_existing_root_work_and_provenance_limits() {
-    let source = "a(1..40). b(1..40). h:-a(X),b(Y).";
+fn factored_cartesian_bodies_visit_only_component_rows() {
+    let visits = InstantiationRows::default();
     let mut limits = FormulaLimits::default();
     limits.theory.max_roots = 200;
-    limits.max_work = 25_000;
-    let admitted = admit_formula(
-        source.to_owned(),
+    let admitted = admit_formula_with_grounding_observer(
+        CARTESIAN_SOURCE.to_owned(),
         AdmissionOptions::default(),
         ExpansionLimits::default(),
         limits,
+        Some(&visits),
     )
     .unwrap();
+    // Canonical compilation and final publication also consume global work.
+    // Count the actual factorized route: two 40-row components, rather than
+    // the 40 + 40*40 row visits of a complete Cartesian join. The compact root
+    // ceiling independently prevents publishing that Cartesian formula family.
+    assert_eq!(visits.0.get(), 40 + 40);
     assert_eq!(stable(&admitted), stable(&input("a(1..40).b(1..40).h.")));
+}
+
+#[test]
+fn a_factored_root_retains_its_source_location() {
+    let source = CARTESIAN_SOURCE;
+    let admitted = input(source);
     assert!(admitted.formula_origins().iter().flatten().any(|location| {
         let span = location.span;
         &source[usize::try_from(span.start().get()).unwrap()
             ..usize::try_from(span.end().get()).unwrap()]
             == "h:-a(X),b(Y)."
     }));
+}
+
+#[test]
+fn a_factored_source_respects_the_zero_root_ceiling() {
+    let mut limits = FormulaLimits::default();
     limits.theory.max_roots = 0;
     assert!(matches!(
         admit_formula(
-            source.to_owned(),
+            CARTESIAN_SOURCE.to_owned(),
             AdmissionOptions::default(),
             ExpansionLimits::default(),
             limits

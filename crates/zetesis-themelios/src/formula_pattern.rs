@@ -5,16 +5,17 @@
 //! nor introduce named slots. Plans and matching traverse flat preorder storage.
 
 use themelios_base::span::Location;
+use zetesis_core::catalog::TermRef;
 use zetesis_core::{
-    AtomPattern, ConstructionError, Sign, Term, Value, ValueError, ValueLimits, ValueNode,
+    BindingView, ConstructionError, PatternRef, TemplateTerm, ValueError, ValueNodeRef,
 };
 
 use crate::expansion::Budget;
-use crate::formula_support::{Counters, copy};
-use crate::{AdmissionFailure, ExpansionResource, FormulaFailure, FormulaLimits};
+use crate::formula_support::{Computation, GroundingWork, components};
+use crate::{AdmissionFailure, ExpansionResource, FormulaFailure};
 
 pub(crate) struct PatternAtom {
-    pub atom: AtomPattern,
+    pub atom: components::Pattern,
     pub arguments: Vec<ArgumentPattern>,
 }
 pub(crate) struct ArgumentPattern {
@@ -22,34 +23,45 @@ pub(crate) struct ArgumentPattern {
     pub nodes: Vec<PatternNode>,
 }
 pub(crate) enum PatternNode {
-    Tuple(usize),
-    Function {
-        name: String,
-        sign: Sign,
-        arity: usize,
-    },
-    Constant(Value),
+    Constructor(components::Constructor),
+    Constant(components::Scalar),
     Slot(usize),
     Wildcard,
 }
+
+/// A retained plan paired with its source's resolved flat atom.
+#[derive(Clone, Copy)]
+pub(crate) struct Pattern<'a> {
+    source: &'a PatternAtom,
+    atom: PatternRef<'a>,
+}
 impl PatternAtom {
-    pub(super) fn node_count(&self) -> usize {
+    pub(crate) fn bind<'a>(&'a self, atom: PatternRef<'a>) -> Pattern<'a> {
+        Pattern { source: self, atom }
+    }
+}
+impl<'a> Pattern<'a> {
+    pub(crate) fn atom(self) -> PatternRef<'a> {
+        self.atom
+    }
+    pub(crate) fn node_count(self) -> usize {
         self.atom.terms().len()
             + self
+                .source
                 .arguments
                 .iter()
                 .map(|argument| argument.nodes.len())
                 .sum::<usize>()
     }
-    pub(super) fn slots(&self) -> impl Iterator<Item = usize> + '_ {
+    pub(crate) fn slots(self) -> impl Iterator<Item = usize> + 'a {
         self.atom
             .terms()
             .iter()
             .filter_map(|term| match term {
-                Term::Variable(slot) => Some(*slot),
-                Term::Constant(_) => None,
+                TemplateTerm::Variable(slot) => Some(slot),
+                TemplateTerm::Constant(_) => None,
             })
-            .chain(self.arguments.iter().flat_map(|argument| {
+            .chain(self.source.arguments.iter().flat_map(|argument| {
                 argument.nodes.iter().filter_map(|node| {
                     if let PatternNode::Slot(slot) = node {
                         Some(*slot)
@@ -61,228 +73,140 @@ impl PatternAtom {
     }
 
     /// No incoming slot changes unless the caller commits the complete delta.
-    pub(super) fn matches(
-        &self,
-        atom: zetesis_core::relation::Row<'_, '_>,
-        values: &[Option<Value>],
+    /// Captures borrow the support prefix; no whole value or subtree is copied.
+    pub(crate) fn matches<'source>(
+        self,
+        atom: zetesis_core::relation::Row<'_, 'source>,
+        values: BindingView<'_>,
+        computation: &Computation<'_, '_>,
         context: &mut MatchContext<'_>,
-    ) -> Result<Option<Vec<(usize, Value)>>, FormulaFailure> {
+    ) -> Result<Option<Vec<(usize, TermRef<'source>)>>, FormulaFailure> {
         context.work()?;
-        if self.atom.predicate() != atom.predicate() {
+        if atom
+            .predicate()
+            .compare_ref_with(self.atom.predicate(), || context.work())?
+            .is_ne()
+        {
             return Ok(None);
         }
         context.charge(self.node_count() as u128)?;
         let slots = self.slots().count();
         let mut delta = Vec::new();
-        reserve(&mut delta, slots, context.budget, context.location)?;
+        reserve(&mut delta, slots, context.budget, context.work.location)?;
         for (column, term) in self.atom.terms().iter().enumerate() {
             let value = atom.value(column).expect("checked pattern arity");
-            context.value_work(value)?;
             let agrees = match term {
-                Term::Constant(expected) => expected == value,
-                Term::Variable(slot) => {
-                    bind(*slot, Borrowed::Whole(value), values, &mut delta, context)?
-                }
+                TemplateTerm::Constant(expected) => context.equal(value, expected)?,
+                TemplateTerm::Variable(slot) => bind(slot, value, values, &mut delta, context)?,
             };
             if !agrees {
                 return Ok(None);
             }
         }
-        for argument in &self.arguments {
-            let Value::Structured(value) = atom
+        for argument in &self.source.arguments {
+            let value = atom
                 .value(argument.position)
-                .expect("checked argument position")
-            else {
-                return Ok(None);
-            };
+                .expect("checked argument position");
             let mut offset = 0;
             for node in &argument.nodes {
-                context.work()?;
-                let Some(actual) = value.nodes().get(offset) else {
+                let Some(actual) = value.subterm_with(offset, || context.work())? else {
                     return Ok(None);
                 };
-                // Shape nodes descend into their children. A leaf consumes one
-                // complete actual subtree. Equal constructor arities preserve
-                // this preorder alignment; validated values bound every offset.
-                // Captured-value work above already charges compared name bytes.
-                if let Some(agrees) = node.shape_matches(actual) {
-                    if !agrees {
+                // Equal constructor arities preserve preorder alignment. A
+                // capture consumes its complete subtree, retaining its identity.
+                context.work()?;
+                let descriptor = actual.descriptor();
+                context.charge(descriptor_bytes(descriptor))?;
+                if let PatternNode::Constructor(constructor) = node {
+                    let expected = computation.static_constructor(
+                        *constructor,
+                        context.work.limits,
+                        context.work.counters,
+                        context.work.location,
+                    )?;
+                    if expected != descriptor {
                         return Ok(None);
                     }
                     offset += 1;
                     continue;
                 }
-                let end = subtree_end(value.nodes(), offset, context)?;
-                let subtree = Borrowed::Nodes(&value.nodes()[offset..end]);
                 let agrees = match node {
-                    PatternNode::Slot(slot) => bind(*slot, subtree, values, &mut delta, context)?,
-                    PatternNode::Constant(expected) => subtree.equals(expected),
-                    PatternNode::Wildcard => true,
-                    PatternNode::Tuple(_) | PatternNode::Function { .. } => {
-                        unreachable!("shape consumed above")
+                    PatternNode::Slot(slot) => bind(*slot, actual, values, &mut delta, context)?,
+                    PatternNode::Constant(expected) => {
+                        let expected = computation.static_scalar(
+                            *expected,
+                            context.work.limits,
+                            context.work.counters,
+                            context.work.location,
+                        )?;
+                        context.equal(actual, expected)?
                     }
+                    PatternNode::Wildcard => true,
+                    PatternNode::Constructor(_) => unreachable!("shape consumed above"),
                 };
                 if !agrees {
                     return Ok(None);
                 }
-                offset = end;
+                context.work()?;
+                offset += actual.expanded_nodes();
             }
-            debug_assert_eq!(offset, value.nodes().len());
+            debug_assert_eq!(offset, value.expanded_nodes());
         }
         Ok(Some(delta))
     }
 }
 
-impl PatternNode {
-    /// None denotes a value leaf, whose complete subtree must be consumed.
-    fn shape_matches(&self, actual: &ValueNode) -> Option<bool> {
-        match self {
-            Self::Tuple(arity) => {
-                Some(matches!(actual, ValueNode::Tuple { arity: found } if found == arity))
-            }
-            Self::Function { name, sign, arity } => Some(matches!(
-                actual,
-                ValueNode::Function { name: found, sign: found_sign, arity: found_arity }
-                    if name == found && sign == found_sign && arity == found_arity
-            )),
-            Self::Constant(_) | Self::Slot(_) | Self::Wildcard => None,
-        }
-    }
-}
-
 pub(super) struct MatchContext<'a> {
-    pub limits: &'a FormulaLimits,
+    pub work: GroundingWork<'a>,
     pub budget: &'a mut Budget,
-    pub counters: &'a mut Counters,
-    pub location: Location,
 }
 impl MatchContext<'_> {
     fn work(&mut self) -> Result<(), FormulaFailure> {
-        self.counters.work(self.limits, self.location)
+        self.work
+            .counters
+            .work(self.work.limits, self.work.location)
     }
     /// Charge `amount` units at once, so a refusal states that requirement.
     fn charge(&mut self, amount: u128) -> Result<(), FormulaFailure> {
-        self.counters
-            .charge_work(amount, self.limits, self.location)
+        self.work
+            .counters
+            .charge_work(amount, self.work.limits, self.work.location)
     }
-    fn value_work(&mut self, value: &Value) -> Result<(), FormulaFailure> {
-        self.charge(1 + crate::formula_ir::value_bytes(value))
+    fn equal(&mut self, left: TermRef<'_>, right: TermRef<'_>) -> Result<bool, FormulaFailure> {
+        left.compare_ref_with(right, || self.work())
+            .map(std::cmp::Ordering::is_eq)
     }
 }
 
-fn bind(
+fn bind<'source>(
     slot: usize,
-    value: Borrowed<'_>,
-    values: &[Option<Value>],
-    delta: &mut Vec<(usize, Value)>,
+    value: TermRef<'source>,
+    values: BindingView<'_>,
+    delta: &mut Vec<(usize, TermRef<'source>)>,
     context: &mut MatchContext<'_>,
 ) -> Result<bool, FormulaFailure> {
-    if let Some(bound) = &values[slot] {
-        return Ok(value.equals(bound));
+    context.work()?;
+    if let Some(bound) = values.get(slot) {
+        return context.equal(value, bound);
     }
-    // The delta is deliberately private until every argument agrees. Repeated
-    // names in this row therefore see staged bindings without changing the join.
+    // Repeated names see staged bindings without changing the incoming frame.
     for (target, bound) in delta.iter() {
         context.work()?;
         if *target == slot {
-            return Ok(value.equals(bound));
+            return context.equal(value, *bound);
         }
     }
-    let owned = match value {
-        Borrowed::Whole(value) => copy(value, context.budget, context.location)?,
-        Borrowed::Nodes(nodes) => extract(nodes, context)?,
-    };
-    delta.push((slot, owned));
+    delta.push((slot, value));
     Ok(true)
 }
 
-#[derive(Clone, Copy)]
-enum Borrowed<'a> {
-    Whole(&'a Value),
-    Nodes(&'a [ValueNode]),
-}
-impl Borrowed<'_> {
-    fn equals(self, value: &Value) -> bool {
-        match self {
-            Self::Whole(actual) => actual == value,
-            Self::Nodes(nodes) => match (nodes, value) {
-                (_, Value::Structured(value)) => nodes == value.nodes(),
-                ([ValueNode::Infimum], Value::Infimum)
-                | ([ValueNode::Supremum], Value::Supremum) => true,
-                ([ValueNode::Number(a)], Value::Number(b)) => a == b,
-                ([ValueNode::String(a)], Value::String(b))
-                | ([ValueNode::Symbol(a)], Value::Symbol(b)) => a == b,
-                _ => false,
-            },
-        }
-    }
-}
-
-fn subtree_end(
-    nodes: &[ValueNode],
-    start: usize,
-    context: &mut MatchContext<'_>,
-) -> Result<usize, FormulaFailure> {
-    let mut remaining = 1;
-    let mut end = start;
-    while remaining != 0 {
-        let node = &nodes[end];
-        context.charge(1 + text_bytes(node) as u128)?;
-        remaining -= 1;
-        remaining += match node {
-            ValueNode::Function { arity, .. } | ValueNode::Tuple { arity } => *arity,
-            _ => 0,
-        };
-        end += 1;
-    }
-    Ok(end)
-}
-fn text_bytes(node: &ValueNode) -> usize {
+fn descriptor_bytes(node: ValueNodeRef<'_>) -> u128 {
     match node {
-        ValueNode::String(text)
-        | ValueNode::Symbol(text)
-        | ValueNode::Function { name: text, .. } => text.len(),
+        ValueNodeRef::String(text)
+        | ValueNodeRef::Symbol(text)
+        | ValueNodeRef::Function { name: text, .. } => text.len() as u128,
         _ => 0,
     }
-}
-fn extract(nodes: &[ValueNode], context: &mut MatchContext<'_>) -> Result<Value, FormulaFailure> {
-    // Selected construction payload: node cells, cloned text, canonical spelling
-    // and validation/render frames. The 16-byte spelling allowance is amortized
-    // over the tree: total child arities equal node count minus one. Twice the
-    // text covers the worst spelling escape expansion.
-    // Source nodes and allocator overhead are not newly owned payload here.
-    const SPELLING_BYTES_PER_NODE_ALLOWANCE: usize = 16;
-    const TEXT_WITH_SPELLING_MULTIPLIER: u128 = 3;
-    let cell = std::mem::size_of::<ValueNode>()
-        + std::mem::size_of::<usize>()
-        + std::mem::size_of::<(usize, bool, bool)>()
-        + SPELLING_BYTES_PER_NODE_ALLOWANCE;
-    let bytes = nodes.len() as u128 * cell as u128
-        + TEXT_WITH_SPELLING_MULTIPLIER
-            * nodes
-                .iter()
-                .map(|node| text_bytes(node) as u128)
-                .sum::<u128>();
-    context
-        .budget
-        .charge(ExpansionResource::ScalarBytes, bytes, context.location)?;
-    context.budget.charge(
-        ExpansionResource::Values,
-        nodes.len() as u128,
-        context.location,
-    )?;
-    let mut owned = Vec::new();
-    owned
-        .try_reserve_exact(nodes.len())
-        .map_err(|_| allocation(context.location))?;
-    owned.extend_from_slice(nodes);
-    Value::from_nodes(owned, ValueLimits::default()).map_err(|error| {
-        AdmissionFailure::Construction {
-            error: ConstructionError::Value(error),
-            location: context.location,
-        }
-        .into()
-    })
 }
 
 /// Reserve selected owned cells before growing a buffer; allocator overhead is excluded.
@@ -332,9 +256,12 @@ fn allocation(location: Location) -> FormulaFailure {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::FormulaLimits;
+    use crate::formula_support::Counters;
+    use crate::formula_support::testing::Fixture;
     use crate::{ExpansionFailure, ExpansionLimits, FormulaResource};
     use themelios_base::span::{ByteOffset, Span};
-    use zetesis_core::{Atom, Predicate};
+    use zetesis_core::{Atom, Predicate, Sign, Value, ValueLimits, ValueNode};
 
     fn location() -> Location {
         Location {
@@ -342,22 +269,11 @@ mod tests {
             span: Span::new(ByteOffset::new(0), ByteOffset::new(1)).unwrap(),
         }
     }
-    fn fixture() -> (PatternAtom, Atom, Vec<Option<Value>>) {
+    fn fixture(root: ValueNodeRef<'_>) -> (Fixture, PatternAtom, Predicate) {
         let predicate = Predicate::new("q", 1).unwrap();
-        let pattern = PatternAtom {
-            atom: AtomPattern::new(predicate.clone(), vec![Term::Variable(0)]).unwrap(),
-            arguments: vec![ArgumentPattern {
-                position: 0,
-                nodes: vec![
-                    PatternNode::Tuple(2),
-                    PatternNode::Slot(1),
-                    PatternNode::Constant(Value::Number(2)),
-                ],
-            }],
-        };
         let value = Value::from_nodes(
             vec![
-                ValueNode::Tuple { arity: 2 },
+                root.into_owned(),
                 ValueNode::Tuple { arity: 1 },
                 ValueNode::Symbol("a".into()),
                 ValueNode::Number(2),
@@ -365,231 +281,257 @@ mod tests {
             ValueLimits::default(),
         )
         .unwrap();
+        let atom = Atom::new(predicate.clone(), vec![value]).unwrap();
+        let mut fixture = Fixture::from_atoms([atom], location());
+        let scalar = fixture.scalar(&Value::Number(2), location());
+        let shape = fixture.constructor(root, location());
+        let atom = fixture.admit(location(), |source, counters| {
+            let limits = FormulaLimits::default();
+            let predicate = source
+                .predicate((&predicate).into(), &limits, counters, location())
+                .unwrap();
+            source
+                .pattern(
+                    predicate,
+                    &[components::Term::Variable(0)],
+                    &limits,
+                    counters,
+                    location(),
+                )
+                .unwrap()
+        });
         (
-            pattern,
-            Atom::new(predicate, vec![value]).unwrap(),
-            vec![None, None],
+            fixture,
+            PatternAtom {
+                atom,
+                arguments: vec![ArgumentPattern {
+                    position: 0,
+                    nodes: vec![
+                        PatternNode::Constructor(shape),
+                        PatternNode::Slot(1),
+                        PatternNode::Constant(scalar),
+                    ],
+                }],
+            },
+            predicate,
         )
     }
+
     #[test]
     fn a_refused_charge_states_the_whole_requirement() {
-        // Matching charges one unit on entry and then the pattern's node count
-        // at once. A ceiling of one refuses the second charge, and the refusal
-        // names what that charge required, not the ceiling plus one.
-        let (pattern, atom, incoming) = fixture();
-        let relation = zetesis_core::relation::Relation::from_atoms(
-            atom.predicate(),
-            std::slice::from_ref(&atom),
-            zetesis_core::relation::Limits::default(),
-        )
-        .unwrap();
+        // A batched pattern charge reports the whole requested amount, even
+        // when only its first unit would exceed the ceiling.
         let mut budget = Budget::new(ExpansionLimits::default(), 100);
         let mut counters = Counters::default();
-        let error = pattern
-            .matches(
-                relation.row(0).unwrap(),
-                &incoming,
-                &mut MatchContext {
-                    limits: &FormulaLimits {
-                        max_work: 1,
-                        ..FormulaLimits::default()
-                    },
-                    budget: &mut budget,
-                    counters: &mut counters,
-                    location: location(),
-                },
-            )
-            .unwrap_err();
-        let required = 1 + pattern.node_count() as u128;
-        assert!(required > 2);
+        let limits = FormulaLimits {
+            max_work: 1,
+            ..FormulaLimits::default()
+        };
+        let mut context = MatchContext {
+            work: GroundingWork::new(&limits, &mut counters, location()),
+            budget: &mut budget,
+        };
+        context.work().unwrap();
+        let error = context.charge(4).unwrap_err();
         assert!(matches!(
             error,
             FormulaFailure::Limit {
                 resource: FormulaResource::Work,
-                observed,
+                observed: 5,
                 limit: 1,
                 ..
-            } if observed == required
+            }
         ));
     }
     #[test]
     fn work_refusals_discard_the_entire_delta() {
-        let (pattern, atom, incoming) = fixture();
-        assert_work_boundary(&pattern, &atom, &incoming);
+        assert_work_boundary(ValueNodeRef::Tuple { arity: 2 });
     }
     #[test]
     fn function_matching_obeys_the_work_ceiling() {
-        let (mut pattern, atom, incoming) = fixture();
-        let name = "constructor_name".to_owned();
-        pattern.arguments[0].nodes[0] = PatternNode::Function {
-            name: name.clone(),
+        assert_work_boundary(ValueNodeRef::Function {
+            name: "constructor_name",
             sign: Sign::Negative,
             arity: 2,
-        };
-        let Value::Structured(original) = &atom.values()[0] else {
-            panic!("structured fixture");
-        };
-        let mut nodes = original.nodes().to_vec();
-        nodes[0] = ValueNode::Function {
-            name,
-            sign: Sign::Negative,
-            arity: 2,
-        };
-        let atom = Atom::new(
-            atom.predicate().clone(),
-            vec![Value::from_nodes(nodes, ValueLimits::default()).unwrap()],
-        )
-        .unwrap();
-        assert_work_boundary(&pattern, &atom, &incoming);
+        });
     }
-    fn assert_work_boundary(pattern: &PatternAtom, atom: &Atom, incoming: &[Option<Value>]) {
-        let relation = zetesis_core::relation::Relation::from_atoms(
-            atom.predicate(),
-            std::slice::from_ref(atom),
-            zetesis_core::relation::Limits::default(),
-        )
-        .unwrap();
-        let atom = relation.row(0).unwrap();
-        let mut budget = Budget::new(ExpansionLimits::default(), 100);
-        let mut counters = Counters::default();
-        let delta = pattern
-            .matches(
-                atom,
-                incoming,
-                &mut MatchContext {
-                    limits: &FormulaLimits::default(),
-                    budget: &mut budget,
-                    counters: &mut counters,
-                    location: location(),
-                },
-            )
-            .unwrap()
-            .unwrap();
-        assert_eq!(delta.len(), 2);
-        let exact = counters.work;
-        for limit in 0..exact {
+    fn assert_work_boundary(root: ValueNodeRef<'_>) {
+        let (mut fixture, source, predicate) = fixture(root);
+        fixture.with(location(), |support, computation, preparation| {
+            let flat = computation
+                .static_pattern(
+                    source.atom,
+                    &FormulaLimits::default(),
+                    preparation,
+                    location(),
+                )
+                .unwrap();
+            let pattern = source.bind(flat);
+            let atom = support.rows(&predicate).next().unwrap();
+            let incoming: [Option<TermRef<'_>>; 2] = [None, None];
             let mut budget = Budget::new(ExpansionLimits::default(), 100);
             let mut counters = Counters::default();
-            let error = pattern
+            let delta = pattern
                 .matches(
                     atom,
-                    incoming,
+                    incoming.as_slice().into(),
+                    computation,
                     &mut MatchContext {
-                        limits: &FormulaLimits {
-                            max_work: limit,
-                            ..FormulaLimits::default()
-                        },
+                        work: GroundingWork::new(
+                            &FormulaLimits::default(),
+                            &mut counters,
+                            location(),
+                        ),
                         budget: &mut budget,
-                        counters: &mut counters,
-                        location: location(),
                     },
                 )
-                .unwrap_err();
-            assert!(matches!(
-                error,
-                FormulaFailure::Limit {
-                    resource: FormulaResource::Work,
-                    ..
-                }
-            ));
-            assert_eq!(incoming, vec![None, None]);
-        }
-        let mut budget = Budget::new(ExpansionLimits::default(), 100);
-        let mut counters = Counters::default();
-        assert!(
-            pattern
-                .matches(
-                    atom,
-                    incoming,
-                    &mut MatchContext {
-                        limits: &FormulaLimits {
-                            max_work: exact,
-                            ..FormulaLimits::default()
-                        },
-                        budget: &mut budget,
-                        counters: &mut counters,
-                        location: location()
-                    }
-                )
                 .unwrap()
-                .is_some()
-        );
+                .unwrap();
+            assert_eq!(delta.len(), 2);
+            let exact = counters.accounting.work;
+            for limit in 0..exact {
+                let mut budget = Budget::new(ExpansionLimits::default(), 100);
+                let mut counters = Counters::default();
+                let error = pattern
+                    .matches(
+                        atom,
+                        incoming.as_slice().into(),
+                        computation,
+                        &mut MatchContext {
+                            work: GroundingWork::new(
+                                &FormulaLimits {
+                                    max_work: limit,
+                                    ..FormulaLimits::default()
+                                },
+                                &mut counters,
+                                location(),
+                            ),
+                            budget: &mut budget,
+                        },
+                    )
+                    .unwrap_err();
+                assert!(matches!(
+                    error,
+                    FormulaFailure::Limit {
+                        resource: FormulaResource::Work,
+                        ..
+                    }
+                ));
+                assert_eq!(incoming, [None, None]);
+            }
+            let mut budget = Budget::new(ExpansionLimits::default(), 100);
+            let mut counters = Counters::default();
+            assert!(
+                pattern
+                    .matches(
+                        atom,
+                        incoming.as_slice().into(),
+                        computation,
+                        &mut MatchContext {
+                            work: GroundingWork::new(
+                                &FormulaLimits {
+                                    max_work: exact,
+                                    ..FormulaLimits::default()
+                                },
+                                &mut counters,
+                                location()
+                            ),
+                            budget: &mut budget
+                        }
+                    )
+                    .unwrap()
+                    .is_some()
+            );
+        });
     }
     #[test]
-    fn delta_storage_is_admitted_before_a_value_is_copied() {
-        let (pattern, atom, incoming) = fixture();
-        let relation = zetesis_core::relation::Relation::from_atoms(
-            atom.predicate(),
-            std::slice::from_ref(&atom),
-            zetesis_core::relation::Limits::default(),
-        )
-        .unwrap();
-        let mut budget = Budget::new(
-            ExpansionLimits {
-                max_scalar_bytes: 0,
-                ..ExpansionLimits::default()
-            },
-            100,
-        );
-        let mut counters = Counters::default();
-        let error = pattern
-            .matches(
-                relation.row(0).unwrap(),
-                &incoming,
-                &mut MatchContext {
-                    limits: &FormulaLimits::default(),
-                    budget: &mut budget,
-                    counters: &mut counters,
-                    location: location(),
-                },
-            )
-            .unwrap_err();
-        assert!(
-            matches!(error,FormulaFailure::Expansion(ExpansionFailure::Limit {resource:ExpansionResource::ScalarBytes,observed,..}) if observed==2*std::mem::size_of::<(usize,Value)>() as u128)
-        );
-        assert_eq!(incoming, vec![None, None]);
-    }
-    #[test]
-    fn extraction_obeys_its_inclusive_construction_payload_ceiling() {
-        let nodes = [ValueNode::Tuple { arity: 1 }, ValueNode::Symbol("a".into())];
-        let exact = 2
-            * (std::mem::size_of::<ValueNode>()
-                + std::mem::size_of::<usize>()
-                + std::mem::size_of::<(usize, bool, bool)>()
-                + 16)
-            + 3;
-        for limit in [exact - 1, exact] {
+    fn capture_storage_is_admitted_before_matching() {
+        let (mut fixture, source, predicate) = fixture(ValueNodeRef::Tuple { arity: 2 });
+        fixture.with(location(), |support, computation, preparation| {
+            let flat = computation
+                .static_pattern(
+                    source.atom,
+                    &FormulaLimits::default(),
+                    preparation,
+                    location(),
+                )
+                .unwrap();
+            let incoming: [Option<TermRef<'_>>; 2] = [None, None];
             let mut budget = Budget::new(
                 ExpansionLimits {
-                    max_scalar_bytes: limit,
+                    max_scalar_bytes: 0,
                     ..ExpansionLimits::default()
                 },
                 100,
             );
             let mut counters = Counters::default();
-            let result = extract(
-                &nodes,
-                &mut MatchContext {
-                    limits: &FormulaLimits::default(),
-                    budget: &mut budget,
-                    counters: &mut counters,
-                    location: location(),
-                },
+            let error = source
+                .bind(flat)
+                .matches(
+                    support.rows(&predicate).next().unwrap(),
+                    incoming.as_slice().into(),
+                    computation,
+                    &mut MatchContext {
+                        work: GroundingWork::new(
+                            &FormulaLimits::default(),
+                            &mut counters,
+                            location(),
+                        ),
+                        budget: &mut budget,
+                    },
+                )
+                .unwrap_err();
+            assert!(
+                matches!(error, FormulaFailure::Expansion(ExpansionFailure::Limit {
+                resource: ExpansionResource::ScalarBytes, observed, ..
+            }) if observed == 2 * std::mem::size_of::<(usize, TermRef<'_>)>() as u128)
             );
-            if limit == exact {
-                let Value::Structured(value) = result.unwrap() else {
-                    panic!("tuple remains structural")
-                };
-                assert_eq!(value.to_string(), "(a,)");
-            } else {
-                assert!(matches!(
-                    result,
-                    Err(FormulaFailure::Expansion(ExpansionFailure::Limit {
-                        resource: ExpansionResource::ScalarBytes,
-                        ..
-                    }))
-                ));
-            }
-        }
+            assert_eq!(incoming, [None, None]);
+        });
+    }
+    #[test]
+    fn nested_captures_borrow_the_support_value() {
+        let (mut fixture, source, predicate) = fixture(ValueNodeRef::Tuple { arity: 2 });
+        fixture.with(location(), |support, computation, preparation| {
+            let flat = computation
+                .static_pattern(
+                    source.atom,
+                    &FormulaLimits::default(),
+                    preparation,
+                    location(),
+                )
+                .unwrap();
+            let row = support.rows(&predicate).next().unwrap();
+            let incoming: [Option<TermRef<'_>>; 2] = [None, None];
+            let mut budget = Budget::new(ExpansionLimits::default(), 100);
+            let mut counters = Counters::default();
+            let delta = source
+                .bind(flat)
+                .matches(
+                    row,
+                    incoming.as_slice().into(),
+                    computation,
+                    &mut MatchContext {
+                        work: GroundingWork::new(
+                            &FormulaLimits::default(),
+                            &mut counters,
+                            location(),
+                        ),
+                        budget: &mut budget,
+                    },
+                )
+                .unwrap()
+                .unwrap();
+            let nested = delta.iter().find(|(slot, _)| *slot == 1).unwrap().1;
+            assert_eq!(nested.to_string(), "(a,)");
+            let expected = row.value(0).unwrap().child(0).unwrap();
+            let ValueNodeRef::Symbol(actual) = nested.child(0).unwrap().descriptor() else {
+                panic!("symbol capture")
+            };
+            let ValueNodeRef::Symbol(source) = expected.child(0).unwrap().descriptor() else {
+                panic!("source symbol")
+            };
+            assert!(std::ptr::eq(actual.as_ptr(), source.as_ptr()));
+        });
     }
 }

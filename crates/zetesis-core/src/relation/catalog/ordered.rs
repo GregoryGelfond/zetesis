@@ -2,7 +2,10 @@
 
 use std::mem::size_of;
 
-use crate::ordered_index::position;
+use crate::{
+    catalog::{Atoms, CatalogRead},
+    ordered_index::{Index, position},
+};
 
 use super::{Catalog, CatalogFailure, Failure, Limits, Storage, Work};
 
@@ -94,24 +97,25 @@ impl Catalog {
     /// # Errors
     /// Current shape, bytes and work must fit `limits`. Refused preparation does
     /// not publish a partial run or change atom/equality identity.
-    pub fn prepare_ordered(&mut self, limits: Limits) -> Result<Preparation<'_>, CatalogFailure> {
+    pub fn prepare_ordered(
+        &mut self,
+        read: CatalogRead<'_>,
+        limits: Limits,
+    ) -> Result<Preparation<'_>, CatalogFailure> {
         let mut work = self.work(limits)?;
-        if self.prepared != self.atoms.len() {
-            let prepare = if self.levels.is_empty() && self.tail.is_empty() {
-                // A refused traversal leaves no partial run.
-                self.traverse(&mut work).inspect_err(|_| self.tail.clear())
-            } else {
-                self.append_run(&mut work)
-            };
-            prepare.map_err(|error| self.failed(error, &work))?;
-            self.prepared = self.atoms.len();
-        }
+        let atoms = self
+            .membership
+            .bind(read)
+            .map_err(|error| self.failed(Failure::Read(error), &work))?;
+        self.ordered
+            .prepare(atoms, &self.rows, &mut work)
+            .map_err(|error| self.failed(error, &work))?;
         Ok(Preparation {
             storage: self.receipt(&work),
-            runs: Runs {
-                levels: &self.levels,
-                tail: &self.tail,
-            },
+            runs: self
+                .ordered
+                .runs(self.len())
+                .ok_or_else(|| self.failed(Failure::Order, &work))?,
         })
     }
 
@@ -121,10 +125,7 @@ impl Catalog {
     /// mean this relation has no tuples. A new empty catalog is already prepared.
     #[must_use]
     pub fn ordered(&self) -> Option<Runs<'_>> {
-        (self.prepared == self.atoms.len()).then(|| Runs {
-            levels: &self.levels,
-            tail: &self.tail,
-        })
+        self.ordered.runs(self.len())
     }
 
     /// The complete canonical order of a prepared extent as one sequence of
@@ -138,62 +139,116 @@ impl Catalog {
     /// # Errors
     /// Refuses an unprepared extent as [`Failure::Order`], or work and bytes
     /// above `limits`.
-    pub fn canonical(&self, limits: Limits) -> Result<Canonical, CatalogFailure> {
+    pub fn canonical(
+        &self,
+        read: CatalogRead<'_>,
+        limits: Limits,
+    ) -> Result<Canonical, CatalogFailure> {
         let mut work = self.work(limits)?;
-        let merge = (|| {
-            let Some(prepared) = self.ordered() else {
-                return Err(Failure::Order);
-            };
-            let mut merged = work.reserve::<usize>(self.atoms.len())?;
-            let mut runs = work.reserve::<&[usize]>(prepared.runs().count())?;
-            runs.extend(prepared.runs());
-            let mut cursors = work.reserve::<usize>(runs.len())?;
-            cursors.resize(runs.len(), 0);
-            // The least head among the runs, until every run is exhausted:
-            // the runs hold every prepared row once, so the merge then holds
-            // them all.
-            loop {
-                let mut least: Option<usize> = None;
-                for (run, &cursor) in cursors.iter().enumerate() {
-                    if cursor == runs[run].len() {
-                        continue;
-                    }
-                    least = Some(match least {
-                        Some(best)
-                            if self
-                                .order(runs[best][cursors[best]], runs[run][cursor], &mut work)?
-                                .is_le() =>
-                        {
-                            best
-                        }
-                        _ => run,
-                    });
-                }
-                let Some(run) = least else {
-                    break;
-                };
-                work.tick(1)?;
-                merged.push(runs[run][cursors[run]]);
-                cursors[run] += 1;
+        let atoms = self
+            .atoms(read)
+            .map_err(|error| self.failed(error, &work))?;
+        let ids = self
+            .ordered
+            .canonical(atoms, &mut work)
+            .map_err(|error| self.failed(error, &work))?;
+        Ok(Canonical {
+            ids,
+            storage: self.receipt(&work),
+        })
+    }
+}
+
+/// Geometric runs are derived local-row order, never another payload owner.
+#[derive(Default)]
+pub(super) struct Ordered {
+    levels: Vec<Vec<usize>>,
+    tail: Vec<usize>,
+    prepared: usize,
+}
+
+impl Ordered {
+    pub(super) fn capacity_bytes(&self) -> usize {
+        self.levels.capacity() * size_of::<Vec<usize>>()
+            + (self.levels.iter().map(Vec::capacity).sum::<usize>() + self.tail.capacity())
+                * size_of::<usize>()
+    }
+
+    pub(super) fn level_count(&self) -> usize {
+        self.levels.len()
+    }
+
+    pub(super) fn clear(&mut self) {
+        self.levels.clear();
+        self.tail.clear();
+        self.prepared = 0;
+    }
+
+    fn runs(&self, length: usize) -> Option<Runs<'_>> {
+        (self.prepared == length).then_some(Runs {
+            levels: &self.levels,
+            tail: &self.tail,
+        })
+    }
+
+    fn prepare(&mut self, atoms: Atoms<'_>, rows: &Index, work: &mut Work) -> Result<(), Failure> {
+        if self.prepared != atoms.len() {
+            if self.levels.is_empty() && self.tail.is_empty() {
+                self.traverse(rows, atoms.len(), work)
+                    .inspect_err(|_| self.tail.clear())?;
+            } else {
+                self.append_run(atoms, work)?;
             }
-            Ok(merged)
-        })();
-        match merge {
-            Ok(ids) => Ok(Canonical {
-                ids,
-                storage: self.receipt(&work),
-            }),
-            Err(error) => Err(self.failed(error, &work)),
+            self.prepared = atoms.len();
         }
+        Ok(())
+    }
+
+    fn canonical(&self, atoms: Atoms<'_>, work: &mut Work) -> Result<Vec<usize>, Failure> {
+        let Some(prepared) = self.runs(atoms.len()) else {
+            return Err(Failure::Order);
+        };
+        let mut merged = work.reserve::<usize>(atoms.len())?;
+        let mut runs = work.reserve::<&[usize]>(prepared.runs().count())?;
+        runs.extend(prepared.runs());
+        let mut cursors = work.reserve::<usize>(runs.len())?;
+        cursors.resize(runs.len(), 0);
+        // The least head among the runs, until every run is exhausted:
+        // the runs hold every prepared row once, so the merge then holds
+        // them all.
+        loop {
+            let mut least: Option<usize> = None;
+            for (run, &cursor) in cursors.iter().enumerate() {
+                if cursor == runs[run].len() {
+                    continue;
+                }
+                least = Some(match least {
+                    Some(best)
+                        if order(atoms, runs[best][cursors[best]], runs[run][cursor], work)?
+                            .is_le() =>
+                    {
+                        best
+                    }
+                    _ => run,
+                });
+            }
+            let Some(run) = least else {
+                break;
+            };
+            work.tick(1)?;
+            merged.push(runs[run][cursors[run]]);
+            cursors[run] += 1;
+        }
+        Ok(merged)
     }
 
     /// Build the first run by an in-order traversal of the row index.
-    fn traverse(&mut self, work: &mut Work) -> Result<(), Failure> {
-        work.grow(&mut self.tail, self.atoms.len())?;
+    fn traverse(&mut self, rows: &Index, length: usize, work: &mut Work) -> Result<(), Failure> {
+        work.grow(&mut self.tail, length)?;
         work.include(size_of::<Vec<usize>>())?;
         let mut path = work.reserve::<usize>(0)?;
         self.tail.clear();
-        let mut cursor = self.rows.root;
+        let mut cursor = rows.root;
         loop {
             while let Some(link) = cursor {
                 work.tick(1)?;
@@ -201,14 +256,14 @@ impl Catalog {
                 work.grow(&mut path, 1)?;
                 work.tick(1)?;
                 path.push(id);
-                cursor = self.rows.nodes[id].children[0];
+                cursor = rows.nodes[id].children[0];
             }
             let Some(id) = path.pop() else {
                 break;
             };
             work.tick(1)?;
             self.tail.push(id);
-            cursor = self.rows.nodes[id].children[1];
+            cursor = rows.nodes[id].children[1];
         }
         work.release(path);
         work.live -= size_of::<Vec<usize>>();
@@ -219,7 +274,7 @@ impl Catalog {
     /// rows appended since the last preparation into the new tail. Each step
     /// publishes only complete runs, so a refusal at any point leaves the
     /// levels whole and the extent unprepared.
-    fn append_run(&mut self, work: &mut Work) -> Result<(), Failure> {
+    fn append_run(&mut self, atoms: Atoms<'_>, work: &mut Work) -> Result<(), Failure> {
         if !self.tail.is_empty() {
             // Admit the level slot before the move, so a refusal leaves the
             // run where it was.
@@ -231,13 +286,13 @@ impl Catalog {
         // A refused compaction may already have promoted the tail or merged
         // some levels. Resume that phase even when the tail is now empty;
         // only fully compacted levels may accompany a newly published tail.
-        self.compact(work)?;
-        let appended = self.prepared..self.atoms.len();
+        self.compact(atoms, work)?;
+        let appended = self.prepared..atoms.len();
         let mut run = work.reserve::<usize>(appended.len())?;
         run.extend(appended);
         work.tick(run.len() as u128)?;
         let mut scratch = work.reserve::<usize>(run.len())?;
-        self.sort(&mut run, &mut scratch, work)?;
+        Self::sort(atoms, &mut run, &mut scratch, work)?;
         work.release(scratch);
         work.release(std::mem::replace(&mut self.tail, run));
         Ok(())
@@ -245,7 +300,7 @@ impl Catalog {
 
     /// Merge the top two levels while the newer is at least half the older,
     /// so the levels shrink geometrically and their count stays O(log n).
-    fn compact(&mut self, work: &mut Work) -> Result<(), Failure> {
+    fn compact(&mut self, atoms: Atoms<'_>, work: &mut Work) -> Result<(), Failure> {
         while let [.., below, top] = &self.levels[..] {
             if top.len() * 2 < below.len() {
                 return Ok(());
@@ -253,7 +308,7 @@ impl Catalog {
             let mut merged = work.reserve::<usize>(below.len() + top.len())?;
             let (mut left, mut right) = (0, 0);
             while left < below.len() && right < top.len() {
-                if self.order(top[right], below[left], work)?.is_lt() {
+                if order(atoms, top[right], below[left], work)?.is_lt() {
                     merged.push(top[right]);
                     right += 1;
                 } else {
@@ -277,7 +332,7 @@ impl Catalog {
     /// Bottom-up merge sort of a run by typed row comparison; `scratch` has
     /// capacity for the whole run. O(d log d) comparisons, each charged.
     fn sort(
-        &self,
+        atoms: Atoms<'_>,
         run: &mut Vec<usize>,
         scratch: &mut Vec<usize>,
         work: &mut Work,
@@ -292,7 +347,7 @@ impl Catalog {
                 let end = (start + 2 * width).min(length);
                 let (mut left, mut right) = (start, middle);
                 while left < middle && right < end {
-                    if self.order(run[right], run[left], work)?.is_lt() {
+                    if order(atoms, run[right], run[left], work)?.is_lt() {
                         scratch.push(run[right]);
                         right += 1;
                     } else {
@@ -310,25 +365,23 @@ impl Catalog {
         }
         Ok(())
     }
+}
 
-    /// Typed identity order of two rows, charged per compared value.
-    fn order(
-        &self,
-        left: usize,
-        right: usize,
-        work: &mut Work,
-    ) -> Result<std::cmp::Ordering, Failure> {
-        work.tick(1)?;
-        for (left, right) in self.atoms[left]
-            .values()
-            .iter()
-            .zip(self.atoms[right].values())
-        {
-            let order = work.compare(left, right)?;
-            if !order.is_eq() {
-                return Ok(order);
-            }
+/// Typed identity order of two rows, charged per compared value.
+fn order(
+    atoms: Atoms<'_>,
+    left: usize,
+    right: usize,
+    work: &mut Work,
+) -> Result<std::cmp::Ordering, Failure> {
+    work.tick(1)?;
+    let left = atoms.at(left).ok_or(Failure::CatalogIndex)?;
+    let right = atoms.at(right).ok_or(Failure::CatalogIndex)?;
+    for (left, right) in left.values().iter().zip(right.values()) {
+        let order = work.compare(left, right)?;
+        if !order.is_eq() {
+            return Ok(order);
         }
-        Ok(std::cmp::Ordering::Equal)
     }
+    Ok(std::cmp::Ordering::Equal)
 }

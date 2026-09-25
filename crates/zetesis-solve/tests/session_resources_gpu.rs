@@ -4,7 +4,7 @@
 use std::{convert::Infallible, num::NonZeroUsize};
 
 use zetesis_core::{
-    Atom, Predicate, Sign, Value,
+    Atom, Model, Predicate, Sign, Value,
     relation::{Limits, Relation},
 };
 use zetesis_cpu::{Cancellation, Stop};
@@ -131,7 +131,7 @@ fn atom(name: &str, sign: Sign, values: Vec<Value>) -> Atom {
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct Record {
-    atoms: Vec<Atom>,
+    atoms: Model,
     costs: Option<Vec<(i32, i64)>>,
 }
 
@@ -144,13 +144,13 @@ impl Record {
         ];
         atoms.sort();
         Self {
-            atoms,
+            atoms: Model::new(atoms).unwrap(),
             costs: cost.map(|cost| vec![(2, cost)]),
         }
     }
 
     fn from_answer(answer: &AnswerSet) -> Self {
-        let atoms = answer.interpretation().atoms().iter().cloned().collect();
+        let atoms = answer.interpretation().clone();
         Self {
             atoms,
             costs: answer.score().map(|score| {
@@ -425,7 +425,9 @@ fn independent_sessions(device: Device) {
     independent_closures(&retained, device);
     independent_formulas(&retained, device);
     let value = Value::Number(7);
-    let query = relation.query(&[(0, &value)], Limits::default()).unwrap();
+    let query = relation
+        .query(&[(0, (&value).into())], Limits::default())
+        .unwrap();
     let masks = prepared
         .filter(
             &[query],
@@ -838,7 +840,7 @@ fn unseeded_cycle_has_one_empty_answer_set() {
     require_complete(
         &capture,
         &[Record {
-            atoms: Vec::new(),
+            atoms: Model::default(),
             costs: None,
         }],
     );

@@ -5,7 +5,8 @@ use super::{BatchPlan, GraphPlan, PackedGraph, PackedSeeds, decode};
 use crate::{GpuErrorKind, GpuLimits};
 use std::{num::NonZeroU32, time::Duration};
 use zetesis_core::{
-    AdmissionLimits, AtomPattern, GroundProgram, Predicate, Program, Seed, StaticLimits, Template,
+    AdmissionLimits, AtomPattern, GroundProgram, Predicate, Program, Seed, SeedSelection,
+    StaticLimits, Template,
 };
 use zetesis_cpu::{Cancellation, Limits, check_static};
 
@@ -58,10 +59,19 @@ fn assert_same_plan_and_semantics(
             retried.accounted_bytes
         ),
     );
-    assert_eq!(program.atoms()[0].predicate().name(), "a");
+    assert_eq!(program.atoms().at(0).unwrap().predicate().name(), "a");
     let seeds = [
         Seed::new(program.program(), []).unwrap(),
-        Seed::new(program.program(), [program.atoms()[0].clone()]).unwrap(),
+        SeedSelection::from_carrier_atoms(
+            program.program(),
+            [program
+                .program()
+                .locate_atom(program.atoms().at(0).unwrap(), true)
+                .unwrap()
+                .unwrap()],
+        )
+        .unwrap()
+        .to_seed(),
     ];
     let before = PackedSeeds::new(program, seeds.iter().map(Seed::view), baseline).unwrap();
     let after = PackedSeeds::new(program, seeds.iter().map(Seed::view), retried).unwrap();

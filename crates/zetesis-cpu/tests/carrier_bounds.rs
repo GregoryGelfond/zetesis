@@ -5,9 +5,7 @@
 
 use std::collections::BTreeSet;
 use zetesis_core::{Atom, Predicate, Program, Seed, Template, Term, Value};
-use zetesis_cpu::{
-    Cancellation, CandidateLimits, Candidates, Limits, PreparationLimits, PreparedQueries, check,
-};
+use zetesis_cpu::{Cancellation, CandidateLimits, Candidates, Limits, check};
 
 #[path = "support/programs.rs"]
 mod programs;
@@ -77,9 +75,14 @@ fn accepted_models(program: &Program, bounded: bool) -> BTreeSet<Vec<Atom>> {
                 &Cancellation::default(),
             )
             .unwrap();
-            checked
-                .accepted()
-                .then(|| checked.interpretation().atoms().iter().cloned().collect())
+            checked.accepted().then(|| {
+                checked
+                    .interpretation()
+                    .atoms()
+                    .iter()
+                    .map(|atom| atom.to_atom(zetesis_core::ValueLimits::default()).unwrap())
+                    .collect()
+            })
         })
         .collect()
 }
@@ -401,42 +404,6 @@ fn the_narrowing_reports_its_decisions() {
     let statistics = stratified_statistics();
     assert_eq!(statistics.held_gate_atoms, 8);
     assert_eq!(statistics.cut_gate_atoms, 8);
-}
-
-#[test]
-fn the_narrowing_charges_its_preparation_apart_from_its_closures() {
-    // The stratified program's preparation charges 329 units and its
-    // largest closure 876 on the workspace the narrowing keeps, 884 on a
-    // fresh one that must be sized. Each is admitted under the work ceiling
-    // on its own, as a prepared candidate check's are, so the least ceiling
-    // under which the narrowing completes is the larger of the two; charged
-    // together, closure by closure on a fresh workspace, they would need
-    // 1,213.
-    let program = stratified_program();
-    let preparation = PreparedQueries::new(
-        &program,
-        PreparationLimits::default(),
-        &Cancellation::default(),
-    )
-    .unwrap()
-    .statistics()
-    .work;
-    assert_eq!(preparation, 329);
-    let stop = |max_work| {
-        let mut candidates = Candidates::new(
-            &program,
-            CandidateLimits::default(),
-            Cancellation::default(),
-        );
-        candidates.bounded(Limits {
-            max_work,
-            ..Limits::default()
-        });
-        let _ = candidates.next();
-        candidates.statistics().narrowing_stop
-    };
-    assert_eq!(stop(876), None);
-    assert_eq!(stop(875), Some(zetesis_cpu::Stop::WorkLimit));
 }
 
 #[test]

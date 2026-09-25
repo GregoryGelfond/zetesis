@@ -7,24 +7,25 @@
 use std::cmp::Ordering;
 use std::ops::Range;
 
-use zetesis_core::{Atom, Model, Predicate, Sign};
+use zetesis_core::{
+    Model, Sign,
+    catalog::{AtomRef, PredicateRef},
+};
 
-use super::{Error, Pattern, Symbol, Work};
+use super::{Error, Pattern, Work};
 
 pub(super) struct ModelRows<'a> {
-    atoms: Vec<&'a Atom>,
+    model: &'a Model,
 }
 
 impl<'a> ModelRows<'a> {
     pub fn new(model: &'a Model, work: &mut Work<'_>) -> Result<Self, Error> {
-        work.step(model.atoms().len() as u128)?;
-        let mut atoms = work.reserve(model.atoms().len())?;
-        atoms.extend(model.atoms());
-        Ok(Self { atoms })
+        work.step(1)?;
+        Ok(Self { model })
     }
 
-    pub fn get(&self, row: usize) -> &'a Atom {
-        self.atoms[row]
+    pub fn get(&self, row: usize) -> AtomRef<'a> {
+        self.model.atoms().at(row).expect("admitted model row")
     }
 
     fn bound(
@@ -34,10 +35,11 @@ impl<'a> ModelRows<'a> {
         work: &mut Work<'_>,
     ) -> Result<usize, Error> {
         let mut lower = 0;
-        let mut upper = self.atoms.len();
+        let mut upper = self.model.atoms().len();
         while lower < upper {
             let middle = lower + (upper - lower) / 2;
-            let predicate = self.atoms[middle].predicate();
+            work.step(1)?;
+            let predicate = self.get(middle).predicate();
             work.step(1 + key.0.len() as u128 + predicate.name().len() as u128)?;
             // Predicate::Ord is name, arity, sign. No owned key is constructed.
             let order = (predicate.name(), predicate.arity(), predicate.sign()).cmp(&key);
@@ -56,32 +58,14 @@ impl<'a> ModelRows<'a> {
         Ok(lower..upper)
     }
 
-    pub fn predicate(
+    pub fn predicate<'predicate>(
         &self,
-        predicate: &Predicate,
+        predicate: impl Into<PredicateRef<'predicate>>,
         work: &mut Work<'_>,
     ) -> Result<Range<usize>, Error> {
+        let predicate = predicate.into();
         self.range(
             (predicate.name(), predicate.arity(), predicate.sign()),
-            work,
-        )
-    }
-
-    pub fn symbol(&self, value: &Symbol, work: &mut Work<'_>) -> Result<Range<usize>, Error> {
-        let Symbol::Function {
-            name,
-            sign,
-            arguments,
-        } = value
-        else {
-            unreachable!("an atom key is a signed function")
-        };
-        self.range(
-            (
-                name.as_str(),
-                arguments.len(),
-                crate::coherence::core_sign(*sign),
-            ),
             work,
         )
     }
@@ -99,12 +83,20 @@ impl AtomChoices {
     pub fn new(
         patterns: &[Pattern],
         rows: &ModelRows<'_>,
+        metadata: crate::metadata::Read<'_>,
         work: &mut Work<'_>,
     ) -> Result<Self, Error> {
         work.step(patterns.len() as u128)?;
         let mut ranges = work.reserve(patterns.len())?;
         for pattern in patterns {
-            ranges.push(rows.predicate(&pattern.predicate, work)?);
+            ranges.push(
+                rows.predicate(
+                    metadata
+                        .predicate(pattern.predicate)
+                        .expect("compiled predicate"),
+                    work,
+                )?,
+            );
         }
         Ok(Self {
             ranges,

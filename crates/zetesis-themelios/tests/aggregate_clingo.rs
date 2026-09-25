@@ -17,7 +17,7 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 
 use serde_json::Value as Json;
-use zetesis_core::{Atom, Model, Term};
+use zetesis_core::{Atom, Model};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{AggregateErrorKind, AggregateLimits, Interpretation, Limits, check};
 use zetesis_themelios::{
@@ -81,16 +81,35 @@ fn cases() -> Vec<Case> {
 fn atom(source: &str) -> Atom {
     let fact = admit(format!("{source}."), AdmissionOptions::default())
         .expect("complete scalar atom identity");
-    let head = fact.program().templates()[0].head().expect("fact head");
+    let head = fact
+        .program()
+        .templates()
+        .at(0)
+        .unwrap()
+        .head()
+        .expect("fact head");
     let values = head
         .terms()
         .iter()
         .map(|term| match term {
-            Term::Constant(value) => value.clone(),
-            Term::Variable(_) => panic!("recorded model atoms must be ground"),
+            zetesis_core::TemplateTerm::Constant(value) => value
+                .to_value(zetesis_core::ValueLimits::default())
+                .unwrap(),
+            zetesis_core::TemplateTerm::Variable(_) => {
+                panic!("recorded model atoms must be ground")
+            }
         })
         .collect();
-    Atom::new(head.predicate().clone(), values).expect("ground atom arity")
+    Atom::new(
+        zetesis_core::Predicate::with_sign(
+            head.predicate().name(),
+            head.predicate().arity(),
+            head.predicate().sign(),
+        )
+        .unwrap(),
+        values,
+    )
+    .expect("ground atom arity")
 }
 
 fn exhaustive(input: &AdmittedFormula) -> (BTreeSet<BTreeSet<Atom>>, Option<Vec<i64>>) {
@@ -113,9 +132,16 @@ fn exhaustive(input: &AdmittedFormula) -> (BTreeSet<BTreeSet<Atom>>, Option<Vec<
         }
         let atoms: BTreeSet<_> = candidate
             .atoms()
-            .map(|atom| input.atoms()[atom].clone())
+            .map(|atom| {
+                input
+                    .atoms()
+                    .at(atom)
+                    .unwrap()
+                    .to_atom(zetesis_core::ValueLimits::default())
+                    .unwrap()
+            })
             .collect();
-        let model = Model::new(atoms.iter().cloned());
+        let model = Model::from_positions(input.atom_catalog(), candidate.atoms()).unwrap();
         let evaluation = zetesis_objective::evaluate(
             input.objectives(),
             &model,

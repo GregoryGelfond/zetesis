@@ -23,7 +23,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let table = Table::prepare(&relation, &[0, 1], Limits::default(), &cancellation)?;
     let departure = Value::Number(1);
     let selected = table.select(
-        &[Domain::Singleton(&departure), Domain::Unrestricted],
+        &[Domain::Singleton((&departure).into()), Domain::Unrestricted],
         Limits::default(),
         &cancellation,
     )?;
@@ -34,7 +34,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let restricted = table.project(&[&departures, &arrivals], Limits::default(), &cancellation)?;
     assert_eq!(
         restricted.domain(0).unwrap().collect::<Vec<_>>(),
-        vec![&Value::Number(1)]
+        vec![Value::Number(1)]
     );
     assert!(restricted.contains(1));
     assert!(!restricted.contains(0));
@@ -43,7 +43,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let restored = table.project(&[&departures, &arrivals], Limits::default(), &cancellation)?;
     assert_eq!(
         restored.domain(0).unwrap().collect::<Vec<_>>(),
-        departures.iter().collect::<Vec<_>>()
+        departures.to_vec()
     );
     assert!((0..3).all(|row| restored.contains(row)));
     Ok(())

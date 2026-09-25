@@ -25,7 +25,7 @@ fn retained_capacity_uses_the_inclusive_total_limit() {
     let relation = Relation::from_atoms(&predicate, &atoms, relation::Limits::default()).unwrap();
     let value = Value::Number(1);
     let queries = [relation
-        .query(&[(0, &value)], relation::Limits::default())
+        .query(&[(0, (&value).into())], relation::Limits::default())
         .unwrap()];
     for deficit in [0, 1] {
         let mut plan = plan(&relation, &queries);
@@ -140,10 +140,16 @@ fn decode_preserves_the_preallocated_mask_storage() {
     .unwrap();
     let queries = [
         relation
-            .query(&[(0, &Value::Number(2))], relation::Limits::default())
+            .query(
+                &[(0, (&Value::Number(2)).into())],
+                relation::Limits::default(),
+            )
             .unwrap(),
         relation
-            .query(&[(0, &Value::Number(0))], relation::Limits::default())
+            .query(
+                &[(0, (&Value::Number(0)).into())],
+                relation::Limits::default(),
+            )
             .unwrap(),
     ];
     let mut plan = plan(&relation, &queries);

@@ -42,7 +42,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let answer = session.next().unwrap()?;
         assert_eq!(
             answer.interpretation(),
-            &Model::new([Atom::new(predicate, vec![])?])
+            &Model::new([Atom::new(predicate, vec![])?])?
         );
         assert!(
             answer

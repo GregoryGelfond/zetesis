@@ -61,12 +61,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         (
             &first,
             &first_seed,
-            Model::new([domain.instantiate(&assignment)?, left_atom]),
+            Model::new([domain.instantiate(&assignment)?, left_atom])?,
         ),
         (
             &second,
             &second_seed,
-            Model::new([domain.instantiate(&assignment)?, right_atom]),
+            Model::new([domain.instantiate(&assignment)?, right_atom])?,
         ),
     ] {
         let fresh = check(&program, seed, limits, &cancellation)?;

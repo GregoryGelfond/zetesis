@@ -49,7 +49,8 @@ logical atom or a grounding-domain value.
 
 A positive structural equality can capture constructor or tuple components from
 an already finite evaluated operand. The complete chosen value occupies one
-fresh slot, while copied captured subvalues have their own owned-payload charge.
+fresh slot. Input captures borrow their original terms; generated captures retain
+canonical IDs and their own logical local charge, without copying term payload.
 Keeping that complete value avoids reconstructing an expression or making a new
 pool choice when another chain edge reads it. Matching checks the constructor's
 sign, name and ordered children, as specified abstractly by
@@ -113,13 +114,17 @@ matched atom; negative keys are constructed from established source values and
 tested against that same model. Complete tuple keys are deduplicated only after
 all local conditions pass.
 
-Borrowed model values have no local owned-payload charge. Generated alternatives,
-owned binding values and retained aggregate keys share `Limits::max_local_bytes`.
+Borrowed model values have no local payload charge. Generated alternatives,
+generated binding values and retained aggregate keys share `Limits::max_local_bytes`.
 The metric is 16 bytes per semantic node plus UTF-8 text; it excludes container
-capacity and allocator overhead and is not RSS. A local scope releases its own
-bindings and alternatives on exhaustion, early success or failure; enclosing
-aggregate keys remain live until their own scope ends. The independently bounded
-output set retains its own payload. These are Rust contracts supported by
+capacity and allocator overhead and is not RSS. Repeated references can carry
+separate logical charges while sharing canonical payload. A local scope releases
+its own charges on exhaustion, early success or failure; enclosing aggregate
+keys keep their charges until their scope ends. The derived arena retains its
+registered roots until evaluation ends, under the separate
+`Limits::max_term_storage_bytes` allowance. It borrows model and compiled-metadata
+prefixes rather than copying their payload. The output boundary constructs the
+independently bounded public terms. These are Rust contracts supported by
 [focused scope tests](../../crates/zetesis-themelios/tests/observation_scopes.rs),
 not a theorem about allocation or cancellation.
 

@@ -9,7 +9,8 @@
 use themelios_base::span::Location;
 use themelios_program::program::DefaultNegation;
 use zetesis_core::{
-    AtomIndex, AtomRow, Predicate,
+    AtomIndex, AtomRow,
+    catalog::Atoms,
     relation::{Failure, Row},
 };
 use zetesis_cpu::regions::Region;
@@ -19,8 +20,8 @@ use crate::formula_support::{CompletedSupport, Counters, RowFilter};
 use crate::{FormulaFailure, FormulaLimits};
 
 struct PredicateRows<'source> {
-    /// The exact catalog predicate borrowed by every row of this relation.
-    predicate: &'source Predicate,
+    /// The exact source occurrence mapping used by every row of this relation.
+    atoms: Atoms<'source>,
     positions: Vec<Option<usize>>,
 }
 
@@ -53,7 +54,7 @@ impl<'source> SourceRows<'source> {
             counters,
             location,
         )?;
-        for (predicate, atoms) in support.source_atoms() {
+        for (_, atoms) in support.source_atoms() {
             counters.work(limits, location)?;
             let mut positions = Vec::new();
             reserve(
@@ -73,10 +74,7 @@ impl<'source> SourceRows<'source> {
                 positions.push(found.map(AtomRow::position));
             }
             counters.work(limits, location)?;
-            predicates.push(PredicateRows {
-                predicate,
-                positions,
-            });
+            predicates.push(PredicateRows { atoms, positions });
         }
         // Every reservation checked its actual capacity before any publication.
         support.retain_workspace(usize::try_from(bytes).expect("admitted support bytes fit usize"));
@@ -98,6 +96,7 @@ fn reserve<T>(
     support.admit_workspace(
         *bytes + count as u128 * size_of::<T>() as u128,
         limits,
+        counters,
         location,
     )?;
     counters.work(limits, location)?;
@@ -108,7 +107,7 @@ fn reserve<T>(
             location,
         })?;
     let actual = *bytes + values.capacity() as u128 * size_of::<T>() as u128;
-    support.admit_workspace(actual, limits, location)?;
+    support.admit_workspace(actual, limits, counters, location)?;
     *bytes = actual;
     Ok(())
 }
@@ -126,6 +125,7 @@ impl Selection<'_, '_> {
     pub(super) fn possible(
         &self,
         rule: &RuleIr,
+        support: &CompletedSupport<'_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
     ) -> Result<bool, FormulaFailure> {
@@ -133,6 +133,10 @@ impl Selection<'_, '_> {
             let Some((negation, pattern)) = super::literal_atom(literal) else {
                 continue;
             };
+            let components = support
+                .components()
+                .ok_or_else(|| crate::formula_support::components::missing(rule.location))?;
+            let pattern = pattern.get(components, limits, counters, rule.location)?;
             let rows = self
                 .index
                 .lookup()
@@ -166,20 +170,20 @@ impl RowFilter for Selection<'_, '_> {
         counters: &mut Counters,
         location: Location,
     ) -> Result<bool, FormulaFailure> {
-        // SourceRows and Join borrow the same completed catalogs. Pointer
-        // identity names a relation here, not equality between ASP predicates.
-        // The descriptor scan is bounded by that owner's predicate count and
-        // charges before each comparison. It does not inspect atom/name payload.
+        // A row position is meaningful only in its original occurrence map.
+        // Equal atom or predicate contents cannot establish that correspondence.
         for source in &self.rows.predicates {
             counters.work(limits, location)?;
-            if std::ptr::eq(source.predicate, row.predicate()) {
+            if let Some(occurrence) = row.occurrence_in(source.atoms) {
                 counters.work(limits, location)?;
-                let position = source.positions.get(row.position()).ok_or(
-                    FormulaFailure::SupportRelation {
-                        error: Failure::Owner,
-                        location,
-                    },
-                )?;
+                let position =
+                    source
+                        .positions
+                        .get(occurrence)
+                        .ok_or(FormulaFailure::SupportRelation {
+                            error: Failure::Owner,
+                            location,
+                        })?;
                 return Ok(position.is_none_or(|position| self.region.is_held(position)));
             }
         }
@@ -216,10 +220,12 @@ mod tests {
             max_support_bytes: 0,
             ..prepared.limits
         };
-        match prepared
-            .completed
-            .admit_workspace(0, &limits, prepared.source.location)
-        {
+        match prepared.completed.admit_workspace(
+            0,
+            &limits,
+            &Counters::default(),
+            prepared.source.location,
+        ) {
             Err(FormulaFailure::Limit {
                 resource: FormulaResource::SupportBytes,
                 observed,
@@ -248,7 +254,7 @@ mod tests {
             + prepared.completed.source_atoms().count() * size_of::<PredicateRows<'_>>();
         let mut previous = None;
         for _ in 0..2 {
-            let before = counters.work;
+            let before = counters.accounting.work;
             let cause = prepared
                 .prepare_selection(owner.atom_catalog(), &mut counters)
                 .unwrap_err();
@@ -271,7 +277,7 @@ mod tests {
             }
             previous = Some(observed);
             assert!(
-                counters.work > before,
+                counters.accounting.work > before,
                 "failed preparation retains accepted work"
             );
             assert!(prepared.index.is_some());
@@ -293,11 +299,11 @@ mod tests {
                 .map(|p| p.positions.capacity() as u128 * size_of::<Option<usize>>() as u128)
                 .sum::<u128>();
         assert_eq!(workspace_bytes(prepared), retained + map_bytes);
-        let work = counters.work;
+        let work = counters.accounting.work;
         prepared
             .prepare_selection(owner.atom_catalog(), &mut counters)
             .unwrap();
-        assert_eq!(counters.work, work);
+        assert_eq!(counters.accounting.work, work);
         assert_eq!(workspace_bytes(prepared), retained + map_bytes);
     }
 
@@ -326,7 +332,7 @@ mod tests {
         };
         let mut visited = 0;
         for (predicate, atoms) in prepared.completed.source_atoms() {
-            let relation = Relation::from_atoms(predicate, atoms, Limits::default()).unwrap();
+            let relation = Relation::from_refs(predicate, atoms, Limits::default()).unwrap();
             for position in 0..atoms.len() {
                 assert!(
                     selection
@@ -347,10 +353,35 @@ mod tests {
     #[test]
     fn row_selection_preserves_unsorted_dense_ids() {
         let owner = owner();
-        let mut atoms = owner.atom_catalog().atoms().to_vec();
-        atoms.sort_unstable_by(|a, b| b.cmp(a));
-        assert!(atoms.windows(2).all(|pair| pair[0] > pair[1]));
-        let index = AtomIndex::new_with(&atoms, || Ok::<_, FormulaFailure>(())).unwrap();
+        let mut catalog_owner = zetesis_core::atom_interner::AtomInterner::new();
+        let catalog_limits = zetesis_core::atom_interner::Limits {
+            max_atoms: owner.atom_catalog().atoms().len(),
+            max_bytes: 16 * 1024 * 1024,
+        };
+        let mut positions = Vec::new();
+        for atom in owner.atom_catalog().atoms() {
+            let position = catalog_owner
+                .entry_atom_with(atom, catalog_limits, || Ok::<_, FormulaFailure>(()))
+                .unwrap()
+                .insert_with(catalog_limits, || Ok::<_, FormulaFailure>(()))
+                .unwrap();
+            positions.push(position);
+        }
+        positions.sort_unstable_by(|&a, &b| {
+            catalog_owner
+                .get(b)
+                .unwrap()
+                .cmp(&catalog_owner.get(a).unwrap())
+        });
+        // The independent catalog publishes real occurrence IDs in descending
+        // semantic order; the index must recover those IDs after its own sort.
+        let catalog = catalog_owner
+            .publish_selection_with(&positions, catalog_limits, || Ok::<_, FormulaFailure>(()))
+            .unwrap();
+        let atoms = catalog.atoms();
+        assert!(atoms.len() > 1);
+        assert!(atoms.iter().zip(atoms.iter().skip(1)).all(|(a, b)| a > b));
+        let index = AtomIndex::from_catalog_with(atoms, || Ok::<_, FormulaFailure>(())).unwrap();
         let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
         let prepared = checker.prepared.as_mut().unwrap();
         let mut counters = Counters::default();
@@ -362,6 +393,8 @@ mod tests {
             prepared.source.location,
         )
         .unwrap();
+        let mut saw_supported = false;
+        let mut saw_unsupported = false;
         for held in 0..atoms.len() {
             let mut region = Region::all_open(atoms.len());
             assert!(region.hold(held));
@@ -370,8 +403,9 @@ mod tests {
                 index: &index,
                 region: &region,
             };
+            let mut has_source_row = false;
             for (predicate, source) in prepared.completed.source_atoms() {
-                let relation = Relation::from_atoms(predicate, source, Limits::default()).unwrap();
+                let relation = Relation::from_refs(predicate, source, Limits::default()).unwrap();
                 for (position, atom) in source.iter().enumerate() {
                     let permitted = selection
                         .permits(
@@ -381,9 +415,17 @@ mod tests {
                             prepared.source.location,
                         )
                         .unwrap();
-                    assert_eq!(permitted, atom == &atoms[held]);
+                    let is_held_atom = atom == atoms.at(held).unwrap();
+                    assert_eq!(permitted, is_held_atom);
+                    has_source_row |= is_held_atom;
                 }
             }
+            saw_supported |= has_source_row;
+            saw_unsupported |= !has_source_row;
         }
+        // The negative occurrence -p(2) is admitted by the constraint, but no
+        // source rule supports it. Its dense ID must not select another row.
+        assert!(saw_supported);
+        assert!(saw_unsupported);
     }
 }

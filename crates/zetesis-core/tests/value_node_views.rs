@@ -50,6 +50,71 @@ fn node_views_borrow_the_original_text() {
     assert_eq!(node.view().text_bytes(), text.len());
 }
 
+#[test]
+fn node_storage_order_uses_typed_descriptors() {
+    // Raw node descriptions keep positive nullary functions distinct from
+    // symbols. Function storage order is name, sign, arity, unlike ASP order.
+    let ordered = [
+        ValueNode::Infimum,
+        ValueNode::Number(i32::MIN),
+        ValueNode::Number(i32::MAX),
+        ValueNode::String("z".into()),
+        ValueNode::Symbol("a".into()),
+        ValueNode::Function {
+            name: "f".into(),
+            sign: Sign::Positive,
+            arity: 0,
+        },
+        ValueNode::Function {
+            name: "f".into(),
+            sign: Sign::Positive,
+            arity: 2,
+        },
+        ValueNode::Function {
+            name: "f".into(),
+            sign: Sign::Negative,
+            arity: 0,
+        },
+        ValueNode::Function {
+            name: "g".into(),
+            sign: Sign::Positive,
+            arity: 0,
+        },
+        ValueNode::Tuple { arity: 0 },
+        ValueNode::Tuple { arity: 1 },
+        ValueNode::Supremum,
+    ];
+    for (left_position, left) in ordered.iter().enumerate() {
+        for (right_position, right) in ordered.iter().enumerate() {
+            assert_eq!(left.cmp(right), left_position.cmp(&right_position));
+        }
+    }
+}
+
+#[test]
+fn node_encoding_measures_include_typed_fields() {
+    for (node, bytes) in [
+        (ValueNodeRef::Infimum, 1),
+        (ValueNodeRef::Supremum, 1),
+        (ValueNodeRef::Number(i32::MIN), 5),
+        (ValueNodeRef::String(""), 9),
+        (ValueNodeRef::String("é"), 11),
+        (ValueNodeRef::Symbol("é"), 11),
+        (
+            ValueNodeRef::Function {
+                name: "é",
+                sign: Sign::Negative,
+                arity: 2,
+            },
+            20,
+        ),
+        (ValueNodeRef::Tuple { arity: 0 }, 9),
+        (ValueNodeRef::Tuple { arity: 2 }, 9),
+    ] {
+        assert_eq!(node.canonical_bytes(), bytes);
+    }
+}
+
 proptest! {
     #[test]
     fn borrowed_spelling_measures_match_construction(

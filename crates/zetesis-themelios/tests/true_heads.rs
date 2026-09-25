@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use serde_json::{Value as Json, json};
-use zetesis_core::{Atom, Sign, Value};
+use zetesis_core::Sign;
 use zetesis_ferraris::{Node, Theory};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits,
@@ -39,7 +39,8 @@ fn limited(
 ) -> Result<AdmittedFormula, FormulaFailure> {
     admit_formula(source.into(), options, expansion, *limits)
 }
-fn name(atom: &Atom) -> String {
+fn name<'a>(atom: impl Into<zetesis_core::catalog::AtomRef<'a>>) -> String {
+    let atom = atom.into();
     let sign = if atom.predicate().sign() == Sign::Negative {
         "-"
     } else {
@@ -51,13 +52,14 @@ fn name(atom: &Atom) -> String {
     let values: Vec<_> = atom
         .values()
         .iter()
-        .map(|value| match value {
-            Value::Infimum => "#inf".to_owned(),
-            Value::Supremum => "#sup".to_owned(),
-            Value::Structured(value) => value.to_string(),
-            Value::Number(number) => number.to_string(),
-            Value::String(string) => serde_json::to_string(string).unwrap(),
-            Value::Symbol(symbol) => symbol.clone(),
+        .map(|value| match value.descriptor() {
+            zetesis_core::ValueNodeRef::Infimum => "#inf".to_owned(),
+            zetesis_core::ValueNodeRef::Supremum => "#sup".to_owned(),
+            zetesis_core::ValueNodeRef::Function { .. }
+            | zetesis_core::ValueNodeRef::Tuple { .. } => value.to_string(),
+            zetesis_core::ValueNodeRef::Number(number) => number.to_string(),
+            zetesis_core::ValueNodeRef::String(string) => serde_json::to_string(string).unwrap(),
+            zetesis_core::ValueNodeRef::Symbol(symbol) => symbol.to_owned(),
         })
         .collect();
     format!("{sign}{}({})", atom.predicate().name(), values.join(","))
@@ -142,7 +144,11 @@ fn complete_models_match_explicit_families_and_recorded_reference_expectations()
     }
 }
 
-fn remap(mask: usize, from: &[Atom], to: &[Atom]) -> usize {
+fn remap(
+    mask: usize,
+    from: zetesis_core::catalog::Atoms<'_>,
+    to: zetesis_core::catalog::Atoms<'_>,
+) -> usize {
     from.iter()
         .enumerate()
         .filter(|(index, _)| mask & (1 << index) != 0)

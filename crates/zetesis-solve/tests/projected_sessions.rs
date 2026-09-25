@@ -68,8 +68,7 @@ fn distinct_keys_retain_full_membership() {
             .projection()
             .atoms()
             .iter()
-            .filter(|atom| answer.interpretation().contains(atom))
-            .cloned()
+            .filter(|atom| answer.interpretation().contains(*atom))
             .collect();
         assert!(keys.insert(key));
     }

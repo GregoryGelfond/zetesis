@@ -2,7 +2,7 @@
 use std::collections::BTreeSet;
 
 use serde_json::Value as Json;
-use zetesis_core::{Atom, Model, Sign, Value};
+use zetesis_core::{Model, Sign};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
 use zetesis_themelios::{
@@ -24,7 +24,8 @@ pub(super) fn costs(values: &Json) -> Option<Vec<i64>> {
         .as_array()
         .map(|values| values.iter().map(|v| v.as_i64().unwrap()).collect())
 }
-pub(super) fn canonical(atom: &Atom) -> String {
+pub(super) fn canonical<'a>(atom: impl Into<zetesis_core::catalog::AtomRef<'a>>) -> String {
+    let atom = atom.into();
     let sign = if atom.predicate().sign() == Sign::Negative {
         "-"
     } else {
@@ -34,13 +35,14 @@ pub(super) fn canonical(atom: &Atom) -> String {
     let arguments: Vec<_> = atom
         .values()
         .iter()
-        .map(|value| match value {
-            Value::Infimum => "#inf".into(),
-            Value::Supremum => "#sup".into(),
-            Value::Structured(value) => value.to_string(),
-            Value::Number(value) => value.to_string(),
-            Value::Symbol(value) => value.clone(),
-            Value::String(value) => serde_json::to_string(value).unwrap(),
+        .map(|value| match value.descriptor() {
+            zetesis_core::ValueNodeRef::Infimum => "#inf".into(),
+            zetesis_core::ValueNodeRef::Supremum => "#sup".into(),
+            zetesis_core::ValueNodeRef::Function { .. }
+            | zetesis_core::ValueNodeRef::Tuple { .. } => value.to_string(),
+            zetesis_core::ValueNodeRef::Number(value) => value.to_string(),
+            zetesis_core::ValueNodeRef::Symbol(value) => value.to_owned(),
+            zetesis_core::ValueNodeRef::String(value) => serde_json::to_string(value).unwrap(),
         })
         .collect();
     if arguments.is_empty() {
@@ -76,11 +78,13 @@ pub fn exhaustive(input: &AdmittedFormula) -> Records {
         }
         let atoms: Vec<_> = candidate
             .atoms()
-            .map(|atom| input.atoms()[atom].clone())
+            .map(|atom| input.atoms().at(atom).unwrap())
             .collect();
+        let evaluated_model =
+            Model::from_positions(input.atom_catalog(), candidate.atoms()).unwrap();
         let evaluation = zetesis_objective::evaluate(
             input.objectives(),
-            &Model::new(atoms.iter().cloned()),
+            &evaluated_model,
             zetesis_objective::Limits::default(),
             &cancellation,
         )
@@ -89,7 +93,7 @@ pub fn exhaustive(input: &AdmittedFormula) -> Records {
         let costs = score
             .is_present()
             .then(|| score.costs().iter().map(|&(_, value)| value).collect());
-        assert!(records.insert((atoms.iter().map(canonical).collect(), costs)));
+        assert!(records.insert((atoms.iter().copied().map(canonical).collect(), costs)));
     }
     records
 }

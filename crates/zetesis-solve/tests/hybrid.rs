@@ -2,7 +2,7 @@
 
 use std::{collections::BTreeSet, num::NonZeroUsize};
 
-use zetesis_core::{Atom, Predicate, Sign, Value};
+use zetesis_core::{Atom, Model, Predicate, Sign, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     Backend, Completion, Grounder, Interruption, Oracle, PreparedInput, SemanticOutcome, Session,
@@ -17,7 +17,7 @@ use zetesis_themelios::{
 const MONOTONE: &str = include_str!("fixtures/hybrid/monotone.lp");
 const CORE: &str = "d(1..6). p(X)|q(X):-d(X).";
 const ROOT_CEILING: usize = 32;
-type Family = BTreeSet<Vec<Atom>>;
+type Family = BTreeSet<Model>;
 
 fn configuration() -> SolveConfig {
     SolveConfig {
@@ -83,9 +83,10 @@ fn capture(input: PreparedInput<'_>, config: SolveConfig) -> (Family, SemanticOu
     let mut family = Family::new();
     for answer in session.by_ref() {
         let answer = answer.unwrap();
-        let mut atoms: Vec<_> = answer.interpretation().atoms().iter().cloned().collect();
-        atoms.sort();
-        assert!(family.insert(atoms), "a source answer was returned twice");
+        assert!(
+            family.insert(answer.interpretation().clone()),
+            "a source answer was returned twice"
+        );
     }
     assert!(session.next().is_none());
     (family, session.outcome().unwrap())
@@ -110,8 +111,7 @@ fn monotone_family() -> Family {
         .map(|cut| {
             let mut atoms: Vec<_> = (1..=6).map(|value| number("d", value)).collect();
             atoms.extend((1..=6).map(|value| number(if value <= cut { "q" } else { "p" }, value)));
-            atoms.sort();
-            atoms
+            Model::new(atoms).unwrap()
         })
         .collect()
 }
@@ -248,7 +248,7 @@ fn a_refuted_root_establishes_unsatisfiability() {
 fn constraint_atoms_keep_their_signed_identity() {
     let source = "a|-a. :-a,not absent. :-missing.";
     let admitted = hybrid(source, &limits());
-    let expected = Family::from([vec![atom("a", Sign::Negative, vec![])]]);
+    let expected = Family::from([Model::new([atom("a", Sign::Negative, vec![])]).unwrap()]);
     let (family, outcome) = capture(PreparedInput::hybrid(&admitted), configuration());
     assert_eq!(family, expected);
     assert_eq!(outcome.completion(), Some(Completion::Exhausted));
@@ -268,15 +268,22 @@ fn requested_models_count_only_source_answers() {
     };
     let (first, _) = capture(PreparedInput::formula(&core), config);
     assert_eq!(first.len(), 1);
-    assert_eq!(first.first().unwrap().len(), 1);
-    let rejected = first.first().unwrap()[0].predicate().name();
+    assert_eq!(first.first().unwrap().atoms().len(), 1);
+    let rejected = first
+        .first()
+        .unwrap()
+        .atoms()
+        .first()
+        .unwrap()
+        .predicate()
+        .name();
     assert!(matches!(rejected, "a" | "b"));
     let retained = if rejected == "a" { "b" } else { "a" };
     let admitted = hybrid(&format!("a|b. :-{rejected}."), &limits());
     let (family, outcome) = capture(PreparedInput::hybrid(&admitted), config);
     assert_eq!(
         family,
-        Family::from([vec![atom(retained, Sign::Positive, vec![])]])
+        Family::from([Model::new([atom(retained, Sign::Positive, vec![])]).unwrap()])
     );
     assert_eq!(outcome.completion(), Some(Completion::RequestedModels));
     let statistics = outcome.hybrid_execution().unwrap();
@@ -525,11 +532,7 @@ fn a_requested_prefix_settles_region_workers() {
     .start()
     .unwrap();
     let answer = session.next().unwrap().unwrap();
-    assert!(monotone_family().contains(&{
-        let mut atoms: Vec<_> = answer.interpretation().atoms().iter().cloned().collect();
-        atoms.sort();
-        atoms
-    }));
+    assert!(monotone_family().contains(answer.interpretation()));
     assert!(session.next().is_none());
     let outcome = session.outcome().unwrap();
     assert_eq!(outcome.completion(), Some(Completion::RequestedModels));

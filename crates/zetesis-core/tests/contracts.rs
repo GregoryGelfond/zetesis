@@ -71,7 +71,7 @@ fn extrema_surround_finite_terms_without_coercing_printed_spellings() {
             assert_eq!(a == b, left == right);
         }
     }
-    let model = Model::new(values.iter().cloned().map(|value| atom("v", vec![value])));
+    let model = Model::new(values.iter().cloned().map(|value| atom("v", vec![value]))).unwrap();
     assert_eq!(model.atoms().len(), values.len());
     let templates = values
         .iter()
@@ -88,8 +88,14 @@ fn extrema_surround_finite_terms_without_coercing_printed_spellings() {
         .collect();
     let source = admitted(templates);
     assert_eq!(source.domain().len(), values.len());
-    assert_eq!(source.domain().first(), Some(&Value::Infimum));
-    assert_eq!(source.domain().last(), Some(&Value::Supremum));
+    assert_eq!(
+        source.domain().iter().next(),
+        Some((&Value::Infimum).into())
+    );
+    assert_eq!(
+        source.domain().iter().next_back(),
+        Some((&Value::Supremum).into())
+    );
 }
 
 #[test]
@@ -196,8 +202,13 @@ fn program_preserves_templates_and_scans_filter_only_constants() {
         vec![Filter::Eq(number(7), number(9))],
     );
     let program = admitted(vec![template.clone(), template.clone()]);
-    assert_eq!(program.templates(), &[template.clone(), template]);
-    assert_eq!(program.domain(), &[Value::Number(7), Value::Number(9)]);
+    assert_eq!(program.templates().len(), 2);
+    for admitted in program.templates() {
+        assert_eq!(admitted, template);
+    }
+    assert_eq!(program.domain().len(), 2);
+    assert_eq!(program.domain().at(0).unwrap(), Value::Number(7));
+    assert_eq!(program.domain().at(1).unwrap(), Value::Number(9));
     assert!(program.predicates().is_empty());
 }
 
@@ -216,7 +227,11 @@ fn empty_seed_does_not_expand_a_large_symbolic_carrier() {
         .next()
         .expect("nonempty carrier")
         .expect("one tuple fits");
-    assert_eq!(first.values(), vec![Value::Number(0); 32]);
+    assert!(
+        first.atom().values().iter().eq(vec![Value::Number(0); 32]
+            .iter()
+            .map(zetesis_core::catalog::TermRef::from))
+    );
     assert!(!seed.contains(&first));
     assert!(matches!(
         GroundProgram::compile(&program, StaticLimits::default()),
@@ -254,7 +269,11 @@ fn carrier_iteration_and_cloned_cursors_are_exact() {
                 (0..size).map(move |y| atom("gate", vec![Value::Number(x), Value::Number(y)]))
             })
             .collect();
-        assert_eq!(all, expected);
+        assert!(
+            all.iter()
+                .map(zetesis_core::CarrierAtom::atom)
+                .eq(expected.iter().map(zetesis_core::catalog::AtomRef::from))
+        );
     }
 }
 
@@ -273,12 +292,17 @@ fn empty_domain_has_nullary_atoms_but_no_positive_arity_tuples() {
         ),
     ]);
     assert!(program.domain().is_empty());
-    assert_eq!(
-        program
-            .gate_atoms()
-            .collect::<Result<Vec<_>, _>>()
-            .expect("empty tuple"),
-        vec![atom("a", vec![])]
+    let gates = program
+        .gate_atoms()
+        .collect::<Result<Vec<_>, _>>()
+        .expect("empty tuple");
+    assert!(
+        gates
+            .iter()
+            .map(zetesis_core::CarrierAtom::atom)
+            .eq([atom("a", vec![])]
+                .iter()
+                .map(zetesis_core::catalog::AtomRef::from))
     );
     let graph =
         GroundProgram::compile(&program, StaticLimits::default()).expect("one nullary graph");
@@ -312,8 +336,11 @@ fn static_filters_and_ground_duplicate_antecedents_are_exact() {
             "different variables alias after substitution"
         );
         assert_eq!(rule.gate_true().len(), 1);
-        let head = &graph.atoms()[rule.head().expect("headed") as usize];
-        assert_eq!(head.values()[0], head.values()[1]);
+        let head = graph
+            .atoms()
+            .at(rule.head().expect("headed") as usize)
+            .unwrap();
+        assert_eq!(head.values().at(0), head.values().at(1));
     }
 }
 
@@ -371,13 +398,13 @@ fn word_conversion_crosses_the_old_sixty_four_atom_limit() {
         .collect();
     let program = admitted(templates);
     let graph = GroundProgram::compile(&program, StaticLimits::default()).expect("seventy atoms");
-    let chosen = [0usize, 31, 32, 63, 64, 69].map(|index| graph.atoms()[index].clone());
+    let chosen = [0usize, 31, 32, 63, 64, 69].map(|index| atom(&format!("a{index:02}"), vec![]));
     let seed = Seed::new(&program, chosen.clone()).expect("gate atoms");
     let words = graph.seed_words(&seed).expect("three words");
     assert_eq!(words.len(), 3);
     assert_eq!(
         graph.model_from_words(&words).expect("exact decode"),
-        Model::new(chosen)
+        Model::new(chosen).unwrap()
     );
     assert_eq!(
         graph.model_from_words(&[0, 0, 1 << 6]),

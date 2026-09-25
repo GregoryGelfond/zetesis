@@ -40,7 +40,15 @@ fn accumulation_overflow_preserves_prior_evidence() {
 }
 
 fn payload(model: &Model) -> &str {
-    let Value::String(value) = &model.atoms().first().unwrap().values()[0] else {
+    let zetesis_core::ValueNodeRef::String(value) = model
+        .atoms()
+        .first()
+        .unwrap()
+        .values()
+        .at(0)
+        .unwrap()
+        .descriptor()
+    else {
         panic!("fixture contains one string argument");
     };
     value

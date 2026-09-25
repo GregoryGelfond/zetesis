@@ -303,9 +303,18 @@ fn check_native(case: &Case, selected: &Family, expected: &Family) {
     .unwrap();
     assert_eq!(owner.source().text(), case.source);
     assert!(owner.projection().is_explicit());
-    // This temporary interpretation spells the fixed domain only; no
-    // answer-set or support claim is made by Model construction.
-    let domain = model_symbols(&Model::new(owner.projection().atoms().iter().cloned()));
+    // Explicit fixture export feeds the bounded renderer used by the external
+    // oracle comparison. This fixed-domain model makes no answer-set claim.
+    let domain = model_symbols(
+        &Model::new(
+            owner
+                .projection()
+                .atoms()
+                .iter()
+                .map(|atom| atom.to_atom(zetesis_core::ValueLimits::default()).unwrap()),
+        )
+        .unwrap(),
+    );
     assert_eq!(
         domain,
         symbols(case.domain),

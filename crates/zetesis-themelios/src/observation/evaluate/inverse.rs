@@ -6,7 +6,7 @@
 
 use themelios_program::term::BinaryOp;
 
-use super::{Bound, Error, ErrorKind, Symbol, Template, UnaryOp, Work};
+use super::{Binding, Error, ErrorKind, Interpreter, Template, UnaryOp, Work};
 
 fn contains(term: &Template, slot: usize, work: &mut Work<'_>) -> Result<bool, Error> {
     work.step(1)?;
@@ -19,33 +19,33 @@ fn contains(term: &Template, slot: usize, work: &mut Work<'_>) -> Result<bool, E
         _ => false,
     })
 }
-
-fn candidate(
+fn candidate<'input>(
     term: &Template,
     slot: usize,
     target: i128,
-    binding: &[Option<Bound<'_>>],
-    work: &mut Work<'_>,
+    binding: &Binding<'input>,
+    context: &mut Interpreter<'input, '_, '_>,
 ) -> Result<Option<i128>, Error> {
-    work.step(1)?;
+    context.work.step(1)?;
     match term {
         Template::Variable(found) if *found == slot => Ok(Some(target)),
-        Template::Unary(UnaryOp::Negate, inner) => candidate(inner, slot, -target, binding, work),
+        Template::Unary(UnaryOp::Negate, inner) => {
+            candidate(inner, slot, -target, binding, context)
+        }
         Template::Binary(operator, left, right) => {
-            let unknown_left = contains(left, slot, work)?;
+            let unknown_left = contains(left, slot, context.work)?;
             let (unknown, known) = if unknown_left {
                 (left, right)
             } else {
                 (right, left)
             };
-            let known = i128::from(work.numeric(known, binding)?);
+            let known = i128::from(context.numeric(known, binding)?);
             let target = match operator {
                 BinaryOp::Add => target - known,
                 BinaryOp::Sub if unknown_left => target + known,
                 BinaryOp::Sub => known - target,
                 BinaryOp::Mul if known == 0 => {
-                    // Zero does not determine a finite inverse binding.
-                    return Err(work.error(ErrorKind::Unsupported(
+                    return Err(context.work.error(ErrorKind::Unsupported(
                         super::super::Feature::UnsafeVariable,
                     )));
                 }
@@ -53,34 +53,44 @@ fn candidate(
                 BinaryOp::Mul => target / known,
                 _ => unreachable!("compiler admits only single-candidate inverse operators"),
             };
-            candidate(unknown, slot, target, binding, work)
+            candidate(unknown, slot, target, binding, context)
         }
         _ => unreachable!("compiler admits exactly one unknown occurrence"),
     }
 }
-
-pub(super) fn bind(
+pub(super) fn bind<'input>(
     slot: usize,
     expression: &Template,
-    value: &Symbol,
-    binding: &mut [Option<Bound<'_>>],
+    target: i32,
+    binding: &mut Binding<'input>,
     undo: &mut Vec<usize>,
-    work: &mut Work<'_>,
+    context: &mut Interpreter<'input, '_, '_>,
 ) -> Result<bool, Error> {
-    let Symbol::Number(target) = value else {
-        return Ok(false);
-    };
-    if binding[slot].is_some() {
-        return Ok(work.numeric(expression, binding)? == *target);
+    if binding.is_bound(slot) {
+        return Ok(context.numeric(expression, binding)? == target);
     }
-    let Some(value) = candidate(expression, slot, i128::from(*target), binding, work)? else {
+    let Some(value) = candidate(expression, slot, i128::from(target), binding, context)? else {
         return Ok(false);
     };
     let Ok(value) = i32::try_from(value) else {
         return Ok(false);
     };
-    let (value, metric) = super::patterns::own(&Symbol::Number(value), work)?;
-    binding[slot] = Some(Bound::Owned(value, metric));
+    let mut metric = super::Metric::default();
+    context.work.step(1)?;
+    context.work.node(&mut metric)?;
+    context.work.check(
+        super::Resource::Depth,
+        1,
+        context.work.limits.max_symbol_depth as u128,
+    )?;
+    context.work.construction_check(metric)?;
+    context.work.check(
+        super::Resource::LocalBytes,
+        context.work.local_bytes + metric.payload(),
+        context.work.limits.max_local_bytes as u128,
+    )?;
+    let key = context.number(value)?;
+    binding.bind_term(slot, &key, metric, context.work)?;
     undo.push(slot);
-    Ok(work.numeric(expression, binding)? == *target)
+    Ok(context.numeric(expression, binding)? == target)
 }

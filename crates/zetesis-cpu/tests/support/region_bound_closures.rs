@@ -36,10 +36,10 @@ fn materialize(candidates: &Candidates<'_>, region: &Region) -> Cube {
     };
     for (at, gate) in candidates.root.iter().enumerate() {
         if region.is_held(at) {
-            cube.must.insert(gate.atom().clone());
+            cube.must.insert(gate.carrier());
         }
         if !region.is_cut(at) {
-            cube.may.as_mut().unwrap().insert(gate.atom().clone());
+            cube.may.as_mut().unwrap().insert(gate.carrier());
         }
     }
     cube
@@ -48,9 +48,9 @@ fn materialize(candidates: &Candidates<'_>, region: &Region) -> Cube {
 fn transfer(root: &[Arc<GateAtom>], cube: &Cube, region: &mut Region) {
     for (at, gate) in root.iter().enumerate() {
         if region.is_open(at) {
-            if cube.must.contains(gate.atom()) {
+            if cube.must.contains(&gate.carrier()) {
                 region.hold(at);
-            } else if !cube.may.as_ref().unwrap().contains(gate.atom()) {
+            } else if !cube.may.as_ref().unwrap().contains(&gate.carrier()) {
                 region.cut(at);
             }
         }
@@ -108,37 +108,47 @@ fn borrowed_passes_match_materialized_passes() {
 }
 
 #[test]
-fn borrowed_passes_preserve_work_refusals() {
+fn a_stopped_transfer_preserves_the_prepass_cube() {
     let program = cycle();
     let candidates = bounded(&program);
-    let mut original = Region::all_open(candidates.root.len());
-    original.cut(0);
+    let original = materialize(&candidates, &Region::all_open(candidates.root.len()));
+    let lower = Model::new(Vec::new()).unwrap();
+    let atoms = ["a", "b", "c"]
+        .map(|name| zetesis_core::Atom::new(Predicate::new(name, 0).unwrap(), vec![]).unwrap());
+    let upper = Model::new(atoms).unwrap();
+    let cancellation = Cancellation::default();
     let mut completed = false;
-    // This finite three-atom control crosses both lower and upper work
-    // boundaries. Fresh, identically prepared workspaces prevent prior capacity
-    // histories from changing either side's accounting premise.
-    for max_work in 0..=256 {
-        let mut reference =
-            Closures::new(&program, Limits::default(), Cancellation::default()).unwrap();
-        let mut borrowed =
-            Closures::new(&program, Limits::default(), Cancellation::default()).unwrap();
-        reference.limits.max_work = max_work;
-        borrowed.limits.max_work = max_work;
-        let mut cube = materialize(&candidates, &original);
-        let expected = reference.narrow(&mut cube);
-        let mut expected_region = original.clone();
-        if matches!(expected, Ok(Pass::Changed | Pass::Fixed)) {
-            transfer(&candidates.root, &cube, &mut expected_region);
-            completed = true;
+    for max_work in 0..4096 {
+        let mut cube = Cube {
+            must: original.must.clone(),
+            may: original.may.clone(),
+        };
+        let mut work = Work::source(&cancellation, max_work);
+        let result = transfer_root(
+            &program,
+            &mut cube,
+            &lower,
+            &upper,
+            Limits::default().max_closure_bytes,
+            &mut 0,
+            &mut work,
+        );
+        match result {
+            Err(Stop::WorkLimit) => {
+                assert_eq!(cube.must, original.must);
+                assert_eq!(cube.may, original.may);
+                assert_eq!(work.source_statistics(0).work, max_work);
+            }
+            Ok(Pass::Fixed) => {
+                completed = true;
+                break;
+            }
+            other => panic!("unexpected transfer: {other:?}"),
         }
-        let mut region = original.clone();
-        let actual = borrowed.narrow_region(&candidates.root_must, &candidates.root, &mut region);
-        assert_eq!(actual, expected, "work ceiling {max_work}");
-        assert_eq!(region, expected_region, "work ceiling {max_work}");
     }
     assert!(
         completed,
-        "the sweep must include a completed pass, not only refusals"
+        "the sweep includes every transfer refusal and a completed pass"
     );
 }
 
@@ -281,4 +291,29 @@ fn an_upper_only_constraint_does_not_refute() {
         closures.narrow_region(&held, &root, &mut region),
         Ok(Pass::Fixed)
     );
+}
+
+#[test]
+fn a_coordinate_refusal_keeps_the_symbolic_upper_bound() {
+    let program = cycle();
+    let upper =
+        Model::new([zetesis_core::Atom::new(Predicate::new("a", 0).unwrap(), vec![]).unwrap()])
+            .unwrap();
+    let cancellation = Cancellation::default();
+    let mut work = Work::source(&cancellation, u64::MAX);
+    let mut cube = Cube::all_open();
+    assert_eq!(
+        transfer_root(
+            &program,
+            &mut cube,
+            &Model::default(),
+            &upper,
+            0,
+            &mut 0,
+            &mut work
+        ),
+        Err(Stop::Allocation)
+    );
+    assert!(cube.must.is_empty());
+    assert!(cube.may.is_none());
 }

@@ -86,23 +86,19 @@ fn search_refusal_transfers_the_original_checked_prefix() {
     assert_eq!(failure.answer_sets().len(), 1);
     let subject = failure.subject().clone();
     let original_answer = failure.answer_sets().as_ptr();
-    let original_atom = std::ptr::from_ref(
-        failure.answer_sets()[0]
-            .interpretation()
-            .atoms()
-            .first()
-            .unwrap(),
-    );
+    let original_catalog = failure.answer_sets()[0].interpretation().catalog().clone();
     let expected = names(&failure.answer_sets()[0]);
     assert!(expected.contains(&"a".into()));
     let answers = failure.into_answer_sets();
     drop(owner);
     assert_eq!(answers.len(), 1);
     assert_eq!(std::ptr::from_ref(&answers[0]), original_answer);
-    assert!(std::ptr::eq(
-        answers[0].interpretation().atoms().first().unwrap(),
-        original_atom
-    ));
+    assert!(
+        answers[0]
+            .interpretation()
+            .catalog()
+            .same_owner(&original_catalog)
+    );
     assert_eq!(names(&answers[0]), expected);
     assert!(answers[0].subject().same_instance(&subject));
 }

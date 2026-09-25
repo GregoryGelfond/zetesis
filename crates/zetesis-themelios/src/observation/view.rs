@@ -3,7 +3,8 @@
 use std::fmt;
 
 use themelios_program::symbol::{Sign as SymbolSign, Symbol};
-use zetesis_core::{Atom, Model, Sign, Value, ValueNode};
+use zetesis_core::catalog::{AtomRef, TermRef};
+use zetesis_core::{Model, Sign, ValueNodeRef};
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_objective::Score;
 
@@ -125,11 +126,11 @@ impl ModelView<'_> {
     /// Constructing the iterator takes constant time and allocates nothing. A full
     /// traversal scans all atoms and, for explicit selection, performs a binary
     /// lookup per atom; predicate comparison also inspects name bytes.
-    pub fn shown_atoms(&self) -> impl Iterator<Item = &Atom> {
+    pub fn shown_atoms(&self) -> impl Iterator<Item = AtomRef<'_>> {
         self.model
             .atoms()
             .iter()
-            .filter(|atom| self.selection.includes(atom))
+            .filter(|atom| self.selection.includes(*atom))
     }
 
     /// Distinct enabled terms. Equal symbols in the atom channel remain separate.
@@ -242,7 +243,7 @@ impl ModelView<'_> {
         &'m self,
         out: &mut Buffer<'_>,
         table: &mut AtomTable,
-        added: &mut Vec<&'m Atom>,
+        added: &mut Vec<AtomRef<'m>>,
         deferred: &mut bool,
     ) -> Result<(), ViewError> {
         // One lookup per atom: the index of each atom of the model, in model
@@ -411,7 +412,7 @@ impl<'a> Buffer<'a> {
         Ok(())
     }
     /// A typed atom: its predicate, sign and arguments.
-    fn atom(&mut self, atom: &Atom) -> Result<(), ViewError> {
+    fn atom(&mut self, atom: AtomRef<'_>) -> Result<(), ViewError> {
         self.text("{\"predicate\":")?;
         self.quoted(atom.predicate().name())?;
         self.text(",\"sign\":")?;
@@ -524,41 +525,32 @@ impl<'a> Buffer<'a> {
         self.text(&arity.to_string())?;
         self.text("}")
     }
-    fn node(&mut self, node: &ValueNode) -> Result<(), ViewError> {
+    fn node(&mut self, node: ValueNodeRef<'_>) -> Result<(), ViewError> {
         match node {
-            ValueNode::Infimum => self.leaf("infimum", None, None),
-            ValueNode::Supremum => self.leaf("supremum", None, None),
-            ValueNode::Number(value) => self.leaf("number", None, Some(*value)),
-            ValueNode::String(value) => self.leaf("string", Some(value), None),
-            ValueNode::Symbol(value) => self.leaf("symbol", Some(value), None),
-            ValueNode::Function { name, sign, arity } => {
-                self.constructor(Some(name), *sign == Sign::Negative, *arity)
+            ValueNodeRef::Infimum => self.leaf("infimum", None, None),
+            ValueNodeRef::Supremum => self.leaf("supremum", None, None),
+            ValueNodeRef::Number(value) => self.leaf("number", None, Some(value)),
+            ValueNodeRef::String(value) => self.leaf("string", Some(value), None),
+            ValueNodeRef::Symbol(value) => self.leaf("symbol", Some(value), None),
+            ValueNodeRef::Function { name, sign, arity } => {
+                self.constructor(Some(name), sign == Sign::Negative, arity)
             }
-            ValueNode::Tuple { arity } => self.constructor(None, false, *arity),
+            ValueNodeRef::Tuple { arity } => self.constructor(None, false, arity),
         }
     }
-    fn value(&mut self, value: &Value) -> Result<(), ViewError> {
-        if self.limits.max_depth == 0 {
+    fn value(&mut self, value: TermRef<'_>) -> Result<(), ViewError> {
+        if value.depth() > self.limits.max_depth {
             return Err(ViewError::Depth);
         }
         self.text("[")?;
-        match value {
-            Value::Infimum => self.leaf("infimum", None, None)?,
-            Value::Supremum => self.leaf("supremum", None, None)?,
-            Value::Number(value) => self.leaf("number", None, Some(*value))?,
-            Value::String(value) => self.leaf("string", Some(value), None)?,
-            Value::Symbol(value) => self.leaf("symbol", Some(value), None)?,
-            Value::Structured(value) => {
-                if value.depth() > self.limits.max_depth {
-                    return Err(ViewError::Depth);
-                }
-                for (index, node) in value.nodes().iter().enumerate() {
-                    if index != 0 {
-                        self.text(",")?;
-                    }
-                    self.node(node)?;
-                }
+        let mut nodes = value.nodes();
+        let mut first = true;
+        while let Some(node) = nodes.next_with(|| self.step(1))? {
+            if !first {
+                self.text(",")?;
             }
+            first = false;
+            self.node(node)?;
         }
         self.text("]")
     }

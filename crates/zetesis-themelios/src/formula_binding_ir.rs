@@ -1,12 +1,12 @@
 //! Scalar/range bindings and evaluated heads lower to scoped value slots.
 
+use crate::formula_support::components::{Pattern, Term as CoreTerm};
 use themelios_program::program::{Arguments, Literal, LiteralInner, Relation};
 use themelios_program::term::{Term, Variable};
-use zetesis_core::{AtomPattern, Predicate, Term as CoreTerm};
 
 use crate::diagnostic::unsupported;
 use crate::formula_ir::{Compiler, Expression, LiteralIr, Operation, Variables};
-use crate::{AdmissionFailure, FormulaFailure, ProfileFeature};
+use crate::{FormulaFailure, ProfileFeature};
 
 impl Compiler<'_> {
     pub(super) fn binding_comparison(
@@ -43,7 +43,7 @@ impl Compiler<'_> {
         literal: &Literal,
         variables: &mut Variables,
         body: &mut Vec<LiteralIr>,
-    ) -> Result<AtomPattern, FormulaFailure> {
+    ) -> Result<Pattern, FormulaFailure> {
         use themelios_program::program::DefaultNegation;
         if literal.negation != DefaultNegation::None {
             return Err(unsupported(ProfileFeature::NegatedHead, self.location).into());
@@ -174,7 +174,7 @@ impl Compiler<'_> {
         atom: &themelios_program::program::Atom,
         variables: &mut Variables,
         body: &mut Vec<LiteralIr>,
-    ) -> Result<AtomPattern, FormulaFailure> {
+    ) -> Result<Pattern, FormulaFailure> {
         let Arguments::Single(arguments) = &atom.arguments else {
             return Err(unsupported(ProfileFeature::PooledArguments, self.location).into());
         };
@@ -187,7 +187,7 @@ impl Compiler<'_> {
         let mut terms = Vec::new();
         for term in arguments {
             if matches!(term, Term::Variable(_) | Term::Symbolic(_)) {
-                terms.push(self.objective_term(term, variables)?);
+                terms.push(self.domain_term(term, variables)?);
             } else {
                 crate::formula::ceiling(
                     crate::FormulaResource::Variables,
@@ -216,21 +216,11 @@ impl Compiler<'_> {
                 terms.push(CoreTerm::Variable(target));
             }
         }
-        let predicate = Predicate::with_sign(
+        let predicate = self.predicate(
             atom.name.as_str(),
             arguments.len(),
             crate::coherence::core_sign(atom.sign),
-        )
-        .map_err(|error| AdmissionFailure::Construction {
-            error,
-            location: self.location,
-        })?;
-        let pattern =
-            AtomPattern::new(predicate, terms).map_err(|error| AdmissionFailure::Construction {
-                error,
-                location: self.location,
-            })?;
-        self.pattern_domain(&pattern)?;
-        Ok(pattern)
+        )?;
+        self.pattern_from_parts(predicate, &terms)
     }
 }

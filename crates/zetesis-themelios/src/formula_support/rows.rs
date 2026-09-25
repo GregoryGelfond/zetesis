@@ -6,9 +6,8 @@
 //! owns no second copy of current slots and never escapes the join module.
 
 use themelios_base::span::Location;
-use zetesis_core::Value;
 
-use super::{Counters, Join, Row};
+use super::{Computation, Counters, Join, Row};
 use crate::expansion::Budget;
 use crate::formula_binding::Binding;
 use crate::{FormulaFailure, FormulaLimits};
@@ -45,12 +44,14 @@ impl<'a, 'source> FilteredRows<'a, 'source> {
 
     pub(crate) fn next_row(
         &mut self,
+        computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
     ) -> Result<Option<Row<'_>>, FormulaFailure> {
-        self.join.next_row(limits, budget, counters, location)
+        self.join
+            .next_row(computation, limits, budget, counters, location)
     }
 }
 
@@ -69,16 +70,16 @@ pub(super) enum Frame {
 }
 
 impl Frame {
-    pub(super) fn binding<'a>(&'a self, current: &'a [Option<Value>]) -> Binding<'a> {
+    pub(super) fn binding<'a>(&'a self, current: &'a Binding) -> Binding<'a> {
         Binding::borrowed(match self {
-            Self::Current => current,
+            Self::Current => current.slots(),
             Self::Owned(binding) => binding.slots(),
         })
     }
 
-    pub(super) fn into_binding(self, current: &[Option<Value>]) -> Binding<'_> {
+    pub(super) fn into_binding<'a>(self, current: &'a Binding<'_>) -> Binding<'a> {
         match self {
-            Self::Current => Binding::borrowed(current),
+            Self::Current => Binding::borrowed(current.slots()),
             Self::Owned(binding) => binding,
         }
     }

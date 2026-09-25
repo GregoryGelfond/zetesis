@@ -221,6 +221,13 @@ pub enum AdmissionFailure {
         /// Source of the value being constructed.
         location: Location,
     },
+    /// Canonical source metadata could not be admitted or published.
+    Metadata {
+        /// Typed canonical identity, allocation or storage refusal.
+        error: crate::MetadataStorageError,
+        /// Original declaration or compilation fallback location.
+        location: Location,
+    },
     /// The normalized program failed the independent core admission door.
     Core {
         /// The typed core refusal.
@@ -260,6 +267,9 @@ impl AdmissionFailure {
             Self::Construction { location, .. } => {
                 vec![diagnostic("invalid-shape", self.to_string(), *location)]
             }
+            Self::Metadata { location, .. } => {
+                vec![diagnostic("metadata-storage", self.to_string(), *location)]
+            }
             Self::Core { location, .. } => {
                 vec![diagnostic("core-admission", self.to_string(), *location)]
             }
@@ -292,6 +302,7 @@ impl fmt::Display for AdmissionFailure {
                 "numeric extremum endpoint {value} is excluded by the zetesis endpoint guard"
             ),
             Self::Construction { error, .. } => error.fmt(f),
+            Self::Metadata { error, .. } => error.fmt(f),
             Self::Core { error, .. } => error.fmt(f),
         }
     }
@@ -303,6 +314,7 @@ impl std::error::Error for AdmissionFailure {
             Self::Source { error, .. } => Some(error),
             Self::Syntax(error) => Some(error),
             Self::Construction { error, .. } => Some(error),
+            Self::Metadata { error, .. } => Some(error),
             Self::Core { error, .. } => Some(error),
             _ => None,
         }

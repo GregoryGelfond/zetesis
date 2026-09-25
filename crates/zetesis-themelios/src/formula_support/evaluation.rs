@@ -1,63 +1,33 @@
-//! Flat plan evaluation with private, bounded reuse of empty value storage.
+//! Flat expression evaluation over one canonical term authority.
 //!
-//! Before node `i`, the live prefix holds precisely nodes `0..i` in source-plan
-//! order: as integers while every value so far is a number, and as value
-//! cells from the first value that is not. Operands refer only to that prefix;
-//! an intermediate result is appended only after its work, operand-copy and
-//! result checks succeed. The root uses the same checked operation and returns
-//! directly because no later node consumes it. Strict evaluation stops at the
-//! first failure. Source-family evaluation retains numeric zero-divisor
-//! failures, visits independent later nodes, and skips every operation with a
-//! missing operand. A missing-mask cell prevents any placeholder scratch cell
-//! from being read as a semantic value. Clearing the prefix preserves capacity,
-//! never a previous result.
+//! Numeric prefixes use machine integers. Once a nonnumeric result is needed,
+//! scratch stores scoped term IDs; constructors reuse child IDs in the same DAG.
+//! Missing arithmetic outputs are explicit and never enter an emitted binding.
+//! Independent source branches still run after a zero divisor. Reusable scratch
+//! retains bounded empty metadata, never an owned Value or copied child tree.
 
 use themelios_base::span::Location;
-use themelios_program::term::BinaryOp;
-use zetesis_core::Value;
+use themelios_program::term::{BinaryOp, EvalError};
+use zetesis_core::ValueNodeRef;
+use zetesis_core::catalog::{AssignmentError, TermKey};
 
-use super::{Counters, copy, numeric, scalar_value};
-use crate::expansion::Budget;
+use super::{Computation, Counters};
 use crate::formula_ir::{Expression, Operation};
 use crate::grounding_observer::Event;
 use crate::{ExpansionFailure, FormulaFailure, FormulaLimits};
 
-/// At most this many empty cells survive an evaluation in one join cursor.
-/// This is a storage policy, independent of copied-payload and logical-work
-/// ceilings. Large expressions still use the existing finite plan and release
-/// their entire workspace afterward. No strings or structures remain live.
-const RETAINED_VALUE_CELLS: usize = 32;
+mod scratch;
+use scratch::{Frame, Scratch};
 
-/// One cursor's evaluation workspace; never shared across workers or scopes.
-///
-/// Scratch retains only intermediate results; a one-node plan allocates no
-/// scratch cells. Peak live scratch is linear in the expression's proper prefix.
-/// Between evaluations it contains zero values and at most 32 allocated cells
-/// of each kind. A worker with `j` simultaneous join cursors therefore retains
-/// at most `32*j` cells of each kind; cursor lifetime follows the existing
-/// bounded source-scope traversal. The join lends this same workspace to
-/// binding generators and final filters; those operations return before
-/// another borrow begins. Reuse itself changes neither the join schedule nor
-/// authored resource accounting. Source-family mode additionally owns one
-/// transient missing-node mask, bounded by the already-admitted expression's
-/// node count and reserved fallibly. It is released before the next evaluation,
-/// rather than charged to cumulative scalar payload. Independent-branch
-/// validation retains the same per-node work charges.
-///
-/// A plan over numbers, the common case of a comparison or a binder, runs
-/// entirely in the integer cells: no value is constructed or copied and no
-/// payload is charged, since a number has none. The first value that is not a
-/// number moves the integer prefix into value cells, and the plan continues
-/// there, charging each value's payload as the value cells do.
+type Input = Result<Option<TermKey>, FormulaFailure>;
+
 #[derive(Default)]
 pub(crate) struct Evaluation {
-    values: Vec<Value>,
-    integers: Vec<i32>,
+    scratch: Scratch,
     zero_divisor: bool,
 }
 
 impl Evaluation {
-    /// Cause of the most recent failed expression; reset before every attempt.
     pub(crate) const fn zero_divisor(&self) -> bool {
         self.zero_divisor
     }
@@ -67,96 +37,96 @@ impl Evaluation {
         super::undefined(location)
     }
 
-    pub(crate) fn expression<'a>(
+    pub(crate) fn expression(
         &mut self,
         expression: &Expression,
-        variable: impl Fn(usize) -> Result<&'a Value, FormulaFailure>,
+        variable: impl Fn(usize) -> Result<TermKey, FormulaFailure>,
+        computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
-        budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
-    ) -> Result<Value, FormulaFailure> {
+    ) -> Result<TermKey, FormulaFailure> {
         self.evaluate(
             expression,
             Mode::Strict(|slot| variable(slot).map(Some)),
+            computation,
             limits,
-            budget,
             counters,
             location,
         )
     }
 
-    /// Source families validate independent branches after a zero divisor.
-    /// An operation depending on a missing value is not evaluated. The scalar
-    /// operations themselves are shared with strict, first-failure evaluation.
-    pub(crate) fn source_expression<'a>(
+    pub(crate) fn source_expression(
         &mut self,
         expression: &Expression,
-        variable: impl Fn(usize) -> Result<&'a Value, FormulaFailure>,
+        variable: impl Fn(usize) -> Result<TermKey, FormulaFailure>,
+        computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
-        budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
-    ) -> Result<Value, FormulaFailure> {
+    ) -> Result<TermKey, FormulaFailure> {
         self.evaluate(
             expression,
             Mode::Source(|slot| variable(slot).map(Some)),
+            computation,
             limits,
-            budget,
             counters,
             location,
         )
     }
 
-    /// `None` is an inherited arithmetic-unavailable input, never an unbound
-    /// source variable. Independent branches remain subject to checked arithmetic.
-    pub(crate) fn source_partial<'a>(
+    /// None denotes inherited arithmetic unavailability, never an unsafe variable.
+    pub(crate) fn source_partial(
         &mut self,
         expression: &Expression,
-        variable: impl Fn(usize) -> Result<Option<&'a Value>, FormulaFailure>,
+        variable: impl Fn(usize) -> Input,
+        computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
-        budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
-    ) -> Result<Value, FormulaFailure> {
+    ) -> Result<TermKey, FormulaFailure> {
         self.evaluate(
             expression,
             Mode::Partial(variable),
+            computation,
             limits,
-            budget,
             counters,
             location,
         )
     }
 
-    /// Evaluate independent expression components without allowing a zero in
-    /// one component to conceal a fatal arithmetic failure in another.
-    pub(crate) fn source_values<'a, const N: usize>(
+    pub(crate) fn source_values<const N: usize>(
         &mut self,
         expressions: [&Expression; N],
-        variable: impl Fn(usize) -> Result<&'a Value, FormulaFailure>,
+        variable: impl Fn(usize) -> Result<TermKey, FormulaFailure>,
+        computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
-        budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
-    ) -> Result<[Value; N], FormulaFailure> {
+    ) -> Result<[TermKey; N], FormulaFailure> {
         let mut failures = Failures::default();
-        let mut values: [Option<Value>; N] = std::array::from_fn(|_| None);
+        let mut values: [Option<TermKey>; N] = std::array::from_fn(|_| None);
         for (expression, value) in expressions.into_iter().zip(&mut values) {
-            let result =
-                self.source_expression(expression, &variable, limits, budget, counters, location);
+            let result = self.source_expression(
+                expression,
+                &variable,
+                computation,
+                limits,
+                counters,
+                location,
+            );
             *value = failures.value(result, self.zero_divisor())?;
         }
         failures.finish(self)?;
         Ok(values.map(|value| value.expect("every independent component is defined")))
     }
 
-    pub(crate) fn source_tuple<'a>(
+    pub(crate) fn source_tuple(
         &mut self,
         (left, right): (&[Expression], &[Expression]),
-        variable: impl Fn(usize) -> Result<&'a Value, FormulaFailure>,
+        variable: impl Fn(usize) -> Result<TermKey, FormulaFailure>,
+        computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
-        budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
     ) -> Result<bool, FormulaFailure> {
@@ -165,10 +135,23 @@ impl Evaluation {
         for index in 0..left.len().max(right.len()) {
             let result = match (left.get(index), right.get(index)) {
                 (Some(left), Some(right)) => self
-                    .source_values([left, right], &variable, limits, budget, counters, location)
-                    .map(|[left, right]| left == right),
+                    .source_values(
+                        [left, right],
+                        &variable,
+                        computation,
+                        limits,
+                        counters,
+                        location,
+                    )
+                    .and_then(|[left, right]| {
+                        let read = computation.read();
+                        let left = read.term(&left).map_err(|error| scope(error, location))?;
+                        let right = read.term(&right).map_err(|error| scope(error, location))?;
+                        left.compare_ref_with(right, || counters.work(limits, location))
+                            .map(std::cmp::Ordering::is_eq)
+                    }),
                 (Some(value), None) | (None, Some(value)) => self
-                    .source_expression(value, &variable, limits, budget, counters, location)
+                    .source_expression(value, &variable, computation, limits, counters, location)
                     .map(|_| false),
                 (None, None) => unreachable!("one tuple has a component at this index"),
             };
@@ -180,81 +163,90 @@ impl Evaluation {
         Ok(equal)
     }
 
-    fn evaluate<'a>(
+    fn evaluate(
         &mut self,
         expression: &Expression,
-        mode: Mode<impl Fn(usize) -> Result<Option<&'a Value>, FormulaFailure>>,
+        mode: Mode<impl Fn(usize) -> Input>,
+        computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
-        budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
-    ) -> Result<Value, FormulaFailure> {
+    ) -> Result<TermKey, FormulaFailure> {
         self.zero_divisor = false;
         counters.record(Event::ExpressionEvaluation);
-        let mut missing = Vec::new();
-        if matches!(&mode, Mode::Partial(_))
-            || (matches!(&mode, Mode::Source(_)) && super::family::expression(expression))
-        {
-            // The compiled plan already bounds this one-attempt mask. Like
-            // ordinary evaluation/frame scratch, it retains no scalar payload
-            // between evaluations; a long enumeration cannot accumulate it.
-            missing
-                .try_reserve_exact(expression.nodes.len())
-                .map_err(|_| FormulaFailure::SupportRelation {
-                    error: zetesis_core::relation::Failure::Allocation,
-                    location,
-                })?;
-            missing.resize(expression.nodes.len(), false);
-        }
+        self.scratch
+            .begin(computation, limits, counters, location)?;
+        let needs_mask = matches!(&mode, Mode::Partial(_))
+            || matches!(&mode, Mode::Source(_)) && super::family::expression(expression);
         let variable = match mode {
             Mode::Strict(variable) | Mode::Source(variable) | Mode::Partial(variable) => variable,
         };
-        let mut frame = Frame {
-            values: &mut self.values,
-            integers: &mut self.integers,
+        let frame = Frame {
+            scratch: &mut self.scratch,
+            location,
         };
         let mut context = Context {
             variable: &variable,
+            computation,
             limits,
-            budget,
             counters,
             location,
             zero_divisor: &mut self.zero_divisor,
-            missing,
         };
-        let result = (|| match integer_prefix(&mut frame, &expression.nodes, &mut context)? {
-            Prefix::Complete(value) => Ok(value),
+        if needs_mask {
+            frame.scratch.mask(expression.nodes.len(), &mut context)?;
+        }
+        let result = match integer_prefix(frame.scratch, &expression.nodes, &mut context)? {
+            Prefix::Complete(number) => {
+                if frame.scratch.missing.last().copied().unwrap_or(false) {
+                    None
+                } else {
+                    Some(
+                        context
+                            .computation
+                            .number(number, limits, context.counters, location)?,
+                    )
+                }
+            }
             Prefix::Ended { evaluated, first } => value_suffix(
-                &mut frame,
+                frame.scratch,
                 &expression.nodes,
                 evaluated,
                 first,
                 &mut context,
-            ),
-        })();
-        if result.is_ok() && context.missing.last().copied().unwrap_or(false) {
-            drop(context);
-            drop(frame);
-            return Err(self.zero_divisor_failure(location));
+            )?,
+        };
+        if let Some(value) = result {
+            Ok(value)
+        } else {
+            *context.zero_divisor = true;
+            Err(super::undefined(location))
         }
-        result
     }
 }
 
-/// A variable reader together with its arithmetic-availability policy.
+fn dependent(node: &Operation, scratch: &Scratch) -> bool {
+    let missing = |index| scratch.missing.get(index).copied().unwrap_or(false);
+    match node {
+        Operation::Unary(_, argument) | Operation::Absolute(argument) => missing(*argument),
+        Operation::Binary(_, left, right) => missing(*left) || missing(*right),
+        Operation::Constructor(constructor) => constructor.arguments.iter().copied().any(missing),
+        Operation::Constant(_) | Operation::Variable(_) => false,
+    }
+}
+
 enum Mode<V> {
     Strict(V),
     Source(V),
     Partial(V),
 }
 
-/// Arithmetic failures of independent components; resources are never deferred.
+/// Arithmetic failures of independent components; resource refusals are immediate.
 #[derive(Default)]
 pub(crate) struct Failures {
     zero: Option<ExpansionFailure>,
     fatal: Option<ExpansionFailure>,
 }
-
 impl Failures {
     pub(crate) fn value<T>(
         &mut self,
@@ -274,7 +266,6 @@ impl Failures {
             Err(error) => Err(error),
         }
     }
-
     pub(crate) fn finish(self, evaluation: &mut Evaluation) -> Result<(), FormulaFailure> {
         evaluation.zero_divisor = self.fatal.is_none() && self.zero.is_some();
         match self.fatal.or(self.zero) {
@@ -284,268 +275,254 @@ impl Failures {
     }
 }
 
-/// The borrowed inputs one evaluation reads and charges.
-struct Context<'c, 'a, V: Fn(usize) -> Result<Option<&'a Value>, FormulaFailure>> {
+struct Context<'c, 'owner, 'source, V: Fn(usize) -> Input> {
     variable: &'c V,
+    computation: &'c mut Computation<'owner, 'source>,
     limits: &'c FormulaLimits,
-    budget: &'c mut Budget,
     counters: &'c mut Counters,
     location: Location,
     zero_divisor: &'c mut bool,
-    missing: Vec<bool>,
 }
-
-impl<'a, V: Fn(usize) -> Result<Option<&'a Value>, FormulaFailure>> Context<'_, 'a, V> {
-    fn dependent(&self, node: &Operation) -> bool {
-        let missing = |index| self.missing.get(index).copied().unwrap_or(false);
-        match node {
-            Operation::Unary(_, argument) | Operation::Absolute(argument) => missing(*argument),
-            Operation::Binary(_, left, right) => missing(*left) || missing(*right),
-            Operation::Constructor(constructor) => {
-                constructor.arguments.iter().copied().any(missing)
-            }
-            Operation::Constant(_) | Operation::Variable(_) => false,
-        }
-    }
-
-    fn retain<T>(
-        &mut self,
-        result: Result<T, FormulaFailure>,
-        index: usize,
-        placeholder: T,
-    ) -> Result<T, FormulaFailure> {
-        match result {
-            Err(FormulaFailure::Expansion(ExpansionFailure::Evaluation { .. }))
-                if *self.zero_divisor && !self.missing.is_empty() =>
-            {
-                self.missing[index] = true;
-                *self.zero_divisor = false;
-                Ok(placeholder)
-            }
-            other => other,
-        }
-    }
-
-    fn binary(
-        &mut self,
-        operator: BinaryOp,
-        left: i32,
-        right: i32,
-    ) -> Result<i32, themelios_program::term::EvalError> {
+impl<V: Fn(usize) -> Input> Context<'_, '_, '_, V> {
+    fn binary(&mut self, operator: BinaryOp, left: i32, right: i32) -> Result<i32, EvalError> {
         *self.zero_divisor = matches!(operator, BinaryOp::Div | BinaryOp::Mod) && right == 0;
         crate::scalar_arithmetic::binary(operator, left, right)
     }
-
     fn admit(&mut self) -> Result<(), FormulaFailure> {
         self.counters.work(self.limits, self.location)?;
         self.counters.record(Event::ExpressionNode);
         Ok(())
     }
-    /// Charge a value's payload at once, so a refusal states that
-    /// requirement, as the pattern match and the row match charge theirs.
-    fn payload(&mut self, value: &Value) -> Result<(), FormulaFailure> {
-        if let Value::Structured(structure) = value {
-            self.counters.charge_work(
-                structure.payload_bytes() as u128,
-                self.limits,
-                self.location,
-            )?;
+    fn retain<T>(
+        &mut self,
+        result: Result<T, FormulaFailure>,
+        index: usize,
+        scratch: &mut Scratch,
+    ) -> Result<Option<T>, FormulaFailure> {
+        match result {
+            Ok(value) => Ok(Some(value)),
+            Err(FormulaFailure::Expansion(ExpansionFailure::Evaluation { .. }))
+                if *self.zero_divisor && !scratch.missing.is_empty() =>
+            {
+                scratch.missing[index] = true;
+                *self.zero_divisor = false;
+                Ok(None)
+            }
+            Err(error) => Err(error),
         }
-        Ok(())
+    }
+    fn numeric(&mut self, key: &TermKey) -> Result<i32, FormulaFailure> {
+        self.counters.work(self.limits, self.location)?;
+        let value = self
+            .computation
+            .read()
+            .term(key)
+            .map_err(|error| scope(error, self.location))?;
+        match value.descriptor() {
+            ValueNodeRef::Number(value) => Ok(value),
+            _ => Err(super::undefined(self.location)),
+        }
+    }
+    fn number(&mut self, value: Result<i32, EvalError>) -> Result<TermKey, FormulaFailure> {
+        let value = value.map_err(|error| ExpansionFailure::Evaluation {
+            error,
+            location: self.location,
+        })?;
+        self.computation
+            .number(value, self.limits, self.counters, self.location)
     }
 }
 
-/// How the integer prefix ended.
 enum Prefix {
-    /// Every node was a number, the root included.
-    Complete(Value),
-    /// The node at `evaluated - 1` produced `first`, the first value that is
-    /// not a number, already admitted.
-    Ended { evaluated: usize, first: Value },
+    Complete(i32),
+    Ended { evaluated: usize, first: TermKey },
 }
 
-/// Evaluate nodes as integers while every value is a number. Each node is
-/// admitted before it is read, in plan order, as in the value phase.
-fn integer_prefix<'a, V: Fn(usize) -> Result<Option<&'a Value>, FormulaFailure>>(
-    frame: &mut Frame<'_>,
+fn integer_prefix<V: Fn(usize) -> Input>(
+    scratch: &mut Scratch,
     nodes: &[Operation],
-    context: &mut Context<'_, 'a, V>,
+    context: &mut Context<'_, '_, '_, V>,
 ) -> Result<Prefix, FormulaFailure> {
-    let mut evaluated = 0;
-    for node in nodes {
+    for (index, node) in nodes.iter().enumerate() {
         context.admit()?;
-        evaluated += 1;
-        if context.dependent(node) {
-            context.missing[evaluated - 1] = true;
-            if evaluated == nodes.len() {
-                return Ok(Prefix::Complete(Value::Number(0)));
+        if dependent(node, scratch) {
+            scratch.missing[index] = true;
+            if index + 1 == nodes.len() {
+                return Ok(Prefix::Complete(0));
             }
-            frame.integers.push(0);
+            scratch.integer(0, context)?;
             continue;
         }
-        let integers: &[i32] = frame.integers;
-        let result = match *node {
-            Operation::Constant(Value::Number(number)) => Ok(number),
-            Operation::Constant(ref value) => {
-                let first = copy(value, context.budget, context.location)?;
-                return Ok(Prefix::Ended { evaluated, first });
-            }
-            Operation::Variable(index) => match (context.variable)(index)? {
-                Some(Value::Number(number)) => Ok(*number),
-                Some(value) => {
-                    let first = copy(value, context.budget, context.location)?;
-                    return Ok(Prefix::Ended { evaluated, first });
-                }
-                None => {
-                    context.missing[evaluated - 1] = true;
-                    Ok(0)
-                }
-            },
-            Operation::Unary(operator, argument) => {
-                crate::scalar_arithmetic::unary(operator, integers[argument])
-            }
-            Operation::Binary(operator, left, right) => {
-                context.binary(operator, integers[left], integers[right])
-            }
-            Operation::Absolute(argument) => crate::scalar_arithmetic::absolute(integers[argument]),
-            Operation::Constructor(ref constructor) => {
-                frame.materialize();
-                let first = constructor.evaluate(
-                    frame.values,
+        let result = match node {
+            Operation::Constant(scalar) => {
+                let value = context.computation.static_scalar(
+                    *scalar,
                     context.limits,
-                    context.budget,
                     context.counters,
                     context.location,
                 )?;
-                return Ok(Prefix::Ended { evaluated, first });
+                if let ValueNodeRef::Number(number) = value.descriptor() {
+                    Ok(number)
+                } else {
+                    let first = context.computation.static_key(
+                        *scalar,
+                        context.limits,
+                        context.counters,
+                        context.location,
+                    )?;
+                    return Ok(Prefix::Ended {
+                        evaluated: index + 1,
+                        first,
+                    });
+                }
             }
-        };
-        let result = result.map_err(|error| {
+            Operation::Variable(variable) => {
+                if let Some(key) = (context.variable)(*variable)? {
+                    context.counters.work(context.limits, context.location)?;
+                    if let ValueNodeRef::Number(number) = context
+                        .computation
+                        .read()
+                        .term(&key)
+                        .map_err(|error| scope(error, context.location))?
+                        .descriptor()
+                    {
+                        Ok(number)
+                    } else {
+                        return Ok(Prefix::Ended {
+                            evaluated: index + 1,
+                            first: key,
+                        });
+                    }
+                } else {
+                    scratch.missing[index] = true;
+                    Ok(0)
+                }
+            }
+            Operation::Unary(operator, argument) => {
+                crate::scalar_arithmetic::unary(*operator, scratch.integers[*argument])
+            }
+            Operation::Binary(operator, left, right) => {
+                context.binary(*operator, scratch.integers[*left], scratch.integers[*right])
+            }
+            Operation::Absolute(argument) => {
+                crate::scalar_arithmetic::absolute(scratch.integers[*argument])
+            }
+            Operation::Constructor(constructor) => {
+                scratch.materialize(context)?;
+                let first = constructor.evaluate(
+                    scratch.terms().as_slice(),
+                    context.computation,
+                    context.limits,
+                    context.counters,
+                    context.location,
+                )?;
+                return Ok(Prefix::Ended {
+                    evaluated: index + 1,
+                    first,
+                });
+            }
+        }
+        .map_err(|error| {
             FormulaFailure::from(ExpansionFailure::Evaluation {
                 error,
                 location: context.location,
             })
         });
-        let number = context.retain(result, evaluated - 1, 0)?;
-        if evaluated == nodes.len() {
-            return Ok(Prefix::Complete(Value::Number(number)));
+        let number = context.retain(result, index, scratch)?.unwrap_or(0);
+        if index + 1 == nodes.len() {
+            return Ok(Prefix::Complete(number));
         }
-        frame.integers.push(number);
+        scratch.integer(number, context)?;
     }
-    unreachable!("the root ends the integer prefix: an expression has a root")
+    unreachable!("an admitted expression has a root")
 }
 
-/// Continue on value cells: the integer prefix moves into them, the first
-/// non-numeric value takes its place, and the remaining nodes follow.
-fn value_suffix<'a, V: Fn(usize) -> Result<Option<&'a Value>, FormulaFailure>>(
-    frame: &mut Frame<'_>,
+fn value_suffix<V: Fn(usize) -> Input>(
+    scratch: &mut Scratch,
     nodes: &[Operation],
     evaluated: usize,
-    first: Value,
-    context: &mut Context<'_, 'a, V>,
-) -> Result<Value, FormulaFailure> {
-    frame.materialize();
-    context.payload(&first)?;
+    first: TermKey,
+    context: &mut Context<'_, '_, '_, V>,
+) -> Result<Option<TermKey>, FormulaFailure> {
+    scratch.materialize(context)?;
     if evaluated == nodes.len() {
-        return Ok(first);
+        return Ok(Some(first));
     }
-    frame.values.push(first);
-    let (root, prefix) = nodes.split_last().expect("expression has root");
+    scratch.push(Some(&first), context)?;
+    let (root, prefix) = nodes.split_last().expect("expression has a root");
     for (index, node) in prefix.iter().enumerate().skip(evaluated) {
-        let value = source_node(node, index, frame.values, context)?;
-        frame.values.push(value);
+        let value = source_node(node, index, scratch, context)?;
+        scratch.push(value.as_ref(), context)?;
     }
-    source_node(root, nodes.len() - 1, frame.values, context)
+    source_node(root, nodes.len() - 1, scratch, context)
 }
 
-fn source_node<'a, V: Fn(usize) -> Result<Option<&'a Value>, FormulaFailure>>(
+fn source_node<V: Fn(usize) -> Input>(
     node: &Operation,
     index: usize,
-    values: &[Value],
-    context: &mut Context<'_, 'a, V>,
-) -> Result<Value, FormulaFailure> {
-    if context.dependent(node) {
-        context.admit()?;
-        context.missing[index] = true;
-        return Ok(Value::Number(0));
-    }
-    let result = evaluate(node, index, values, context);
-    context.retain(result, index, Value::Number(0))
-}
-
-fn evaluate<'a, V: Fn(usize) -> Result<Option<&'a Value>, FormulaFailure>>(
-    node: &Operation,
-    index: usize,
-    values: &[Value],
-    context: &mut Context<'_, 'a, V>,
-) -> Result<Value, FormulaFailure> {
+    scratch: &mut Scratch,
+    context: &mut Context<'_, '_, '_, V>,
+) -> Result<Option<TermKey>, FormulaFailure> {
     context.admit()?;
-    let location = context.location;
-    let value = match *node {
-        Operation::Constructor(ref constructor) => constructor.evaluate(
-            values,
+    if dependent(node, scratch) {
+        scratch.missing[index] = true;
+        return Ok(None);
+    }
+    let result = match node {
+        Operation::Constructor(constructor) => constructor.evaluate(
+            scratch.terms().as_slice(),
+            context.computation,
             context.limits,
-            context.budget,
             context.counters,
-            location,
-        )?,
-        Operation::Constant(ref value) => copy(value, context.budget, location)?,
+            context.location,
+        ),
+        Operation::Constant(scalar) => context.computation.static_key(
+            *scalar,
+            context.limits,
+            context.counters,
+            context.location,
+        ),
         Operation::Variable(variable) => {
-            if let Some(value) = (context.variable)(variable)? {
-                copy(value, context.budget, location)?
+            if let Some(value) = (context.variable)(*variable)? {
+                Ok(value)
             } else {
-                context.missing[index] = true;
-                Value::Number(0)
+                scratch.missing[index] = true;
+                return Ok(None);
             }
         }
-        Operation::Unary(operator, argument) => scalar_value(
-            crate::scalar_arithmetic::unary(operator, numeric(&values[argument], location)?),
-            location,
-        )?,
-        Operation::Binary(operator, left, right) => scalar_value(
-            context.binary(
-                operator,
-                numeric(&values[left], location)?,
-                numeric(&values[right], location)?,
-            ),
-            location,
-        )?,
-        Operation::Absolute(argument) => scalar_value(
-            crate::scalar_arithmetic::absolute(numeric(&values[argument], location)?),
-            location,
-        )?,
+        Operation::Unary(operator, argument) => {
+            let argument = numeric_slot(scratch, *argument, context)?;
+            context.number(crate::scalar_arithmetic::unary(*operator, argument))
+        }
+        Operation::Binary(operator, left, right) => {
+            let left = numeric_slot(scratch, *left, context)?;
+            let right = numeric_slot(scratch, *right, context)?;
+            let result = context.binary(*operator, left, right);
+            context.number(result)
+        }
+        Operation::Absolute(argument) => {
+            let argument = numeric_slot(scratch, *argument, context)?;
+            context.number(crate::scalar_arithmetic::absolute(argument))
+        }
     };
-    context.payload(&value)?;
-    Ok(value)
+    context.retain(result, index, scratch)
 }
 
-/// Drop the live prefix on success, typed failure and unwinding alike. The root
-/// is returned separately on success; no reference into storage escapes.
-struct Frame<'a> {
-    values: &'a mut Vec<Value>,
-    integers: &'a mut Vec<i32>,
+fn numeric_slot<V: Fn(usize) -> Input>(
+    scratch: &Scratch,
+    slot: usize,
+    context: &mut Context<'_, '_, '_, V>,
+) -> Result<i32, FormulaFailure> {
+    let key = scratch
+        .terms()
+        .key(slot)
+        .map_err(|error| crate::formula_binding::assignment(error, context.location))?
+        .ok_or_else(|| {
+            crate::formula_binding::assignment(AssignmentError::Unbound { slot }, context.location)
+        })?;
+    context.numeric(&key)
 }
 
-impl Frame<'_> {
-    /// Move the integer prefix into value cells, in plan order.
-    fn materialize(&mut self) {
-        self.values
-            .extend(self.integers.drain(..).map(Value::Number));
-    }
+fn scope(error: zetesis_core::catalog::ReadError, location: Location) -> FormulaFailure {
+    crate::formula_binding::assignment(AssignmentError::Read(error), location)
 }
-
-impl Drop for Frame<'_> {
-    fn drop(&mut self) {
-        self.values.clear();
-        if self.values.capacity() > RETAINED_VALUE_CELLS {
-            *self.values = Vec::new();
-        }
-        self.integers.clear();
-        if self.integers.capacity() > RETAINED_VALUE_CELLS {
-            *self.integers = Vec::new();
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests;

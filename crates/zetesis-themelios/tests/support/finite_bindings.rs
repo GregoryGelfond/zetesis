@@ -7,14 +7,16 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
-use zetesis_core::{Atom, Sign, Value};
+use zetesis_core::catalog::AtomRef;
+use zetesis_core::{Sign, ValueNodeRef};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Node, Theory};
 use zetesis_themelios::AdmittedFormula;
 
 pub(super) type Models = BTreeSet<BTreeSet<String>>;
 
-pub(super) fn atom_text(atom: &Atom) -> String {
+pub(super) fn atom_text<'a>(atom: impl Into<AtomRef<'a>>) -> String {
+    let atom = atom.into();
     let sign = if atom.predicate().sign() == Sign::Negative {
         "-"
     } else {
@@ -27,13 +29,13 @@ pub(super) fn atom_text(atom: &Atom) -> String {
     let values: Vec<_> = atom
         .values()
         .iter()
-        .map(|value| match value {
-            Value::Number(number) => number.to_string(),
-            Value::Symbol(value) => value.clone(),
-            Value::String(value) => serde_json::to_string(value).unwrap(),
-            Value::Infimum => "#inf".into(),
-            Value::Supremum => "#sup".into(),
-            Value::Structured(value) => value.to_string(),
+        .map(|value| match value.descriptor() {
+            ValueNodeRef::Number(number) => number.to_string(),
+            ValueNodeRef::Symbol(value) => value.to_owned(),
+            ValueNodeRef::String(value) => serde_json::to_string(value).unwrap(),
+            ValueNodeRef::Infimum => "#inf".into(),
+            ValueNodeRef::Supremum => "#sup".into(),
+            ValueNodeRef::Function { .. } | ValueNodeRef::Tuple { .. } => value.to_string(),
         })
         .collect();
     format!("{name}({})", values.join(","))
@@ -109,7 +111,7 @@ pub(super) fn native(input: &AdmittedFormula) -> Models {
                 model
                     .unwrap()
                     .atoms()
-                    .map(|index| atom_text(&input.atoms()[index]))
+                    .map(|index| atom_text(input.atoms().at(index).unwrap()))
                     .collect()
             )
         );

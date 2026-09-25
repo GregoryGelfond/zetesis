@@ -24,9 +24,11 @@ fn oracle(backend: physical::Backend) -> GpuAggregateOracle {
 fn assert_evaluation(actual: AggregateGpuEvaluation, expected: native::Evaluation<'_>) {
     let value = match expected.value() {
         native::Value::Integer(value) => AggregateGpuValue::Integer(i32::try_from(value).unwrap()),
-        native::Value::Term(Value::Infimum) => AggregateGpuValue::Infimum,
-        native::Value::Term(Value::Supremum) => AggregateGpuValue::Supremum,
-        native::Value::Term(_) => panic!("numeric fixture"),
+        native::Value::Term(value) => match value.descriptor() {
+            zetesis_core::ValueNodeRef::Infimum => AggregateGpuValue::Infimum,
+            zetesis_core::ValueNodeRef::Supremum => AggregateGpuValue::Supremum,
+            _ => panic!("numeric fixture"),
+        },
     };
     assert_eq!(actual.value(), value);
     assert_eq!(actual.holds(), expected.holds());

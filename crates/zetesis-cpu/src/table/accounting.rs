@@ -2,7 +2,7 @@
 
 use std::{cmp::Ordering, mem::size_of};
 
-use zetesis_core::Value;
+use zetesis_core::catalog::TermRef;
 
 use crate::Cancellation;
 
@@ -76,14 +76,12 @@ impl<'a> Work<'a> {
         Ok(())
     }
 
-    pub(super) fn compare(&mut self, left: &Value, right: &Value) -> Result<Ordering, Cause> {
-        let amount = left
-            .payload_bytes()
-            .checked_add(right.payload_bytes())
-            .and_then(|bytes| bytes.checked_add(1))
-            .ok_or(Cause::Overflow)?;
-        self.tick(amount)?;
-        Ok(left.cmp(right))
+    pub(super) fn compare(
+        &mut self,
+        left: TermRef<'_>,
+        right: TermRef<'_>,
+    ) -> Result<Ordering, Cause> {
+        left.compare_ref_with(right, || self.tick(1))
     }
 
     fn admit(&mut self, bytes: usize) -> Result<(), Cause> {

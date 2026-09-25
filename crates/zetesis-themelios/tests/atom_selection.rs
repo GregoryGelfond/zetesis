@@ -44,8 +44,9 @@ fn selection_matches_the_signed_signature_union() {
         assert!(
             selection
                 .signatures()
-                .windows(2)
-                .all(|pair| pair[0] < pair[1])
+                .iter()
+                .zip(selection.signatures().iter().skip(1))
+                .all(|(left, right)| left < right)
         );
     }
 }

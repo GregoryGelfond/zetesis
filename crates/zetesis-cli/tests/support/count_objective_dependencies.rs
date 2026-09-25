@@ -103,7 +103,12 @@ fn record(answer: &AnswerSet, subject: &Subject) -> Record {
     let score = answer.score().expect("the numeric objective is present");
     assert!(score.is_present());
     (
-        answer.interpretation().atoms().iter().cloned().collect(),
+        answer
+            .interpretation()
+            .atoms()
+            .iter()
+            .map(|atom| atom.to_atom(zetesis_core::ValueLimits::default()).unwrap())
+            .collect(),
         Some(score.costs().to_vec()),
     )
 }

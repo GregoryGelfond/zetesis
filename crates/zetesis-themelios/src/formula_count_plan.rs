@@ -29,7 +29,8 @@ pub struct CountPlanLimits {
     pub max_attempts: usize,
     /// Conservative cumulative logical allocation payload across optional work.
     /// Existing source/theory/atom storage, allocator metadata and excess
-    /// allocator capacity are excluded; transferred source key payload is charged.
+    /// allocator capacity are excluded. Source validation transfers a stack-only
+    /// certificate; optional capture retains only members and origins.
     pub max_bytes: u64,
     /// Cumulative capture, matching, partition and emission operations.
     pub max_work: u64,

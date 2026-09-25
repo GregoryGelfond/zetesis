@@ -12,14 +12,14 @@
 
 use std::{mem::size_of, ops::Range};
 
-use zetesis_core::{Value, relation::Relation};
+use zetesis_core::{Value, catalog::TermRef, relation::Relation};
 
 use crate::{Cancellation, Stop};
 
 mod accounting;
 mod selection;
 
-pub use selection::{Domain, Selection};
+pub use selection::{Domain, Selection, Values};
 
 use accounting::Work;
 
@@ -33,7 +33,8 @@ pub struct Limits {
     /// Live operation capacity, including the relation and prepared input.
     /// Borrowed source payload and other caller-owned results are excluded.
     pub max_bytes: usize,
-    /// Charged cells, bitwise operations and typed-comparison payload bytes.
+    /// Charged cells, bitwise operations, typed descriptors/navigation and
+    /// compared text-byte prefixes.
     pub max_work: u64,
 }
 
@@ -54,7 +55,7 @@ pub enum Resource {
     Entries,
     /// Live operation-scoped capacity.
     Bytes,
-    /// Charged logical operations and typed payload bytes.
+    /// Charged logical operations and visited typed comparison steps.
     Work,
 }
 
@@ -120,7 +121,8 @@ pub struct Statistics {
 /// repeated first variable. Labels must be consecutive in first-occurrence
 /// order. Rows disagreeing at aliased columns are excluded before projection.
 /// Equal row occurrences remain distinct positions, including catalog aliases.
-/// Value representatives are borrowed; no logical value or atom is cloned.
+/// Value representatives borrow the relation's existing dictionary through
+/// [`TermRef`]; no logical value, atom or equality dictionary is duplicated.
 ///
 /// With R rows, V distinct variable/value pairs, and W=ceil(R/32), support
 /// storage is V*W words. Preparation additionally sorts O(R) borrowed row cells
@@ -130,7 +132,7 @@ pub struct Table<'owner, 'source> {
     relation: &'owner Relation<'source>,
     scope: Vec<usize>,
     variables: Vec<Range<usize>>,
-    values: Vec<&'source Value>,
+    values: Vec<TermRef<'source>>,
     supports: Vec<u32>,
     coherent: Vec<u32>,
     statistics: Statistics,
@@ -151,7 +153,7 @@ pub struct Projection<'table, 'owner, 'source> {
 #[derive(Clone, Copy)]
 struct RowValue<'source> {
     row: usize,
-    value: &'source Value,
+    value: TermRef<'source>,
 }
 
 impl<'owner, 'source> Table<'owner, 'source> {
@@ -163,7 +165,7 @@ impl<'owner, 'source> Table<'owner, 'source> {
     ///
     /// # Examples
     /// ```
-    /// use zetesis_core::{Atom, Predicate, Value, relation::Relation};
+    /// use zetesis_core::{Atom, Predicate, Value, catalog::TermRef, relation::Relation};
     /// use zetesis_cpu::{Cancellation, table::{Limits, Table}};
     /// let predicate = Predicate::new("pair", 2)?;
     /// let rows = [Atom::new(predicate.clone(), vec![Value::Number(1), Value::Number(2)])?];
@@ -173,7 +175,7 @@ impl<'owner, 'source> Table<'owner, 'source> {
     /// let second = [Value::Number(2)];
     /// let projected = table.project(&[&first, &second], Limits::default(), &Cancellation::default())?;
     /// assert!(projected.contains(0));
-    /// assert_eq!(projected.domain(0).unwrap().collect::<Vec<_>>(), vec![&Value::Number(1)]);
+    /// assert_eq!(projected.domain(0).unwrap().collect::<Vec<_>>(), vec![TermRef::from(&Value::Number(1))]);
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     pub fn prepare(
@@ -272,8 +274,10 @@ impl<'owner, 'source> Table<'owner, 'source> {
 
     /// Intersect complete rows with the supplied domains and project their values.
     ///
-    /// Each domain is a finite list of whole typed values; duplicates have set
-    /// meaning and absent values have no support. Every call recomputes from the
+    /// This ingress adapter borrows each owned value through [`TermRef`]; it
+    /// neither copies values nor builds another dictionary. Canonical domain
+    /// references use [`Self::project_domains`]. Duplicates have set meaning;
+    /// absent values have no support. Every call recomputes from the
     /// immutable base, including after domain widening. For K variables, D
     /// supplied domain values, V indexed entries, A allowed entries and W row
     /// words, work is O(K + (K+1)*W + V + D*(1+log(V+1)+W) + A*W), plus typed
@@ -291,7 +295,9 @@ impl<'owner, 'source> Table<'owner, 'source> {
         cancellation: &Cancellation,
     ) -> Result<Projection<'_, 'owner, 'source>, Failure> {
         self.project_inner(
-            domains.iter().map(|domain| Domain::Finite(domain)),
+            domains
+                .iter()
+                .map(|domain| Domain::Finite((*domain).into())),
             limits,
             cancellation,
         )
@@ -427,7 +433,7 @@ impl<'owner, 'source> Table<'owner, 'source> {
     fn lookup(
         &self,
         variable: usize,
-        value: &Value,
+        value: TermRef<'_>,
         work: &mut Work<'_>,
     ) -> Result<Option<usize>, Cause> {
         let mut range = self.variables[variable].clone();
@@ -466,7 +472,7 @@ impl<'table, 'owner, 'source> Projection<'table, 'owner, 'source> {
     /// Borrow supported typed values for one variable, in typed value order.
     /// Unknown variable indices are explicit absence. This allocates no storage.
     #[must_use]
-    pub fn domain(&self, variable: usize) -> Option<impl Iterator<Item = &'source Value> + '_> {
+    pub fn domain(&self, variable: usize) -> Option<impl Iterator<Item = TermRef<'source>> + '_> {
         self.table.variables.get(variable).map(|range| {
             range
                 .clone()

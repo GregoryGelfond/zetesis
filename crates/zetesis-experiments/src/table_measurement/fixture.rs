@@ -143,8 +143,14 @@ impl Fixture {
         })
     }
 
-    pub fn id(&self, value: &Value) -> Result<usize, Error> {
-        self.values.binary_search(value).map_err(|_| Error::Parity)
+    pub fn id<'value>(
+        &self,
+        value: impl Into<zetesis_core::catalog::TermRef<'value>>,
+    ) -> Result<usize, Error> {
+        let value = value.into();
+        self.values
+            .binary_search_by(|entry| value.compare(entry).reverse())
+            .map_err(|_| Error::Parity)
     }
 
     pub fn subject(&self, case: Case) -> Result<Subject, Error> {

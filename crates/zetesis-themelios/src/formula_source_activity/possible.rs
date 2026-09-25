@@ -1,44 +1,42 @@
-//! One completed possible relation is the authoritative conservative carrier.
+//! Completed possible relation rows supply identities, without copying payload.
 //! Membership covers possible truth and never establishes realizability.
 
-use super::{Activity, Context, SourceEligibility};
-use crate::formula_support::{self, Support};
-use crate::{ExpansionResource, FormulaFailure};
-use zetesis_core::Atom;
+use super::{Activity, Context, SourceEligibility, authority::Round};
+use crate::FormulaFailure;
+use crate::formula_support::Support;
 
 impl SourceEligibility {
     pub(super) fn possible(
         &mut self,
-        predicate: &zetesis_core::Predicate,
+        predicate: zetesis_core::catalog::PredicateRef<'_>,
         support: &Support<'_>,
         temporary: usize,
-        context: &mut Context<'_>,
+        context: &mut Context<'_, '_, '_>,
+    ) -> Result<(), FormulaFailure> {
+        self.round = Some(Round::new(context));
+        let result = self
+            .possible_into_round(
+                predicate,
+                support,
+                temporary.saturating_add(self.activity.len()),
+                context,
+            )
+            .and_then(|()| self.publish_predicate(context));
+        self.round = None;
+        result
+    }
+
+    pub(super) fn possible_into_round(
+        &mut self,
+        predicate: zetesis_core::catalog::PredicateRef<'_>,
+        support: &Support<'_>,
+        temporary: usize,
+        context: &mut Context<'_, '_, '_>,
     ) -> Result<(), FormulaFailure> {
         context.work()?;
         for row in support.rows(predicate) {
             context.work()?;
-            let mut values = Vec::new();
-            values
-                .try_reserve_exact(predicate.arity())
-                .map_err(|_| context.allocation())?;
-            for value in formula_support::row_values(row) {
-                context.work()?;
-                values.push(formula_support::copy(
-                    value,
-                    context.budget,
-                    context.location,
-                )?);
-            }
-            context.budget.charge(
-                ExpansionResource::ScalarBytes,
-                predicate.name().len() as u128,
-                context.location,
-            )?;
-            let atom = Atom::new(predicate.clone(), values).expect("completed support arity");
-            if !self.atoms.contains_key(&atom) {
-                context.entries(temporary.saturating_add(self.atoms.len()).saturating_add(1))?;
-                self.atoms.insert(atom, Activity::Optional);
-            }
+            self.retain_atom(row.atom(), Activity::Optional, temporary, context)?;
         }
         Ok(())
     }

@@ -33,7 +33,7 @@ fn input(source: &str) -> AdmittedFormula {
     )
     .unwrap_or_else(|error| panic!("{source}: {error}"))
 }
-fn models(theory: &Theory, atoms: &[Atom]) -> Models {
+fn models(theory: &Theory, atoms: zetesis_core::catalog::Atoms<'_>) -> Models {
     let mut search = StableModels::new(theory, Limits::default(), Cancellation::default())
         .expect("bounded search");
     let models = search
@@ -42,7 +42,13 @@ fn models(theory: &Theory, atoms: &[Atom]) -> Models {
             model
                 .expect("complete native search")
                 .atoms()
-                .map(|index| atoms[index].clone())
+                .map(|index| {
+                    atoms
+                        .at(index)
+                        .unwrap()
+                        .to_atom(zetesis_core::ValueLimits::default())
+                        .unwrap()
+                })
                 .collect()
         })
         .collect();
@@ -184,7 +190,7 @@ fn existing_scalar_fact_and_normal_rule_profile_keeps_its_models() {
                     .closure()
                     .atoms()
                     .iter()
-                    .cloned()
+                    .map(|atom| atom.to_atom(zetesis_core::ValueLimits::default()).unwrap())
                     .collect::<BTreeSet<_>>()
             })
         })
@@ -388,7 +394,7 @@ fn unchanged_queens_source_admits_eighty_original_atoms_with_output_metadata() {
         admitted
             .atoms()
             .iter()
-            .filter(|atom| admitted.metadata().output().includes(atom))
+            .filter(|atom| admitted.metadata().output().includes(*atom))
             .count(),
         64
     );
@@ -529,7 +535,9 @@ fn clingo(source: &str) -> Models {
                         template
                             .head()
                             .expect("fact")
-                            .instantiate(&[])
+                            .key(&[] as &[zetesis_core::Value])
+                            .expect("ground source pattern")
+                            .to_atom(zetesis_core::ValueLimits::default())
                             .expect("ground")
                     })
                     .collect();

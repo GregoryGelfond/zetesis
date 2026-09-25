@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 
-use zetesis_core::{Predicate, Value};
+use zetesis_core::Predicate;
 use zetesis_cpu::Cancellation;
 use zetesis_sat::Incomplete;
 use zetesis_solve::{
@@ -43,11 +43,13 @@ fn mask(answer: &AnswerSet, vertices: u32) -> u32 {
     let expected = Predicate::new("selected", 1).unwrap();
     let mut selected = 0;
     for atom in answer.interpretation().atoms() {
-        assert_eq!(atom.predicate(), &expected);
-        let [Value::Number(vertex)] = atom.values() else {
+        assert_eq!(atom.predicate(), expected);
+        assert_eq!(atom.values().len(), 1);
+        let zetesis_core::ValueNodeRef::Number(vertex) = atom.values().at(0).unwrap().descriptor()
+        else {
             panic!("selected must have one numeric vertex")
         };
-        let vertex = u32::try_from(*vertex).unwrap();
+        let vertex = u32::try_from(vertex).unwrap();
         assert!((1..=vertices).contains(&vertex));
         let bit = 1 << (vertex - 1);
         assert_eq!(selected & bit, 0, "each vertex occurs once");

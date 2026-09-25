@@ -12,8 +12,19 @@ mod programs;
 
 use programs::{fact, number, pattern, program};
 
-fn numbers(values: &[i32]) -> Bound {
-    Bound::Finite(values.iter().map(|&value| Value::Number(value)).collect())
+fn numbers(bounds: &ArgumentBounds, values: &[i32]) -> Bound {
+    Bound::Finite(
+        values
+            .iter()
+            .map(|&value| {
+                bounds
+                    .program
+                    .domain()
+                    .binary_search(&Value::Number(value))
+                    .unwrap()
+            })
+            .collect(),
+    )
 }
 
 fn rule(head: AtomPattern, body: Vec<AtomPattern>) -> Template {
@@ -69,8 +80,8 @@ fn facts_bound_their_arguments() {
     )
     .unwrap();
     let e = Predicate::new("e", 2).unwrap();
-    assert_eq!(*bound(&bounds, &e, 0), numbers(&[0, 1]));
-    assert_eq!(*bound(&bounds, &e, 1), numbers(&[1, 2]));
+    assert_eq!(*bound(&bounds, &e, 0), numbers(&bounds, &[0, 1]));
+    assert_eq!(*bound(&bounds, &e, 1), numbers(&bounds, &[1, 2]));
     assert!(work.statistics.work > 0);
 }
 
@@ -80,7 +91,7 @@ fn a_derivation_closes_its_head_argument_over_the_positions_binding_it() {
     // argument may bind Y to.
     let bounds = bounds(&reachability());
     let r = Predicate::new("r", 1).unwrap();
-    assert_eq!(*bound(&bounds, &r, 0), numbers(&[0, 1, 2]));
+    assert_eq!(*bound(&bounds, &r, 0), numbers(&bounds, &[0, 1, 2]));
     assert_eq!(bounds.bounds(&r).map(<[Bound]>::len), Some(1));
 }
 
@@ -103,7 +114,7 @@ fn a_variable_bound_at_two_positions_takes_their_intersection() {
     let bounds = bounds(&program);
     assert_eq!(
         *bound(&bounds, &Predicate::new("q", 1).unwrap(), 0),
-        numbers(&[2])
+        numbers(&bounds, &[2])
     );
 }
 
@@ -119,8 +130,8 @@ fn a_constant_head_argument_contributes_itself() {
     ]);
     let bounds = bounds(&program);
     let s = Predicate::new("s", 2).unwrap();
-    assert_eq!(*bound(&bounds, &s, 0), numbers(&[7]));
-    assert_eq!(*bound(&bounds, &s, 1), numbers(&[1]));
+    assert_eq!(*bound(&bounds, &s, 0), numbers(&bounds, &[7]));
+    assert_eq!(*bound(&bounds, &s, 1), numbers(&bounds, &[1]));
     // An argument the program does not have is unknown.
     assert_eq!(*bound(&bounds, &s, 2), Bound::Unknown);
     assert_eq!(

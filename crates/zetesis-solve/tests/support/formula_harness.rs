@@ -1,6 +1,6 @@
 //! Native session capture for injected membership executors.
 
-use zetesis_core::{Atom, Model};
+use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_objective::Score;
 use zetesis_themelios::{
@@ -13,7 +13,7 @@ use crate::formula_session::FormulaSession;
 use crate::phase_timing::Recorder;
 use crate::{AnswerSelection, PhaseTimings, SemanticOutcome, SolveConfig, SolveError};
 
-pub(super) type Record = (Vec<Atom>, Option<Vec<(i32, i64)>>);
+pub(super) type Record = (Model, Option<Vec<(i32, i64)>>);
 
 pub(super) struct Capture {
     pub(super) answers: Vec<(Model, Option<Score>)>,
@@ -29,7 +29,7 @@ impl Capture {
             .iter()
             .map(|(model, score)| {
                 (
-                    model.atoms().iter().cloned().collect(),
+                    model.clone(),
                     score.as_ref().map(|score| score.costs().to_vec()),
                 )
             })

@@ -14,7 +14,7 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 
 use serde_json::Value as Json;
-use zetesis_core::{Atom, Term};
+use zetesis_core::{Atom, Predicate, TemplateTerm, ValueLimits};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
 use zetesis_themelios::{
@@ -61,16 +61,27 @@ fn atom(source: &str) -> Atom {
     let input = admit(format!("{source}."), AdmissionOptions::default())
         .expect("campaign atoms belong to the scalar profile");
     assert_eq!(input.program().templates().len(), 1);
-    let head = input.program().templates()[0].head().expect("ground atom");
+    let head = input
+        .program()
+        .templates()
+        .at(0)
+        .unwrap()
+        .head()
+        .expect("ground atom");
     let values = head
         .terms()
         .iter()
         .map(|term| match term {
-            Term::Constant(value) => value.clone(),
-            Term::Variable(_) => panic!("oracle atom must be ground"),
+            TemplateTerm::Constant(value) => value.to_value(ValueLimits::default()).unwrap(),
+            TemplateTerm::Variable(_) => panic!("oracle atom must be ground"),
         })
         .collect();
-    Atom::new(head.predicate().clone(), values).expect("canonical atom arity")
+    let predicate = head.predicate();
+    Atom::new(
+        Predicate::with_sign(predicate.name(), predicate.arity(), predicate.sign()).unwrap(),
+        values,
+    )
+    .expect("canonical atom arity")
 }
 
 fn exhaustive(input: &AdmittedFormula) -> Models {
@@ -90,7 +101,14 @@ fn exhaustive(input: &AdmittedFormula) -> Models {
         {
             let atoms = candidate
                 .atoms()
-                .map(|atom| input.atoms()[atom].clone())
+                .map(|atom| {
+                    input
+                        .atoms()
+                        .at(atom)
+                        .unwrap()
+                        .to_atom(ValueLimits::default())
+                        .unwrap()
+                })
                 .collect();
             assert!(result.insert(atoms), "unique semantic model");
         }

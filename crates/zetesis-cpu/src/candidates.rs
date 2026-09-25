@@ -7,18 +7,17 @@
 use std::iter::FusedIterator;
 use std::sync::Arc;
 use zetesis_core::{
-    Atom, GateAtom, GateAtomError, GateAtoms, GateIndex, GateIndexError, Model, Program, Seed,
-    SeedSelection, SeedSelectionError,
+    CarrierAtom, CarrierFailure, GateAtom, GateAtomError, GateAtoms, GateIndex, GateIndexError,
+    GateIndexFailure, Model, Program, Seed, SeedSelection, SeedSelectionError,
 };
 
 use crate::oracle::restrictions::{Conflict, Restrictions};
 use crate::oracle::{
-    Bounds, ClosureWorkspace, Cube, Limits, PreparationLimits, PreparedQueries, RegionBounds,
-    definite_closure, possible_closure,
+    Bounds, CarrierSet, ClosureWorkspace, Cube, Limits, PreparationLimits, PreparedQueries,
+    RegionBounds, Work, definite_closure, model_contains, possible_closure,
 };
 use crate::regions::{Counting, Narrowing, Region, Traversal, Visit};
 use crate::{Cancellation, Stop};
-use std::collections::BTreeSet;
 
 /// Explicit limits for complete seed enumeration. Zero is a real ceiling.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -42,16 +41,15 @@ impl Default for CandidateLimits {
 /// traversal. They are cumulative across the entire candidate iterator.
 #[derive(Clone, Copy, Debug)]
 pub struct CandidateRestrictionLimits {
-    /// Source joins, checked copies and premise comparisons across all seeds.
-    /// Fact canonicalization uses [`zetesis_core::Model::new`]: its `O(n log n)`
-    /// comparisons and catalog-size traversal are unmetered; vector/Arc allocation
-    /// is infallible. Its copied
-    /// inputs remain bounded by `max_atoms` and `max_bytes`.
+    /// Source joins, checked coordinate lookup, metadata moves and premise
+    /// comparisons across all seeds. No owned atom canonicalization is needed.
     pub max_work: u64,
-    /// Fact and forbidden-conjunction atom occurrences copied during preparation.
+    /// Fact and forbidden-conjunction coordinate occurrences admitted during preparation.
     pub max_atoms: usize,
-    /// Logical copied atom, template and value payload during preparation.
-    /// Allocator slack, tree/index metadata and caller-owned source are excluded.
+    /// Named coordinate, borrowed-row and pattern-handle capacities during
+    /// preparation, including old/replacement buffer overlap. Shared Program
+    /// storage and allocator/Arc bookkeeping are excluded; local join scratch
+    /// shares this allowance while the borrowed query is active.
     pub max_bytes: usize,
 }
 
@@ -65,21 +63,21 @@ impl Default for CandidateRestrictionLimits {
     }
 }
 
-/// Work performed by the optional necessary-condition filter. The original
-/// powerset constructor leaves all fields zero.
+/// Candidate storage and optional narrowing/filter work. The original powerset
+/// constructor leaves the optional optimization counters zero.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct CandidateStatistics {
     /// Charged construction and traversal operations, retained after interruption.
-    /// Fact canonicalization's comparisons and allocation are not included.
     pub restriction_work: u64,
-    /// Fact and forbidden-conjunction atom occurrences in completed preparation.
+    /// Fact and forbidden-conjunction coordinate occurrences in completed preparation.
     /// Zero when preparation failed; `restriction_work` retains failed work.
     pub restriction_atoms: usize,
-    /// Copied fact and conjunction payload in completed preparation.
-    /// Temporary templates and allocator/index overhead are not included.
+    /// Retained forbidden-conjunction coordinate and handle capacities.
+    /// Preparation facts and borrowed query buffers have already been released.
     pub restriction_bytes: usize,
-    /// Peak copied payload during completed preparation, including its temporary
-    /// template. Zero when preparation failed.
+    /// Peak admitted coordinate and metadata storage during completed
+    /// preparation, including temporary facts and pattern partitions.
+    /// Shared Program storage is separate; zero on failure.
     pub restriction_peak_bytes: usize,
     /// Positive gate conjunctions obtained from covered fact-side bindings.
     pub restriction_conjunctions: usize,
@@ -104,6 +102,22 @@ pub struct CandidateStatistics {
     /// point, each two closures; a pass that refuted the root or stopped is
     /// not counted.
     pub narrowing_passes: usize,
+    /// Checked coordinate lookup, set reads and decision transfer after completed
+    /// narrowing closures, including work retained on a stopped transfer. Each
+    /// pass has a separate `Limits::max_work` allowance.
+    pub narrowing_transfer_work: u64,
+    /// Largest admitted named transfer buffer envelope. This excludes completed
+    /// Models, closure workspaces, allocator overhead and shared Program storage.
+    pub narrowing_transfer_peak_bytes: usize,
+    /// The admitted Program's storage, shared by every retained carrier token
+    /// and counted once, independently of candidate/closure storage ceilings.
+    pub shared_program_bytes: u128,
+    /// Retained carrier tuple capacities, counting each shared coordinate owner
+    /// once across the root, held selection and current binary counter.
+    pub coordinate_bytes: u128,
+    /// Named candidate handle, indexed-witness and decision-vector capacities.
+    /// Arc counters, traversal history and closure owners are separate.
+    pub candidate_metadata_bytes: u128,
     /// A constraint fired in the lower closure of the narrowed root, so no
     /// seed of it is accepted and the counter offered none
     /// (`Bounds.lower_constraint_refutes`).
@@ -163,6 +177,8 @@ struct Closures {
     workspace: ClosureWorkspace,
     limits: Limits,
     cancellation: Cancellation,
+    transfer_work: u64,
+    transfer_peak_bytes: usize,
 }
 
 impl Closures {
@@ -186,6 +202,8 @@ impl Closures {
             workspace: ClosureWorkspace::default(),
             limits,
             cancellation,
+            transfer_work: 0,
+            transfer_peak_bytes: 0,
         })
     }
 
@@ -215,55 +233,37 @@ impl Closures {
         })
     }
 
-    /// The owned root pass also supports an unbounded symbolic upper side.
+    /// One transfer has an independent `max_work` allowance after its two
+    /// completed closures. Coordinate/handle capacity is bounded separately by
+    /// `max_closure_bytes`; it excludes their retained Models, the prepared
+    /// workspace, shared Program storage and allocator/Arc bookkeeping.
     fn narrow(&mut self, cube: &mut Cube) -> Result<Pass, Stop> {
         let Enclosure::Complete { lower, upper } = self.enclose((&*cube).into())? else {
             return Ok(Pass::Refuted);
         };
-        let program = self.prepared.program();
-        let before = (cube.must.len(), cube.may.as_ref().map(BTreeSet::len));
-        for atom in lower.atoms() {
-            if program.contains_gate_atom(atom) {
-                cube.must.insert(atom.clone());
-            }
-        }
-        let derivable: BTreeSet<Atom> = upper
-            .atoms()
-            .iter()
-            .filter(|atom| program.contains_gate_atom(atom))
-            .cloned()
-            .collect();
-        cube.may = Some(match cube.may.take() {
-            None => derivable,
-            Some(may) => may.intersection(&derivable).cloned().collect(),
-        });
-        // A gate atom every seed of the region holds that no seed of it can
-        // derive: the region holds no accepted seed
-        // (`Bounds.conflicting_atom_refutes`). From the open cube the
-        // lower closure lies inside the upper one; a split can part them.
-        if cube
-            .must
-            .iter()
-            .any(|atom| cube.may.as_ref().is_some_and(|may| !may.contains(atom)))
-        {
-            return Ok(Pass::Refuted);
-        }
-        let after = (cube.must.len(), cube.may.as_ref().map(BTreeSet::len));
-        Ok(if after == before {
-            Pass::Fixed
-        } else {
-            Pass::Changed
-        })
+        let mut work = Work::source(&self.cancellation, self.limits.max_work);
+        let mut peak = 0;
+        let result = transfer_root(
+            self.prepared.program(),
+            cube,
+            &lower,
+            &upper,
+            self.limits.max_closure_bytes,
+            &mut peak,
+            &mut work,
+        );
+        self.transfer_work = self
+            .transfer_work
+            .saturating_add(work.source_statistics(0).work);
+        self.transfer_peak_bytes = self.transfer_peak_bytes.max(peak);
+        result
     }
 
-    /// Narrow a descendant using its existing root owners and decisions.
-    /// Both completed closures and the full conflict check precede mutation.
-    /// Bound lookups and this transfer, like the owned root's set operations,
-    /// remain outside the closure work/byte account. No temporary bound payload
-    /// or index is allocated; the region retains its existing history contract.
+    /// Complete every checked read and stage decisions before changing history.
+    /// A stopped transfer leaves this pass's pre-state intact.
     fn narrow_region(
         &mut self,
-        held: &BTreeSet<Atom>,
+        held: &CarrierSet,
         root: &[Arc<GateAtom>],
         region: &mut Region,
     ) -> Result<Pass, Stop> {
@@ -271,23 +271,208 @@ impl Closures {
         let Enclosure::Complete { lower, upper } = self.enclose(Bounds::Region(&bounds))? else {
             return Ok(Pass::Refuted);
         };
-        if bounds.conflicts(self.prepared.program(), &lower, &upper) {
-            return Ok(Pass::Refuted);
-        }
-        let mut changed = false;
-        for (at, gate) in root.iter().enumerate() {
-            if region.is_open(at) {
-                if lower.contains(gate.atom()) {
-                    region.hold(at);
-                    changed = true;
-                } else if !upper.contains(gate.atom()) {
-                    region.cut(at);
-                    changed = true;
+        let mut work = Work::source(&self.cancellation, self.limits.max_work);
+        let mut peak = 0;
+        let result = (|| {
+            if bounds.conflicts(self.prepared.program(), &lower, &upper, &mut work)? {
+                return Ok(None);
+            }
+            let mut decisions = Vec::new();
+            for (at, gate) in root.iter().enumerate() {
+                work.tick()?;
+                if region.is_open(at) {
+                    let held = model_contains(&lower, gate.atom(), &mut work)?;
+                    if held || !model_contains(&upper, gate.atom(), &mut work)? {
+                        reserve(
+                            &mut decisions,
+                            1,
+                            0,
+                            self.limits.max_closure_bytes,
+                            &mut peak,
+                            &mut work,
+                        )?;
+                        work.tick()?;
+                        decisions.push((at, held));
+                    }
                 }
+            }
+            // Admission of every commit precedes mutation: no fallible read,
+            // cancellation check or resource charge occurs during this commit.
+            for _ in &decisions {
+                work.tick()?;
+            }
+            Ok(Some(decisions))
+        })();
+        self.transfer_work = self
+            .transfer_work
+            .saturating_add(work.source_statistics(0).work);
+        self.transfer_peak_bytes = self.transfer_peak_bytes.max(peak);
+        let Some(decisions) = result? else {
+            return Ok(Pass::Refuted);
+        };
+        let changed = !decisions.is_empty();
+        for (at, held) in decisions {
+            if held {
+                region.hold(at);
+            } else {
+                region.cut(at);
             }
         }
         Ok(if changed { Pass::Changed } else { Pass::Fixed })
     }
+}
+
+/// Named buffers for the transfer itself. Models and the immutable Program are
+/// retained independently; the latter is reported once on the candidate owner.
+fn cube_bytes(cube: &Cube) -> u128 {
+    cube.must.handle_bytes()
+        + cube.may.as_ref().map_or_else(
+            || cube.must.coordinate_bytes(),
+            |may| may.handle_bytes() + may.coordinate_bytes(),
+        )
+}
+
+fn reserve<T>(
+    values: &mut Vec<T>,
+    additional: usize,
+    other: u128,
+    limit: usize,
+    peak: &mut usize,
+    work: &mut Work<'_>,
+) -> Result<(), Stop> {
+    let required = values
+        .len()
+        .checked_add(additional)
+        .ok_or(Stop::Allocation)?;
+    if required > values.capacity() {
+        let target = required.max(values.capacity().saturating_mul(2)).max(4);
+        let old = values.capacity() as u128 * size_of::<T>() as u128;
+        let replacement = target as u128 * size_of::<T>() as u128;
+        admit_transfer(other + old + replacement, limit, peak)?;
+        for _ in 0..values.len().max(1) {
+            work.tick()?;
+        }
+        values
+            .try_reserve_exact(target - values.len())
+            .map_err(|_| Stop::Allocation)?;
+        admit_transfer(
+            other + old + values.capacity() as u128 * size_of::<T>() as u128,
+            limit,
+            peak,
+        )?;
+    }
+    admit_transfer(
+        other + values.capacity() as u128 * size_of::<T>() as u128,
+        limit,
+        peak,
+    )
+}
+
+fn admit_transfer(bytes: u128, limit: usize, peak: &mut usize) -> Result<(), Stop> {
+    if bytes > limit as u128 {
+        return Err(Stop::Allocation);
+    }
+    *peak = (*peak).max(usize::try_from(bytes).map_err(|_| Stop::Allocation)?);
+    Ok(())
+}
+
+fn carrier_stop(error: &CarrierFailure<Stop>) -> Stop {
+    match error {
+        CarrierFailure::Stopped(stop) => *stop,
+        CarrierFailure::Storage(zetesis_core::CarrierError::Coordinates) => Stop::InvalidProgram,
+        CarrierFailure::Storage(_) => Stop::Allocation,
+    }
+}
+
+fn transfer_root(
+    program: &Program,
+    cube: &mut Cube,
+    lower: &Model,
+    upper: &Model,
+    limit: usize,
+    peak: &mut usize,
+    work: &mut Work<'_>,
+) -> Result<Pass, Stop> {
+    let old_bytes = cube_bytes(cube);
+    admit_transfer(old_bytes, limit, peak)?;
+    let mut may = CarrierSet::new();
+    let mut must = CarrierSet::new();
+    let mut coordinates = 0u128;
+    for atom in upper.atoms() {
+        work.tick()?;
+        let live = old_bytes + may.handle_bytes() + must.handle_bytes() + coordinates;
+        let remaining = usize::try_from((limit as u128).checked_sub(live).ok_or(Stop::Allocation)?)
+            .map_err(|_| Stop::Allocation)?;
+        let Some(carrier) = program
+            .locate_atom_with(atom, true, remaining, || work.tick())
+            .map_err(|error| carrier_stop(&error))?
+        else {
+            continue;
+        };
+        // The just-created tuple is live even if the prior upper bound cuts it.
+        let tuple_bytes = carrier.coordinate_bytes();
+        admit_transfer(live + tuple_bytes, limit, peak)?;
+        if let Some(previous) = &cube.may
+            && !previous.contains_atom(atom, work)?
+        {
+            continue;
+        }
+        let held = cube.must.contains_atom(atom, work)? || model_contains(lower, atom, work)?;
+        coordinates += tuple_bytes;
+        may.reserve(
+            1,
+            old_bytes + must.handle_bytes() + coordinates,
+            limit,
+            peak,
+            work,
+        )?;
+        if held {
+            must.reserve(
+                1,
+                old_bytes + may.handle_bytes() + coordinates,
+                limit,
+                peak,
+                work,
+            )?;
+            must.push_ordered(carrier.clone(), work)?;
+        }
+        may.push_ordered(carrier, work)?;
+        admit_transfer(
+            old_bytes + may.handle_bytes() + must.handle_bytes() + coordinates,
+            limit,
+            peak,
+        )?;
+    }
+    for atom in cube.must.iter() {
+        if !may.contains_atom(atom.atom(), work)? {
+            return Ok(Pass::Refuted);
+        }
+    }
+    for atom in lower.atoms() {
+        work.tick()?;
+        if program
+            .gate_predicates()
+            .binary_search_with(atom.predicate(), || work.tick())?
+            .is_ok()
+            && !may.contains_atom(atom, work)?
+        {
+            return Ok(Pass::Refuted);
+        }
+    }
+    let before = (cube.must.len(), cube.may.as_ref().map(CarrierSet::len));
+    let after = (must.len(), Some(may.len()));
+    work.tick()?;
+    // Every must handle shares its tuple with may. A resource refusal above
+    // drops only staged buffers; no prefix of this pass becomes a bound.
+    *cube = Cube {
+        must,
+        may: Some(may),
+    };
+    Ok(if before == after {
+        Pass::Fixed
+    } else {
+        Pass::Changed
+    })
 }
 
 /// Completed lower/upper consequences, or a definite constraint refutation.
@@ -334,14 +519,14 @@ pub enum CandidateTermination {
 /// every seed must hold; the others are omitted or held throughout, and the
 /// narrowing's preparation and closure workspace are retained with the
 /// iterator once the bounds are applied.
-/// Each discovered atom payload is retained once in an immutable shared owner.
-/// Creating that Arc uses infallible allocation under the carrier-count bound;
-/// carrier and selected-handle vectors use typed fallible reservation.
+/// Each discovered tuple retains only shared integer coordinates and the one
+/// Program vocabulary. Arc envelopes remain infallible under the carrier-count
+/// bound; coordinate and selected-handle buffers use fallible reservation.
 pub struct Candidates<'a> {
     program: &'a Program,
     carrier: GateAtoms<'a>,
-    may: Option<BTreeSet<Atom>>,
-    must: Vec<Arc<Atom>>,
+    may: Option<CarrierSet>,
+    must: Vec<CarrierAtom>,
     refuted: bool,
     atoms: Vec<Arc<GateAtom>>,
     bits: Vec<bool>,
@@ -357,7 +542,7 @@ pub struct Candidates<'a> {
     /// region decides over their indices.
     root: Vec<Arc<GateAtom>>,
     /// The gate atoms every seed holds, from the root's narrowing.
-    root_must: BTreeSet<Atom>,
+    root_must: CarrierSet,
     /// The coverage tree of the narrowed root, once the bounds are applied.
     traversal: Option<Traversal>,
     /// The counter is running inside a counted region.
@@ -386,10 +571,13 @@ impl<'a> Candidates<'a> {
             narrowing: NarrowingState::Disabled,
             enumeration: Enumeration::Carrier,
             root: Vec::new(),
-            root_must: BTreeSet::new(),
+            root_must: CarrierSet::new(),
             traversal: None,
             counting: false,
-            statistics: CandidateStatistics::default(),
+            statistics: CandidateStatistics {
+                shared_program_bytes: program.storage_bytes(),
+                ..CandidateStatistics::default()
+            },
         }
     }
 
@@ -434,18 +622,50 @@ impl<'a> Candidates<'a> {
     /// of the completed passes and is retained in the statistics;
     /// cancellation or a deadline stops the pull that met it.
     /// Descendants borrow those completed root owners and their indexed
-    /// decisions for both pre-pass gate readings. Bound comparison/transfer is
-    /// outside the per-closure work and named byte account, as root set
-    /// operations are; no descendant bound payload is materialized.
+    /// decisions for both pre-pass gate readings. Each completed pair is followed
+    /// by a transfer with its own `max_work` allowance; coordinate and staged
+    /// decision buffers are separately bounded by `max_closure_bytes`.
+    /// A stopped transfer commits no part of that pass.
     pub fn bounded(&mut self, limits: Limits) {
         debug_assert!(!self.started, "the bound precedes the first pull");
         self.narrowing = NarrowingState::Pending(limits);
     }
 
-    /// Accounted necessary-condition work and copied payload through this pull.
+    /// Accounted necessary-condition work and named storage through this pull.
     #[must_use]
     pub fn statistics(&self) -> CandidateStatistics {
         let mut statistics = self.statistics;
+        let (coordinates, witnesses) = match self.enumeration {
+            Enumeration::Regions => (
+                self.root_must.coordinate_bytes()
+                    + self
+                        .root
+                        .iter()
+                        .map(|gate| gate.carrier().coordinate_bytes())
+                        .sum::<u128>(),
+                self.root.len(),
+            ),
+            Enumeration::Carrier => (
+                self.may.as_ref().map_or_else(
+                    || self.must.iter().map(CarrierAtom::coordinate_bytes).sum(),
+                    CarrierSet::coordinate_bytes,
+                ) + self
+                    .atoms
+                    .iter()
+                    .map(|gate| gate.carrier().coordinate_bytes())
+                    .sum::<u128>(),
+                self.atoms.len(),
+            ),
+        };
+        statistics.coordinate_bytes = coordinates;
+        statistics.candidate_metadata_bytes = (self.root.capacity() + self.atoms.capacity())
+            as u128
+            * size_of::<Arc<GateAtom>>() as u128
+            + self.must.capacity() as u128 * size_of::<CarrierAtom>() as u128
+            + self.root_must.handle_bytes()
+            + self.may.as_ref().map_or(0, CarrierSet::handle_bytes)
+            + self.bits.capacity() as u128 * size_of::<bool>() as u128
+            + witnesses as u128 * size_of::<GateAtom>() as u128;
         if let Some(traversal) = &self.traversal {
             let regions = traversal.statistics();
             statistics.regions = regions.regions;
@@ -561,16 +781,25 @@ impl<'a> Candidates<'a> {
         self.must.clear();
         self.atoms.clear();
         self.bits.clear();
-        let mut held: BTreeSet<&Atom> = self.root_must.iter().collect();
+        let count = self
+            .root_must
+            .len()
+            .checked_add(region.held().count())
+            .ok_or(Stop::Allocation)?;
+        let mut held = Vec::new();
+        held.try_reserve_exact(count)
+            .map_err(|_| Stop::Allocation)?;
+        held.extend(self.root_must.iter().cloned());
         for index in region.held() {
-            held.insert(self.root[index].atom());
+            held.push(self.root[index].carrier());
         }
+        held.sort_unstable();
         self.must
             .try_reserve(held.len())
             .map_err(|_| Stop::Allocation)?;
         for atom in held {
             self.cancellation.poll()?;
-            self.must.push(Arc::new(atom.clone()));
+            self.must.push(atom);
         }
         self.atoms
             .try_reserve(open.len())
@@ -595,7 +824,10 @@ impl<'a> Candidates<'a> {
             let NarrowingState::Applied(closures) = &mut self.narrowing else {
                 return Ok(Narrowing::Fixed { changed: false });
             };
-            match closures.narrow_region(&self.root_must, &self.root, region) {
+            let result = closures.narrow_region(&self.root_must, &self.root, region);
+            self.statistics.narrowing_transfer_work = closures.transfer_work;
+            self.statistics.narrowing_transfer_peak_bytes = closures.transfer_peak_bytes;
+            match result {
                 Ok(Pass::Changed) => {
                     self.statistics.region_passes += 1;
                     changed = true;
@@ -630,9 +862,9 @@ impl<'a> Candidates<'a> {
         )
         .map_err(|error| match error {
             SeedSelectionError::Allocation => Stop::Allocation,
-            SeedSelectionError::OutsideCarrier { .. } | SeedSelectionError::WrongProgram => {
-                Stop::InvalidProgram
-            }
+            SeedSelectionError::OutsideCarrier { .. }
+            | SeedSelectionError::OutsideGateCarrier { .. }
+            | SeedSelectionError::WrongProgram => Stop::InvalidProgram,
         })?;
         Ok(Some(seed))
     }
@@ -687,7 +919,10 @@ impl<'a> Candidates<'a> {
         // `may` or is the last; both sets lie within the finite gate atoms
         // of the first upper closure, so the loop ends.
         self.narrowing = loop {
-            match closures.narrow(&mut cube) {
+            let result = closures.narrow(&mut cube);
+            self.statistics.narrowing_transfer_work = closures.transfer_work;
+            self.statistics.narrowing_transfer_peak_bytes = closures.transfer_peak_bytes;
+            match result {
                 Ok(Pass::Changed) => self.statistics.narrowing_passes += 1,
                 Ok(Pass::Fixed) => {
                     self.statistics.narrowing_passes += 1;
@@ -705,9 +940,9 @@ impl<'a> Candidates<'a> {
                 }
             }
         };
-        for atom in &cube.must {
+        for atom in cube.must.iter() {
             self.must.try_reserve(1).map_err(|_| Stop::Allocation)?;
-            self.must.push(Arc::new(atom.clone()));
+            self.must.push(atom.clone());
         }
         self.statistics.held_gate_atoms = self.must.len();
         if self.refuted {
@@ -739,24 +974,49 @@ impl<'a> Candidates<'a> {
     /// admitted gate signature; token payloads move from `may` without copies.
     /// Work depends on signatures and supported atoms, not Cartesian tuples.
     /// Existing carrier-position overflow and open-atom count limits still apply.
-    fn materialize_root(&mut self, may: BTreeSet<Atom>) -> Result<(), Stop> {
+    fn materialize_root(&mut self, may: CarrierSet) -> Result<(), Stop> {
         self.cancellation.poll()?;
         let index = GateIndex::new(self.program).map_err(gate_index_stop)?;
         self.statistics.cut_gate_atoms = index
             .len()
             .checked_sub(may.len())
             .ok_or(Stop::InvalidProgram)?;
-        for atom in may {
-            self.cancellation.poll()?;
-            if !self.root_must.contains(&atom) {
-                if self.root.len() >= self.limits.max_carrier_atoms {
-                    return Err(Stop::CarrierLimit);
+        let NarrowingState::Applied(closures) = &mut self.narrowing else {
+            return Err(Stop::InvalidProgram);
+        };
+        let mut work = Work::source(&self.cancellation, closures.limits.max_work);
+        let result = (|| {
+            let mut root = Vec::new();
+            for atom in may.into_atoms() {
+                work.tick()?;
+                if !self.root_must.contains_atom(atom.atom(), &mut work)? {
+                    if root.len() >= self.limits.max_carrier_atoms {
+                        return Err(Stop::CarrierLimit);
+                    }
+                    if root.len() == root.capacity() {
+                        for _ in 0..root.len().max(1) {
+                            work.tick()?;
+                        }
+                    }
+                    root.try_reserve(1).map_err(|_| Stop::Allocation)?;
+                    let gate =
+                        index
+                            .locate_carrier_with(atom, || work.tick())
+                            .map_err(|failure| match failure {
+                                GateIndexFailure::Index(error) => gate_index_stop(error),
+                                GateIndexFailure::Stopped(stop) => stop,
+                            })?;
+                    work.tick()?;
+                    root.push(Arc::new(gate));
                 }
-                self.root.try_reserve(1).map_err(|_| Stop::Allocation)?;
-                self.root
-                    .push(Arc::new(index.locate(atom).map_err(gate_index_stop)?));
             }
-        }
+            Ok(root)
+        })();
+        closures.transfer_work = closures
+            .transfer_work
+            .saturating_add(work.source_statistics(0).work);
+        self.statistics.narrowing_transfer_work = closures.transfer_work;
+        self.root = result?;
         Ok(())
     }
 
@@ -841,12 +1101,12 @@ impl<'a> Candidates<'a> {
             if self
                 .may
                 .as_ref()
-                .is_some_and(|may| !may.contains(atom.atom()))
+                .is_some_and(|may| !may.iter().any(|possible| possible.atom() == atom.atom()))
             {
                 self.statistics.cut_gate_atoms += 1;
             } else if self
                 .must
-                .binary_search_by(|necessary| necessary.as_ref().cmp(atom.atom()))
+                .binary_search_by(|necessary| necessary.atom().cmp(&atom.atom()))
                 .is_err()
             {
                 break atom;

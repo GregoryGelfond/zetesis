@@ -76,8 +76,8 @@ fn equal(left: &AdmittedFormula, right: &AdmittedFormula) {
     assert_eq!(left.theory().roots(), right.theory().roots());
     assert_eq!(left.formula_origins(), right.formula_origins());
     assert_eq!(
-        left.objectives().templates(),
-        right.objectives().templates()
+        left.objectives().templates().iter().collect::<Vec<_>>(),
+        right.objectives().templates().iter().collect::<Vec<_>>()
     );
     assert_eq!(left.objective_origins(), right.objective_origins());
 }
@@ -109,7 +109,7 @@ fn finite_meets_avoid_real_prefixes_and_probes() {
             .atoms()
             .iter()
             .filter(|atom| atom.predicate().name() == "r")
-            .map(|atom| atom.values().to_vec())
+            .map(|atom| atom.values().iter().collect::<Vec<_>>())
             .collect();
         let expected: Vec<_> = (5..=8)
             .flat_map(|left| {

@@ -6,7 +6,7 @@
 //! recognizes finite one-candidate captures after structural selection.
 
 use super::{Compiler, Error, Operand, Pattern, Term, UnaryOp, evaluated};
-use crate::observation::{ErrorKind, Predicate, Resource};
+use crate::observation::{ErrorKind, Resource};
 use themelios_program::program::Atom;
 use themelios_program::symbol::Sign;
 
@@ -65,27 +65,29 @@ impl Compiler<'_> {
             }
             Term::Function { name, arguments } => {
                 self.text(name.as_str())?;
-                Ok(Operand::Function(
-                    Sign::Positive,
-                    name.clone(),
-                    self.selected_operands(arguments, position, depth + 1)?,
+                let children = self.selected_operands(arguments, position, depth + 1)?;
+                Ok(Operand::Construct(
+                    self.shape(Some(name.as_str()), Sign::Positive, children.len())?,
+                    children,
                 ))
             }
-            Term::Tuple(arguments) => Ok(Operand::Tuple(self.selected_operands(
-                arguments,
-                position,
-                depth + 1,
-            )?)),
+            Term::Tuple(arguments) => {
+                let children = self.selected_operands(arguments, position, depth + 1)?;
+                Ok(Operand::Construct(
+                    self.shape(None, Sign::Positive, children.len())?,
+                    children,
+                ))
+            }
             Term::UnaryOperation {
                 operator: UnaryOp::Negate,
                 argument,
             } if matches!(argument.as_ref(), Term::Function { .. }) => {
-                let Operand::Function(_, name, arguments) =
+                let Operand::Construct(shape, arguments) =
                     self.selected_operand(argument, position, depth + 1)?
                 else {
                     unreachable!()
                 };
-                Ok(Operand::Function(Sign::Negative, name, arguments))
+                Ok(Operand::Construct(self.negate(shape)?, arguments))
             }
             _ => self.operand(term, true, depth),
         }
@@ -148,12 +150,7 @@ impl Compiler<'_> {
             self.text(atom.name.as_str())?;
             let mut terms = self.selected_operands(arguments, position, 1)?;
             self.prepare_inverses(&mut terms);
-            let predicate = Predicate::with_sign(
-                atom.name.as_str(),
-                terms.len(),
-                crate::coherence::core_sign(atom.sign),
-            )
-            .map_err(|_| self.error(ErrorKind::InvalidSymbol))?;
+            let predicate = self.signature(atom.name.as_str(), terms.len(), atom.sign)?;
             patterns.push(Pattern {
                 predicate,
                 evaluated: terms.iter().any(evaluated),

@@ -5,7 +5,8 @@
 //! A new round rebuilds source relations from the union of derived atoms; seed
 //! atoms remain separate. The union offers instances and never establishes truth
 //! in an individual world.
-//! One appendable catalog owns demanded atoms. Each source round borrows its
+//! One appendable catalog owns demanded atom rows over the Program's shared
+//! immutable term/predicate vocabulary. Each source round borrows its
 //! committed prefix through canonical local IDs while callbacks append only to
 //! a disjoint tail. Identity publication does not establish consequence truth;
 //! every offered identity is committed even when the last round adds no truth.
@@ -13,9 +14,10 @@
 use std::fmt;
 
 use zetesis_core::atom_interner::{
-    AtomAppender, AtomInterner, Failure as InternFailure, Limits as InternLimits,
+    AtomAppender, AtomEntry, AtomInterner, Failure as InternFailure, Limits as InternLimits,
 };
-use zetesis_core::{Atom, AtomCatalog, Model, ModelError, Program, Seed, SeedView};
+use zetesis_core::catalog::AtomRef;
+use zetesis_core::{AtomKey, Model, Program, Seed, SeedView};
 
 use crate::oracle::{Work, worlds};
 use crate::{Cancellation, Stop, source};
@@ -66,15 +68,24 @@ pub struct Limits {
     pub max_chunk_rules: usize,
     /// Maximum encoded instance words, excluding the offset table.
     pub max_chunk_words: usize,
-    /// Fixed scratch allowance for one copied source instance, reserved
-    /// separately from all catalog growth throughout every scan.
+    /// Logical key metadata and referenced encoding allowance for one source
+    /// instance, reserved separately from catalog growth throughout every scan.
+    /// Keys borrow terms; this conservative reservation includes their metadata.
     pub max_instance_bytes: usize,
+    /// Independent named source-scan workspace allowance: borrowed row handles,
+    /// assignment/cursor/undo buffers and one offered instance's key capacity.
+    /// Program/catalog payload, world masks and callback transport remain under
+    /// their existing owners and bounds; this is separate from `max_host_bytes`.
+    pub max_scan_bytes: usize,
     /// Maximum admitted host storage envelope: actual committed/pending catalog,
-    /// AVL/path and ordered-ID capacities, measured nested atom payload, requested
+    /// tuple metadata, AVL/path and ordered-ID capacities, requested
     /// packed truth/seed/delta/chunk/result storage, source membership/workspace
     /// and requested final model-selection slots. Catalog and mask growth
     /// include their named old/new overlap. Source rows borrow catalog atoms.
-    /// Input program/seeds, Arc envelopes, allocator overhead, final selection
+    /// The immutable Program vocabulary and lookup indexes are shared and counted
+    /// with the input Program, not charged again per batch. This includes unused
+    /// input terms; no full carrier is materialized. Input program/seeds, Arc
+    /// reference counters, allocator overhead, final selection
     /// Vec capacity beyond its requested slots, rounding outside the catalog and
     /// ordered-ID capacities, and backend-private transport are excluded. This
     /// bound is not RSS; a backend bounds its transport separately.
@@ -91,6 +102,7 @@ impl Default for Limits {
             max_chunk_rules: 256,
             max_chunk_words: 16_384,
             max_instance_bytes: 1024 * 1024,
+            max_scan_bytes: 128 * 1024 * 1024,
             max_host_bytes: 128 * 1024 * 1024,
         }
     }
@@ -397,8 +409,9 @@ fn evaluate_world(
 /// participate in the final projection check, even if no rule derives them.
 /// Empty batches perform no source or evaluator work. Catalog/index, ordered-ID
 /// and transport vector reservations return typed allocation failures. Borrowed
-/// source-relation grouping, copied Instance payloads and shared ownership
-/// envelopes retain their infallible allocation contracts.
+/// source-relation grouping and shared ownership envelopes retain their
+/// infallible allocation contracts. Source instances borrow canonical terms;
+/// their checked key-vector reservations are fallible.
 /// Completed worlds share one final atom catalog and retain their own selected
 /// positions. This is a logical payload bound, not a process-RSS guarantee.
 ///
@@ -423,8 +436,8 @@ pub fn check_with<E>(
 /// Check borrowed candidate views with the same immutable-round protocol as
 /// [`check_with`]. Cloning the iterator must preserve its length, order and
 /// candidate identities. The views borrow their true atoms; this boundary
-/// creates no owned seed or temporary view vector. Each distinct demanded atom
-/// is copied into one catalog at most once; round selections own only IDs. The
+/// creates no owned seed or temporary view vector. Demanded atom rows use the
+/// Program's canonical vocabulary; round selections own only IDs. The
 /// final catalog transfers to shared result models without copying atom payloads.
 ///
 /// # Errors
@@ -519,9 +532,11 @@ struct State {
 /// Dense round truth and chunk storage. Atom identity lives in the interner;
 /// source views can borrow its committed region while this state grows masks.
 struct Transport {
-    payload_bytes: usize,
     fixed_bytes: usize,
     source_mask_bytes: usize,
+    /// Exact immutable input vocabulary already present in every full catalog
+    /// receipt. Only this subtotal is excluded from the batch-local allowance.
+    shared_vocabulary_bytes: u128,
     words: usize,
     snapshots: Vec<u32>,
     seeds: Vec<u32>,
@@ -563,7 +578,7 @@ impl SourceSnapshot<'_> {
         program: &Program,
         limits: source::ScanLimits,
         work: &mut Work<'_>,
-        consume: impl FnMut(source::Instance, &mut Work<'_>) -> Result<(), E>,
+        consume: impl FnMut(source::Instance<'_>, &mut Work<'_>) -> Result<(), E>,
     ) -> Result<source::ScanStatistics, source::ScanFailure<E>> {
         match self {
             Self::Union(rows) => source::scan_rows(program, rows.iter(), limits, work, consume),
@@ -584,14 +599,14 @@ fn prepare_snapshot<'a>(
     if let Some(retained) = workspace.as_ref() {
         retained.record_retained(work);
     }
-    let bounds = transport.catalog_limits(limits, catalog.len(), transport.payload_bytes)?;
+    let bounds = transport.catalog_limits(limits, catalog.len())?;
     let ordered = catalog
         .ordered_ids_with(bounds, || work.tick())
         .map_err(|error| intern_stop(&error))?;
     let available = transport.source_bytes(limits, catalog.storage_bytes(), catalog.len())?;
     let (committed, appender) = catalog.split();
     let rows = worlds::Rows::select(
-        committed.as_slice(),
+        committed.atoms(),
         ordered,
         &transport.snapshots,
         transport.words,
@@ -664,7 +679,7 @@ fn run<'seed, E>(
     if candidates == 0 {
         return Ok(Vec::new());
     }
-    let mut state = State::new(candidates, limits)?;
+    let mut state = State::new(program, candidates, limits)?;
     state.initialize(seeds.clone(), candidates, limits, cancellation, progress)?;
     loop {
         progress.catalog_atoms = state.catalog.len();
@@ -721,21 +736,35 @@ fn run<'seed, E>(
 }
 
 impl State {
-    fn new(candidates: usize, limits: Limits) -> Result<Self, Stop> {
+    fn new(program: &Program, candidates: usize, limits: Limits) -> Result<Self, Stop> {
+        let transport = Transport::new(candidates, limits, program.shared_vocabulary_bytes())?;
+        let allowance = transport.catalog_limits(limits, 0)?.max_bytes;
+        // Core storage ceilings use usize. The full allowance may include a
+        // shared input credit larger than the remaining addressable capacity;
+        // clipping to usize::MAX then remains at most that admitted allowance.
+        let catalog =
+            AtomInterner::for_program(program, usize::try_from(allowance).unwrap_or(usize::MAX))
+                .map_err(|error| Stop::catalog(&error))?;
         let state = Self {
-            catalog: AtomInterner::new(),
-            transport: Transport::new(candidates, limits)?,
+            catalog,
+            transport,
             world_workspace: None,
         };
-        if state.catalog.storage_bytes() > state.transport.catalog_limits(limits, 0, 0)?.max_bytes {
+        if state.catalog.storage_bytes() > state.transport.catalog_limits(limits, 0)?.max_bytes {
             return Err(Stop::Allocation);
         }
         Ok(state)
     }
 
-    fn intern(&mut self, atom: &Atom, limits: Limits, work: &mut Work<'_>) -> Result<u32, Stop> {
+    fn intern<'a>(
+        &mut self,
+        atom: impl Into<AtomRef<'a>>,
+        limits: Limits,
+        work: &mut Work<'_>,
+    ) -> Result<u32, Stop> {
         let (_, mut appender) = self.catalog.split();
-        self.transport.intern(&mut appender, atom, limits, work)
+        self.transport
+            .intern_atom(&mut appender, atom.into(), limits, work)
     }
 
     fn initialize<'seed>(
@@ -789,7 +818,7 @@ impl State {
         );
         let result = self
             .transport
-            .catalog_limits(limits, self.catalog.len(), self.transport.payload_bytes)
+            .catalog_limits(limits, self.catalog.len())
             .and_then(|bounds| {
                 self.catalog
                     .commit_with(bounds, || work.tick())
@@ -817,6 +846,7 @@ impl State {
                 .max_chunk_words
                 .saturating_sub(RECORD_HEADER_WORDS - 1),
             max_instance_bytes: limits.max_instance_bytes,
+            max_scan_bytes: limits.max_scan_bytes,
         };
         let mut work = Work::source(cancellation, scan_limits.max_work);
         let prepared = prepare_snapshot(
@@ -868,23 +898,19 @@ impl State {
         cancellation: &Cancellation,
         progress: &mut Progress,
     ) -> Result<Vec<Check>, Stop> {
-        // Source rounds are complete. Transfer the sole dense Atom vector;
-        // its integer lookup metadata can now drop without copying payloads.
-        let bounds = self.transport.catalog_limits(
-            limits,
-            self.catalog.len(),
-            self.transport.payload_bytes,
-        )?;
+        // Source rounds are complete. Transfer the canonical snapshot and
+        // discovery mapping; lookup metadata drops without copying terms.
+        let bounds = self.transport.catalog_limits(limits, self.catalog.len())?;
         let mut work = Work::source(
             cancellation,
             limits.max_source_work.saturating_sub(progress.source_work),
         );
-        let atoms = self
+        let catalog = self
             .catalog
-            .into_atoms_with(bounds, || work.tick())
+            .into_catalog_with(bounds, || work.tick())
             .map_err(|error| intern_stop(&error));
         progress.record_source(work.source_statistics(0));
-        let catalog = AtomCatalog::new(atoms?);
+        let catalog = catalog?;
         let transport = self.transport;
         let mut checks = Vec::new();
         checks
@@ -900,10 +926,7 @@ impl State {
                 &catalog,
                 (0..catalog.atoms().len()).filter(|id| contains(words, *id)),
             )
-            .map_err(|error| match error {
-                ModelError::Allocation => Stop::Allocation,
-                ModelError::Position { .. } => Stop::InvalidProgram,
-            })?;
+            .map_err(|error| Stop::model(&error))?;
             let mismatch = closure
                 .atoms()
                 .iter()
@@ -925,7 +948,7 @@ impl State {
 }
 
 impl Transport {
-    fn new(candidates: usize, limits: Limits) -> Result<Self, Stop> {
+    fn new(candidates: usize, limits: Limits, shared_vocabulary_bytes: u128) -> Result<Self, Stop> {
         if candidates > limits.max_candidates
             || limits.max_atoms == 0
             || limits.max_atoms >= u32::MAX as usize
@@ -963,9 +986,9 @@ impl Transport {
             .try_reserve_exact(limits.max_chunk_words)
             .map_err(|_| Stop::Allocation)?;
         Ok(Self {
-            payload_bytes: 0,
             fixed_bytes,
             source_mask_bytes: 0,
+            shared_vocabulary_bytes,
             words,
             snapshots: zeros(bits)?,
             seeds: zeros(bits)?,
@@ -976,18 +999,14 @@ impl Transport {
         })
     }
 
-    fn catalog_limits(
-        &self,
-        limits: Limits,
-        atoms: usize,
-        payload: usize,
-    ) -> Result<InternLimits, Stop> {
+    fn catalog_limits(&self, limits: Limits, atoms: usize) -> Result<InternLimits, Stop> {
         let external = self
-            .external_bytes(atoms, payload)?
+            .external_bytes(atoms)?
             .checked_add(self.source_mask_bytes as u128)
             .ok_or(Stop::Allocation)?;
         let max_bytes = (limits.max_host_bytes as u128)
             .checked_sub(external)
+            .and_then(|bytes| bytes.checked_add(self.shared_vocabulary_bytes))
             .ok_or(Stop::Allocation)?;
         Ok(InternLimits {
             max_atoms: limits.max_atoms,
@@ -995,7 +1014,7 @@ impl Transport {
         })
     }
 
-    fn external_bytes(&self, atoms: usize, payload: usize) -> Result<u128, Stop> {
+    fn external_bytes(&self, atoms: usize) -> Result<u128, Stop> {
         // Completed worlds share the catalog. Bound requested selected positions
         // by one per catalog atom per world; Model Vec capacity slack is excluded
         // from this requested-payload allowance. No symbolic snapshot copy exists.
@@ -1003,7 +1022,12 @@ impl Transport {
             .checked_mul(self.violated.len())
             .and_then(|cells| cells.checked_mul(size_of::<usize>()))
             .ok_or(Stop::Allocation)?;
-        Ok(self.fixed_bytes as u128 + payload as u128 + selected as u128)
+        Ok(self.fixed_bytes as u128 + selected as u128)
+    }
+
+    fn catalog_bytes(&self, full: u128) -> Result<u128, Stop> {
+        full.checked_sub(self.shared_vocabulary_bytes)
+            .ok_or(Stop::InvalidProgram)
     }
 
     fn source_bytes(
@@ -1013,8 +1037,8 @@ impl Transport {
         atoms: usize,
     ) -> Result<usize, Stop> {
         let used = self
-            .external_bytes(atoms, self.payload_bytes)?
-            .checked_add(catalog_bytes)
+            .external_bytes(atoms)?
+            .checked_add(self.catalog_bytes(catalog_bytes)?)
             .ok_or(Stop::Allocation)?;
         let remaining = (limits.max_host_bytes as u128)
             .checked_sub(used)
@@ -1022,45 +1046,62 @@ impl Transport {
         usize::try_from(remaining).map_err(|_| Stop::Allocation)
     }
 
-    fn intern(
+    fn intern_atom(
         &mut self,
         appender: &mut AtomAppender<'_>,
-        atom: &Atom,
+        atom: AtomRef<'_>,
         limits: Limits,
         work: &mut Work<'_>,
     ) -> Result<u32, Stop> {
         let count = appender.len();
-        let bounds = self.catalog_limits(limits, count, self.payload_bytes)?;
+        let bounds = self.catalog_limits(limits, count)?;
         let entry = appender
             .entry_atom_with(atom, bounds, || work.tick())
             .map_err(|error| intern_stop(&error))?;
+        self.publish(entry, count, limits, work)
+    }
+
+    fn intern_key(
+        &mut self,
+        appender: &mut AtomAppender<'_>,
+        key: AtomKey<'_>,
+        limits: Limits,
+        work: &mut Work<'_>,
+    ) -> Result<u32, Stop> {
+        let count = appender.len();
+        let bounds = self.catalog_limits(limits, count)?;
+        let entry = appender
+            .entry_key_with(key, bounds, || work.tick())
+            .map_err(|error| intern_stop(&error))?;
+        self.publish(entry, count, limits, work)
+    }
+
+    /// Both ingress seed atoms and borrowed instance keys use one discovery
+    /// publication. Tuple growth belongs to the interner allowance; transport
+    /// admits its masks and requested model positions. The input vocabulary is
+    /// shared, and every accepted seed already belongs to its Program carrier.
+    fn publish(
+        &mut self,
+        entry: AtomEntry<'_, '_>,
+        count: usize,
+        limits: Limits,
+        work: &mut Work<'_>,
+    ) -> Result<u32, Stop> {
         if let Some(id) = entry.position() {
             return u32::try_from(id).map_err(|_| Stop::CarrierLimit);
         }
         if count >= limits.max_atoms {
             return Err(Stop::CarrierLimit);
         }
-        let bytes = atom_payload_bytes(atom)?;
-        let total = self
-            .payload_bytes
-            .checked_add(bytes)
-            .ok_or(Stop::Allocation)?;
-        self.grow(count, total, entry.storage_bytes(), limits)?;
-        let bounds = self.catalog_limits(limits, count + 1, total)?;
+        self.grow(count, entry.storage_bytes(), limits)?;
+        let bounds = self.catalog_limits(limits, count + 1)?;
         let id = entry
             .insert_with(bounds, || work.tick())
             .map_err(|error| intern_stop(&error))?;
-        self.payload_bytes = total;
         u32::try_from(id).map_err(|_| Stop::CarrierLimit)
     }
 
-    fn grow(
-        &mut self,
-        atom: usize,
-        payload_bytes: usize,
-        catalog_bytes: u128,
-        limits: Limits,
-    ) -> Result<(), Stop> {
+    fn grow(&mut self, atom: usize, catalog_bytes: u128, limits: Limits) -> Result<(), Stop> {
         let needed = atom / 32 + 1;
         if needed <= self.words {
             return Ok(());
@@ -1090,10 +1131,9 @@ impl Transport {
             .and_then(|cells| cells.checked_mul(size_of::<usize>()))
             .ok_or(Stop::Allocation)?;
         let peak = peak as u128
-            + payload_bytes as u128
             + selected as u128
             + self.source_mask_bytes as u128
-            + catalog_bytes;
+            + self.catalog_bytes(catalog_bytes)?;
         if peak > limits.max_host_bytes as u128 {
             return Err(Stop::Allocation);
         }
@@ -1119,7 +1159,7 @@ impl Transport {
     fn offer<E>(
         &mut self,
         appender: &mut AtomAppender<'_>,
-        instance: &source::Instance,
+        instance: &source::Instance<'_>,
         limits: Limits,
         work: &mut Work<'_>,
         evaluation: &mut Evaluation<'_, impl FnMut(&Chunk<'_>) -> Result<Vec<u32>, E>>,
@@ -1143,7 +1183,7 @@ impl Transport {
         let offset = u32::try_from(self.records.len()).map_err(|_| Stop::CarrierLimit)?;
         let head = instance
             .head()
-            .map(|atom| self.intern(appender, atom, limits, work))
+            .map(|atom| self.intern_key(appender, atom, limits, work))
             .transpose()?
             .map_or(CONSTRAINT_HEAD, |id| id + 1);
         self.records.push(head);
@@ -1161,7 +1201,7 @@ impl Transport {
             .chain(instance.gate_true())
             .chain(instance.gate_false())
         {
-            let id = self.intern(appender, atom, limits, work)?;
+            let id = self.intern_key(appender, atom, limits, work)?;
             self.records.push(id);
         }
         self.offsets.push(offset);
@@ -1233,23 +1273,12 @@ fn zeros(length: usize) -> Result<Vec<u32>, Stop> {
 fn intern_stop(error: &InternFailure<Stop>) -> Stop {
     match error {
         InternFailure::Stopped(stop) => *stop,
+        InternFailure::Catalog(error) => Stop::catalog(error),
         InternFailure::Atoms { .. } => Stop::CarrierLimit,
         InternFailure::Bytes { .. } | InternFailure::Allocation(_) | InternFailure::Overflow => {
             Stop::Allocation
         }
     }
-}
-
-fn atom_payload_bytes(atom: &Atom) -> Result<usize, Stop> {
-    // The interner separately accounts Atom vector cells and ID-only metadata.
-    let mut bytes = atom.predicate().name().len();
-    for value in atom.values() {
-        bytes = bytes
-            .checked_add(size_of::<zetesis_core::Value>())
-            .and_then(|n| n.checked_add(value.payload_bytes()))
-            .ok_or(Stop::Allocation)?;
-    }
-    Ok(bytes)
 }
 
 fn contains(words: &[u32], atom: usize) -> bool {

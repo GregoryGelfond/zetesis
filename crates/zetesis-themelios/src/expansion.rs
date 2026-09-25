@@ -28,8 +28,8 @@ pub struct ExpansionLimits {
     /// plus finite-pool cursor positions, copied term cells/text, constructor-plan
     /// storage and constructed value node/spelling/frame reservations. Positive
     /// structural patterns also charge plan/cursor cells, constructor and slot
-    /// names, deltas and conservative extracted-value construction payload
-    /// before allocation.
+    /// names, and requested capture-delta cells before allocation. Captures
+    /// borrow canonical terms; the delta does not copy captured payload.
     /// Evaluated positive positions reserve copied term cells/text, flat
     /// operations, check instructions and initial distinct required-input slots.
     /// Conditional alternatives additionally charge scoped variable payload,
@@ -95,7 +95,7 @@ pub enum ExpansionResource {
     /// and retained Boolean choice syntax nodes.
     Values,
     /// Copied scalar payload, finite-pool positions, term/plan storage and
-    /// constructed/extracted value reservations, including structural pattern deltas.
+    /// constructed-value reservations and borrowed structural-capture delta cells.
     ScalarBytes,
     /// Original locations in emitted templates and Boolean choice occurrence evidence.
     Origins,

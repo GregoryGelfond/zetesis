@@ -20,7 +20,7 @@ fn admit(source: &str) -> AdmittedFormula {
 }
 fn terms(source: &str) -> Vec<String> {
     let input = admit(source);
-    let model = Model::new(input.atoms().iter().cloned());
+    let model = Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap();
     input
         .metadata()
         .observations()
@@ -264,7 +264,7 @@ fn default_negation_tests_nested_patterns_without_rebinding() {
 #[test]
 fn failed_nested_matches_release_their_partial_bindings() {
     let input = admit("p(f(1,2)).p(f(3,3)). #show. #show X:p(f(X,X)).");
-    let model = Model::new(input.atoms().iter().cloned());
+    let model = Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap();
     let result = input
         .metadata()
         .observations()
@@ -432,7 +432,7 @@ fn scalar_argument_ranges_can_depend_on_same_atom_captures() {
 #[test]
 fn negated_pool_expansions_release_their_owned_alternatives() {
     let input = admit("p(1). #show. #show x:not p((1;2);3),not p((3;4);5).");
-    let model = Model::new(input.atoms().iter().cloned());
+    let model = Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap();
     let run = |max_local_bytes| {
         input.metadata().observations().evaluate(
             &model,
@@ -456,7 +456,7 @@ fn negated_pool_expansions_release_their_owned_alternatives() {
 #[test]
 fn failed_pool_rows_release_nested_capture_ownership() {
     let input = admit("p(f(1),0).p(f(2),1). #show. #show X:p(f(X),9;f(X),1).");
-    let model = Model::new(input.atoms().iter().cloned());
+    let model = Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap();
     let full = input
         .metadata()
         .observations()

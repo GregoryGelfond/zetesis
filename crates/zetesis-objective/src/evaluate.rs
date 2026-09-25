@@ -1,11 +1,12 @@
 use std::cmp::Ordering;
 
-use zetesis_core::{Atom, AtomPattern, AtomRows, Filter, Model, Term, Value};
+use zetesis_core::catalog::{AtomRef, TermRef};
+use zetesis_core::{AtomRows, Model, PatternRef, TemplateTerm, ValueNodeRef};
 use zetesis_cpu::Cancellation;
 
 use crate::{
     Condition, ConditionNode, Contribution, Error, ErrorKind, Evaluation, Limits, ObjectiveProgram,
-    ObjectiveTemplate, Score, Statistics, Stop,
+    ObjectiveTemplateRef, Score, Statistics, Stop,
 };
 
 struct Work<'a> {
@@ -58,70 +59,46 @@ impl Work<'_> {
     // One checked canonical identity operation is shared with catalog lookup.
     // Source comparisons use ASP term order instead; these callers test equality
     // or sort complete contribution keys consistently.
-    fn compare_identity(&mut self, left: &Value, right: &Value) -> Result<Ordering, Error> {
-        left.compare_identity_with(right, || self.tick())
+    fn compare_identity(
+        &mut self,
+        left: TermRef<'_>,
+        right: TermRef<'_>,
+    ) -> Result<Ordering, Error> {
+        left.compare_ref_with(right, || self.tick())
     }
     fn resolve<'a>(
         &mut self,
-        term: &'a Term,
-        binding: &[Option<&'a Value>],
-    ) -> Result<&'a Value, Error> {
+        term: TemplateTerm<'a>,
+        binding: &[Option<TermRef<'a>>],
+    ) -> Result<TermRef<'a>, Error> {
         self.tick()?;
         match term {
-            Term::Constant(value) => Ok(value),
-            Term::Variable(variable) => {
-                binding.get(*variable).copied().flatten().ok_or_else(|| {
-                    self.error(ErrorKind::UnboundVariable {
-                        variable: *variable,
-                    })
-                })
-            }
+            TemplateTerm::Constant(value) => Ok(value),
+            TemplateTerm::Variable(variable) => binding
+                .get(variable)
+                .copied()
+                .flatten()
+                .ok_or_else(|| self.error(ErrorKind::UnboundVariable { variable })),
         }
     }
-    fn copy_value(&mut self, value: &Value) -> Result<Value, Error> {
-        self.tick()?;
-        match value {
-            Value::Infimum => Ok(Value::Infimum),
-            Value::Supremum => Ok(Value::Supremum),
-            Value::Number(number) => Ok(Value::Number(*number)),
-            Value::Structured(value) => {
-                for _ in 0..value.payload_bytes() {
-                    self.tick()?;
-                }
-                Ok(Value::Structured(value.clone()))
-            }
-            Value::String(text) | Value::Symbol(text) => {
-                let mut owned = String::new();
-                owned
-                    .try_reserve_exact(text.len())
-                    .map_err(|_| self.stop(Stop::Allocation))?;
-                for character in text.chars() {
-                    self.tick()?;
-                    owned.push(character);
-                }
-                Ok(if matches!(value, Value::String(_)) {
-                    Value::String(owned)
-                } else {
-                    Value::Symbol(owned)
-                })
-            }
-        }
-    }
-
-    fn contains(&mut self, model: &Model, query: &Atom) -> Result<bool, Error> {
+    fn contains(&mut self, model: &Model, query: AtomRef<'_>) -> Result<bool, Error> {
         Ok(model.lookup().get_with(query, || self.tick())?.is_some())
     }
 
     fn condition(&mut self, condition: &Condition, model: &Model) -> Result<bool, Error> {
         let mut values: Vec<bool> = self.reserve(condition.nodes().len())?;
-        for node in condition.nodes() {
+        for index in 0..condition.nodes().len() {
             self.tick()?;
+            let node = condition
+                .nodes()
+                .at(index)
+                .expect("bounded condition operation");
             let value = match node {
-                ConditionNode::Boolean(value) => *value,
+                ConditionNode::Boolean(value) => value,
                 ConditionNode::Atom(atom) => self.contains(model, atom)?,
-                ConditionNode::Not(operand) => !values[*operand],
-                ConditionNode::And(left, right) => values[*left] && values[*right],
-                ConditionNode::Or(left, right) => values[*left] || values[*right],
+                ConditionNode::Not(operand) => !values[operand],
+                ConditionNode::And(left, right) => values[left] && values[right],
+                ConditionNode::Or(left, right) => values[left] || values[right],
             };
             values.push(value);
         }
@@ -129,9 +106,9 @@ impl Work<'_> {
     }
 }
 
-struct Evaluator<'a> {
-    work: Work<'a>,
-    keys: Vec<Contribution>,
+struct Evaluator<'input, 'control> {
+    work: Work<'control>,
+    keys: Vec<Contribution<'input>>,
     totals: Vec<i128>,
 }
 
@@ -145,12 +122,12 @@ struct Evaluator<'a> {
 /// Returns typed numeric weight-normalization or cost overflow, invalid bindings,
 /// cancellation/deadlines or explicit budget/allocation refusals. No partial
 /// score is returned. Source origins remain in the caller's template catalog.
-pub fn evaluate(
-    program: &ObjectiveProgram,
-    model: &Model,
+pub fn evaluate<'input>(
+    program: &'input ObjectiveProgram,
+    model: &'input Model,
     limits: Limits,
     cancellation: &Cancellation,
-) -> Result<Evaluation, Error> {
+) -> Result<Evaluation<'input>, Error> {
     let mut work = Work {
         limits,
         cancellation,
@@ -205,11 +182,11 @@ struct Frame<'a> {
     trail_start: usize,
 }
 
-impl Evaluator<'_> {
-    fn join<'a>(
+impl<'input> Evaluator<'input, '_> {
+    fn join(
         &mut self,
-        template: &'a ObjectiveTemplate,
-        model: &'a Model,
+        template: ObjectiveTemplateRef<'input>,
+        model: &'input Model,
         variables: usize,
         slot: usize,
     ) -> Result<(), Error> {
@@ -228,9 +205,14 @@ impl Evaluator<'_> {
         let mut frames = self.work.reserve(template.positive().len())?;
         let mut trail = self.work.reserve(variables)?;
         frames.push(Frame {
-            atoms: model
-                .lookup()
-                .predicate_with(template.positive()[0].predicate(), || self.work.tick())?,
+            atoms: model.lookup().predicate_with(
+                template
+                    .positive()
+                    .at(0)
+                    .expect("nonempty positive body")
+                    .predicate(),
+                || self.work.tick(),
+            )?,
             trail_start: 0,
         });
         while !frames.is_empty() {
@@ -246,7 +228,7 @@ impl Evaluator<'_> {
                 continue;
             };
             if !self.matches(
-                &template.positive()[depth],
+                template.positive().at(depth).expect("join depth in body"),
                 row.atom(),
                 &mut binding,
                 &mut trail,
@@ -257,11 +239,14 @@ impl Evaluator<'_> {
                 self.active(template, &binding, slot)?;
             } else {
                 frames.push(Frame {
-                    atoms: model
-                        .lookup()
-                        .predicate_with(template.positive()[depth + 1].predicate(), || {
-                            self.work.tick()
-                        })?,
+                    atoms: model.lookup().predicate_with(
+                        template
+                            .positive()
+                            .at(depth + 1)
+                            .expect("next join depth in body")
+                            .predicate(),
+                        || self.work.tick(),
+                    )?,
                     trail_start: trail.len(),
                 });
             }
@@ -269,32 +254,34 @@ impl Evaluator<'_> {
         Ok(())
     }
 
-    fn matches<'a>(
+    fn matches(
         &mut self,
-        pattern: &'a AtomPattern,
-        atom: &'a Atom,
-        binding: &mut [Option<&'a Value>],
+        pattern: PatternRef<'input>,
+        atom: AtomRef<'input>,
+        binding: &mut [Option<TermRef<'input>>],
         trail: &mut Vec<usize>,
     ) -> Result<bool, Error> {
         self.work.tick()?;
         // The predicate window has already established the full signed signature;
         // matching below still checks constants and repeated/bound whole values.
-        for (term, value) in pattern.terms().iter().zip(atom.values()) {
+        for column in 0..pattern.terms().len() {
             self.work.tick()?;
+            let term = pattern.terms().at(column).expect("bounded pattern column");
+            let value = atom.values().at(column).expect("matched predicate arity");
             match term {
-                Term::Constant(constant) => {
+                TemplateTerm::Constant(constant) => {
                     if self.work.compare_identity(constant, value)? != Ordering::Equal {
                         return Ok(false);
                     }
                 }
-                Term::Variable(variable) => {
-                    if let Some(previous) = binding[*variable] {
+                TemplateTerm::Variable(variable) => {
+                    if let Some(previous) = binding[variable] {
                         if self.work.compare_identity(previous, value)? != Ordering::Equal {
                             return Ok(false);
                         }
                     } else {
-                        binding[*variable] = Some(value);
-                        trail.push(*variable);
+                        binding[variable] = Some(value);
+                        trail.push(variable);
                     }
                 }
             }
@@ -302,10 +289,10 @@ impl Evaluator<'_> {
         Ok(true)
     }
 
-    fn active<'a>(
+    fn active(
         &mut self,
-        template: &'a ObjectiveTemplate,
-        binding: &[Option<&'a Value>],
+        template: ObjectiveTemplateRef<'input>,
+        binding: &[Option<TermRef<'input>>],
         slot: usize,
     ) -> Result<(), Error> {
         self.work.tick()?;
@@ -313,26 +300,32 @@ impl Evaluator<'_> {
             return Err(self.work.stop(Stop::BindingLimit));
         }
         self.work.statistics.bindings += 1;
-        for filter in template.filters() {
+        for index in 0..template.filters().len() {
+            self.work.tick()?;
+            let filter = template.filters().at(index).expect("bounded filter index");
             let (left, right) = filter.terms();
             let left = self.work.resolve(left, binding)?;
             let right = self.work.resolve(right, binding)?;
             let equal = self.work.compare_identity(left, right)? == Ordering::Equal;
-            if equal != matches!(filter, Filter::Eq(..)) {
+            if equal != filter.is_equality() {
                 return Ok(());
             }
         }
         self.work.statistics.active_bindings =
             self.work.increment(self.work.statistics.active_bindings)?;
-        let Value::Number(weight) = self.work.resolve(template.weight(), binding)? else {
+        let weight = self.work.resolve(template.weight(), binding)?;
+        self.work.tick()?;
+        let ValueNodeRef::Number(weight) = weight.descriptor() else {
             return Ok(());
         };
         let weight = template
             .weight_polarity()
-            .normalize(*weight)
+            .normalize(weight)
             .ok_or_else(|| self.work.error(ErrorKind::WeightNormalizationOverflow))?;
         let mut tuple = self.work.reserve(template.tuple().len())?;
-        for term in template.tuple() {
+        for index in 0..template.tuple().len() {
+            self.work.tick()?;
+            let term = template.tuple().at(index).expect("bounded tuple field");
             tuple.push(self.work.resolve(term, binding)?);
         }
         self.contribute(template.priority(), weight, &tuple, slot)
@@ -343,7 +336,7 @@ impl Evaluator<'_> {
         index: usize,
         priority: i32,
         weight: i32,
-        tuple: &[&Value],
+        tuple: &[TermRef<'input>],
     ) -> Result<Ordering, Error> {
         self.work.tick()?;
         let key = &self.keys[index];
@@ -352,7 +345,7 @@ impl Evaluator<'_> {
             return Ok(prefix);
         }
         for (left, right) in key.tuple.iter().zip(tuple) {
-            let order = self.work.compare_identity(left, right)?;
+            let order = self.work.compare_identity(*left, *right)?;
             if order != Ordering::Equal {
                 return Ok(order);
             }
@@ -364,7 +357,7 @@ impl Evaluator<'_> {
         &mut self,
         priority: i32,
         weight: i32,
-        tuple: &[&Value],
+        tuple: &[TermRef<'input>],
         slot: usize,
     ) -> Result<(), Error> {
         let mut low = 0;
@@ -389,9 +382,10 @@ impl Evaluator<'_> {
         if total_bytes > self.work.limits.max_key_bytes {
             return Err(self.work.stop(Stop::KeyBytesLimit));
         }
-        let mut owned = self.work.reserve(tuple.len())?;
+        let mut retained = self.work.reserve(tuple.len())?;
         for value in tuple {
-            owned.push(self.work.copy_value(value)?);
+            self.work.tick()?;
+            retained.push(*value);
         }
         // Sorted storage avoids opaque hash/set allocation. Charge each moved
         // key before Vec::insert's memmove; this intentionally bounds its O(k) work.
@@ -409,7 +403,7 @@ impl Evaluator<'_> {
             Contribution {
                 priority,
                 weight,
-                tuple: owned,
+                tuple: retained,
             },
         );
         self.totals[slot] = total;
@@ -418,20 +412,13 @@ impl Evaluator<'_> {
         Ok(())
     }
 
-    fn key_bytes(&mut self, tuple: &[&Value]) -> Result<usize, Error> {
-        // Two i32 fields and a u64 tuple length. Each value has a one-byte tag,
-        // then an i32 number or a u64 byte length followed by UTF-8 payload.
-        // The two extrema have distinct tags and no payload.
+    fn key_bytes(&mut self, tuple: &[TermRef<'input>]) -> Result<usize, Error> {
+        // This logical encoding measure is unchanged by borrowing canonical
+        // payload. Retained cells contain handles, never copied text or DAGs.
         let mut bytes = 16;
         for value in tuple {
-            self.work.tick()?;
-            let payload = match value {
-                Value::Infimum | Value::Supremum => 0,
-                Value::Number(_) => 4,
-                Value::Structured(value) => value.canonical_bytes() - 1,
-                Value::String(text) | Value::Symbol(text) => self.work.add_size(8, text.len())?,
-            };
-            bytes = self.work.add_size(bytes, self.work.add_size(1, payload)?)?;
+            let length = value.canonical_bytes_with(|| self.work.tick())?;
+            bytes = self.work.add_size(bytes, length)?;
         }
         Ok(bytes)
     }
@@ -441,6 +428,54 @@ impl Evaluator<'_> {
 mod tests {
     use super::final_cost;
     use crate::ErrorKind;
+
+    #[test]
+    fn contribution_evidence_borrows_model_payload() {
+        use crate::{AdmissionLimits, Limits, ObjectiveProgram, ObjectiveTemplate};
+        use zetesis_core::{Atom, AtomPattern, Model, Predicate, Term, Value, ValueNodeRef};
+        let predicate = Predicate::new("p", 1).unwrap();
+        let model = Model::new([Atom::new(
+            predicate.clone(),
+            vec![Value::String("retained-payload".repeat(1024))],
+        )
+        .unwrap()])
+        .unwrap();
+        let program = ObjectiveProgram::new(
+            vec![ObjectiveTemplate::new(
+                Term::Constant(Value::Number(1)),
+                0,
+                vec![Term::Variable(0)],
+                vec![AtomPattern::new(predicate, vec![Term::Variable(0)]).unwrap()],
+                vec![],
+            )],
+            AdmissionLimits::default(),
+        )
+        .unwrap();
+        let evaluated = super::evaluate(
+            &program,
+            &model,
+            Limits::default(),
+            &zetesis_cpu::Cancellation::default(),
+        )
+        .unwrap();
+        let ValueNodeRef::String(source) = model
+            .atoms()
+            .iter()
+            .next()
+            .unwrap()
+            .values()
+            .at(0)
+            .unwrap()
+            .descriptor()
+        else {
+            panic!("string source");
+        };
+        let ValueNodeRef::String(retained) = evaluated.contributions()[0].tuple()[0].descriptor()
+        else {
+            panic!("string evidence");
+        };
+        assert!(std::ptr::eq(source, retained));
+    }
 
     #[test]
     fn final_signed_cost_conversion_accepts_exact_edges_and_refuses_excess() {

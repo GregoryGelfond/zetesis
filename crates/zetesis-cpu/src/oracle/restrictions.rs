@@ -1,28 +1,26 @@
-//! Source-certified positive gate conjunctions forbidden in every answer set.
+//! Fact-certified forbidden conjunctions retaining only Program coordinates.
 
-use super::{Relations, Work, source::copy_atom, visit};
+use super::{Relations, Work, visit};
 use crate::{Cancellation, CandidateRestrictionLimits, Stop};
 
 use std::sync::Arc;
-use zetesis_core::{Atom, AtomPattern, GateAtom, Model, Program, Template, Term};
+use zetesis_core::{
+    CarrierAtom, CarrierFailure, GateAtom, PatternRef, Program, TemplateRef, TemplateTerm,
+    catalog::TermRef,
+};
 
 pub(crate) struct Restrictions {
-    forbidden: Vec<Vec<Atom>>,
+    forbidden: Vec<Vec<CarrierAtom>>,
     pub(crate) atoms: usize,
     pub(crate) bytes: usize,
     pub(crate) peak_bytes: usize,
 }
-
 pub(crate) struct Attempt {
     pub(crate) result: Result<Restrictions, Stop>,
     pub(crate) work: u64,
 }
-
 pub(crate) enum Conflict {
-    /// This conjunction has no counted gate premise and rules out every seed:
-    /// its premises are facts or gate atoms held in every seed.
     Unconditional,
-    /// Every premise stays true until the lowest selected bit is cleared.
     Selected(usize),
 }
 
@@ -30,7 +28,6 @@ impl Restrictions {
     pub(crate) fn conjunctions(&self) -> usize {
         self.forbidden.len()
     }
-
     pub(crate) fn compile(
         program: &Program,
         limits: CandidateRestrictionLimits,
@@ -43,13 +40,9 @@ impl Restrictions {
             work: work.statistics.work,
         }
     }
-
-    /// Find a forbidden conjunction whose premises are all true in the current
-    /// seed: `necessary` holds the gate atoms every seed selects, in canonical
-    /// order, and `atoms`/`bits` the counted ones with their selection.
     pub(crate) fn conflict(
         &self,
-        necessary: &[Arc<Atom>],
+        necessary: &[CarrierAtom],
         atoms: &[Arc<GateAtom>],
         bits: &[bool],
         max_work: u64,
@@ -59,10 +52,9 @@ impl Restrictions {
         let result = self.find_conflict(necessary, atoms, bits, &mut work);
         (result, work.statistics.work)
     }
-
     fn find_conflict(
         &self,
-        necessary: &[Arc<Atom>],
+        necessary: &[CarrierAtom],
         atoms: &[Arc<GateAtom>],
         bits: &[bool],
         work: &mut Work<'_>,
@@ -72,8 +64,6 @@ impl Restrictions {
             let mut first = None;
             let mut matched = true;
             for premise in forbidden {
-                // A necessary premise never clears, so it does not bound the
-                // interval the conjunction excludes.
                 if held(premise, necessary, work)? {
                     continue;
                 }
@@ -93,41 +83,180 @@ impl Restrictions {
     }
 }
 
-fn held(premise: &Atom, necessary: &[Arc<Atom>], work: &mut Work<'_>) -> Result<bool, Stop> {
-    let mut start = 0;
-    let mut end = necessary.len();
-    while start < end {
-        let middle = start + (end - start) / 2;
-        charge_atom(premise, work)?;
-        charge_atom(&necessary[middle], work)?;
-        match necessary[middle].as_ref().cmp(premise) {
-            std::cmp::Ordering::Less => start = middle + 1,
-            std::cmp::Ordering::Greater => end = middle,
+fn held(
+    premise: &CarrierAtom,
+    necessary: &[CarrierAtom],
+    work: &mut Work<'_>,
+) -> Result<bool, Stop> {
+    let (mut low, mut high) = (0, necessary.len());
+    while low < high {
+        let middle = low + (high - low) / 2;
+        work.tick()?;
+        match necessary[middle]
+            .atom()
+            .compare_ref_with(premise.atom(), || work.tick())?
+        {
+            std::cmp::Ordering::Less => low = middle + 1,
+            std::cmp::Ordering::Greater => high = middle,
             std::cmp::Ordering::Equal => return Ok(true),
         }
     }
     Ok(false)
 }
-
 fn selected_index(
-    premise: &Atom,
+    premise: &CarrierAtom,
     atoms: &[Arc<GateAtom>],
     bits: &[bool],
     work: &mut Work<'_>,
 ) -> Result<Option<usize>, Stop> {
-    let mut start = 0;
-    let mut end = atoms.len();
-    while start < end {
-        let middle = start + (end - start) / 2;
-        charge_atom(premise, work)?;
-        charge_atom(atoms[middle].atom(), work)?;
-        match atoms[middle].atom().cmp(premise) {
-            std::cmp::Ordering::Less => start = middle + 1,
-            std::cmp::Ordering::Greater => end = middle,
+    let (mut low, mut high) = (0, atoms.len());
+    while low < high {
+        let middle = low + (high - low) / 2;
+        work.tick()?;
+        match atoms[middle]
+            .atom()
+            .compare_ref_with(premise.atom(), || work.tick())?
+        {
+            std::cmp::Ordering::Less => low = middle + 1,
+            std::cmp::Ordering::Greater => high = middle,
             std::cmp::Ordering::Equal => return Ok(bits[middle].then_some(middle)),
         }
     }
     Ok(None)
+}
+
+/// Named live coordinate and metadata allocations. Program payload is shared
+/// once by the caller, never charged once per fact or premise. Buffer growth
+/// admits old/replacement overlap; allocator bookkeeping is excluded.
+struct Storage {
+    bytes: u128,
+    peak: u128,
+    limit: usize,
+}
+impl Storage {
+    fn admit(&mut self, bytes: u128) -> Result<(), Stop> {
+        if bytes > self.limit as u128 {
+            return Err(Stop::Allocation);
+        }
+        self.peak = self.peak.max(bytes);
+        Ok(())
+    }
+    fn reserve<T>(
+        &mut self,
+        values: &mut Vec<T>,
+        additional: usize,
+        work: &mut Work<'_>,
+    ) -> Result<(), Stop> {
+        let required = values
+            .len()
+            .checked_add(additional)
+            .ok_or(Stop::Allocation)?;
+        if required <= values.capacity() {
+            return Ok(());
+        }
+        let target = required.max(values.capacity().saturating_mul(2)).max(4);
+        let old = buffer_bytes(values);
+        self.admit(self.bytes + target as u128 * size_of::<T>() as u128)?;
+        work.charge(values.len().max(1))?;
+        values
+            .try_reserve_exact(target - values.len())
+            .map_err(|_| Stop::Allocation)?;
+        self.admit(self.bytes + buffer_bytes(values))?;
+        self.bytes = self.bytes - old + buffer_bytes(values);
+        Ok(())
+    }
+    fn release<T>(&mut self, values: Vec<T>) {
+        self.bytes -= buffer_bytes(&values);
+        drop(values);
+    }
+    fn remaining(&self) -> Result<usize, Stop> {
+        usize::try_from(
+            (self.limit as u128)
+                .checked_sub(self.bytes)
+                .ok_or(Stop::Allocation)?,
+        )
+        .map_err(|_| Stop::Allocation)
+    }
+}
+fn buffer_bytes<T>(values: &Vec<T>) -> u128 {
+    values.capacity() as u128 * size_of::<T>() as u128
+}
+fn located(
+    program: &Program,
+    pattern: PatternRef<'_>,
+    assignment: &[Option<TermRef<'_>>],
+    gates_only: bool,
+    remaining_atoms: &mut usize,
+    storage: &mut Storage,
+    work: &mut Work<'_>,
+) -> Result<CarrierAtom, Stop> {
+    if *remaining_atoms == 0 {
+        return Err(Stop::CarrierLimit);
+    }
+    work.charge(pattern.terms().len())?;
+    let key = pattern.key(assignment).map_err(|_| Stop::InvalidProgram)?;
+    let atom = program
+        .locate_key_with(&key, gates_only, storage.remaining()?, || work.tick())
+        .map_err(|error| match error {
+            CarrierFailure::Stopped(stop) => stop,
+            CarrierFailure::Storage(zetesis_core::CarrierError::Coordinates) => {
+                Stop::InvalidProgram
+            }
+            CarrierFailure::Storage(_) => Stop::Allocation,
+        })?
+        .ok_or(Stop::InvalidProgram)?;
+    storage.bytes += atom.coordinate_bytes();
+    storage.admit(storage.bytes)?;
+    *remaining_atoms -= 1;
+    Ok(atom)
+}
+
+/// Discover and deduplicate actual unconditional facts before they become the
+/// immutable input rows for constraint joins. Located coordinates and sorting
+/// retain the same storage account used by the later joins.
+fn unconditional_facts(
+    program: &Program,
+    remaining_atoms: &mut usize,
+    storage: &mut Storage,
+    work: &mut Work<'_>,
+) -> Result<Vec<CarrierAtom>, Stop> {
+    let mut facts: Vec<CarrierAtom> = Vec::new();
+    for template in program.templates() {
+        work.tick()?;
+        if template.positive().is_empty()
+            && template.gate_true().is_empty()
+            && template.gate_false().is_empty()
+            && template.filters().is_empty()
+            && let Some(head) = template.head()
+        {
+            let atom = located(program, head, &[], false, remaining_atoms, storage, work)?;
+            let (mut low, mut high) = (0, facts.len());
+            let mut duplicate = false;
+            while low < high {
+                let middle = low + (high - low) / 2;
+                work.tick()?;
+                match facts[middle]
+                    .atom()
+                    .compare_ref_with(atom.atom(), || work.tick())?
+                {
+                    std::cmp::Ordering::Less => low = middle + 1,
+                    std::cmp::Ordering::Greater => high = middle,
+                    std::cmp::Ordering::Equal => {
+                        duplicate = true;
+                        break;
+                    }
+                }
+            }
+            if duplicate {
+                storage.bytes -= atom.coordinate_bytes();
+            } else {
+                storage.reserve(&mut facts, 1, work)?;
+                work.charge(facts.len() - low + 1)?;
+                facts.insert(low, atom);
+            }
+        }
+    }
+    Ok(facts)
 }
 
 fn compile(
@@ -148,201 +277,140 @@ fn compile(
             peak_bytes: 0,
         });
     }
+    let mut storage = Storage {
+        bytes: 0,
+        peak: 0,
+        limit: limits.max_bytes,
+    };
     let mut remaining_atoms = limits.max_atoms;
-    let mut remaining_bytes = limits.max_bytes;
-    let mut facts = Vec::new();
-    for template in program.templates() {
-        work.tick()?;
-        if template.positive().is_empty()
-            && template.gate_true().is_empty()
-            && template.gate_false().is_empty()
-            && template.filters().is_empty()
-            && let Some(head) = template.head()
-        {
-            let atom = copy_atom(head, &[], &mut remaining_atoms, &mut remaining_bytes, work)?;
-            facts.try_reserve(1).map_err(|_| Stop::Allocation)?;
-            facts.push(atom);
-        }
-    }
-    // Canonical ordering is required by the source join's prefix windows. Only
-    // actual unconditional facts enter this snapshot. Model::new's ordering,
-    // deduplication and allocation are not metered by restriction_work; copied
-    // input size is bounded above, and this existing operation is indivisible.
-    work.cancellation.poll()?;
-    let facts = Model::new(facts);
-    work.cancellation.poll()?;
+    let facts = unconditional_facts(program, &mut remaining_atoms, &mut storage, work)?;
+    // Only actual unconditional facts enter the shared join; neither possible
+    // support nor the entire carrier is supplied as a source truth relation.
     let mut relations = Relations::new();
-    for atom in facts.atoms() {
-        work.tick()?;
-        relations.push(atom);
+    storage.bytes += relations.retained_bytes();
+    storage.admit(storage.bytes)?;
+    for atom in &facts {
+        let previous = relations.retained_bytes();
+        relations.push_with(
+            atom.atom(),
+            storage.bytes - previous,
+            limits.max_bytes,
+            &mut storage.peak,
+            work,
+        )?;
+        storage.bytes = storage.bytes - previous + relations.retained_bytes();
+        storage.admit(storage.bytes)?;
     }
+    let facts_bytes = storage.bytes;
     let mut forbidden = Vec::new();
-    let mut peak_bytes = limits.max_bytes - remaining_bytes;
     for template in program.templates() {
         work.tick()?;
         if template.head().is_some() || !template.gate_false().is_empty() {
             continue;
         }
-        if let Some((template, temporary_bytes)) = lift(program, template, remaining_bytes, work)? {
-            let mut available_bytes = remaining_bytes - temporary_bytes;
-            peak_bytes = peak_bytes.max(limits.max_bytes - available_bytes);
-            visit(
-                &template,
-                &relations,
-                super::Gates::Unjudged,
-                None,
-                work,
-                |assignment, work| {
-                    available_bytes = available_bytes
-                        .checked_sub(size_of::<Vec<Atom>>())
-                        .ok_or(Stop::Allocation)?;
-                    work.charge(size_of::<Vec<Atom>>())?;
-                    let mut conjunction = Vec::new();
-                    conjunction
-                        .try_reserve_exact(template.gate_true().len())
-                        .map_err(|_| Stop::Allocation)?;
-                    for premise in template.gate_true() {
-                        conjunction.push(copy_atom(
-                            premise,
-                            assignment,
-                            &mut remaining_atoms,
-                            &mut available_bytes,
-                            work,
-                        )?);
-                    }
-                    forbidden.try_reserve(1).map_err(|_| Stop::Allocation)?;
-                    forbidden.push(conjunction);
-                    peak_bytes = peak_bytes.max(limits.max_bytes - available_bytes);
-                    Ok::<(), Stop>(())
-                },
-            )?;
-            remaining_bytes = available_bytes + temporary_bytes;
-        }
+        let Some(partition) = lift(program, template, &mut storage, work)? else {
+            continue;
+        };
+        let query = template.with_patterns(&partition.positive, &partition.gates);
+        let scratch = visit(
+            query,
+            &relations,
+            super::Gates::Unjudged,
+            None,
+            super::QueryStorage {
+                retained_bytes: storage.bytes,
+                max_bytes: limits.max_bytes,
+            },
+            work,
+            |assignment, scratch, work| {
+                storage.bytes += scratch;
+                storage.admit(storage.bytes)?;
+                storage.reserve(&mut forbidden, 1, work)?;
+                let mut conjunction = Vec::new();
+                storage.reserve(&mut conjunction, query.gate_true().len(), work)?;
+                for premise in query.gate_true() {
+                    conjunction.push(located(
+                        program,
+                        premise,
+                        assignment,
+                        true,
+                        &mut remaining_atoms,
+                        &mut storage,
+                        work,
+                    )?);
+                }
+                work.tick()?;
+                forbidden.push(conjunction);
+                storage.bytes -= scratch;
+                Ok::<(), Stop>(())
+            },
+        )?;
+        storage.admit(storage.bytes + scratch)?;
+        storage.bytes -= buffer_bytes(&partition.positive) + buffer_bytes(&partition.gates);
     }
+    storage.bytes -= facts_bytes;
     Ok(Restrictions {
         forbidden,
         atoms: limits.max_atoms - remaining_atoms,
-        bytes: limits.max_bytes - remaining_bytes,
-        peak_bytes,
+        bytes: usize::try_from(storage.bytes).map_err(|_| Stop::Allocation)?,
+        peak_bytes: usize::try_from(storage.peak).map_err(|_| Stop::Allocation)?,
     })
 }
 
-/// Move only ordinary gate predicates into the positive candidate premises.
-/// Every variable must still be bound by fact-side positive patterns; otherwise
-/// decline this constraint rather than treating an unknown binding as false.
-fn lift(
+struct Partition<'a> {
+    positive: Vec<PatternRef<'a>>,
+    gates: Vec<PatternRef<'a>>,
+}
+/// Every variable must be bound by nongate facts. Other constraints remain for
+/// the membership oracle. The partition copies pattern handles, never payload.
+fn lift<'a>(
     program: &Program,
-    template: &Template,
-    max_bytes: usize,
+    template: TemplateRef<'a>,
+    storage: &mut Storage,
     work: &mut Work<'_>,
-) -> Result<Option<(Template, usize)>, Stop> {
+) -> Result<Option<Partition<'a>>, Stop> {
     let mut bound = Vec::new();
-    bound
-        .try_reserve_exact(template.variable_count())
-        .map_err(|_| Stop::Allocation)?;
+    storage.reserve(&mut bound, template.variable_count(), work)?;
+    work.charge(template.variable_count())?;
     bound.resize(template.variable_count(), false);
-    let mut fact_patterns = 0;
-    for pattern in template.positive() {
-        work.tick()?;
-        if program
-            .gate_predicates()
-            .binary_search(pattern.predicate())
-            .is_err()
-        {
-            fact_patterns += 1;
-            for term in pattern.terms() {
-                work.tick()?;
-                if let Term::Variable(variable) = term {
-                    bound[*variable] = true;
-                }
-            }
-        }
-    }
-    for &bound in &bound {
-        work.tick()?;
-        if !bound {
-            return Ok(None);
-        }
-    }
-    let mut bytes = size_of::<Template>();
-    for pattern in template.positive().iter().chain(template.gate_true()) {
-        bytes = bytes
-            .checked_add(pattern_bytes(pattern)?)
-            .ok_or(Stop::Allocation)?;
-    }
-    for filter in template.filters() {
-        let (left, right) = filter.terms();
-        bytes = bytes
-            .checked_add(size_of_val(filter))
-            .and_then(|n| n.checked_add(term_payload(left)))
-            .and_then(|n| n.checked_add(term_payload(right)))
-            .ok_or(Stop::Allocation)?;
-    }
-    if bytes > max_bytes {
-        return Err(Stop::Allocation);
-    }
-    work.charge(bytes)?;
     let mut positive = Vec::new();
     let mut gates = Vec::new();
-    positive
-        .try_reserve_exact(fact_patterns)
-        .map_err(|_| Stop::Allocation)?;
-    gates
-        .try_reserve_exact(
-            (template.positive().len() - fact_patterns)
-                .checked_add(template.gate_true().len())
-                .ok_or(Stop::Allocation)?,
-        )
-        .map_err(|_| Stop::Allocation)?;
-    gates.extend_from_slice(template.gate_true());
     for pattern in template.positive() {
+        work.tick()?;
         if program
             .gate_predicates()
-            .binary_search(pattern.predicate())
-            .is_ok()
+            .binary_search_with(pattern.predicate(), || work.tick())?
+            .is_err()
         {
-            gates.push(pattern.clone());
+            storage.reserve(&mut positive, 1, work)?;
+            for term in pattern.terms() {
+                work.tick()?;
+                if let TemplateTerm::Variable(variable) = term {
+                    *bound.get_mut(variable).ok_or(Stop::InvalidProgram)? = true;
+                }
+            }
+            work.tick()?;
+            positive.push(pattern);
         } else {
-            positive.push(pattern.clone());
+            storage.reserve(&mut gates, 1, work)?;
+            work.tick()?;
+            gates.push(pattern);
         }
     }
-    Ok(Some((
-        Template::new(
-            None,
-            positive,
-            gates,
-            Vec::new(),
-            template.filters().to_vec(),
-        ),
-        bytes,
-    )))
-}
-
-fn pattern_bytes(pattern: &AtomPattern) -> Result<usize, Stop> {
-    let mut bytes = size_of::<AtomPattern>()
-        .checked_add(pattern.predicate().name().len())
-        .ok_or(Stop::Allocation)?;
-    for term in pattern.terms() {
-        bytes = bytes
-            .checked_add(size_of::<Term>())
-            .and_then(|n| n.checked_add(term_payload(term)))
-            .ok_or(Stop::Allocation)?;
-    }
-    Ok(bytes)
-}
-
-fn term_payload(term: &Term) -> usize {
-    match term {
-        Term::Constant(value) => value.payload_bytes(),
-        Term::Variable(_) => 0,
-    }
-}
-
-fn charge_atom(atom: &Atom, work: &mut Work<'_>) -> Result<(), Stop> {
-    work.charge(atom.predicate().name().len())?;
-    for value in atom.values() {
+    let mut complete = true;
+    for present in &bound {
         work.tick()?;
-        work.charge(value.payload_bytes())?;
+        complete &= *present;
     }
-    Ok(())
+    storage.release(bound);
+    if !complete {
+        storage.bytes -= buffer_bytes(&positive) + buffer_bytes(&gates);
+        return Ok(None);
+    }
+    for pattern in template.gate_true() {
+        storage.reserve(&mut gates, 1, work)?;
+        work.tick()?;
+        gates.push(pattern);
+    }
+    Ok(Some(Partition { positive, gates }))
 }

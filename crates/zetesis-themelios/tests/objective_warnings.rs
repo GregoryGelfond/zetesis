@@ -1,6 +1,6 @@
 //! Objective families require jointly defined condition and scalar fields.
 
-use zetesis_core::{Term, Value};
+use zetesis_core::Value;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, FormulaFailure,
     FormulaLimits, admit_formula, observation::EvaluationError,
@@ -30,18 +30,23 @@ fn mixed_objective_fields_retain_only_defined_instances() {
         let source = format!("d(0..1). #minimize{{{fields}:d(X)}}.");
         let admitted = admit(&source).unwrap();
         assert_eq!(admitted.warnings().len(), 1, "{source}");
-        let [template] = admitted.objectives().templates() else {
-            panic!("one defined objective instance: {source}");
-        };
+        assert_eq!(
+            admitted.objectives().templates().len(),
+            1,
+            "one defined objective instance: {source}"
+        );
+        let template = admitted.objectives().templates().at(0).unwrap();
         assert_eq!(
             template.weight(),
-            &Term::Constant(Value::Number(1)),
+            zetesis_core::TemplateTerm::Constant((&Value::Number(1)).into()),
             "{source}"
         );
         assert_eq!(template.priority(), priority, "{source}");
         assert_eq!(
-            template.tuple(),
-            [Term::Constant(Value::Number(1))],
+            template.tuple().iter().collect::<Vec<_>>(),
+            [zetesis_core::TemplateTerm::Constant(
+                (&Value::Number(1)).into()
+            )],
             "{source}"
         );
     }
@@ -75,12 +80,15 @@ fn pooled_objective_fragments_share_the_original_family() {
         let source = format!("d(0). {objective}");
         let admitted = admit(&source).unwrap();
         assert_eq!(admitted.warnings().len(), 1, "{source}");
-        let [template] = admitted.objectives().templates() else {
-            panic!("one defined pooled alternative: {source}");
-        };
+        assert_eq!(
+            admitted.objectives().templates().len(),
+            1,
+            "one defined pooled alternative: {source}"
+        );
+        let template = admitted.objectives().templates().at(0).unwrap();
         assert_eq!(
             template.weight(),
-            &Term::Constant(Value::Number(1)),
+            zetesis_core::TemplateTerm::Constant((&Value::Number(1)).into()),
             "{source}"
         );
     }

@@ -694,7 +694,7 @@ fn hidden_optimum_ties_and_cancellation_keep_complete_model_identity() {
     let mut full_models = Models::new();
     for model in search.by_ref() {
         let model = model.unwrap();
-        let model = zetesis_core::Model::new(model.atoms().map(|atom| p.atoms()[atom].clone()));
+        let model = zetesis_core::Model::from_positions(p.atom_catalog(), model.atoms()).unwrap();
         let evaluated = zetesis_objective::evaluate(
             p.objectives(),
             &model,

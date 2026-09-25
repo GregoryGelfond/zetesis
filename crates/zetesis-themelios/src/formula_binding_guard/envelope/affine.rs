@@ -10,7 +10,7 @@
 
 use themelios_base::span::Location;
 use themelios_program::term::{BinaryOp, UnaryOp};
-use zetesis_core::Value;
+use zetesis_core::ValueNodeRef;
 
 use crate::expansion::Budget;
 use crate::formula_ir::{Expression, Operation};
@@ -23,13 +23,16 @@ pub(super) struct Affine {
     closed: bool,
 }
 
-pub(super) struct Reader<'a> {
+pub(super) struct Reader<'a, 'source> {
+    pub source: &'a crate::formula_support::components::Admission<'source>,
+    pub limits: &'a crate::FormulaLimits,
+    pub counters: &'a mut crate::formula_support::Counters,
     pub variables: usize,
     pub budget: &'a mut Budget,
     pub location: Location,
 }
 
-impl Reader<'_> {
+impl Reader<'_, '_> {
     pub fn variable(&mut self, target: usize) -> Result<Affine, FormulaFailure> {
         self.budget.charge(
             ExpansionResource::ScalarBytes,
@@ -62,7 +65,18 @@ impl Reader<'_> {
             // coefficient construction and arithmetic.
             self.work(1 + 6 * self.variables as u128)?;
             let form = match *node {
-                Operation::Constant(Value::Number(number)) => Some(self.number(number)),
+                Operation::Constant(scalar) => {
+                    let value = self.source.scalar_ref(
+                        scalar,
+                        self.limits,
+                        self.counters,
+                        self.location,
+                    )?;
+                    match value.descriptor() {
+                        ValueNodeRef::Number(number) => Some(self.number(number)),
+                        _ => None,
+                    }
+                }
                 Operation::Variable(variable) => {
                     let mut form = self.number(0);
                     form.coefficients[variable] = 1;

@@ -10,6 +10,8 @@
 //! visited. Each push spends grounding work and reserves fallibly; transient
 //! frame cells do not consume the cumulative scalar-payload allowance.
 
+use crate::formula_support::{Context, GroundingWork};
+
 use themelios_base::span::Location;
 
 use crate::expansion::Budget;
@@ -17,7 +19,7 @@ use crate::formula_binding::Binding;
 use crate::formula_conditional_ir::{Consequent, ConsequentOperand};
 use crate::formula_ir::{HeadIr, LiteralIr, Prepared, Projection, RuleIr};
 use crate::formula_support::family::{Evidence, Warnings};
-use crate::formula_support::{Counters, Join, Support};
+use crate::formula_support::{Computation, Counters, Join, Support};
 use crate::{FormulaFailure, FormulaLimits};
 
 #[derive(Clone, Copy)]
@@ -46,8 +48,9 @@ struct Task<'a, 'source> {
     location: Location,
 }
 
-struct Scan<'a, 'source, 'context> {
+struct Scan<'a, 'source, 'context, 'compute> {
     support: &'a Support<'source>,
+    computation: &'context mut Computation<'compute, 'source>,
     limits: &'context FormulaLimits,
     budget: &'context mut Budget,
     counters: &'context mut Counters,
@@ -55,9 +58,10 @@ struct Scan<'a, 'source, 'context> {
     stack: Vec<Task<'a, 'source>>,
 }
 
-pub(super) fn prepare(
-    prepared: &Prepared,
-    support: &Support,
+pub(super) fn prepare<'a, 'source>(
+    prepared: &'a Prepared,
+    support: &'a Support<'source>,
+    computation: &mut Computation<'_, 'source>,
     limits: &FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
@@ -80,13 +84,21 @@ pub(super) fn prepare(
         }
         let mut scan = Scan {
             support,
+            computation,
             limits,
             budget,
             counters,
             warnings: &mut warnings,
             stack: Vec::new(),
         };
-        let join = Join::rule(rule, support, scan.budget)?;
+        let join = Join::rule(
+            rule,
+            support,
+            scan.computation,
+            limits,
+            scan.budget,
+            scan.counters,
+        )?;
         scan.push(Frame {
             join,
             body: &rule.body,
@@ -122,17 +134,26 @@ pub(super) fn prepare(
 
 /// Objective rows use the same independent nested-scope evidence before their
 /// priority, weight and tuple expressions complete the enclosing family.
-pub(super) fn body(
-    (literals, location): (&[LiteralIr], Location),
+pub(super) fn body<'a, 'source>(
+    literals: &'a [LiteralIr],
     binding: &Binding,
-    support: &Support,
-    limits: &FormulaLimits,
+    support: &'a Support<'source>,
     budget: &mut Budget,
-    counters: &mut Counters,
     warnings: &mut Warnings,
+    context: Context<'_, &mut Computation<'_, 'source>>,
 ) -> Result<(), FormulaFailure> {
+    let Context {
+        computation,
+        work:
+            GroundingWork {
+                limits,
+                counters,
+                location,
+            },
+    } = context;
     let mut scan = Scan {
         support,
+        computation,
         limits,
         budget,
         counters,
@@ -144,7 +165,7 @@ pub(super) fn body(
     Ok(())
 }
 
-impl<'a, 'source> Scan<'a, 'source, '_> {
+impl<'a, 'source> Scan<'a, 'source, '_, '_> {
     fn task(&mut self, task: Task<'a, 'source>) -> Result<usize, FormulaFailure> {
         self.counters.work(self.limits, task.location)?;
         // An outer row's descendants drain before that row advances. Live
@@ -214,7 +235,7 @@ impl<'a, 'source> Scan<'a, 'source, '_> {
             variables,
             self.support,
             self.budget,
-            location,
+            Context::new(&*self.computation, self.limits, self.counters, location),
         )?;
         if let Continue::Consequent(Consequent::Guard(guard)) = continuation {
             join.check_guard(guard);
@@ -242,11 +263,13 @@ impl<'a, 'source> Scan<'a, 'source, '_> {
                     .family(task.evidence, self.limits, self.counters, location)?;
                 continue;
             };
-            if let Some(row) =
-                frame
-                    .join
-                    .next_owned_row(self.limits, self.budget, self.counters, location)?
-            {
+            if let Some(row) = frame.join.next_owned_row(
+                self.computation,
+                self.limits,
+                self.budget,
+                self.counters,
+                location,
+            )? {
                 let (body, body_variables, continuation) =
                     (frame.body, frame.body_variables, frame.continuation);
                 if matches!(
@@ -403,7 +426,7 @@ impl<'a, 'source> Scan<'a, 'source, '_> {
                         alternative.variables,
                         self.support,
                         self.budget,
-                        location,
+                        Context::new(&*self.computation, self.limits, self.counters, location),
                     )?;
                     join.check_guard(&alternative.guard);
                     self.fragment(
@@ -437,8 +460,13 @@ impl<'a, 'source> Scan<'a, 'source, '_> {
                 {
                     let group = self.group(location)?;
                     for element in elements {
-                        let join =
-                            Join::element(element, binding, self.support, self.budget, location)?;
+                        let join = Join::element(
+                            element,
+                            binding,
+                            self.support,
+                            self.budget,
+                            Context::new(&*self.computation, self.limits, self.counters, location),
+                        )?;
                         self.fragment(
                             Frame {
                                 join,
@@ -463,7 +491,7 @@ impl<'a, 'source> Scan<'a, 'source, '_> {
                             element.body_variables..element.variables,
                             self.support,
                             self.budget,
-                            location,
+                            Context::new(&*self.computation, self.limits, self.counters, location),
                         )?;
                         self.fragment(
                             Frame {

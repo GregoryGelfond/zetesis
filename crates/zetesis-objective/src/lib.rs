@@ -12,11 +12,15 @@ mod error;
 mod evaluate;
 mod condition;
 
-pub use condition::{Condition, ConditionNode};
+pub use condition::{
+    Condition, ConditionError, ConditionFailure, ConditionIndex, ConditionIter, ConditionNode,
+    ConditionNodeRef, ConditionNodes,
+};
 pub use error::{Error, ErrorKind, Limits, Statistics, Stop};
 pub use evaluate::evaluate;
 pub use program::{
-    AdmissionError, AdmissionLimits, AdmissionResource, ObjectiveProgram, ObjectiveTemplate,
+    AdmissionError, AdmissionLimits, AdmissionResource, ObjectiveElement, ObjectiveProgram,
+    ObjectiveTemplate, ObjectiveTemplateIter, ObjectiveTemplateRef, ObjectiveTemplates,
     WeightPolarity,
 };
 pub use score::{Contribution, Evaluation, Score};

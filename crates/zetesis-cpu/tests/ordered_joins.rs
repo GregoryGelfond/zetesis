@@ -187,7 +187,7 @@ fn a_failed_suffix_cannot_poison_later_prefixes() {
         .atoms()
         .iter()
         .filter(|atom| atom.predicate().name() == "keep")
-        .map(|atom| atom.values().to_vec())
+        .map(|atom| atom.values().iter().collect::<Vec<_>>())
         .collect();
     assert_eq!(
         actual,

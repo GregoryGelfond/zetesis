@@ -362,7 +362,7 @@ impl Scanned<'_> {
             domains: self
                 .domains
                 .iter()
-                .map(|domain| domain.iter().map(|value| fixture.id(value)).collect())
+                .map(|domain| domain.iter().map(|value| fixture.id(*value)).collect())
                 .collect::<Result<_, _>>()?,
         })
     }

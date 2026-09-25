@@ -68,7 +68,7 @@ fn missing_generator_values_do_not_become_inputs() {
         .atoms()
         .iter()
         .filter(|atom| atom.predicate().name() == "p")
-        .map(zetesis_core::Atom::values)
+        .map(|atom| atom.values().iter().collect::<Vec<_>>())
         .collect();
     assert_eq!(
         produced,

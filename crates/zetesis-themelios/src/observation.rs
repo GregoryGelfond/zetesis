@@ -4,8 +4,9 @@
 //! original atoms retains cross-channel duplicates and never projects model identity.
 //! The caller establishes stability separately; these queries create no support.
 
-mod compile;
+pub(crate) mod compile;
 mod evaluate;
+mod identity;
 mod render;
 pub mod view;
 pub mod json;
@@ -13,7 +14,9 @@ pub mod json;
 pub use view::{ModelView, ViewError, ViewLimits};
 
 use std::fmt;
+use std::sync::Arc;
 
+use crate::metadata::{Constructor, MetadataVocabulary, Predicate, Read, Scalar};
 use themelios_base::span::Location;
 use themelios_program::program::{AggregateFunction, DefaultNegation, Relation};
 /// Shared logical symbol vocabulary, nameable without another pinned dependency.
@@ -21,7 +24,7 @@ pub use themelios_program::symbol::{Name, Sign as SymbolSign, Symbol};
 /// Checked arithmetic causes from the pinned shared value vocabulary.
 pub use themelios_program::term::EvalError as EvaluationError;
 use themelios_program::term::{BinaryOp, UnaryOp};
-use zetesis_core::{Model, Predicate, Value};
+use zetesis_core::Model;
 use zetesis_cpu::{Cancellation, Stop};
 
 pub(crate) use compile::compile;
@@ -83,10 +86,18 @@ pub struct Limits {
     pub max_output_bytes: usize,
     /// Simultaneously retained generated expression alternatives, owned bindings,
     /// and aggregate tuple keys, measured
-    /// as 16 bytes per semantic node plus UTF-8 text. Borrowed model values,
+    /// as 16 bytes per semantic node plus UTF-8 text. A wildcard occupies one
+    /// key node; default negation is metadata, not an extra logical value.
+    /// Borrowed model values,
     /// container capacity and allocator overhead are excluded; this is not RSS.
     /// Storage is released when its local query or key scope ends.
     pub max_local_bytes: usize,
+    /// Combined named capacity of the derived term arena and retained wildcard
+    /// key graph, including their replacement overlap. Borrowed input payload
+    /// is excluded. Transient ID frames each use this ceiling independently;
+    /// their combined capacities and allocator overhead are not this measure.
+    /// Logical local and construction allowances remain independent.
+    pub max_term_storage_bytes: usize,
 }
 impl Default for Limits {
     fn default() -> Self {
@@ -99,6 +110,7 @@ impl Default for Limits {
             max_symbol_bytes: 1_048_576,
             max_output_bytes: 8_388_608,
             max_local_bytes: 8_388_608,
+            max_term_storage_bytes: 64 * 1024 * 1024,
         }
     }
 }
@@ -110,11 +122,14 @@ impl Default for Limits {
 pub struct ConstructionLimits {
     /// Inclusive conservative bound: twice the semantic node count times
     /// `size_of::<Symbol>()`, plus twice the UTF-8 string/name bytes. One node
-    /// allowance covers constructed Symbol cells, the other the reverse-conversion
-    /// stack. The extra text allowance covers the canonical name validator's
-    /// temporary Source text copy. The same conservative formula applies to all
+    /// allowance covers constructed `Symbol` cells, the other bounds compact
+    /// parent frames, whose reservation depends on nesting depth. Actual named
+    /// capacities are checked against the same ceiling after each reservation.
+    /// The extra text allowance covers the canonical name validator's temporary
+    /// source text copy. The same conservative formula applies to all
     /// symbols and is checked before construction, including duplicate terms.
-    /// Comparison operands share this ceiling while both are live.
+    /// Comparison operands share this logical construction preflight. Canonical
+    /// comparison uses a borrowed cursor and does not copy either input payload.
     /// Borrowed input capacity/cached spelling, allocator overhead, reference-count
     /// headers and join/result-container bookkeeping are excluded. Logical output
     /// and node limits separately bound retained results. This is not an RSS cap.
@@ -159,6 +174,8 @@ pub enum Resource {
     ConstructionBytes,
     /// Live generated alternatives, owned bindings and aggregate tuple payload.
     LocalBytes,
+    /// Named capacity of the derived term arena and retained wildcard keys.
+    TermStorageBytes,
 }
 
 /// A source form outside this observation slice.
@@ -202,6 +219,12 @@ pub enum ErrorKind {
     Allocation,
     /// A public supplied model contains a symbol name that cannot be represented.
     InvalidSymbol,
+    /// Compiled canonical metadata admission or publication failed.
+    Metadata(crate::MetadataStorageError),
+    /// Scoped term assignment, slot or prefix validation failed.
+    TermAssignment(zetesis_core::catalog::AssignmentError),
+    /// A non-ceiling canonical storage or shape operation failed.
+    TermStorage(zetesis_core::catalog::Error),
 }
 
 /// Work completed before success or refusal.
@@ -211,6 +234,11 @@ pub struct Statistics {
     pub work: u64,
     /// Completed outer or local substitutions examined.
     pub bindings: u64,
+    /// Current named capacity of derived terms and retained wildcard keys.
+    pub term_storage_bytes: u128,
+    /// Peak named term/key capacity envelope. Borrowed inputs, transient query
+    /// frames and allocator bookkeeping are excluded; this is not resident memory.
+    pub peak_term_storage_bytes: u128,
 }
 
 /// Located source failure or runtime refusal with partial accounting.
@@ -218,14 +246,25 @@ pub struct Statistics {
 /// byte span. [`Self::retain_source`]
 /// adds an original source excerpt through themelios's canonical plain view;
 /// terminal styling and publication remain the consumer's responsibility.
+/// The cause uses a fixed boxed diagnostic envelope, allocated only on refusal.
+/// Its allocation follows the standard allocator's failure policy; successful
+/// observation operations allocate no diagnostic envelope.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Error {
-    kind: ErrorKind,
+    kind: Box<ErrorKind>,
     location: Option<Location>,
     statistics: Statistics,
     source: Option<Box<crate::source_diagnostics::RetainedSource>>,
 }
 impl Error {
+    fn new(kind: ErrorKind, location: Option<Location>, statistics: Statistics) -> Self {
+        Self {
+            kind: Box::new(kind),
+            location,
+            statistics,
+            source: None,
+        }
+    }
     /// Typed cause.
     #[must_use]
     pub fn kind(&self) -> &ErrorKind {
@@ -304,12 +343,11 @@ impl fmt::Display for Error {
 }
 impl std::error::Error for Error {}
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 enum Template {
-    Value(Symbol),
+    Constant(Scalar),
     Variable(usize),
-    Function(themelios_program::symbol::Sign, Name, Vec<Self>),
-    Tuple(Vec<Self>),
+    Construct(Constructor, Vec<Self>),
     Unary(UnaryOp, Box<Self>),
     Binary(BinaryOp, Box<Self>, Box<Self>),
     Absolute(Box<Self>),
@@ -322,36 +360,33 @@ impl Template {
             Self::Pool(_) | Self::Interval(_, _) => true,
             Self::Unary(_, argument) | Self::Absolute(argument) => argument.multiple(),
             Self::Binary(_, left, right) => left.multiple() || right.multiple(),
-            Self::Function(_, _, arguments) | Self::Tuple(arguments) => {
-                arguments.iter().any(Self::multiple)
-            }
-            Self::Value(_) | Self::Variable(_) => false,
+            Self::Construct(_, arguments) => arguments.iter().any(Self::multiple),
+            Self::Constant(_) | Self::Variable(_) => false,
         }
     }
 }
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 enum Operand {
-    Value(Value),
+    Constant(Scalar),
     Variable(usize),
     Any,
-    Function(SymbolSign, Name, Vec<Self>),
-    Tuple(Vec<Self>),
+    Construct(Constructor, Vec<Self>),
     Expression(Template),
     Inverse { slot: usize, expression: Template },
 }
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 struct Pattern {
     predicate: Predicate,
     terms: Vec<Operand>,
     evaluated: bool,
     key: Option<usize>,
 }
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 struct AtomTest {
     pattern: Pattern,
     expansion: Query,
 }
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 enum Condition {
     Atom(DefaultNegation, Vec<AtomTest>),
     AtomPatternValue(DefaultNegation, usize),
@@ -360,26 +395,46 @@ enum Condition {
     Conditional(Query, Box<Self>),
     Aggregate(DefaultNegation, AggregateQuery, Vec<Guard>),
 }
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 struct Guard {
     relation: Relation,
     bound: Template,
 }
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
+enum AggregateKey {
+    Tuple(Template),
+    Atom {
+        negation: DefaultNegation,
+        slot: usize,
+    },
+}
+#[derive(Clone, Debug)]
 struct AggregateElement {
-    tuple: Template,
-    atom_pattern_key: bool,
+    key: AggregateKey,
     query: Query,
 }
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 struct AggregateQuery {
     function: AggregateFunction,
     elements: Vec<AggregateElement>,
 }
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
+enum KeyTemplate {
+    Value(Template),
+    Any,
+    Construct(Constructor, Vec<Self>),
+    Pool(Vec<Self>),
+}
+#[derive(Clone, Debug)]
+struct AtomKeyTemplate {
+    predicate: Predicate,
+    arguments: Vec<KeyTemplate>,
+}
+#[derive(Clone, Debug)]
 enum Binder {
     Atom(Vec<Pattern>),
     Assign(usize, Template),
+    AtomKey(usize, AtomKeyTemplate),
     Match {
         patterns: Vec<Operand>,
         value: Template,
@@ -388,15 +443,15 @@ enum Binder {
     Aggregate(usize, AggregateQuery),
     NumericMismatch(AggregateQuery),
 }
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 struct Query {
     binders: Vec<Binder>,
     conditions: Vec<Condition>,
     variables: usize,
     inputs: Vec<usize>,
 }
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct Directive {
+#[derive(Clone, Debug)]
+pub(crate) struct Directive {
     term: Template,
     query: Query,
     origins: Vec<Location>,
@@ -404,11 +459,49 @@ struct Directive {
 
 /// Immutable display templates with original source evidence. No solver or
 /// candidate carrier is retained; the query is meaningful for any supplied model.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default)]
 pub struct ObservationProgram {
+    data: Option<Arc<ObservationData>>,
+}
+#[derive(Debug)]
+struct ObservationData {
+    vocabulary: Arc<MetadataVocabulary>,
     directives: Vec<Directive>,
 }
+#[derive(Clone, Copy)]
+struct ObservationRead<'a> {
+    metadata: Read<'a>,
+    directives: &'a [Directive],
+}
 impl ObservationProgram {
+    pub(crate) fn publish(vocabulary: Arc<MetadataVocabulary>, directives: Vec<Directive>) -> Self {
+        if directives.is_empty() {
+            Self::default()
+        } else {
+            Self {
+                data: Some(Arc::new(ObservationData {
+                    vocabulary,
+                    directives,
+                })),
+            }
+        }
+    }
+    fn read_with<E>(
+        &self,
+        before: impl FnMut() -> Result<(), E>,
+    ) -> Result<Option<ObservationRead<'_>>, zetesis_core::TemplateCatalogFailure<E>> {
+        self.data
+            .as_ref()
+            .map(|data| {
+                data.vocabulary
+                    .read_with(before)
+                    .map(|metadata| ObservationRead {
+                        metadata,
+                        directives: &data.directives,
+                    })
+            })
+            .transpose()
+    }
     /// Compile only this channel through the validated shared-program metadata door.
     /// Constants and observation safety are checked; logical execution is not admitted.
     ///
@@ -426,12 +519,13 @@ impl ObservationProgram {
     /// Whether the term channel contains no source templates.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.directives.is_empty()
+        self.data.is_none()
     }
     /// Original locations per distinct source template, in compilation order.
     pub fn origins(&self) -> impl Iterator<Item = &[Location]> {
-        self.directives
+        self.data
             .iter()
+            .flat_map(|data| data.directives.iter())
             .map(|directive| directive.origins.as_slice())
     }
     /// Evaluate the distinct term channel over a supplied complete model.

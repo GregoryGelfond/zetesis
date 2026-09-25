@@ -5,14 +5,17 @@
 //! The ordinary probe, full scan and column filter retain distinct work
 //! populations. No equality selection discharges matching or arithmetic.
 
+use crate::formula_support::Context;
 use themelios_base::source::SourceId;
 use themelios_base::span::{ByteOffset, Location, Span};
 use themelios_program::program::{DefaultNegation, Relation as Comparison};
 use themelios_program::term::BinaryOp;
-use zetesis_core::relation::{Limits, Relation};
-use zetesis_core::{Atom, AtomPattern, Predicate, Term, Value, ValueLimits, ValueNode};
+use zetesis_core::relation::Limits;
+use zetesis_core::{
+    Atom, AtomPattern, Predicate, TemplateTerm, Term, Value, ValueLimits, ValueNode, ValueNodeRef,
+};
 
-use super::{Budget, Counters, Join, Support, SupportCatalog};
+use super::{Budget, Computation, Counters, Join, Support, SupportCatalog};
 use crate::formula_ir::{Expression, LiteralIr, Operation};
 use crate::formula_pattern::{ArgumentPattern, PatternAtom, PatternNode};
 use crate::{ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource};
@@ -37,7 +40,7 @@ fn support(rows: Vec<Vec<Value>>) -> SupportCatalog {
         let atom = Atom::new(Predicate::new("row", values.len()).unwrap(), values).unwrap();
         support = support
             .insert(
-                atom,
+                &atom,
                 &FormulaLimits::default(),
                 &mut Counters::default(),
                 location(),
@@ -47,11 +50,12 @@ fn support(rows: Vec<Vec<Value>>) -> SupportCatalog {
     support
 }
 
-fn pattern(terms: Vec<Term>) -> AtomPattern {
-    AtomPattern::new(Predicate::new("row", terms.len()).unwrap(), terms).unwrap()
+fn pattern(catalog: &mut SupportCatalog, terms: Vec<Term>) -> super::components::Pattern {
+    let pattern = AtomPattern::new(Predicate::new("row", terms.len()).unwrap(), terms).unwrap();
+    super::testing::admit_pattern(catalog, &pattern, &mut Counters::default(), location())
 }
 
-fn positive(pattern: AtomPattern) -> LiteralIr {
+fn positive(pattern: super::components::Pattern) -> LiteralIr {
     LiteralIr::Atom(DefaultNegation::None, pattern)
 }
 
@@ -59,15 +63,55 @@ fn numbers(values: &[i32]) -> Vec<Value> {
     values.iter().map(|&value| Value::Number(value)).collect()
 }
 
-fn number(value: i32) -> Expression {
+fn constant(catalog: &mut SupportCatalog, value: i32) -> Operation {
+    let limits = FormulaLimits::default();
+    let mut counters = Counters::default();
+    let mut admission = catalog
+        .component_admission(&limits, &mut counters, location())
+        .unwrap();
+    let scalar = admission
+        .scalar(
+            (&Value::Number(value)).into(),
+            &limits,
+            &mut counters,
+            location(),
+        )
+        .unwrap();
+    admission
+        .finish(&limits, &mut counters, location())
+        .unwrap();
+    Operation::Constant(scalar)
+}
+
+fn tuple(catalog: &mut SupportCatalog, arity: usize) -> super::components::Constructor {
+    let limits = FormulaLimits::default();
+    let mut counters = Counters::default();
+    let mut admission = catalog
+        .component_admission(&limits, &mut counters, location())
+        .unwrap();
+    let constructor = admission
+        .constructor(
+            ValueNodeRef::Tuple { arity },
+            &limits,
+            &mut counters,
+            location(),
+        )
+        .unwrap();
+    admission
+        .finish(&limits, &mut counters, location())
+        .unwrap();
+    constructor
+}
+
+fn number(catalog: &mut SupportCatalog, value: i32) -> Expression {
     Expression {
-        nodes: vec![Operation::Constant(Value::Number(value))],
+        nodes: vec![constant(catalog, value)],
     }
 }
 
 fn evaluate(
     route: Route,
-    catalog: &SupportCatalog,
+    catalog: &mut SupportCatalog,
     literals: &[LiteralIr],
     prefix: &[Value],
     variables: usize,
@@ -75,34 +119,25 @@ fn evaluate(
 ) -> Result<Vec<Vec<Value>>, FormulaFailure> {
     let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
     let mut counters = Counters::default();
-    let relations = catalog.snapshot(
-        &FormulaLimits::default(),
-        &mut Counters::default(),
-        location(),
-    )?;
-    let support = Support::indexed(
-        &relations,
-        &crate::FormulaLimits::default(),
-        &crate::formula_support::Counters::default(),
-        location(),
-    )
-    .unwrap();
+    let (relations, mut append) =
+        catalog.split(&FormulaLimits::default(), &mut counters, location())?;
+    let support = Support::indexed(&relations, &FormulaLimits::default(), &counters, location())?;
+    let mut computation = Computation::new(&mut append, &support);
     let atom = match &literals[0] {
         LiteralIr::Atom(DefaultNegation::None, atom) => atom,
         LiteralIr::PatternAtom(pattern) => &pattern.atom,
         _ => panic!("positive first pattern"),
     };
-    let original: Vec<_> = support
-        .rows(atom.predicate())
-        .map(|row| {
-            Atom::new(
-                row.predicate().clone(),
-                super::row_values(row).cloned().collect(),
-            )
-            .unwrap()
-        })
-        .collect();
-    let relation = Relation::from_atoms(atom.predicate(), &original, Limits::default()).unwrap();
+    let atom =
+        computation.static_pattern(*atom, &FormulaLimits::default(), &mut counters, location())?;
+    let relation = support
+        .relation_with(
+            atom.predicate(),
+            &FormulaLimits::default(),
+            &mut counters,
+            location(),
+        )?
+        .expect("fixture relation");
     let all = relation.all(Limits::default()).unwrap();
     let keys: Vec<_> = atom
         .terms()
@@ -110,21 +145,24 @@ fn evaluate(
         .enumerate()
         .filter_map(|(column, term)| {
             let value = match term {
-                Term::Constant(value) => Some(value),
-                Term::Variable(variable) => prefix.get(*variable),
+                TemplateTerm::Constant(value) => Some(value),
+                TemplateTerm::Variable(variable) => prefix.get(variable).map(Into::into),
             }?;
             Some((column, value))
         })
         .collect();
     let query = relation.query(&keys, Limits::default()).unwrap();
     let selected = relation.select(&query, &all, Limits::default()).unwrap();
+    let prefix_values: Vec<_> = prefix.iter().cloned().map(Some).collect();
+    let prefix_binding =
+        super::testing::binding(&prefix_values, &mut computation, &mut counters, location());
     let mut join = Join::new(
         literals,
-        &crate::formula_binding::complete(prefix.iter().cloned()),
+        &prefix_binding,
         variables,
         &support,
         &mut budget,
-        location(),
+        Context::new(&computation, limits, &mut counters, location()),
     )?;
     assert_eq!(join.plan.patterns.len(), 1, "fixed single-pattern control");
     match route {
@@ -148,12 +186,22 @@ fn evaluate(
         }
     }
     let mut bindings = Vec::new();
-    while let Some(binding) = join.next(limits, &mut budget, &mut counters, location())? {
+    while let Some(binding) = join.next(
+        &mut computation,
+        limits,
+        &mut budget,
+        &mut counters,
+        location(),
+    )? {
         bindings.push(
-            binding
-                .slots()
-                .iter()
-                .map(|slot| slot.clone().expect("complete scope"))
+            (0..binding.len())
+                .map(|slot| {
+                    binding
+                        .read(slot, computation.read(), location())
+                        .unwrap()
+                        .to_value(ValueLimits::default())
+                        .unwrap()
+                })
                 .collect(),
         );
     }
@@ -169,7 +217,7 @@ fn evaluate(
 }
 
 fn agree(
-    support: &SupportCatalog,
+    support: &mut SupportCatalog,
     literals: &[LiteralIr],
     prefix: &[Value],
     variables: usize,
@@ -193,32 +241,41 @@ fn agree(
 
 #[test]
 fn bound_equalities_preserve_complete_join_bindings() {
-    let support = support(
+    let mut support = support(
         (0..3)
             .flat_map(|left| (0..3).map(move |right| numbers(&[left, right, left + right])))
             .collect(),
     );
-    let literals = [positive(pattern(vec![
-        Term::Constant(Value::Number(1)),
-        Term::Variable(0),
-        Term::Variable(1),
-    ]))];
-    agree(&support, &literals, &numbers(&[2]), 2, &[numbers(&[2, 3])]);
+    let literals = [positive(pattern(
+        &mut support,
+        vec![
+            Term::Constant(Value::Number(1)),
+            Term::Variable(0),
+            Term::Variable(1),
+        ],
+    ))];
+    agree(
+        &mut support,
+        &literals,
+        &numbers(&[2]),
+        2,
+        &[numbers(&[2, 3])],
+    );
 }
 
 #[test]
 fn repeated_variables_still_require_the_matcher() {
-    let support = support(vec![numbers(&[1, 2]), numbers(&[2, 2]), numbers(&[3, 4])]);
-    let literals = [positive(pattern(vec![
-        Term::Variable(0),
-        Term::Variable(0),
-    ]))];
-    agree(&support, &literals, &[], 1, &[numbers(&[2])]);
+    let mut support = support(vec![numbers(&[1, 2]), numbers(&[2, 2]), numbers(&[3, 4])]);
+    let literals = [positive(pattern(
+        &mut support,
+        vec![Term::Variable(0), Term::Variable(0)],
+    ))];
+    agree(&mut support, &literals, &[], 1, &[numbers(&[2])]);
 }
 
 #[test]
 fn structural_matches_preserve_transactional_bindings() {
-    let tuple = |left, right| {
+    let tuple_value = |left, right| {
         Value::from_nodes(
             vec![
                 ValueNode::Tuple { arity: 2 },
@@ -229,22 +286,22 @@ fn structural_matches_preserve_transactional_bindings() {
         )
         .unwrap()
     };
-    let unequal = tuple(1, 2);
-    let equal = tuple(2, 2);
-    let support = support(vec![vec![unequal], vec![equal.clone()]]);
+    let unequal = tuple_value(1, 2);
+    let equal = tuple_value(2, 2);
+    let mut support = support(vec![vec![unequal], vec![equal.clone()]]);
     let literals = [LiteralIr::PatternAtom(PatternAtom {
-        atom: pattern(vec![Term::Variable(0)]),
+        atom: pattern(&mut support, vec![Term::Variable(0)]),
         arguments: vec![ArgumentPattern {
             position: 0,
             nodes: vec![
-                PatternNode::Tuple(2),
+                PatternNode::Constructor(tuple(&mut support, 2)),
                 PatternNode::Slot(1),
                 PatternNode::Slot(1),
             ],
         }],
     })];
     agree(
-        &support,
+        &mut support,
         &literals,
         &[],
         2,
@@ -254,18 +311,18 @@ fn structural_matches_preserve_transactional_bindings() {
 
 #[test]
 fn column_filters_retain_checked_binding_generation() {
-    let support = support(vec![numbers(&[1, 4]), numbers(&[2, 5]), numbers(&[1, 6])]);
+    let mut support = support(vec![numbers(&[1, 4]), numbers(&[2, 5]), numbers(&[1, 6])]);
     let literals = [
-        positive(pattern(vec![
-            Term::Constant(Value::Number(1)),
-            Term::Variable(0),
-        ])),
+        positive(pattern(
+            &mut support,
+            vec![Term::Constant(Value::Number(1)), Term::Variable(0)],
+        )),
         LiteralIr::Bind {
             target: 1,
             value: Expression {
                 nodes: vec![
                     Operation::Variable(0),
-                    Operation::Constant(Value::Number(2)),
+                    constant(&mut support, 2),
                     Operation::Binary(BinaryOp::Mul, 0, 1),
                 ],
             },
@@ -275,35 +332,42 @@ fn column_filters_retain_checked_binding_generation() {
                 nodes: vec![Operation::Variable(1)],
             },
             Comparison::Gt,
-            number(10),
+            number(&mut support, 10),
         ),
     ];
-    agree(&support, &literals, &[], 2, &[numbers(&[6, 12])]);
+    agree(&mut support, &literals, &[], 2, &[numbers(&[6, 12])]);
 }
 
 #[test]
 fn column_filters_preserve_arithmetic_failures() {
-    let support = support(vec![numbers(&[1])]);
+    let mut support = support(vec![numbers(&[1])]);
     let literals = [
-        positive(pattern(vec![Term::Constant(Value::Number(1))])),
-        LiteralIr::TupleCompare(vec![number(0)], Comparison::Eq, vec![number(1)]),
+        positive(pattern(
+            &mut support,
+            vec![Term::Constant(Value::Number(1))],
+        )),
+        LiteralIr::TupleCompare(
+            vec![number(&mut support, 0)],
+            Comparison::Eq,
+            vec![number(&mut support, 1)],
+        ),
         LiteralIr::TupleCompare(
             vec![Expression {
                 nodes: vec![
-                    Operation::Constant(Value::Number(1)),
-                    Operation::Constant(Value::Number(0)),
+                    constant(&mut support, 1),
+                    constant(&mut support, 0),
                     Operation::Binary(BinaryOp::Div, 0, 1),
                 ],
             }],
             Comparison::Eq,
-            vec![number(0)],
+            vec![number(&mut support, 0)],
         ),
     ];
     for route in [Route::Indexed, Route::Scan, Route::Columns] {
         assert!(matches!(
             evaluate(
                 route,
-                &support,
+                &mut support,
                 &literals,
                 &[],
                 0,
@@ -318,13 +382,13 @@ fn column_filters_preserve_arithmetic_failures() {
 
 #[test]
 fn bounded_join_failure_is_not_complete_exhaustion() {
-    let support = support(vec![numbers(&[1]), numbers(&[2])]);
-    let literals = [positive(pattern(vec![Term::Variable(0)]))];
+    let mut support = support(vec![numbers(&[1]), numbers(&[2])]);
+    let literals = [positive(pattern(&mut support, vec![Term::Variable(0)]))];
     for route in [Route::Indexed, Route::Scan, Route::Columns] {
         assert!(matches!(
             evaluate(
                 route,
-                &support,
+                &mut support,
                 &literals,
                 &[],
                 1,

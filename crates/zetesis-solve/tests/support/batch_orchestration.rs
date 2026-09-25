@@ -3,6 +3,7 @@
 
 use std::num::NonZeroUsize;
 
+use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Interpretation;
 use zetesis_sat::{BatchStatistics, BatchVerdict, Incomplete, StableModels, Statistics};
@@ -120,7 +121,7 @@ fn native_batches_preserve_complete_full_answers() {
             .map(|answer| {
                 let answer = answer.unwrap();
                 (
-                    answer.interpretation().atoms().iter().cloned().collect(),
+                    answer.interpretation().clone(),
                     answer.score().map(|score| score.costs().to_vec()),
                 )
             })
@@ -192,12 +193,10 @@ fn proposal_limit_delivers_the_committed_prefix() {
     let expected: Vec<Record> = execution.proposed[0]
         .iter()
         .map(|candidate| {
-            let mut atoms: Vec<_> = candidate
-                .iter()
-                .map(|id| owner.atoms()[*id].clone())
-                .collect();
-            atoms.sort();
-            (atoms, None)
+            (
+                Model::from_positions(owner.atom_catalog(), candidate.iter().copied()).unwrap(),
+                None,
+            )
         })
         .collect();
     let mut expected = expected;
@@ -233,14 +232,15 @@ fn objective_bounds_preserve_queued_optimal_ties() {
         .into_iter()
         .map(|name| {
             (
-                vec![
-                    owner
+                Model::from_positions(
+                    owner.atom_catalog(),
+                    [owner
                         .atoms()
                         .iter()
-                        .find(|atom| atom.predicate().name() == name)
-                        .unwrap()
-                        .clone(),
-                ],
+                        .position(|atom| atom.predicate().name() == name)
+                        .unwrap()],
+                )
+                .unwrap(),
                 Some(vec![(0, 1)]),
             )
         })

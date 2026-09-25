@@ -4,7 +4,8 @@
 //! packed stride. A join frame intersects only complete round-snapshot truth.
 //! Frozen seeds and pending consequences never enter this representation.
 
-use zetesis_core::{Atom, Predicate, Program, Template};
+use zetesis_core::catalog::{AtomRef, Atoms, PredicateRef};
+use zetesis_core::{Program, TemplateRef};
 
 use super::Work;
 use crate::Stop;
@@ -17,14 +18,14 @@ mod tests;
 /// The ID vector owns no Atom and can outlive mutation of an independent append
 /// tail or packed transport. Its retained capacity remains live during callbacks.
 pub(crate) struct Rows<'a> {
-    atoms: &'a [Atom],
+    atoms: Atoms<'a>,
     positions: Vec<usize>,
     bytes: usize,
 }
 
 impl<'a> Rows<'a> {
     pub(crate) fn select(
-        atoms: &'a [Atom],
+        atoms: Atoms<'a>,
         mut positions: Vec<usize>,
         snapshots: &[u32],
         stride: usize,
@@ -76,8 +77,10 @@ impl<'a> Rows<'a> {
         self.bytes
     }
 
-    pub(crate) fn iter(&self) -> impl ExactSizeIterator<Item = &Atom> + Clone {
-        self.positions.iter().map(|&id| &self.atoms[id])
+    pub(crate) fn iter(&self) -> impl ExactSizeIterator<Item = AtomRef<'a>> + Clone {
+        self.positions
+            .iter()
+            .map(|&id| self.atoms.at(id).expect("selected source occurrence"))
     }
 }
 
@@ -221,7 +224,9 @@ impl Snapshot<'_> {
         self.workspace
     }
 
-    pub(crate) fn parts(&mut self) -> (impl ExactSizeIterator<Item = &Atom> + Clone, Join<'_>) {
+    pub(crate) fn parts(
+        &mut self,
+    ) -> (impl ExactSizeIterator<Item = AtomRef<'_>> + Clone, Join<'_>) {
         (
             self.rows.iter(),
             Join {
@@ -258,7 +263,7 @@ fn present(snapshots: &[u32], stride: usize, world: usize, atom: usize) -> bool 
 /// The iterative source visitor owns bindings/cursors; this borrow owns only
 /// their necessary world-membership condition and never establishes gate truth.
 pub(crate) struct Join<'a> {
-    atoms: &'a [Atom],
+    atoms: Atoms<'a>,
     positions: &'a [usize],
     membership: &'a [u32],
     frames: &'a mut [u32],
@@ -268,7 +273,11 @@ pub(crate) struct Join<'a> {
 }
 
 impl Join<'_> {
-    pub(super) fn reset(&mut self, template: &Template, work: &mut Work<'_>) -> Result<(), Stop> {
+    pub(super) fn reset(
+        &mut self,
+        template: TemplateRef<'_>,
+        work: &mut Work<'_>,
+    ) -> Result<(), Stop> {
         for (index, value) in self.frames[..self.words].iter_mut().enumerate() {
             work.mask_word()?;
             let remaining = self.worlds - index * 32;
@@ -284,27 +293,35 @@ impl Join<'_> {
         Ok(())
     }
 
-    fn row_start(&self, predicate: &Predicate, work: &mut Work<'_>) -> Result<Option<usize>, Stop> {
+    fn row_start(
+        &self,
+        predicate: PredicateRef<'_>,
+        work: &mut Work<'_>,
+    ) -> Result<Option<usize>, Stop> {
         let mut start = 0;
         let mut end = self.positions.len();
         while start < end {
             work.tick()?;
             let middle = start + (end - start) / 2;
-            let actual = self.atoms[self.positions[middle]].predicate();
-            for name in [actual.name(), predicate.name()] {
-                work.charge(name.len())?;
-            }
-            if actual < predicate {
+            let actual = self
+                .atoms
+                .at(self.positions[middle])
+                .ok_or(Stop::InvalidProgram)?
+                .predicate();
+            if actual.compare_ref_with(predicate, || work.tick())?.is_lt() {
                 start = middle + 1;
             } else {
                 end = middle;
             }
         }
         work.tick()?;
-        Ok(self
-            .positions
-            .get(start)
-            .is_some_and(|&id| self.atoms[id].predicate() == predicate)
+        let Some(&id) = self.positions.get(start) else {
+            return Ok(None);
+        };
+        let actual = self.atoms.at(id).ok_or(Stop::InvalidProgram)?.predicate();
+        Ok(actual
+            .compare_ref_with(predicate, || work.tick())?
+            .is_eq()
             .then_some(start))
     }
 

@@ -1,30 +1,25 @@
 //! Transferable source-check history, independent of transient observation.
 
-use std::{collections::BTreeSet, mem};
-use zetesis_core::Value;
+use std::mem;
 use zetesis_cpu::Cancellation;
 
-use super::Counters;
+use super::{Counters, generated::Generated, storage::Workspace};
 
 /// All cumulative formula charges and generated-value identity. The scalar
 /// payload budget has its own owner. Neither runtime control nor the local
 /// grounding observer belongs to this retained history.
 #[derive(Default)]
 pub(crate) struct Accounting {
+    pub(super) workspace: Workspace,
     pub(crate) work: u64,
     pub(crate) substitutions: u64,
-    generated_values: BTreeSet<Value>,
-    allowance: Option<crate::ConstraintAllowance>,
+    pub(super) generated_values: Option<Generated>,
+    pub(super) allowance: Option<crate::ConstraintAllowance>,
 }
 
 impl Counters {
     pub(crate) fn into_accounting(self) -> Accounting {
-        Accounting {
-            work: self.work,
-            substitutions: self.substitutions,
-            generated_values: self.generated_values,
-            allowance: self.allowance,
-        }
+        self.accounting
     }
 }
 
@@ -37,22 +32,13 @@ impl Accounting {
         cancellation: &Cancellation,
         action: impl FnOnce(&mut Counters) -> T,
     ) -> T {
-        let Self {
-            work,
-            substitutions,
-            generated_values,
-            allowance,
-        } = mem::take(self);
         let mut active = Active {
-            retained: self,
             counters: Counters {
-                work,
-                substitutions,
-                generated_values,
-                allowance,
+                accounting: mem::take(self),
                 cancellation: Some(cancellation.clone()),
-                ..Counters::default()
+                observed: super::Work::default(),
             },
+            retained: self,
         };
         action(&mut active.counters)
     }
@@ -64,7 +50,7 @@ struct Active<'a> {
 }
 impl Drop for Active<'_> {
     fn drop(&mut self) {
-        *self.retained = mem::take(&mut self.counters).into_accounting();
+        mem::swap(self.retained, &mut self.counters.accounting);
     }
 }
 

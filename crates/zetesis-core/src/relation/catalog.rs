@@ -1,9 +1,12 @@
-//! Appendable extensional tuple ownership with immutable relation views.
+//! Appendable extensional membership over one canonical atom authority.
 
 use std::mem::size_of;
 
 use crate::{
-    Atom, AtomKey, Predicate, Value, identity,
+    AtomKey,
+    catalog::{
+        AtomRef, Atoms, CatalogRead, DeclaredPredicate, Member, Membership, PredicateRef, TermRef,
+    },
     ordered_index::{self, Directions, Index, Link, Node, Step},
 };
 
@@ -16,58 +19,33 @@ use super::{
     Storage, Work, ceiling,
 };
 
-/// One signed predicate's unique typed atoms and appendable equality layout.
+/// One signed predicate's unique atom membership and appendable equality layout.
 ///
-/// The catalog owns every atom once; dictionary entries are stable source-cell
-/// positions. An immutable view borrows both owners, preventing mutation while
-/// any query, row or selection is live. Rows and equality IDs survive append;
-/// [`Self::take_atoms`] invalidates them. Query identity remains the particular
-/// immutable Relation object.
+/// Logical payload stays in the canonical authority supplied by each checked
+/// read. This catalog owns only membership IDs, row/equality indexes and ordered
+/// runs. Dictionary entries are stable local source-cell positions. Rows and
+/// equality IDs survive append; [`Self::clear`] invalidates them. Query identity
+/// remains the particular immutable Relation object.
 ///
-/// Byte limits cover the catalog object, atom-vector cells, row index, equality
-/// layout and operation scratch. The supplied atoms' nested payload allocations
-/// remain the source admission caller's responsibility, as for borrowed views.
-/// They are reported conservatively as referenced payload, not unique RSS.
-/// Membership uses the same checked typed identity comparisons as
-/// [`AtomInterner`](crate::atom_interner::AtomInterner).
-/// Row and dictionary AVL indexes contain only IDs and links. Row membership
-/// visits O(log n) nodes; dictionary membership visits O(log d), with typed
-/// descriptor/text-prefix comparison work additional. Inserting a tuple with
-/// `a` newly distinct values keeps O(a log d) tentative node patches; checked
-/// overlay scans can
-/// cost O(a² log² d) metadata work. No historical sorted ID sequence is shifted.
-/// Ordered access requires an explicitly prepared view, reusable until append,
-/// held as sorted runs: preparation after appends sorts the appended rows into
-/// a new run and merges older runs only when two are within a factor of two,
-/// so each row is merged O(log n) times over a derivation and no preparation
-/// traverses or copies the whole extent.
-/// Column/vector growth and ordered preparation have separate admitted costs.
+/// Byte limits cover the catalog object and its metadata capacities, including
+/// operation scratch and replacement overlap. Canonical payload is separately
+/// charged to its authority. Referenced encoding bytes count argument occurrences
+/// and are neither unique storage nor RSS.
+///
+/// Row membership visits O(log n) nodes; dictionary membership visits O(log d),
+/// with typed descriptor/text-prefix comparison work additional. Inserting a
+/// tuple with `a` newly distinct values retains O(a log d) tentative node patches;
+/// checked overlay scans can cost O(a² log² d) metadata work. Historical row and
+/// equality IDs do not shift. Ordered runs preserve the existing incremental
+/// preparation and separate allocation/work admission.
 pub struct Catalog {
-    predicate: Predicate,
-    atoms: Vec<Atom>,
+    membership: Membership,
+    arity: usize,
     rows: Index,
-    /// Sorted runs of row IDs, oldest first, each less than half its
-    /// predecessor's length, holding every row below `prepared` that is not
-    /// in `tail`.
-    levels: Vec<Vec<usize>>,
-    /// The sorted run the last appending preparation added.
-    tail: Vec<usize>,
-    /// Rows covered by the runs; prepared exactly when it is the atom count,
-    /// since row IDs are assigned in order.
-    prepared: usize,
+    ordered: ordered::Ordered,
     layout: Layout,
-    payload: u128,
+    encoding_bytes: u128,
     construction: Storage,
-}
-
-/// Atoms transferred from a catalog, with its remaining reusable capacity.
-/// The vector retains insertion order and its exact original payload allocation.
-pub struct ExtractedAtoms {
-    /// The sole transferred atom owner. No atom or nested payload is cloned.
-    pub atoms: Vec<Atom>,
-    /// Remaining empty-catalog capacity and this extraction's charged work.
-    /// The transferred atom vector and payload now belong to the caller.
-    pub storage: Storage,
 }
 
 /// The outcome and operation-scoped accounting of one complete insertion.
@@ -121,8 +99,13 @@ impl Catalog {
     /// Create an empty signed relation owner, including nullary relations.
     ///
     /// # Errors
-    /// Refuses shape, byte/work limits or allocation failure without an owner.
-    pub fn new(predicate: Predicate, limits: Limits) -> Result<Self, CatalogFailure> {
+    /// Refuses an incompatible read, shape, byte/work limits or allocation
+    /// failure without a metadata owner.
+    pub fn new(
+        read: CatalogRead<'_>,
+        predicate: DeclaredPredicate,
+        limits: Limits,
+    ) -> Result<Self, CatalogFailure> {
         let mut work =
             Work::new(limits, size_of::<Self>() as u128).map_err(|error| CatalogFailure {
                 error,
@@ -131,33 +114,29 @@ impl Catalog {
                 peak_construction_bytes: 0,
             })?;
         let build = (|| {
-            ceiling(
-                Resource::Columns,
-                predicate.arity() as u128,
-                limits.max_columns as u128,
-            )?;
-            let mut columns = work.reserve(predicate.arity())?;
-            for _ in 0..predicate.arity() {
+            let membership = Membership::new(read, predicate).map_err(Failure::Read)?;
+            let arity = membership.predicate(read).map_err(Failure::Read)?.arity();
+            ceiling(Resource::Columns, arity as u128, limits.max_columns as u128)?;
+            let mut columns = work.reserve(arity)?;
+            for _ in 0..arity {
                 work.tick(1)?;
                 columns.push(Vec::new());
             }
             Ok(Self {
-                predicate,
-                atoms: Vec::new(),
+                membership,
+                arity,
                 rows: Index::default(),
-                levels: Vec::new(),
-                tail: Vec::new(),
-                prepared: 0,
+                ordered: ordered::Ordered::default(),
                 layout: Layout {
                     dictionary: Vec::new(),
                     index: DictionaryIndex::Append(Index::default()),
                     columns,
                 },
-                payload: 0,
+                encoding_bytes: 0,
                 construction: Storage {
                     retained_bytes: work.live,
                     peak_construction_bytes: work.peak,
-                    referenced_payload_bytes: 0,
+                    referenced_encoding_bytes: 0,
                     borrowed_mapping_bytes: 0,
                     construction_work: work.used,
                 },
@@ -177,50 +156,57 @@ impl Catalog {
         self.construction
     }
 
-    /// Full signed predicate identity. Constant time.
+    /// Number of unique local rows, independent of canonical discovery order.
     #[must_use]
-    pub const fn predicate(&self) -> &Predicate {
-        &self.predicate
+    pub fn len(&self) -> usize {
+        self.membership.ids.len()
     }
 
-    /// Unique typed tuples in stable insertion order. Constant-time borrow.
+    /// Whether this predicate currently has no extensional members.
     #[must_use]
-    pub fn atoms(&self) -> &[Atom] {
-        &self.atoms
+    pub fn is_empty(&self) -> bool {
+        self.membership.ids.is_empty()
     }
 
-    /// Consume the owner without copying atoms or their nested payloads.
-    /// The returned sequence retains insertion order.
-    #[must_use]
-    pub fn into_atoms(self) -> Vec<Atom> {
-        self.atoms
-    }
-
-    /// Transfer all atoms and begin a new empty catalog extent.
-    ///
-    /// This retains only empty index, dictionary, column and ordered-view
-    /// capacities. The returned vector preserves original atom/value addresses.
-    /// Row and equality IDs survive append, but this operation invalidates them;
-    /// subsequent inserts assign IDs afresh. The exclusive borrow prevents any old view from living
-    /// across this boundary. No truth or identity is inherited by the empty catalog.
-    ///
-    /// Work is O(arity) buffer/root resets: ID metadata has no destructors, and
-    /// the atom vector is moved. Every check precedes the indivisible transfer.
+    /// Resolve the signed predicate through a compatible canonical prefix.
     ///
     /// # Errors
-    /// Current shape/capacity and reset work must satisfy `limits`. On refusal,
-    /// atoms, IDs, indexes and the previous prepared view remain unchanged.
-    pub fn take_atoms(&mut self, limits: Limits) -> Result<ExtractedAtoms, CatalogFailure> {
-        // Atom-vector transfer; three row-index resets; three dictionary-index
-        // resets; dictionary, ordered rows, prepared flag and payload counter.
+    /// Refuses a foreign authority or a prefix older than this membership.
+    pub fn predicate<'a>(&self, read: CatalogRead<'a>) -> Result<PredicateRef<'a>, Failure> {
+        self.membership.predicate(read).map_err(Failure::Read)
+    }
+
+    /// Borrow unique tuples in stable local insertion order. Prefix validation
+    /// is constant time and neither imports payload nor copies a directory.
+    ///
+    /// # Errors
+    /// Refuses a foreign authority or a prefix missing any retained member.
+    pub fn atoms<'a>(&'a self, read: CatalogRead<'a>) -> Result<Atoms<'a>, Failure> {
+        self.membership.bind(read).map_err(Failure::Read)
+    }
+
+    /// Begin an empty local extent while retaining reusable metadata capacity.
+    /// Canonical identity remains in its authority; no truth is inherited.
+    /// Rows and equality IDs are invalidated, and new inserts start at row zero.
+    ///
+    /// All checks precede the indivisible reset. Work covers column resets,
+    /// fixed index bookkeeping and releasing the previously retained run levels.
+    ///
+    /// # Errors
+    /// Refuses shape/capacity or reset work without changing the published extent.
+    pub fn clear(&mut self, limits: Limits) -> Result<Storage, CatalogFailure> {
         const RESET_BOOKKEEPING: u128 = 11;
         let mut work = self.work(limits)?;
-        work.tick(self.layout.columns.len() as u128 + RESET_BOOKKEEPING)
-            .map_err(|error| self.failed(error, &work))?;
+        work.tick(
+            self.layout.columns.len() as u128
+                + self.ordered.level_count() as u128
+                + RESET_BOOKKEEPING,
+        )
+        .map_err(|error| self.failed(error, &work))?;
         let DictionaryIndex::Append(index) = &mut self.layout.index else {
             unreachable!("catalog owns an append index");
         };
-        let atoms = std::mem::take(&mut self.atoms);
+        self.membership.clear();
         self.rows.nodes.clear();
         self.rows.path.clear();
         self.rows.root = None;
@@ -231,46 +217,54 @@ impl Catalog {
         for column in &mut self.layout.columns {
             column.clear();
         }
-        self.levels.clear();
-        self.tail.clear();
-        self.prepared = 0;
-        self.payload = 0;
-        Ok(ExtractedAtoms {
-            atoms,
-            storage: self.receipt(&work),
-        })
+        self.ordered.clear();
+        self.encoding_bytes = 0;
+        Ok(self.receipt(&work))
     }
 
-    /// Borrow the current layout without rebuilding its dictionary or columns.
-    /// The source lifetime prevents append while this immutable view is borrowed.
-    /// View accounting includes only its own object: the catalog's retained
-    /// capacity remains the caller's separate owner charge.
-    #[must_use]
-    pub fn view(&self) -> Relation<'_> {
-        Relation {
-            predicate: &self.predicate,
-            source: Source::Atoms(&self.atoms),
+    /// Borrow existing columns and canonical rows without rebuilding either.
+    /// The view borrows metadata and the supplied read prefix. Its receipt
+    /// includes only the view object; both owners remain separate caller charges.
+    ///
+    /// # Errors
+    /// Refuses a foreign authority or a prefix older than this membership.
+    pub fn view<'a>(&'a self, read: CatalogRead<'a>) -> Result<Relation<'a>, Failure> {
+        let atoms = self.atoms(read)?;
+        Ok(Relation {
+            predicate: self.predicate(read)?,
+            source: Source::Canonical(atoms),
             layout: LayoutOwner::Borrowed(&self.layout),
             storage: Storage {
                 retained_bytes: size_of::<Relation<'_>>(),
                 peak_construction_bytes: size_of::<Relation<'_>>(),
-                referenced_payload_bytes: self.payload,
+                referenced_encoding_bytes: self.encoding_bytes,
                 borrowed_mapping_bytes: 0,
                 construction_work: 0,
             },
-        }
+        })
     }
 
     /// Check exact typed tuple membership without constructing another atom.
     ///
     /// # Errors
-    /// Refuses foreign predicates or work/byte ceilings. Comparisons include
+    /// Refuses incompatible reads, foreign predicates or work/byte ceilings. Comparisons include
     /// nested typed-value payload costs and do not rely on equality IDs alone.
-    pub fn lookup(&self, atom: &Atom, limits: Limits) -> Result<Lookup, CatalogFailure> {
+    ///
+    /// # Panics
+    /// Panics if an admitted atom's argument extent disagrees with its predicate
+    /// arity. Atom construction maintains this invariant.
+    pub fn lookup(
+        &self,
+        read: CatalogRead<'_>,
+        atom: AtomRef<'_>,
+        limits: Limits,
+    ) -> Result<Lookup, CatalogFailure> {
         let mut work = self.work(limits)?;
+        work.tick(1).map_err(|error| self.failed(error, &work))?;
         self.locate(
+            read,
             atom.predicate(),
-            |column| &atom.values()[column],
+            |column| atom.values().at(column).expect("checked atom arity"),
             &mut work,
             |_| {},
         )
@@ -285,11 +279,18 @@ impl Catalog {
     /// as [`Self::lookup`]. No atom or value payload is copied.
     ///
     /// # Errors
-    /// Refuses foreign predicates or work/byte ceilings, preserving completed
+    /// Refuses incompatible reads, foreign predicates or work/byte ceilings, preserving completed
     /// comparison work in the failure receipt.
-    pub fn lookup_key(&self, key: &AtomKey<'_>, limits: Limits) -> Result<Lookup, CatalogFailure> {
+    pub fn lookup_key(
+        &self,
+        read: CatalogRead<'_>,
+        key: &AtomKey<'_>,
+        limits: Limits,
+    ) -> Result<Lookup, CatalogFailure> {
         let mut work = self.work(limits)?;
+        work.tick(1).map_err(|error| self.failed(error, &work))?;
         self.locate(
+            read,
             key.predicate(),
             |column| key.argument(column),
             &mut work,
@@ -305,21 +306,30 @@ impl Catalog {
     /// Insert an atom only after every required reservation and check succeeds.
     ///
     /// # Errors
-    /// Refuses predicate mismatch, inclusive limits, overflow or allocation
+    /// Refuses uninterned atoms, incompatible scopes/prefixes, predicate mismatch,
+    /// inclusive limits, overflow or allocation
     /// failure. Logical contents and all published row/equality IDs remain
     /// unchanged on failure; successful reservations may retain spare capacity.
     /// Subsequent views and admissions include that actual retained capacity.
-    pub fn insert(&mut self, atom: Atom, limits: Limits) -> Result<Insertion, CatalogFailure> {
+    pub fn insert(
+        &mut self,
+        atom: AtomRef<'_>,
+        limits: Limits,
+    ) -> Result<Insertion, CatalogFailure> {
         let mut work = self.work(limits)?;
         self.insert_inner(atom, &mut work)
             .map_err(|error| self.failed(error, &work))
     }
 
-    fn insert_inner(&mut self, atom: Atom, work: &mut Work) -> Result<Insertion, Failure> {
+    fn insert_inner(&mut self, atom: AtomRef<'_>, work: &mut Work) -> Result<Insertion, Failure> {
+        work.tick(1)?;
+        let member = self.membership.member(atom).map_err(Failure::Read)?;
+        let atom = member.atom();
         let mut route = Directions::default();
         if let Some(row) = self.locate(
+            member.read(),
             atom.predicate(),
-            |column| &atom.values()[column],
+            |column| atom.values().at(column).expect("checked atom arity"),
             work,
             |right| route.push(right).expect("AVL height fits two words"),
         )? {
@@ -329,20 +339,21 @@ impl Catalog {
                 storage: self.receipt(work),
             });
         }
-        let row = self.atoms.len();
+        let row = self.len();
         ceiling(
             Resource::Rows,
             row as u128 + 1,
             work.limits.max_rows as u128,
         )?;
         let row_root = plan::row(&mut self.rows, row, &route, work)?;
-        let plan = plan::values(&mut self.layout, &self.atoms, &atom, self.payload, work)?;
+        let atoms = self.membership.bind(member.read()).map_err(Failure::Read)?;
+        let plan = plan::values(&mut self.layout, atoms, atom, self.encoding_bytes, work)?;
         self.reserve(&plan, work)?;
-        Ok(self.publish(atom, row_root, plan, work))
+        Ok(self.publish(member, row_root, plan, work))
     }
 
     fn reserve(&mut self, plan: &plan::Plan, work: &mut Work) -> Result<(), Failure> {
-        work.grow(&mut self.atoms, 1)?;
+        work.grow(&mut self.membership.ids, 1)?;
         work.grow(&mut self.rows.nodes, 1)?;
         work.grow(&mut self.layout.dictionary, plan.added.len())?;
         let DictionaryIndex::Append(index) = &mut self.layout.index else {
@@ -366,12 +377,12 @@ impl Catalog {
 
     fn publish(
         &mut self,
-        atom: Atom,
+        member: Member<'_>,
         row_root: Link,
         plan: plan::Plan,
         work: &mut Work,
     ) -> Insertion {
-        let row = self.atoms.len();
+        let row = self.len();
         let DictionaryIndex::Append(index) = &mut self.layout.index else {
             unreachable!("catalog owns an append index");
         };
@@ -387,8 +398,8 @@ impl Catalog {
             column.push(id);
         }
         self.rows.publish(row_root);
-        self.atoms.push(atom);
-        self.payload = plan.payload;
+        self.membership.publish(member);
+        self.encoding_bytes = plan.encoding_bytes;
         plan.release(work);
         Insertion {
             row,
@@ -399,12 +410,19 @@ impl Catalog {
 
     fn locate<'value>(
         &self,
-        predicate: &Predicate,
-        value: impl Fn(usize) -> &'value Value,
+        read: CatalogRead<'_>,
+        predicate: PredicateRef<'_>,
+        value: impl Fn(usize) -> TermRef<'value>,
         work: &mut Work,
         descend: impl FnMut(bool),
     ) -> Result<Option<usize>, Failure> {
-        if !identity::predicate(predicate, &self.predicate, &mut || work.tick(1))?.is_eq() {
+        work.tick(1)?;
+        let atoms = self.atoms(read)?;
+        let expected = self.predicate(read)?;
+        if !predicate
+            .compare_ref_with(expected, || work.tick(1))?
+            .is_eq()
+        {
             return Err(Failure::Predicate);
         }
         ordered_index::search(
@@ -412,7 +430,8 @@ impl Catalog {
             self.rows.root,
             |row| {
                 work.tick(1)?;
-                for (column, right) in self.atoms[row].values().iter().enumerate() {
+                let atom = atoms.at(row).ok_or(Failure::CatalogIndex)?;
+                for (column, right) in atom.values().iter().enumerate() {
                     let order = work.compare(value(column), right)?;
                     if !order.is_eq() {
                         return Ok(order);
@@ -426,14 +445,10 @@ impl Catalog {
 
     fn work(&self, limits: Limits) -> Result<Work, CatalogFailure> {
         let build = (|| {
-            ceiling(
-                Resource::Rows,
-                self.atoms.len() as u128,
-                limits.max_rows as u128,
-            )?;
+            ceiling(Resource::Rows, self.len() as u128, limits.max_rows as u128)?;
             ceiling(
                 Resource::Columns,
-                self.predicate.arity() as u128,
+                self.arity as u128,
                 limits.max_columns as u128,
             )?;
             ceiling(
@@ -465,11 +480,9 @@ impl Catalog {
     #[must_use]
     pub fn retained_bytes(&self) -> usize {
         size_of::<Self>()
-            + self.atoms.capacity() * size_of::<Atom>()
+            + vector_bytes(&self.membership.ids)
             + index_bytes(&self.rows)
-            + (self.levels.capacity() * size_of::<Vec<usize>>())
-            + (self.levels.iter().map(Vec::capacity).sum::<usize>() + self.tail.capacity())
-                * size_of::<usize>()
+            + self.ordered.capacity_bytes()
             + self.layout.dictionary.capacity() * size_of::<Cell>()
             + match &self.layout.index {
                 DictionaryIndex::Sorted(ids) => ids.capacity() * size_of::<u32>(),
@@ -488,11 +501,15 @@ impl Catalog {
         Storage {
             retained_bytes: self.retained_bytes(),
             peak_construction_bytes: work.peak,
-            referenced_payload_bytes: self.payload,
+            referenced_encoding_bytes: self.encoding_bytes,
             borrowed_mapping_bytes: 0,
             construction_work: work.used,
         }
     }
+}
+
+fn vector_bytes<T>(values: &Vec<T>) -> usize {
+    values.capacity() * size_of::<T>()
 }
 
 fn index_bytes(index: &Index) -> usize {

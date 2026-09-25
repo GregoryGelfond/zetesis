@@ -11,11 +11,11 @@ use crate::formula_binding::Binding;
 use themelios_base::span::Location;
 use themelios_program::program::{Comparison, DefaultNegation, Relation};
 use themelios_program::term::Term;
-use zetesis_core::Value;
+use zetesis_core::ValueNodeRef;
+use zetesis_core::catalog::{AssignmentError, CatalogRead, TermKey, TermRef};
 
-use crate::expansion::Budget;
 use crate::formula_ir::{Compiler, Expression, LiteralIr, Variables};
-use crate::formula_support::{Counters, Evaluation, Failures, compare};
+use crate::formula_support::{Computation, Counters, Evaluation, Failures, compare};
 use crate::{ExpansionResource, FormulaFailure, FormulaLimits};
 
 pub(crate) enum Guard {
@@ -60,16 +60,16 @@ impl Guard {
     pub(super) fn evaluate(
         &self,
         assignment: &Binding,
+        computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
-        budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
     ) -> Result<bool, FormulaFailure> {
         self.evaluate_in(
             assignment,
             &mut Evaluation::default(),
+            computation,
             limits,
-            budget,
             counters,
             location,
         )
@@ -79,8 +79,8 @@ impl Guard {
         &self,
         assignment: &Binding,
         evaluation: &mut Evaluation,
+        computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
-        budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
     ) -> Result<bool, FormulaFailure> {
@@ -97,9 +97,54 @@ impl Guard {
         for comparison in comparisons {
             counters.work(limits, location)?;
             let result = match comparison {
-                GuardComparison::Scalar(left, relation, right) => evaluation.source_values([left, right], |variable| assignment.read(variable, location), limits, budget, counters, location).map(|[left, right]| compare(&left, *relation, &right)),
-                GuardComparison::Tuple(left, relation, right) => evaluation.source_tuple((left, right), |variable| assignment.read(variable, location), limits, budget, counters, location).map(|equal| equal == (*relation == Relation::Eq)),
-                GuardComparison::Range(value, lower, upper) => evaluation.source_values([value, lower, upper], |variable| assignment.read(variable, location), limits, budget, counters, location).map(|values| matches!(values, [Value::Number(value), Value::Number(lower), Value::Number(upper)] if lower <= value && value <= upper)),
+                GuardComparison::Scalar(left, relation, right) => evaluation
+                    .source_values(
+                        [left, right],
+                        |variable| assignment.key(variable, location),
+                        computation,
+                        limits,
+                        counters,
+                        location,
+                    )
+                    .and_then(|[left, right]| {
+                        let read = computation.read();
+                        let left = resolve(read, &left, limits, counters, location)?;
+                        let right = resolve(read, &right, limits, counters, location)?;
+                        compare(left, *relation, right, limits, counters, location)
+                    }),
+                GuardComparison::Tuple(left, relation, right) => evaluation
+                    .source_tuple(
+                        (left, right),
+                        |variable| assignment.key(variable, location),
+                        computation,
+                        limits,
+                        counters,
+                        location,
+                    )
+                    .map(|equal| equal == (*relation == Relation::Eq)),
+                GuardComparison::Range(value, lower, upper) => evaluation
+                    .source_values(
+                        [value, lower, upper],
+                        |variable| assignment.key(variable, location),
+                        computation,
+                        limits,
+                        counters,
+                        location,
+                    )
+                    .and_then(|values| {
+                        let read = computation.read();
+                        let mut numbers = [None; 3];
+                        for (number, value) in numbers.iter_mut().zip(&values) {
+                            let value = resolve(read, value, limits, counters, location)?;
+                            counters.work(limits, location)?;
+                            *number = match value.descriptor() {
+                                ValueNodeRef::Number(value) => Some(value),
+                                _ => None,
+                            };
+                        }
+                        Ok(matches!(numbers, [Some(value), Some(lower), Some(upper)]
+                        if lower <= value && value <= upper))
+                    }),
             };
             if let Some(value) = failures.value(result, evaluation.zero_divisor())? {
                 conjunction &= value;
@@ -108,6 +153,19 @@ impl Guard {
         failures.finish(evaluation)?;
         Ok(conjunction != (*negation == DefaultNegation::Not))
     }
+}
+
+/// Resolution checks the computation's current prefix before borrowing payload.
+fn resolve<'read>(
+    read: CatalogRead<'read>,
+    key: &TermKey,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: Location,
+) -> Result<TermRef<'read>, FormulaFailure> {
+    counters.work(limits, location)?;
+    read.term(key)
+        .map_err(|error| crate::formula_binding::assignment(AssignmentError::Read(error), location))
 }
 
 impl Compiler<'_> {
@@ -192,9 +250,9 @@ impl Compiler<'_> {
                 self.location,
             )?;
             comparisons.push(GuardComparison::Scalar(
-                scalar(left),
+                Self::scalar_expression(&left),
                 relation,
-                scalar(right.clone()),
+                Self::scalar_expression(&right),
             ));
             left = right;
         }
@@ -228,14 +286,5 @@ impl Compiler<'_> {
             self.expression(lower, variables)?,
             self.expression(upper, variables)?,
         )))
-    }
-}
-
-fn scalar(term: zetesis_core::Term) -> Expression {
-    Expression {
-        nodes: vec![match term {
-            zetesis_core::Term::Constant(value) => crate::formula_ir::Operation::Constant(value),
-            zetesis_core::Term::Variable(slot) => crate::formula_ir::Operation::Variable(slot),
-        }],
     }
 }

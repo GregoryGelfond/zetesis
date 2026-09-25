@@ -2,6 +2,7 @@
 
 use super::{atoms, predicate};
 use crate::Value;
+use crate::catalog::TermRef;
 use crate::relation::{Failure, Limits, Relation, Resource};
 
 #[test]
@@ -13,7 +14,7 @@ fn completed_attempt_matches_the_convenience_query() {
     );
     let relation = Relation::from_atoms(&predicate, &atoms, Limits::default()).unwrap();
     let value = Value::String("7".into());
-    let keys = [(0, &value), (0, &value)];
+    let keys = [(0, TermRef::from(&value)), (0, TermRef::from(&value))];
     let ordinary = relation.query(&keys, Limits::default()).unwrap();
     let attempt = relation.query_attempt(&keys, Limits::default());
     let query = attempt.result.unwrap();
@@ -40,7 +41,7 @@ fn every_work_interruption_retains_its_lookup_prefix() {
     let relation = Relation::from_atoms(&predicate, &atoms, Limits::default()).unwrap();
     let value = Value::String("common-prefix-16".into());
     let missing = Value::Number(16);
-    let keys = [(0, &value), (0, &missing)];
+    let keys = [(0, TermRef::from(&value)), (0, TermRef::from(&missing))];
     let complete = relation.query_attempt(&keys, Limits::default());
     let query = complete.result.unwrap();
     assert!(!query.is_possible());
@@ -65,7 +66,10 @@ fn every_work_interruption_retains_its_lookup_prefix() {
             }) if observed == u128::from(maximum) + 1 && limit == u128::from(maximum)));
         }
     }
-    assert_eq!(relation.row(16).unwrap().value(0), Some(&value));
+    assert_eq!(
+        relation.row(16).unwrap().value(0),
+        Some(TermRef::from(&value))
+    );
     assert_eq!(relation.row_count(), atoms.len());
 }
 
@@ -75,9 +79,12 @@ fn later_invalid_columns_keep_prior_missing_key_work() {
     let atoms = atoms(&predicate, vec![vec![Value::Number(7)]]);
     let relation = Relation::from_atoms(&predicate, &atoms, Limits::default()).unwrap();
     let missing = Value::Number(8);
-    let prefix = relation.query_attempt(&[(0, &missing)], Limits::default());
+    let prefix = relation.query_attempt(&[(0, TermRef::from(&missing))], Limits::default());
     assert!(!prefix.result.unwrap().is_possible());
-    let failure = relation.query_attempt(&[(0, &missing), (1, &missing)], Limits::default());
+    let failure = relation.query_attempt(
+        &[(0, TermRef::from(&missing)), (1, TermRef::from(&missing))],
+        Limits::default(),
+    );
     assert!(matches!(failure.result, Err(Failure::Column)));
     assert_eq!(failure.work, prefix.work + 1);
     assert!(failure.peak_bytes > relation.storage().retained_bytes);
@@ -114,7 +121,7 @@ fn query_capacity_is_admitted_before_dictionary_work() {
     let atoms = atoms(&predicate, vec![vec![Value::Number(7)]]);
     let relation = Relation::from_atoms(&predicate, &atoms, Limits::default()).unwrap();
     let value = Value::Number(7);
-    let keys = [(0, &value), (0, &value)];
+    let keys = [(0, TermRef::from(&value)), (0, TermRef::from(&value))];
     let complete = relation.query_attempt(&keys, Limits::default());
     assert!(complete.result.unwrap().is_possible());
     let exact = Limits {

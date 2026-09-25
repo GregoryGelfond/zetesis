@@ -302,7 +302,7 @@ impl Formula {
         }
     }
 }
-fn world(atoms: &[zetesis_core::Atom], mask: usize) -> BTreeSet<String> {
+fn world(atoms: zetesis_core::catalog::Atoms<'_>, mask: usize) -> BTreeSet<String> {
     atoms
         .iter()
         .enumerate()
@@ -1226,7 +1226,7 @@ fn conjunction_matches_bounded_completion() {
                     models.insert(
                         model
                             .atoms()
-                            .map(|index| atom_text(&admitted.atoms()[index]))
+                            .map(|index| atom_text(admitted.atoms().at(index).unwrap()))
                             .collect()
                     )
                 );

@@ -11,7 +11,7 @@ mod join;
 use std::collections::BTreeMap;
 use std::fmt;
 
-use zetesis_core::Atom;
+use zetesis_core::catalog::Atoms;
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{AggregateElement, AggregateError, AggregateLimits, Node, Theory};
 use zetesis_objective::{ObjectiveProgram, Score};
@@ -205,7 +205,7 @@ impl ObjectivePlan {
     /// cancellation or allocation.
     pub fn new(
         original: &Theory,
-        atoms: &[Atom],
+        atoms: Atoms<'_>,
         objectives: &ObjectiveProgram,
         limits: ObjectivePlanLimits,
         cancellation: &Cancellation,

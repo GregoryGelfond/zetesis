@@ -2,7 +2,7 @@
 
 use std::{fmt, mem::size_of};
 
-use crate::Value;
+use crate::catalog::TermRef;
 
 use super::{Failure, Limits, Relation, Row, Work, storage};
 
@@ -214,6 +214,10 @@ impl<'owner, 'source> Mask<'owner, 'source> {
 impl<'source> Relation<'source> {
     /// Resolve whole-value equalities without retaining caller value borrows.
     ///
+    /// Terms may come from this catalog, another catalog or [`crate::Value`]
+    /// ingress via [`TermRef::from`]. Exact typed identity resolves each through
+    /// the same dictionary; raw IDs from distinct catalogs are never compared.
+    ///
     /// Construction performs logarithmic dictionary lookup per equality,
     /// including typed payload costs. Input order and repeated columns remain
     /// explicit. A missing value cannot make a later invalid column valid.
@@ -224,7 +228,7 @@ impl<'source> Relation<'source> {
     /// [`Self::query_attempt`] additionally retains accounting on failure.
     pub fn query(
         &self,
-        equalities: &[(usize, &Value)],
+        equalities: &[(usize, TermRef<'_>)],
         limits: Limits,
     ) -> Result<Query<'_, 'source>, Failure> {
         self.query_attempt(equalities, limits).result
@@ -241,7 +245,7 @@ impl<'source> Relation<'source> {
     #[must_use]
     pub fn query_attempt(
         &self,
-        equalities: &[(usize, &Value)],
+        equalities: &[(usize, TermRef<'_>)],
         limits: Limits,
     ) -> QueryAttempt<'_, 'source> {
         let attempt =
@@ -275,7 +279,7 @@ impl<'source> Relation<'source> {
     #[must_use]
     pub fn query_attempt_with<E>(
         &self,
-        equalities: &[(usize, &Value)],
+        equalities: &[(usize, TermRef<'_>)],
         limits: Limits,
         mut before: impl FnMut() -> Result<(), E>,
     ) -> QueryAttempt<'_, 'source, QueryFailure<E>> {
@@ -299,7 +303,7 @@ impl<'source> Relation<'source> {
 
     fn resolve_query<E>(
         &self,
-        equalities: &[(usize, &Value)],
+        equalities: &[(usize, TermRef<'_>)],
         work: &mut Work,
         before: &mut impl FnMut() -> Result<(), E>,
     ) -> Result<Query<'_, 'source>, QueryFailure<E>> {

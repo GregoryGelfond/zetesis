@@ -115,12 +115,17 @@ fn traverse<S: Sink>(
     sink.finish(bytes, limits)
 }
 
-fn view(symbol: &Symbol) -> ValueNodeRef<'_> {
+pub(crate) fn view(symbol: &Symbol) -> ValueNodeRef<'_> {
     match symbol {
         Symbol::Infimum => ValueNodeRef::Infimum,
         Symbol::Supremum => ValueNodeRef::Supremum,
         Symbol::Number(number) => ValueNodeRef::Number(*number),
         Symbol::String(text) => ValueNodeRef::String(text),
+        Symbol::Function {
+            name,
+            arguments,
+            sign: Sign::Positive,
+        } if arguments.is_empty() => ValueNodeRef::Symbol(name.as_str()),
         Symbol::Function {
             name,
             arguments,
@@ -136,52 +141,273 @@ fn view(symbol: &Symbol) -> ValueNodeRef<'_> {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BridgeError {
     Allocation,
     InvalidName,
+    Storage { required: u128, limit: u128 },
 }
 
-/// Reverse postorder reconstruction. The upstream Symbol also drops iteratively.
+#[derive(Debug)]
+pub(crate) enum BridgeFailure<E> {
+    Bridge(BridgeError),
+    Stopped(E),
+}
+impl<E> From<BridgeError> for BridgeFailure<E> {
+    fn from(error: BridgeError) -> Self {
+        Self::Bridge(error)
+    }
+}
+
+/// A constructor frame needs only its head, never a copied term description.
+/// `None` is the anonymous tuple constructor, not an absent logical value.
+struct Frame<'a> {
+    name: Option<&'a str>,
+    arguments: Vec<Symbol>,
+    arity: usize,
+    sign: Sign,
+}
+// At most N-1 unfinished parents and N output Symbol cells coexist. This
+// layout relation is part of the advertised two-cells-per-node preflight.
+const _: () = assert!(size_of::<Frame<'static>>() <= size_of::<Symbol>());
+
+/// Allocation capacity retained by the conversion, including a root Symbol
+/// cell. Completed child vectors remain live inside their parents, so their
+/// capacities stay charged after a frame is popped. Temporary name-validation
+/// text is checked separately while it overlaps with these owners.
+struct ExportStorage {
+    retained: u128,
+    limit: u128,
+}
+impl ExportStorage {
+    fn new(limit: u128) -> Result<Self, BridgeError> {
+        let storage = Self {
+            retained: size_of::<Symbol>() as u128,
+            limit,
+        };
+        storage.check(0)?;
+        Ok(storage)
+    }
+    fn check(&self, additional: u128) -> Result<(), BridgeError> {
+        let required = self.retained + additional;
+        if required > self.limit {
+            Err(BridgeError::Storage {
+                required,
+                limit: self.limit,
+            })
+        } else {
+            Ok(())
+        }
+    }
+    fn retain(&mut self, actual: u128) -> Result<(), BridgeError> {
+        self.check(actual)?;
+        self.retained += actual;
+        Ok(())
+    }
+    fn reserve<T, E>(
+        &mut self,
+        count: usize,
+        before: &mut impl FnMut() -> Result<(), E>,
+    ) -> Result<Vec<T>, BridgeFailure<E>> {
+        self.check(count as u128 * size_of::<T>() as u128)?;
+        before().map_err(BridgeFailure::Stopped)?;
+        let mut values = Vec::new();
+        values
+            .try_reserve_exact(count)
+            .map_err(|_| BridgeError::Allocation)?;
+        // An allocator may provide more capacity than requested. Report that
+        // actual envelope as storage refusal, never as allocation failure.
+        self.retain(values.capacity() as u128 * size_of::<T>() as u128)?;
+        Ok(values)
+    }
+    fn text<E>(
+        &mut self,
+        value: &str,
+        name: bool,
+        before: &mut impl FnMut() -> Result<(), E>,
+    ) -> Result<String, BridgeFailure<E>> {
+        let validation = if name { value.len() as u128 } else { 0 };
+        self.check(value.len() as u128 + validation)?;
+        before().map_err(BridgeFailure::Stopped)?;
+        let mut result = String::new();
+        result
+            .try_reserve_exact(value.len())
+            .map_err(|_| BridgeError::Allocation)?;
+        self.check(result.capacity() as u128 + validation)?;
+        // Admit both copying and the name validator's independent text scan.
+        for _ in 0..value.len() {
+            before().map_err(BridgeFailure::Stopped)?;
+        }
+        if name {
+            for _ in 0..value.len() {
+                before().map_err(BridgeFailure::Stopped)?;
+            }
+        }
+        self.retain(result.capacity() as u128)?;
+        result.push_str(value);
+        Ok(result)
+    }
+}
+
+/// Reconstruct the upstream output directly from borrowed logical nodes.
+/// The owned description already supplies an exact node/text preflight; its
+/// payload is not included among the conversion's retained allocations.
 pub(crate) fn to_symbol(value: &zetesis_core::StructuralValue) -> Result<Symbol, BridgeError> {
-    let mut stack = Vec::new();
-    stack
-        .try_reserve_exact(value.nodes().len())
-        .map_err(|_| BridgeError::Allocation)?;
-    for node in value.nodes().iter().rev() {
-        let symbol = match node {
-            ValueNode::Infimum => Symbol::Infimum,
-            ValueNode::Supremum => Symbol::Supremum,
-            ValueNode::Number(n) => Symbol::Number(*n),
-            ValueNode::String(s) => Symbol::String(s.clone()),
-            ValueNode::Symbol(name) => Symbol::Function {
-                name: Name::new(name.clone()).map_err(|_| BridgeError::InvalidName)?,
-                arguments: Vec::new(),
-                sign: Sign::Positive,
+    let count = value.nodes().len();
+    let text = value
+        .nodes()
+        .iter()
+        .map(|node| node.view().text_bytes() as u128)
+        .sum::<u128>();
+    let limit = 2 * count as u128 * size_of::<Symbol>() as u128 + 2 * text;
+    let mut storage = ExportStorage::new(limit)?;
+    let mut nodes = value.nodes().iter();
+    let result = from_nodes(
+        count,
+        value.depth(),
+        &mut storage,
+        |before| {
+            before()?;
+            Ok(nodes.next().map(ValueNode::view))
+        },
+        || Ok::<_, std::convert::Infallible>(()),
+    );
+    match result {
+        Ok(symbol) => Ok(symbol),
+        Err(BridgeFailure::Bridge(error)) => Err(error),
+        Err(BridgeFailure::Stopped(never)) => match never {},
+    }
+}
+
+/// Export a canonical term without an owned Value intermediate. The caller
+/// chooses the construction allowance; the usual observation preflight is two
+/// Symbol cells per expanded node plus twice its UTF-8 text. Actual frame,
+/// child-vector and text capacities are checked before constructing output.
+/// The callback admits canonical navigation, allocation, copying and assembly;
+/// a stop drops every private partial Symbol and publishes no prefix.
+pub(crate) fn term_symbol_with<E>(
+    value: zetesis_core::catalog::TermRef<'_>,
+    max_bytes: u128,
+    mut before: impl FnMut() -> Result<(), E>,
+) -> Result<Symbol, BridgeFailure<E>> {
+    before().map_err(BridgeFailure::Stopped)?;
+    let mut storage = ExportStorage::new(max_bytes)?;
+    let mut nodes = value.nodes();
+    from_nodes(
+        value.expanded_nodes(),
+        value.depth(),
+        &mut storage,
+        |before| nodes.next_with(before),
+        before,
+    )
+}
+
+fn symbol_node<E>(
+    node: ValueNodeRef<'_>,
+    arguments: Vec<Symbol>,
+    storage: &mut ExportStorage,
+    before: &mut impl FnMut() -> Result<(), E>,
+) -> Result<Symbol, BridgeFailure<E>> {
+    before().map_err(BridgeFailure::Stopped)?;
+    Ok(match node {
+        ValueNodeRef::Infimum => Symbol::Infimum,
+        ValueNodeRef::Supremum => Symbol::Supremum,
+        ValueNodeRef::Number(value) => Symbol::Number(value),
+        ValueNodeRef::String(value) => Symbol::String(storage.text(value, false, before)?),
+        ValueNodeRef::Symbol(name) => Symbol::Function {
+            name: Name::new(storage.text(name, true, before)?)
+                .map_err(|_| BridgeError::InvalidName)?,
+            sign: Sign::Positive,
+            arguments,
+        },
+        ValueNodeRef::Function { name, sign, .. } => Symbol::Function {
+            name: Name::new(storage.text(name, true, before)?)
+                .map_err(|_| BridgeError::InvalidName)?,
+            sign: match sign {
+                zetesis_core::Sign::Positive => Sign::Positive,
+                zetesis_core::Sign::Negative => Sign::Negative,
             },
-            ValueNode::Function { name, sign, arity } => Symbol::Function {
-                name: Name::new(name.clone()).map_err(|_| BridgeError::InvalidName)?,
-                arguments: children(&mut stack, *arity)?,
-                sign: match sign {
+            arguments,
+        },
+        ValueNodeRef::Tuple { .. } => Symbol::Tuple(arguments),
+    })
+}
+impl Frame<'_> {
+    fn finish<E>(
+        self,
+        storage: &mut ExportStorage,
+        before: &mut impl FnMut() -> Result<(), E>,
+    ) -> Result<Symbol, BridgeFailure<E>> {
+        before().map_err(BridgeFailure::Stopped)?;
+        Ok(if let Some(name) = self.name {
+            Symbol::Function {
+                name: Name::new(storage.text(name, true, before)?)
+                    .map_err(|_| BridgeError::InvalidName)?,
+                sign: self.sign,
+                arguments: self.arguments,
+            }
+        } else {
+            Symbol::Tuple(self.arguments)
+        })
+    }
+}
+
+fn from_nodes<'a, E>(
+    node_count: usize,
+    depth: usize,
+    storage: &mut ExportStorage,
+    mut next: impl FnMut(&mut dyn FnMut() -> Result<(), E>) -> Result<Option<ValueNodeRef<'a>>, E>,
+    mut before: impl FnMut() -> Result<(), E>,
+) -> Result<Symbol, BridgeFailure<E>> {
+    if node_count == 0 || depth == 0 || depth > node_count {
+        return Err(BridgeError::InvalidName.into());
+    }
+    // Ancestors of the next node occupy at most depth-1 frames, bounded by
+    // N-1. Reserve once, without geometric growth or old/new overlap, while
+    // avoiding an N-frame reservation for a shallow, wide constructor.
+    let frame_count = depth - 1;
+    let mut frames: Vec<Frame<'a>> = storage.reserve(frame_count, &mut before)?;
+    while let Some(node) = next(&mut before).map_err(BridgeFailure::Stopped)? {
+        let head = match node {
+            ValueNodeRef::Function { name, arity, sign } if arity != 0 => Some((
+                Some(name),
+                arity,
+                match sign {
                     zetesis_core::Sign::Positive => Sign::Positive,
                     zetesis_core::Sign::Negative => Sign::Negative,
                 },
-            },
-            ValueNode::Tuple { arity } => Symbol::Tuple(children(&mut stack, *arity)?),
+            )),
+            ValueNodeRef::Tuple { arity } if arity != 0 => Some((None, arity, Sign::Positive)),
+            _ => None,
         };
-        stack.push(symbol);
+        if let Some((name, arity, sign)) = head {
+            if frames.len() >= frame_count {
+                return Err(BridgeError::InvalidName.into());
+            }
+            let arguments = storage.reserve(arity, &mut before)?;
+            frames.push(Frame {
+                name,
+                arguments,
+                arity,
+                sign,
+            });
+            continue;
+        }
+        let mut symbol = symbol_node(node, Vec::new(), storage, &mut before)?;
+        loop {
+            before().map_err(BridgeFailure::Stopped)?;
+            let Some(parent) = frames.last_mut() else {
+                return Ok(symbol);
+            };
+            parent.arguments.push(symbol);
+            if parent.arguments.len() < parent.arity {
+                break;
+            }
+            let parent = frames.pop().expect("completed parent frame");
+            symbol = parent.finish(storage, &mut before)?;
+        }
     }
-    stack.pop().ok_or(BridgeError::InvalidName)
-}
-fn children(stack: &mut Vec<Symbol>, arity: usize) -> Result<Vec<Symbol>, BridgeError> {
-    let mut result = Vec::new();
-    result
-        .try_reserve_exact(arity)
-        .map_err(|_| BridgeError::Allocation)?;
-    for _ in 0..arity {
-        result.push(stack.pop().ok_or(BridgeError::InvalidName)?);
-    }
-    Ok(result)
+    Err(BridgeError::InvalidName.into())
 }
 
 /// Conservative node/text payload before cloning an upstream structural symbol.

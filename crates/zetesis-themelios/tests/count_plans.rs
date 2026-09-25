@@ -124,7 +124,7 @@ fn preproposal_restrictions_preserve_stable_models() {
                 model
                     .unwrap()
                     .atoms()
-                    .map(|atom| atom_text(&admitted.atoms()[atom]))
+                    .map(|atom| atom_text(admitted.atoms().at(atom).unwrap()))
                     .collect()
             })
             .collect();
@@ -365,9 +365,11 @@ fn emission_failure_publishes_no_partial_plan() {
 }
 
 #[test]
-fn optional_planning_preserves_original_resource_failures() {
+fn optional_planning_preserves_original_work_failures() {
     for maximum in [0, 1, 10, 50, 100] {
-        let prepare = || {
+        // Canonical source admission consumes this same cumulative allowance.
+        // A refusal before materialization must remain the original failure.
+        let ground = |planned| {
             prepare_formula(
                 SOURCES[0].into(),
                 AdmissionOptions::default(),
@@ -377,15 +379,62 @@ fn optional_planning_preserves_original_resource_failures() {
                     ..FormulaLimits::default()
                 },
             )
-            .unwrap()
+            .and_then(|prepared| {
+                if planned {
+                    prepared.ground_with_count_plan(
+                        CountPlanLimits::default(),
+                        &Cancellation::default(),
+                        None,
+                    )
+                } else {
+                    prepared.ground()
+                }
+            })
         };
-        let ordinary = prepare().ground().unwrap_err();
-        let planned = prepare()
-            .ground_with_count_plan(CountPlanLimits::default(), &Cancellation::default(), None)
-            .unwrap_err();
+        let ordinary = ground(false).unwrap_err();
+        let planned = ground(true).unwrap_err();
+        assert!(matches!(
+            &ordinary,
+            zetesis_themelios::FormulaFailure::Limit {
+                resource: zetesis_themelios::FormulaResource::Work,
+                limit,
+                ..
+            } if *limit == u128::from(maximum)
+        ));
         assert_eq!(ordinary.to_string(), planned.to_string());
         assert_eq!(ordinary.diagnostics(), planned.diagnostics());
     }
+}
+
+#[test]
+fn optional_planning_preserves_grounding_round_failures() {
+    let prepare = || {
+        prepare_formula(
+            SOURCES[0].into(),
+            AdmissionOptions::default(),
+            ExpansionLimits::default(),
+            FormulaLimits {
+                max_support_rounds: 0,
+                ..FormulaLimits::default()
+            },
+        )
+        .expect("source preparation does not construct possible support")
+    };
+    let ordinary = prepare().ground().unwrap_err();
+    let planned = prepare()
+        .ground_with_count_plan(CountPlanLimits::default(), &Cancellation::default(), None)
+        .unwrap_err();
+    assert!(matches!(
+        &ordinary,
+        zetesis_themelios::FormulaFailure::Limit {
+            resource: zetesis_themelios::FormulaResource::SupportRounds,
+            limit: 0,
+            observed: 1,
+            ..
+        }
+    ));
+    assert_eq!(ordinary.to_string(), planned.to_string());
+    assert_eq!(ordinary.diagnostics(), planned.diagnostics());
 }
 
 #[test]
@@ -564,8 +613,8 @@ fn optional_planning_preserves_objective_templates() {
     let planned = admitted(&source, true);
     assert!(matches!(planned.count_plan(), CountPlanStatus::Ready(_)));
     assert_eq!(
-        original.objectives().templates(),
-        planned.objectives().templates()
+        original.objectives().templates().iter().collect::<Vec<_>>(),
+        planned.objectives().templates().iter().collect::<Vec<_>>()
     );
     assert_eq!(
         original.objectives().priorities(),
@@ -628,4 +677,31 @@ fn stopped_bundle_planning_keeps_original_sources() {
     assert!(text.contains('{'));
     assert_eq!(input.bundle().sources().len(), 2);
     assert_eq!(input.theory().atom_count(), 4);
+}
+
+#[test]
+fn source_tuple_payload_is_not_retained_by_count_planning() {
+    let source = |key: &str| {
+        format!(
+            "2#count{{{key}:a;second:b;third:c;fourth:d}}2.#count{{k:a;l:b}}<=1.#count{{x:c;y:d}}<=1."
+        )
+    };
+    let short = admitted(&source("first"), true);
+    let bytes = plan(&short).statistics().storage_bytes;
+    assert!(bytes > 0);
+    let limits = CountPlanLimits {
+        max_bytes: bytes,
+        ..CountPlanLimits::default()
+    };
+    let long = planned_with(
+        &source(&"long_key".repeat(128)),
+        limits,
+        &Cancellation::default(),
+    );
+    assert_eq!(plan(&long).statistics().storage_bytes, bytes);
+    assert_eq!(
+        plan(&long).statistics().work,
+        plan(&short).statistics().work
+    );
+    assert_eq!(native(&long), native(&short));
 }

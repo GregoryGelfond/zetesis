@@ -1,12 +1,12 @@
-use themelios_base::source::SourceId;
-use themelios_base::span::{ByteOffset, Location, Span};
-use zetesis_core::Value;
-
-use super::{Binding, complete};
-use crate::FormulaLimits;
-use crate::expansion::Budget;
-use crate::formula_support::Counters;
-use crate::{ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure};
+use super::Binding;
+use crate::formula_support::Context;
+use crate::formula_support::testing::{Fixture, binding};
+use crate::{FormulaFailure, FormulaLimits, FormulaResource};
+use themelios_base::{
+    source::SourceId,
+    span::{ByteOffset, Location, Span},
+};
+use zetesis_core::{Value, ValueNodeRef};
 
 fn location() -> Location {
     Location {
@@ -15,156 +15,185 @@ fn location() -> Location {
     }
 }
 
-fn budget() -> Budget {
-    Budget::new(ExpansionLimits::default(), usize::MAX)
-}
-
 #[test]
 fn absence_is_distinct_from_numeric_zero() {
-    let binding = copy_slots(&[None, Some(Value::Number(0))], &mut budget(), location()).unwrap();
-    assert!(
-        matches!(binding.read(0, location()), Err(FormulaFailure::UnsafeVariable { variable: 0, location: found }) if found == location())
-    );
-    assert_eq!(binding.read(1, location()).unwrap(), &Value::Number(0));
+    Fixture::default().with(location(), |_, computation, counters| {
+        let frame = binding(
+            &[None, Some(Value::Number(0))],
+            computation,
+            counters,
+            location(),
+        );
+        assert!(matches!(
+            frame.read(0, computation.read(), location()),
+            Err(FormulaFailure::UnsafeVariable { variable: 0, .. })
+        ));
+        assert_eq!(
+            frame
+                .read(1, computation.read(), location())
+                .unwrap()
+                .descriptor(),
+            ValueNodeRef::Number(0)
+        );
+    });
 }
 
 #[test]
 fn a_prefix_cannot_read_the_parent_suffix() {
-    let parent = complete([Value::Number(4), Value::Number(9)]);
-    let prefix = parent.prefix(1);
-    assert!(std::ptr::eq(
-        prefix.read(0, location()).unwrap(),
-        parent.read(0, location()).unwrap()
-    ));
-    assert!(matches!(
-        prefix.read(1, location()),
-        Err(FormulaFailure::UnsafeVariable { variable: 1, .. })
-    ));
+    Fixture::default().with(location(), |_, computation, counters| {
+        let parent = binding(
+            &[Some(Value::Number(4)), Some(Value::Number(9))],
+            computation,
+            counters,
+            location(),
+        );
+        let prefix = parent.prefix(1);
+        assert_eq!(
+            prefix.read(0, computation.read(), location()).unwrap(),
+            parent.read(0, computation.read(), location()).unwrap()
+        );
+        assert!(matches!(
+            prefix.read(1, computation.read(), location()),
+            Err(FormulaFailure::UnsafeVariable { variable: 1, .. })
+        ));
+    });
 }
 
 #[test]
 fn copying_preserves_absent_slots() {
-    let original = copy_slots(
-        &[Some(Value::Symbol("name".into())), None],
-        &mut budget(),
-        location(),
-    )
-    .unwrap();
-    let copied = original
-        .copied(
-            &FormulaLimits::default(),
-            &mut Counters::default(),
-            &mut budget(),
+    Fixture::default().with(location(), |_, computation, counters| {
+        let original = binding(
+            &[Some(Value::Symbol("name".into())), None],
+            computation,
+            counters,
             location(),
-        )
-        .unwrap();
-    assert_eq!(original, copied);
-    assert!(copied.read(1, location()).is_err());
+        );
+        let copied = original
+            .copied(computation, &FormulaLimits::default(), counters, location())
+            .unwrap();
+        assert_eq!(copied.len(), original.len());
+        assert_eq!(
+            copied.read(0, computation.read(), location()).unwrap(),
+            original.read(0, computation.read(), location()).unwrap()
+        );
+        assert!(!copied.is_bound(1, location()).unwrap());
+    });
 }
 
 #[test]
 fn scope_growth_publishes_only_absence() {
-    let mut binding = complete([Value::Number(3)]);
-    binding.extend_scope(3, location()).unwrap();
-    assert_eq!(binding.slots(), &[Some(Value::Number(3)), None, None]);
-    binding.set(2, Value::Number(0), location()).unwrap();
-    binding.clear(2);
-    assert!(binding.read(2, location()).is_err());
+    Fixture::default().with(location(), |_, computation, counters| {
+        let limits = FormulaLimits::default();
+        let mut frame = binding(&[Some(Value::Number(3))], computation, counters, location());
+        frame
+            .extend_scope(3, computation, &limits, counters, location())
+            .unwrap();
+        assert_eq!(
+            frame
+                .read(0, computation.read(), location())
+                .unwrap()
+                .descriptor(),
+            ValueNodeRef::Number(3)
+        );
+        for slot in 1..3 {
+            assert!(!frame.is_bound(slot, location()).unwrap());
+        }
+    });
 }
 
 #[test]
-fn frame_cells_are_not_charged_to_the_scalar_budget() {
-    // A frame is transient; only the values copied into it are retained
-    // payload. An empty frame of any width is admitted under a zero budget.
-    let mut exhausted = Budget::new(
-        ExpansionLimits {
-            max_scalar_bytes: 0,
-            ..Default::default()
-        },
-        usize::MAX,
-    );
-    let binding = copy_slots(&[None, None, None], &mut exhausted, location()).unwrap();
-    assert_eq!(binding.len(), 3);
-    let symbol = Value::Symbol("a".into());
-    assert!(matches!(
-        copy_slots(&[Some(symbol)], &mut exhausted, location()),
-        Err(FormulaFailure::Expansion(ExpansionFailure::Limit {
-            resource: ExpansionResource::ScalarBytes,
-            ..
-        }))
-    ));
+fn clearing_a_slot_preserves_its_scope() {
+    Fixture::default().with(location(), |_, computation, counters| {
+        let mut frame = binding(&[Some(Value::Number(0))], computation, counters, location());
+        frame
+            .clear(0, &FormulaLimits::default(), counters, location())
+            .unwrap();
+        assert!(!frame.is_bound(0, location()).unwrap());
+        assert_eq!(frame.len(), 1);
+        assert!(
+            frame
+                .view(
+                    computation.read(),
+                    &FormulaLimits::default(),
+                    counters,
+                    location()
+                )
+                .is_ok()
+        );
+    });
+}
+
+#[test]
+fn frame_capacity_obeys_shared_storage_admission() {
+    Fixture::default().with(location(), |_, computation, counters| {
+        let limits = FormulaLimits::default();
+        let frame = binding(&[None, None, None], computation, counters, location());
+        let empty = computation.lease();
+        let current =
+            limits.max_support_bytes - computation.allowance(&empty, &limits, location()).unwrap();
+        let bounded = FormulaLimits {
+            max_support_bytes: current,
+            ..limits
+        };
+        assert!(matches!(
+            frame.copied(computation, &bounded, counters, location()),
+            Err(FormulaFailure::Limit {
+                resource: FormulaResource::SupportBytes,
+                ..
+            })
+        ));
+    });
 }
 
 #[test]
 fn local_joins_cannot_rebind_absent_outer_inputs() {
     use themelios_program::program::DefaultNegation;
-    use zetesis_core::{AtomPattern, Predicate, Sign, Term};
-
-    let prefix = copy_slots(&[None], &mut budget(), location()).unwrap();
-    let literals = [crate::formula_ir::LiteralIr::Atom(
-        DefaultNegation::None,
-        AtomPattern::new(
-            Predicate::with_sign("p", 1, Sign::Positive).unwrap(),
-            vec![Term::Variable(0)],
-        )
-        .unwrap(),
-    )];
-    let relations = crate::formula_support::Relations::default();
-    let support = crate::formula_support::Support::indexed(
-        &relations,
-        &crate::FormulaLimits::default(),
-        &crate::formula_support::Counters::default(),
+    use zetesis_core::{AtomPattern, Predicate, Term};
+    let mut fixture = Fixture::default();
+    let pattern = fixture.pattern(
+        &AtomPattern::new(Predicate::new("p", 1).unwrap(), vec![Term::Variable(0)]).unwrap(),
         location(),
-    )
-    .unwrap();
-    assert!(matches!(
-        crate::formula_support::Join::new(
-            &literals,
-            &prefix,
-            1,
-            &support,
-            &mut budget(),
-            location()
-        ),
-        Err(FormulaFailure::UnsafeVariable { variable: 0, .. })
-    ));
-}
-
-fn copy_slots(
-    source: &[Option<Value>],
-    budget: &mut Budget,
-    location: Location,
-) -> Result<Binding<'static>, FormulaFailure> {
-    Binding::copy_slots(
-        source,
-        &FormulaLimits::default(),
-        &mut Counters::default(),
-        budget,
-        location,
-    )
+    );
+    fixture.with(location(), |support, computation, counters| {
+        let prefix = binding(&[None], computation, counters, location());
+        let literals = [crate::formula_ir::LiteralIr::Atom(
+            DefaultNegation::None,
+            pattern,
+        )];
+        let mut budget =
+            crate::expansion::Budget::new(crate::ExpansionLimits::default(), usize::MAX);
+        assert!(matches!(
+            crate::formula_support::Join::new(
+                &literals,
+                &prefix,
+                1,
+                support,
+                &mut budget,
+                Context::new(computation, &FormulaLimits::default(), counters, location())
+            ),
+            Err(FormulaFailure::UnsafeVariable { variable: 0, .. })
+        ));
+    });
 }
 
 #[test]
-fn absent_frame_inspections_obey_the_work_limit() {
-    for limit in [2, 3] {
-        let mut counters = Counters::default();
-        let result = Binding::copy_slots(
-            &[None, None, None],
-            &FormulaLimits {
-                max_work: limit,
-                ..Default::default()
-            },
-            &mut counters,
-            &mut budget(),
-            location(),
-        );
-        if limit == 3 {
-            assert_eq!(result.unwrap().slots(), &[None, None, None]);
-            assert_eq!(counters.work, 3);
-        } else {
-            assert!(
-                matches!(result, Err(FormulaFailure::Limit { resource: crate::FormulaResource::Work, observed: 3, limit: 2, location: found }) if found == location())
-            );
+fn stopped_copy_preserves_the_source_frame() {
+    Fixture::default().with(location(), |_, computation, counters| {
+        let source = binding(&[None, None, None], computation, counters, location());
+        let bounded = FormulaLimits {
+            max_work: counters.accounting.work,
+            ..Default::default()
+        };
+        assert!(matches!(
+            Binding::copy_slots(source.slots(), computation, &bounded, counters, location()),
+            Err(FormulaFailure::Limit {
+                resource: FormulaResource::Work,
+                ..
+            })
+        ));
+        assert_eq!(source.len(), 3);
+        for slot in 0..3 {
+            assert!(!source.is_bound(slot, location()).unwrap());
         }
-    }
+    });
 }

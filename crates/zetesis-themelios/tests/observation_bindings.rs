@@ -108,7 +108,10 @@ fn finite_equalities_retain_their_complete_guards() {
     for (source, expected) in CHAINS.iter().chain(STRUCTURES).chain(EXTREMA) {
         let input = admit(source);
         assert_eq!(
-            display(&input, &Model::new(input.atoms().iter().cloned())),
+            display(
+                &input,
+                &Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap()
+            ),
             *expected,
             "{source}"
         );
@@ -155,7 +158,10 @@ fn assert_hidden_family(source: &str, expected: &[&str]) {
     let family = family(&input);
     assert_eq!(family.len(), 2);
     assert_eq!(family[0].0, Model::default());
-    assert_eq!(family[1].0, Model::new(input.atoms().iter().cloned()));
+    assert_eq!(
+        family[1].0,
+        Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap()
+    );
     for (_, shown) in family {
         assert_eq!(shown, expected);
     }
@@ -178,7 +184,7 @@ fn family(input: &AdmittedFormula) -> Vec<(Model, Vec<String>)> {
         .unwrap()
         .accepted()
         {
-            let model = Model::new(candidate.atoms().map(|index| input.atoms()[index].clone()));
+            let model = Model::from_positions(input.atom_catalog(), candidate.atoms()).unwrap();
             family.push((model.clone(), display(input, &model)));
         }
     }
@@ -204,7 +210,8 @@ fn extremum_capture_uses_each_original_model() {
                 vec![Value::Number(*number)],
             )
             .unwrap()
-        }));
+        }))
+        .unwrap();
         let shown = shown.iter().map(|value| (*value).to_owned()).collect();
         assert!(actual.contains(&(model, shown)));
     }
@@ -581,7 +588,8 @@ fn finite_binding_shapes_produce_the_expected_displays() {
 
 #[test]
 fn observation_bindings_preserve_hidden_answer_identity() {
-    let singleton = Model::new([Atom::new(Predicate::new("hidden", 0).unwrap(), vec![]).unwrap()]);
+    let singleton =
+        Model::new([Atom::new(Predicate::new("hidden", 0).unwrap(), vec![]).unwrap()]).unwrap();
     for (source, _) in FINITE_BINDINGS {
         let hidden = admit(&format!("{{hidden}}. {source}"));
         let answers = family(&hidden);

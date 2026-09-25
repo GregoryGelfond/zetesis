@@ -8,6 +8,7 @@ use zetesis_ferraris::{Interpretation, Limits, models, models_reduct};
 use super::*;
 use crate::ExpansionLimits;
 use crate::formula_source_activity::Context;
+use crate::formula_support::testing::Fixture;
 
 fn location() -> Location {
     Location {
@@ -16,18 +17,39 @@ fn location() -> Location {
     }
 }
 
+fn with_builder<T>(
+    limits: &FormulaLimits,
+    purpose: Purpose,
+    run: impl FnOnce(&mut Builder<'_, '_, '_>) -> T,
+) -> T {
+    Fixture::default().with(location(), |_, computation, counters| {
+        let mut budget = Budget::new(ExpansionLimits::default(), 0);
+        let mut builder = Builder::empty(
+            computation,
+            limits,
+            &mut budget,
+            counters,
+            purpose,
+            None,
+            location(),
+        )
+        .unwrap();
+        run(&mut builder)
+    })
+}
+
 fn constants(root: usize) -> Theory {
     let limits = FormulaLimits::default();
-    let mut budget = Budget::new(ExpansionLimits::default(), 0);
-    let mut builder = Builder::empty(
-        &limits,
-        &mut budget,
-        Counters::default(),
-        Purpose::Theory,
-        None,
-    );
-    builder.initialize(location()).unwrap();
-    Theory::new(1, builder.nodes, vec![root], limits.theory).unwrap()
+    with_builder(&limits, Purpose::Theory, |builder| {
+        builder.initialize(location()).unwrap();
+        Theory::new(
+            1,
+            std::mem::take(&mut builder.nodes),
+            vec![root],
+            limits.theory,
+        )
+        .unwrap()
+    })
 }
 
 #[test]
@@ -89,183 +111,159 @@ fn initialization_obeys_node_ceiling() {
                     FormulaResource::ObjectiveFormulaNodes
                 }
             };
-            let mut budget = Budget::new(ExpansionLimits::default(), 0);
-            let mut builder =
-                Builder::empty(&limits, &mut budget, Counters::default(), purpose, None);
-            let result = builder.initialize(location());
-            if cap == 2 {
-                result.unwrap();
-                assert_eq!(builder.nodes[FALSUM], Node::False);
-                assert_eq!(builder.nodes[VERUM], Node::Implies(FALSUM, FALSUM));
-            } else {
-                let Err(FormulaFailure::Limit {
-                    resource: actual,
-                    limit,
-                    observed,
-                    location: origin,
-                }) = result
-                else {
-                    panic!("expected a located node ceiling: {result:?}");
-                };
-                assert_eq!(actual, resource);
-                assert_eq!(limit, cap as u128);
-                assert_eq!(observed, cap as u128 + 1);
-                assert_eq!(origin, location());
-                assert_eq!(builder.nodes.len(), cap);
-            }
+            with_builder(&limits, purpose, |builder| {
+                let result = builder.initialize(location());
+                if cap == 2 {
+                    result.unwrap();
+                    assert_eq!(builder.nodes[FALSUM], Node::False);
+                    assert_eq!(builder.nodes[VERUM], Node::Implies(FALSUM, FALSUM));
+                } else {
+                    let Err(FormulaFailure::Limit {
+                        resource: actual,
+                        limit,
+                        observed,
+                        location: origin,
+                    }) = result
+                    else {
+                        panic!("expected a located node ceiling: {result:?}");
+                    };
+                    assert_eq!(actual, resource);
+                    assert_eq!(limit, cap as u128);
+                    assert_eq!(observed, cap as u128 + 1);
+                    assert_eq!(origin, location());
+                    assert_eq!(builder.nodes.len(), cap);
+                }
+            });
         }
     }
 }
 
 #[test]
 fn initialization_obeys_work_ceiling() {
-    let limits = FormulaLimits {
-        max_work: 1,
-        ..FormulaLimits::default()
-    };
-    let mut budget = Budget::new(ExpansionLimits::default(), 0);
-    let mut builder = Builder::empty(
-        &limits,
-        &mut budget,
-        Counters::default(),
-        Purpose::Theory,
-        None,
-    );
-    assert!(matches!(
-        builder.initialize(location()),
-        Err(FormulaFailure::Limit {
-            resource: FormulaResource::Work,
-            limit: 1,
-            observed: 2,
-            ..
-        })
-    ));
-    assert_eq!(builder.counters.work, 1);
-    assert_eq!(builder.nodes, [Node::False]);
+    Fixture::default().with(location(), |_, computation, counters| {
+        let before = counters.accounting.work;
+        let limits = FormulaLimits {
+            max_work: before + 1,
+            ..FormulaLimits::default()
+        };
+        let mut budget = Budget::new(ExpansionLimits::default(), 0);
+        let mut builder = Builder::empty(
+            computation,
+            &limits,
+            &mut budget,
+            counters,
+            Purpose::Theory,
+            None,
+            location(),
+        )
+        .unwrap();
+        let result = builder.initialize(location());
+        assert!(matches!(result, Err(FormulaFailure::Limit {
+            resource: FormulaResource::Work, limit, observed, ..
+        }) if limit == u128::from(before + 1) && observed == u128::from(before + 2)));
+        assert_eq!(builder.counters.accounting.work - before, 1);
+        assert_eq!(builder.nodes, [Node::False]);
+    });
 }
 
 #[test]
 fn scoped_initialization_retains_spent_work() {
     for purpose in [Purpose::Objective, Purpose::Validation] {
-        let mut limits = FormulaLimits {
-            max_objective_formula_nodes: 1,
-            ..FormulaLimits::default()
-        };
-        limits.theory.max_nodes = 1;
-        let mut budget = Budget::new(ExpansionLimits::default(), 0);
-        let mut counters = Counters::default();
-        counters.charge_work(7, &limits, location()).unwrap();
-        let mut context = Context {
-            limits: &limits,
-            budget: &mut budget,
-            counters: &mut counters,
-            location: location(),
-        };
-        assert!(matches!(
-            scoped_body::validate_with_purpose(
-                &[],
-                &crate::formula_binding::Binding::default(),
-                &Support::indexed(
-                    &crate::formula_support::Relations::default(),
-                    &crate::FormulaLimits::default(),
-                    &crate::formula_support::Counters::default(),
-                    location()
-                )
-                .unwrap(),
-                &mut context,
-                purpose
-            ),
-            Err(FormulaFailure::Limit {
-                limit: 1,
-                observed: 2,
-                ..
-            })
-        ));
-        assert_eq!(
-            counters.work, 9,
-            "initialization retains both charged lookups"
-        );
-        counters.work(&limits, location()).unwrap();
-        assert_eq!(counters.work, 10, "the restored owner remains cumulative");
+        Fixture::default().with(location(), |support, computation, counters| {
+            let mut limits = FormulaLimits {
+                max_objective_formula_nodes: 1,
+                ..FormulaLimits::default()
+            };
+            limits.theory.max_nodes = 1;
+            let mut budget = Budget::new(ExpansionLimits::default(), 0);
+            let binding = Binding::new(computation, &limits, counters, location()).unwrap();
+            counters.charge_work(7, &limits, location()).unwrap();
+            let before = counters.accounting.work;
+            let mut context = Context {
+                computation,
+                limits: &limits,
+                budget: &mut budget,
+                counters,
+                location: location(),
+            };
+            assert!(matches!(
+                scoped_body::validate_with_purpose(&[], &binding, support, &mut context, purpose),
+                Err(FormulaFailure::Limit {
+                    limit: 1,
+                    observed: 2,
+                    ..
+                })
+            ));
+            assert_eq!(
+                counters.accounting.work - before,
+                2,
+                "both charged lookups remain spent"
+            );
+            counters.work(&limits, location()).unwrap();
+            assert_eq!(counters.accounting.work - before, 3);
+        });
     }
 }
 
 #[test]
 fn producer_origins_preserve_atom_associations() {
-    let limits = FormulaLimits::default();
-    let mut budget = Budget::new(ExpansionLimits::default(), 0);
-    let mut builder = Builder::empty(
-        &limits,
-        &mut budget,
-        Counters::default(),
-        Purpose::Theory,
-        None,
-    );
-    builder.initialize(location()).unwrap();
-    for name in ["p", "q"] {
-        let pattern =
-            AtomPattern::new(zetesis_core::Predicate::new(name, 0).unwrap(), vec![]).unwrap();
+    with_builder(&FormulaLimits::default(), Purpose::Theory, |builder| {
+        builder.initialize(location()).unwrap();
+        for name in ["p", "q"] {
+            let atom =
+                zetesis_core::Atom::new(zetesis_core::Predicate::new(name, 0).unwrap(), vec![])
+                    .unwrap();
+            builder.atom_ref((&atom).into(), location()).unwrap();
+        }
+        let origin = |offset| Location {
+            source: SourceId::new(19),
+            span: Span::empty(ByteOffset::new(offset)),
+        };
+        let rule = |origins| RuleIr {
+            head: HeadIr::Normal(None),
+            body: vec![],
+            body_variables: 0,
+            bindings: None,
+            variables: 0,
+            location: location(),
+            origins,
+        };
         builder
-            .atom(&pattern, &Binding::default(), location())
+            .record_head_origins(0, &rule(vec![origin(8), origin(2), origin(8)]))
             .unwrap();
-    }
-    let origin = |offset| Location {
-        source: SourceId::new(19),
-        span: Span::empty(ByteOffset::new(offset)),
-    };
-    let rule = |origins| RuleIr {
-        head: HeadIr::Normal(None),
-        body: vec![],
-        body_variables: 0,
-        bindings: None,
-        variables: 0,
-        location: location(),
-        origins,
-    };
-    builder
-        .record_head_origins(0, &rule(vec![origin(8), origin(2), origin(8)]))
-        .unwrap();
-    builder
-        .record_head_origins(1, &rule(vec![origin(3)]))
-        .unwrap();
-    assert_eq!(
-        builder.metadata.origins(0).collect::<Vec<_>>(),
-        [location(), origin(2), origin(8)]
-    );
-    assert_eq!(
-        builder.metadata.origins(1).collect::<Vec<_>>(),
-        [location(), origin(3)]
-    );
-    let expected = (0..2)
-        .map(|atom| builder.metadata.origins(atom).collect::<Vec<_>>())
-        .collect::<Vec<_>>();
-    builder.support_guards().unwrap();
-    assert_eq!(builder.origins, expected);
+        builder
+            .record_head_origins(1, &rule(vec![origin(3)]))
+            .unwrap();
+        assert_eq!(
+            builder.metadata.origins(0).collect::<Vec<_>>(),
+            [location(), origin(2), origin(8)]
+        );
+        assert_eq!(
+            builder.metadata.origins(1).collect::<Vec<_>>(),
+            [location(), origin(3)]
+        );
+        let expected = (0..2)
+            .map(|atom| builder.metadata.origins(atom).collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+        builder.support_guards().unwrap();
+        assert_eq!(builder.origins, expected);
+    });
 }
 
 #[test]
 fn owned_root_provenance_transfers_its_storage() {
-    let limits = FormulaLimits::default();
-    let mut budget = Budget::new(ExpansionLimits::default(), 0);
-    let mut builder = Builder::empty(
-        &limits,
-        &mut budget,
-        Counters::default(),
-        Purpose::Theory,
-        None,
-    );
-    let origins = vec![location()];
-    let data = origins.as_ptr();
-    builder
-        .root_at(FALSUM, Cow::Owned(origins), location())
-        .unwrap();
-    assert!(std::ptr::eq(builder.origins[0].as_ptr(), data));
+    with_builder(&FormulaLimits::default(), Purpose::Theory, |builder| {
+        let origins = vec![location()];
+        let data = origins.as_ptr();
+        builder
+            .root_at(FALSUM, Cow::Owned(origins), location())
+            .unwrap();
+        assert!(std::ptr::eq(builder.origins[0].as_ptr(), data));
+    });
 }
 
 #[test]
 fn origin_insertion_obeys_the_work_ceiling() {
-    let mut limits = FormulaLimits::default();
-    let mut budget = Budget::new(ExpansionLimits::default(), 0);
     let next = Location {
         source: SourceId::new(20),
         span: Span::empty(ByteOffset::new(0)),
@@ -279,44 +277,26 @@ fn origin_insertion_obeys_the_work_ceiling() {
         location: next,
         origins: vec![next],
     };
-    // One tail comparison plus one published location; spare arena capacity requires no relocation.
-    limits.max_work = 2;
-    let mut builder = Builder::empty(
-        &limits,
-        &mut budget,
-        Counters::default(),
-        Purpose::Theory,
-        None,
-    );
-    builder
-        .metadata
-        .atom(location(), &mut builder.counters, builder.limits)
-        .unwrap();
-    builder.record_head_origins(0, &rule).unwrap();
-    assert_eq!(builder.counters.work, 2);
-    let short = FormulaLimits {
-        max_work: 1,
-        ..limits
-    };
-    let mut short_budget = Budget::new(ExpansionLimits::default(), 0);
-    let mut refused = Builder::empty(
-        &short,
-        &mut short_budget,
-        Counters::default(),
-        Purpose::Theory,
-        None,
-    );
-    refused
-        .metadata
-        .atom(location(), &mut refused.counters, refused.limits)
-        .unwrap();
-    assert!(
-        matches!(refused.record_head_origins(0, &rule), Err(FormulaFailure::Limit { resource: FormulaResource::Work, observed: 2, limit: 1, location: found }) if found == next)
-    );
-    assert_eq!(
-        refused.metadata.origins(0).collect::<Vec<_>>(),
-        [location()]
-    );
+    for allowance in [1, 2] {
+        Fixture::default().with(location(), |_, computation, counters| {
+            let limits = FormulaLimits { max_work: counters.accounting.work + allowance, ..FormulaLimits::default() };
+            let mut budget = Budget::new(ExpansionLimits::default(), 0);
+            let mut builder = Builder::empty(computation, &limits, &mut budget, counters,
+                Purpose::Theory, None, location()).unwrap();
+            builder.metadata.atom(location(), &mut builder.counters, builder.limits).unwrap();
+            let before = builder.counters.accounting.work;
+            let result = builder.record_head_origins(0, &rule);
+            if allowance == 2 {
+                result.unwrap();
+                assert_eq!(builder.counters.accounting.work - before, 2);
+            } else {
+                assert!(matches!(result, Err(FormulaFailure::Limit {
+                    resource: FormulaResource::Work, observed, limit, location: found,
+                }) if observed == u128::from(before + 2) && limit == u128::from(before + 1) && found == next));
+                assert_eq!(builder.metadata.origins(0).collect::<Vec<_>>(), [location()]);
+            }
+        });
+    }
 }
 
 #[test]
@@ -328,82 +308,65 @@ fn guard_evidence_admission_precedes_copy_work() {
             FormulaResource::Origins => limits.max_origin_locations = 0,
             _ => unreachable!("the two emitted-evidence bounds"),
         }
-        let mut budget = Budget::new(ExpansionLimits::default(), 0);
-        let mut builder = Builder::empty(
-            &limits,
-            &mut budget,
-            Counters::default(),
-            Purpose::Theory,
-            None,
-        );
-        builder.initialize(location()).unwrap();
-        let pattern =
-            AtomPattern::new(zetesis_core::Predicate::new("p", 0).unwrap(), vec![]).unwrap();
-        builder
-            .atom(&pattern, &Binding::default(), location())
-            .unwrap();
-        let before = builder.counters.work;
-        assert!(
-            matches!(builder.support_guards(), Err(FormulaFailure::Limit { resource: found, .. }) if found == resource)
-        );
-        // One atom lookup and three implication nodes, with no origin-copy work.
-        assert_eq!(builder.counters.work - before, 4);
-        assert!(builder.roots.is_empty());
-        assert!(builder.origins.is_empty());
-        assert_eq!(builder.origin_count, 0);
+        with_builder(&limits, Purpose::Theory, |builder| {
+            builder.initialize(location()).unwrap();
+            let atom =
+                zetesis_core::Atom::new(zetesis_core::Predicate::new("p", 0).unwrap(), vec![])
+                    .unwrap();
+            builder.atom_ref((&atom).into(), location()).unwrap();
+            let before = builder.counters.accounting.work;
+            assert!(
+                matches!(builder.support_guards(), Err(FormulaFailure::Limit { resource: found, .. }) if found == resource)
+            );
+            // One atom-node lookup and three implication nodes; no origin copy.
+            assert_eq!(builder.counters.accounting.work - before, 4);
+            assert!(builder.roots.is_empty());
+            assert!(builder.origins.is_empty());
+            assert_eq!(builder.origin_count, 0);
+        });
     }
 }
 
 #[test]
 fn interleaved_producers_retain_the_support_fold() {
-    let limits = FormulaLimits::default();
-    let mut budget = Budget::new(ExpansionLimits::default(), 0);
-    let mut builder = Builder::empty(
-        &limits,
-        &mut budget,
-        Counters::default(),
-        Purpose::Theory,
-        None,
-    );
-    builder.initialize(location()).unwrap();
-    let mut nodes = Vec::new();
-    for name in ["p", "q", "x", "y", "z"] {
-        let pattern =
-            AtomPattern::new(zetesis_core::Predicate::new(name, 0).unwrap(), vec![]).unwrap();
-        nodes.push(
-            builder
-                .atom(&pattern, &Binding::default(), location())
-                .unwrap(),
+    with_builder(&FormulaLimits::default(), Purpose::Theory, |builder| {
+        builder.initialize(location()).unwrap();
+        let mut nodes = Vec::new();
+        for name in ["p", "q", "x", "y", "z"] {
+            let atom =
+                zetesis_core::Atom::new(zetesis_core::Predicate::new(name, 0).unwrap(), vec![])
+                    .unwrap();
+            nodes.push(builder.atom_ref((&atom).into(), location()).unwrap());
+        }
+        let rule = RuleIr {
+            head: HeadIr::Normal(None),
+            body: vec![],
+            body_variables: 0,
+            bindings: None,
+            variables: 0,
+            location: location(),
+            origins: vec![location()],
+        };
+        for (head, body) in [
+            (nodes[0], nodes[2]),
+            (nodes[1], nodes[4]),
+            (nodes[0], nodes[3]),
+            (nodes[0], nodes[2]),
+        ] {
+            builder.producer(head, body, &rule).unwrap();
+        }
+        let before = builder.nodes.len();
+        builder.support_guards().unwrap();
+        assert_eq!(builder.nodes[before], Node::Or(nodes[2], nodes[3]));
+        assert_eq!(builder.nodes[before + 1], Node::Or(before, nodes[2]));
+        assert_eq!(
+            builder.nodes[before + 2],
+            Node::Implies(nodes[0], before + 1)
         );
-    }
-    let rule = RuleIr {
-        head: HeadIr::Normal(None),
-        body: vec![],
-        body_variables: 0,
-        bindings: None,
-        variables: 0,
-        location: location(),
-        origins: vec![location()],
-    };
-    for (head, body) in [
-        (nodes[0], nodes[2]),
-        (nodes[1], nodes[4]),
-        (nodes[0], nodes[3]),
-        (nodes[0], nodes[2]),
-    ] {
-        builder.producer(head, body, &rule).unwrap();
-    }
-    let before = builder.nodes.len();
-    builder.support_guards().unwrap();
-    assert_eq!(builder.nodes[before], Node::Or(nodes[2], nodes[3]));
-    assert_eq!(builder.nodes[before + 1], Node::Or(before, nodes[2]));
-    assert_eq!(
-        builder.nodes[before + 2],
-        Node::Implies(nodes[0], before + 1)
-    );
-    assert_eq!(
-        builder.roots.len(),
-        5,
-        "every atom retains its necessary guard"
-    );
+        assert_eq!(
+            builder.roots.len(),
+            5,
+            "every atom retains its necessary guard"
+        );
+    });
 }

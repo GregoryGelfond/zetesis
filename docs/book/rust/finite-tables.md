@@ -231,9 +231,10 @@ cumulative formula work budget, with no refund on Stopped. It uses bounded
 standard collections and has no fallible-allocation or caller-control API.
 This is an uninterruptible operation under the existing eager contract, not a
 new cancellation/deadline guarantee. Its heap is outside `max_support_bytes`.
-Rule guards separately charge their named headers, preparation scratch, actual
-vector capacities and temporary atomic conversion payload beside retained
-support, table indices and live masks. Query-attempt receipts retain original
+Rule guards separately charge their named headers, preparation scratch,
+dictionary IDs and actual vector capacities beside retained support, table
+indices and live masks. Candidate terms remain borrowed canonical references.
+Query-attempt receipts retain original
 failed work and actual capacity peaks. These capacities exclude allocator
 metadata, analyzer heap and a complete stack/RSS measure. Additional analysis,
 guard and mask costs may outweigh avoided bindings or probes.

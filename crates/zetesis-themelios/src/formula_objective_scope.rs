@@ -172,23 +172,13 @@ impl Compiler<'_> {
         polarity: WeightPolarity,
         family: ObjectiveFamily,
     ) -> Result<ObjectiveIr, FormulaFailure> {
-        // The scope compiles under the compilation's shared names, lent to
-        // it and taken back with what it added, as the budget is lent.
-        let mut compiler = Compiler {
-            options: self.options,
-            limits: self.limits,
-            budget: self.budget,
-            domain: BTreeSet::new(),
-            predicates: std::mem::take(&mut self.predicates),
-            next_aggregate: self.next_aggregate,
-            dependency_projection: false,
-            location: self.location,
-        };
-        let objective = compiler.scoped_body(source, weight, terms, origins, polarity, family);
-        self.predicates = compiler.predicates;
-        self.next_aggregate = compiler.next_aggregate;
-        self.dependency_projection |= compiler.dependency_projection;
-        objective
+        // Objective roots have their own selection over the same canonical
+        // authority. Preserve the enclosing domain even when this scope refuses.
+        let empty = self.empty_domain()?;
+        let domain = std::mem::replace(&mut self.domain, empty);
+        let result = self.scoped_body(source, weight, terms, origins, polarity, family);
+        self.domain = domain;
+        result
     }
 
     fn scoped_field(
@@ -247,8 +237,8 @@ impl Compiler<'_> {
         let positive = body
             .iter()
             .filter_map(|literal| match literal {
-                LiteralIr::Atom(DefaultNegation::None, atom) => Some(atom.clone()),
-                LiteralIr::PatternAtom(pattern) => Some(pattern.atom.clone()),
+                LiteralIr::Atom(DefaultNegation::None, atom) => Some(*atom),
+                LiteralIr::PatternAtom(pattern) => Some(pattern.atom),
                 _ => None,
             })
             .collect();

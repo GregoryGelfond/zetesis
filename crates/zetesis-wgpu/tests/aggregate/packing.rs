@@ -66,8 +66,10 @@ fn packed_eligibility_preserves_each_occurrence() {
 fn encoded(evaluation: native::Evaluation<'_>) -> [u32; 3] {
     let (value, present) = match evaluation.value() {
         native::Value::Integer(number) => (bits(i32::try_from(number).unwrap()), 1),
-        native::Value::Term(Value::Infimum | Value::Supremum) => (0, 0),
-        native::Value::Term(_) => panic!("numeric fixture"),
+        native::Value::Term(value) => match value.descriptor() {
+            zetesis_core::ValueNodeRef::Infimum | zetesis_core::ValueNodeRef::Supremum => (0, 0),
+            _ => panic!("numeric fixture"),
+        },
     };
     [value, present, u32::from(evaluation.holds())]
 }
@@ -111,9 +113,11 @@ fn wire(plan: &Plan, group: &native::Group, records: &[native::Eligibility<'_>])
 fn value(value: native::Value<'_>) -> AggregateGpuValue {
     match value {
         native::Value::Integer(value) => AggregateGpuValue::Integer(i32::try_from(value).unwrap()),
-        native::Value::Term(Value::Infimum) => AggregateGpuValue::Infimum,
-        native::Value::Term(Value::Supremum) => AggregateGpuValue::Supremum,
-        native::Value::Term(_) => panic!("numeric fixture"),
+        native::Value::Term(value) => match value.descriptor() {
+            zetesis_core::ValueNodeRef::Infimum => AggregateGpuValue::Infimum,
+            zetesis_core::ValueNodeRef::Supremum => AggregateGpuValue::Supremum,
+            _ => panic!("numeric fixture"),
+        },
     }
 }
 
@@ -490,4 +494,56 @@ fn complete_work_bounds_shader_index_arithmetic() {
         device_work(u32::MAX, 1).unwrap_err().kind(),
         GpuErrorKind::Capacity
     );
+}
+
+#[test]
+fn shared_vocabulary_does_not_forge_group_identity() {
+    let theory = fixtures::theory();
+    let worlds = fixtures::worlds(&theory);
+    let mut builder = zetesis_core::catalog::VocabularyBuilder::new(1 << 20).unwrap();
+    let key = builder
+        .import_term_with(
+            (&Value::Number(4)).into(),
+            zetesis_core::catalog::Limits::default(),
+            || Ok::<_, ()>(()),
+        )
+        .unwrap();
+    let owner = builder.finish_with(0, || Ok::<_, ()>(())).unwrap();
+    let make = || {
+        native::GroupData::new(
+            &theory,
+            Function::Sum,
+            owner.read(),
+            vec![native::Tuple {
+                key: vec![owner.read().term(&key).unwrap()],
+                condition: 2,
+            }],
+            vec![],
+            native::AdmissionLimits::default(),
+            &Cancellation::default(),
+        )
+        .unwrap()
+    };
+    let left = make();
+    let right = make();
+    let left = left.bind_with(owner.read(), || Ok::<_, ()>(())).unwrap();
+    let right = right.bind_with(owner.read(), || Ok::<_, ()>(())).unwrap();
+    let prepared = AggregateGpuPlan::new(
+        left,
+        AggregateGpuPlanLimits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
+    let records = fixtures::observations(right, &worlds, 1);
+    let error = Plan::new(
+        &prepared,
+        &records,
+        AggregateGpuLimits::default(),
+        &wgpu::Limits::default(),
+        1,
+        &Cancellation::default(),
+    )
+    .err()
+    .unwrap();
+    assert_eq!(error.kind(), GpuErrorKind::Seed);
 }

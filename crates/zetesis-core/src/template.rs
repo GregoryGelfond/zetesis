@@ -4,6 +4,12 @@ use crate::{Atom, ConstructionError, Predicate, Value};
 use std::collections::BTreeSet;
 use std::fmt;
 
+pub(crate) mod catalog;
+pub use catalog::{
+    TemplateCatalog, TemplateCatalogBuilder, TemplateCatalogFailure, TemplateCatalogSelection,
+    TemplateComponents, TemplateComponentsRef, TemplateRow,
+};
+
 /// A template argument. Variable IDs are local to one template.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Term {
@@ -34,15 +40,6 @@ pub struct AtomPattern {
     terms: Vec<Term>,
 }
 impl AtomPattern {
-    /// Refer to the program's shared name for this pattern's predicate;
-    /// `shared` must be equal to the pattern's predicate.
-    pub(crate) fn share_predicate(&mut self, shared: Predicate) {
-        debug_assert!(
-            self.predicate == shared,
-            "a shared name spells the same predicate"
-        );
-        self.predicate = shared;
-    }
     /// Construct a pattern with exactly the signature's arity.
     ///
     /// # Errors
@@ -71,7 +68,16 @@ impl AtomPattern {
     /// # Errors
     /// Returns the first missing variable; constants do not read the assignment.
     pub fn instantiate(&self, assignment: &[Value]) -> Result<Atom, InstantiationError> {
-        self.key(assignment).map(crate::AtomKey::to_atom)
+        self.key(assignment)?;
+        let values = self
+            .terms
+            .iter()
+            .map(|term| match term {
+                Term::Constant(value) => value.clone(),
+                Term::Variable(variable) => assignment[*variable].clone(),
+            })
+            .collect();
+        Ok(Atom::from_valid_parts(self.predicate.clone(), values))
     }
 }
 
@@ -96,12 +102,7 @@ impl Filter {
     /// # Errors
     /// Returns the first variable not present in the assignment.
     pub fn evaluate(&self, assignment: &[Value]) -> Result<bool, InstantiationError> {
-        let (left, right) = self.terms();
-        let equal = left.resolve(assignment)? == right.resolve(assignment)?;
-        Ok(match self {
-            Self::Eq(..) => equal,
-            Self::Neq(..) => !equal,
-        })
+        crate::program::FilterRef::from(self).evaluate(assignment)
     }
 }
 
@@ -166,13 +167,6 @@ impl Template {
     #[must_use]
     pub fn variable_count(&self) -> usize {
         self.variable_count
-    }
-    pub(crate) fn patterns_mut(&mut self) -> impl Iterator<Item = &mut AtomPattern> {
-        self.head
-            .iter_mut()
-            .chain(self.positive.iter_mut())
-            .chain(self.gate_true.iter_mut())
-            .chain(self.gate_false.iter_mut())
     }
     pub(crate) fn patterns(&self) -> impl Iterator<Item = &AtomPattern> {
         self.head

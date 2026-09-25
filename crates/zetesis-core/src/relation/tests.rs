@@ -1,9 +1,11 @@
 use super::*;
+use crate::Value;
 
 mod masks;
 mod mask_selection;
 mod query_attempt;
 mod query_metering;
+mod canonical;
 
 fn predicate(arity: usize) -> Predicate {
     Predicate::new("relation", arity).unwrap()
@@ -28,7 +30,7 @@ fn row_values_borrow_the_source_beyond_the_view() {
         let relation = Relation::from_atoms(&signature, &source, Limits::default()).unwrap();
         relation.row(0).unwrap().value(0).unwrap()
     };
-    assert_eq!(value, &Value::Number(7));
+    assert_eq!(value, Value::Number(7));
 }
 
 #[test]
@@ -63,10 +65,10 @@ fn columns_reconstruct_every_typed_argument() {
     let relation = Relation::from_atoms(&signature, &source, Limits::default()).unwrap();
     for (position, expected) in source.iter().enumerate() {
         let row = relation.row(position).unwrap();
-        assert_eq!(row.predicate(), expected.predicate());
+        assert_eq!(row.predicate(), PredicateRef::from(expected.predicate()));
         assert_eq!(row.source_index(), position);
         for (column, value) in expected.values().iter().enumerate() {
-            assert_eq!(row.value(column), Some(value));
+            assert_eq!(row.value(column), Some(TermRef::from(value)));
         }
     }
 }
@@ -104,19 +106,15 @@ fn catalog_views_preserve_original_indices() {
     let actual: Vec<_> = (0..indices.len())
         .map(|index| {
             let row = selected.row(index).unwrap();
-            (
-                row.position(),
-                row.source_index(),
-                row.value(0).unwrap().clone(),
-            )
+            (row.position(), row.source_index(), row.value(0).unwrap())
         })
         .collect();
     assert_eq!(
         actual,
         vec![
-            (0, 2, Value::Number(6)),
-            (1, 0, Value::Number(4)),
-            (2, 2, Value::Number(6))
+            (0, 2, TermRef::from(&Value::Number(6))),
+            (1, 0, TermRef::from(&Value::Number(4))),
+            (2, 2, TermRef::from(&Value::Number(6)))
         ]
     );
 }
@@ -185,9 +183,12 @@ fn selection_matches_independent_row_equality() {
             let values = [Value::Number(left), Value::Number(right)];
             for bound in [
                 vec![],
-                vec![(0, &values[0])],
-                vec![(1, &values[1])],
-                vec![(0, &values[0]), (1, &values[1])],
+                vec![(0, TermRef::from(&values[0]))],
+                vec![(1, TermRef::from(&values[1]))],
+                vec![
+                    (0, TermRef::from(&values[0])),
+                    (1, TermRef::from(&values[1])),
+                ],
             ] {
                 let query = relation.query(&bound, Limits::default()).unwrap();
                 let selected = relation.select(&query, &input, Limits::default()).unwrap();
@@ -196,9 +197,9 @@ fn selection_matches_independent_row_equality() {
                     .iter()
                     .copied()
                     .filter(|row| {
-                        bound
-                            .iter()
-                            .all(|(column, value)| &source[*row].values()[*column] == *value)
+                        bound.iter().all(|(column, value)| {
+                            TermRef::from(&source[*row].values()[*column]) == *value
+                        })
                     })
                     .collect();
                 assert_eq!(selected.positions(), expected);
@@ -235,7 +236,7 @@ fn missing_dictionary_values_select_nothing() {
     let relation = Relation::from_atoms(&signature, &source, Limits::default()).unwrap();
     let input = relation.all(Limits::default()).unwrap();
     let query = relation
-        .query(&[(0, &Value::Number(8))], Limits::default())
+        .query(&[(0, TermRef::from(&Value::Number(8)))], Limits::default())
         .unwrap();
     assert!(!query.is_possible());
     assert!(
@@ -258,7 +259,10 @@ fn repeated_columns_remain_conjunctive() {
     let input = relation.all(Limits::default()).unwrap();
     let query = relation
         .query(
-            &[(0, &Value::Number(4)), (0, &Value::Number(5))],
+            &[
+                (0, TermRef::from(&Value::Number(4))),
+                (0, TermRef::from(&Value::Number(5))),
+            ],
             Limits::default(),
         )
         .unwrap();
@@ -285,7 +289,10 @@ fn missing_values_do_not_hide_invalid_columns() {
     let relation = Relation::from_atoms(&signature, &source, Limits::default()).unwrap();
     assert!(matches!(
         relation.query(
-            &[(0, &Value::Number(8)), (1, &Value::Number(4))],
+            &[
+                (0, TermRef::from(&Value::Number(8))),
+                (1, TermRef::from(&Value::Number(4)))
+            ],
             Limits::default()
         ),
         Err(Failure::Column)
@@ -432,7 +439,7 @@ fn a_filter_stop_preserves_its_inputs() {
     );
     let relation = Relation::from_atoms(&signature, &source, Limits::default()).unwrap();
     let query = relation
-        .query(&[(0, &Value::Number(4))], Limits::default())
+        .query(&[(0, TermRef::from(&Value::Number(4)))], Limits::default())
         .unwrap();
     let input = relation.all(Limits::default()).unwrap();
     limit(
@@ -470,7 +477,7 @@ fn construction_records_transient_sort_capacity() {
     let relation = Relation::from_atoms(&signature, &source, Limits::default()).unwrap();
     let storage = relation.storage();
     assert!(storage.peak_construction_bytes > storage.retained_bytes);
-    assert_eq!(storage.referenced_payload_bytes, 0);
+    assert_eq!(storage.referenced_encoding_bytes, 16 * 5);
     assert_eq!(storage.borrowed_mapping_bytes, 0);
     assert!(storage.construction_work > 0);
 }

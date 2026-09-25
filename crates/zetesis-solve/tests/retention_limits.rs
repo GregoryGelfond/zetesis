@@ -37,10 +37,10 @@ fn fixture() -> AdmittedFormula {
 fn expected() -> BTreeSet<Model> {
     let atom = |name| Atom::new(Predicate::new(name, 0).unwrap(), vec![]).unwrap();
     BTreeSet::from([
-        Model::new([]),
-        Model::new([atom("a")]),
-        Model::new([atom("b")]),
-        Model::new([atom("a"), atom("b")]),
+        Model::new([]).unwrap(),
+        Model::new([atom("a")]).unwrap(),
+        Model::new([atom("b")]).unwrap(),
+        Model::new([atom("a"), atom("b")]).unwrap(),
     ])
 }
 

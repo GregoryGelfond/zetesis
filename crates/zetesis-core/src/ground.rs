@@ -3,10 +3,11 @@
 
 use std::fmt;
 
+use crate::atom_interner::{AtomInterner, Failure as InternFailure, Limits as InternLimits};
 use crate::carrier::advance;
 use crate::{
-    Atom, AtomCatalog, AtomPattern, CarrierError, Model, ModelError, Program, Seed, SeedError,
-    SeedView, Template, Value,
+    AtomCatalog, CarrierError, Model, ModelError, PatternRef, Patterns, Program, Seed, SeedError,
+    SeedView, TemplateRef, catalog::TermRef,
 };
 
 /// Dense atom index within one [`GroundProgram`]. It is never a symbolic identity.
@@ -105,16 +106,30 @@ impl GroundProgram {
                 limits.max_substitutions,
             )?;
         }
-        let mut atoms = Vec::new();
-        atoms
-            .try_reserve_exact(atom_count)
-            .map_err(|_| StaticError::Allocation)?;
+        // Static admission already bounds the complete carrier. Its tuple
+        // writer shares the exact Program vocabulary; only rows and discovery
+        // positions are constructed here, never a second term store.
+        let mut atoms =
+            AtomInterner::for_program(program, usize::MAX).map_err(StaticError::Catalog)?;
+        let atom_limits = InternLimits {
+            max_atoms: atom_count,
+            max_bytes: u128::MAX,
+        };
         for atom in program.carrier_atoms() {
-            atoms.push(atom.map_err(StaticError::Carrier)?);
+            let atom = atom.map_err(StaticError::Carrier)?;
+            atoms
+                .entry_atom_with(atom.atom(), atom_limits, || {
+                    Ok::<_, std::convert::Infallible>(())
+                })
+                .map_err(intern_failure)?
+                .insert_with(atom_limits, || Ok::<_, std::convert::Infallible>(()))
+                .map_err(intern_failure)?;
         }
         let mut graph = Self {
             program: program.clone(),
-            atoms: AtomCatalog::new(atoms),
+            atoms: atoms
+                .into_catalog_with(atom_limits, || Ok::<_, std::convert::Infallible>(()))
+                .map_err(intern_failure)?,
             rules: Vec::new(),
             gate_atom_ids: Vec::new(),
         };
@@ -137,7 +152,7 @@ impl GroundProgram {
 
     fn compile_template(
         &mut self,
-        template: &Template,
+        template: TemplateRef<'_>,
         max_rules: usize,
     ) -> Result<(), StaticError> {
         if self.program.domain().is_empty() && template.variable_count() != 0 {
@@ -149,14 +164,22 @@ impl GroundProgram {
             .map_err(|_| StaticError::Allocation)?;
         coordinates.resize(template.variable_count(), 0);
         loop {
-            let assignment: Vec<Value> = coordinates
-                .iter()
-                .map(|index| self.program.domain()[*index].clone())
-                .collect();
+            let mut assignment = Vec::new();
+            assignment
+                .try_reserve_exact(coordinates.len())
+                .map_err(|_| StaticError::Allocation)?;
+            for index in &coordinates {
+                assignment.push(
+                    self.program
+                        .domain()
+                        .get(*index)
+                        .ok_or(StaticError::InvalidAdmittedProgram)?,
+                );
+            }
             let mut enabled = true;
             for filter in template.filters() {
                 if !filter
-                    .evaluate(&assignment)
+                    .evaluate(assignment.as_slice())
                     .map_err(|_| StaticError::InvalidAdmittedProgram)?
                 {
                     enabled = false;
@@ -196,19 +219,23 @@ impl GroundProgram {
 
     fn instantiate_id(
         &self,
-        pattern: &AtomPattern,
-        assignment: &[Value],
+        pattern: PatternRef<'_>,
+        assignment: &[TermRef<'_>],
     ) -> Result<AtomId, StaticError> {
-        let atom = pattern
-            .instantiate(assignment)
+        let key = pattern
+            .key(assignment)
             .map_err(|_| StaticError::InvalidAdmittedProgram)?;
-        self.atom_id(&atom)
-            .ok_or(StaticError::InvalidAdmittedProgram)
+        let position = self
+            .atoms
+            .atoms()
+            .binary_search_key(&key)
+            .map_err(|_| StaticError::InvalidAdmittedProgram)?;
+        u32::try_from(position).map_err(|_| StaticError::DenseIdOverflow)
     }
     fn instantiate_ids(
         &self,
-        patterns: &[AtomPattern],
-        assignment: &[Value],
+        patterns: Patterns<'_>,
+        assignment: &[TermRef<'_>],
     ) -> Result<Vec<AtomId>, StaticError> {
         let mut ids = Vec::new();
         ids.try_reserve_exact(patterns.len())
@@ -226,9 +253,9 @@ impl GroundProgram {
     pub fn program(&self) -> &Program {
         &self.program
     }
-    /// Canonical atoms; slice index equals dense ID.
+    /// Canonical atom occurrences; the original position equals the dense ID.
     #[must_use]
-    pub fn atoms(&self) -> &[Atom] {
+    pub fn atoms(&self) -> crate::catalog::Atoms<'_> {
         self.atoms.atoms()
     }
     /// Shared dense-order atom ownership used by decoded interpretations.
@@ -253,7 +280,8 @@ impl GroundProgram {
     }
     /// Find a symbolic atom's dense ID without changing the graph.
     #[must_use]
-    pub fn atom_id(&self, atom: &Atom) -> Option<AtomId> {
+    pub fn atom_id<'a>(&self, atom: impl Into<crate::catalog::AtomRef<'a>>) -> Option<AtomId> {
+        let atom = atom.into();
         self.atoms
             .atoms()
             .binary_search(atom)
@@ -362,6 +390,20 @@ impl GroundProgram {
     }
 }
 
+fn intern_failure(error: InternFailure<std::convert::Infallible>) -> StaticError {
+    match error {
+        InternFailure::Catalog(error) => StaticError::Catalog(error),
+        InternFailure::Atoms { required, limit } => StaticError::LimitExceeded {
+            resource: "atoms",
+            actual: required,
+            limit,
+        },
+        InternFailure::Allocation(_) => StaticError::Allocation,
+        InternFailure::Overflow | InternFailure::Bytes { .. } => StaticError::CountOverflow,
+        InternFailure::Stopped(never) => match never {},
+    }
+}
+
 fn power(base: usize, exponent: usize) -> Result<usize, StaticError> {
     let mut result = 1usize;
     for _ in 0..exponent {
@@ -401,6 +443,8 @@ pub enum StaticError {
     Allocation,
     /// The streaming atom carrier refused tuple storage.
     Carrier(CarrierError),
+    /// Canonical term or atom storage refused publication.
+    Catalog(crate::catalog::Error),
     /// An admitted pattern could not be instantiated inside its carrier.
     InvalidAdmittedProgram,
 }
@@ -416,6 +460,7 @@ impl fmt::Display for StaticError {
             } => write!(f, "static {resource} count {actual} exceeds {limit}"),
             Self::Allocation => f.write_str("static storage could not be reserved"),
             Self::Carrier(error) => error.fmt(f),
+            Self::Catalog(error) => error.fmt(f),
             Self::InvalidAdmittedProgram => {
                 f.write_str("admitted template escaped its validated carrier")
             }

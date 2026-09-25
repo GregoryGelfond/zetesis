@@ -1,10 +1,11 @@
 //! Canonical gate positions index the filtered complete carrier exactly.
 
 use std::sync::Arc;
+use zetesis_core::catalog::AtomRef;
 use zetesis_core::{
     AdmissionLimits, Atom, AtomPattern, GateAtom, GateIndex, GateIndexError, GroundProgram,
-    Predicate, Program, SeedError, SeedSelection, SeedSelectionError, Sign, StaticLimits, Template,
-    Term, Value, ValueLimits, ValueNode,
+    Predicate, Program, Seed, SeedError, SeedSelection, SeedSelectionError, Sign, StaticLimits,
+    Template, Term, Value, ValueLimits, ValueNode,
 };
 
 fn program() -> Program {
@@ -72,19 +73,33 @@ fn full_carrier_matches_independent_atom_storage_order() {
     // odometer. For binary tuples the first coordinate changes fastest, so the
     // subsequent Atom::Ord sort must supply the intended lexicographic order.
     for predicate in program.predicates().iter().rev() {
+        let predicate =
+            Predicate::with_sign(predicate.name(), predicate.arity(), predicate.sign()).unwrap();
         match predicate.arity() {
             0 => expected.push(Atom::new(predicate.clone(), vec![]).unwrap()),
             1 => {
                 for value in program.domain().iter().rev() {
-                    expected.push(Atom::new(predicate.clone(), vec![value.clone()]).unwrap());
+                    expected.push(
+                        Atom::new(
+                            predicate.clone(),
+                            vec![value.to_value(ValueLimits::default()).unwrap()],
+                        )
+                        .unwrap(),
+                    );
                 }
             }
             2 => {
                 for second in program.domain().iter().rev() {
                     for first in program.domain().iter().rev() {
                         expected.push(
-                            Atom::new(predicate.clone(), vec![first.clone(), second.clone()])
-                                .unwrap(),
+                            Atom::new(
+                                predicate.clone(),
+                                vec![
+                                    first.to_value(ValueLimits::default()).unwrap(),
+                                    second.to_value(ValueLimits::default()).unwrap(),
+                                ],
+                            )
+                            .unwrap(),
                         );
                     }
                 }
@@ -99,7 +114,10 @@ fn full_carrier_matches_independent_atom_storage_order() {
         .carrier_atoms()
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
-    assert_eq!(actual, expected);
+    assert_eq!(
+        actual.iter().map(|atom| atom.atom()).collect::<Vec<_>>(),
+        expected.iter().map(AtomRef::from).collect::<Vec<_>>()
+    );
 }
 
 #[test]
@@ -112,15 +130,18 @@ fn gate_positions_match_typed_interleaved_carrier_order() {
     assert!(graph.atom_count() > tokens.len());
     let selected = SeedSelection::from_gate_atoms(&program, tokens.iter().cloned()).unwrap();
     for (index, entry) in selected.view().entries().enumerate() {
-        assert_eq!(entry.atom(), &gate_atoms[index]);
+        assert_eq!(entry.atom(), gate_atoms[index].atom());
         let id = entry.resolve_in(&graph).unwrap();
         assert_eq!(id, graph.gate_atom_ids()[index]);
-        assert_eq!(graph.atoms()[id as usize], gate_atoms[index]);
+        assert_eq!(
+            graph.atoms().at(id as usize).unwrap(),
+            gate_atoms[index].atom()
+        );
     }
 }
 
 #[test]
-fn sorting_keeps_token_position_and_payload_together() {
+fn sorting_keeps_token_position_and_identity_together() {
     let program = program();
     let graph = GroundProgram::compile(&program, StaticLimits::default()).unwrap();
     let tokens = tokens(&program);
@@ -129,9 +150,12 @@ fn sorting_keeps_token_position_and_payload_together() {
             .unwrap();
     assert_eq!(selected.view().atoms().len(), tokens.len());
     for (entry, token) in selected.view().entries().zip(&tokens) {
-        assert!(std::ptr::eq(entry.atom(), token.atom()));
+        assert_eq!(entry.atom(), token.atom());
         assert_eq!(
-            &graph.atoms()[entry.resolve_in(&graph).unwrap() as usize],
+            graph
+                .atoms()
+                .at(entry.resolve_in(&graph).unwrap() as usize)
+                .unwrap(),
             token.atom()
         );
     }
@@ -218,12 +242,12 @@ fn direct_ranks_match_every_typed_gate_position() {
         expected
             .iter()
             .rev()
-            .map(|token| Arc::new(index.locate(token.atom().clone()).unwrap())),
+            .map(|token| Arc::new(index.locate(token.atom()).unwrap())),
     )
     .unwrap();
     for (entry, &position) in selected.view().entries().zip(graph.gate_atom_ids()) {
         assert_eq!(entry.resolve_in(&graph), Ok(position));
-        assert_eq!(entry.atom(), &graph.atoms()[position as usize]);
+        assert_eq!(graph.atoms().at(position as usize).unwrap(), entry.atom());
     }
 }
 
@@ -241,7 +265,7 @@ fn sparse_direct_ranks_keep_original_positions() {
         subset
             .iter()
             .rev()
-            .map(|token| Arc::new(index.locate(token.atom().clone()).unwrap())),
+            .map(|token| Arc::new(index.locate(token.atom()).unwrap())),
     )
     .unwrap();
     let mut words = vec![u32::MAX; graph.word_count()];
@@ -267,7 +291,7 @@ fn direct_rank_refuses_outside_signatures_and_values() {
         .unwrap(),
     ] {
         assert!(matches!(
-            index.locate(atom),
+            index.locate(&atom),
             Err(GateIndexError::OutsideCarrier)
         ));
     }
@@ -290,7 +314,7 @@ fn direct_rank_keeps_nullary_atoms_in_an_empty_domain() {
     let index = GateIndex::new(&program).unwrap();
     assert_eq!(index.len(), 1);
     let token = index
-        .locate(Atom::new(Predicate::new("p", 0).unwrap(), vec![]).unwrap())
+        .locate(&Atom::new(Predicate::new("p", 0).unwrap(), vec![]).unwrap())
         .unwrap();
     let selected = SeedSelection::from_gate_atoms(&program, [Arc::new(token)]).unwrap();
     let graph = GroundProgram::compile(&program, StaticLimits::default()).unwrap();
@@ -304,8 +328,7 @@ fn direct_rank_keeps_nullary_atoms_in_an_empty_domain() {
     assert!(index.is_empty());
 }
 
-#[test]
-fn direct_index_refuses_unrepresentable_carrier_size() {
+fn overflow_program() -> Program {
     let arity = usize::try_from(usize::BITS).unwrap();
     let p = AtomPattern::new(
         Predicate::new("p", arity).unwrap(),
@@ -317,7 +340,7 @@ fn direct_index_refuses_unrepresentable_carrier_size() {
         vec![Term::Constant(Value::Number(1))],
     )
     .unwrap();
-    let program = Program::new(
+    Program::new(
         vec![
             Template::new(Some(p.clone()), vec![], vec![p], vec![], vec![]),
             Template::new(Some(one), vec![], vec![], vec![], vec![]),
@@ -327,11 +350,36 @@ fn direct_index_refuses_unrepresentable_carrier_size() {
             ..AdmissionLimits::default()
         },
     )
-    .unwrap();
+    .unwrap()
+}
+
+#[test]
+fn direct_index_refuses_unrepresentable_carrier_size() {
     // Only two domain values and two templates are allocated, while the
     // symbolic gate carrier contains 2^usize::BITS distinct tuples.
     assert!(matches!(
-        GateIndex::new(&program),
+        GateIndex::new(&overflow_program()),
         Err(GateIndexError::OrdinalOverflow)
     ));
+}
+
+#[test]
+fn sparse_seed_needs_no_representable_carrier_ordinal() {
+    let program = overflow_program();
+    let arity = usize::try_from(usize::BITS).unwrap();
+    // Last tuple: its one-based gate position is 2^usize::BITS, not usize.
+    let atom = Atom::new(
+        Predicate::new("p", arity).unwrap(),
+        vec![Value::Number(1); arity],
+    )
+    .unwrap();
+    let seed = Seed::new(&program, [atom.clone()]).unwrap();
+    let selected = SeedSelection::new(&program, [Arc::new(atom.clone())]).unwrap();
+    assert_eq!(seed.atoms().len(), 1);
+    assert!(seed.contains(&atom));
+    assert!(selected.view().contains(&atom));
+    assert_eq!(
+        seed.atoms().at(0).unwrap(),
+        selected.view().atoms().next().unwrap()
+    );
 }

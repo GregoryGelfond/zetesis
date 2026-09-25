@@ -1,35 +1,25 @@
-//! Total relation renamings on acyclic paths from aggregate assignments.
-//!
-//! A single positive body atom with a variable permutation in the head neither
-//! filters nor invents rows. Transport its generated positions, rather than
-//! treating its output as an ordinary unrestricted objective domain. Each
-//! predicate is visited once in the frontend's dependency order; retained state
-//! is bounded by the analyzed heads and their argument positions. This is a
-//! structural certificate, not a transformation of the source or its theory.
+//! Total acyclic relation renamings preserve generated argument positions.
 
+use super::{Context, HeadIr, LiteralIr, RuleIr, heads};
+use crate::FormulaFailure;
 use std::collections::{BTreeMap, BTreeSet};
-
 use themelios_analysis::depend::DependencyGraph;
 use themelios_program::program::DefaultNegation;
 use themelios_program::symbol::Signature;
-use zetesis_core::{AtomPattern, Term};
-
-use super::{HeadIr, LiteralIr, RuleIr, signature};
+use zetesis_core::{PatternRef, TemplateTerm};
 
 pub(super) fn certify(
     rules: &[RuleIr],
     graph: &DependencyGraph,
     relevant: &BTreeSet<Signature>,
     generated: &mut BTreeMap<Signature, BTreeSet<usize>>,
-) -> BTreeSet<Signature> {
+    context: &mut Context<'_, '_>,
+) -> Result<BTreeSet<Signature>, FormulaFailure> {
     let mut forwarded = BTreeSet::new();
     if generated.is_empty() {
-        return forwarded;
+        return Ok(forwarded);
     }
-    let definitions = definitions(rules);
-    // Dependency components are in producer-before-consumer order. A recursive
-    // component cannot acquire a forwarding certificate, even if its assignment
-    // seed already belongs to the previously supported total-observer profile.
+    let definitions = definitions(rules, context)?;
     for component in graph.components().filter(|group| !group.is_recursive()) {
         for producer in component.members() {
             if !relevant.contains(producer) || generated.contains_key(producer) {
@@ -38,92 +28,88 @@ pub(super) fn certify(
             let Some(Some(rule)) = definitions.get(producer) else {
                 continue;
             };
+            context.location = rule.location;
             let (HeadIr::Normal(Some(head)), [LiteralIr::Atom(DefaultNegation::None, body)]) =
                 (&rule.head, rule.body.as_slice())
             else {
                 continue;
             };
-            let Some(positions) = generated.get(&signature(body.predicate())) else {
+            let Some(positions) = generated.get(&context.signature(*body)?) else {
                 continue;
             };
-            let Some(transported) = permutation(head, body, positions) else {
+            let head = context.pattern(*head)?;
+            let body = context.pattern(*body)?;
+            let Some(transported) = permutation(head, body, positions, context)? else {
                 continue;
             };
             generated.insert(producer.clone(), transported);
             forwarded.insert(producer.clone());
         }
     }
-    forwarded
+    Ok(forwarded)
 }
 
-/// `None` records multiple definitions; a missing entry records no definition.
-/// Unsigned choice occurrences count, so an ordinary rule cannot certify a
-/// predicate that also has an independent producer. Default-negated choice
-/// operands impose no producer permission; their active bounds remain in the
-/// original theory. Disjunctive objective dependencies retain their refusal.
-fn definitions(rules: &[RuleIr]) -> BTreeMap<Signature, Option<&RuleIr>> {
+/// Missing means no definition; None means competing producer occurrences.
+/// Default-negated choice operands never supply positive producer permission.
+fn definitions<'rules>(
+    rules: &'rules [RuleIr],
+    context: &mut Context<'_, '_>,
+) -> Result<BTreeMap<Signature, Option<&'rules RuleIr>>, FormulaFailure> {
     let mut definitions = BTreeMap::new();
     for rule in rules {
-        let mut record = |atom: &AtomPattern| {
+        context.location = rule.location;
+        for atom in heads(&rule.head, true) {
             definitions
-                .entry(signature(atom.predicate()))
+                .entry(context.signature(atom)?)
                 .and_modify(|definition| *definition = None)
                 .or_insert(Some(rule));
-        };
-        match &rule.head {
-            HeadIr::Normal(Some(atom)) => record(atom),
-            HeadIr::Normal(None) => {}
-            HeadIr::Disjunction(_) | HeadIr::ConditionalDisjunction { .. } => {
-                for head in rule.head.disjuncts() {
-                    if let Some(atom) = head.atom() {
-                        record(atom);
-                    }
-                }
-            }
-            HeadIr::Choice(group) => {
-                for element in &group.elements {
-                    if let Some(head) = element.head.positive_atom() {
-                        record(head);
-                    }
-                }
-            }
         }
     }
-    definitions
+    Ok(definitions)
 }
 
-fn permutation(
-    head: &AtomPattern,
-    body: &AtomPattern,
+fn variables(
+    atom: PatternRef<'_>,
+    context: &mut Context<'_, '_>,
+) -> Result<Option<BTreeSet<usize>>, FormulaFailure> {
+    let mut variables = BTreeSet::new();
+    for column in 0..atom.terms().len() {
+        context.work()?;
+        match atom.terms().at(column).expect("column within pattern") {
+            TemplateTerm::Variable(variable) => {
+                variables.insert(variable);
+            }
+            TemplateTerm::Constant(_) => return Ok(None),
+        }
+    }
+    Ok(Some(variables))
+}
+
+fn permutation<'source>(
+    head: PatternRef<'source>,
+    body: PatternRef<'source>,
     generated: &BTreeSet<usize>,
-) -> Option<BTreeSet<usize>> {
-    let variables = |atom: &AtomPattern| {
-        atom.terms()
-            .iter()
-            .map(|term| match term {
-                Term::Variable(variable) => Some(*variable),
-                Term::Constant(_) => None,
-            })
-            .collect::<Option<BTreeSet<_>>>()
+    context: &mut Context<'_, 'source>,
+) -> Result<Option<BTreeSet<usize>>, FormulaFailure> {
+    let (Some(inputs), Some(outputs)) = (variables(body, context)?, variables(head, context)?)
+    else {
+        return Ok(None);
     };
-    let inputs = variables(body)?;
-    let outputs = variables(head)?;
     if inputs.len() != body.terms().len()
         || outputs.len() != head.terms().len()
         || inputs != outputs
     {
-        return None;
+        return Ok(None);
     }
-    Some(
-        head.terms()
-            .iter()
-            .enumerate()
-            .filter_map(|(position, term)| {
-                generated
-                    .iter()
-                    .any(|&input| body.terms()[input] == *term)
-                    .then_some(position)
-            })
-            .collect(),
-    )
+    let mut transported = BTreeSet::new();
+    for position in 0..head.terms().len() {
+        let term = context.term(head, position)?;
+        for &input in generated {
+            if context.term(body, input)? == term {
+                transported.insert(position);
+                break;
+            }
+        }
+    }
+    Ok(Some(transported))
 }

@@ -35,11 +35,22 @@ fn ground_heads(input: &Admitted) -> BTreeSet<Atom> {
                 .terms()
                 .iter()
                 .map(|term| match term {
-                    Term::Constant(value) => value.clone(),
-                    Term::Variable(_) => panic!("ground fact"),
+                    zetesis_core::TemplateTerm::Constant(value) => value
+                        .to_value(zetesis_core::ValueLimits::default())
+                        .unwrap(),
+                    zetesis_core::TemplateTerm::Variable(_) => panic!("ground fact"),
                 })
                 .collect();
-            Atom::new(head.predicate().clone(), values).expect("head arity")
+            Atom::new(
+                zetesis_core::Predicate::with_sign(
+                    head.predicate().name(),
+                    head.predicate().arity(),
+                    head.predicate().sign(),
+                )
+                .unwrap(),
+                values,
+            )
+            .expect("head arity")
         })
         .collect()
 }
@@ -67,11 +78,20 @@ fn checked_ground_arithmetic_matches_explicit_scalars() {
     );
     let minimum = extended("p(-2147483647-1).");
     assert_eq!(
-        minimum.program().templates()[0]
+        minimum
+            .program()
+            .templates()
+            .at(0)
+            .unwrap()
             .head()
             .expect("head")
-            .terms(),
-        &[Term::Constant(zetesis_core::Value::Number(i32::MIN))]
+            .terms()
+            .iter()
+            .collect::<Vec<_>>(),
+        [Term::Constant(zetesis_core::Value::Number(i32::MIN))]
+            .iter()
+            .map(zetesis_core::TemplateTerm::from)
+            .collect::<Vec<_>>()
     );
 }
 
@@ -157,7 +177,13 @@ fn scalar_normalization_preserves_relational_bindings_and_frozen_gates() {
         explicit.program().templates().len()
     );
     for template in expanded.program().templates() {
-        assert!(explicit.program().templates().contains(template));
+        assert!(
+            explicit
+                .program()
+                .templates()
+                .iter()
+                .any(|other| other == template)
+        );
     }
 }
 
@@ -569,8 +595,8 @@ fn plain_rules_compile_as_their_explicit_s0_admission_does() {
     let explicit = admit(text.to_owned(), AdmissionOptions::default()).expect("S0");
     let expanded = extended(text);
     assert_eq!(
-        expanded.program().templates(),
-        explicit.program().templates()
+        expanded.program().templates().iter().collect::<Vec<_>>(),
+        explicit.program().templates().iter().collect::<Vec<_>>()
     );
     assert_eq!(expanded.template_origins(), explicit.template_origins());
 }

@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
-use zetesis_core::{Atom, Sign, Value};
+use zetesis_core::Sign;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Node, Theory};
 use zetesis_themelios::{
@@ -64,7 +64,8 @@ fn json_model(values: &Json) -> BTreeSet<String> {
     result
 }
 
-fn atom_text(atom: &Atom) -> String {
+fn atom_text<'a>(atom: impl Into<zetesis_core::catalog::AtomRef<'a>>) -> String {
+    let atom = atom.into();
     let sign = if atom.predicate().sign() == Sign::Negative {
         "-"
     } else {
@@ -77,13 +78,14 @@ fn atom_text(atom: &Atom) -> String {
     let values: Vec<_> = atom
         .values()
         .iter()
-        .map(|value| match value {
-            Value::Number(number) => number.to_string(),
-            Value::Symbol(value) => value.clone(),
-            Value::String(value) => serde_json::to_string(value).unwrap(),
-            Value::Infimum => "#inf".into(),
-            Value::Supremum => "#sup".into(),
-            Value::Structured(value) => value.to_string(),
+        .map(|value| match value.descriptor() {
+            zetesis_core::ValueNodeRef::Number(number) => number.to_string(),
+            zetesis_core::ValueNodeRef::Symbol(value) => value.to_owned(),
+            zetesis_core::ValueNodeRef::String(value) => serde_json::to_string(value).unwrap(),
+            zetesis_core::ValueNodeRef::Infimum => "#inf".into(),
+            zetesis_core::ValueNodeRef::Supremum => "#sup".into(),
+            zetesis_core::ValueNodeRef::Function { .. }
+            | zetesis_core::ValueNodeRef::Tuple { .. } => value.to_string(),
         })
         .collect();
     format!("{name}({})", values.join(","))
@@ -159,7 +161,7 @@ fn native(input: &AdmittedFormula) -> Models {
                 model
                     .unwrap()
                     .atoms()
-                    .map(|index| atom_text(&input.atoms()[index]))
+                    .map(|index| atom_text(input.atoms().at(index).unwrap()))
                     .collect()
             )
         );
@@ -185,7 +187,11 @@ fn exact_sources_match_external_records_and_an_independent_reduct_evaluator() {
     assert_eq!(models, 120);
 }
 
-fn remap(mask: usize, from: &[Atom], to: &[Atom]) -> usize {
+fn remap(
+    mask: usize,
+    from: zetesis_core::catalog::Atoms<'_>,
+    to: zetesis_core::catalog::Atoms<'_>,
+) -> usize {
     from.iter()
         .enumerate()
         .filter(|(index, _)| mask & (1 << index) != 0)
@@ -421,7 +427,7 @@ fn bundle_guards_keep_original_sources_signatures_and_rule_origins() {
         admitted
             .atoms()
             .iter()
-            .filter(|atom| admitted.metadata().output().includes(atom))
+            .filter(|atom| admitted.metadata().output().includes(*atom))
             .all(|atom| atom.predicate().name() == "p")
     );
 }

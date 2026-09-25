@@ -152,7 +152,14 @@ fn producer_activity_does_not_consume_query_capacity() {
         let input = source_records::admit(source, &limits).unwrap();
         assert_eq!(input.objectives().templates().len(), 1);
         assert_eq!(
-            input.objectives().templates()[0].condition().nodes().len(),
+            input
+                .objectives()
+                .templates()
+                .at(0)
+                .unwrap()
+                .condition()
+                .nodes()
+                .len(),
             5
         );
         let expected = source_records::exhaustive(
@@ -214,7 +221,14 @@ fn numeric_zero_retains_its_model_query() {
     let input = source_records::admit(source, &limits).unwrap();
     assert_eq!(input.objectives().templates().len(), 1);
     assert_eq!(
-        input.objectives().templates()[0].condition().nodes().len(),
+        input
+            .objectives()
+            .templates()
+            .at(0)
+            .unwrap()
+            .condition()
+            .nodes()
+            .len(),
         5
     );
     assert_eq!(input.objectives().priorities(), &[0]);

@@ -4,7 +4,7 @@
 //! and after each whole catalog operation, rather than within its comparisons,
 //! reservations and index planning. A stopped operation never returns a closure.
 
-use std::{collections::BTreeSet, mem::size_of};
+use std::mem::size_of;
 
 mod partition;
 use partition::Partition;
@@ -13,15 +13,22 @@ mod dense;
 pub(in crate::oracle) use dense::{Block, Dense, Layout, Layouts, PendingMarks};
 
 pub(super) mod storage;
-pub(super) use storage::atom_bytes;
+mod pending;
+#[cfg(test)]
+pub(super) mod fixtures;
+pub(super) use pending::Pending;
 
 use zetesis_core::{
-    Atom, AtomKey, Model, Predicate, Value,
+    AtomKey, Model, Program,
+    atom_interner::{AtomAppender, AtomInterner},
+    catalog::{AtomRef, Atoms, CatalogRead, DeclaredPredicate, PredicateRef, TermRef},
     relation::{Catalog, CatalogFailure, Failure, Insertion, Limits, Resource, Storage},
 };
 
 use super::Work;
 use crate::Stop;
+#[cfg(test)]
+use zetesis_core::{Atom, Predicate};
 
 /// A view is one or more runs, each in complete tuple storage order. A row is
 /// addressed by its run and its position within the run; positions are access
@@ -31,9 +38,9 @@ use crate::Stop;
 /// positions, of which only the set ones are rows.
 #[derive(Clone, Copy)]
 pub(super) enum Rows<'a> {
-    Borrowed(&'a [&'a Atom]),
+    Borrowed(&'a [AtomRef<'a>]),
     Runs {
-        atoms: &'a [Atom],
+        atoms: Atoms<'a>,
         levels: &'a [Vec<usize>],
         tail: &'a [usize],
     },
@@ -47,13 +54,13 @@ pub(super) enum Rows<'a> {
 /// relation, whose values are read from the relation's layout.
 #[derive(Clone, Copy)]
 pub(super) enum Row<'a> {
-    Atom(&'a Atom),
+    Atom(AtomRef<'a>),
     Dense { layout: &'a Layout, position: usize },
 }
 
 impl<'a> Row<'a> {
     /// The row's values in argument order.
-    pub(super) fn values(self) -> impl Iterator<Item = &'a Value> {
+    pub(super) fn values(self) -> impl Iterator<Item = TermRef<'a>> {
         let (atom, dense) = match self {
             Self::Atom(atom) => (Some(atom.values().iter()), None),
             Self::Dense { layout, position } => (
@@ -71,7 +78,7 @@ impl<'a> Row<'a> {
 
     /// The borrowed atom of a tree row; a dense row has none.
     #[cfg(test)]
-    pub(super) fn atom(self) -> Option<&'a Atom> {
+    pub(super) fn atom(self) -> Option<AtomRef<'a>> {
         match self {
             Self::Atom(atom) => Some(atom),
             Self::Dense { .. } => None,
@@ -124,7 +131,7 @@ impl<'a> Rows<'a> {
                 .get(run)
                 .map_or(tail, Vec::as_slice)
                 .get(position)
-                .and_then(|&id| atoms.get(id))
+                .and_then(|&id| atoms.at(id))
                 .map(Row::Atom),
             Self::Dense { relation, .. } => {
                 (position < relation.layout().positions()).then_some(Row::Dense {
@@ -162,21 +169,30 @@ pub(super) enum RowSet {
 /// never happens inside one round.
 pub(super) trait Relational {
     /// The handle of the predicate's relation, or `None` when it has no rows.
-    fn resolve(&self, predicate: &Predicate) -> Option<usize>;
+    fn resolve(
+        &self,
+        predicate: PredicateRef<'_>,
+        work: &mut Work<'_>,
+    ) -> Result<Option<usize>, Stop>;
 
     /// The rows of a resolved relation in the requested set.
     fn rows_at(&self, handle: usize, set: RowSet) -> Result<Rows<'_>, Stop>;
 
     #[cfg(test)]
     fn rows(&self, predicate: &Predicate) -> Rows<'_> {
-        self.resolve(predicate)
+        let cancellation = crate::Cancellation::default();
+        let mut work = Work::source(&cancellation, u64::MAX);
+        self.resolve(predicate.into(), &mut work)
+            .unwrap()
             .and_then(|handle| self.rows_at(handle, RowSet::Current).ok())
             .unwrap_or(Rows::Borrowed(&[]))
     }
 
     #[cfg(test)]
     fn selected(&self, predicate: &Predicate, set: RowSet) -> Result<Rows<'_>, Stop> {
-        match self.resolve(predicate) {
+        let cancellation = crate::Cancellation::default();
+        let mut work = Work::source(&cancellation, u64::MAX);
+        match self.resolve(predicate.into(), &mut work)? {
             Some(handle) => self.rows_at(handle, set),
             None => Ok(Rows::Borrowed(&[])),
         }
@@ -206,9 +222,11 @@ pub(super) enum Relation {
 }
 
 impl Relation {
-    fn predicate(&self) -> &Predicate {
+    fn predicate<'a>(&'a self, read: CatalogRead<'a>) -> PredicateRef<'a> {
         match self {
-            Self::Tree { catalog, .. } => catalog.predicate(),
+            Self::Tree { catalog, .. } => catalog
+                .predicate(read)
+                .expect("reader covers retained relation"),
             Self::Dense(dense) => dense.predicate(),
         }
     }
@@ -238,20 +256,100 @@ impl Relation {
 /// Borrowed rows grouped by predicate, in canonical atom order: the groups are
 /// in predicate order and each group's rows in storage order, as a model's
 /// atoms arrive. One run per predicate.
-pub(super) struct Relations<'a>(Vec<(&'a Predicate, Vec<&'a Atom>)>);
+pub(super) struct Relations<'a>(Vec<(PredicateRef<'a>, Vec<AtomRef<'a>>)>);
 
 impl<'a> Relations<'a> {
     pub(super) const fn new() -> Self {
         Self(Vec::new())
     }
 
-    /// Append the next atom of a canonically ordered sequence.
-    pub(super) fn push(&mut self, atom: &'a Atom) {
-        match self.0.last_mut() {
-            Some((predicate, rows)) if *predicate == atom.predicate() => rows.push(atom),
-            _ => self.0.push((atom.predicate(), vec![atom])),
-        }
+    /// Named borrowed-row directory and row-buffer capacities. No canonical
+    /// payload or shared Program is retained by these references.
+    pub(super) fn retained_bytes(&self) -> u128 {
+        size_of::<Self>() as u128
+            + self.0.capacity() as u128 * size_of::<(PredicateRef<'_>, Vec<AtomRef<'_>>)>() as u128
+            + self
+                .0
+                .iter()
+                .map(|(_, rows)| rows.capacity() as u128 * size_of::<AtomRef<'_>>() as u128)
+                .sum::<u128>()
     }
+
+    /// Append one already ordered row, admitting metadata growth while its old
+    /// buffer remains live. `other_bytes` names live caller allocations.
+    pub(super) fn push_with(
+        &mut self,
+        atom: AtomRef<'a>,
+        other_bytes: u128,
+        limit: usize,
+        peak: &mut u128,
+        work: &mut Work<'_>,
+    ) -> Result<(), Stop> {
+        work.tick()?;
+        let predicate = atom.predicate();
+        let same = match self.0.last() {
+            Some((previous, _)) => previous
+                .compare_ref_with(predicate, || work.tick())?
+                .is_eq(),
+            None => false,
+        };
+        if same {
+            let live = self.retained_bytes();
+            let rows = &mut self.0.last_mut().ok_or(Stop::InvalidProgram)?.1;
+            reserve_rows(rows, other_bytes + live, limit, peak, work)?;
+            work.tick()?;
+            rows.push(atom);
+        } else {
+            let live = self.retained_bytes();
+            reserve_rows(&mut self.0, other_bytes + live, limit, peak, work)?;
+            let mut rows = Vec::new();
+            reserve_rows(
+                &mut rows,
+                other_bytes + self.retained_bytes(),
+                limit,
+                peak,
+                work,
+            )?;
+            work.tick()?;
+            rows.push(atom);
+            work.tick()?;
+            self.0.push((predicate, rows));
+        }
+        Ok(())
+    }
+}
+
+fn reserve_rows<T>(
+    rows: &mut Vec<T>,
+    live: u128,
+    limit: usize,
+    peak: &mut u128,
+    work: &mut Work<'_>,
+) -> Result<(), Stop> {
+    if rows.len() < rows.capacity() {
+        return Ok(());
+    }
+    let target = rows
+        .len()
+        .checked_add(1)
+        .ok_or(Stop::Allocation)?
+        .max(rows.capacity().saturating_mul(2))
+        .max(4);
+    if live + target as u128 * size_of::<T>() as u128 > limit as u128 {
+        return Err(Stop::StorageLimit);
+    }
+    *peak = (*peak).max(live + target as u128 * size_of::<T>() as u128);
+    for _ in 0..rows.len().max(1) {
+        work.tick()?;
+    }
+    rows.try_reserve_exact(target - rows.len())
+        .map_err(|_| Stop::Allocation)?;
+    let actual = live + rows.capacity() as u128 * size_of::<T>() as u128;
+    *peak = (*peak).max(actual);
+    if actual > limit as u128 {
+        return Err(Stop::StorageLimit);
+    }
+    Ok(())
 }
 
 /// Charge relation work, which counts as catalog work.
@@ -270,17 +368,40 @@ pub(super) fn charge(work: &mut Work<'_>, amount: usize) -> Result<(), Stop> {
 #[cfg(test)]
 impl<'a, const N: usize> From<[(&'a Predicate, Vec<&'a Atom>); N]> for Relations<'a> {
     fn from(groups: [(&'a Predicate, Vec<&'a Atom>); N]) -> Self {
-        let mut groups = groups.to_vec();
-        groups.sort_by(|left, right| left.0.cmp(right.0));
+        let mut groups: Vec<_> = groups
+            .into_iter()
+            .map(|(predicate, atoms)| {
+                (
+                    PredicateRef::from(predicate),
+                    atoms.into_iter().map(AtomRef::from).collect(),
+                )
+            })
+            .collect();
+        groups.sort_by(|left, right| left.0.cmp(&right.0));
         Self(groups)
     }
 }
 
 impl Relational for Relations<'_> {
-    fn resolve(&self, predicate: &Predicate) -> Option<usize> {
-        self.0
-            .binary_search_by(|(candidate, _)| (*candidate).cmp(predicate))
-            .ok()
+    fn resolve(
+        &self,
+        predicate: PredicateRef<'_>,
+        work: &mut Work<'_>,
+    ) -> Result<Option<usize>, Stop> {
+        let (mut low, mut high) = (0, self.0.len());
+        while low < high {
+            let middle = low + (high - low) / 2;
+            work.tick()?;
+            match self.0[middle]
+                .0
+                .compare_ref_with(predicate, || work.tick())?
+            {
+                std::cmp::Ordering::Less => low = middle + 1,
+                std::cmp::Ordering::Greater => high = middle,
+                std::cmp::Ordering::Equal => return Ok(Some(middle)),
+            }
+        }
+        Ok(None)
     }
 
     fn rows_at(&self, handle: usize, set: RowSet) -> Result<Rows<'_>, Stop> {
@@ -293,81 +414,324 @@ impl Relational for Relations<'_> {
     }
 }
 
-/// The scalar closure's relations, of two kinds: a tree relation owns each
-/// of its atoms once until final interpretation assembly, and a dense
-/// relation owns no atom, holding its tuples as bits until the assembly
-/// builds them. Views borrow the retained row index; rounds do not rebuild
-/// tuple snapshots. Relations are kept in predicate order, so the final
-/// model is their concatenation and a handle is a position in this vector.
+/// One Program's retained canonical authority and independently reset truth.
+/// Payload survives candidate completion under the named storage ceiling;
+/// relation rows, partitions and dense bits do not.
+#[derive(Default)]
 pub(super) struct Catalogs {
+    authority: Option<AtomInterner>,
+    program: Option<Program>,
+    declarations: Vec<DeclaredPredicate>,
     relations: Vec<Relation>,
     atoms: usize,
-    bytes: u128,
     overhead: u128,
 }
 
-impl Default for Catalogs {
-    fn default() -> Self {
-        Self {
-            relations: Vec::new(),
-            atoms: 0,
-            bytes: (size_of::<Self>() + size_of::<BTreeSet<Atom>>()) as u128,
-            overhead: 0,
+/// An immutable committed round, disjoint from its canonical append capability.
+/// Every retained tree member was covered when the round was prepared.
+pub(super) struct RoundRead<'a> {
+    read: CatalogRead<'a>,
+    relations: &'a [Relation],
+    atoms: usize,
+    base: u128,
+}
+
+impl Relational for RoundRead<'_> {
+    fn resolve(
+        &self,
+        predicate: PredicateRef<'_>,
+        work: &mut Work<'_>,
+    ) -> Result<Option<usize>, Stop> {
+        Ok(self.find(predicate, work)?.ok())
+    }
+    fn rows_at(&self, handle: usize, set: RowSet) -> Result<Rows<'_>, Stop> {
+        rows_at(self.relations, self.read, handle, set)
+    }
+}
+
+fn rows_at<'a>(
+    relations: &'a [Relation],
+    read: CatalogRead<'a>,
+    handle: usize,
+    set: RowSet,
+) -> Result<Rows<'a>, Stop> {
+    match relations.get(handle).ok_or(Stop::InvalidProgram)? {
+        Relation::Tree { catalog, partition } => partition.rows(catalog, read, set),
+        Relation::Dense(relation) => Ok(Rows::Dense { relation, set }),
+    }
+}
+
+fn find_relation(
+    relations: &[Relation],
+    read: CatalogRead<'_>,
+    predicate: PredicateRef<'_>,
+    work: &mut Work<'_>,
+) -> Result<Result<usize, usize>, Stop> {
+    let (mut left, mut right) = (0, relations.len());
+    while left < right {
+        charge(work, 1)?;
+        let middle = left + (right - left) / 2;
+        match relations[middle]
+            .predicate(read)
+            .compare_ref_with(predicate, || charge(work, 1))?
+        {
+            std::cmp::Ordering::Less => left = middle + 1,
+            std::cmp::Ordering::Equal => return Ok(Ok(middle)),
+            std::cmp::Ordering::Greater => right = middle,
         }
+    }
+    Ok(Err(left))
+}
+
+impl RoundRead<'_> {
+    fn find(
+        &self,
+        predicate: PredicateRef<'_>,
+        work: &mut Work<'_>,
+    ) -> Result<Result<usize, usize>, Stop> {
+        find_relation(self.relations, self.read, predicate, work)
+    }
+    pub(super) fn len(&self) -> usize {
+        self.atoms
+    }
+    pub(super) fn base_bytes(&self) -> u128 {
+        self.base
+    }
+    pub(super) fn dense(
+        &self,
+        predicate: PredicateRef<'_>,
+        work: &mut Work<'_>,
+    ) -> Result<Option<&Dense>, Stop> {
+        let Ok(handle) = self.find(predicate, work)? else {
+            return Ok(None);
+        };
+        Ok(match &self.relations[handle] {
+            Relation::Dense(dense) => Some(dense),
+            Relation::Tree { .. } => None,
+        })
+    }
+    pub(super) fn predicates_with_new(&self) -> impl Iterator<Item = PredicateRef<'_>> {
+        self.relations
+            .iter()
+            .filter(|relation| relation_has_new(relation))
+            .map(|relation| relation.predicate(self.read))
+    }
+    pub(super) fn has_new(
+        &self,
+        predicate: PredicateRef<'_>,
+        work: &mut Work<'_>,
+    ) -> Result<bool, Stop> {
+        work.tick()?;
+        Ok(self
+            .find(predicate, work)?
+            .ok()
+            .is_some_and(|handle| relation_has_new(&self.relations[handle])))
+    }
+    pub(super) fn contains(
+        &self,
+        key: &AtomKey<'_>,
+        transient: u128,
+        work: &mut Work<'_>,
+    ) -> Result<bool, Stop> {
+        work.cancellation.poll()?;
+        let Ok(handle) = self.find(key.predicate(), work)? else {
+            return Ok(false);
+        };
+        let Relation::Tree { catalog, .. } = &self.relations[handle] else {
+            return Err(Stop::InvalidProgram);
+        };
+        let other = self
+            .base
+            .checked_add(transient)
+            .and_then(|bytes| bytes.checked_sub(catalog.retained_bytes() as u128))
+            .ok_or(Stop::StorageLimit)?;
+        let lookup = completed(
+            catalog.lookup_key(self.read, key, limits(work, other)?),
+            other,
+            work,
+        )?;
+        account_storage(work, other, lookup.storage)?;
+        Ok(lookup.row.is_some())
+    }
+}
+
+fn relation_has_new(relation: &Relation) -> bool {
+    match relation {
+        Relation::Tree { catalog, partition } => partition.has_new(catalog.len()),
+        Relation::Dense(dense) => dense.has_new(),
     }
 }
 
 impl Relational for Catalogs {
-    fn resolve(&self, predicate: &Predicate) -> Option<usize> {
-        self.find(predicate).ok()
+    fn resolve(
+        &self,
+        predicate: PredicateRef<'_>,
+        work: &mut Work<'_>,
+    ) -> Result<Option<usize>, Stop> {
+        Ok(self.find(predicate, work)?.ok())
     }
-
     fn rows_at(&self, handle: usize, set: RowSet) -> Result<Rows<'_>, Stop> {
-        match self.relations.get(handle).ok_or(Stop::InvalidProgram)? {
-            Relation::Tree { catalog, partition } => partition.rows(catalog, set),
-            Relation::Dense(relation) => Ok(Rows::Dense { relation, set }),
-        }
+        let read = self.authority.as_ref().ok_or(Stop::InvalidProgram)?.read();
+        rows_at(&self.relations, read, handle, set)
     }
 }
 
 impl Catalogs {
+    /// Bind a workspace once. Reuse retains identity but starts each completed
+    /// candidate with no truth; a different Program requires a new workspace.
+    pub(super) fn bind_program(
+        &mut self,
+        program: &Program,
+        work: &mut Work<'_>,
+    ) -> Result<(), Stop> {
+        if let Some(previous) = &self.program {
+            if !previous.same_instance(program) {
+                return Err(Stop::WrongProgram);
+            }
+            storage::admit(work, self.total_bytes())?;
+            return storage::record(work, self.total_bytes());
+        }
+        let authority =
+            AtomInterner::for_program(program, work.limits.max_closure_bytes).map_err(|error| {
+                storage::atom_failure(zetesis_core::atom_interner::Failure::Catalog(error))
+            })?;
+        self.authority = Some(authority);
+        self.program = Some(program.clone());
+        let live = self.total_bytes();
+        storage::reserve(
+            &mut self.declarations,
+            program.predicates().len(),
+            live,
+            work,
+        )?;
+        for predicate in program.predicates() {
+            let other = self
+                .metadata_bytes()
+                .checked_add(self.overhead)
+                .ok_or(Stop::StorageLimit)?;
+            let allowance = storage::atom_limits(work, other)?;
+            let authority = self.authority.as_mut().ok_or(Stop::InvalidProgram)?;
+            authority.restart_storage_peak();
+            let result = authority.declare_predicate_with(predicate, allowance, || charge(work, 1));
+            storage::record(work, other + authority.storage_peak_bytes())?;
+            self.declarations
+                .push(result.map_err(storage::atom_failure)?);
+        }
+        self.commit(0, work)
+    }
+
+    #[cfg(test)]
     pub(super) const fn len(&self) -> usize {
         self.atoms
     }
 
-    #[cfg(test)]
-    pub(super) fn relation(&self, predicate: &Predicate) -> &Relation {
-        &self.relations[self.find(predicate).expect("relation exists")]
+    fn metadata_bytes(&self) -> u128 {
+        size_of::<Self>() as u128
+            + self.declarations.capacity() as u128 * size_of::<DeclaredPredicate>() as u128
+            + self.relations.capacity() as u128 * size_of::<Relation>() as u128
+            + self
+                .relations
+                .iter()
+                .map(|relation| match relation {
+                    Relation::Tree { catalog, .. } => catalog.retained_bytes() as u128,
+                    Relation::Dense(dense) => dense.retained_bytes(),
+                })
+                .sum::<u128>()
+    }
+    fn total_bytes(&self) -> u128 {
+        self.owned_bytes() + self.overhead
+    }
+    pub(super) fn owned_bytes(&self) -> u128 {
+        self.metadata_bytes()
+            + self
+                .authority
+                .as_ref()
+                .map_or(0, AtomInterner::storage_bytes)
+    }
+    pub(super) fn set_overhead(&mut self, bytes: u128, work: &mut Work<'_>) -> Result<(), Stop> {
+        let total = self
+            .owned_bytes()
+            .checked_add(bytes)
+            .ok_or(Stop::StorageLimit)?;
+        storage::admit(work, total)?;
+        storage::record(work, total)?;
+        self.overhead = bytes;
+        Ok(())
     }
 
-    /// The relation's position, or where one for the predicate would go.
-    fn find(&self, predicate: &Predicate) -> Result<usize, usize> {
-        self.relations
-            .binary_search_by(|relation| relation.predicate().cmp(predicate))
+    fn find(
+        &self,
+        predicate: PredicateRef<'_>,
+        work: &mut Work<'_>,
+    ) -> Result<Result<usize, usize>, Stop> {
+        let Some(authority) = &self.authority else {
+            return Ok(Err(0));
+        };
+        find_relation(&self.relations, authority.read(), predicate, work)
+    }
+
+    #[cfg(test)]
+    pub(super) fn relation(&self, predicate: &Predicate) -> &Relation {
+        let cancellation = crate::Cancellation::default();
+        let mut work = Work::source(&cancellation, u64::MAX);
+        &self.relations[self
+            .find(predicate.into(), &mut work)
+            .unwrap()
+            .expect("relation exists")]
+    }
+
+    pub(super) fn split(&mut self) -> Result<(RoundRead<'_>, AtomAppender<'_>), Stop> {
+        let base = self
+            .metadata_bytes()
+            .checked_add(self.overhead)
+            .ok_or(Stop::StorageLimit)?;
+        let (committed, appender) = self.authority.as_mut().ok_or(Stop::InvalidProgram)?.split();
+        Ok((
+            RoundRead {
+                read: committed.read(),
+                relations: &self.relations,
+                atoms: self.atoms,
+                base,
+            },
+            appender,
+        ))
+    }
+
+    pub(super) fn commit(&mut self, pending: u128, work: &mut Work<'_>) -> Result<(), Stop> {
+        let other = self
+            .metadata_bytes()
+            .checked_add(self.overhead)
+            .and_then(|bytes| bytes.checked_add(pending))
+            .ok_or(Stop::StorageLimit)?;
+        let allowance = storage::atom_limits(work, other)?;
+        let authority = self.authority.as_mut().ok_or(Stop::InvalidProgram)?;
+        authority.restart_storage_peak();
+        let result = authority.commit_with(allowance, || charge(work, 1));
+        storage::record(work, other + authority.storage_peak_bytes())?;
+        result.map_err(storage::atom_failure)
     }
 
     pub(super) fn prepare(&mut self, work: &mut Work<'_>) -> Result<(), Stop> {
-        storage::admit(work, self.bytes)?;
-        storage::record(work, self.bytes)?;
-        for relation in &mut self.relations {
-            let Relation::Tree { catalog, .. } = relation else {
+        storage::admit(work, self.total_bytes())?;
+        storage::record(work, self.total_bytes())?;
+        for index in 0..self.relations.len() {
+            let total = self.total_bytes();
+            let Relation::Tree { catalog, .. } = &mut self.relations[index] else {
                 continue;
             };
             work.cancellation.poll()?;
-            let old = catalog.retained_bytes() as u128;
-            let other = self.bytes.checked_sub(old).ok_or(Stop::InvalidProgram)?;
+            let other = total
+                .checked_sub(catalog.retained_bytes() as u128)
+                .ok_or(Stop::InvalidProgram)?;
+            let read = self.authority.as_ref().ok_or(Stop::InvalidProgram)?.read();
             let result = catalog
-                .prepare_ordered(limits(work, other)?)
+                .prepare_ordered(read, limits(work, other)?)
                 .map(|prepared| prepared.storage);
-            self.bytes = other
-                .checked_add(catalog.retained_bytes() as u128)
-                .ok_or(Stop::StorageLimit)?;
             let receipt = completed(result, other, work)?;
             account_storage(work, other, receipt)?;
         }
         Ok(())
     }
-
     pub(super) fn prepare_delta(&mut self, work: &mut Work<'_>) -> Result<(), Stop> {
         self.prepare(work)?;
         for relation in &self.relations {
@@ -377,176 +741,109 @@ impl Catalogs {
         }
         Ok(())
     }
-
-    /// Advance old truth only after every source partition has completed, and
-    /// before appending the new heads. No borrowed round view is still live.
     pub(super) fn advance(&mut self, work: &mut Work<'_>) -> Result<(), Stop> {
         for relation in &mut self.relations {
             match relation {
-                Relation::Tree { catalog, partition } => {
-                    partition.advance(catalog.atoms().len(), work)?;
-                }
+                Relation::Tree { catalog, partition } => partition.advance(catalog.len(), work)?,
                 Relation::Dense(dense) => dense.advance(work)?,
             }
         }
         Ok(())
     }
 
-    fn relation_has_new(relation: &Relation) -> bool {
-        match relation {
-            Relation::Tree { catalog, partition } => partition.has_new(catalog.atoms().len()),
-            Relation::Dense(dense) => dense.has_new(),
-        }
-    }
-
-    /// Predicates whose relation gained rows since the cutoff advanced, in
-    /// canonical predicate order.
-    pub(super) fn predicates_with_new(&self) -> impl Iterator<Item = &Predicate> {
-        self.relations
-            .iter()
-            .filter(|relation| Self::relation_has_new(relation))
-            .map(Relation::predicate)
-    }
-
-    pub(super) fn has_new(&self, predicate: &Predicate, work: &mut Work<'_>) -> Result<bool, Stop> {
-        work.tick()?;
-        Ok(self
-            .find(predicate)
-            .ok()
-            .is_some_and(|handle| Self::relation_has_new(&self.relations[handle])))
-    }
-
-    pub(super) fn contains(
-        &self,
-        key: &AtomKey<'_>,
-        pending: u128,
-        work: &mut Work<'_>,
-    ) -> Result<bool, Stop> {
-        work.cancellation.poll()?;
-        let Ok(handle) = self.find(key.predicate()) else {
-            return Ok(false);
-        };
-        let catalog = match &self.relations[handle] {
-            Relation::Tree { catalog, .. } => catalog,
-            // A dense relation is asked through its layout by the round,
-            // never through the catalogs.
-            Relation::Dense(_) => return Err(Stop::InvalidProgram),
-        };
-        let other = self
-            .bytes
-            .checked_sub(catalog.retained_bytes() as u128)
-            .and_then(|bytes| bytes.checked_add(pending))
-            .ok_or(Stop::StorageLimit)?;
-        let lookup = completed(catalog.lookup_key(key, limits(work, other)?), other, work)?;
-        account_storage(work, other, lookup.storage)?;
-        Ok(lookup.row.is_some())
-    }
-
-    pub(super) fn pending(
-        &self,
-        key: AtomKey<'_>,
-        pending: u128,
-        work: &mut Work<'_>,
-    ) -> Result<(Atom, u128), Stop> {
-        storage::pending(
-            key,
-            self.bytes.checked_add(pending).ok_or(Stop::StorageLimit)?,
-            work,
-        )
-    }
-
-    /// Insert a derived atom of a tree relation, creating the relation on
-    /// first use. A dense relation takes its rows from the round's pending
-    /// rows, never as atoms, so an atom of one is an invariant violation.
+    /// Publish one canonical discovery into truth after the source round closed.
     pub(super) fn insert(
         &mut self,
-        atom: Atom,
+        id: usize,
         pending: u128,
         work: &mut Work<'_>,
     ) -> Result<(), Stop> {
         work.cancellation.poll()?;
-        let input = atom_bytes(&atom, work)?;
-        let held = pending.checked_add(input).ok_or(Stop::StorageLimit)?;
-        storage::admit(
-            work,
-            self.bytes.checked_add(held).ok_or(Stop::StorageLimit)?,
-        )?;
-        storage::record(
-            work,
-            self.bytes.checked_add(held).ok_or(Stop::StorageLimit)?,
-        )?;
-        let handle = match self.find(atom.predicate()) {
+        let (found, signature) = {
+            let atom = self
+                .authority
+                .as_ref()
+                .and_then(|authority| authority.get(id))
+                .ok_or(Stop::InvalidProgram)?;
+            let signature = self
+                .program
+                .as_ref()
+                .ok_or(Stop::InvalidProgram)?
+                .predicates()
+                .binary_search_with(atom.predicate(), || charge(work, 1))?
+                .map_err(|_| Stop::InvalidProgram)?;
+            (self.find(atom.predicate(), work)?, signature)
+        };
+        let handle = match found {
             Ok(handle) => handle,
             Err(position) => {
-                self.create(position, atom.predicate(), held, work)?;
+                self.create(position, signature, pending, work)?;
                 position
             }
         };
+        let total = self
+            .total_bytes()
+            .checked_add(pending)
+            .ok_or(Stop::StorageLimit)?;
         let Relation::Tree { catalog, .. } = &mut self.relations[handle] else {
             return Err(Stop::InvalidProgram);
         };
-        let old = catalog.retained_bytes() as u128;
-        let other = self
-            .bytes
-            .checked_sub(old)
-            .and_then(|bytes| bytes.checked_add(held))
-            .ok_or(Stop::StorageLimit)?;
+        let other = total
+            .checked_sub(catalog.retained_bytes() as u128)
+            .ok_or(Stop::InvalidProgram)?;
+        let atom = self
+            .authority
+            .as_ref()
+            .and_then(|authority| authority.get(id))
+            .ok_or(Stop::InvalidProgram)?;
         let result = catalog.insert(atom, limits(work, other)?);
-        self.bytes = self
-            .bytes
-            .checked_sub(old)
-            .and_then(|bytes| bytes.checked_add(catalog.retained_bytes() as u128))
-            .ok_or(Stop::StorageLimit)?;
-        if let Ok(insertion) = &result
-            && insertion.inserted
-        {
-            self.bytes = self
-                .bytes
-                .checked_add(input - size_of::<Atom>() as u128)
-                .ok_or(Stop::StorageLimit)?;
-        }
         let insertion = completed(result, other, work)?;
-        storage::record(
-            work,
-            other
-                .checked_add(insertion.storage.peak_construction_bytes as u128)
-                .ok_or(Stop::StorageLimit)?,
-        )?;
-        self.publish(insertion, work)
+        self.publish(insertion, other, work)
     }
 
-    /// Create the relation at its sorted position. The catalog's signature is
-    /// the relation's only copy of the predicate.
+    // Truth is already published in the relation. Keep the aggregate count in
+    // step with it even when cancellation is observed while charging its receipt.
+    fn publish(
+        &mut self,
+        insertion: Insertion,
+        other: u128,
+        work: &mut Work<'_>,
+    ) -> Result<(), Stop> {
+        if insertion.inserted {
+            self.atoms += 1;
+        }
+        account_storage(work, other, insertion.storage)
+    }
+
     fn create(
         &mut self,
         position: usize,
-        predicate: &Predicate,
-        held: u128,
+        signature: usize,
+        pending: u128,
         work: &mut Work<'_>,
     ) -> Result<(), Stop> {
-        let base = self
-            .bytes
-            .checked_add(held)
-            .and_then(|bytes| bytes.checked_add(size_of::<Relation>() as u128))
+        let live = self
+            .total_bytes()
+            .checked_add(pending)
             .ok_or(Stop::StorageLimit)?;
-        let headers = base
-            .checked_add(size_of::<Catalog>() as u128)
+        storage::reserve(&mut self.relations, 1, live, work)?;
+        let other = self
+            .total_bytes()
+            .checked_add(pending)
             .ok_or(Stop::StorageLimit)?;
-        let signature = storage::predicate(predicate, headers, work)?;
-        let names = signature.name_bytes() as u128;
-        let other = base.checked_add(names).ok_or(Stop::StorageLimit)?;
-        let catalog = completed(Catalog::new(signature, limits(work, other)?), other, work)?;
+        let declaration = self
+            .declarations
+            .get(signature)
+            .ok_or(Stop::InvalidProgram)?
+            .clone();
+        let read = self.authority.as_ref().ok_or(Stop::InvalidProgram)?.read();
+        let catalog = completed(
+            Catalog::new(read, declaration, limits(work, other)?),
+            other,
+            work,
+        )?;
         account_storage(work, other, catalog.construction())?;
-        self.bytes = self
-            .bytes
-            .checked_add(size_of::<Relation>() as u128)
-            .and_then(|bytes| bytes.checked_add(names))
-            .and_then(|bytes| bytes.checked_add(catalog.retained_bytes() as u128))
-            .ok_or(Stop::StorageLimit)?;
-        self.relations
-            .try_reserve(1)
-            .map_err(|_| Stop::Allocation)?;
-        work.charge(self.relations.len() - position)?;
+        charge(work, self.relations.len() - position + 1)?;
         self.relations.insert(
             position,
             Relation::Tree {
@@ -557,9 +854,6 @@ impl Catalogs {
         Ok(())
     }
 
-    /// Create the dense relation of every layout that lacks one, so that a
-    /// round can test and mark a dense head without changing the catalogs.
-    /// A reused workspace already holds them and pays one search each.
     pub(super) fn create_dense_relations(
         &mut self,
         layouts: &Layouts,
@@ -567,24 +861,31 @@ impl Catalogs {
     ) -> Result<(), Stop> {
         for layout in layouts.iter() {
             work.tick()?;
-            if let Err(position) = self.find(layout.predicate()) {
-                self.create_dense(position, layout, 0, work)?;
+            if let Err(position) = self.find(layout.predicate(), work)? {
+                self.create_dense(position, layout, work)?;
             }
         }
         Ok(())
     }
-
-    /// The dense relation of a predicate, if it has one.
-    pub(super) fn dense(&self, predicate: &Predicate) -> Option<&Dense> {
-        match &self.relations[self.find(predicate).ok()?] {
-            Relation::Dense(dense) => Some(dense),
-            Relation::Tree { .. } => None,
-        }
+    fn create_dense(
+        &mut self,
+        position: usize,
+        layout: &std::sync::Arc<Layout>,
+        work: &mut Work<'_>,
+    ) -> Result<(), Stop> {
+        let live = self.total_bytes();
+        storage::reserve(&mut self.relations, 1, live, work)?;
+        let total = self
+            .total_bytes()
+            .checked_add(Dense::word_bytes(layout))
+            .ok_or(Stop::StorageLimit)?;
+        storage::admit(work, total)?;
+        let dense = Dense::new(layout.clone())?;
+        storage::after_reservation(work, self.total_bytes() + dense.retained_bytes())?;
+        charge(work, self.relations.len() - position + 1)?;
+        self.relations.insert(position, Relation::Dense(dense));
+        Ok(())
     }
-
-    /// Insert a round's pending marks into their relations as new rows,
-    /// leaving the marks empty. Called where the round's atoms are
-    /// inserted: after the cutoff advanced, with no borrowed view live.
     pub(super) fn absorb(
         &mut self,
         pending: &mut PendingMarks,
@@ -597,7 +898,7 @@ impl Catalogs {
         for (slot, layout) in layouts.iter().enumerate() {
             work.cancellation.poll()?;
             let handle = self
-                .find(layout.predicate())
+                .find(layout.predicate(), work)?
                 .map_err(|_| Stop::InvalidProgram)?;
             let Relation::Dense(dense) = &mut self.relations[handle] else {
                 return Err(Stop::InvalidProgram);
@@ -607,124 +908,162 @@ impl Catalogs {
         Ok(())
     }
 
-    /// Create a dense relation at its sorted position. Its variable storage
-    /// is the two word vectors; the layout is shared with the preparation
-    /// that chose it and counted there.
-    fn create_dense(
-        &mut self,
-        position: usize,
-        layout: &std::sync::Arc<Layout>,
-        held: u128,
-        work: &mut Work<'_>,
-    ) -> Result<(), Stop> {
-        let added = (size_of::<Relation>() as u128)
-            .checked_add(Dense::word_bytes(layout))
+    /// Resolve current truth rows to semantic-order discovery positions. Dense
+    /// rows may discover atom identities here; neither path publishes a model.
+    fn selected_positions(&mut self, work: &mut Work<'_>) -> Result<Vec<usize>, Stop> {
+        let mut positions = Vec::new();
+        let live = self
+            .total_bytes()
+            .checked_add(size_of::<Vec<usize>>() as u128)
             .ok_or(Stop::StorageLimit)?;
-        let total = self
-            .bytes
-            .checked_add(held)
-            .and_then(|bytes| bytes.checked_add(added))
-            .ok_or(Stop::StorageLimit)?;
-        storage::admit(work, total)?;
-        let dense = Dense::new(layout.clone())?;
-        storage::after_reservation(work, total)?;
-        self.bytes = self.bytes.checked_add(added).ok_or(Stop::StorageLimit)?;
-        self.relations
-            .try_reserve(1)
-            .map_err(|_| Stop::Allocation)?;
-        work.charge(self.relations.len() - position)?;
-        self.relations.insert(position, Relation::Dense(dense));
-        Ok(())
-    }
-
-    fn publish(&mut self, insertion: Insertion, work: &mut Work<'_>) -> Result<(), Stop> {
-        // The catalog has published its tuple. Keep the enclosing count coherent
-        // before accounting observes a cancellation or deadline.
-        if insertion.inserted {
-            self.atoms += 1;
-        }
-        account(work, insertion.storage.construction_work)
-    }
-
-    pub(super) fn owned_bytes(&self) -> u128 {
-        self.bytes - self.overhead
-    }
-
-    pub(super) fn set_overhead(&mut self, bytes: u128, work: &mut Work<'_>) -> Result<(), Stop> {
-        let total = self
-            .owned_bytes()
-            .checked_add(bytes)
-            .ok_or(Stop::StorageLimit)?;
-        storage::admit(work, total)?;
-        storage::record(work, total)?;
-        self.bytes = total;
-        self.overhead = bytes;
-        Ok(())
-    }
-
-    pub(super) fn take_model(&mut self, work: &mut Work<'_>) -> Result<Model, Stop> {
-        // Final interpretation assembly owns these headers; its allocation and
-        // canonicalization remain separate from the closure capacity allowance.
-        // Each payload is moved once. Empty indexes and predicate owners remain.
-        let mut atoms = Vec::new();
-        atoms
-            .try_reserve_exact(self.atoms)
-            .map_err(|_| Stop::Allocation)?;
-        // Relations are in predicate order and each catalog knows its rows'
-        // canonical order, so the model is their concatenation: no sort.
-        for relation in &mut self.relations {
-            let (catalog, partition) = match relation {
-                Relation::Tree { catalog, partition } => (catalog, partition),
-                Relation::Dense(dense) => {
-                    work.tick()?;
-                    dense.take_atoms(&mut atoms, self.bytes, work)?;
-                    continue;
-                }
-            };
-            partition.reset(work)?;
-            work.tick()?;
-            let mut payload = 0_u128;
-            for atom in catalog.atoms() {
-                payload = payload
-                    .checked_add(atom_bytes(atom, work)? - size_of::<Atom>() as u128)
-                    .ok_or(Stop::StorageLimit)?;
-            }
-            let old = catalog.retained_bytes() as u128;
-            let other = self.bytes.checked_sub(old).ok_or(Stop::InvalidProgram)?;
-            let canonical = completed(catalog.canonical(limits(work, other)?), other, work)?;
-            account_storage(work, other, canonical.storage)?;
-            let order = canonical.ids;
-            let result = catalog.take_atoms(limits(work, other)?);
-            self.bytes = other
-                .checked_add(catalog.retained_bytes() as u128)
+        storage::reserve(&mut positions, self.atoms, live, work)?;
+        for index in 0..self.relations.len() {
+            let selection_bytes = size_of::<Vec<usize>>() as u128
+                + positions.capacity() as u128 * size_of::<usize>() as u128;
+            let total = self
+                .total_bytes()
+                .checked_add(selection_bytes)
                 .ok_or(Stop::StorageLimit)?;
-            let extracted = completed(result, other, work)?;
-            self.bytes = self
-                .bytes
-                .checked_sub(payload)
-                .ok_or(Stop::InvalidProgram)?;
-            account_storage(work, other, extracted.storage)?;
-            // Move each atom to its canonical position; the taken atoms and
-            // the order are transient and released with this loop iteration.
-            storage::admit(
-                work,
-                self.bytes
-                    .checked_add((extracted.atoms.len() * size_of::<Atom>()) as u128)
-                    .ok_or(Stop::StorageLimit)?,
-            )?;
-            work.charge(order.len())?;
-            let mut taken: Vec<Option<Atom>> = extracted.atoms.into_iter().map(Some).collect();
-            for id in order {
-                atoms.push(
-                    taken
-                        .get_mut(id)
-                        .and_then(Option::take)
-                        .ok_or(Stop::InvalidProgram)?,
-                );
+            match &self.relations[index] {
+                Relation::Tree { catalog, .. } => {
+                    let authority = self.authority.as_ref().ok_or(Stop::InvalidProgram)?;
+                    let other = total
+                        .checked_sub(catalog.retained_bytes() as u128)
+                        .ok_or(Stop::InvalidProgram)?;
+                    let canonical = completed(
+                        catalog.canonical(authority.read(), limits(work, other)?),
+                        other,
+                        work,
+                    )?;
+                    account_storage(work, other, canonical.storage)?;
+                    let ordered_bytes = size_of::<Vec<usize>>() as u128
+                        + canonical.ids.capacity() as u128 * size_of::<usize>() as u128;
+                    let rows = catalog
+                        .atoms(authority.read())
+                        .map_err(|_| Stop::InvalidProgram)?;
+                    let allowance = storage::atom_limits(
+                        work,
+                        self.metadata_bytes() + self.overhead + selection_bytes + ordered_bytes,
+                    )?;
+                    for row in canonical.ids {
+                        let atom = rows.at(row).ok_or(Stop::InvalidProgram)?;
+                        let id = authority
+                            .find_atom_with(atom, allowance, || charge(work, 1))
+                            .map_err(storage::atom_failure)?
+                            .ok_or(Stop::InvalidProgram)?;
+                        charge(work, 1)?;
+                        positions.push(id);
+                    }
+                }
+                Relation::Dense(dense) => {
+                    let layout = dense.layout();
+                    let mut coordinates = Vec::new();
+                    storage::reserve(
+                        &mut coordinates,
+                        layout.predicate().arity(),
+                        total + size_of::<Vec<usize>>() as u128,
+                        work,
+                    )?;
+                    let coordinate_bytes = size_of::<Vec<usize>>() as u128
+                        + coordinates.capacity() as u128 * size_of::<usize>() as u128;
+                    let base =
+                        self.metadata_bytes() + self.overhead + selection_bytes + coordinate_bytes;
+                    let mut range = 0..layout.positions();
+                    while let Some(position) = dense.next_row(RowSet::Current, &mut range, work)? {
+                        coordinates.clear();
+                        charge(work, layout.predicate().arity())?;
+                        coordinates.extend(
+                            (0..layout.predicate().arity())
+                                .map(|argument| layout.coordinate(argument, position)),
+                        );
+                        let authority = self.authority.as_mut().ok_or(Stop::InvalidProgram)?;
+                        let available = available(work, base + authority.storage_bytes())?;
+                        let atom = layout
+                            .program()
+                            .carrier_atom_with(layout.signature(), &coordinates, available, || {
+                                charge(work, 1)
+                            })
+                            .map_err(|error| carrier_failure(&error))?;
+                        let other = base + atom.coordinate_bytes();
+                        let allowance = storage::atom_limits(work, other)?;
+                        authority.restart_storage_peak();
+                        let result = authority
+                            .entry_atom_with(atom.atom(), allowance, || charge(work, 1))
+                            .and_then(|entry| entry.insert_with(allowance, || charge(work, 1)));
+                        storage::record(work, other + authority.storage_peak_bytes())?;
+                        let id = result.map_err(storage::atom_failure)?;
+                        charge(work, 1)?;
+                        positions.push(id);
+                    }
+                }
+            }
+        }
+        Ok(positions)
+    }
+
+    /// Select the final prepared truth in semantic order and publish one shared
+    /// prefix. The complete no-delta round has prepared every tree extent.
+    /// Only ID/coordinate metadata is constructed; existing terms are not copied.
+    pub(super) fn take_model(&mut self, work: &mut Work<'_>) -> Result<Model, Stop> {
+        let positions = self.selected_positions(work)?;
+        let selection_bytes = size_of::<Vec<usize>>() as u128
+            + positions.capacity() as u128 * size_of::<usize>() as u128;
+        let other = self.metadata_bytes() + self.overhead + selection_bytes;
+        let allowance = storage::atom_limits(work, other)?;
+        let authority = self.authority.as_mut().ok_or(Stop::InvalidProgram)?;
+        authority.restart_storage_peak();
+        let result = authority.publish_selection_with(&positions, allowance, || charge(work, 1));
+        storage::record(work, other + authority.storage_peak_bytes())?;
+        let catalog = result.map_err(storage::atom_failure)?;
+        let publication = catalog.publication_bytes();
+        let current = other + authority.storage_bytes() + publication;
+        let result =
+            Model::from_ordered_catalog_with(catalog, available(work, current)?, || work.tick());
+        let model = result.map_err(|failure| match failure {
+            zetesis_core::ModelFailure::Stopped(stop) => stop,
+            zetesis_core::ModelFailure::Model(error) => Stop::model(&error),
+        })?;
+        storage::record(work, current + model.selection_bytes())?;
+        drop(positions);
+        let result_bytes = publication + model.selection_bytes();
+        // Shared canonical storage is counted by the authority. Only the new
+        // catalog/selection metadata remains alongside truth during reset.
+        for index in 0..self.relations.len() {
+            let total = self.total_bytes() + result_bytes;
+            match &mut self.relations[index] {
+                Relation::Tree { catalog, partition } => {
+                    let other = total
+                        .checked_sub(catalog.retained_bytes() as u128)
+                        .ok_or(Stop::InvalidProgram)?;
+                    let receipt = completed(catalog.clear(limits(work, other)?), other, work)?;
+                    account_storage(work, other, receipt)?;
+                    partition.reset(work)?;
+                }
+                Relation::Dense(dense) => dense.reset(work)?,
             }
         }
         self.atoms = 0;
-        Ok(Model::from_ordered(atoms))
+        Ok(model)
+    }
+}
+
+fn available(work: &Work<'_>, live: u128) -> Result<usize, Stop> {
+    usize::try_from(
+        (work.limits.max_closure_bytes as u128)
+            .checked_sub(live)
+            .ok_or(Stop::StorageLimit)?,
+    )
+    .map_err(|_| Stop::StorageLimit)
+}
+
+fn carrier_failure(failure: &zetesis_core::CarrierFailure<Stop>) -> Stop {
+    match failure {
+        zetesis_core::CarrierFailure::Stopped(stop) => *stop,
+        zetesis_core::CarrierFailure::Storage(error) => match error {
+            zetesis_core::CarrierError::Allocation => Stop::Allocation,
+            zetesis_core::CarrierError::Bytes { .. } => Stop::StorageLimit,
+            zetesis_core::CarrierError::Coordinates => Stop::InvalidProgram,
+        },
     }
 }
 
@@ -806,9 +1145,10 @@ fn completed<T>(
 
 #[cfg(test)]
 mod tests {
+    use super::fixtures::{catalogs as fixture, insert, intern};
     use super::*;
     use crate::Cancellation;
-    use zetesis_core::Value;
+    use zetesis_core::{Atom, Value, ValueNodeRef};
 
     fn atom(value: Value) -> Atom {
         Atom::new(Predicate::new("p", 1).unwrap(), vec![value]).unwrap()
@@ -820,43 +1160,49 @@ mod tests {
         let cancellation = Cancellation::default();
         let mut work = Work::source(&cancellation, u64::MAX);
         work.limits.max_derived_atoms = 3;
-        let mut catalogs = Catalogs::default();
         let mut expected = [
             atom(Value::Symbol("a".into())),
             atom(Value::Number(2)),
             atom(Value::String("a".into())),
         ];
+        let mut catalogs = fixture(&expected, &mut work);
         for atom in &expected {
-            catalogs.insert(atom.clone(), 0, &mut work).unwrap();
+            insert(&mut catalogs, atom, &mut work);
         }
         catalogs.prepare(&mut work).unwrap();
         expected.sort();
         // The first preparation is one run, in canonical order.
         let rows = catalogs.rows(&predicate);
         assert_eq!(rows.runs(), 1);
-        let all: Vec<&Atom> = rows
+        let all: Vec<AtomRef<'_>> = rows
             .all()
             .into_iter()
             .map(|row| row.atom().unwrap())
             .collect();
-        assert_eq!(all, expected.iter().collect::<Vec<_>>());
+        assert_eq!(all, expected.iter().map(AtomRef::from).collect::<Vec<_>>());
         assert!(rows.get(0, expected.len()).is_none());
     }
 
     #[test]
-    fn ordered_rows_borrow_the_owning_tuple() {
+    fn ordered_rows_borrow_canonical_text() {
         let predicate = Predicate::new("p", 1).unwrap();
         let cancellation = Cancellation::default();
         let mut work = Work::source(&cancellation, u64::MAX);
         work.limits.max_derived_atoms = 1;
-        let mut catalogs = Catalogs::default();
-        catalogs
-            .insert(atom(Value::String("payload".into())), 0, &mut work)
-            .unwrap();
+        let source = atom(Value::String("payload".into()));
+        let mut catalogs = fixture(std::slice::from_ref(&source), &mut work);
+        insert(&mut catalogs, &source, &mut work);
         catalogs.prepare(&mut work).unwrap();
-        let original = &catalogs.relation(&predicate).catalog().atoms()[0];
-        let row = catalogs.rows(&predicate).get(0, 0).unwrap();
-        assert!(std::ptr::eq(original, row.atom().unwrap()));
+        let original = catalogs.authority.as_ref().unwrap().get(0).unwrap();
+        let row = catalogs.rows(&predicate).get(0, 0).unwrap().atom().unwrap();
+        let ValueNodeRef::String(original) = original.values().at(0).unwrap().descriptor() else {
+            unreachable!()
+        };
+        let ValueNodeRef::String(actual) = row.values().at(0).unwrap().descriptor() else {
+            unreachable!()
+        };
+        assert!(std::ptr::eq(original.as_ptr(), actual.as_ptr()));
+        assert_eq!(original.len(), actual.len());
     }
 
     /// The work of the dense-relation propositions: a generous ceiling.
@@ -873,20 +1219,21 @@ mod tests {
     fn laid_out(work: &mut Work<'_>) -> (Predicate, Layouts, Catalogs, PendingMarks) {
         use crate::oracle::argument_bounds::Bound;
         let predicate = Predicate::new("p", 1).unwrap();
+        let source = [1, 2, 3].map(|value| atom(Value::Number(value)));
+        let program = fixtures::program(&source);
         let mut layouts = Layouts::default();
         layouts.push(
             Layout::new(
-                &predicate,
-                &[Bound::Finite(vec![
-                    Value::Number(1),
-                    Value::Number(2),
-                    Value::Number(3),
-                ])],
+                &program,
+                (&predicate).into(),
+                &[Bound::Finite(vec![0, 1, 2])],
                 64,
             )
+            .unwrap()
             .unwrap(),
         );
         let mut catalogs = Catalogs::default();
+        catalogs.bind_program(&program, work).unwrap();
         catalogs.create_dense_relations(&layouts, work).unwrap();
         let mut pending = PendingMarks::default();
         pending.prepare(&layouts, &mut 0, work).unwrap();
@@ -913,10 +1260,8 @@ mod tests {
         let cancellation = Cancellation::default();
         let mut work = dense_work(&cancellation);
         let (_, _, mut catalogs, _) = laid_out(&mut work);
-        assert_eq!(
-            catalogs.insert(atom(Value::Number(2)), 0, &mut work),
-            Err(Stop::InvalidProgram)
-        );
+        let id = intern(&mut catalogs, &atom(Value::Number(2)), &mut work);
+        assert_eq!(catalogs.insert(id, 0, &mut work), Err(Stop::InvalidProgram));
     }
 
     #[test]
@@ -939,7 +1284,8 @@ mod tests {
             let key = pattern.key(&assignment[..]).unwrap();
             assert_eq!(
                 dense
-                    .position(&key)
+                    .position(&key, &mut work)
+                    .unwrap()
                     .is_some_and(|position| dense.contains(position)),
                 expected
             );
@@ -962,8 +1308,9 @@ mod tests {
         .unwrap();
         let assignment = [Some(&value)];
         let key = pattern.key(&assignment[..]).unwrap();
+        let (round, appender) = catalogs.split().unwrap();
         assert_eq!(
-            catalogs.contains(&key, 0, &mut work),
+            round.contains(&key, appender.storage_bytes(), &mut work),
             Err(Stop::InvalidProgram)
         );
     }
@@ -984,9 +1331,23 @@ mod tests {
             })
             .collect();
         assert_eq!(positions, vec![0, 2]);
-        assert!(catalogs.has_new(&predicate, &mut work).unwrap());
+        assert!(
+            catalogs
+                .split()
+                .unwrap()
+                .0
+                .has_new((&predicate).into(), &mut work)
+                .unwrap()
+        );
         catalogs.advance(&mut work).unwrap();
-        assert!(!catalogs.has_new(&predicate, &mut work).unwrap());
+        assert!(
+            !catalogs
+                .split()
+                .unwrap()
+                .0
+                .has_new((&predicate).into(), &mut work)
+                .unwrap()
+        );
     }
 
     #[test]
@@ -999,7 +1360,7 @@ mod tests {
         let model = catalogs.take_model(&mut work).unwrap();
         assert_eq!(
             model,
-            Model::new([atom(Value::Number(1)), atom(Value::Number(3))])
+            Model::new([atom(Value::Number(1)), atom(Value::Number(3))]).unwrap()
         );
     }
 
@@ -1018,30 +1379,63 @@ mod tests {
     }
 
     #[test]
+    fn truth_reset_retains_discovery_identity_and_prior_models() {
+        let cancellation = Cancellation::default();
+        let mut work = dense_work(&cancellation);
+        let source = [3, 1, 2].map(|value| atom(Value::Number(value)));
+        let mut catalogs = fixture(&source, &mut work);
+        insert(&mut catalogs, &source[0], &mut work);
+        insert(&mut catalogs, &source[1], &mut work);
+        catalogs.prepare(&mut work).unwrap();
+        let first = catalogs.take_model(&mut work).unwrap();
+        assert_eq!(catalogs.len(), 0);
+        assert_eq!(catalogs.authority.as_ref().unwrap().len(), 2);
+        // Reusing an earlier identity adds truth without a new discovery.
+        insert(&mut catalogs, &source[1], &mut work);
+        assert_eq!(catalogs.authority.as_ref().unwrap().len(), 2);
+        insert(&mut catalogs, &source[2], &mut work);
+        assert_eq!(catalogs.authority.as_ref().unwrap().len(), 3);
+        catalogs.prepare(&mut work).unwrap();
+        let second = catalogs.take_model(&mut work).unwrap();
+        assert_eq!(
+            first,
+            Model::new([source[0].clone(), source[1].clone()]).unwrap()
+        );
+        assert_eq!(
+            second,
+            Model::new([source[1].clone(), source[2].clone()]).unwrap()
+        );
+    }
+
+    #[test]
     fn cancelled_receipt_preserves_catalog_count() {
         let cancellation = Cancellation::default();
         let mut work = Work::source(&cancellation, u64::MAX);
         work.limits.max_derived_atoms = 1;
-        let mut catalogs = Catalogs::default();
         let tuple = atom(Value::Number(1));
-        let predicate = tuple.predicate().clone();
-        let mut catalog = Catalog::new(predicate.clone(), limits(&work, 0).unwrap()).unwrap();
-        let receipt = catalog.insert(tuple, limits(&work, 0).unwrap()).unwrap();
-        catalogs.relations.insert(
-            0,
-            Relation::Tree {
-                catalog: Box::new(catalog),
-                partition: Partition::default(),
-            },
-        );
+        let mut catalogs = fixture(std::slice::from_ref(&tuple), &mut work);
+        let id = intern(&mut catalogs, &tuple, &mut work);
+        catalogs.create(0, 0, 0, &mut work).unwrap();
+        let total = catalogs.total_bytes();
+        let Relation::Tree { catalog, .. } = &mut catalogs.relations[0] else {
+            unreachable!()
+        };
+        let other = total - catalog.retained_bytes() as u128;
+        let tuple = catalogs.authority.as_ref().unwrap().get(id).unwrap();
+        let receipt = catalog
+            .insert(tuple, limits(&work, other).unwrap())
+            .unwrap();
         cancellation.cancel();
-        assert_eq!(catalogs.publish(receipt, &mut work), Err(Stop::Cancelled));
+        assert_eq!(
+            catalogs.publish(receipt, other, &mut work),
+            Err(Stop::Cancelled)
+        );
         assert_eq!(
             catalogs.len(),
             catalogs
                 .relations
                 .iter()
-                .map(|relation| relation.catalog().atoms().len())
+                .map(|relation| relation.catalog().len())
                 .sum::<usize>()
         );
     }

@@ -84,7 +84,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 mod tests {
     use super::*;
     use std::collections::BTreeSet;
-    use zetesis_core::Value;
+    use zetesis_core::ValueNodeRef;
 
     #[test]
     fn quickstart_preserves_the_full_family_behind_show() -> Result<(), Box<dyn Error>> {
@@ -114,14 +114,16 @@ mod tests {
                 .atoms()
                 .iter()
                 .filter(|atom| atom.predicate().name() == "task")
-                .map(|atom| atom.values().to_vec())
+                .map(|atom| {
+                    assert_eq!(atom.values().len(), 1);
+                    let ValueNodeRef::Symbol(name) = atom.values().at(0).unwrap().descriptor()
+                    else {
+                        panic!("task must have one symbolic argument");
+                    };
+                    name
+                })
                 .collect::<BTreeSet<_>>();
-            assert_eq!(
-                tasks,
-                BTreeSet::from(
-                    ["build", "test", "deploy"].map(|task| vec![Value::Symbol(task.into())])
-                )
-            );
+            assert_eq!(tasks, BTreeSet::from(["build", "test", "deploy"]));
             let shown = input.metadata().observations().render(
                 model,
                 input.metadata().output(),

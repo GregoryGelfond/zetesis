@@ -1,12 +1,15 @@
 //! Independent finite interpretations for private membership preparation.
 
-use zetesis_core::{AdmissionLimits, AtomPattern, Sign, Value};
+use zetesis_core::catalog::AtomRef;
+use zetesis_core::{
+    AdmissionLimits, Atom, AtomCatalog, AtomPattern, Predicate, Sign, Template, Value, ValueNodeRef,
+};
 
 use super::*;
 use crate::Cancellation;
 
 struct Catalog {
-    atoms: Vec<Atom>,
+    atoms: AtomCatalog,
     positions: Vec<usize>,
 }
 
@@ -14,11 +17,19 @@ impl Catalog {
     fn new(atoms: Vec<Atom>) -> Self {
         let mut positions: Vec<_> = (0..atoms.len()).collect();
         positions.sort_by_key(|&id| &atoms[id]);
-        Self { atoms, positions }
+        Self {
+            atoms: AtomCatalog::new(atoms).unwrap(),
+            positions,
+        }
     }
 
-    fn id(&self, atom: &Atom) -> usize {
-        self.atoms.iter().position(|actual| actual == atom).unwrap()
+    fn id<'a>(&self, atom: impl Into<AtomRef<'a>>) -> usize {
+        let atom = atom.into();
+        self.atoms
+            .atoms()
+            .iter()
+            .position(|actual| actual == atom)
+            .unwrap()
     }
 
     fn snapshot<'a>(
@@ -31,7 +42,7 @@ impl Catalog {
     ) -> Result<Snapshot<'a>, Stop> {
         workspace.record_retained(work);
         let rows = Rows::select(
-            &self.atoms,
+            self.atoms.atoms(),
             self.positions.clone(),
             input,
             stride,
@@ -94,7 +105,8 @@ fn assert_conjunctions(
     work: &mut Work<'_>,
 ) {
     let (atoms, mut join) = snapshot.parts();
-    join.reset(&program.templates()[0], work).unwrap();
+    join.reset(program.templates().at(0).unwrap(), work)
+        .unwrap();
     let mut selected = Vec::new();
     for (depth, name) in ["a", "b", "c"].into_iter().enumerate() {
         if !atoms.clone().any(|atom| atom.predicate().name() == name) {
@@ -229,7 +241,8 @@ fn pairwise_overlap_does_not_establish_a_common_world() {
     let mut snapshot =
         snapshot(&program, &catalog, &[6, 3, 5], 1, 3, usize::MAX, &mut work).unwrap();
     let (_, mut join) = snapshot.parts();
-    join.reset(&program.templates()[0], &mut work).unwrap();
+    join.reset(program.templates().at(0).unwrap(), &mut work)
+        .unwrap();
     assert!(join.extend(0, 0, &mut work).unwrap());
     assert!(join.extend(1, 0, &mut work).unwrap());
     assert!(!join.extend(2, 0, &mut work).unwrap());
@@ -278,7 +291,8 @@ fn predicate_signs_have_distinct_membership_rows() {
     let mut work = Work::source(&cancellation, u64::MAX);
     let mut snapshot = snapshot(&program, &catalog, &[1, 2], 1, 2, usize::MAX, &mut work).unwrap();
     let (_, mut join) = snapshot.parts();
-    join.reset(&program.templates()[0], &mut work).unwrap();
+    join.reset(program.templates().at(0).unwrap(), &mut work)
+        .unwrap();
     assert!(join.extend(0, 0, &mut work).unwrap());
     assert!(!join.extend(1, 0, &mut work).unwrap());
 }
@@ -301,7 +315,8 @@ fn unused_world_tail_bits_are_never_members() {
         )
         .unwrap();
         let (_, mut join) = snapshot.parts();
-        join.reset(&program.templates()[0], &mut work).unwrap();
+        join.reset(program.templates().at(0).unwrap(), &mut work)
+            .unwrap();
         for bit in 0..join.words * 32 {
             assert_eq!(join.frames[bit / 32] & (1 << (bit % 32)) != 0, bit < count);
         }
@@ -338,7 +353,7 @@ fn malformed_snapshot_dimensions_are_refused() {
 fn catalog_ids_must_fit_the_snapshot_stride() {
     let program = program();
     let catalog = Catalog {
-        atoms: (0..33).map(|id| atom(&format!("a{id}"))).collect(),
+        atoms: AtomCatalog::new((0..33).map(|id| atom(&format!("a{id}"))).collect()).unwrap(),
         positions: vec![32],
     };
     let cancellation = Cancellation::default();
@@ -394,13 +409,15 @@ fn selected_rows_borrow_the_authoritative_typed_payload() {
         .collect();
     assert_eq!(selected.rows.positions, expected);
     for actual in selected.rows.iter() {
-        let original = &catalog.atoms[catalog.id(actual)];
-        assert!(std::ptr::eq(actual, original));
-        assert_eq!(actual.values().as_ptr(), original.values().as_ptr());
-        match (&actual.values()[0], &original.values()[0]) {
-            (Value::String(left), Value::String(right))
-            | (Value::Symbol(left), Value::Symbol(right)) => {
-                assert_eq!(left.as_ptr(), right.as_ptr());
+        let original = catalog.atoms.atoms().at(catalog.id(actual)).unwrap();
+        assert_eq!(actual, original);
+        match (
+            actual.values().at(0).unwrap().descriptor(),
+            original.values().at(0).unwrap().descriptor(),
+        ) {
+            (ValueNodeRef::String(left), ValueNodeRef::String(right))
+            | (ValueNodeRef::Symbol(left), ValueNodeRef::Symbol(right)) => {
+                assert!(std::ptr::eq(left, right));
             }
             other => panic!("unexpected selected values: {other:?}"),
         }

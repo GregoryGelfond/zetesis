@@ -35,7 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let b = Atom::new(Predicate::new("b", 0)?, vec![])?;
     assert_eq!(
         family,
-        BTreeSet::from([Model::new([a.clone()]), Model::new([b])])
+        BTreeSet::from([Model::new([a.clone()])?, Model::new([b])?])
     );
     assert_eq!(outcome.verified_models(), 2);
     assert_eq!(outcome.completion(), Some(Completion::Exhausted));
@@ -50,7 +50,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &Cancellation::default(),
     )?;
     assert!(checked.accepted());
-    assert_eq!(checked.closure(), &Model::new([a]));
+    assert_eq!(checked.closure(), &Model::new([a])?);
 
     // A fresh bounded collection owns the complete-family claim. A Vec gathered
     // from an arbitrary stream cannot acquire it from a separate outcome.

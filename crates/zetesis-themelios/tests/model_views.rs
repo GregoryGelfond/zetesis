@@ -18,7 +18,7 @@ fn atom(name: &str, values: Vec<Value>) -> Atom {
 #[test]
 fn evaluated_views_resume_the_original_rendering_budget() {
     let fixture = ObservationFixture::with_directives(
-        Model::new([atom("p", vec![Value::Number(1)])]),
+        Model::new([atom("p", vec![Value::Number(1)])]).unwrap(),
         "p(1). #show p/1. #show f(X):p(X).",
     );
     let expected = fixture
@@ -60,7 +60,7 @@ fn evaluated_views_resume_the_original_rendering_budget() {
 #[test]
 fn evaluated_view_rendering_refuses_partial_lines() {
     let fixture = ObservationFixture::with_directives(
-        Model::new([atom("p", vec![Value::Number(1)])]),
+        Model::new([atom("p", vec![Value::Number(1)])]).unwrap(),
         "p(1). #show f(X):p(X).",
     );
     let view = fixture.view();
@@ -161,8 +161,10 @@ fn a_refused_record_after_the_first_leaves_the_first_records_atoms_indexed() {
     // second record refused before its first lookup withdraws nothing of the
     // first, so a third record refers to the first's atoms by their indices
     // and spells only its own new atom.
-    let first = ObservationFixture::plain(Model::new([atom("a", vec![]), atom("b", vec![])]));
-    let later = ObservationFixture::plain(Model::new([atom("a", vec![]), atom("c", vec![])]));
+    let first =
+        ObservationFixture::plain(Model::new([atom("a", vec![]), atom("b", vec![])]).unwrap());
+    let later =
+        ObservationFixture::plain(Model::new([atom("a", vec![]), atom("c", vec![])]).unwrap());
     let mut table = AtomTable::new(16);
     first
         .view()
@@ -223,14 +225,15 @@ fn value_model() -> Model {
         ],
     )
     .unwrap()])
+    .unwrap()
 }
 
 fn string_observation() -> ObservationFixture {
-    ObservationFixture::plain(Model::new([atom("p", vec![Value::String("\n\"λ".into())])]))
+    ObservationFixture::plain(Model::new([atom("p", vec![Value::String("\n\"λ".into())])]).unwrap())
 }
 
 fn nested_observation() -> ObservationFixture {
-    ObservationFixture::with_directives(Model::new([]), "#show f(g(1),(2,)).")
+    ObservationFixture::with_directives(Model::new([]).unwrap(), "#show f(g(1),(2,)).")
 }
 
 #[test]
@@ -297,7 +300,7 @@ fn absent_score_has_no_cost_vector() {
 #[test]
 fn shown_channels_retain_independent_identity() {
     let fixture = ObservationFixture::with_directives(
-        Model::new([atom("a", vec![]), atom("hidden", vec![])]),
+        Model::new([atom("a", vec![]), atom("hidden", vec![])]).unwrap(),
         "a. #show a. #show f((1,),()).",
     );
     let view = fixture.view();
@@ -316,7 +319,7 @@ fn shown_channels_retain_independent_identity() {
 #[test]
 fn hidden_selection_preserves_full_identity() {
     let fixture = ObservationFixture::with_directives(
-        Model::new([atom("a", vec![]), atom("hidden", vec![])]),
+        Model::new([atom("a", vec![]), atom("hidden", vec![])]).unwrap(),
         "#show.",
     );
     let view = fixture.view();

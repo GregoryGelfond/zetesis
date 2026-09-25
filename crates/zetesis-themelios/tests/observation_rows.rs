@@ -46,9 +46,11 @@ fn unary(model: &Model, name: &str, sign: Sign) -> Vec<i32> {
         .filter_map(|atom| {
             if atom.predicate().name() == name
                 && atom.predicate().sign() == sign
-                && let [Value::Number(value)] = atom.values()
+                && atom.values().len() == 1
+                && let zetesis_core::ValueNodeRef::Number(value) =
+                    atom.values().at(0).unwrap().descriptor()
             {
-                return Some(*value);
+                return Some(value);
             }
             None
         })
@@ -75,7 +77,8 @@ fn observation_joins_match_full_row_enumeration() {
                     atom("q", Sign::Negative, &[7]),
                     atom("unrelated", Sign::Positive, &[8]),
                 ]),
-        );
+        )
+        .unwrap();
         let expected: Vec<_> = unary(&model, "p", Sign::Positive)
             .into_iter()
             .flat_map(|left| {
@@ -99,7 +102,8 @@ fn negative_observations_use_complete_signed_identity() {
         atom("q", Sign::Positive, &[2]),
         atom("q", Sign::Negative, &[1]),
         atom("q", Sign::Positive, &[1, 2]),
-    ]);
+    ])
+    .unwrap();
     assert_eq!(symbols(&input, &model), [Symbol::Number(1)]);
 }
 
@@ -113,7 +117,8 @@ fn nested_aggregate_queries_retain_join_bindings() {
         atom("q", Sign::Positive, &[2]),
         atom("q", Sign::Positive, &[3]),
         atom("q", Sign::Negative, &[4]),
-    ]);
+    ])
+    .unwrap();
     assert_eq!(symbols(&input, &model), [tuple(1, 3), tuple(2, 2)]);
 }
 
@@ -125,7 +130,8 @@ fn tuple_aliases_match_one_complete_row() {
         atom("edge", Sign::Positive, &[1, 2]),
         atom("edge", Sign::Positive, &[2, 1]),
         atom("edge", Sign::Negative, &[2, 2]),
-    ]);
+    ])
+    .unwrap();
     assert_eq!(symbols(&input, &model), [Symbol::Number(1)]);
 }
 
@@ -139,7 +145,8 @@ fn sparse_query_work_excludes_unrelated_row_products() {
                 atom("p", Sign::Positive, &[1]),
                 atom("q", Sign::Positive, &[2]),
             ]),
-    );
+    )
+    .unwrap();
     // The old two-depth whole-model scan exceeds this budget. The new budget
     // includes all 258 model references, predicate probes and complete output.
     let evaluation = input
@@ -165,7 +172,8 @@ fn query_work_refusals_publish_no_partial_terms() {
         atom("p", Sign::Positive, &[1]),
         atom("q", Sign::Positive, &[1]),
         atom("q", Sign::Positive, &[2]),
-    ]);
+    ])
+    .unwrap();
     let program = input.metadata().observations();
     let complete = program
         .evaluate(&model, Limits::default(), &Cancellation::default())

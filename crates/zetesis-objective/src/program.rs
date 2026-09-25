@@ -1,7 +1,15 @@
 use std::fmt;
 use std::sync::Arc;
 
-use zetesis_core::{AtomPattern, Filter, Term};
+use std::{iter::FusedIterator, ops::Range};
+use zetesis_core::{
+    AtomPattern, Filter, FilterRef, Filters, PatternRef, PatternTerms, Patterns, TemplateCatalog,
+    TemplateRow, TemplateTerm, Term,
+};
+
+mod admission;
+#[cfg(test)]
+mod tests;
 
 use crate::Condition;
 
@@ -150,30 +158,13 @@ impl ObjectiveTemplate {
         limits: AdmissionLimits,
         index: usize,
     ) -> Result<(), AdmissionError> {
-        for (resource, actual, limit) in [
-            (
-                AdmissionResource::TupleWidth,
-                tuple_width,
-                limits.max_tuple_width,
-            ),
-            (
-                AdmissionResource::PositiveBody,
-                positive.len(),
-                limits.max_positive_body,
-            ),
-            (AdmissionResource::Filters, filter_count, limits.max_filters),
-        ] {
-            check_bound(resource, actual, limit, Some(index))?;
-        }
-        for pattern in positive {
-            check_bound(
-                AdmissionResource::PredicateArity,
-                pattern.terms().len(),
-                limits.max_predicate_arity,
-                Some(index),
-            )?;
-        }
-        Ok(())
+        validate_shape(
+            tuple_width,
+            positive.iter().map(PatternRef::from),
+            filter_count,
+            limits,
+            index,
+        )
     }
 
     /// Validate the relational scope and output width before evaluating source
@@ -199,9 +190,10 @@ impl ObjectiveTemplate {
                 .chain(filters.iter().flat_map(|filter| {
                     let (left, right) = filter.terms();
                     [left, right]
-                })),
-            positive,
-            filters,
+                }))
+                .map(TemplateTerm::from),
+            positive.iter().map(PatternRef::from),
+            filters.len(),
             limits,
             index,
         )
@@ -223,9 +215,54 @@ fn terms<'a>(
         }))
 }
 
+/// An objective occurrence referencing a row of an existing template catalog.
+/// The row's first scalar field is the weight; the remaining fields are its
+/// tuple. Conditions must already be canonical, or be the empty true query.
+/// This descriptor retains no atom, term or predicate payload of its own.
+#[derive(Clone, Debug)]
+pub struct ObjectiveElement {
+    row: usize,
+    priority: i32,
+    polarity: WeightPolarity,
+    condition: Condition,
+}
+impl ObjectiveElement {
+    /// Reference one catalog row at a fixed priority. Admission checks the row.
+    #[must_use]
+    pub fn new(row: usize, priority: i32) -> Self {
+        Self {
+            row,
+            priority,
+            polarity: WeightPolarity::AsWritten,
+            condition: Condition::default(),
+        }
+    }
+    /// Select checked numeric normalization before global key deduplication.
+    #[must_use]
+    pub fn with_weight_polarity(mut self, polarity: WeightPolarity) -> Self {
+        self.polarity = polarity;
+        self
+    }
+    /// Attach an already canonical closed model query, or the empty true query.
+    #[must_use]
+    pub fn with_condition(mut self, condition: Condition) -> Self {
+        self.condition = condition;
+        self
+    }
+}
+
 /// Admission ceilings. Zero is a real ceiling, never an unlimited sentinel.
 #[derive(Clone, Copy, Debug)]
 pub struct AdmissionLimits {
+    /// Inclusive ID-only node metadata per closed condition, including its
+    /// shared condition envelope. Shared canonical payload is counted once
+    /// under `max_bytes`. The independent default is 128 MiB; zero is a real limit.
+    pub max_condition_node_bytes: usize,
+    /// Inclusive combined template vocabulary, metadata, condition nodes and
+    /// retained catalog allowance, including admission/publication overlap.
+    /// The independent default is 128 MiB; input descriptions, allocator
+    /// bookkeeping and Arc counters are excluded.
+    pub max_bytes: usize,
     /// Maximum lifted elements across all objective directives.
     pub max_templates: usize,
     /// Maximum explicit scalar tuple components per element.
@@ -244,6 +281,8 @@ pub struct AdmissionLimits {
 impl Default for AdmissionLimits {
     fn default() -> Self {
         Self {
+            max_condition_node_bytes: 134_217_728,
+            max_bytes: 134_217_728,
             max_templates: 100_000,
             max_tuple_width: 64,
             max_variables_per_template: 64,
@@ -275,8 +314,41 @@ pub enum AdmissionResource {
 }
 
 /// An objective program cannot enter the evaluator unless these checks pass.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AdmissionError {
+    /// An objective occurrence names no row of the supplied catalog.
+    CatalogRow {
+        /// Original objective occurrence.
+        template: usize,
+        /// Requested catalog row.
+        row: usize,
+    },
+    /// A referenced catalog row has no scalar weight field.
+    MissingWeight {
+        /// Original objective occurrence.
+        template: usize,
+        /// Referenced catalog row.
+        row: usize,
+    },
+    /// The catalog entry point cannot import owned condition descriptions.
+    ConditionNotCanonical {
+        /// Original objective occurrence.
+        template: usize,
+    },
+    /// Combined canonical vocabulary or retained metadata could not be admitted.
+    Storage {
+        /// Original template where known.
+        template: Option<usize>,
+        /// Exact canonical/storage refusal.
+        error: zetesis_core::catalog::Error,
+    },
+    /// A closed condition's canonical representation could not be admitted.
+    ConditionStorage {
+        /// Original input template.
+        template: usize,
+        /// Exact coordinate or canonical storage cause.
+        error: crate::ConditionError,
+    },
     /// A configured shape ceiling was exceeded.
     Limit {
         /// Refused dimension.
@@ -329,10 +401,16 @@ impl AdmissionError {
     #[must_use]
     pub const fn template_index(&self) -> Option<usize> {
         match *self {
-            Self::Limit { template, .. } | Self::Overflow { template } => template,
-            Self::UnsafeVariable { template, .. }
+            Self::Storage { template, .. }
+            | Self::Limit { template, .. }
+            | Self::Overflow { template } => template,
+            Self::CatalogRow { template, .. }
+            | Self::MissingWeight { template, .. }
+            | Self::ConditionNotCanonical { template }
+            | Self::UnsafeVariable { template, .. }
             | Self::NonDenseVariable { template, .. }
             | Self::MissingPriority { template }
+            | Self::ConditionStorage { template, .. }
             | Self::ConditionReference { template, .. } => Some(template),
             Self::Allocation => None,
         }
@@ -341,6 +419,24 @@ impl AdmissionError {
 impl fmt::Display for AdmissionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::CatalogRow { template, row } => write!(
+                f,
+                "objective template {template} references missing catalog row {row}"
+            ),
+            Self::MissingWeight { template, row } => write!(
+                f,
+                "objective template {template} catalog row {row} has no weight field"
+            ),
+            Self::ConditionNotCanonical { template } => write!(
+                f,
+                "objective template {template} requires a canonical condition for catalog admission"
+            ),
+            Self::Storage { template, error } => {
+                write!(f, "objective storage (template {template:?}): {error}")
+            }
+            Self::ConditionStorage { template, error } => {
+                write!(f, "objective template {template} condition: {error}")
+            }
             Self::Limit {
                 resource,
                 template,
@@ -377,93 +473,299 @@ impl fmt::Display for AdmissionError {
         }
     }
 }
-impl std::error::Error for AdmissionError {}
+impl std::error::Error for AdmissionError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::ConditionStorage { error, .. } => Some(error),
+            Self::Storage { error, .. } => Some(error),
+            _ => None,
+        }
+    }
+}
 
 #[derive(Debug)]
 struct Data {
-    templates: Vec<ObjectiveTemplate>,
-    variables: Vec<usize>,
+    catalog: Option<TemplateCatalog>,
+    templates: Vec<AdmittedTemplate>,
     priorities: Vec<i32>,
-    slots: Vec<usize>,
     present: bool,
+    storage_bytes: u128,
+}
+#[derive(Debug)]
+struct AdmittedTemplate {
+    row: usize,
+    polarity: WeightPolarity,
+    condition: Condition,
+    variables: usize,
+    slot: usize,
+}
+impl Data {
+    fn row(&self, template: &AdmittedTemplate) -> TemplateRow<'_> {
+        self.catalog
+            .as_ref()
+            .and_then(|catalog| catalog.at(template.row))
+            .expect("objective metadata names its complete canonical component row")
+    }
+    fn fields(&self, template: &AdmittedTemplate) -> (TemplateTerm<'_>, PatternTerms<'_>) {
+        let fields = self.row(template).terms();
+        (
+            fields
+                .at(0)
+                .expect("objective admission stores a weight before its tuple"),
+            fields
+                .slice(1..fields.len())
+                .expect("the remaining scalar fields are the objective tuple"),
+        )
+    }
+    fn priority(&self, template: &AdmittedTemplate) -> i32 {
+        self.priorities[template.slot]
+    }
 }
 
-/// An immutable collection of all objective elements. Equal tuple keys from
-/// separate templates/directives are globally coalesced during evaluation.
+/// An immutable collection of objective metadata over canonical template storage.
+/// It supplies costs, never logical support. Equal complete contribution keys
+/// from separate templates/directives are globally coalesced during evaluation.
 #[derive(Clone, Debug)]
 pub struct ObjectiveProgram(Arc<Data>);
 impl ObjectiveProgram {
-    /// Admit templates in original order and mark the objective present even
-    /// for an empty list. Use [`Self::none`] for an absent objective. Determining
-    /// source-level objective presence belongs to the frontend, not this evaluator.
+    /// Consume original-order descriptions and admit one canonical vocabulary.
+    /// Owned condition input shares that vocabulary; supplied canonical condition
+    /// catalogs retain their original authority. Source presence and complete
+    /// priority discovery remain the frontend's responsibility.
     ///
     /// # Errors
-    /// Refuses shape limits, unsafe or sparse variable IDs, overflow or allocation.
+    /// Refuses shape/safety, invalid condition references, combined named storage,
+    /// overflow or fallible reservation. No partial `ObjectiveProgram` escapes.
     pub fn new(
         templates: Vec<ObjectiveTemplate>,
         limits: AdmissionLimits,
     ) -> Result<Self, AdmissionError> {
-        check_bound(
-            AdmissionResource::Templates,
-            templates.len(),
-            limits.max_templates,
-            None,
-        )?;
-        let mut variables = reserved(templates.len())?;
-        let mut priorities = reserved(templates.len())?;
-        for (index, template) in templates.iter().enumerate() {
-            variables.push(admit_template(template, limits, index)?);
-            priorities.push(template.priority);
-        }
-        priorities.sort_unstable_by(|left, right| right.cmp(left));
-        priorities.dedup();
-        let mut slots = reserved(templates.len())?;
-        for (index, template) in templates.iter().enumerate() {
-            slots.push(
-                priorities
-                    .binary_search_by(|value| template.priority.cmp(value))
-                    .map_err(|_| AdmissionError::MissingPriority { template: index })?,
-            );
-        }
-        Ok(Self(Arc::new(Data {
-            templates,
-            variables,
-            priorities,
-            slots,
-            present: true,
-        })))
+        admission::admit(templates, limits).map(|data| Self(Arc::new(data)))
     }
-    /// An explicitly absent objective, distinct from a present zero-cost objective.
+    /// Admit objective metadata over existing canonical components without
+    /// importing or copying their payload. Row occurrences remain in descriptor
+    /// order and may repeat. Each row stores its weight before its tuple fields.
+    /// Positive patterns alone establish dense variable safety; filters and
+    /// closed conditions do not. Empty conditions mean true; nonempty conditions
+    /// must already have a canonical atom catalog.
+    ///
+    /// The byte ceiling covers the retained catalog, occurrence/priority buffers,
+    /// unique condition allocations and simultaneous safety scratch. Exact shared
+    /// snapshots are counted once; partially shared prefixes are conservative.
+    /// Caller descriptor storage and allocator/Arc bookkeeping are excluded.
+    ///
+    /// # Errors
+    /// Refuses missing rows or weights, owned nonempty conditions, shape/safety,
+    /// condition references, named storage, overflow or fallible reservation.
+    pub fn from_catalog(
+        catalog: TemplateCatalog,
+        rows: Vec<ObjectiveElement>,
+        limits: AdmissionLimits,
+    ) -> Result<Self, AdmissionError> {
+        admission::from_catalog(catalog, rows, limits).map(|data| Self(Arc::new(data)))
+    }
+
+    /// An absent objective, distinct from a present empty or zero-cost objective.
     #[must_use]
     pub fn none() -> Self {
         Self(Arc::new(Data {
+            catalog: None,
             templates: Vec::new(),
-            variables: Vec::new(),
             priorities: Vec::new(),
-            slots: Vec::new(),
             present: false,
+            storage_bytes: size_of::<Data>() as u128,
         }))
     }
-    /// Whether the caller admitted an objective, independently of current cost.
+    /// Whether an objective was admitted, independently of current cost.
     #[must_use]
     pub fn is_present(&self) -> bool {
         self.0.present
     }
-    /// Original template order for source-origin correlation.
+    /// Original template occurrences as borrowed canonical views.
     #[must_use]
-    pub fn templates(&self) -> &[ObjectiveTemplate] {
-        &self.0.templates
+    pub fn templates(&self) -> ObjectiveTemplates<'_> {
+        ObjectiveTemplates(&self.0)
     }
-    /// Fixed, distinct descending priority slots, including inactive templates.
+    /// Fixed distinct descending priority slots, including inactive templates.
     #[must_use]
     pub fn priorities(&self) -> &[i32] {
         &self.0.priorities
     }
+    /// Named retained canonical and metadata storage. Shared clones name the
+    /// same allocations. Independent source catalogs can share segments beyond
+    /// their exact occurrence owner and are conservatively counted separately.
+    #[must_use]
+    pub fn storage_bytes(&self) -> u128 {
+        self.0.storage_bytes
+    }
     pub(crate) fn variables(&self, index: usize) -> usize {
-        self.0.variables[index]
+        self.0.templates[index].variables
     }
     pub(crate) fn slot(&self, index: usize) -> usize {
-        self.0.slots[index]
+        self.0.templates[index].slot
+    }
+}
+
+/// One admitted objective element, borrowing all typed terms and patterns.
+#[derive(Clone, Copy, Debug)]
+pub struct ObjectiveTemplateRef<'a> {
+    data: &'a Data,
+    template: &'a AdmittedTemplate,
+}
+impl PartialEq for ObjectiveTemplateRef<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.weight() == other.weight()
+            && self.weight_polarity() == other.weight_polarity()
+            && self.priority() == other.priority()
+            && self.tuple().iter().eq(other.tuple())
+            && self.positive().iter().eq(other.positive())
+            && self.filters().iter().eq(other.filters())
+            && self.condition() == other.condition()
+    }
+}
+impl Eq for ObjectiveTemplateRef<'_> {}
+impl<'a> ObjectiveTemplateRef<'a> {
+    /// Check a borrowed source scope's shape without copying logical terms.
+    /// This checks tuple width, body size, filters and predicate arity; the
+    /// frontend remains responsible for the safety of additional binding forms.
+    /// # Errors
+    /// Refuses a configured shape ceiling.
+    pub fn validate_shape(
+        tuple_width: usize,
+        positive: impl Iterator<Item = PatternRef<'a>> + Clone,
+        filter_count: usize,
+        limits: AdmissionLimits,
+        index: usize,
+    ) -> Result<(), AdmissionError> {
+        validate_shape(tuple_width, positive, filter_count, limits, index)
+    }
+
+    /// Validate borrowed positive patterns and filters before source expression
+    /// evaluation. Constants stay in the caller's canonical vocabulary.
+    /// The caller establishes that expression inputs have independent binders.
+    /// # Errors
+    /// Refuses shape limits, unsafe or sparse variable IDs, storage or allocation.
+    pub fn validate_scope(
+        tuple_width: usize,
+        positive: impl Iterator<Item = PatternRef<'a>> + Clone,
+        filters: impl Iterator<Item = FilterRef<'a>> + Clone,
+        limits: AdmissionLimits,
+        index: usize,
+    ) -> Result<usize, AdmissionError> {
+        let filter_count = filters.clone().count();
+        let terms = positive
+            .clone()
+            .flat_map(|pattern| pattern.terms().iter())
+            .chain(filters.flat_map(|filter| {
+                let (left, right) = filter.terms();
+                [left, right]
+            }));
+        admit_scope(tuple_width, terms, positive, filter_count, limits, index)
+    }
+
+    /// Original scalar weight; numeric normalization follows substitution.
+    #[must_use]
+    pub fn weight(self) -> TemplateTerm<'a> {
+        self.data.fields(self.template).0
+    }
+    /// Checked normalization applied before contribution-key deduplication.
+    #[must_use]
+    pub fn weight_polarity(self) -> WeightPolarity {
+        self.template.polarity
+    }
+    /// Admitted priority, retained even when this element has no active binding.
+    #[must_use]
+    pub fn priority(self) -> i32 {
+        self.data.priority(self.template)
+    }
+    /// Original tuple fields after the weight, including repeated occurrences.
+    #[must_use]
+    pub fn tuple(self) -> PatternTerms<'a> {
+        self.data.fields(self.template).1
+    }
+    /// Positive relational conditions, which alone establish variable safety.
+    #[must_use]
+    pub fn positive(self) -> Patterns<'a> {
+        self.data.row(self.template).patterns()
+    }
+    /// Exact comparison conditions; they do not establish variable safety.
+    #[must_use]
+    pub fn filters(self) -> Filters<'a> {
+        self.data.row(self.template).filters()
+    }
+    /// Closed query against the supplied original model; empty means true.
+    #[must_use]
+    pub fn condition(self) -> &'a Condition {
+        &self.template.condition
+    }
+}
+
+/// Original-order objective rows; coordinates are local to this immutable owner.
+#[derive(Clone, Copy, Debug)]
+pub struct ObjectiveTemplates<'a>(&'a Data);
+impl<'a> ObjectiveTemplates<'a> {
+    /// Number of original occurrences.
+    #[must_use]
+    pub fn len(self) -> usize {
+        self.0.templates.len()
+    }
+    /// Whether the objective has no element rows.
+    #[must_use]
+    pub fn is_empty(self) -> bool {
+        self.0.templates.is_empty()
+    }
+    /// Borrow one original occurrence or return None outside the view.
+    #[must_use]
+    pub fn at(self, index: usize) -> Option<ObjectiveTemplateRef<'a>> {
+        self.0
+            .templates
+            .get(index)
+            .map(|template| ObjectiveTemplateRef {
+                data: self.0,
+                template,
+            })
+    }
+    /// Same checked occurrence read as at.
+    #[must_use]
+    pub fn get(self, index: usize) -> Option<ObjectiveTemplateRef<'a>> {
+        self.at(index)
+    }
+    /// Exact double-ended traversal borrowing this owner.
+    #[must_use]
+    pub fn iter(self) -> ObjectiveTemplateIter<'a> {
+        ObjectiveTemplateIter {
+            view: self,
+            range: 0..self.len(),
+        }
+    }
+}
+/// Exact double-ended cursor over admitted objective occurrences.
+#[derive(Clone, Debug)]
+pub struct ObjectiveTemplateIter<'a> {
+    view: ObjectiveTemplates<'a>,
+    range: Range<usize>,
+}
+impl<'a> Iterator for ObjectiveTemplateIter<'a> {
+    type Item = ObjectiveTemplateRef<'a>;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.range.next().and_then(|index| self.view.at(index))
+    }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.range.size_hint()
+    }
+}
+impl DoubleEndedIterator for ObjectiveTemplateIter<'_> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.range.next_back().and_then(|index| self.view.at(index))
+    }
+}
+impl ExactSizeIterator for ObjectiveTemplateIter<'_> {}
+impl FusedIterator for ObjectiveTemplateIter<'_> {}
+impl<'a> IntoIterator for ObjectiveTemplates<'a> {
+    type Item = ObjectiveTemplateRef<'a>;
+    type IntoIter = ObjectiveTemplateIter<'a>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
     }
 }
 
@@ -498,7 +800,7 @@ fn admit_template(
     limits: AdmissionLimits,
     index: usize,
 ) -> Result<usize, AdmissionError> {
-    template.condition.admit(limits, index)?;
+    template.condition.validate(limits, index)?;
     ObjectiveTemplate::validate_fields(
         &template.weight,
         &template.tuple,
@@ -519,9 +821,9 @@ fn admit_fields(
 ) -> Result<usize, AdmissionError> {
     admit_scope(
         tuple.len(),
-        terms(weight, tuple, positive, filters),
-        positive,
-        filters,
+        terms(weight, tuple, positive, filters).map(TemplateTerm::from),
+        positive.iter().map(PatternRef::from),
+        filters.len(),
         limits,
         index,
     )
@@ -529,16 +831,16 @@ fn admit_fields(
 
 fn admit_scope<'a>(
     tuple_width: usize,
-    terms: impl Iterator<Item = &'a Term> + Clone,
-    positive: &[AtomPattern],
-    filters: &[Filter],
+    terms: impl Iterator<Item = TemplateTerm<'a>> + Clone,
+    positive: impl Iterator<Item = PatternRef<'a>> + Clone,
+    filter_count: usize,
     limits: AdmissionLimits,
     index: usize,
 ) -> Result<usize, AdmissionError> {
-    ObjectiveTemplate::validate_shape(tuple_width, positive, filters.len(), limits, index)?;
+    validate_shape(tuple_width, positive.clone(), filter_count, limits, index)?;
     let mut count = 0;
     for term in terms.clone() {
-        if let Term::Variable(variable) = term {
+        if let TemplateTerm::Variable(variable) = term {
             let proposed = variable.checked_add(1).ok_or(AdmissionError::Overflow {
                 template: Some(index),
             })?;
@@ -551,18 +853,30 @@ fn admit_scope<'a>(
             count = count.max(proposed);
         }
     }
+    let headers = 2 * size_of::<Vec<bool>>() as u128;
+    admission::check_storage(headers + 2 * count as u128, limits.max_bytes, Some(index))?;
     let mut used = reserved(count)?;
+    admission::check_storage(
+        headers + used.capacity() as u128 + count as u128,
+        limits.max_bytes,
+        Some(index),
+    )?;
     used.resize(count, false);
     let mut bound = reserved(count)?;
+    admission::check_storage(
+        headers + used.capacity() as u128 + bound.capacity() as u128,
+        limits.max_bytes,
+        Some(index),
+    )?;
     bound.resize(count, false);
     for term in terms {
-        if let Term::Variable(variable) = term {
-            used[*variable] = true;
+        if let TemplateTerm::Variable(variable) = term {
+            used[variable] = true;
         }
     }
-    for term in positive.iter().flat_map(AtomPattern::terms) {
-        if let Term::Variable(variable) = term {
-            bound[*variable] = true;
+    for term in positive.flat_map(PatternRef::terms) {
+        if let TemplateTerm::Variable(variable) = term {
+            bound[variable] = true;
         }
     }
     for variable in 0..count {
@@ -580,4 +894,37 @@ fn admit_scope<'a>(
         }
     }
     Ok(count)
+}
+
+fn validate_shape<'a>(
+    tuple_width: usize,
+    positive: impl Iterator<Item = PatternRef<'a>> + Clone,
+    filter_count: usize,
+    limits: AdmissionLimits,
+    index: usize,
+) -> Result<(), AdmissionError> {
+    for (resource, actual, limit) in [
+        (
+            AdmissionResource::TupleWidth,
+            tuple_width,
+            limits.max_tuple_width,
+        ),
+        (
+            AdmissionResource::PositiveBody,
+            positive.clone().count(),
+            limits.max_positive_body,
+        ),
+        (AdmissionResource::Filters, filter_count, limits.max_filters),
+    ] {
+        check_bound(resource, actual, limit, Some(index))?;
+    }
+    for pattern in positive {
+        check_bound(
+            AdmissionResource::PredicateArity,
+            pattern.terms().len(),
+            limits.max_predicate_arity,
+            Some(index),
+        )?;
+    }
+    Ok(())
 }

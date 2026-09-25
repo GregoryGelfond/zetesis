@@ -18,13 +18,25 @@ fn extremal_atom_arguments_retain_typed_values() {
     )
     .unwrap();
     assert_eq!(
-        input.program().templates()[0].head().unwrap().terms(),
-        &[
+        input
+            .program()
+            .templates()
+            .at(0)
+            .unwrap()
+            .head()
+            .unwrap()
+            .terms()
+            .iter()
+            .collect::<Vec<_>>(),
+        [
             Term::Constant(Value::Infimum),
             Term::Constant(Value::Supremum),
             Term::Constant(Value::String("#inf".into())),
             Term::Constant(Value::String("#sup".into()))
         ]
+        .iter()
+        .map(zetesis_core::TemplateTerm::from)
+        .collect::<Vec<_>>()
     );
 }
 

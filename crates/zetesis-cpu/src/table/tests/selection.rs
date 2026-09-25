@@ -19,8 +19,10 @@ fn expected_rows(
                     .all(|(column, (value, &variable))| {
                         let in_domain = match domains[variable] {
                             Domain::Unrestricted => true,
-                            Domain::Singleton(wanted) => value == wanted,
-                            Domain::Finite(wanted) => wanted.contains(value),
+                            Domain::Singleton(wanted) => wanted == TermRef::from(value),
+                            Domain::Finite(wanted) => {
+                                wanted.iter().any(|wanted| wanted == TermRef::from(value))
+                            }
                         };
                         in_domain
                             && values
@@ -63,6 +65,9 @@ fn assert_domains(
         assert_eq!(
             projected.domain(variable).unwrap().collect::<BTreeSet<_>>(),
             expected_values
+                .into_iter()
+                .map(TermRef::from)
+                .collect::<BTreeSet<_>>()
         );
     }
 }
@@ -79,11 +84,11 @@ fn borrowed_domains_match_complete_rows() {
     let values = numbers(&[0, 1, 2]);
     let domains = [
         Domain::Unrestricted,
-        Domain::Finite(&[]),
-        Domain::Singleton(&values[0]),
-        Domain::Singleton(&values[1]),
-        Domain::Singleton(&values[2]),
-        Domain::Finite(&values[..2]),
+        Domain::Finite((&[] as &[Value]).into()),
+        Domain::Singleton(TermRef::from(&values[0])),
+        Domain::Singleton(TermRef::from(&values[1])),
+        Domain::Singleton(TermRef::from(&values[2])),
+        Domain::Finite((&values[..2]).into()),
     ];
     for bits in 0..16_u32 {
         let source = atoms(
@@ -132,7 +137,7 @@ fn selection_outlives_its_prepared_index() {
         let value = Value::Number(2);
         table
             .select(
-                &[Domain::Singleton(&value)],
+                &[Domain::Singleton(TermRef::from(&value))],
                 Limits::default(),
                 &Cancellation::default(),
             )
@@ -142,7 +147,7 @@ fn selection_outlives_its_prepared_index() {
     assert_eq!(selected.rows().collect::<Vec<_>>(), vec![1]);
     assert_eq!(
         selected.relation().row(1).unwrap().value(0),
-        Some(&Value::Number(2))
+        Some(TermRef::from(&Value::Number(2)))
     );
 }
 
@@ -156,7 +161,7 @@ fn advancing_bindings_preserves_prior_selection() {
     let mut bound = Value::Number(0);
     let first = table
         .select(
-            &[Domain::Singleton(&bound)],
+            &[Domain::Singleton(TermRef::from(&bound))],
             Limits::default(),
             &Cancellation::default(),
         )
@@ -164,7 +169,7 @@ fn advancing_bindings_preserves_prior_selection() {
     bound = Value::Number(1);
     let second = table
         .select(
-            &[Domain::Singleton(&bound)],
+            &[Domain::Singleton(TermRef::from(&bound))],
             Limits::default(),
             &Cancellation::default(),
         )
@@ -229,7 +234,7 @@ fn selection_skips_empty_mask_words() {
         Table::prepare(&relation, &[0], Limits::default(), &Cancellation::default()).unwrap();
     let selected = table
         .select(
-            &[Domain::Singleton(&Value::Number(1))],
+            &[Domain::Singleton(TermRef::from(&Value::Number(1)))],
             Limits::default(),
             &Cancellation::default(),
         )
@@ -266,7 +271,7 @@ fn checked_scan_visits_each_inspected_word() {
         Table::prepare(&relation, &[0], Limits::default(), &Cancellation::default()).unwrap();
     let selected = table
         .select(
-            &[Domain::Singleton(&Value::Number(1))],
+            &[Domain::Singleton(TermRef::from(&Value::Number(1)))],
             Limits::default(),
             &Cancellation::default(),
         )
@@ -304,7 +309,7 @@ fn checked_scan_error_preserves_retry_position() {
         Table::prepare(&relation, &[0], Limits::default(), &Cancellation::default()).unwrap();
     let selected = table
         .select(
-            &[Domain::Singleton(&Value::Number(1))],
+            &[Domain::Singleton(TermRef::from(&Value::Number(1)))],
             Limits::default(),
             &Cancellation::default(),
         )
@@ -370,7 +375,7 @@ fn row_selection_omits_projected_domain_storage() {
     let relation = Relation::from_atoms(&predicate, &source, RelationLimits::default()).unwrap();
     let table =
         Table::prepare(&relation, &[0], Limits::default(), &Cancellation::default()).unwrap();
-    let domains = [Domain::Singleton(&Value::Number(1))];
+    let domains = [Domain::Singleton(TermRef::from(&Value::Number(1)))];
     let selected = table
         .select(&domains, Limits::default(), &Cancellation::default())
         .unwrap();
@@ -391,7 +396,7 @@ fn singleton_selection_needs_no_union_capacity() {
     let value = Value::Number(1);
     let selected = table
         .select(
-            &[Domain::Singleton(&value)],
+            &[Domain::Singleton(TermRef::from(&value))],
             Limits::default(),
             &Cancellation::default(),
         )
@@ -403,7 +408,7 @@ fn singleton_selection_needs_no_union_capacity() {
     assert!(
         table
             .select(
-                &[Domain::Singleton(&value)],
+                &[Domain::Singleton(TermRef::from(&value))],
                 exact,
                 &Cancellation::default()
             )
@@ -411,7 +416,7 @@ fn singleton_selection_needs_no_union_capacity() {
     );
     let failure = table
         .select(
-            &[Domain::Finite(std::slice::from_ref(&value))],
+            &[Domain::Finite(std::slice::from_ref(&value).into())],
             exact,
             &Cancellation::default(),
         )
@@ -593,9 +598,9 @@ fn rayon_selection_preserves_query_order() {
     let table =
         Table::prepare(&relation, &[0], Limits::default(), &Cancellation::default()).unwrap();
     let domains = [
-        Domain::Finite(&[]),
+        Domain::Finite((&[] as &[Value]).into()),
         Domain::Unrestricted,
-        Domain::Singleton(&Value::Number(2)),
+        Domain::Singleton(TermRef::from(&Value::Number(2))),
     ];
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(2)

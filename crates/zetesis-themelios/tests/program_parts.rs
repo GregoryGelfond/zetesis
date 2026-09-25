@@ -107,7 +107,10 @@ fn scalar_admission_preserves_explicit_base_rules() {
             ExpansionLimits::default(),
         )
         .unwrap();
-        assert_eq!(direct.program().templates(), extended.program().templates());
+        assert_eq!(
+            direct.program().templates().iter().collect::<Vec<_>>(),
+            extended.program().templates().iter().collect::<Vec<_>>()
+        );
         assert_eq!(direct.source().text(), source);
     }
 }
@@ -143,8 +146,8 @@ fn base_delimiters_preserve_objective_templates() {
     let implicit = input("{a}. #minimize{2@1,k:a}.");
     let explicit = input("#program base. {a}. #program base. #minimize{2@1,k:a}.");
     assert_eq!(
-        explicit.objectives().templates(),
-        implicit.objectives().templates()
+        explicit.objectives().templates().iter().collect::<Vec<_>>(),
+        implicit.objectives().templates().iter().collect::<Vec<_>>()
     );
     let declarations = |admitted: &AdmittedFormula| {
         admitted

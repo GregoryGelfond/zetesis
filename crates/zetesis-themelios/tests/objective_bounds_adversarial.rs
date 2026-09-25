@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::time::{Duration, Instant};
 
 use serde_json::Value as Json;
-use zetesis_core::{Atom, Model, Term, Value};
+use zetesis_core::{Model, Term, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check, models};
 use zetesis_objective::{ObjectiveProgram, ObjectiveTemplate, Score};
@@ -65,7 +65,8 @@ fn costs(value: &Json) -> Option<Vec<i64>> {
         .map(|values| values.iter().map(|value| value.as_i64().unwrap()).collect())
 }
 
-fn text(atom: &Atom) -> String {
+fn text<'a>(atom: impl Into<zetesis_core::catalog::AtomRef<'a>>) -> String {
+    let atom = atom.into();
     let predicate = atom.predicate().name();
     if atom.values().is_empty() {
         return predicate.to_owned();
@@ -73,13 +74,14 @@ fn text(atom: &Atom) -> String {
     let values: Vec<_> = atom
         .values()
         .iter()
-        .map(|value| match value {
-            Value::Infimum => "#inf".to_owned(),
-            Value::Supremum => "#sup".to_owned(),
-            Value::Structured(value) => value.to_string(),
-            Value::Number(value) => value.to_string(),
-            Value::Symbol(value) => value.clone(),
-            Value::String(value) => serde_json::to_string(value).unwrap(),
+        .map(|value| match value.descriptor() {
+            zetesis_core::ValueNodeRef::Infimum => "#inf".to_owned(),
+            zetesis_core::ValueNodeRef::Supremum => "#sup".to_owned(),
+            zetesis_core::ValueNodeRef::Function { .. }
+            | zetesis_core::ValueNodeRef::Tuple { .. } => value.to_string(),
+            zetesis_core::ValueNodeRef::Number(value) => value.to_string(),
+            zetesis_core::ValueNodeRef::Symbol(value) => value.to_owned(),
+            zetesis_core::ValueNodeRef::String(value) => serde_json::to_string(value).unwrap(),
         })
         .collect();
     format!("{predicate}({})", values.join(","))
@@ -96,14 +98,11 @@ fn admit(source: &str) -> AdmittedFormula {
 }
 
 fn relation(input: &AdmittedFormula, mask: usize) -> Model {
-    Model::new(
-        input
-            .atoms()
-            .iter()
-            .enumerate()
-            .filter(|(index, _)| mask & (1 << index) != 0)
-            .map(|(_, atom)| atom.clone()),
+    Model::from_positions(
+        input.atom_catalog(),
+        (0..input.atoms().len()).filter(|index| mask & (1 << index) != 0),
     )
+    .unwrap()
 }
 
 fn interpretation(input: &AdmittedFormula, mask: usize) -> Interpretation {
@@ -202,7 +201,11 @@ fn every_verified_incumbent_retains_exactly_improving_and_tied_original_models()
     let mut nonlexical = false;
     for case in cases {
         let input = admit(&case.source);
-        nonlexical |= input.atoms().windows(2).any(|pair| pair[0] > pair[1]);
+        nonlexical |= input
+            .atoms()
+            .iter()
+            .zip(input.atoms().iter().skip(1))
+            .any(|(left, right)| left > right);
         let original_nodes = input.theory().nodes().to_vec();
         let original_roots = input.theory().roots().to_vec();
         let stable = stable(&input);
@@ -352,7 +355,7 @@ fn constant_score(values: &[(i32, i32)]) -> Score {
     .unwrap();
     zetesis_objective::evaluate(
         &program,
-        &Model::new([]),
+        &Model::new([]).unwrap(),
         zetesis_objective::Limits::default(),
         &Cancellation::default(),
     )

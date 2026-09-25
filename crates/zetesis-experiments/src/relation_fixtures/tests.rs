@@ -26,7 +26,7 @@ fn scalar_columns_match_the_independent_row_reference() {
             for (index, keys) in fixture.queries().iter().enumerate() {
                 let keys: Vec<_> = keys
                     .iter()
-                    .map(|(column, value)| (*column, value))
+                    .map(|(column, value)| (*column, value.into()))
                     .collect();
                 let query = relation.query(&keys, RelationLimits::default()).unwrap();
                 let selected = relation
@@ -58,9 +58,12 @@ fn selected_rows_reconstruct_the_original_typed_values() {
         for index in 0..positions.len() {
             let row = selection.row(index).unwrap();
             let source = &fixture.atoms()[row.source_index()];
-            assert_eq!(row.predicate(), source.predicate());
+            assert_eq!(
+                row.predicate(),
+                zetesis_core::catalog::PredicateRef::from(source.predicate())
+            );
             for (column, value) in source.values().iter().enumerate() {
-                assert_eq!(row.value(column), Some(value));
+                assert_eq!(row.value(column), Some(value.into()));
             }
         }
     }

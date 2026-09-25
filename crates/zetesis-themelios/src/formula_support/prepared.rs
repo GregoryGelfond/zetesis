@@ -1,8 +1,8 @@
 //! Reusable ordering for an exact rule over completed immutable support.
 
 use super::{
-    CompletedCatalog, CompletedQueries, CompletedSupport, Counters, FilteredRows, Join, RowFilter,
-    order,
+    CompletedQueries, CompletedSupport, Completion, Computation, Counters, FilteredRows, Join,
+    RowFilter, order,
 };
 use crate::expansion::Budget;
 use crate::formula_binding::Binding;
@@ -12,7 +12,7 @@ use crate::{FormulaFailure, FormulaLimits};
 /// No candidate, binding, arithmetic result or traversal position is retained.
 pub(crate) struct PreparedRule<'source> {
     rule: &'source RuleIr,
-    catalog: &'source CompletedCatalog,
+    completion: &'source Completion,
     plan: order::Plan<'source>,
 }
 
@@ -28,7 +28,7 @@ impl<'source> PreparedRule<'source> {
         let location = rules.first().expect("nonempty streamed source").location;
         let mut slots = Vec::new();
         let bytes = |capacity: usize| capacity as u128 * size_of::<Option<Self>>() as u128;
-        support.admit_workspace(bytes(rules.len()), limits, location)?;
+        support.admit_workspace(bytes(rules.len()), limits, counters, location)?;
         counters.work(limits, location)?;
         slots
             .try_reserve_exact(rules.len())
@@ -36,7 +36,7 @@ impl<'source> PreparedRule<'source> {
                 error: zetesis_core::relation::Failure::Allocation,
                 location,
             })?;
-        support.admit_workspace(bytes(slots.capacity()), limits, location)?;
+        support.admit_workspace(bytes(slots.capacity()), limits, counters, location)?;
         for rule in rules {
             counters.work(limits, rule.location)?;
             slots.push(None);
@@ -66,25 +66,46 @@ impl<'source> PreparedRule<'source> {
             counters,
             rule.location,
         )?;
+        let computation = queries.computation(rule.location)?;
+        let empty = Binding::new(&computation, limits, counters, rule.location)?;
         let plan = order::Plan::new(
             &rule.body,
-            &Binding::default(),
+            &empty,
             rule.variables,
-            queries.support(),
+            &completed.relations,
             budget,
             rule.location,
-            Some(&mut |bytes| {
-                counters.work(limits, rule.location)?;
-                completed.admit_workspace(bytes, limits, rule.location)
+            Some(&mut |capacity| match capacity {
+                order::Capacity::Requested(bytes) => {
+                    counters.work(limits, rule.location)?;
+                    computation.preparation_capacity(
+                        order::Capacity::Requested(bytes),
+                        limits,
+                        counters,
+                        rule.location,
+                    )
+                }
+                order::Capacity::Allocated(bytes) => {
+                    // Actual capacity remains evidence even when the next
+                    // work permit refuses; retain that original refusal.
+                    let observed = computation.preparation_capacity(
+                        order::Capacity::Allocated(bytes),
+                        limits,
+                        counters,
+                        rule.location,
+                    );
+                    counters.work(limits, rule.location)?;
+                    observed
+                }
             }),
         )?;
-        completed.admit_workspace(plan.retained_bytes(), limits, rule.location)?;
+        completed.admit_workspace(plan.retained_bytes(), limits, counters, rule.location)?;
         completed.retain_workspace(
             usize::try_from(plan.retained_bytes()).expect("admitted support bytes fit usize"),
         );
         Ok(Self {
             rule,
-            catalog: completed.catalog,
+            completion: completed.completion,
             plan,
         })
     }
@@ -95,9 +116,12 @@ impl<'source> PreparedRule<'source> {
         &'a self,
         queries: &'a CompletedQueries<'queries>,
         filter: Option<&'a dyn RowFilter>,
+        computation: &Computation<'_, '_>,
+        limits: &FormulaLimits,
         budget: &mut Budget,
+        counters: &mut Counters,
     ) -> Result<FilteredRows<'a, 'queries>, FormulaFailure> {
-        if !std::ptr::eq(self.catalog, queries.catalog) {
+        if !self.completion.same(queries.completion) {
             return Err(FormulaFailure::SupportRelation {
                 error: zetesis_core::relation::Failure::Owner,
                 location: self.rule.location,
@@ -109,6 +133,7 @@ impl<'source> PreparedRule<'source> {
             filter,
             Some(&self.plan),
             budget,
+            crate::formula_support::Context::new(computation, limits, counters, self.rule.location),
         )
     }
 }

@@ -1,9 +1,11 @@
 //! Transactional canonical payload accounting for retained interpretations.
 //!
-//! Catalogs are charged once per allocation, selections once per retained entry,
-//! and caller-described associated payload separately. This is not an allocator
-//! or RSS bound: vector/hash capacity, index entries, Arc envelopes, subjects and
-//! transient candidates remain outside this portable measure.
+//! Each occurrence catalog's portable encoding is charged once per allocation,
+//! selections once per retained entry, and caller-described payload separately.
+//! Canonical identities outside an occurrence map remain uncharged even when
+//! its shared prefix keeps them alive. This is not an allocator or RSS bound:
+//! vector/hash capacity, index entries, Arc envelopes, subjects and transient
+//! candidates also remain outside this measure.
 
 use std::{collections::HashMap, fmt};
 
@@ -14,7 +16,8 @@ use crate::{AtomCatalog, Model};
 pub struct RetainedPayload {
     /// Distinct catalog allocations, including an empty catalog if retained.
     pub catalogs: usize,
-    /// Whole canonical catalogs, including unselected atoms, counted once each.
+    /// Encoded occurrence catalogs, including repeated and unselected entries,
+    /// counted once per catalog allocation; excludes other prefix identities.
     pub catalog_bytes: usize,
     /// Canonical position records, counted separately for every retained entry.
     pub selection_bytes: usize,
@@ -70,9 +73,9 @@ impl ModelRetention {
     }
 
     /// Prepare replacement of the complete retained family by one model entry.
-    /// The new owner's full catalog and supplied associated payload are charged
-    /// against an empty ledger; old owners remain live until commit. The byte
-    /// limit describes the new retained payload, not old/new transient overlap.
+    /// The new owner's full occurrence encoding and supplied associated payload
+    /// are charged against an empty ledger; old owners remain live until commit.
+    /// The byte limit describes the new payload, not old/new transient overlap.
     ///
     /// # Errors
     /// Returns the same failures as [`Self::admit`], preserving the old family

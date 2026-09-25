@@ -245,9 +245,9 @@ fn source_count_plans_preserve_cartesian_selections() {
                 let count = model
                     .iter()
                     .filter(|&&atom| {
-                        let atom = &planned.admitted.atoms()[atom];
+                        let atom = planned.admitted.atoms().at(atom).unwrap();
                         atom.predicate().name() == "p"
-                            && atom.values()[0]
+                            && atom.values().get(0).unwrap()
                                 == zetesis_core::Value::Number(i32::try_from(group).unwrap())
                     })
                     .count();

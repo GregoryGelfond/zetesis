@@ -2,7 +2,8 @@
 
 use super::*;
 use zetesis_core::{
-    AdmissionLimits, AtomPattern, GroundProgram, Predicate, StaticLimits, Template, Term, Value,
+    AdmissionLimits, Atom, AtomPattern, GroundProgram, Predicate, StaticLimits, Template, Term,
+    Value,
 };
 
 fn pattern(name: &str, values: &[i32]) -> AtomPattern {
@@ -86,7 +87,13 @@ fn counted_regions_cover_each_open_root_seed_once() {
     candidates.bounded(Limits::default());
     let actual: Vec<_> = candidates
         .by_ref()
-        .map(|seed| seed.unwrap().atoms().iter().cloned().collect::<Vec<_>>())
+        .map(|seed| {
+            seed.unwrap()
+                .atoms()
+                .iter()
+                .map(|atom| atom.to_atom(zetesis_core::ValueLimits::default()).unwrap())
+                .collect::<Vec<_>>()
+        })
         .collect();
     // Compare the sequence, not a set: deduplication would hide replayed seeds.
     assert_eq!(actual, expected_choices(&values));
@@ -111,7 +118,13 @@ fn counted_regions_never_resume_the_symbolic_carrier() {
     candidates.bounded(Limits::default());
     let actual: Vec<_> = candidates
         .by_ref()
-        .map(|seed| seed.unwrap().atoms().iter().cloned().collect::<Vec<_>>())
+        .map(|seed| {
+            seed.unwrap()
+                .atoms()
+                .iter()
+                .map(|atom| atom.to_atom(zetesis_core::ValueLimits::default()).unwrap())
+                .collect::<Vec<_>>()
+        })
         .collect();
     assert_eq!(actual, expected_choices(&values));
     assert_eq!(candidates.statistics().cut_gate_atoms, 3);
@@ -161,7 +174,10 @@ fn supported_root_tokens_pack_at_their_original_positions() {
         assert_eq!(words, graph.seed_words(&selection.to_seed()).unwrap());
         for entry in selection.view().entries() {
             assert_eq!(
-                &graph.atoms()[entry.resolve_in(&graph).unwrap() as usize],
+                graph
+                    .atoms()
+                    .at(entry.resolve_in(&graph).unwrap() as usize)
+                    .unwrap(),
                 entry.atom()
             );
         }

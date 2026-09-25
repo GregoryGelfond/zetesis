@@ -31,6 +31,7 @@ pub use aggregate::{
     AggregateExtremum, AggregateFamilyBuild, AggregateFamilyLimits, AggregateGuard,
     AggregateLimits, AggregateProfile, AggregateStatistics, ExtremumBound, ValueExtremumElement,
     append_aggregate, append_aggregate_family, append_extremum, append_value_extremum,
+    append_value_extremum_refs,
 };
 
 pub use evaluation::{

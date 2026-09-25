@@ -18,15 +18,16 @@
 //!
 //! Every order yields the same complete bindings, since the join is a
 //! conjunction, and the semi-naive partition is by source occurrence and
-//! does not read this order. The choice costs one work unit per occurrence
-//! considered against each waiting comparison.
+//! does not read this order. Each arrangement resolves offered row counts once.
+//! Rank evaluation, variable metadata scans and checked predicate comparisons
+//! consume term work before inspection, including when no comparison waits.
 
 use std::cmp::Reverse;
 
 use themelios_base::span::Location;
-use zetesis_core::Term;
+use zetesis_core::TemplateTerm;
 
-use super::{PatternOccurrence, PositivePattern, Support, comparison};
+use super::{PatternOccurrence, PositivePattern, Relations, comparison};
 use crate::expansion::Budget;
 use crate::formula_binding::Binding;
 use crate::formula_ir::LiteralIr;
@@ -46,10 +47,10 @@ impl<'a> Plan<'a> {
         literals: &'a [LiteralIr],
         prefix: &Binding,
         variables: usize,
-        support: &Support<'_>,
+        support: &Relations<'a>,
         budget: &mut Budget,
         location: Location,
-        admit: Option<&mut dyn FnMut(u128) -> Result<(), FormulaFailure>>,
+        admit: Option<&mut dyn FnMut(Capacity) -> Result<(), FormulaFailure>>,
     ) -> Result<Self, FormulaFailure> {
         let mut space = Workspace {
             bytes: 0,
@@ -59,40 +60,70 @@ impl<'a> Plan<'a> {
         // Universals have separate local scopes. Their conditions cannot bind
         // outer variables, and truth/vacuity over an incomplete support round
         // cannot prune possible heads. Only ordinary positive atoms join here.
-        let patterns = literals.iter().enumerate().filter_map(|(source, literal)| {
-            let pattern = match literal {
-                LiteralIr::Atom(DefaultNegation::None, atom) => PositivePattern::Flat(atom),
-                LiteralIr::PatternAtom(pattern) => PositivePattern::Structural(pattern),
-                _ => return None,
+        let mut patterns = space.reserve(literals.len())?;
+        for (source, literal) in literals.iter().enumerate() {
+            work(budget, 1, location)?;
+            let flat = match literal {
+                LiteralIr::Atom(DefaultNegation::None, atom) => *atom,
+                LiteralIr::PatternAtom(pattern) => pattern.atom,
+                _ => continue,
             };
-            Some(PatternOccurrence { pattern, source })
-        });
-        let mut patterns = space.collect(patterns, literals.len())?;
+            let components = support
+                .components()
+                .ok_or_else(|| super::components::missing(location))?;
+            let flat = flat.get_with(components, location, || {
+                budget
+                    .charge(ExpansionResource::TermWork, 1, location)
+                    .map_err(Into::into)
+            })?;
+            let pattern = match literal {
+                LiteralIr::Atom(..) => PositivePattern::Flat(flat),
+                LiteralIr::PatternAtom(pattern) => PositivePattern::Structural(pattern.bind(flat)),
+                _ => unreachable!("selected positive occurrence"),
+            };
+            patterns.push(PatternOccurrence { pattern, source });
+        }
         for pattern in &patterns {
-            for term in pattern.atom().terms() {
+            work(budget, 1, location)?;
+            let terms = pattern.atom().terms();
+            for column in 0..terms.len() {
                 budget.charge(ExpansionResource::TermWork, 1, location)?;
-                if let zetesis_core::Term::Variable(variable) = term
-                    && prefix.slots().get(*variable).is_some_and(Option::is_none)
+                let term = terms.at(column).expect("checked pattern arity");
+                if let TemplateTerm::Variable(variable) = term
+                    && variable < prefix.len()
+                    && !prefix.is_bound(variable, location)?
                 {
-                    return Err(FormulaFailure::UnsafeVariable {
-                        variable: *variable,
-                        location,
-                    });
+                    return Err(FormulaFailure::UnsafeVariable { variable, location });
                 }
             }
         }
-        let mut prefix = space.collect(prefix.slots().iter().map(Option::is_some), variables)?;
+        work(budget, prefix.len() as u128, location)?;
+        let mut prefix = space.collect(
+            (0..prefix.len()).map(|slot| {
+                prefix
+                    .slots()
+                    .is_bound(slot)
+                    .expect("slot is inside the selected prefix")
+            }),
+            variables,
+        )?;
+        work(budget, variables as u128, location)?;
         prefix.resize(variables, false);
+        work(budget, prefix.len() as u128, location)?;
         let mut bound = space.collect(prefix.iter().copied(), variables)?;
         arrange_with(
             &mut patterns,
             literals,
             &mut bound,
-            |pattern| support.row_count(pattern.atom().predicate()),
+            |pattern, budget| {
+                support
+                    .row_counts_with(pattern.atom().predicate(), || work(budget, 1, location))
+                    .map(|(_, total)| total)
+            },
             budget,
             &mut space,
         )?;
-        let decisions = Decisions::with_space(literals, &patterns, &prefix, &mut space)?;
+        let decisions = Decisions::with_space(literals, &patterns, &prefix, budget, &mut space)?;
         Ok(Self {
             patterns,
             decisions,
@@ -105,13 +136,21 @@ impl<'a> Plan<'a> {
     }
 }
 
+/// One cumulative planner capacity boundary. Requested capacity is checked
+/// before allocation; allocated capacity is observed only after it succeeds.
+#[derive(Clone, Copy)]
+pub(super) enum Capacity {
+    Requested(u128),
+    Allocated(u128),
+}
+
 /// Prepared vectors reserve once before filling. The cumulative reservation is
-/// a conservative preparation peak, including scratch already dropped. Ordinary
-/// joins keep their existing collection behavior and allocation boundaries.
+/// a conservative preparation peak, including scratch already dropped. Only
+/// successful allocations contribute to its observed capacity.
 struct Workspace<'a> {
     bytes: u128,
     location: Option<Location>,
-    admit: Option<&'a mut dyn FnMut(u128) -> Result<(), FormulaFailure>>,
+    admit: Option<&'a mut dyn FnMut(Capacity) -> Result<(), FormulaFailure>>,
 }
 impl Workspace<'_> {
     fn collect<T>(
@@ -137,7 +176,9 @@ impl Workspace<'_> {
         let Some(admit) = &mut self.admit else {
             return Ok(Vec::with_capacity(capacity));
         };
-        admit(self.bytes + capacity as u128 * size_of::<T>() as u128)?;
+        admit(Capacity::Requested(
+            self.bytes + capacity as u128 * size_of::<T>() as u128,
+        ))?;
         let mut result = Vec::new();
         result
             .try_reserve_exact(capacity)
@@ -148,7 +189,7 @@ impl Workspace<'_> {
                     .expect("bounded preparation has a source location"),
             })?;
         self.bytes += result.capacity() as u128 * size_of::<T>() as u128;
-        admit(self.bytes)?;
+        admit(Capacity::Allocated(self.bytes))?;
         Ok(result)
     }
 }
@@ -163,74 +204,132 @@ impl Waiting {
     fn of(
         literals: &[LiteralIr],
         bound: &[bool],
+        budget: &mut Budget,
         space: &mut Workspace<'_>,
     ) -> Result<Vec<Self>, FormulaFailure> {
-        // Reserve the outer vector before the inner input vectors so every
-        // live allocation is admitted before its first element is written.
+        let location = space.location.expect("arrangement has a source location");
+        // Reserve outer storage first; expression scans are charged before the
+        // filtered input iterator can skip any nonvariable operations.
         let capacity = if space.admit.is_some() {
             literals.len()
         } else {
             0
         };
         let mut waiting = space.reserve(capacity)?;
-        for (left, _, right) in literals.iter().filter_map(comparison) {
+        for literal in literals {
+            work(budget, 1, location)?;
+            let Some((left, _, right)) = comparison(literal) else {
+                continue;
+            };
+            work(
+                budget,
+                left.nodes.len() as u128 + right.nodes.len() as u128,
+                location,
+            )?;
             let variables = space.collect(
                 left.inputs().chain(right.inputs()),
                 left.nodes.len().saturating_add(right.nodes.len()),
             )?;
+            work(budget, variables.len() as u128, location)?;
             let decided = variables.iter().all(|&variable| is_bound(bound, variable));
             waiting.push(Self { variables, decided });
         }
         Ok(waiting)
     }
 
-    /// Whether binding `occurrence` on top of `bound` decides this comparison.
-    fn decided_by(&self, occurrence: &PatternOccurrence<'_>, bound: &[bool]) -> bool {
-        !self.decided
-            && self
-                .variables
-                .iter()
-                .all(|&variable| is_bound(bound, variable) || binds(occurrence, variable))
-    }
-
-    /// The variables this comparison still waits on that `occurrence` binds.
-    fn advanced_by(&self, occurrence: &PatternOccurrence<'_>, bound: &[bool]) -> usize {
+    fn decided_by(
+        &self,
+        occurrence: &PatternOccurrence<'_>,
+        bound: &[bool],
+        budget: &mut Budget,
+        location: Location,
+    ) -> Result<bool, FormulaFailure> {
         if self.decided {
-            return 0;
+            return Ok(false);
         }
-        self.variables
-            .iter()
-            .filter(|&&variable| !is_bound(bound, variable) && binds(occurrence, variable))
-            .count()
-    }
-}
-
-/// Apply `visit` to every variable slot the occurrence binds when it
-/// matches: its whole arguments and, for a structural pattern, the captured
-/// subterms.
-fn each_slot(occurrence: &PatternOccurrence<'_>, mut visit: impl FnMut(usize)) {
-    match occurrence.pattern {
-        PositivePattern::Flat(atom) => {
-            for term in atom.terms() {
-                if let Term::Variable(variable) = term {
-                    visit(*variable);
-                }
+        for &variable in &self.variables {
+            work(budget, 1, location)?;
+            if !is_bound(bound, variable) && !binds(occurrence, variable, budget, location)? {
+                return Ok(false);
             }
         }
-        PositivePattern::Structural(pattern) => pattern.slots().for_each(visit),
+        Ok(true)
+    }
+
+    fn advanced_by(
+        &self,
+        occurrence: &PatternOccurrence<'_>,
+        bound: &[bool],
+        budget: &mut Budget,
+        location: Location,
+    ) -> Result<usize, FormulaFailure> {
+        if self.decided {
+            return Ok(0);
+        }
+        let mut count = 0;
+        for &variable in &self.variables {
+            work(budget, 1, location)?;
+            if !is_bound(bound, variable) && binds(occurrence, variable, budget, location)? {
+                count += 1;
+            }
+        }
+        Ok(count)
     }
 }
 
-fn binds(occurrence: &PatternOccurrence<'_>, variable: usize) -> bool {
-    let mut found = false;
-    each_slot(occurrence, |slot| found |= slot == variable);
-    found
+fn work(budget: &mut Budget, amount: u128, location: Location) -> Result<(), FormulaFailure> {
+    budget
+        .charge(ExpansionResource::TermWork, amount, location)
+        .map_err(Into::into)
 }
 
-fn is_test(occurrence: &PatternOccurrence<'_>, bound: &[bool]) -> bool {
+/// Pre-admit the complete metadata scan before applying any slot update.
+/// Structural compilation retains at most one argument plan per flat column,
+/// so the flat width also bounds the header scan that obtains its node count.
+fn each_slot(
+    occurrence: &PatternOccurrence<'_>,
+    budget: &mut Budget,
+    location: Location,
+    visit: impl FnMut(usize),
+) -> Result<(), FormulaFailure> {
+    work(budget, 1, location)?;
+    let width = occurrence.atom().terms().len();
+    work(budget, width as u128, location)?;
+    match occurrence.pattern {
+        PositivePattern::Flat(atom) => atom.terms().variables().for_each(visit),
+        PositivePattern::Structural(pattern) => {
+            let nodes = pattern.node_count();
+            work(budget, nodes as u128, location)?;
+            pattern.slots().for_each(visit);
+        }
+    }
+    Ok(())
+}
+
+fn binds(
+    occurrence: &PatternOccurrence<'_>,
+    variable: usize,
+    budget: &mut Budget,
+    location: Location,
+) -> Result<bool, FormulaFailure> {
+    let mut found = false;
+    each_slot(occurrence, budget, location, |slot| {
+        found |= slot == variable;
+    })?;
+    Ok(found)
+}
+
+fn is_test(
+    occurrence: &PatternOccurrence<'_>,
+    bound: &[bool],
+    budget: &mut Budget,
+    location: Location,
+) -> Result<bool, FormulaFailure> {
     let mut all = true;
-    each_slot(occurrence, |slot| all &= is_bound(bound, slot));
-    all
+    each_slot(occurrence, budget, location, |slot| {
+        all &= is_bound(bound, slot);
+    })?;
+    Ok(all)
 }
 
 /// What the prefixes of one join order decide: for each literal, the depth
@@ -254,55 +353,73 @@ pub(super) struct Decisions {
 }
 
 impl Decisions {
-    pub(super) fn of(
+    pub(super) fn checked(
         literals: &[LiteralIr],
         occurrences: &[PatternOccurrence<'_>],
         prefix: &[bool],
-    ) -> Self {
+        budget: &mut Budget,
+        location: Location,
+        admit: &mut dyn FnMut(Capacity) -> Result<(), FormulaFailure>,
+    ) -> Result<Self, FormulaFailure> {
         Self::with_space(
             literals,
             occurrences,
             prefix,
+            budget,
             &mut Workspace {
                 bytes: 0,
-                location: None,
-                admit: None,
+                location: Some(location),
+                admit: Some(admit),
             },
         )
-        .expect("unbounded planning performs no fallible reservations")
     }
 
     fn with_space(
         literals: &[LiteralIr],
         occurrences: &[PatternOccurrence<'_>],
         prefix: &[bool],
+        budget: &mut Budget,
         space: &mut Workspace<'_>,
     ) -> Result<Self, FormulaFailure> {
+        let location = space.location.expect("decisions have a source location");
+        work(budget, prefix.len() as u128, location)?;
         let mut bound_at =
             space.collect(prefix.iter().map(|&bound| bound.then_some(0)), prefix.len())?;
         for (depth, occurrence) in occurrences.iter().enumerate() {
-            each_slot(occurrence, |slot| {
+            each_slot(occurrence, budget, location, |slot| {
                 if let Some(entry) = bound_at.get_mut(slot)
                     && entry.is_none()
                 {
                     *entry = Some(depth);
                 }
-            });
+            })?;
         }
-        let at = literals.iter().map(|literal| {
-            let (left, _, right) = comparison(literal)?;
-            left.inputs()
-                .chain(right.inputs())
-                .try_fold(0, |depth, variable| {
-                    bound_at
-                        .get(variable)
-                        .copied()
-                        .flatten()
-                        .map(|at| depth.max(at))
-                })
-        });
-        let at = space.collect(at, literals.len())?;
+        let mut at = space.reserve(literals.len())?;
+        for literal in literals {
+            work(budget, 1, location)?;
+            let decision = if let Some((left, _, right)) = comparison(literal) {
+                work(
+                    budget,
+                    left.nodes.len() as u128 + right.nodes.len() as u128,
+                    location,
+                )?;
+                left.inputs()
+                    .chain(right.inputs())
+                    .try_fold(0, |depth, variable| {
+                        bound_at
+                            .get(variable)
+                            .copied()
+                            .flatten()
+                            .map(|at| depth.max(at))
+                    })
+            } else {
+                None
+            };
+            at.push(decision);
+        }
+        work(budget, at.len() as u128, location)?;
         let last = at.iter().filter_map(|depth| *depth).max();
+        work(budget, literals.len() as u128, location)?;
         let on_completion = literals.iter().zip(&at).any(|(literal, decision)| {
             decision.is_none()
                 && !matches!(
@@ -348,6 +465,7 @@ fn is_bound(bound: &[bool], variable: usize) -> bool {
 /// enclosing prefix, the rows offered to each occurrence and the comparisons
 /// of `literals`. On return `bound` also holds the variables the occurrences
 /// bind.
+#[cfg(test)]
 pub(super) fn arrange(
     occurrences: &mut [PatternOccurrence<'_>],
     literals: &[LiteralIr],
@@ -360,7 +478,7 @@ pub(super) fn arrange(
         occurrences,
         literals,
         bound,
-        row_count,
+        |occurrence, _| Ok(row_count(occurrence)),
         budget,
         &mut Workspace {
             bytes: 0,
@@ -370,28 +488,57 @@ pub(super) fn arrange(
     )
 }
 
+pub(super) fn arrange_checked(
+    occurrences: &mut [PatternOccurrence<'_>],
+    literals: &[LiteralIr],
+    bound: &mut [bool],
+    row_count: impl FnMut(&PatternOccurrence<'_>, &mut Budget) -> Result<usize, FormulaFailure>,
+    budget: &mut Budget,
+    location: Location,
+    admit: &mut dyn FnMut(Capacity) -> Result<(), FormulaFailure>,
+) -> Result<(), FormulaFailure> {
+    arrange_with(
+        occurrences,
+        literals,
+        bound,
+        row_count,
+        budget,
+        &mut Workspace {
+            bytes: 0,
+            location: Some(location),
+            admit: Some(admit),
+        },
+    )
+}
+
 fn arrange_with(
     occurrences: &mut [PatternOccurrence<'_>],
     literals: &[LiteralIr],
     bound: &mut [bool],
-    row_count: impl Fn(&PatternOccurrence<'_>) -> usize,
+    mut row_count: impl FnMut(&PatternOccurrence<'_>, &mut Budget) -> Result<usize, FormulaFailure>,
     budget: &mut Budget,
     space: &mut Workspace<'_>,
 ) -> Result<(), FormulaFailure> {
     let location = space.location.expect("arrangement has a source location");
-    let mut waiting = Waiting::of(literals, bound, space)?;
+    let mut offered = space.reserve(occurrences.len())?;
+    for occurrence in occurrences.iter() {
+        work(budget, 1, location)?;
+        offered.push(row_count(occurrence, budget)?);
+    }
+    let mut waiting = Waiting::of(literals, bound, budget, space)?;
     for position in 0..occurrences.len() {
         let mut best = None;
         for (candidate, occurrence) in occurrences.iter().enumerate().skip(position) {
+            work(budget, 1, location)?;
             let (mut decides, mut advances) = (0, 0);
             for comparison in &waiting {
-                budget.charge(ExpansionResource::TermWork, 1, location)?;
-                decides += usize::from(comparison.decided_by(occurrence, bound));
-                advances += comparison.advanced_by(occurrence, bound);
+                work(budget, 1, location)?;
+                decides += usize::from(comparison.decided_by(occurrence, bound, budget, location)?);
+                advances += comparison.advanced_by(occurrence, bound, budget, location)?;
             }
             let rank = (
-                !is_test(occurrence, bound),
-                row_count(occurrence),
+                !is_test(occurrence, bound, budget, location)?,
+                offered[candidate],
                 Reverse(decides),
                 Reverse(advances),
                 occurrence.source,
@@ -400,14 +547,17 @@ fn arrange_with(
                 best = Some((candidate, rank));
             }
         }
+        work(budget, 1, location)?;
         let (chosen, _) = best.expect("a candidate remains at every position");
         occurrences.swap(position, chosen);
-        each_slot(&occurrences[position], |slot| {
+        offered.swap(position, chosen);
+        each_slot(&occurrences[position], budget, location, |slot| {
             if let Some(entry) = bound.get_mut(slot) {
                 *entry = true;
             }
-        });
+        })?;
         for comparison in &mut waiting {
+            work(budget, 1 + comparison.variables.len() as u128, location)?;
             comparison.decided |= comparison
                 .variables
                 .iter()

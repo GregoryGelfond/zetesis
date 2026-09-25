@@ -2,7 +2,7 @@
 
 use std::{convert::Infallible, mem::size_of};
 
-use zetesis_core::{Value, relation::Relation};
+use zetesis_core::{Value, catalog::TermRef, relation::Relation};
 
 use crate::Cancellation;
 
@@ -17,9 +17,116 @@ pub enum Domain<'value> {
     /// No restriction on this variable beyond the supplied coherent relation.
     Unrestricted,
     /// Exactly one typed value, with no temporary one-element owner.
-    Singleton(&'value Value),
+    Singleton(TermRef<'value>),
     /// A finite list with set semantics, including duplicates and absent values.
-    Finite(&'value [Value]),
+    Finite(Values<'value>),
+}
+
+/// A finite borrowed domain list, without an owned term dictionary.
+///
+/// Canonical callers supply a slice of [`TermRef`]s. Owned [`Value`] slices
+/// are ingress descriptions and resolve to the same borrowed term interface.
+/// Construction, indexing and iteration allocate nothing and copy only views;
+/// the supplied payload and reference-list storage remain caller-owned.
+///
+/// ```
+/// use zetesis_core::{Value, catalog::TermRef};
+/// use zetesis_cpu::table::Values;
+/// let ingress = [Value::Number(7)];
+/// let references = [TermRef::from(&ingress[0])];
+/// let source = Values::from(ingress.as_slice());
+/// let borrowed = Values::from(references.as_slice());
+/// assert!(source.iter().eq(borrowed.iter()));
+/// ```
+#[derive(Clone, Copy, Debug)]
+pub struct Values<'a>(ValueSource<'a>);
+
+#[derive(Clone, Copy, Debug)]
+enum ValueSource<'a> {
+    Ingress(&'a [Value]),
+    Terms(&'a [TermRef<'a>]),
+}
+
+impl<'a> From<&'a [Value]> for Values<'a> {
+    fn from(values: &'a [Value]) -> Self {
+        Self(ValueSource::Ingress(values))
+    }
+}
+impl<'a> From<&'a [TermRef<'a>]> for Values<'a> {
+    fn from(values: &'a [TermRef<'a>]) -> Self {
+        Self(ValueSource::Terms(values))
+    }
+}
+impl<'a> Values<'a> {
+    /// Number of supplied values, including repetitions and unsupported values.
+    #[must_use]
+    pub const fn len(self) -> usize {
+        match self.0 {
+            ValueSource::Ingress(values) => values.len(),
+            ValueSource::Terms(values) => values.len(),
+        }
+    }
+
+    /// Whether this finite domain permits no value.
+    #[must_use]
+    pub const fn is_empty(self) -> bool {
+        self.len() == 0
+    }
+
+    /// Borrow the value at an in-range position, without copying payload.
+    #[must_use]
+    pub fn at(self, index: usize) -> Option<TermRef<'a>> {
+        match self.0 {
+            ValueSource::Ingress(values) => values.get(index).map(TermRef::from),
+            ValueSource::Terms(values) => values.get(index).copied(),
+        }
+    }
+
+    /// Original domain order, including repetitions. No term is materialized.
+    #[must_use]
+    pub fn iter(self) -> impl ExactSizeIterator<Item = TermRef<'a>> + DoubleEndedIterator + Clone {
+        match self.0 {
+            ValueSource::Ingress(values) => ValuesIter::Ingress(values.iter()),
+            ValueSource::Terms(values) => ValuesIter::Terms(values.iter()),
+        }
+    }
+}
+
+/// Both input forms advance their own borrowed slice without an indexed lookup.
+#[derive(Clone)]
+enum ValuesIter<'a> {
+    Ingress(std::slice::Iter<'a, Value>),
+    Terms(std::slice::Iter<'a, TermRef<'a>>),
+}
+impl<'a> Iterator for ValuesIter<'a> {
+    type Item = TermRef<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Ingress(values) => values.next().map(TermRef::from),
+            Self::Terms(values) => values.next().copied(),
+        }
+    }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let len = self.len();
+        (len, Some(len))
+    }
+}
+impl DoubleEndedIterator for ValuesIter<'_> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Ingress(values) => values.next_back().map(TermRef::from),
+            Self::Terms(values) => values.next_back().copied(),
+        }
+    }
+}
+impl ExactSizeIterator for ValuesIter<'_> {
+    fn len(&self) -> usize {
+        match self {
+            Self::Ingress(values) => values.len(),
+            Self::Terms(values) => values.len(),
+        }
+    }
 }
 
 /// Complete domain filtering over one exact immutable relation.
@@ -123,7 +230,7 @@ impl<'owner, 'source> Table<'owner, 'source> {
                     } else {
                         union = work.zeros(rows.len())?;
                     }
-                    for value in values {
+                    for value in values.iter() {
                         work.tick(1)?;
                         if let Some(entry) = self.lookup(variable, value, work)? {
                             if let Some(permitted) = &mut permitted {

@@ -2,35 +2,48 @@
 //!
 //! Cursors enumerate relational alternatives and generated values. A depth owns
 //! only its new bindings and expanded alternatives; inherited slots are borrowed.
-//! Exhaustion, visitor stop and errors all release this query's ownership while
-//! leaving keys retained by an enclosing aggregate scope untouched.
+//! Exhaustion, visitor stop and errors release this query's logical ownership.
+
+use zetesis_core::catalog::TermKey;
 
 use super::rows::AtomChoices;
 use super::{
-    Binder, Bound, Error, ErrorKind, EvaluationError, Metric, ModelRows, Query, Resource, Symbol,
-    Visitor, Work, complete, matches, patterns, scopes, values,
+    Binder, Binding, Error, ErrorKind, EvaluationError, Interpreter, Metric, ModelRows, Query,
+    Resource, Visitor, Work, anonymous, complete, matches, patterns, scopes, values,
 };
+
+enum Alternatives {
+    Terms(values::Values),
+    Keys(anonymous::Alternatives),
+}
+impl Alternatives {
+    fn bytes(&self) -> u128 {
+        match self {
+            Self::Terms(values) => values.bytes,
+            Self::Keys(values) => values.bytes,
+        }
+    }
+}
 
 enum Choice {
     Atom { alternative: usize, row: usize },
     Value(usize),
 }
-
 impl Choice {
-    /// Apply one cursor choice while leaving every captured value in the
-    /// current depth's undo owner, including when matching refuses or fails.
-    fn bind<'a>(
+    /// Every installed value belongs to the depth's undo owner, including when
+    /// later matching refuses or fails.
+    fn bind<'input>(
         self,
         binder: &Binder,
-        alternatives: Option<&values::Values>,
-        atoms: &ModelRows<'a>,
-        binding: &mut [Option<Bound<'a>>],
+        alternatives: Option<&Alternatives>,
+        atoms: &ModelRows<'input>,
+        binding: &mut Binding<'input>,
         undo: &mut Vec<usize>,
-        work: &mut Work<'_>,
+        context: &mut Interpreter<'input, '_, '_>,
     ) -> Result<bool, Error> {
         match (binder, self) {
             (Binder::NumericMismatch(aggregate), Self::Value(_)) => {
-                scopes::aggregate(aggregate, atoms, binding, work)?;
+                scopes::aggregate(aggregate, atoms, binding, context)?;
                 Ok(false)
             }
             (Binder::Atom(alternatives), Self::Atom { alternative, row }) => matches(
@@ -39,14 +52,32 @@ impl Choice {
                 binding,
                 undo,
                 true,
-                work,
+                context,
             ),
+            (Binder::AtomKey(slot, _), Self::Value(cursor)) => {
+                let Some(Alternatives::Keys(values)) = alternatives else {
+                    unreachable!("atom-key cursor prepares typed alternatives")
+                };
+                context.work.step(1)?;
+                let (key, metric) = values.values[cursor];
+                admit_local(metric, context.work)?;
+                binding.bind_pattern(*slot, key, metric, context.work);
+                undo.push(*slot);
+                Ok(true)
+            }
             (
                 binder @ (Binder::Aggregate(_, _) | Binder::Assign(_, _) | Binder::Match { .. }),
                 Self::Value(cursor),
             ) => {
-                let owned = owned_binding(binder, alternatives, cursor, atoms, binding, work)?;
-                retain_binding(binder, owned, cursor, binding, undo, work)
+                let terms = match alternatives {
+                    Some(Alternatives::Terms(values)) => Some(values),
+                    None => None,
+                    Some(Alternatives::Keys(_)) => {
+                        unreachable!("scalar cursor retains term alternatives")
+                    }
+                };
+                let owned = owned_binding(binder, terms, cursor, atoms, binding, context)?;
+                retain_binding(binder, owned, cursor, binding, undo, context)
             }
             _ => unreachable!("query cursors preserve binder kind"),
         }
@@ -57,21 +88,20 @@ enum Cursor {
     Atoms(AtomChoices),
     Values(usize),
 }
-
 impl Cursor {
-    fn next(
+    fn next<'input>(
         &mut self,
         binder: &Binder,
-        binding: &[Option<Bound<'_>>],
-        alternatives: &mut Option<values::Values>,
-        work: &mut Work<'_>,
+        binding: &Binding<'input>,
+        alternatives: &mut Option<Alternatives>,
+        context: &mut Interpreter<'input, '_, '_>,
     ) -> Result<Option<Choice>, Error> {
         match self {
             Self::Atoms(rows) => Ok(rows
-                .next(work)?
+                .next(context.work)?
                 .map(|(alternative, row)| Choice::Atom { alternative, row })),
             Self::Values(cursor) => {
-                let count = choice_count(binder, binding, alternatives, work)?;
+                let count = choice_count(binder, binding, alternatives, context)?;
                 if *cursor == count {
                     *cursor = 0;
                     Ok(None)
@@ -84,17 +114,22 @@ impl Cursor {
         }
     }
 }
-
-fn cursors(
+fn cursors<'input>(
     query: &Query,
-    atoms: &ModelRows<'_>,
-    work: &mut Work<'_>,
+    atoms: &ModelRows<'input>,
+    context: &mut Interpreter<'input, '_, '_>,
 ) -> Result<Vec<Cursor>, Error> {
-    let mut cursors = work.reserve(query.binders.len())?;
+    let mut cursors = context.work.reserve(query.binders.len())?;
     for binder in &query.binders {
         cursors.push(match binder {
-            Binder::Atom(patterns) => Cursor::Atoms(AtomChoices::new(patterns, atoms, work)?),
+            Binder::Atom(patterns) => Cursor::Atoms(AtomChoices::new(
+                patterns,
+                atoms,
+                context.metadata,
+                context.work,
+            )?),
             Binder::Assign(..)
+            | Binder::AtomKey(..)
             | Binder::Match { .. }
             | Binder::Aggregate(..)
             | Binder::NumericMismatch(_) => Cursor::Values(0),
@@ -102,7 +137,6 @@ fn cursors(
     }
     Ok(cursors)
 }
-
 fn undo_slots(query: &Query, work: &Work<'_>) -> Result<Vec<Vec<usize>>, Error> {
     let mut undos = work.reserve(query.binders.len())?;
     for binder in &query.binders {
@@ -115,7 +149,7 @@ fn undo_slots(query: &Query, work: &Work<'_>) -> Result<Vec<Vec<usize>>, Error> 
                 })
                 .max()
                 .unwrap_or(0),
-            Binder::Assign(_, _) | Binder::Aggregate(_, _) => 1,
+            Binder::Assign(..) | Binder::AtomKey(..) | Binder::Aggregate(..) => 1,
             Binder::NumericMismatch(_) => 0,
             Binder::Match {
                 patterns: alternatives,
@@ -126,15 +160,22 @@ fn undo_slots(query: &Query, work: &Work<'_>) -> Result<Vec<Vec<usize>>, Error> 
     }
     Ok(undos)
 }
-
-fn owned_binding(
+fn admit_local(metric: Metric, work: &Work<'_>) -> Result<(), Error> {
+    work.construction_check(metric)?;
+    work.check(
+        Resource::LocalBytes,
+        work.local_bytes + metric.payload(),
+        work.limits.max_local_bytes as u128,
+    )
+}
+fn owned_binding<'input>(
     binder: &Binder,
     alternatives: Option<&values::Values>,
     cursor: usize,
-    atoms: &ModelRows<'_>,
-    binding: &[Option<Bound<'_>>],
-    work: &mut Work<'_>,
-) -> Result<(usize, Symbol, Metric), Error> {
+    atoms: &ModelRows<'input>,
+    binding: &Binding<'input>,
+    context: &mut Interpreter<'input, '_, '_>,
+) -> Result<(usize, TermKey, Metric), Error> {
     let cursor = if let Binder::Match { patterns, .. } = binder {
         cursor / patterns.len()
     } else {
@@ -147,153 +188,168 @@ fn owned_binding(
             value: expression,
             ..
         } => {
-            let (value, metric) = if let Some(values) = alternatives {
-                patterns::own(&values.values[cursor].0, work)?
+            let (key, metric) = if let Some(values) = alternatives {
+                context.work.step(1)?;
+                let metric = values.metric(cursor);
+                admit_local(metric, context.work)?;
+                (values.key(cursor, context)?, metric)
             } else {
-                work.own(expression, binding)?
+                context.own(expression, binding)?
             };
-            Ok((*slot, value, metric))
+            Ok((*slot, key, metric))
         }
         Binder::Aggregate(slot, aggregate) => {
-            let (value, metric) = scopes::aggregate(aggregate, atoms, binding, work)?;
-            work.check(
+            let (value, metric) = scopes::aggregate(aggregate, atoms, binding, context)?;
+            context.work.check(
                 Resource::Nodes,
                 metric.nodes as u128,
-                work.limits.max_symbol_nodes as u128,
+                context.work.limits.max_symbol_nodes as u128,
             )?;
-            work.check(Resource::Depth, 1, work.limits.max_symbol_depth as u128)?;
-            work.construction_check(metric)?;
-            // Guard measures stay wide. A binding constructs an ordinary logical
-            // value and therefore crosses the pinned scalar-width boundary here.
-            let value = match value {
+            context.work.check(
+                Resource::Depth,
+                1,
+                context.work.limits.max_symbol_depth as u128,
+            )?;
+            admit_local(metric, context.work)?;
+            // Guard arithmetic stays wide. A retained logical scalar crosses
+            // the pinned width boundary only when this binder constructs it.
+            let key = match value {
                 scopes::Value::Integer(value) => {
-                    Symbol::Number(i32::try_from(value).map_err(|_| {
-                        work.error(ErrorKind::Evaluation(EvaluationError::Overflow))
-                    })?)
+                    context.number(i32::try_from(value).map_err(|_| {
+                        context
+                            .work
+                            .error(ErrorKind::Evaluation(EvaluationError::Overflow))
+                    })?)?
                 }
-                scopes::Value::Symbol(value) => value,
+                scopes::Value::Term(key) => key,
             };
-            work.check(
-                Resource::LocalBytes,
-                work.local_bytes + metric.payload(),
-                work.limits.max_local_bytes as u128,
-            )?;
-            work.local_bytes += metric.payload();
-            Ok((*slot, value, metric))
+            Ok((*slot, key, metric))
         }
-        Binder::Atom(_) | Binder::NumericMismatch(_) => {
+        Binder::Atom(_) | Binder::AtomKey(..) | Binder::NumericMismatch(_) => {
             unreachable!("this binder does not retain a scalar")
         }
     }
 }
-
-fn choice_count(
+fn choice_count<'input>(
     binder: &Binder,
-    binding: &[Option<Bound<'_>>],
-    alternatives: &mut Option<values::Values>,
-    work: &mut Work<'_>,
+    binding: &Binding<'input>,
+    alternatives: &mut Option<Alternatives>,
+    context: &mut Interpreter<'input, '_, '_>,
 ) -> Result<usize, Error> {
     Ok(match binder {
         Binder::Atom(_) => unreachable!("atom cursors enumerate predicate ranges"),
         Binder::Aggregate(_, _) | Binder::NumericMismatch(_) => 1,
+        Binder::AtomKey(_, template) => {
+            if alternatives.is_none() {
+                *alternatives = Some(Alternatives::Keys(anonymous::collect(
+                    template, binding, context,
+                )?));
+            }
+            let Some(Alternatives::Keys(values)) = alternatives else {
+                unreachable!("typed atom-key alternatives")
+            };
+            values.values.len()
+        }
         Binder::Assign(_, expression)
         | Binder::Match {
             value: expression, ..
         } => {
             if expression.multiple() && alternatives.is_none() {
-                *alternatives = Some(values::collect(expression, binding, work)?);
+                *alternatives = Some(Alternatives::Terms(values::collect(
+                    expression, binding, context,
+                )?));
             }
-            let values = alternatives
-                .as_ref()
-                .map_or(1, |values| values.values.len());
+            let values = match alternatives {
+                Some(Alternatives::Terms(values)) => values.len(),
+                None => 1,
+                Some(Alternatives::Keys(_)) => unreachable!("typed scalar alternatives"),
+            };
             let patterns = if let Binder::Match { patterns, .. } = binder {
                 patterns.len()
             } else {
                 1
             };
             values.checked_mul(patterns).ok_or_else(|| {
-                work.error(ErrorKind::Limit {
+                context.work.error(ErrorKind::Limit {
                     resource: Resource::Bindings,
                     observed: (values as u128) * (patterns as u128),
-                    limit: u128::from(work.limits.max_bindings),
+                    limit: u128::from(context.work.limits.max_bindings),
                 })
             })?
         }
     })
 }
-
-/// Retain a complete owned value even when matching reports a partial failure.
-/// The common query unwind then owns every whole value and captured subvalue.
-fn retain_binding(
+fn retain_binding<'input>(
     binder: &Binder,
-    owned: (usize, Symbol, Metric),
+    owned: (usize, TermKey, Metric),
     cursor: usize,
-    binding: &mut [Option<Bound<'_>>],
+    binding: &mut Binding<'input>,
     undo: &mut Vec<usize>,
-    work: &mut Work<'_>,
+    context: &mut Interpreter<'input, '_, '_>,
 ) -> Result<bool, Error> {
-    let (slot, value, metric) = owned;
-    let matched = if let Binder::Match {
+    let (slot, key, metric) = owned;
+    // Match's complete slot is freshly allocated by the compiler; its pattern
+    // cannot refer to it. Install ownership before the matcher can fail, so the
+    // same unwind releases both the whole term and any partial captures.
+    binding.bind_term(slot, &key, metric, context.work)?;
+    undo.push(slot);
+    if let Binder::Match {
         patterns: alternatives,
         ..
     } = binder
     {
-        patterns::bind_symbol(
+        patterns::bind_key(
             &alternatives[cursor % alternatives.len()],
-            &value,
+            &key,
             binding,
             undo,
-            work,
+            context,
         )
     } else {
         Ok(true)
-    };
-    binding[slot] = Some(Bound::Owned(value, metric));
-    undo.push(slot);
-    matched
+    }
 }
 
-pub(super) fn visit<'a>(
+pub(super) fn visit<'input>(
     query: &Query,
-    atoms: &ModelRows<'a>,
-    outer: &'a [Option<Bound<'a>>],
-    work: &mut Work<'_>,
-    visitor: &mut Visitor<'_>,
+    atoms: &ModelRows<'input>,
+    outer: Option<&Binding<'input>>,
+    context: &mut Interpreter<'input, '_, '_>,
+    visitor: &mut Visitor<'input, '_>,
 ) -> Result<bool, Error> {
-    work.step(1 + query.variables as u128 + query.binders.len() as u128)?;
-    let mut binding = work.reserve(query.variables)?;
-    binding.extend(
-        outer
-            .iter()
-            .take(query.variables)
-            .map(|value| value.as_ref().map(|value| Bound::Borrowed(value.borrow()))),
-    );
-    binding.resize_with(query.variables, || None);
-    let mut alternatives: Vec<Option<values::Values>> = work.reserve(query.binders.len())?;
+    context
+        .work
+        .step(1 + query.variables as u128 + query.binders.len() as u128)?;
+    let mut binding = Binding::new(
+        query.variables,
+        outer,
+        context.terms.read(),
+        context.work.limits.max_term_storage_bytes,
+        context.work,
+    )?;
+    let mut alternatives: Vec<Option<Alternatives>> = context.work.reserve(query.binders.len())?;
     alternatives.resize_with(query.binders.len(), || None);
     let result = (|| {
         if query.binders.is_empty() {
-            return complete(query, atoms, &mut binding, work, visitor);
+            return complete(query, atoms, &mut binding, context, visitor);
         }
-        let mut cursors = cursors(query, atoms, work)?;
-        let mut undos = undo_slots(query, work)?;
+        let mut cursors = cursors(query, atoms, context)?;
+        let mut undos = undo_slots(query, context.work)?;
         let mut depth = 0;
         loop {
-            work.step(1 + undos[depth].len() as u128)?;
+            context.work.step(1 + undos[depth].len() as u128)?;
             for slot in undos[depth].drain(..) {
-                if let Some(Bound::Owned(_, metric)) = binding[slot].take() {
-                    work.local_bytes -= metric.payload();
-                }
+                binding.clear(slot, context.work);
             }
             let choice = cursors[depth].next(
                 &query.binders[depth],
                 &binding,
                 &mut alternatives[depth],
-                work,
+                context,
             )?;
             let Some(choice) = choice else {
                 if let Some(values) = alternatives[depth].take() {
-                    work.local_bytes -= values.bytes;
+                    context.work.local_bytes -= values.bytes();
                 }
                 if depth == 0 {
                     break;
@@ -307,12 +363,12 @@ pub(super) fn visit<'a>(
                 atoms,
                 &mut binding,
                 &mut undos[depth],
-                work,
+                context,
             )? {
                 continue;
             }
             if depth + 1 == query.binders.len() {
-                if !complete(query, atoms, &mut binding, work, visitor)? {
+                if !complete(query, atoms, &mut binding, context, visitor)? {
                     return Ok(false);
                 }
             } else {
@@ -321,19 +377,13 @@ pub(super) fn visit<'a>(
         }
         Ok(true)
     })();
-    // The visitor may retain aggregate keys in its enclosing scope. Release only
-    // this query's owned bindings, on success, early termination, and error alike.
-    work.local_bytes -= alternatives
+    // The visitor may retain aggregate keys in an enclosing scope. Release only
+    // this query's charges, on exhaustion, early termination and errors alike.
+    context.work.local_bytes -= alternatives
         .iter()
         .flatten()
-        .map(|values| values.bytes)
+        .map(Alternatives::bytes)
         .sum::<u128>();
-    work.local_bytes -= binding
-        .iter()
-        .filter_map(|bound| match bound {
-            Some(Bound::Owned(_, metric)) => Some(metric.payload()),
-            _ => None,
-        })
-        .sum::<u128>();
+    binding.release(context.work);
     result
 }

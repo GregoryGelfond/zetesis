@@ -2,7 +2,7 @@
 
 use std::cmp::Ordering;
 
-use crate::{Atom, Predicate, Value, ValueNode};
+use crate::{Atom, Predicate, Value};
 
 pub(crate) fn bytes<E>(
     left: &[u8],
@@ -88,19 +88,20 @@ impl Value {
         mut before: impl FnMut() -> Result<(), E>,
     ) -> Result<Ordering, E> {
         before()?;
-        let order = value_rank(self).cmp(&value_rank(other));
+        let order = crate::term_order::value_storage_rank(self)
+            .cmp(&crate::term_order::value_storage_rank(other));
         if !order.is_eq() {
             return Ok(order);
         }
         match (self, other) {
-            (Self::Number(left), Self::Number(right)) => Ok(left.cmp(right)),
-            (Self::String(left), Self::String(right))
-            | (Self::Symbol(left), Self::Symbol(right)) => {
-                bytes(left.as_bytes(), right.as_bytes(), &mut before)
-            }
             (Self::Structured(left), Self::Structured(right)) => {
                 for (left, right) in left.nodes().iter().zip(right.nodes()) {
-                    let order = node(left, right, &mut before)?;
+                    before()?;
+                    let order = crate::term_order::storage_with(
+                        left.view(),
+                        right.view(),
+                        |left, right| bytes(left.as_bytes(), right.as_bytes(), &mut before),
+                    )?;
                     if !order.is_eq() {
                         return Ok(order);
                     }
@@ -108,63 +109,11 @@ impl Value {
                 before()?;
                 Ok(left.nodes().len().cmp(&right.nodes().len()))
             }
-            _ => Ok(Ordering::Equal), // Equal ranks leave only the two extrema.
+            _ => crate::term_order::storage_with(
+                self.root_view(),
+                other.root_view(),
+                |left, right| bytes(left.as_bytes(), right.as_bytes(), &mut before),
+            ),
         }
-    }
-}
-
-fn value_rank(value: &Value) -> u8 {
-    match value {
-        Value::Infimum => 0,
-        Value::Number(_) => 1,
-        Value::String(_) => 2,
-        Value::Symbol(_) => 3,
-        Value::Structured(_) => 4,
-        Value::Supremum => 5,
-    }
-}
-
-fn node_rank(node: &ValueNode) -> u8 {
-    match node {
-        ValueNode::Infimum => 0,
-        ValueNode::Number(_) => 1,
-        ValueNode::String(_) => 2,
-        ValueNode::Symbol(_) => 3,
-        ValueNode::Function { .. } => 4,
-        ValueNode::Tuple { .. } => 5,
-        ValueNode::Supremum => 6,
-    }
-}
-
-fn node<E>(
-    left: &ValueNode,
-    right: &ValueNode,
-    before: &mut impl FnMut() -> Result<(), E>,
-) -> Result<Ordering, E> {
-    before()?;
-    let order = node_rank(left).cmp(&node_rank(right));
-    if !order.is_eq() {
-        return Ok(order);
-    }
-    match (left, right) {
-        (ValueNode::Number(a), ValueNode::Number(b)) => Ok(a.cmp(b)),
-        (ValueNode::String(a), ValueNode::String(b))
-        | (ValueNode::Symbol(a), ValueNode::Symbol(b)) => bytes(a.as_bytes(), b.as_bytes(), before),
-        (
-            ValueNode::Function {
-                name: a,
-                sign: sa,
-                arity: aa,
-            },
-            ValueNode::Function {
-                name: b,
-                sign: sb,
-                arity: ab,
-            },
-        ) => Ok(bytes(a.as_bytes(), b.as_bytes(), before)?
-            .then_with(|| sa.cmp(sb))
-            .then_with(|| aa.cmp(ab))),
-        (ValueNode::Tuple { arity: a }, ValueNode::Tuple { arity: b }) => Ok(a.cmp(b)),
-        _ => Ok(Ordering::Equal),
     }
 }

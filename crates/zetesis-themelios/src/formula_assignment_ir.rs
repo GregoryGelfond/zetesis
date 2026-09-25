@@ -1,9 +1,10 @@
 //! Explicit scope checks for finite aggregate equality binders and consumers.
 
+use crate::formula_support::components::{Pattern as AtomPattern, Term};
 use themelios_program::program::{
     Aggregate, AggregateFunction, Body, BodyElement, DefaultNegation, Relation,
 };
-use zetesis_core::{AtomPattern, Term};
+use zetesis_core::TemplateTerm;
 
 use crate::diagnostic::unsupported;
 use crate::formula_conditional_ir::{Consequent, ConsequentOperand};
@@ -171,13 +172,19 @@ impl Compiler<'_> {
         Ok(expression.inputs().any(|input| input == variable))
     }
 
-    fn pattern_uses(
-        &mut self,
-        atom: &AtomPattern,
-        variable: usize,
-    ) -> Result<bool, FormulaFailure> {
-        self.scope_work(atom.terms().len())?;
-        Ok(atom.terms().contains(&Term::Variable(variable)))
+    fn pattern_uses(&mut self, atom: AtomPattern, variable: usize) -> Result<bool, FormulaFailure> {
+        let atom = self
+            .source
+            .pattern_ref(atom, self.limits, self.counters, self.location)?;
+        self.budget.charge(
+            ExpansionResource::TermWork,
+            atom.terms().len() as u128,
+            self.location,
+        )?;
+        Ok(atom
+            .terms()
+            .iter()
+            .any(|term| matches!(term, TemplateTerm::Variable(slot) if slot == variable)))
     }
 
     fn projection_uses(
@@ -220,7 +227,7 @@ impl Compiler<'_> {
                 self.scope_work(terms.len())?;
                 terms.contains(&Term::Variable(variable))
             }
-            AggregateKey::Atom(atom) => self.pattern_uses(atom, variable)?,
+            AggregateKey::Atom(atom) => self.pattern_uses(*atom, variable)?,
         };
         if key_uses {
             return Ok(true);
@@ -240,9 +247,20 @@ impl Compiler<'_> {
     ) -> Result<bool, FormulaFailure> {
         self.scope_work(1)?;
         Ok(match literal {
-            LiteralIr::Atom(_, atom) => self.pattern_uses(atom, variable)?,
+            LiteralIr::Atom(_, atom) => self.pattern_uses(*atom, variable)?,
             LiteralIr::PatternAtom(pattern) => {
-                self.scope_work(pattern.node_count())?;
+                let flat = self.source.pattern_ref(
+                    pattern.atom,
+                    self.limits,
+                    self.counters,
+                    self.location,
+                )?;
+                let pattern = pattern.bind(flat);
+                self.budget.charge(
+                    ExpansionResource::TermWork,
+                    pattern.node_count() as u128,
+                    self.location,
+                )?;
                 pattern.slots().any(|slot| slot == variable)
             }
             LiteralIr::ProjectedAtom(_, projection) => {
@@ -323,7 +341,7 @@ impl Compiler<'_> {
             Consequent::Atoms(_, alternatives) => {
                 for alternative in alternatives {
                     uses |= match &alternative.operand {
-                        ConsequentOperand::Atom(atom) => self.pattern_uses(atom, variable)?,
+                        ConsequentOperand::Atom(atom) => self.pattern_uses(*atom, variable)?,
                         ConsequentOperand::Projection(projection) => {
                             self.projection_uses(projection, variable)?
                         }

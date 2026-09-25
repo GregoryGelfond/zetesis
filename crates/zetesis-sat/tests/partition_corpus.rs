@@ -72,9 +72,17 @@ fn report_queens_partition_work() {
         for coordinate in 0..2 {
             let mut rows = BTreeMap::<_, Vec<usize>>::new();
             for &atom in &members {
-                rows.entry(admitted.atoms()[atom].values()[coordinate].clone())
-                    .or_default()
-                    .push(atom);
+                rows.entry(
+                    admitted
+                        .atoms()
+                        .at(atom)
+                        .unwrap()
+                        .values()
+                        .at(coordinate)
+                        .unwrap(),
+                )
+                .or_default()
+                .push(atom);
             }
             assert_eq!(rows.len(), 8);
             let groups: Vec<_> = rows

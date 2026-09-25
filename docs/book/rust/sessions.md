@@ -239,11 +239,16 @@ cargo run --locked -p zetesis-solve --no-default-features --example book-hybrid
 ```
 
 `SolveConfig::constraints` supplies cumulative `ConstraintCheckLimits` for that
-session: work, substitutions and copied scalar payload. These are separate from
-source admission and per-candidate reduct-oracle limits. Completed support
-indexes are reused; constraint joins run for regions and for consumed core
-answers. The worker checks and final checker share one allowance. Additional
-region scans and preparation can cost more than the avoided membership work,
+session: charged work, substitutions and structural-capture reservations. The
+retained `max_scalar_bytes` field bounds requested capture-delta bytes; those
+cells borrow canonical terms. Flat binding copies retain IDs and frozen
+constructor lookup reuses admitted terms, so neither adds a scalar-byte charge.
+Their physical storage remains under the admitted support allowance. The
+`scalar_bytes` receipt is cumulative reserved bytes, not live capacity or RSS.
+These limits are separate from source admission and per-candidate reduct-oracle
+limits. Completed support indexes are reused; constraint joins run for regions
+and for consumed core answers. The worker checks and final checker share one
+allowance. Additional region scans and preparation can cost more than the avoided membership work,
 so the schedule still needs workload-specific measurement.
 
 `SemanticOutcome::hybrid_execution()` reports consumed `core_answers`,
@@ -281,12 +286,14 @@ inconsistency, while an empty vector collected from a stopped stream does not.
 An arbitrary vector and a detached outcome cannot construct a `WorldView`.
 
 `WorldViewLimits` independently bounds retained answers, summed full atoms and
-canonical payload bytes: each distinct catalog allocation once, selected
-positions per answer, and one optional score record per answer. A sparse answer
-retains all unselected catalog atoms; equal-content separately allocated catalogs
-are charged separately. The byte bound excludes
-shared subjects, spare vector/hash capacity, owner-index entries, allocator/Arc overhead, engine state and the one answer being
-considered for collection. It is not a process-memory limit. Members are moved
+portable payload bytes: each distinct occurrence catalog's encoding once,
+selected positions per answer, and one optional score record per answer.
+Equal-content separate catalogs are charged separately. A sparse answer keeps
+its entire shared prefix alive; identities outside its occurrence map are not
+charged by this measure. The byte bound also excludes shared subjects, spare
+vector/hash capacity, owner-index entries, allocator/Arc overhead, engine state
+and the one answer being considered for collection. It is not a process-memory
+limit. Members are moved
 into the collection without a repeated membership check or full-model clone;
 retained space can still be exponential in program size.
 

@@ -16,7 +16,7 @@ fn input(source: &str) -> zetesis_themelios::AdmittedFormula {
 }
 fn shown(source: &str) -> Vec<String> {
     let input = input(source);
-    let model = Model::new(input.atoms().iter().cloned());
+    let model = Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap();
     input
         .metadata()
         .observations()

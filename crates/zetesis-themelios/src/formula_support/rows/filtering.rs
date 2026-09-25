@@ -1,16 +1,20 @@
+use crate::formula_support::testing::Fixture;
 use std::cell::Cell;
 
 use themelios_base::source::SourceId;
 use themelios_base::span::{ByteOffset, Location, Span};
 use themelios_program::program::{DefaultNegation, Relation};
 use themelios_program::term::BinaryOp;
-use zetesis_core::{Atom, AtomPattern, Predicate, Term, Value, ValueLimits, ValueNode};
+use zetesis_core::{
+    Atom, AtomPattern, Predicate, Term, Value, ValueLimits, ValueNode, ValueNodeRef,
+};
 
 use super::RowFilter;
+use super::tests::exported;
 use crate::expansion::Budget;
 use crate::formula_ir::{Expression, HeadIr, LiteralIr, Operation, RuleIr};
 use crate::formula_pattern::{ArgumentPattern, PatternAtom, PatternNode};
-use crate::formula_support::{Counters, Join, Support, SupportCatalog};
+use crate::formula_support::{Computation, Counters, Join, Support};
 use crate::{ExpansionLimits, FormulaFailure, FormulaLimits};
 
 fn location() -> Location {
@@ -28,14 +32,17 @@ fn atom(name: &str, values: &[i32]) -> Atom {
     .unwrap()
 }
 
-fn pattern(name: &str, variables: &[usize]) -> LiteralIr {
+fn pattern(fixture: &mut Fixture, name: &str, variables: &[usize]) -> LiteralIr {
     LiteralIr::Atom(
         DefaultNegation::None,
-        AtomPattern::new(
-            Predicate::new(name, variables.len()).unwrap(),
-            variables.iter().copied().map(Term::Variable).collect(),
-        )
-        .unwrap(),
+        fixture.pattern(
+            &AtomPattern::new(
+                Predicate::new(name, variables.len()).unwrap(),
+                variables.iter().copied().map(Term::Variable).collect(),
+            )
+            .unwrap(),
+            location(),
+        ),
     )
 }
 
@@ -53,24 +60,23 @@ fn rule(body: Vec<LiteralIr>, variables: usize) -> RuleIr {
 
 fn with_support<T>(
     atoms: Vec<Atom>,
-    consume: impl FnOnce(&Support<'_>, &mut Budget, &mut Counters) -> T,
+    consume: impl FnOnce(&Support<'_>, &mut Computation<'_, '_>, &mut Budget, &mut Counters) -> T,
 ) -> T {
-    let limits = FormulaLimits::default();
-    let mut catalog = SupportCatalog::default();
-    for atom in atoms {
-        catalog = catalog
-            .insert(atom, &limits, &mut Counters::default(), location())
-            .unwrap();
-    }
-    let relations = catalog
-        .snapshot(&limits, &mut Counters::default(), location())
-        .unwrap();
-    let support = Support::indexed(&relations, &limits, &Counters::default(), location()).unwrap();
-    consume(
-        &support,
-        &mut Budget::new(ExpansionLimits::default(), usize::MAX),
-        &mut Counters::default(),
-    )
+    with_fixture(Fixture::from_atoms(atoms, location()), consume)
+}
+
+fn with_fixture<T>(
+    mut fixture: Fixture,
+    consume: impl FnOnce(&Support<'_>, &mut Computation<'_, '_>, &mut Budget, &mut Counters) -> T,
+) -> T {
+    fixture.with(location(), |support, computation, counters| {
+        consume(
+            support,
+            computation,
+            &mut Budget::new(ExpansionLimits::default(), usize::MAX),
+            counters,
+        )
+    })
 }
 
 struct Select<F>(F);
@@ -100,37 +106,66 @@ struct Run {
 }
 
 fn unfiltered(wrapped: bool, max_work: u64) -> Run {
-    let rule = rule(vec![pattern("p", &[0, 1]), pattern("p", &[1, 2])], 3);
-    with_support(
-        vec![atom("p", &[1, 1]), atom("p", &[1, 2]), atom("p", &[2, 3])],
-        |support, budget, counters| {
-            let mut ordinary = Join::rule(&rule, support, budget).unwrap();
-            let mut filtered = Join::filtered_rule(&rule, support, None, None, budget).unwrap();
-            let limits = FormulaLimits {
-                max_work,
-                ..FormulaLimits::default()
+    let mut fixture = Fixture::from_atoms(
+        [atom("p", &[1, 1]), atom("p", &[1, 2]), atom("p", &[2, 3])],
+        location(),
+    );
+    let rule = rule(
+        vec![
+            pattern(&mut fixture, "p", &[0, 1]),
+            pattern(&mut fixture, "p", &[1, 2]),
+        ],
+        3,
+    );
+    with_fixture(fixture, |support, computation, budget, counters| {
+        let mut ordinary = Join::rule(
+            &rule,
+            support,
+            computation,
+            &FormulaLimits::default(),
+            budget,
+            counters,
+        )
+        .unwrap();
+        let mut filtered = Join::filtered_rule(
+            &rule,
+            support,
+            None,
+            None,
+            budget,
+            crate::formula_support::Context::new(
+                computation,
+                &FormulaLimits::default(),
+                counters,
+                rule.location,
+            ),
+        )
+        .unwrap();
+        let before = counters.accounting.work;
+        let limits = FormulaLimits {
+            max_work: before.saturating_add(max_work),
+            ..FormulaLimits::default()
+        };
+        let mut rows = Vec::new();
+        let failure = loop {
+            let next = if wrapped {
+                filtered.next_row(computation, &limits, budget, counters, location())
+            } else {
+                ordinary.next_row(computation, &limits, budget, counters, location())
             };
-            let mut rows = Vec::new();
-            let failure = loop {
-                let next = if wrapped {
-                    filtered.next_row(&limits, budget, counters, location())
-                } else {
-                    ordinary.next_row(&limits, budget, counters, location())
-                };
-                match next {
-                    Ok(Some(row)) => rows.push((row.values.slots().to_vec(), row.passes)),
-                    Ok(None) => break None,
-                    Err(error) => break Some(format!("{error:?}")),
-                }
-            };
-            Run {
-                rows,
-                failure,
-                work: counters.work,
-                substitutions: counters.substitutions,
+            match next {
+                Ok(Some(row)) => rows.push((exported(&row.values, computation), row.passes)),
+                Ok(None) => break None,
+                Err(error) => break Some(format!("{error:?}")),
             }
-        },
-    )
+        };
+        Run {
+            rows,
+            failure,
+            work: counters.accounting.work - before,
+            substitutions: counters.accounting.substitutions,
+        }
+    })
 }
 
 #[test]
@@ -149,10 +184,8 @@ fn absent_selection_preserves_every_work_prefix() {
 
 #[test]
 fn selected_rows_preserve_correlated_backtracking() {
-    let rule = rule(vec![pattern("p", &[0, 1]), pattern("p", &[1, 2])], 3);
-    let selection = Select(|row: zetesis_core::relation::Row<'_, '_>| row.value(0) != row.value(1));
-    with_support(
-        vec![
+    let mut fixture = Fixture::from_atoms(
+        [
             atom("p", &[1, 1]),
             atom("p", &[1, 2]),
             atom("p", &[2, 2]),
@@ -160,75 +193,102 @@ fn selected_rows_preserve_correlated_backtracking() {
             atom("p", &[2, 4]),
             atom("p", &[3, 5]),
         ],
-        |support, budget, counters| {
-            let mut rows =
-                Join::filtered_rule(&rule, support, Some(&selection), None, budget).unwrap();
-            let mut selected = Vec::new();
-            while let Some(row) = rows
-                .next_row(&FormulaLimits::default(), budget, counters, location())
-                .unwrap()
-            {
-                assert!(row.passes);
-                selected.push(row.values.slots().to_vec());
-            }
-            let expected = [[1, 2, 3], [1, 2, 4], [2, 3, 5]]
-                .map(|values| values.map(|value| Some(Value::Number(value))).to_vec());
-            assert_eq!(selected, expected);
-            assert_eq!(counters.substitutions, 3);
-        },
+        location(),
     );
+    let rule = rule(
+        vec![
+            pattern(&mut fixture, "p", &[0, 1]),
+            pattern(&mut fixture, "p", &[1, 2]),
+        ],
+        3,
+    );
+    let selection = Select(|row: zetesis_core::relation::Row<'_, '_>| row.value(0) != row.value(1));
+    with_fixture(fixture, |support, computation, budget, counters| {
+        let mut rows = Join::filtered_rule(
+            &rule,
+            support,
+            Some(&selection),
+            None,
+            budget,
+            crate::formula_support::Context::new(
+                computation,
+                &FormulaLimits::default(),
+                counters,
+                rule.location,
+            ),
+        )
+        .unwrap();
+        let mut selected = Vec::new();
+        while let Some(row) = rows
+            .next_row(
+                computation,
+                &FormulaLimits::default(),
+                budget,
+                counters,
+                location(),
+            )
+            .unwrap()
+        {
+            assert!(row.passes);
+            selected.push(exported(&row.values, computation));
+        }
+        let expected = [[1, 2, 3], [1, 2, 4], [2, 3, 5]]
+            .map(|values| values.map(|value| Some(Value::Number(value))).to_vec());
+        assert_eq!(selected, expected);
+        assert_eq!(counters.accounting.substitutions, 3);
+    });
 }
 
 #[test]
 fn rejected_rows_copy_no_scalar_payload() {
-    let rule = rule(vec![pattern("p", &[0])], 1);
-    let selection = Select(|_: zetesis_core::relation::Row<'_, '_>| false);
     let value = Value::Symbol("payload".into());
-    with_support(
-        vec![Atom::new(Predicate::new("p", 1).unwrap(), vec![value]).unwrap()],
-        |support, budget, counters| {
-            let mut rows =
-                Join::filtered_rule(&rule, support, Some(&selection), None, budget).unwrap();
-            let mut no_payload = Budget::new(
-                ExpansionLimits {
-                    max_scalar_bytes: 0,
-                    ..ExpansionLimits::default()
-                },
-                usize::MAX,
-            );
-            assert!(
-                rows.next_row(
-                    &FormulaLimits::default(),
-                    &mut no_payload,
-                    counters,
-                    location()
-                )
-                .unwrap()
-                .is_none()
-            );
-            assert_eq!(no_payload.usage().scalar_bytes, 0);
-            assert_eq!(counters.substitutions, 0);
-        },
+    let mut fixture = Fixture::from_atoms(
+        [Atom::new(Predicate::new("p", 1).unwrap(), vec![value]).unwrap()],
+        location(),
     );
+    let rule = rule(vec![pattern(&mut fixture, "p", &[0])], 1);
+    let selection = Select(|_: zetesis_core::relation::Row<'_, '_>| false);
+    with_fixture(fixture, |support, computation, budget, counters| {
+        let mut rows = Join::filtered_rule(
+            &rule,
+            support,
+            Some(&selection),
+            None,
+            budget,
+            crate::formula_support::Context::new(
+                computation,
+                &FormulaLimits::default(),
+                counters,
+                rule.location,
+            ),
+        )
+        .unwrap();
+        let mut no_payload = Budget::new(
+            ExpansionLimits {
+                max_scalar_bytes: 0,
+                ..ExpansionLimits::default()
+            },
+            usize::MAX,
+        );
+        assert!(
+            rows.next_row(
+                computation,
+                &FormulaLimits::default(),
+                &mut no_payload,
+                counters,
+                location()
+            )
+            .unwrap()
+            .is_none()
+        );
+        assert_eq!(no_payload.usage().scalar_bytes, 0);
+        assert_eq!(counters.accounting.substitutions, 0);
+    });
 }
 
 #[test]
 fn structural_rows_are_selected_before_matching() {
     let predicate = Predicate::new("p", 1).unwrap();
-    let rule = rule(
-        vec![LiteralIr::PatternAtom(PatternAtom {
-            atom: AtomPattern::new(predicate.clone(), vec![Term::Variable(0)]).unwrap(),
-            arguments: vec![ArgumentPattern {
-                position: 0,
-                nodes: vec![
-                    PatternNode::Tuple(2),
-                    PatternNode::Slot(1),
-                    PatternNode::Slot(1),
-                ],
-            }],
-        })],
-        2,
-    );
     let value = Value::from_nodes(
         vec![
             ValueNode::Tuple { arity: 2 },
@@ -238,64 +298,117 @@ fn structural_rows_are_selected_before_matching() {
         ValueLimits::default(),
     )
     .unwrap();
-    let selection = Select(|_: zetesis_core::relation::Row<'_, '_>| false);
-    with_support(
-        vec![Atom::new(predicate, vec![value]).unwrap()],
-        |support, budget, counters| {
-            let mut rows =
-                Join::filtered_rule(&rule, support, Some(&selection), None, budget).unwrap();
-            let mut no_matching = Budget::new(
-                ExpansionLimits {
-                    max_term_work: 0,
-                    max_scalar_bytes: 0,
-                    ..ExpansionLimits::default()
-                },
-                usize::MAX,
-            );
-            assert!(
-                rows.next_row(
-                    &FormulaLimits::default(),
-                    &mut no_matching,
-                    counters,
-                    location()
-                )
-                .unwrap()
-                .is_none()
-            );
-            assert_eq!(rows.join.values, vec![None, None]);
-            assert_eq!(no_matching.usage().term_work, 0);
-            assert_eq!(counters.substitutions, 0);
-        },
+    let mut fixture = Fixture::from_atoms(
+        [Atom::new(predicate.clone(), vec![value]).unwrap()],
+        location(),
     );
+    let tuple = fixture.constructor(ValueNodeRef::Tuple { arity: 2 }, location());
+    let rule = rule(
+        vec![LiteralIr::PatternAtom(PatternAtom {
+            atom: fixture.pattern(
+                &AtomPattern::new(predicate, vec![Term::Variable(0)]).unwrap(),
+                location(),
+            ),
+            arguments: vec![ArgumentPattern {
+                position: 0,
+                nodes: vec![
+                    PatternNode::Constructor(tuple),
+                    PatternNode::Slot(1),
+                    PatternNode::Slot(1),
+                ],
+            }],
+        })],
+        2,
+    );
+    let selection = Select(|_: zetesis_core::relation::Row<'_, '_>| false);
+    with_fixture(fixture, |support, computation, budget, counters| {
+        let mut rows = Join::filtered_rule(
+            &rule,
+            support,
+            Some(&selection),
+            None,
+            budget,
+            crate::formula_support::Context::new(
+                computation,
+                &FormulaLimits::default(),
+                counters,
+                rule.location,
+            ),
+        )
+        .unwrap();
+        let mut no_matching = Budget::new(
+            ExpansionLimits {
+                max_term_work: 0,
+                max_scalar_bytes: 0,
+                ..ExpansionLimits::default()
+            },
+            usize::MAX,
+        );
+        assert!(
+            rows.next_row(
+                computation,
+                &FormulaLimits::default(),
+                &mut no_matching,
+                counters,
+                location()
+            )
+            .unwrap()
+            .is_none()
+        );
+        assert_eq!(exported(&rows.join.values, computation), vec![None, None]);
+        assert_eq!(no_matching.usage().term_work, 0);
+        assert_eq!(counters.accounting.substitutions, 0);
+    });
 }
 
 #[test]
 fn rejected_rows_do_not_evaluate_partial_scalars() {
+    let mut fixture = Fixture::from_atoms([atom("p", &[0])], location());
+    let one = fixture.scalar(&Value::Number(1), location());
     let division = || Expression {
         nodes: vec![
-            Operation::Constant(Value::Number(1)),
+            Operation::Constant(one),
             Operation::Variable(0),
             Operation::Binary(BinaryOp::Div, 0, 1),
         ],
     };
     let rule = rule(
         vec![
-            pattern("p", &[0]),
+            pattern(&mut fixture, "p", &[0]),
             LiteralIr::Compare(division(), Relation::Eq, division()),
         ],
         1,
     );
     let selection = Select(|_: zetesis_core::relation::Row<'_, '_>| false);
-    with_support(vec![atom("p", &[0])], |support, budget, counters| {
-        let mut rows = Join::filtered_rule(&rule, support, Some(&selection), None, budget).unwrap();
+    with_fixture(fixture, |support, computation, budget, counters| {
+        let mut rows = Join::filtered_rule(
+            &rule,
+            support,
+            Some(&selection),
+            None,
+            budget,
+            crate::formula_support::Context::new(
+                computation,
+                &FormulaLimits::default(),
+                counters,
+                rule.location,
+            ),
+        )
+        .unwrap();
         // This still uses complete arithmetic coverage internally. The filter
         // belongs to a post-admission witness scan, so it precedes evaluation.
         assert!(rows.join.coverage == crate::formula_support::Coverage::Complete);
         let before = budget.usage();
         assert!(
-            rows.next_row(&FormulaLimits::default(), budget, counters, location())
-                .unwrap()
-                .is_none()
+            rows.next_row(
+                computation,
+                &FormulaLimits::default(),
+                budget,
+                counters,
+                location()
+            )
+            .unwrap()
+            .is_none()
         );
         assert_eq!(budget.usage(), before);
         assert!(rows.join.family.zero.is_none());
@@ -304,8 +417,10 @@ fn rejected_rows_do_not_evaluate_partial_scalars() {
 
 #[test]
 fn empty_positive_inputs_keep_their_scalar_row() {
+    let mut fixture = Fixture::default();
+    let one = fixture.scalar(&Value::Number(1), location());
     let constant = || Expression {
-        nodes: vec![Operation::Constant(Value::Number(1))],
+        nodes: vec![Operation::Constant(one)],
     };
     let rule = rule(
         vec![LiteralIr::Compare(constant(), Relation::Eq, constant())],
@@ -316,21 +431,46 @@ fn empty_positive_inputs_keep_their_scalar_row() {
         calls.set(calls.get() + 1);
         false
     });
-    with_support(Vec::new(), |support, budget, counters| {
-        let mut rows = Join::filtered_rule(&rule, support, Some(&selection), None, budget).unwrap();
+    with_fixture(fixture, |support, computation, budget, counters| {
+        let mut rows = Join::filtered_rule(
+            &rule,
+            support,
+            Some(&selection),
+            None,
+            budget,
+            crate::formula_support::Context::new(
+                computation,
+                &FormulaLimits::default(),
+                counters,
+                rule.location,
+            ),
+        )
+        .unwrap();
         let row = rows
-            .next_row(&FormulaLimits::default(), budget, counters, location())
+            .next_row(
+                computation,
+                &FormulaLimits::default(),
+                budget,
+                counters,
+                location(),
+            )
             .unwrap()
             .unwrap();
         assert!(row.passes);
         assert!(row.values.slots().is_empty());
         assert!(
-            rows.next_row(&FormulaLimits::default(), budget, counters, location())
-                .unwrap()
-                .is_none()
+            rows.next_row(
+                computation,
+                &FormulaLimits::default(),
+                budget,
+                counters,
+                location()
+            )
+            .unwrap()
+            .is_none()
         );
         assert_eq!(calls.get(), 0);
-        assert_eq!(counters.substitutions, 1);
+        assert_eq!(counters.accounting.substitutions, 1);
     });
 }
 
@@ -359,35 +499,65 @@ impl RowFilter for RefuseSecond {
 
 #[test]
 fn filter_failure_retains_the_completed_prefix() {
-    let rule = rule(vec![pattern("p", &[0])], 1);
+    let mut fixture = Fixture::from_atoms([atom("p", &[1]), atom("p", &[2])], location());
+    let rule = rule(vec![pattern(&mut fixture, "p", &[0])], 1);
     let selection = RefuseSecond(Cell::new(0));
-    with_support(
-        vec![atom("p", &[1]), atom("p", &[2])],
-        |support, budget, counters| {
-            let mut rows =
-                Join::filtered_rule(&rule, support, Some(&selection), None, budget).unwrap();
-            let first = rows
-                .next_row(&FormulaLimits::default(), budget, counters, location())
+    with_fixture(fixture, |support, computation, budget, counters| {
+        let mut rows = Join::filtered_rule(
+            &rule,
+            support,
+            Some(&selection),
+            None,
+            budget,
+            crate::formula_support::Context::new(
+                computation,
+                &FormulaLimits::default(),
+                counters,
+                rule.location,
+            ),
+        )
+        .unwrap();
+        let first = rows
+            .next_row(
+                computation,
+                &FormulaLimits::default(),
+                budget,
+                counters,
+                location(),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            first
+                .values
+                .read(0, computation.read(), location())
                 .unwrap()
-                .unwrap();
-            assert_eq!(first.values.read(0, location()).unwrap(), &Value::Number(1));
-            let before = counters.work;
-            let error = rows.next_row(&FormulaLimits::default(), budget, counters, location());
-            assert!(matches!(error, Err(FormulaFailure::SupportRelation {
+                .descriptor(),
+            zetesis_core::ValueNodeRef::Number(1)
+        );
+        let before = counters.accounting.work;
+        let error = rows.next_row(
+            computation,
+            &FormulaLimits::default(),
+            budget,
+            counters,
+            location(),
+        );
+        assert!(matches!(error, Err(FormulaFailure::SupportRelation {
             error: zetesis_core::relation::Failure::Owner,
             location: actual,
         }) if actual == location()));
-            assert_eq!(selection.0.get(), 2);
-            assert_eq!(counters.substitutions, 1);
-            assert!(counters.work > before);
-            assert_eq!(rows.join.values, vec![None]);
-        },
-    );
+        assert_eq!(selection.0.get(), 2);
+        assert_eq!(counters.accounting.substitutions, 1);
+        assert!(counters.accounting.work > before);
+        assert_eq!(exported(&rows.join.values, computation), vec![None]);
+    });
 }
 
 #[test]
 fn filter_cancellation_stops_before_binding() {
-    let rule = rule(vec![pattern("p", &[0])], 1);
+    let mut fixture = Fixture::from_atoms([atom("p", &[7])], location());
+    let rule = rule(vec![pattern(&mut fixture, "p", &[0])], 1);
     let cancellation = zetesis_cpu::Cancellation::default();
     let calls = Cell::new(0);
     let selection = Select(|_: zetesis_core::relation::Row<'_, '_>| {
@@ -395,21 +565,39 @@ fn filter_cancellation_stops_before_binding() {
         cancellation.cancel();
         true
     });
-    with_support(vec![atom("p", &[7])], |support, budget, _| {
-        let mut rows = Join::filtered_rule(&rule, support, Some(&selection), None, budget).unwrap();
-        let mut accounting = crate::formula_support::Accounting::default();
-        let result = accounting.with_cancellation(&cancellation, |counters| {
-            rows.next_row(&FormulaLimits::default(), budget, counters, location())
-                .map(|row| row.is_some())
-        });
+    with_fixture(fixture, |support, computation, budget, counters| {
+        let mut rows = Join::filtered_rule(
+            &rule,
+            support,
+            Some(&selection),
+            None,
+            budget,
+            crate::formula_support::Context::new(
+                computation,
+                &FormulaLimits::default(),
+                counters,
+                rule.location,
+            ),
+        )
+        .unwrap();
+        counters.cancellation = Some(cancellation.clone());
+        let result = rows
+            .next_row(
+                computation,
+                &FormulaLimits::default(),
+                budget,
+                counters,
+                location(),
+            )
+            .map(|row| row.is_some());
         assert!(matches!(result, Err(FormulaFailure::Interrupted {
             reason: zetesis_cpu::Stop::Cancelled,
             location: actual,
         }) if actual == location()));
         assert_eq!(calls.get(), 1);
-        assert_eq!(accounting.substitutions, 0);
-        assert!(accounting.work > 0);
-        assert_eq!(rows.join.values, vec![None]);
+        assert_eq!(counters.accounting.substitutions, 0);
+        assert!(counters.accounting.work > 0);
+        assert_eq!(exported(&rows.join.values, computation), vec![None]);
     });
 }
 
@@ -417,15 +605,15 @@ fn filter_cancellation_stops_before_binding() {
 fn source_atom_positions_match_relation_occurrences() {
     with_support(
         vec![atom("p", &[9]), atom("p", &[2]), atom("q", &[3])],
-        |support, _, _| {
+        |support, _, _, _| {
             for (predicate, atoms) in support.source_atoms() {
-                assert_eq!(atoms.len(), support.row_count(predicate));
-                for (position, atom) in atoms.iter().enumerate() {
-                    let row = support.row(predicate, position).unwrap();
-                    assert!(std::ptr::eq(row.predicate(), predicate));
+                assert_eq!(atoms.len(), support.rows(predicate).count());
+                for (position, (row, atom)) in support.rows(predicate).zip(atoms.iter()).enumerate()
+                {
+                    assert_eq!(row.predicate(), predicate);
                     assert_eq!(row.predicate(), atom.predicate());
                     assert_eq!(row.position(), position);
-                    assert_eq!(row.value(0), atom.values().first());
+                    assert_eq!(row.value(0), atom.arguments().get(0));
                 }
             }
         },

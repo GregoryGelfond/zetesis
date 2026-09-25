@@ -1,9 +1,7 @@
 //! Capture source-established count facts without changing original grounding.
 
-use std::collections::BTreeMap;
-
+use crate::formula_head_aggregate::Bijection;
 use themelios_base::span::Location;
-use zetesis_core::{Atom, Value};
 use zetesis_ferraris::{AggregateComparison, Node, Theory};
 
 use super::{
@@ -11,15 +9,15 @@ use super::{
     Request, Work, bytes, ceiling,
 };
 
-/// Values transferred from the complete source tuple/head bijection. Ordinary
-/// choices use their full atoms from the admitted atom catalog as keys; numeric
-/// atom indices below retain exactly that catalog meaning, never a tuple value.
+/// Complete source validation supplies a tuple/head bijection certificate.
+/// Numeric atom indices retain their local theory coordinate meaning; no source
+/// term or atom payload is transferred into this optional planner.
 pub(crate) struct Input<'a> {
     pub body: usize,
-    pub eligible: &'a BTreeMap<usize, usize>,
-    pub tuple_keys: BTreeMap<Atom, Vec<Value>>,
+    pub eligible: &'a [(usize, usize)],
+    pub bijection: Bijection,
     pub nodes: &'a [Node],
-    pub atoms: &'a [Atom],
+    pub atom_count: usize,
     pub bounds: Bounds,
     pub origins: &'a [Location],
     pub location: Location,
@@ -95,7 +93,7 @@ impl Collector {
 
     pub(crate) fn capture_group(
         &mut self,
-        input: Input<'_>,
+        input: &Input<'_>,
         bound_root: usize,
         asserted_root: usize,
     ) {
@@ -110,7 +108,7 @@ impl Collector {
 
     fn capture(
         &mut self,
-        input: Input<'_>,
+        input: &Input<'_>,
         bound_root: usize,
         asserted_root: usize,
     ) -> Result<(), Fault> {
@@ -119,9 +117,9 @@ impl Collector {
             return Ok(());
         };
         // Complete eligibility is inspected before allocating optional descriptors
-        // or copying origins. Existing validated keys are transferred, never
-        // reconstructed. Possible support is not an eligibility truth certificate.
-        for &condition in input.eligible.values() {
+        // or copying origins. The opaque certificate carries only the validated
+        // count premise. Possible support is not an eligibility truth certificate.
+        for &(_, condition) in input.eligible {
             self.work.charge(1)?;
             if condition != 1 {
                 return Ok(());
@@ -160,16 +158,16 @@ impl Collector {
             self.work.limits.max_origins,
             Resource::Origins,
         )?;
-        if !input.tuple_keys.is_empty() && input.tuple_keys.len() != input.eligible.len() {
+        if !input.bijection.accepts_members(input.eligible.len()) {
             return Err(Fault::SourceMapping);
         }
         let mut members = self.work.vector(input.eligible.len())?;
-        for head in input.eligible.keys() {
+        for &(head, _) in input.eligible {
             self.work.charge(1)?;
-            let Some(Node::Atom(atom)) = input.nodes.get(*head) else {
+            let Some(Node::Atom(atom)) = input.nodes.get(head) else {
                 return Err(Fault::SourceMapping);
             };
-            if input.atoms.get(*atom).is_none() {
+            if *atom >= input.atom_count {
                 return Err(Fault::SourceMapping);
             }
             members.push(*atom);
@@ -186,7 +184,6 @@ impl Collector {
         if members.windows(2).any(|pair| pair[0] == pair[1]) {
             return Err(Fault::SourceMapping);
         }
-        self.key_payload(&input.tuple_keys)?;
         let mut origins = self.work.vector(input.origins.len())?;
         for &origin in input.origins {
             self.work.charge(1)?;
@@ -199,9 +196,8 @@ impl Collector {
         self.groups
             .try_reserve_exact(1)
             .map_err(|_| Fault::Stopped(zetesis_cpu::Stop::Allocation))?;
-        // The transferred whole keys established the original group mapping.
-        // No synthetic atom-number tuple is published as a source key.
-        drop(input.tuple_keys);
+        // The source certificate established the original group mapping. These
+        // members are theory coordinates, never synthetic source tuple values.
         self.groups.push(Group {
             body: input.body,
             members,
@@ -213,37 +209,6 @@ impl Collector {
             location: input.location,
         });
         Ok(())
-    }
-
-    fn key_payload(&mut self, keys: &BTreeMap<Atom, Vec<Value>>) -> Result<(), Fault> {
-        for (atom, tuple) in keys {
-            self.work.charge(1)?;
-            self.work.payload(bytes::<Atom>(1)?)?;
-            let name_bytes =
-                u64::try_from(atom.predicate().name().len()).map_err(|_| Fault::Overflow)?;
-            self.work.charge(name_bytes)?;
-            self.work.payload(name_bytes)?;
-            self.work.payload(bytes::<Value>(atom.values().len())?)?;
-            for value in atom.values() {
-                self.value(value)?;
-            }
-            self.work.payload(bytes::<Value>(tuple.capacity())?)?;
-            for value in tuple {
-                self.value(value)?;
-            }
-        }
-        Ok(())
-    }
-
-    fn value(&mut self, value: &Value) -> Result<(), Fault> {
-        let visits = match value {
-            Value::Structured(value) => value.nodes().len(),
-            _ => 1,
-        };
-        self.work
-            .charge(u64::try_from(visits).map_err(|_| Fault::Overflow)?)?;
-        self.work
-            .payload(u64::try_from(value.payload_bytes()).map_err(|_| Fault::Overflow)?)
     }
 
     fn stop(&mut self, kind: Fault) {

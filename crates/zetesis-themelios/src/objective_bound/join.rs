@@ -1,10 +1,11 @@
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
-use zetesis_core::{Atom, AtomIndex, AtomIndexError, AtomPattern, AtomRows, Filter, Term, Value};
+use zetesis_core::catalog::{AtomRef, Atoms, TermRef};
+use zetesis_core::{AtomIndex, AtomIndexError, AtomRows, PatternRef, TemplateTerm, ValueNodeRef};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{AggregateElement, Node, Theory};
-use zetesis_objective::{Condition, ConditionNode, ObjectiveProgram, ObjectiveTemplate};
+use zetesis_objective::{Condition, ConditionNode, ObjectiveProgram, ObjectiveTemplateRef};
 
 use super::{
     ObjectiveBoundError, ObjectiveBoundErrorKind as Kind, ObjectiveBoundResource as Resource,
@@ -14,7 +15,7 @@ use super::{
 struct Key<'a> {
     priority: i32,
     weight: i32,
-    tuple: Vec<&'a Value>,
+    tuple: Vec<TermRef<'a>>,
     condition: usize,
 }
 struct Compiler<'a> {
@@ -27,7 +28,7 @@ struct Compiler<'a> {
 
 pub(super) fn compile(
     original: &Theory,
-    atoms: &[Atom],
+    atoms: Atoms<'_>,
     objectives: &ObjectiveProgram,
     limits: ObjectivePlanLimits,
     cancellation: &Cancellation,
@@ -48,11 +49,12 @@ pub(super) fn compile(
     let mut nodes = Vec::new();
     // The existing atom ceiling admits both O(n) index orders and reusable
     // merge scratch. Only integer row IDs are allocated; payload remains here.
-    let index = AtomIndex::new_with(atoms, || work.tick()).map_err(|error| match error {
-        AtomIndexError::Stopped(error) => error,
-        AtomIndexError::Allocation => work.error(Kind::Allocation),
-        AtomIndexError::Duplicate { .. } => work.error(Kind::AtomCatalog),
-    })?;
+    let index =
+        AtomIndex::from_catalog_with(atoms, || work.tick()).map_err(|error| match error {
+            AtomIndexError::Stopped(error) => error,
+            AtomIndexError::Allocation => work.error(Kind::Allocation),
+            AtomIndexError::Duplicate { .. } => work.error(Kind::AtomCatalog),
+        })?;
     for index in 0..atoms.len() {
         work.node(&mut nodes, Node::Atom(index))?;
     }
@@ -100,7 +102,7 @@ struct Frame<'index, 'source> {
 }
 
 impl<'a> Compiler<'a> {
-    fn join(&mut self, template: &'a ObjectiveTemplate) -> Result<(), ObjectiveBoundError> {
+    fn join(&mut self, template: ObjectiveTemplateRef<'a>) -> Result<(), ObjectiveBoundError> {
         if template.positive().len() > self.work.limits.max_body_atoms {
             return Err(self.work.limit(Resource::BodyAtoms));
         }
@@ -126,7 +128,14 @@ impl<'a> Compiler<'a> {
         }
         let lookup = self.index.lookup();
         frames.push(Frame {
-            rows: lookup.predicate_with(template.positive()[0].predicate(), || self.work.tick())?,
+            rows: lookup.predicate_with(
+                template
+                    .positive()
+                    .at(0)
+                    .expect("nonempty positive body")
+                    .predicate(),
+                || self.work.tick(),
+            )?,
             trail_start: 0,
         });
         while !frames.is_empty() {
@@ -147,7 +156,7 @@ impl<'a> Compiler<'a> {
             let atom_index = row.position();
             if !matches(
                 &mut self.work,
-                &template.positive()[depth],
+                template.positive().at(depth).expect("join depth in body"),
                 row.atom(),
                 &mut binding,
                 &mut trail,
@@ -167,10 +176,14 @@ impl<'a> Compiler<'a> {
                 )?;
             } else {
                 frames.push(Frame {
-                    rows: lookup
-                        .predicate_with(template.positive()[depth + 1].predicate(), || {
-                            self.work.tick()
-                        })?,
+                    rows: lookup.predicate_with(
+                        template
+                            .positive()
+                            .at(depth + 1)
+                            .expect("next join depth in body")
+                            .predicate(),
+                        || self.work.tick(),
+                    )?,
                     trail_start: trail.len(),
                 });
             }
@@ -179,8 +192,8 @@ impl<'a> Compiler<'a> {
     }
     fn active(
         &mut self,
-        template: &'a ObjectiveTemplate,
-        binding: &[Option<&'a Value>],
+        template: ObjectiveTemplateRef<'a>,
+        binding: &[Option<TermRef<'a>>],
         chosen: &[usize],
     ) -> Result<(), ObjectiveBoundError> {
         active(
@@ -193,16 +206,25 @@ impl<'a> Compiler<'a> {
             chosen,
         )
     }
-    fn variables(&mut self, template: &ObjectiveTemplate) -> Result<usize, ObjectiveBoundError> {
+    fn variables(
+        &mut self,
+        template: ObjectiveTemplateRef<'_>,
+    ) -> Result<usize, ObjectiveBoundError> {
         let mut count = 0;
-        for term in template.positive().iter().flat_map(AtomPattern::terms) {
+        for index in 0..template.positive().len() {
             self.work.tick()?;
-            if let Term::Variable(variable) = term {
-                count = count.max(
-                    variable
-                        .checked_add(1)
-                        .ok_or_else(|| self.work.error(Kind::Overflow))?,
-                );
+            let pattern = template.positive().at(index).expect("bounded body pattern");
+            for column in 0..pattern.terms().len() {
+                self.work.tick()?;
+                if let TemplateTerm::Variable(variable) =
+                    pattern.terms().at(column).expect("bounded pattern column")
+                {
+                    count = count.max(
+                        variable
+                            .checked_add(1)
+                            .ok_or_else(|| self.work.error(Kind::Overflow))?,
+                    );
+                }
             }
         }
         if count > self.work.limits.max_variables {
@@ -213,8 +235,12 @@ impl<'a> Compiler<'a> {
 
     fn condition(&mut self, condition: &Condition) -> Result<Option<usize>, ObjectiveBoundError> {
         let mut nodes: Vec<usize> = self.work.reserve(condition.nodes().len())?;
-        for operation in condition.nodes() {
+        for index in 0..condition.nodes().len() {
             self.work.tick()?;
+            let operation = condition
+                .nodes()
+                .at(index)
+                .expect("bounded condition operation");
             let node = match operation {
                 ConditionNode::Boolean(true) => self.truth,
                 ConditionNode::Boolean(false) => self.work.node(&mut self.nodes, Node::False)?,
@@ -222,21 +248,21 @@ impl<'a> Compiler<'a> {
                 ConditionNode::Not(operand) => {
                     let falsum = self.work.node(&mut self.nodes, Node::False)?;
                     self.work
-                        .node(&mut self.nodes, Node::Implies(nodes[*operand], falsum))?
+                        .node(&mut self.nodes, Node::Implies(nodes[operand], falsum))?
                 }
                 ConditionNode::And(left, right) => self
                     .work
-                    .node(&mut self.nodes, Node::And(nodes[*left], nodes[*right]))?,
+                    .node(&mut self.nodes, Node::And(nodes[left], nodes[right]))?,
                 ConditionNode::Or(left, right) => self
                     .work
-                    .node(&mut self.nodes, Node::Or(nodes[*left], nodes[*right]))?,
+                    .node(&mut self.nodes, Node::Or(nodes[left], nodes[right]))?,
             };
             nodes.push(node);
         }
         Ok(nodes.last().copied())
     }
 
-    fn condition_atom(&mut self, query: &Atom) -> Result<usize, ObjectiveBoundError> {
+    fn condition_atom(&mut self, query: AtomRef<'_>) -> Result<usize, ObjectiveBoundError> {
         if let Some(row) = self.index.lookup().get_with(query, || self.work.tick())? {
             return Ok(row.position());
         }
@@ -248,30 +274,32 @@ impl<'a> Compiler<'a> {
 
 fn matches<'a>(
     work: &mut Work<'_>,
-    pattern: &AtomPattern,
-    atom: &'a Atom,
-    binding: &mut [Option<&'a Value>],
+    pattern: PatternRef<'_>,
+    atom: AtomRef<'a>,
+    binding: &mut [Option<TermRef<'a>>],
     trail: &mut Vec<usize>,
 ) -> Result<bool, ObjectiveBoundError> {
-    for (term, value) in pattern.terms().iter().zip(atom.values()) {
+    for column in 0..pattern.terms().len() {
         work.tick()?;
+        let term = pattern.terms().at(column).expect("bounded pattern column");
+        let value = atom.values().at(column).expect("matched predicate arity");
         match term {
-            Term::Constant(constant)
+            TemplateTerm::Constant(constant)
                 if compare_identity(work, constant, value)? != Ordering::Equal =>
             {
                 return Ok(false);
             }
-            Term::Variable(variable) => {
-                if let Some(previous) = binding[*variable] {
+            TemplateTerm::Variable(variable) => {
+                if let Some(previous) = binding[variable] {
                     if compare_identity(work, previous, value)? != Ordering::Equal {
                         return Ok(false);
                     }
                 } else {
-                    binding[*variable] = Some(value);
-                    trail.push(*variable);
+                    binding[variable] = Some(value);
+                    trail.push(variable);
                 }
             }
-            Term::Constant(_) => {}
+            TemplateTerm::Constant(_) => {}
         }
     }
     Ok(true)
@@ -279,14 +307,14 @@ fn matches<'a>(
 
 fn resolve<'a>(
     work: &mut Work<'_>,
-    term: &'a Term,
-    binding: &[Option<&'a Value>],
-) -> Result<&'a Value, ObjectiveBoundError> {
+    term: TemplateTerm<'a>,
+    binding: &[Option<TermRef<'a>>],
+) -> Result<TermRef<'a>, ObjectiveBoundError> {
     work.tick()?;
     match term {
-        Term::Constant(value) => Ok(value),
-        Term::Variable(variable) => binding
-            .get(*variable)
+        TemplateTerm::Constant(value) => Ok(value),
+        TemplateTerm::Variable(variable) => binding
+            .get(variable)
             .copied()
             .flatten()
             .ok_or_else(|| work.error(Kind::UnboundVariable)),
@@ -297,10 +325,10 @@ fn resolve<'a>(
 // behind a conservative payload-size estimate.
 fn compare_identity(
     work: &mut Work<'_>,
-    left: &Value,
-    right: &Value,
+    left: TermRef<'_>,
+    right: TermRef<'_>,
 ) -> Result<Ordering, ObjectiveBoundError> {
-    left.compare_identity_with(right, || work.tick())
+    left.compare_ref_with(right, || work.tick())
 }
 
 fn active<'a>(
@@ -308,8 +336,8 @@ fn active<'a>(
     nodes: &mut Vec<Node>,
     keys: &mut Vec<Key<'a>>,
     truth: usize,
-    template: &'a ObjectiveTemplate,
-    binding: &[Option<&'a Value>],
+    template: ObjectiveTemplateRef<'a>,
+    binding: &[Option<TermRef<'a>>],
     chosen: &[usize],
 ) -> Result<(), ObjectiveBoundError> {
     work.tick()?;
@@ -317,25 +345,29 @@ fn active<'a>(
         return Err(work.limit(Resource::Bindings));
     }
     work.statistics.bindings += 1;
-    for filter in template.filters() {
+    for index in 0..template.filters().len() {
+        work.tick()?;
+        let filter = template.filters().at(index).expect("bounded filter index");
         let (left, right) = filter.terms();
         let left = resolve(work, left, binding)?;
         let right = resolve(work, right, binding)?;
-        if (compare_identity(work, left, right)? == Ordering::Equal)
-            != matches!(filter, Filter::Eq(..))
-        {
+        if (compare_identity(work, left, right)? == Ordering::Equal) != filter.is_equality() {
             return Ok(());
         }
     }
-    let Value::Number(weight) = resolve(work, template.weight(), binding)? else {
+    let weight = resolve(work, template.weight(), binding)?;
+    work.tick()?;
+    let ValueNodeRef::Number(weight) = weight.descriptor() else {
         return Ok(());
     };
     let weight = template
         .weight_polarity()
-        .normalize(*weight)
+        .normalize(weight)
         .ok_or_else(|| work.error(Kind::WeightNormalizationOverflow))?;
     let mut tuple = work.reserve(template.tuple().len())?;
-    for term in template.tuple() {
+    for index in 0..template.tuple().len() {
+        work.tick()?;
+        let term = template.tuple().at(index).expect("bounded tuple field");
         tuple.push(resolve(work, term, binding)?);
     }
     let mut condition = truth;
@@ -373,7 +405,7 @@ fn key_order(
         return Ok(prefix);
     }
     for (left, right) in left.tuple.iter().zip(&right.tuple) {
-        let order = compare_identity(work, left, right)?;
+        let order = compare_identity(work, *left, *right)?;
         if order != Ordering::Equal {
             return Ok(order);
         }
@@ -407,18 +439,9 @@ fn contribute<'a>(
     }
     let mut bytes: usize = 16;
     for value in &key.tuple {
-        work.tick()?;
-        let payload = match value {
-            Value::Infimum | Value::Supremum => 0,
-            Value::Number(_) => 4,
-            Value::Structured(value) => value.canonical_bytes() - 1,
-            Value::String(text) | Value::Symbol(text) => 8_usize
-                .checked_add(text.len())
-                .ok_or_else(|| work.error(Kind::Overflow))?,
-        };
+        let length = value.canonical_bytes_with(|| work.tick())?;
         bytes = bytes
-            .checked_add(1)
-            .and_then(|value| value.checked_add(payload))
+            .checked_add(length)
             .ok_or_else(|| work.error(Kind::Overflow))?;
     }
     let bytes = work

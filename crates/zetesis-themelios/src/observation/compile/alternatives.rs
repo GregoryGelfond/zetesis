@@ -7,7 +7,7 @@ fn width(term: &Template) -> u128 {
         Template::Pool(children) => children
             .iter()
             .fold(0_u128, |sum, term| sum.saturating_add(width(term))),
-        Template::Function(_, _, children) | Template::Tuple(children) => children
+        Template::Construct(_, children) => children
             .iter()
             .fold(1_u128, |n, term| n.saturating_mul(width(term))),
         Template::Unary(_, inner) | Template::Absolute(inner) => width(inner),
@@ -41,22 +41,21 @@ impl Compiler<'_> {
                     .expect("position admitted against the structural alternative count");
                 return self.selected_template(selected, position, depth + 1);
             }
-            Template::Function(sign, name, children) => {
-                self.text(name.as_str())?;
-                Template::Function(
-                    *sign,
-                    name.clone(),
+            Template::Construct(shape, children) => {
+                self.revisit_shape(*shape)?;
+                Template::Construct(
+                    *shape,
                     self.selected_children(children, position, depth + 1)?,
                 )
-            }
-            Template::Tuple(children) => {
-                Template::Tuple(self.selected_children(children, position, depth + 1)?)
             }
             Template::Unary(operator, inner) => Template::Unary(
                 *operator,
                 Box::new(self.selected_template(inner, position, depth + 1)?),
             ),
-            Template::Value(symbol) => Template::Value(self.symbol(symbol, depth, false)?),
+            Template::Constant(scalar) => {
+                self.revisit_scalar(*scalar, depth)?;
+                Template::Constant(*scalar)
+            }
             Template::Variable(slot) => Template::Variable(*slot),
             Template::Binary(operator, left, right) => Template::Binary(
                 *operator,

@@ -13,7 +13,7 @@ use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, AggregateComparison as Comparison, AggregateElement, AggregateExtremum,
     AggregateLimits, Interpretation, Node, Theory, ValueExtremumElement, append_aggregate,
-    append_value_extremum, models, models_reduct,
+    append_value_extremum_refs, models, models_reduct,
     native_aggregate::{self as native, Bound, Function, Group, Guard, Tuple},
 };
 
@@ -205,7 +205,7 @@ fn lower(group: &Group, bound: i32) -> Theory {
                 .tuples()
                 .iter()
                 .map(|tuple| ValueExtremumElement {
-                    value: tuple.key[0].clone(),
+                    value: tuple.key.at(0).unwrap(),
                     condition: tuple.condition,
                 })
                 .collect();
@@ -214,12 +214,12 @@ fn lower(group: &Group, bound: i32) -> Theory {
             } else {
                 AggregateExtremum::Max
             };
-            append_value_extremum(
+            append_value_extremum_refs(
                 &mut nodes,
-                &elements,
+                elements.into_iter(),
                 kind,
                 Comparison::Ge,
-                &Term::Number(bound),
+                (&Term::Number(bound)).into(),
                 AggregateLimits::default(),
                 &Cancellation::default(),
             )
@@ -231,7 +231,9 @@ fn lower(group: &Group, bound: i32) -> Theory {
                 .tuples()
                 .iter()
                 .map(|tuple| {
-                    let Term::Number(value) = tuple.key[0] else {
+                    let zetesis_core::ValueNodeRef::Number(value) =
+                        tuple.key.at(0).unwrap().descriptor()
+                    else {
                         panic!("numeric fixture contribution");
                     };
                     let weight = match group.function() {

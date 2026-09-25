@@ -6,10 +6,12 @@
 
 mod selection;
 
+use crate::formula_support::{Context, GroundingWork};
+
 use std::{fmt, sync::Arc};
 use themelios_base::{source::Source, span::Location};
 use themelios_program::program::{DefaultNegation, Program};
-use zetesis_core::{AtomCatalog, AtomIndex, AtomIndexError, AtomPattern, Model};
+use zetesis_core::{AtomCatalog, AtomIndex, AtomIndexError, Model};
 use zetesis_cpu::{Cancellation, Stop, regions::Region};
 use zetesis_ferraris::Theory;
 
@@ -279,8 +281,8 @@ impl HybridFormula {
                 .map_err(|error| ConstraintCheckFailure {
                     cause: ConstraintCheckCause::Source(Box::new(error)),
                     statistics: ConstraintCheckStatistics {
-                        work: counters.work,
-                        substitutions: counters.substitutions,
+                        work: counters.accounting.work,
+                        substitutions: counters.accounting.substitutions,
                         scalar_bytes: 0,
                     },
                 })?;
@@ -337,7 +339,11 @@ pub struct ConstraintCheckLimits {
     pub max_work: u64,
     /// Complete substitutions visited across all checks, including false filters.
     pub max_substitutions: u64,
-    /// Cumulative copied scalar payload, including generated owned bindings.
+    /// Cumulative bytes requested for capture-delta cells during structural-pattern
+    /// matching, charged through source expansion's `ScalarBytes` resource.
+    /// The historical field name is retained; these cells borrow canonical
+    /// terms. ID-only binding copies and frozen constructor lookups add no
+    /// scalar-byte charge. Their storage uses the admitted support allowance.
     pub max_scalar_bytes: usize,
 }
 impl ConstraintCheckLimits {
@@ -361,7 +367,8 @@ pub struct ConstraintCheckStatistics {
     pub work: u64,
     /// Complete substitutions visited.
     pub substitutions: u64,
-    /// Copied scalar payload; not live memory or process RSS.
+    /// Accepted cumulative capture-delta reservations under `max_scalar_bytes`.
+    /// Canonical payload is borrowed; this is neither live capacity nor RSS.
     pub scalar_bytes: usize,
 }
 
@@ -539,9 +546,9 @@ impl<'a> PreparedConstraints<'a> {
             + size_of::<Vec<usize>>() as u128
             + 3 * atoms.atoms().len() as u128 * size_of::<usize>() as u128;
         self.completed
-            .admit_workspace(requested, &self.limits, location)
+            .admit_workspace(requested, &self.limits, counters, location)
             .map_err(|error| ConstraintCheckCause::Source(Box::new(error)))?;
-        let index = AtomIndex::new_with(atoms.atoms(), || {
+        let index = AtomIndex::from_catalog_with(atoms.atoms(), || {
             counters.work(&self.limits, location).map_err(Box::new)
         })
         .map_err(|error| match error {
@@ -549,7 +556,12 @@ impl<'a> PreparedConstraints<'a> {
             other => ConstraintCheckCause::Index(other),
         })?;
         self.completed
-            .admit_workspace(index.preparation_peak_bytes(), &self.limits, location)
+            .admit_workspace(
+                index.preparation_peak_bytes(),
+                &self.limits,
+                counters,
+                location,
+            )
             .map_err(|error| ConstraintCheckCause::Source(Box::new(error)))?;
         self.completed.retain_workspace(
             usize::try_from(index.retained_bytes()).expect("admitted support bytes fit usize"),
@@ -708,7 +720,7 @@ impl ConstraintChecker<'_> {
         };
         for (rule_index, rule) in constraints.rules.iter().enumerate() {
             if let Some(selection) = &selection
-                && !selection.possible(rule, &prepared.limits, counters)?
+                && !selection.possible(rule, &prepared.completed, &prepared.limits, counters)?
             {
                 continue;
             }
@@ -738,22 +750,32 @@ impl ConstraintChecker<'_> {
                 counters,
                 rule.location,
             )?;
+            let mut computation = queries.computation(rule.location)?;
             let mut join = prepared.plans[rule_index]
                 .as_ref()
                 .expect("prepared above")
-                .rows(&queries, filter, budget)?;
-            while let Some(row) =
-                join.next_row(&prepared.limits, budget, counters, rule.location)?
-            {
+                .rows(
+                    &queries,
+                    filter,
+                    &computation,
+                    &prepared.limits,
+                    budget,
+                    counters,
+                )?;
+            while let Some(row) = join.next_row(
+                &mut computation,
+                &prepared.limits,
+                budget,
+                counters,
+                rule.location,
+            )? {
                 if row.passes
                     && body(
                         &rule.body,
                         &row.values,
                         candidate,
                         prepared.index.as_ref(),
-                        &prepared.limits,
-                        counters,
-                        rule.location,
+                        Context::new(&computation, &prepared.limits, counters, rule.location),
                     )?
                 {
                     return Ok(Some(rule.location));
@@ -779,17 +801,26 @@ fn body(
     binding: &Binding<'_>,
     candidate: Candidate<'_>,
     index: Option<&AtomIndex<'_>>,
-    limits: &FormulaLimits,
-    counters: &mut Counters,
-    location: Location,
+    context: Context<'_, &crate::formula_support::Computation<'_, '_>>,
 ) -> Result<bool, FormulaFailure> {
+    let Context {
+        computation,
+        work:
+            GroundingWork {
+                limits,
+                counters,
+                location,
+            },
+    } = context;
     for literal in literals {
         let Some((negation, pattern)) = literal_atom(literal) else {
             continue;
         };
         counters.work(limits, location)?;
-        let key = pattern
-            .key(binding.slots())
+        let view = binding.view(computation.read(), limits, counters, location)?;
+        let key = computation
+            .static_pattern(*pattern, limits, counters, location)?
+            .key(view)
             .map_err(|error| FormulaFailure::UnsafeVariable {
                 variable: error.variable,
                 location,
@@ -831,7 +862,12 @@ fn body(
     Ok(true)
 }
 
-fn literal_atom(literal: &LiteralIr) -> Option<(DefaultNegation, &AtomPattern)> {
+fn literal_atom(
+    literal: &LiteralIr,
+) -> Option<(
+    DefaultNegation,
+    &crate::formula_support::components::Pattern,
+)> {
     match literal {
         LiteralIr::Atom(negation, pattern) => Some((*negation, pattern)),
         LiteralIr::PatternAtom(pattern) => Some((DefaultNegation::None, &pattern.atom)),

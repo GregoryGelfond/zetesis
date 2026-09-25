@@ -46,15 +46,7 @@ fn ordinary_sessions_propose_only_path_answer_sets() {
         .unwrap();
         let family: BTreeSet<_> = session
             .by_ref()
-            .map(|answer| {
-                answer
-                    .unwrap()
-                    .interpretation()
-                    .atoms()
-                    .iter()
-                    .cloned()
-                    .collect::<Vec<_>>()
-            })
+            .map(|answer| answer.unwrap().interpretation().clone())
             .collect();
         let outcome = session.outcome().unwrap();
         assert_eq!(family.len(), 55);

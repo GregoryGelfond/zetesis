@@ -21,7 +21,7 @@
 
 use std::collections::BTreeSet;
 
-use zetesis_core::{Predicate, Program, Term, Value};
+use zetesis_core::{Program, TemplateRef, TemplateTerm, catalog::PredicateRef};
 
 use super::Work;
 use crate::Stop;
@@ -30,7 +30,7 @@ use crate::Stop;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Bound {
     /// Only these values occur, in canonical order and without repetition.
-    Finite(Vec<Value>),
+    Finite(Vec<usize>),
     /// No finite bound: the argument is unbounded or too wide to keep.
     Unknown,
 }
@@ -38,21 +38,22 @@ pub(crate) enum Bound {
 /// The bounds of every argument of every predicate of one program.
 #[derive(Clone, Debug)]
 pub(crate) struct ArgumentBounds {
-    predicates: Vec<Predicate>,
+    program: Program,
     bounds: Vec<Vec<Bound>>,
 }
 
 /// One argument's growing bound during the fixed point.
 #[derive(Clone, Debug)]
 enum Growing {
-    Finite(BTreeSet<Value>),
+    Finite(BTreeSet<usize>),
     Unknown,
 }
 
 impl ArgumentBounds {
     /// The bounds of every argument of a predicate, in argument order.
-    pub(crate) fn bounds(&self, predicate: &Predicate) -> Option<&[Bound]> {
-        self.predicates
+    pub(crate) fn bounds<'a>(&self, predicate: impl Into<PredicateRef<'a>>) -> Option<&[Bound]> {
+        self.program
+            .predicates()
             .binary_search(predicate)
             .ok()
             .map(|table| self.bounds[table].as_slice())
@@ -70,8 +71,8 @@ pub(super) fn infer(
     max_values: usize,
     work: &mut Work<'_>,
 ) -> Result<ArgumentBounds, Stop> {
-    let predicates: Vec<Predicate> = program.predicates().to_vec();
-    let mut growing: Vec<Vec<Growing>> = predicates
+    let mut growing: Vec<Vec<Growing>> = program
+        .predicates()
         .iter()
         .map(|predicate| {
             (0..predicate.arity())
@@ -79,11 +80,6 @@ pub(super) fn infer(
                 .collect()
         })
         .collect();
-    let table = |predicate: &Predicate| {
-        predicates
-            .binary_search(predicate)
-            .map_err(|_| Stop::InvalidProgram)
-    };
     // Each pass adds values or turns an argument unknown, never the
     // reverse, and the values come from the program's constants, so the
     // passes end when one changes nothing.
@@ -93,13 +89,16 @@ pub(super) fn infer(
             let Some(head) = template.head() else {
                 continue;
             };
-            let target = table(head.predicate())?;
+            let target = table(program, head.predicate(), work)?;
             for (index, term) in head.terms().iter().enumerate() {
                 work.tick()?;
                 let contribution = match term {
-                    Term::Constant(value) => Growing::Finite(BTreeSet::from([value.clone()])),
-                    Term::Variable(variable) => {
-                        variable_bound(template, *variable, &growing, &table, work)?
+                    TemplateTerm::Constant(value) => Growing::Finite(BTreeSet::from([program
+                        .domain()
+                        .binary_search_with(value, || work.tick())?
+                        .map_err(|_| Stop::InvalidProgram)?])),
+                    TemplateTerm::Variable(variable) => {
+                        variable_bound(program, template, variable, &growing, work)?
                     }
                 };
                 changed |= widen(&mut growing[target][index], contribution, max_values, work)?;
@@ -121,7 +120,10 @@ pub(super) fn infer(
                 .collect()
         })
         .collect();
-    Ok(ArgumentBounds { predicates, bounds })
+    Ok(ArgumentBounds {
+        program: program.clone(),
+        bounds,
+    })
 }
 
 /// The values a head variable can take: the intersection of the bounds of
@@ -129,17 +131,17 @@ pub(super) fn infer(
 /// A variable no positive position binds is unknown: the bound stays an
 /// upper domain whatever else binds it.
 fn variable_bound(
-    template: &zetesis_core::Template,
+    program: &Program,
+    template: TemplateRef<'_>,
     variable: usize,
     growing: &[Vec<Growing>],
-    table: &impl Fn(&Predicate) -> Result<usize, Stop>,
     work: &mut Work<'_>,
 ) -> Result<Growing, Stop> {
-    let mut bound: Option<BTreeSet<Value>> = None;
+    let mut bound: Option<BTreeSet<usize>> = None;
     for pattern in template.positive() {
-        let source = table(pattern.predicate())?;
+        let source = table(program, pattern.predicate(), work)?;
         for (index, term) in pattern.terms().iter().enumerate() {
-            if *term != Term::Variable(variable) {
+            if term != TemplateTerm::Variable(variable) {
                 continue;
             }
             work.tick()?;
@@ -149,13 +151,24 @@ fn variable_bound(
                     work.charge(values.len())?;
                     bound = Some(match bound {
                         None => values.clone(),
-                        Some(known) => known.intersection(values).cloned().collect(),
+                        Some(known) => known.intersection(values).copied().collect(),
                     });
                 }
             }
         }
     }
     Ok(bound.map_or(Growing::Unknown, Growing::Finite))
+}
+
+fn table(
+    program: &Program,
+    predicate: PredicateRef<'_>,
+    work: &mut Work<'_>,
+) -> Result<usize, Stop> {
+    program
+        .predicates()
+        .binary_search_with(predicate, || work.tick())?
+        .map_err(|_| Stop::InvalidProgram)
 }
 
 /// Widen an argument's bound by a contribution; whether anything changed.

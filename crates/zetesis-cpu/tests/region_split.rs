@@ -2,7 +2,7 @@
 //! constraint, decided outright, split on its highest undecided atom, or
 //! counted when its narrowing decided nothing beyond the split.
 
-use zetesis_core::{Atom, Program, Seed, Template, Term};
+use zetesis_core::{Program, Seed, Template, Term};
 use zetesis_cpu::{Cancellation, CandidateLimits, Candidates, Limits, Stop, check};
 
 #[path = "support/programs.rs"]
@@ -50,7 +50,7 @@ fn spelled(seed: &Seed) -> Vec<String> {
     let mut atoms: Vec<String> = seed
         .atoms()
         .iter()
-        .map(|atom: &Atom| format!("{}{:?}", atom.predicate().name(), atom.values()))
+        .map(|atom| format!("{}{:?}", atom.predicate().name(), atom.values()))
         .collect();
     atoms.sort();
     atoms

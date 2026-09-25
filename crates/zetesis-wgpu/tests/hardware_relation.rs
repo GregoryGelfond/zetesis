@@ -6,6 +6,7 @@ mod physical;
 
 use zetesis_core::{
     Atom, Predicate, Sign, Value, ValueLimits, ValueNode,
+    atom_interner::{AtomInterner, Limits as AtomLimits},
     relation::{Catalog, Limits, Relation},
 };
 use zetesis_cpu::{Cancellation, Stop};
@@ -66,7 +67,7 @@ fn compare_rows(executor: &mut GpuRelationExecutor, rows: usize) {
         .map(|items| {
             let keys: Vec<_> = items
                 .iter()
-                .map(|(column, value)| (*column, value))
+                .map(|(column, value)| (*column, value.into()))
                 .collect();
             relation.query(&keys, Limits::default()).unwrap()
         })
@@ -187,13 +188,21 @@ fn qualify_masks(backend: physical::Backend) {
 }
 
 fn compare_catalog_growth(executor: &mut GpuRelationExecutor) {
+    // This fixture's finite typed values and 65 rows fit this explicit owner
+    // allowance. It is independent of the relation metadata budget.
+    const CANONICAL_BYTES: usize = 1 << 20;
     let predicate = Predicate::with_sign("row", 2, Sign::Negative).unwrap();
     let values = values();
-    let mut catalog = Catalog::new(predicate.clone(), Limits::default()).unwrap();
+    let mut authority = AtomInterner::new();
+    let allowance = AtomLimits::for_atoms(65, CANONICAL_BYTES);
+    let declaration = authority
+        .declare_predicate_with(&predicate, allowance, || Ok::<_, ()>(()))
+        .unwrap();
+    let mut catalog = Catalog::new(authority.read(), declaration, Limits::default()).unwrap();
     // Insertion order deliberately differs from typed-value order. The second
     // snapshot reuses the first dictionary IDs and crosses two mask boundaries.
     for rows in [31, 65] {
-        for row in catalog.atoms().len()..rows {
+        for row in catalog.len()..rows {
             let atom = Atom::new(
                 predicate.clone(),
                 vec![
@@ -202,12 +211,23 @@ fn compare_catalog_growth(executor: &mut GpuRelationExecutor) {
                 ],
             )
             .unwrap();
-            catalog.insert(atom, Limits::default()).unwrap();
+            let id = authority
+                .entry_atom_with(&atom, allowance, || Ok::<_, ()>(()))
+                .unwrap()
+                .insert_with(allowance, || Ok::<_, ()>(()))
+                .unwrap();
+            catalog
+                .insert(authority.get(id).unwrap(), Limits::default())
+                .unwrap();
         }
-        let relation = catalog.view();
+        let relation = catalog.view(authority.read()).unwrap();
         let queries: Vec<_> = values
             .iter()
-            .map(|value| relation.query(&[(1, value)], Limits::default()).unwrap())
+            .map(|value| {
+                relation
+                    .query(&[(1, value.into())], Limits::default())
+                    .unwrap()
+            })
             .collect();
         let mut prepared = executor
             .prepare(
@@ -230,10 +250,13 @@ fn compare_catalog_growth(executor: &mut GpuRelationExecutor) {
         assert_eq!(prepared.activity().submissions, 1);
         for (query, value) in values.iter().enumerate() {
             let expected: Vec<_> = catalog
-                .atoms()
+                .atoms(authority.read())
+                .unwrap()
                 .iter()
                 .enumerate()
-                .filter_map(|(position, atom)| (atom.values()[1] == *value).then_some(position))
+                .filter_map(|(position, atom)| {
+                    (atom.values().at(1).unwrap() == *value).then_some(position)
+                })
                 .collect();
             let selection = masks.selection(query, Limits::default()).unwrap();
             assert_eq!(selection.positions(), expected);

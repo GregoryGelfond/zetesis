@@ -19,7 +19,10 @@ use std::ops::Range;
 use themelios_analysis::depend::DependencyKind;
 use themelios_base::span::Location;
 use themelios_program::symbol::{Sign, Signature};
-use zetesis_core::{Predicate, relation::Failure};
+use zetesis_core::{
+    catalog::{AtomRef, PredicateRef},
+    relation::Failure,
+};
 
 use super::delta::{self, Variants};
 use super::relations::Memory;
@@ -39,6 +42,24 @@ pub(super) struct ProducerPlan<'source> {
     bytes: usize,
 }
 
+/// Count only producer body occurrences, before reserving their metadata lanes.
+fn input_capacity(
+    prepared: &Prepared,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+) -> Result<usize, FormulaFailure> {
+    let mut input_count = 0_usize;
+    for rule in &prepared.rules {
+        counters.work(limits, rule.location)?;
+        if matches!(rule.head, HeadIr::Normal(Some(_))) {
+            input_count = input_count
+                .checked_add(rule.body.len())
+                .ok_or_else(|| invalid(Failure::Overflow, rule.location))?;
+        }
+    }
+    Ok(input_count)
+}
+
 struct Node<'source> {
     signature: &'source Signature,
     component: Option<usize>,
@@ -47,29 +68,26 @@ struct Node<'source> {
 impl<'source> ProducerPlan<'source> {
     pub(super) fn prepare(
         prepared: &'source Prepared,
+        catalog: &super::SupportCatalog,
         limits: &FormulaLimits,
         counters: &mut Counters,
         location: Location,
     ) -> Result<Option<Self>, FormulaFailure> {
-        let Some(source) = PositiveSource::check(prepared, limits, counters, location)? else {
+        let components = catalog.component_view(limits, counters, location)?;
+        let Some(source) = PositiveSource::check(prepared, components, limits, counters, location)?
+        else {
             return Ok(None);
         };
-        let mut memory = Memory::new(size_of::<Self>(), limits, counters, location);
+        let external =
+            catalog.bytes(location)? as u128 + counters.accounting.workspace.bytes() as u128;
+        let mut memory = Memory::new(size_of::<Self>(), external, limits, counters, location);
         memory.add(0)?;
         let mut rules = Vec::new();
         let mut inputs = Vec::new();
         let mut input_predicates = Vec::new();
         memory.add(size_of::<Vec<usize>>())?;
         memory.reserve(&mut rules, prepared.rules.len())?;
-        let mut input_count = 0_usize;
-        for rule in &prepared.rules {
-            counters.work(limits, rule.location)?;
-            if matches!(rule.head, HeadIr::Normal(Some(_))) {
-                input_count = input_count
-                    .checked_add(rule.body.len())
-                    .ok_or_else(|| invalid(Failure::Overflow, rule.location))?;
-            }
-        }
+        let input_count = input_capacity(prepared, limits, counters)?;
         memory.reserve(&mut inputs, input_count)?;
         memory.reserve(&mut input_predicates, input_count)?;
         let nodes = graph_nodes(prepared, &mut memory, limits, counters, location)?;
@@ -82,7 +100,13 @@ impl<'source> ProducerPlan<'source> {
             let head = find(
                 nodes.len(),
                 |index| nodes[index].signature,
-                head.predicate(),
+                head.get(
+                    components.ok_or_else(|| super::components::missing(rule.location))?,
+                    limits,
+                    counters,
+                    rule.location,
+                )?
+                .predicate(),
                 limits,
                 counters,
                 rule.location,
@@ -101,7 +125,13 @@ impl<'source> ProducerPlan<'source> {
                 let body = find(
                     nodes.len(),
                     |index| nodes[index].signature,
-                    atom.predicate(),
+                    atom.get(
+                        components.ok_or_else(|| super::components::missing(rule.location))?,
+                        limits,
+                        counters,
+                        rule.location,
+                    )?
+                    .predicate(),
                     limits,
                     counters,
                     rule.location,
@@ -151,9 +181,9 @@ impl<'source> ProducerPlan<'source> {
 
     /// Build the next wake set from this complete round's proposed new atoms.
     /// No consumer reads it until all corresponding catalog insertions succeed.
-    pub(super) fn advance(
+    pub(super) fn advance<'atoms>(
         &mut self,
-        delta: &std::collections::BTreeSet<zetesis_core::Atom>,
+        delta: impl Iterator<Item = AtomRef<'atoms>>,
         limits: &FormulaLimits,
         counters: &mut Counters,
         location: Location,
@@ -249,7 +279,7 @@ fn graph_nodes<'source>(
 fn find<'source>(
     count: usize,
     signature_at: impl Fn(usize) -> &'source Signature,
-    predicate: &Predicate,
+    predicate: PredicateRef<'_>,
     limits: &FormulaLimits,
     counters: &mut Counters,
     location: Location,

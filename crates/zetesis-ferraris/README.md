@@ -282,6 +282,31 @@ but returns no partial plan. Cancellation, deadline, allocation and limit
 failures remain refusals. `compile` delegates to the same implementation while
 omitting the failure receipt. No timing gain follows solely from this API.
 
+## Retained native aggregates
+
+`native_aggregate::Group::new` imports already OR-coalesced tuple keys and
+term-valued guards into one canonical vocabulary. Owned `Value` descriptions are
+construction input; reductions borrow `TermRef` values. The alternative
+`GroupData::new` admits metadata over an existing `CatalogRead` without importing
+its payload. `bind_with` checks vocabulary identity and the required prefix before
+returning a `GroupRef`. The caller retains that external vocabulary.
+
+Both forms preserve complete-key equality, original occurrence order, empty
+keys, typed ASP ordering and the original/frozen eligibility contract. Equal
+complete keys are refused, even if their conditions coincide. Scalar, Rayon and
+wgpu callers consume the same borrowed group; device preparation adds its own
+numeric capability checks. Admission alone establishes no formula truth or
+answer-set membership.
+
+`AdmissionLimits::max_bytes` retains the logical transferred-carrier measure.
+The separate `max_storage_bytes` bounds named canonical capacities, metadata,
+duplicate-check scratch and publication overlap. Owned admission includes its
+vocabulary; borrowed admission excludes the caller's catalog. Caller ingress,
+shared theory payload and allocator bookkeeping are outside this dimension.
+`Statistics::storage_bytes` and `storage_peak_bytes` report canonical admission
+capacity separately from the legacy logical fields. These are bounded component
+receipts, not process RSS. Refusal returns its typed cause and accounted prefix.
+
 ## Finite scalar aggregates
 
 `append_aggregate(nodes, elements, comparison, bound, limits, control)` appends a

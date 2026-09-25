@@ -7,16 +7,14 @@
 
 use super::{
     BTreeSet, Binder, Compiler, Condition, DefaultNegation, Error, Feature, Operand, Relation,
-    Sign, Template, UnaryOp,
+    Template, UnaryOp,
 };
 
 fn structural_children(term: &Template) -> Option<&[Template]> {
     match term {
-        Template::Function(_, _, children)
-        | Template::Tuple(children)
-        | Template::Pool(children) => Some(children),
+        Template::Construct(_, children) | Template::Pool(children) => Some(children),
         Template::Unary(UnaryOp::Negate, argument) => match argument.as_ref() {
-            Template::Function(_, _, children) => Some(children),
+            Template::Construct(_, children) => Some(children),
             _ => structural_children(argument),
         },
         _ => None,
@@ -113,22 +111,12 @@ impl Compiler<'_> {
         None
     }
 
-    pub(super) fn structural_pattern(&self, term: Template) -> Result<Operand, Error> {
+    pub(super) fn structural_pattern(&mut self, term: Template) -> Result<Operand, Error> {
         Ok(match term {
             Template::Variable(slot) => Operand::Variable(slot),
-            Template::Value(symbol) => Operand::Value(
-                crate::structural_value::from_symbol(&symbol)
-                    .map_err(|_| self.unsupported(Feature::Comparison))?,
-            ),
-            Template::Function(sign, name, children) => Operand::Function(
-                sign,
-                name,
-                children
-                    .into_iter()
-                    .map(|child| self.structural_pattern(child))
-                    .collect::<Result<_, _>>()?,
-            ),
-            Template::Tuple(children) => Operand::Tuple(
+            Template::Constant(scalar) => Operand::Constant(scalar),
+            Template::Construct(shape, children) => Operand::Construct(
+                shape,
                 children
                     .into_iter()
                     .map(|child| self.structural_pattern(child))
@@ -137,18 +125,11 @@ impl Compiler<'_> {
             Template::Unary(UnaryOp::Negate, argument)
                 if structural_children(&argument).is_some() =>
             {
-                let Operand::Function(sign, name, children) = self.structural_pattern(*argument)?
+                let Operand::Construct(shape, children) = self.structural_pattern(*argument)?
                 else {
                     return Err(self.unsupported(Feature::Comparison));
                 };
-                Operand::Function(
-                    match sign {
-                        Sign::Positive => Sign::Negative,
-                        Sign::Negative => Sign::Positive,
-                    },
-                    name,
-                    children,
-                )
+                Operand::Construct(self.negate(shape)?, children)
             }
             expression => Operand::Expression(expression),
         })

@@ -31,12 +31,15 @@ receipt. The one-shot `check` charges preparation and evaluation together, so
 equal completed results do not imply identical resource cutoffs. These separate
 per-call limits do not bound an entire sequence of checks.
 
-`ClosureWorkspace` retains empty catalog metadata, predicate owners and
-reference-free cursor/undo capacity. Candidate atoms transfer to the returned
-`Check`; no previous candidate truth is reused. Failed evaluation discards dirty
-workspace state, and a different program instance retires the old workspace.
-Its `retained_bytes()` reports named workspace capacity, excluding shared source,
-prepared storage, returned models and documented container/allocator overhead;
+`ClosureWorkspace` retains a canonical tuple authority over the Program's frozen
+vocabulary, plus relation and reference-free cursor/undo capacity. A completed
+`Check` retains a selection over its immutable prefix. The workspace clears
+relation membership, frontiers and pending marks before reuse; retained identity
+supplies no previous candidate truth. Failed evaluation discards dirty workspace
+state, and a different Program instance retires the old workspace.
+Its `retained_bytes()` includes the authority's shared frozen vocabulary and
+workspace metadata. Other source/preparation storage, separately retained results
+and documented container/allocator overhead remain outside that receipt;
 it is not RSS. Retained capacity is admitted again under each check's limits.
 Independent workers need separate mutable workspaces and may share the immutable
 prepared owner. This example executes serially and makes no speed claim.
@@ -82,18 +85,18 @@ preparation and resource contracts.
 
 `Candidates::next_selection` retains opaque gate atoms minted in canonical
 carrier order. The complete graph's gate-ID list has that same order, so a
-selected token resolves by one checked array lookup. Its program, position and
-payload cannot be changed separately. The candidate stream checks its carrier
+selected token resolves by one checked array lookup. Its Program, tuple
+coordinates and position cannot be changed separately. The candidate stream checks its carrier
 bound and reserves handle storage before sharing each newly discovered token.
 Selections sort and deduplicate these positions with integer comparisons;
 this still costs `O(n log n)` comparisons for `n` selected handles. Manually
-supplied `Arc<Atom>` selections retain typed atom sorting and explicit symbolic
-lookup. Both use one entry representation and the same checker, with one work
-charge and control poll before each static resolution.
-Each discovered token additionally retains a program handle and one position;
-the selected-entry variant also occupies more metadata than a bare Arc handle.
-The change avoids repeated payload copies and lookup, without promising fewer
-bytes for every small candidate.
+supplied `Arc<Atom>` descriptions are located in the symbolic carrier during
+admission and then released. Their selections retain Program-bound coordinates,
+not the ingress payload. Both use one entry representation and the same checker,
+with checked static resolution. A `CarrierAtom` can also enter a selection directly
+without needing a representable full-carrier ordinal. Each token retains a Program
+handle and O(arity) coordinate words; indexed tokens additionally retain a position.
+Sharing payload therefore does not promise fewer bytes for every small candidate.
 
 `GroundProgram::seed_words_into` writes a view directly into exact-width
 caller storage. Identity and width errors leave that storage unchanged; successful
@@ -193,31 +196,43 @@ identity. This lets owned seeds and shared selections use the same source and
 world evaluator without materializing input trees. The batch interns each
 distinct demanded atom once. Canonically ordered IDs select borrowed rows from
 the committed catalog while callbacks append to a disjoint tail. No per-round
-Union Model or Worlds atom vector duplicates that payload. The visitor still
-rebuilds its borrowed relation grouping and copies each bounded source instance.
+Union Model or Worlds atom vector duplicates that payload. The visitor rebuilds
+borrowed relation grouping and lends one bounded instance of checked keys to its
+callback, without copying Atom/Value payload.
 
 The catalog grows on demand. Its IDs, frozen seeds, snapshots and pending deltas
 survive changes in packed-word width; catalog presence does not establish world
 truth. Successful source scans and evaluation commit all newly demanded
 identities, including underived heads in a final round with no new consequence.
-Finalization transfers the atom vector into one shared Model catalog; each world
-retains its own selected positions. Sparse results retain false catalog atoms too.
+Finalization transfers the discovery map and shares its immutable canonical
+prefix with one Model catalog; each world retains its own selected positions. Sparse results retain false catalog atoms too.
 
 `max_source_work` now charges seed initialization, identity comparisons and index
 maintenance, canonical row selection and catalog commits as well as source joins
-and instance copying. One work owner spans the batch; these additional explicit
+and borrowed-instance admission. One work owner spans the batch; these additional explicit
 charges can change resource stopping points without changing reduct semantics.
 Packed transport remains batch-owned and the injected evaluator keeps its own
 execution accounting.
 
 `max_host_bytes` admits actual catalog/AVL/path and ordered-ID capacities plus
-their named growth overlap, nested payload measures, and requested truth, seed,
+their named growth overlap and canonical payload, plus requested truth, seed,
 delta, chunk, result, instance scratch and source membership/workspace storage.
 Final model positions have a requested-slot allowance; additional capacity from
 their geometrically growing Vec is excluded. Caller inputs, Arc envelopes,
 allocator overhead and rounding outside the measured catalog/ordered-ID
 capacities, and backend-private transport are also outside that envelope.
 The backend must bound its own transport; this is not a process RSS ceiling.
+
+Source scans also have an independent `max_scan_bytes` allowance, 128 MiB by
+default in both `source::ScanLimits` and lazy `Limits`. It admits actual borrowed
+row-directory and row-buffer capacities, assignment/cursor/undo scratch, and one
+offered instance's key buffer, including buffer-growth overlap. The Program and
+catalog payload, world masks and callback-owned chunks remain under their own
+owners and bounds. The simultaneous host envelope therefore composes these
+independent allowances; `max_scan_bytes` is not taken from `max_instance_bytes`.
+That per-instance limit still measures referenced typed identity and key metadata,
+including repeated occurrences. A failed workspace admission offers no instance
+and establishes no completed source scan.
 
 Failure returns `Failure<E>` with its source, protocol or injected execution
 cause and accumulated progress. No completed checks are published from a batch

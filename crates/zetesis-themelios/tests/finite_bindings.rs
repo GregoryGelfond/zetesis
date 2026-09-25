@@ -6,7 +6,6 @@ mod reference;
 use std::collections::BTreeSet;
 
 use themelios_base::source::SourceId;
-use zetesis_core::Atom;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
     FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
@@ -117,7 +116,11 @@ fn expansions() -> Vec<(&'static str, &'static str)> {
     ]
 }
 
-fn remap(mask: usize, from: &[Atom], to: &[Atom]) -> usize {
+fn remap(
+    mask: usize,
+    from: zetesis_core::catalog::Atoms<'_>,
+    to: zetesis_core::catalog::Atoms<'_>,
+) -> usize {
     from.iter()
         .enumerate()
         .filter(|(index, _)| mask & (1 << index) != 0)

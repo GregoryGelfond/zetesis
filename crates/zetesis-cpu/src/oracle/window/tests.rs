@@ -1,6 +1,9 @@
 //! Compare ordered lookup with an independent linear prefix selection.
 
-use zetesis_core::{Atom, Predicate, Sign, Term, ValueLimits, ValueNode};
+use zetesis_core::{
+    Atom, AtomCatalog, AtomPattern, Predicate, Sign, Term, Value, ValueLimits, ValueNode,
+    catalog::AtomRef,
+};
 
 use super::*;
 use crate::Cancellation;
@@ -48,7 +51,18 @@ fn lookup(
 ) -> Result<(Range<usize>, u64), Stop> {
     let cancellation = Cancellation::default();
     let mut work = Work::source(&cancellation, limit);
-    let range = matching_prefix(pattern, Rows::Borrowed(rows), 0, assignment, &mut work)?;
+    let rows: Vec<_> = rows.iter().map(|atom| AtomRef::from(*atom)).collect();
+    let assignment: Vec<_> = assignment
+        .iter()
+        .map(|value| value.map(TermRef::from))
+        .collect();
+    let range = matching_prefix(
+        pattern.into(),
+        Rows::Borrowed(&rows),
+        0,
+        &assignment,
+        &mut work,
+    )?;
     Ok((range, work.statistics.work))
 }
 
@@ -153,22 +167,51 @@ fn lookup_charges_compared_text_payloads() {
 #[test]
 fn a_bound_prefix_of_a_dense_relation_is_its_block_of_positions() {
     use crate::oracle::argument_bounds::Bound;
-    use crate::oracle::relations::{Catalogs, Layout, Layouts, RowSet};
+    use crate::oracle::relations::{Catalogs, Layout, Layouts, Relation, RowSet, fixtures};
 
     // Three values by two: six positions, the first argument most significant.
     let predicate = Predicate::new("row", 2).unwrap();
-    let axis = |values: &[i32]| Bound::Finite(values.iter().map(|&n| Value::Number(n)).collect());
+    let source: Vec<_> = [1, 2, 3]
+        .into_iter()
+        .flat_map(|left| {
+            [10, 20]
+                .into_iter()
+                .map(move |right| tuple(vec![Value::Number(left), Value::Number(right)]))
+        })
+        .collect();
+    let program = fixtures::program(&source);
+    let axis = |values: &[i32]| {
+        Bound::Finite(
+            values
+                .iter()
+                .map(|&n| program.domain().binary_search(&Value::Number(n)).unwrap())
+                .collect(),
+        )
+    };
     let mut layouts = Layouts::default();
-    layouts.push(Layout::new(&predicate, &[axis(&[1, 2, 3]), axis(&[10, 20])], 64).unwrap());
+    layouts.push(
+        Layout::new(
+            &program,
+            (&predicate).into(),
+            &[axis(&[1, 2, 3]), axis(&[10, 20])],
+            64,
+        )
+        .unwrap()
+        .unwrap(),
+    );
     let cancellation = Cancellation::default();
     let mut work = Work::source(&cancellation, 1_000);
     work.limits.max_closure_bytes = 1 << 20;
     let mut catalogs = Catalogs::default();
+    catalogs.bind_program(&program, &mut work).unwrap();
     catalogs
         .create_dense_relations(&layouts, &mut work)
         .unwrap();
+    let Relation::Dense(relation) = catalogs.relation(&predicate) else {
+        panic!("dense fixture");
+    };
     let rows = Rows::Dense {
-        relation: catalogs.dense(&predicate).unwrap(),
+        relation,
         set: RowSet::Current,
     };
     let two = Value::Number(2);
@@ -177,7 +220,11 @@ fn a_bound_prefix_of_a_dense_relation_is_its_block_of_positions() {
     let open = pattern(vec![Term::Variable(0), Term::Variable(1)]);
     let constant = pattern(vec![Term::Constant(two.clone()), Term::Variable(1)]);
     let mut range = |pattern: &AtomPattern, assignment: &[Option<&Value>]| {
-        matching_prefix(pattern, rows, 0, assignment, &mut work).unwrap()
+        let assignment: Vec<_> = assignment
+            .iter()
+            .map(|value| value.map(TermRef::from))
+            .collect();
+        matching_prefix(pattern.into(), rows, 0, &assignment, &mut work).unwrap()
     };
     assert_eq!(range(&open, &[None, None]), 0..6);
     assert_eq!(range(&open, &[Some(&two), None]), 2..4);
@@ -187,4 +234,61 @@ fn a_bound_prefix_of_a_dense_relation_is_its_block_of_positions() {
     assert_eq!(range(&open, &[None, Some(&twenty)]), 0..6);
     // A value outside its argument's bound matches no position.
     assert_eq!(range(&open, &[Some(&nine), None]), 0..0);
+}
+
+#[test]
+fn canonical_rows_and_bindings_keep_prefix_selection_and_refusals() {
+    let mut atoms: Vec<_> = values()
+        .into_iter()
+        .map(|value| tuple(vec![value]))
+        .collect();
+    atoms.sort();
+    // The expected position comes from the independent owned ingress ordering.
+    let wanted = Value::String("a".into());
+    let expected = atoms
+        .iter()
+        .position(|atom| atom.values() == [wanted.clone()])
+        .unwrap();
+    let catalog = AtomCatalog::new(atoms).unwrap();
+    let rows: Vec<_> = catalog.atoms().iter().collect();
+    // A separate owner supplies the binding; local IDs cannot establish equality.
+    let query = AtomCatalog::new(vec![tuple(vec![wanted])]).unwrap();
+    let assignment = [Some(query.atoms().at(0).unwrap().values().at(0).unwrap())];
+    let pattern = pattern(vec![Term::Variable(0)]);
+    let cancellation = Cancellation::default();
+    let mut work = Work::source(&cancellation, u64::MAX);
+    let range = matching_prefix(
+        (&pattern).into(),
+        Rows::Borrowed(&rows),
+        0,
+        &assignment,
+        &mut work,
+    )
+    .unwrap();
+    assert_eq!(range, expected..expected + 1);
+    let used = work.statistics.work;
+    for limit in 0..used {
+        let mut work = Work::source(&cancellation, limit);
+        assert_eq!(
+            matching_prefix(
+                (&pattern).into(),
+                Rows::Borrowed(&rows),
+                0,
+                &assignment,
+                &mut work
+            ),
+            Err(Stop::WorkLimit)
+        );
+    }
+    let mut work = Work::source(&cancellation, used);
+    assert_eq!(
+        matching_prefix(
+            (&pattern).into(),
+            Rows::Borrowed(&rows),
+            0,
+            &assignment,
+            &mut work
+        ),
+        Ok(range)
+    );
 }

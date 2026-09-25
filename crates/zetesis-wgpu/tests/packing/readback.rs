@@ -7,7 +7,8 @@ use std::num::NonZeroU32;
 use super::{BatchPlan, GraphPlan, PackedSeeds, decode, next_epoch};
 use crate::{GpuCheck, GpuErrorKind, GpuLimits};
 use zetesis_core::{
-    AdmissionLimits, AtomPattern, GroundProgram, Predicate, Program, Seed, StaticLimits, Template,
+    AdmissionLimits, AtomPattern, GroundProgram, Predicate, Program, Seed, SeedSelection,
+    StaticLimits, Template,
 };
 use zetesis_cpu::{Cancellation, Limits, check_static};
 
@@ -36,11 +37,18 @@ fn seeds(graph: &GroundProgram) -> Vec<Seed> {
     [vec![], vec![0], vec![2], vec![0, 2]]
         .into_iter()
         .map(|ids| {
-            Seed::new(
+            SeedSelection::from_carrier_atoms(
                 graph.program(),
-                ids.into_iter().map(|id| graph.atoms()[id].clone()),
+                ids.into_iter().map(|id| {
+                    graph
+                        .program()
+                        .locate_atom(graph.atoms().at(id).unwrap(), true)
+                        .unwrap()
+                        .unwrap()
+                }),
             )
             .unwrap()
+            .to_seed()
         })
         .collect()
 }

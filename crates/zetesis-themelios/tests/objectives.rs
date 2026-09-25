@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-use zetesis_core::{Atom, Model};
+use zetesis_core::{Atom, AtomCatalog, Model, ValueLimits};
 use zetesis_cpu::Cancellation;
 use zetesis_objective::{Score, evaluate};
 use zetesis_sat::{Limits as SearchLimits, StableModels};
@@ -24,7 +24,7 @@ fn input(source: &str) -> AdmittedFormula {
 }
 fn scored(
     theory: &zetesis_ferraris::Theory,
-    atoms: &[Atom],
+    atoms: &AtomCatalog,
     objectives: &zetesis_objective::ObjectiveProgram,
 ) -> Vec<(Model, Score)> {
     let cancellation = Cancellation::default();
@@ -34,7 +34,7 @@ fn scored(
         .by_ref()
         .map(|candidate| {
             let candidate = candidate.expect("complete reduct-verified model");
-            let model = Model::new(candidate.atoms().map(|atom| atoms[atom].clone()));
+            let model = Model::from_positions(atoms, candidate.atoms()).unwrap();
             let score = evaluate(
                 objectives,
                 &model,
@@ -55,10 +55,14 @@ fn scored(
 }
 fn scores(source: &str) -> Vec<Vec<(i32, i64)>> {
     let admitted = input(source);
-    let mut scores: Vec<_> = scored(admitted.theory(), admitted.atoms(), admitted.objectives())
-        .into_iter()
-        .map(|(_, score)| score.costs().to_vec())
-        .collect();
+    let mut scores: Vec<_> = scored(
+        admitted.theory(),
+        admitted.atom_catalog(),
+        admitted.objectives(),
+    )
+    .into_iter()
+    .map(|(_, score)| score.costs().to_vec())
+    .collect();
     scores.sort();
     scores
 }
@@ -76,8 +80,10 @@ fn expected_model(facts: &str) -> BTreeSet<Atom> {
         template
             .head()
             .expect("fact head")
-            .instantiate(&[])
+            .key(&[] as &[zetesis_core::catalog::TermRef<'_>])
             .expect("ground head")
+            .to_atom(ValueLimits::default())
+            .expect("external comparison identity")
     })
     .collect()
 }
@@ -145,7 +151,11 @@ fn unchanged_task_allocation_graphs_have_complete_optimal_contracts() {
                     .ends_with("encodings/task-allocation/variant-01.lp")
             );
         }
-        let models = scored(admitted.theory(), admitted.atoms(), admitted.objectives());
+        let models = scored(
+            admitted.theory(),
+            admitted.atom_catalog(),
+            admitted.objectives(),
+        );
         assert_eq!(models.len(), count, "{path}: all stable models exhausted");
         if let Some(cost) = cost {
             let best = models
@@ -163,8 +173,8 @@ fn unchanged_task_allocation_graphs_have_complete_optimal_contracts() {
                 .0
                 .atoms()
                 .iter()
-                .filter(|atom| admitted.metadata().output().includes(atom))
-                .cloned()
+                .filter(|atom| admitted.metadata().output().includes(*atom))
+                .map(|atom| atom.to_atom(ValueLimits::default()).unwrap())
                 .collect();
             assert_eq!(
                 shown,
@@ -261,7 +271,12 @@ fn objective_conditions_bind_scalars_without_adding_logical_support() {
     );
     let admitted = input("a :- a. #minimize{1:a}.");
     assert_eq!(
-        scored(admitted.theory(), admitted.atoms(), admitted.objectives()).len(),
+        scored(
+            admitted.theory(),
+            admitted.atom_catalog(),
+            admitted.objectives()
+        )
+        .len(),
         1
     );
     assert!(admitted.atoms().is_empty());

@@ -12,7 +12,9 @@ use crate::{
     FormulaFailure, FormulaResource,
 };
 
-/// Shared cumulative work, substitution and copied-scalar allowances.
+/// Shared cumulative work, substitution and structural-capture reservations.
+/// The historical `scalar_bytes` field counts requested capture-delta bytes,
+/// which borrow canonical terms rather than copying their payload.
 ///
 /// Clones share the same monotone counters. Each charge is admitted before its
 /// operation; stopping or dropping a checker does not refund accepted charges.
@@ -112,7 +114,7 @@ impl Shared {
 fn reserve(counter: &AtomicU64, amount: u128, limit: u128) -> Result<(), u128> {
     // Every counter starts within its fixed ceiling and only admitted charges
     // can advance it. A zero charge cannot change admission or the receipt.
-    // In particular, copying an inline number needs no shared payload update.
+    // Canonical ID copies and frozen constructor lookups make no scalar charge.
     // Work callers still poll cancellation before reaching this operation.
     if amount == 0 {
         return Ok(());

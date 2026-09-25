@@ -811,6 +811,76 @@
       "name": "Zetesis.CandidateCursor.zero_fuel_keeps_open_tree"
     },
     {
+      "file": "Zetesis/CanonicalCatalog.lean",
+      "line": 33,
+      "name": "Zetesis.CanonicalCatalog.selection_exact"
+    },
+    {
+      "file": "Zetesis/CanonicalCatalog.lean",
+      "line": 63,
+      "name": "Zetesis.CanonicalCatalog.normalized_selection_exact"
+    },
+    {
+      "file": "Zetesis/CanonicalCatalog.lean",
+      "line": 93,
+      "name": "Zetesis.CanonicalCatalog.append_preserves_interpretation"
+    },
+    {
+      "file": "Zetesis/CanonicalCatalog.lean",
+      "line": 117,
+      "name": "Zetesis.CanonicalCatalog.owner_transfer_preserves_interpretation"
+    },
+    {
+      "file": "Zetesis/CanonicalCatalog.lean",
+      "line": 137,
+      "name": "Zetesis.CanonicalCatalog.raw_ids_do_not_determine_interpretation"
+    },
+    {
+      "file": "Zetesis/CanonicalTemplates.lean",
+      "line": 51,
+      "name": "Zetesis.CanonicalTemplates.read_decodes"
+    },
+    {
+      "file": "Zetesis/CanonicalTemplates.lean",
+      "line": 60,
+      "name": "Zetesis.CanonicalTemplates.substitute_decodes"
+    },
+    {
+      "file": "Zetesis/CanonicalTemplates.lean",
+      "line": 74,
+      "name": "Zetesis.CanonicalTemplates.substitute_agrees"
+    },
+    {
+      "file": "Zetesis/CanonicalTemplates.lean",
+      "line": 93,
+      "name": "Zetesis.CanonicalTemplates.variables_are_scope_reads"
+    },
+    {
+      "file": "Zetesis/CarrierCoordinates.lean",
+      "line": 45,
+      "name": "Zetesis.CarrierCoordinates.decode_injective"
+    },
+    {
+      "file": "Zetesis/CarrierCoordinates.lean",
+      "line": 62,
+      "name": "Zetesis.CarrierCoordinates.tuple_before_iff"
+    },
+    {
+      "file": "Zetesis/CarrierCoordinates.lean",
+      "line": 97,
+      "name": "Zetesis.CarrierCoordinates.decode_before_iff"
+    },
+    {
+      "file": "Zetesis/CarrierCoordinates.lean",
+      "line": 128,
+      "name": "Zetesis.CarrierCoordinates.sparse_membership_iff"
+    },
+    {
+      "file": "Zetesis/CarrierCoordinates.lean",
+      "line": 150,
+      "name": "Zetesis.CarrierCoordinates.shared_vocabulary_does_not_identify_atoms"
+    },
+    {
       "file": "Zetesis/CertifiedExecution.lean",
       "line": 42,
       "name": "Zetesis.CertifiedExecution.ranked_support_verdict_sound"
@@ -6584,6 +6654,9 @@
     "Zetesis/BooleanHeads.lean",
     "Zetesis/Bounds.lean",
     "Zetesis/CandidateCursor.lean",
+    "Zetesis/CanonicalCatalog.lean",
+    "Zetesis/CanonicalTemplates.lean",
+    "Zetesis/CarrierCoordinates.lean",
     "Zetesis/CertifiedExecution.lean",
     "Zetesis/ChoiceConsumers.lean",
     "Zetesis/ChoiceIntervals.lean",
@@ -6711,8 +6784,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "bcddea650d9f0bb30f1abc115744dee920ad09976cf9f19681cc0d383151191b",
-    "Zetesis.lean": "cc80a0fd1cae11784f524910a1259eb8cf64b478bea08b4642b0e1c6261bc084",
+    "Audit.lean": "5bebc08db927dd7b3679475664ca1f8b1066b19323956f36c563c724074023a1",
+    "Zetesis.lean": "713f0e95b75e5c88532ddfacb154b9e0160205d49d744f7f5b1d07a9723d374c",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
     "Zetesis/AggregateBounds.lean": "c1a49f93ac5140bcd22876b42c52c23c4f447352c9cf61f2f01741fbbdc98452",
     "Zetesis/AggregateConsumers.lean": "41aded89dbfaa79833ed3b336030ef4b08afa5be8e7029060416c2f8de59ef97",
@@ -6730,6 +6803,9 @@
     "Zetesis/BooleanHeads.lean": "6c1bdb43ab5b5a4d5753f9396e89adc2e9c52cfa9a1df56860ad8d54005d4c27",
     "Zetesis/Bounds.lean": "4d1e698345c77d7a4a07ceda15f5f550f88923fefcac182053610c1e6bf6fd3a",
     "Zetesis/CandidateCursor.lean": "09bba309247ba7b7300dd8f6994ecb8482ac5b14fbfd356ab8c24103fbfe1039",
+    "Zetesis/CanonicalCatalog.lean": "10430e5227c9b351a74ddb9cd073815e9ea1de8602bdb41b247d4188c0838125",
+    "Zetesis/CanonicalTemplates.lean": "9758c9b87550c7a528d62ea4aa1452635876de4cb6a53d9c8c6b3e97bbb8de9b",
+    "Zetesis/CarrierCoordinates.lean": "f8084e6f7361cceed39895a8974cc2fc54bb13aa896b44dbee1eb4580ce8bced",
     "Zetesis/CertifiedExecution.lean": "693ec9dcd4542e70d21cd19b99dd13dc59ac375b9ac945c65ee1632ff7ccc3a0",
     "Zetesis/ChoiceConsumers.lean": "2505ef92e4694faddfe66bebeb26155b6d820a5493f94fa3653bcfbefc633d5a",
     "Zetesis/ChoiceIntervals.lean": "4b3047699ef976a0e3c1632bcaccd9611c7d26647d08b5766596960e20901b0f",

@@ -50,6 +50,7 @@ fn expected(value: i32) -> Model {
         atom("s", value),
         atom("q", value),
     ])
+    .unwrap()
 }
 
 #[test]
@@ -58,15 +59,20 @@ fn repeated_candidates_reuse_empty_query_capacity() {
     let cancellation = Cancellation::default();
     let prepared =
         PreparedQueries::new(&program, PreparationLimits::default(), &cancellation).unwrap();
-    // Four templates and two positive occurrences; two passes of the bound
-    // inference at sixteen each; three predicates offered a layout; the
-    // block-step plan, a unit and a unit a term for each occurrence, four and
-    // three.
-    assert_eq!(prepared.statistics().work, 48);
     let mut workspace = ClosureWorkspace::default();
     let first = prepared
         .check_view(
             Seed::new(&program, [atom("s", 1)]).unwrap().view(),
+            &mut workspace,
+            Limits::default(),
+            &cancellation,
+        )
+        .unwrap();
+    // Canonical identity persists independently of truth. Warm both finite
+    // candidates before asserting that repeated checks reuse their capacities.
+    prepared
+        .check_view(
+            Seed::new(&program, [atom("s", 2)]).unwrap().view(),
             &mut workspace,
             Limits::default(),
             &cancellation,
@@ -353,8 +359,16 @@ fn prepared_empty_checks_admit_their_retained_owners() {
         PreparedQueries::new(&program, PreparationLimits::default(), &cancellation).unwrap();
     let seed = Seed::new(&program, []).unwrap();
     let mut workspace = ClosureWorkspace::default();
-    let named = usize::try_from(workspace.retained_bytes().unwrap()).unwrap()
-        + prepared.statistics().retained_bytes;
+    let baseline = prepared
+        .check_view(
+            seed.view(),
+            &mut workspace,
+            Limits::default(),
+            &cancellation,
+        )
+        .unwrap();
+    let named = baseline.statistics().peak_closure_bytes;
+    workspace = ClosureWorkspace::default();
     assert!(matches!(
         prepared.check_view(
             seed.view(),

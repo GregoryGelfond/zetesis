@@ -6,7 +6,7 @@
 //! Local scopes retain their independent compiler and cursor paths.
 
 use themelios_program::program::DefaultNegation;
-use zetesis_core::Term;
+use zetesis_core::TemplateTerm;
 
 use crate::formula_binding_cursor::target;
 use crate::formula_ir::{AggregateGuard, Compiler, LiteralIr};
@@ -156,15 +156,36 @@ impl Compiler<'_> {
             self.scope_work(1)?;
             match literal {
                 LiteralIr::Atom(DefaultNegation::None, atom) => {
-                    self.scope_work(atom.terms().len())?;
+                    let atom = self.source.pattern_ref(
+                        *atom,
+                        self.limits,
+                        self.counters,
+                        self.location,
+                    )?;
+                    self.budget.charge(
+                        ExpansionResource::TermWork,
+                        atom.terms().len() as u128,
+                        self.location,
+                    )?;
                     for term in atom.terms() {
-                        if let Term::Variable(slot) = term {
-                            ready[*slot] = true;
+                        if let TemplateTerm::Variable(slot) = term {
+                            ready[slot] = true;
                         }
                     }
                 }
                 LiteralIr::PatternAtom(pattern) => {
-                    self.scope_work(pattern.node_count())?;
+                    let flat = self.source.pattern_ref(
+                        pattern.atom,
+                        self.limits,
+                        self.counters,
+                        self.location,
+                    )?;
+                    let pattern = pattern.bind(flat);
+                    self.budget.charge(
+                        ExpansionResource::TermWork,
+                        pattern.node_count() as u128,
+                        self.location,
+                    )?;
                     for slot in pattern.slots() {
                         ready[slot] = true;
                     }

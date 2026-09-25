@@ -165,8 +165,11 @@ by their primitive after a failed call, independently of shared context health.
 
 ## Native numeric aggregates
 
-Aggregate preparation coalesces complete tuple identities and retains original
-and frozen eligibility separately. Empty extrema carry presence explicitly;
+Native aggregate admission requires already OR-coalesced complete tuple keys
+and refuses duplicates. `AggregateGpuPlan` accepts an owned native `Group` or a
+`GroupRef` bound to caller-owned canonical storage; both prepare the same numeric
+wire representation without copying term payload. Original and frozen
+eligibility remain separate and retain the exact aggregate occurrence identity. Empty extrema carry presence explicitly;
 no ordinary integer stands for an empty minimum or maximum. The numeric GPU
 profile requires representable measured values and guards. Unsupported numeric
 plans return a capability failure rather than changing the source semantics.

@@ -102,7 +102,7 @@ fn compile_parsed(
         options.core_limits,
         limits,
         location,
-        source_metadata.finish(),
+        source_metadata.finish(location)?,
     )
 }
 

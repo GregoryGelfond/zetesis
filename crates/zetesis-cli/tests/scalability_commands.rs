@@ -388,10 +388,12 @@ mod campaigns {
                 serde_json::from_str(retained["capture"]["stdout"]["data"].as_str().unwrap())
                     .unwrap();
             let cause = envelope["outcome"]["error"]["detail"].as_str().unwrap();
-            // File inputs classify an expansion failure by their bundle
-            // admission door; the diagnostic retains the actual exhausted unit.
+            // This option bounds both term expansion and formula preparation.
+            // Either admission door may spend the first unit; the compact view
+            // must retain that actual refusal, including its zero allowance.
             assert!(
-                cause.contains("TermWork") && cause.contains("exceeds 0"),
+                (cause.contains("TermWork") && cause.contains("exceeds 0"))
+                    || cause.contains("formula Work limit 0 exceeded (needed at least 1)"),
                 "{cause}"
             );
             assert!(check["detail"].as_str().unwrap().contains(cause), "{check}");

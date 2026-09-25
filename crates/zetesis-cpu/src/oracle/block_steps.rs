@@ -19,7 +19,7 @@
 
 use std::mem::size_of;
 
-use zetesis_core::{AtomPattern, Program, Template, Term};
+use zetesis_core::{PatternRef, Program, TemplateRef, TemplateTerm};
 
 use super::Work;
 use super::relations::Layouts;
@@ -76,7 +76,7 @@ impl BlockSteps {
     }
 }
 
-fn terms(template: &Template) -> usize {
+fn terms(template: TemplateRef<'_>) -> usize {
     template
         .head()
         .into_iter()
@@ -88,22 +88,23 @@ fn terms(template: &Template) -> usize {
         + 2 * template.filters().len()
 }
 
-fn mentions(pattern: &AtomPattern, variable: usize) -> usize {
+fn mentions(pattern: PatternRef<'_>, variable: usize) -> usize {
     pattern
         .terms()
         .iter()
-        .filter(|term| **term == Term::Variable(variable))
+        .filter(|term| *term == TemplateTerm::Variable(variable))
         .count()
 }
 
 /// The condition of the module documentation, clause by clause.
-fn admits(template: &Template, occurrence: usize, layouts: &Layouts) -> bool {
+fn admits(template: TemplateRef<'_>, occurrence: usize, layouts: &Layouts) -> bool {
     let (Some(head), Some(body)) = (template.head(), template.positive().get(occurrence)) else {
         return false;
     };
-    let (Some(&Term::Variable(free)), Some(&Term::Variable(last))) =
-        (body.terms().last(), head.terms().last())
-    else {
+    let (Some(TemplateTerm::Variable(free)), Some(TemplateTerm::Variable(last))) = (
+        body.terms().iter().next_back(),
+        head.terms().iter().next_back(),
+    ) else {
         return false;
     };
     if free != last || mentions(body, free) != 1 || mentions(head, free) != 1 {
@@ -123,27 +124,27 @@ fn admits(template: &Template, occurrence: usize, layouts: &Layouts) -> bool {
         .any(|pattern| mentions(pattern, free) != 0)
         || template.filters().iter().any(|filter| {
             let (left, right) = filter.terms();
-            [left, right].contains(&&Term::Variable(free))
+            [left, right].contains(&TemplateTerm::Variable(free))
         });
     // Every other variable of the occurrence is bound by an earlier depth.
     let bound = body.terms().iter().all(|term| match term {
-        Term::Constant(_) => true,
-        Term::Variable(variable) => {
-            *variable == free || others().any(|pattern| mentions(pattern, *variable) != 0)
+        TemplateTerm::Constant(_) => true,
+        TemplateTerm::Variable(variable) => {
+            variable == free || others().any(|pattern| mentions(pattern, variable) != 0)
         }
     });
     if read_elsewhere || !bound {
         return false;
     }
     match (layouts.get(body.predicate()), layouts.get(head.predicate())) {
-        (Some(body), Some(head)) => body.last_values() == head.last_values(),
+        (Some(body), Some(head)) => body.last_coordinates() == head.last_coordinates(),
         _ => false,
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use zetesis_core::{Filter, Predicate, Value};
+    use zetesis_core::{Atom, AtomPattern, Filter, Predicate, Template, Term, Value};
 
     use super::*;
     use crate::oracle::argument_bounds::Bound;
@@ -157,21 +158,53 @@ mod tests {
         Term::Variable(variable)
     }
 
-    fn numbers(values: std::ops::RangeInclusive<i32>) -> Bound {
-        Bound::Finite(values.map(Value::Number).collect())
+    fn numbers(program: &Program, values: std::ops::RangeInclusive<i32>) -> Bound {
+        Bound::Finite(
+            values
+                .map(|value| {
+                    program
+                        .domain()
+                        .binary_search(&Value::Number(value))
+                        .unwrap()
+                })
+                .collect(),
+        )
     }
 
     /// `e` and `reach` over 1..=4 by 2..=5, `r` over 0..=5, `q` over 2..=5.
     fn layouts() -> Layouts {
+        let source: Vec<_> = [("e", 2), ("q", 1), ("r", 1), ("reach", 2)]
+            .into_iter()
+            .flat_map(|(name, arity)| {
+                (0..=5).map(move |n| {
+                    Atom::new(
+                        Predicate::new(name, arity).unwrap(),
+                        vec![Value::Number(n); arity],
+                    )
+                    .unwrap()
+                })
+            })
+            .collect();
+        let program = crate::oracle::relations::fixtures::program(&source);
         let mut layouts = Layouts::default();
         for (name, bounds) in [
-            ("e", vec![numbers(1..=4), numbers(2..=5)]),
-            ("q", vec![numbers(2..=5)]),
-            ("r", vec![numbers(0..=5)]),
-            ("reach", vec![numbers(1..=4), numbers(2..=5)]),
+            (
+                "e",
+                vec![numbers(&program, 1..=4), numbers(&program, 2..=5)],
+            ),
+            ("q", vec![numbers(&program, 2..=5)]),
+            ("r", vec![numbers(&program, 0..=5)]),
+            (
+                "reach",
+                vec![numbers(&program, 1..=4), numbers(&program, 2..=5)],
+            ),
         ] {
             let predicate = Predicate::new(name, bounds.len()).unwrap();
-            layouts.push(Layout::new(&predicate, &bounds, 1 << 10).unwrap());
+            layouts.push(
+                Layout::new(&program, (&predicate).into(), &bounds, 1 << 10)
+                    .unwrap()
+                    .unwrap(),
+            );
         }
         layouts
     }
@@ -192,13 +225,13 @@ mod tests {
 
     #[test]
     fn the_transitive_rule_steps_by_rows_of_its_edge_occurrence() {
-        assert!(admits(&transitive(), 1, &layouts()));
+        assert!(admits((&transitive()).into(), 1, &layouts()));
     }
 
     #[test]
     fn an_occurrence_whose_last_variable_another_occurrence_binds_does_not_step() {
         // Y, the last argument of `reach(X,Y)`, is bound by `e(Y,Z)`.
-        assert!(!admits(&transitive(), 0, &layouts()));
+        assert!(!admits((&transitive()).into(), 0, &layouts()));
     }
 
     #[test]
@@ -211,7 +244,7 @@ mod tests {
             vec![],
             vec![],
         );
-        assert!(!admits(&copy, 0, &layouts()));
+        assert!(!admits((&copy).into(), 0, &layouts()));
     }
 
     /// The transitive rule with a false gate and filters added.
@@ -231,13 +264,13 @@ mod tests {
     #[test]
     fn a_gate_reading_the_variable_prevents_the_step() {
         let gated = guarded(vec![pattern("q", &[var(2)])], vec![]);
-        assert!(!admits(&gated, 1, &layouts()));
+        assert!(!admits((&gated).into(), 1, &layouts()));
     }
 
     #[test]
     fn a_filter_reading_the_variable_prevents_the_step() {
         let filtered = guarded(vec![], vec![Filter::Neq(var(2), var(0))]);
-        assert!(!admits(&filtered, 1, &layouts()));
+        assert!(!admits((&filtered).into(), 1, &layouts()));
     }
 
     #[test]
@@ -246,7 +279,7 @@ mod tests {
             vec![pattern("q", &[var(1)])],
             vec![Filter::Neq(var(0), var(1))],
         );
-        assert!(admits(&guarded, 1, &layouts()));
+        assert!(admits((&guarded).into(), 1, &layouts()));
     }
 
     #[test]
@@ -265,12 +298,12 @@ mod tests {
         };
         let layouts = layouts();
         assert!(!admits(
-            &headed(pattern("reach", &[var(2), var(0)])),
+            (&headed(pattern("reach", &[var(2), var(0)]))).into(),
             1,
             &layouts
         ));
         assert!(!admits(
-            &headed(pattern("reach", &[var(2), var(2)])),
+            (&headed(pattern("reach", &[var(2), var(2)]))).into(),
             1,
             &layouts
         ));
@@ -290,13 +323,13 @@ mod tests {
     #[test]
     fn relations_listing_the_argument_differently_do_not_step() {
         // `r` lists 0..=5 and `e` lists its second argument as 2..=5.
-        assert!(!admits(&chain("r"), 1, &layouts()));
+        assert!(!admits((&chain("r")).into(), 1, &layouts()));
     }
 
     #[test]
     fn a_head_of_another_arity_steps_when_the_lists_agree() {
         // `q` lists 2..=5, as `e` lists its second argument.
-        assert!(admits(&chain("q"), 1, &layouts()));
+        assert!(admits((&chain("q")).into(), 1, &layouts()));
     }
 
     /// The transitive body under another head, or none.
@@ -316,11 +349,11 @@ mod tests {
     #[test]
     fn a_head_without_a_layout_does_not_step() {
         let unlaid = headed(Some(pattern("tree", &[var(0), var(2)])));
-        assert!(!admits(&unlaid, 1, &layouts()));
+        assert!(!admits((&unlaid).into(), 1, &layouts()));
     }
 
     #[test]
     fn a_constraint_does_not_step() {
-        assert!(!admits(&headed(None), 1, &layouts()));
+        assert!(!admits((&headed(None)).into(), 1, &layouts()));
     }
 }
