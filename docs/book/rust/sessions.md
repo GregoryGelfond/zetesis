@@ -403,6 +403,17 @@ can record into the same scope without entering the solver's private state.
 Each formula session imports only new cumulative timing work, so repeated
 snapshots cannot count it again. Measurements never establish semantic coverage.
 
+For terminal definitions, `GroundingMode::EagerBaseTerminalDefinitions` identifies
+eager base materialization followed by host reconstruction during solving. A
+grounding interval covers the base, not the complete original theory. The
+`AnswerReconstruction` phase records attempted extensions, including refusals;
+`terminal_execution()` separately records consumed base answers, completed
+original answers and an unfinished attempt. Its accepted work includes source
+admission and remains distinct from base search work. These counters are
+available without timing instrumentation. CLI phase schema 4 adds
+`answer_reconstruction`; maintained readers still accept schemas 1–3 without
+inventing that measurement for older records.
+
 `PreparedInput::program` borrows a native `zetesis_core::Program` without source
 metadata. It reaches the same relational session as a source-admitted program,
 including lazy execution; it does not first compile a complete ground graph.

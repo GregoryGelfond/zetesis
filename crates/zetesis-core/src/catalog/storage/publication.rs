@@ -97,6 +97,7 @@ impl Store {
             atom_owner: Arc::clone(&self.atom_owner),
             data: Arc::new(SnapshotData {
                 vocabulary,
+                base: self.base.as_ref().map(|base| Arc::clone(&base.payload)),
                 segments: rows,
                 atoms,
             }),

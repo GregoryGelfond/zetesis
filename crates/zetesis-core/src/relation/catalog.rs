@@ -31,9 +31,14 @@ use super::{
 /// operation scratch and replacement overlap. Canonical payload is separately
 /// charged to its authority. Referenced encoding bytes count argument occurrences
 /// and are neither unique storage nor RSS.
+/// The canonical inverse counts addressable hash-entry capacity, excluding
+/// opaque bucket/control allocation. Fixed-ID hash operations each admit one
+/// container operation; their internal probes are not individually cancellable.
 ///
-/// Row membership visits O(log n) nodes; dictionary membership visits O(log d),
-/// with typed descriptor/text-prefix comparison work additional. Inserting a
+/// Row membership visits O(log n) nodes. Same-vocabulary dictionary lookup uses
+/// expected O(1) fixed-ID hashing (O(d) worst case); foreign lookup and new-value
+/// placement visit O(log d) semantic nodes, with typed descriptor/text-prefix
+/// comparison work additional. Inserting a
 /// tuple with `a` newly distinct values retains O(a log d) tentative node patches;
 /// checked overlay scans can cost O(a² log² d) metadata work. Historical row and
 /// equality IDs do not shift. Ordered runs preserve the existing incremental
@@ -129,7 +134,7 @@ impl Catalog {
                 ordered: ordered::Ordered::default(),
                 layout: Layout {
                     dictionary: Vec::new(),
-                    index: DictionaryIndex::Append(Index::default()),
+                    index: DictionaryIndex::Append(super::dictionary::Append::default()),
                     columns,
                 },
                 encoding_bytes: 0,
@@ -190,16 +195,21 @@ impl Catalog {
     /// Rows and equality IDs are invalidated, and new inserts start at row zero.
     ///
     /// All checks precede the indivisible reset. Work covers column resets,
-    /// fixed index bookkeeping and releasing the previously retained run levels.
+    /// fixed index bookkeeping, retained hash capacity, and releasing the
+    /// previously retained run levels.
     ///
     /// # Errors
     /// Refuses shape/capacity or reset work without changing the published extent.
     pub fn clear(&mut self, limits: Limits) -> Result<Storage, CatalogFailure> {
-        const RESET_BOOKKEEPING: u128 = 11;
+        const RESET_BOOKKEEPING: u128 = 12;
         let mut work = self.work(limits)?;
+        let DictionaryIndex::Append(index) = &self.layout.index else {
+            unreachable!("catalog owns an append index");
+        };
         work.tick(
             self.layout.columns.len() as u128
                 + self.ordered.level_count() as u128
+                + index.identities.clear_work()
                 + RESET_BOOKKEEPING,
         )
         .map_err(|error| self.failed(error, &work))?;
@@ -210,9 +220,10 @@ impl Catalog {
         self.rows.nodes.clear();
         self.rows.path.clear();
         self.rows.root = None;
-        index.nodes.clear();
-        index.path.clear();
-        index.root = None;
+        index.order.nodes.clear();
+        index.order.path.clear();
+        index.order.root = None;
+        index.identities.clear();
         self.layout.dictionary.clear();
         for column in &mut self.layout.columns {
             column.clear();
@@ -326,9 +337,10 @@ impl Catalog {
         let member = self.membership.member(atom).map_err(Failure::Read)?;
         let atom = member.atom();
         let mut route = Directions::default();
-        if let Some(row) = self.locate(
-            member.read(),
-            atom.predicate(),
+        work.tick(1)?;
+        let atoms = self.membership.bind(member.read()).map_err(Failure::Read)?;
+        if let Some(row) = self.locate_bound(
+            atoms,
             |column| atom.values().at(column).expect("checked atom arity"),
             work,
             |right| route.push(right).expect("AVL height fits two words"),
@@ -346,7 +358,6 @@ impl Catalog {
             work.limits.max_rows as u128,
         )?;
         let row_root = plan::row(&mut self.rows, row, &route, work)?;
-        let atoms = self.membership.bind(member.read()).map_err(Failure::Read)?;
         let plan = plan::values(&mut self.layout, atoms, atom, self.encoding_bytes, work)?;
         self.reserve(&plan, work)?;
         Ok(self.publish(member, row_root, plan, work))
@@ -359,16 +370,18 @@ impl Catalog {
         let DictionaryIndex::Append(index) = &mut self.layout.index else {
             return Err(Failure::Dictionary);
         };
-        work.grow(&mut index.nodes, plan.added.len())?;
+        work.grow(&mut index.order.nodes, plan.added.len())?;
+        index.identities.reserve(plan.added.len(), work)?;
         for column in &mut self.layout.columns {
             work.grow(column, 1)?;
         }
-        // Publication has no callbacks, allocations, comparisons or failure.
-        // Include the branch inspection of each row-path step and every patch.
+        // Publication has no callbacks, allocations, payload comparisons or
+        // failure. Include each fixed-ID hash insertion, row-path inspection
+        // and tentative patch write before beginning the indivisible writes.
         work.tick(
             self.rows.path.len() as u128
                 + plan.ids.len() as u128
-                + plan.added.len() as u128 * 2
+                + plan.added.len() as u128 * 3
                 + plan.patches.len() as u128
                 + 3,
         )?;
@@ -387,13 +400,19 @@ impl Catalog {
             unreachable!("catalog owns an append index");
         };
         index
+            .order
             .nodes
-            .resize(index.nodes.len() + plan.added.len(), Node::default());
+            .resize(index.order.nodes.len() + plan.added.len(), Node::default());
         for patch in &plan.patches {
-            index.nodes[patch.id] = patch.node;
+            index.order.nodes[patch.id] = patch.node;
         }
-        index.root = plan.root;
-        self.layout.dictionary.extend_from_slice(&plan.added);
+        index.order.root = plan.root;
+        for added in &plan.added {
+            let equality =
+                u32::try_from(self.layout.dictionary.len()).expect("admitted equality ID");
+            index.identities.publish(added.term, equality);
+            self.layout.dictionary.push(added.cell);
+        }
         for (column, id) in self.layout.columns.iter_mut().zip(plan.ids.iter().copied()) {
             column.push(id);
         }
@@ -419,12 +438,22 @@ impl Catalog {
         work.tick(1)?;
         let atoms = self.atoms(read)?;
         let expected = self.predicate(read)?;
-        if !predicate
-            .compare_ref_with(expected, || work.tick(1))?
-            .is_eq()
-        {
+        if !predicate.equals_ref_with(expected, || work.tick(1))? {
             return Err(Failure::Predicate);
         }
+        self.locate_bound(atoms, value, work, descend)
+    }
+
+    /// Search this catalog's bound membership after the caller has checked the
+    /// query's signed predicate. Insertion establishes that through `member`;
+    /// public lookups retain their reader and predicate checks in `locate`.
+    fn locate_bound<'value>(
+        &self,
+        atoms: Atoms<'_>,
+        value: impl Fn(usize) -> TermRef<'value>,
+        work: &mut Work,
+        descend: impl FnMut(bool),
+    ) -> Result<Option<usize>, Failure> {
         ordered_index::search(
             &self.rows.nodes,
             self.rows.root,
@@ -486,7 +515,9 @@ impl Catalog {
             + self.layout.dictionary.capacity() * size_of::<Cell>()
             + match &self.layout.index {
                 DictionaryIndex::Sorted(ids) => ids.capacity() * size_of::<u32>(),
-                DictionaryIndex::Append(index) => index_bytes(index),
+                DictionaryIndex::Append(index) => {
+                    index_bytes(&index.order) + index.identities.bytes()
+                }
             }
             + self.layout.columns.capacity() * size_of::<Vec<u32>>()
             + self

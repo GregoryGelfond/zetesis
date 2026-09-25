@@ -99,6 +99,7 @@ import Zetesis.EvaluatedWitnesses
 import Zetesis.ObjectiveValues
 import Zetesis.ExtremumPresence
 import Zetesis.NormalFerraris
+import Zetesis.TerminalDefinitions
 import Zetesis.NormalSupport
 import Zetesis.OrderedBounds
 import Zetesis.ObjectivePriorities
@@ -134,6 +135,7 @@ import Zetesis.Frontier
 import Zetesis.ModelSelections
 import Zetesis.AtomCatalogs
 import Zetesis.CanonicalCatalog
+import Zetesis.ClosedCatalog
 import Zetesis.CarrierCoordinates
 import Zetesis.CanonicalTemplates
 import Zetesis.StorageOwners

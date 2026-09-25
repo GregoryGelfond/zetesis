@@ -2,6 +2,14 @@
 
 #[path = "tests/probes.rs"]
 mod probes;
+#[path = "tests/discovery.rs"]
+mod discovery_tests;
+#[path = "tests/ordering.rs"]
+mod ordering_tests;
+#[path = "tests/prepared.rs"]
+mod prepared_tests;
+#[path = "tests/closed.rs"]
+mod closed_tests;
 
 use super::*;
 use crate::{
@@ -97,6 +105,19 @@ fn validate(owner: &AtomInterner) {
         actual.extend(atoms);
     }
     assert_eq!(seen, (0..owner.len()).collect());
+    assert_eq!(owner.discovery.nodes.len(), owner.len());
+    for id in 0..owner.len() {
+        assert_eq!(
+            owner
+                .find_atom_with(
+                    owner.get(id).unwrap(),
+                    limits(),
+                    || Ok::<(), Infallible>(())
+                )
+                .unwrap(),
+            Some(id),
+        );
+    }
     let expected: BTreeSet<_> = (0..owner.len()).map(|id| owner.get(id).unwrap()).collect();
     assert_eq!(actual, expected.into_iter().collect::<Vec<_>>());
 }
@@ -326,7 +347,7 @@ fn tighter_storage_refuses_before_lookup() {
         || Err("work"),
     );
     assert!(
-        matches!(result, Err(Failure::Bytes { required, limit }) if required == current && limit == current - 1)
+        matches!(result, Err(Failure::Bytes { required, limit }) if required == current + PREPARED_BYTES && limit == current - 1)
     );
     assert_eq!(owner.storage_bytes(), current);
     assert_eq!(owner.storage_peak_bytes(), peak);
@@ -572,6 +593,7 @@ fn refused_discovery_retries_one_existing_identity() {
     assert_eq!(admitted, operations - 1);
     assert!(owner.is_empty());
     assert!(owner.index.nodes.is_empty());
+    assert!(owner.discovery.nodes.is_empty());
     assert!(owner.get(0).is_none());
     assert_eq!(
         owner

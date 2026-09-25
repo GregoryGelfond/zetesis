@@ -320,8 +320,7 @@ impl Join<'_> {
         };
         let actual = self.atoms.at(id).ok_or(Stop::InvalidProgram)?.predicate();
         Ok(actual
-            .compare_ref_with(predicate, || work.tick())?
-            .is_eq()
+            .equals_ref_with(predicate, || work.tick())?
             .then_some(start))
     }
 

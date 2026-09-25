@@ -12,6 +12,9 @@ Appending atoms preserves old selections under an explicit prefix bound. Moving
 identities between owners instead requires agreement of their decoded atoms.
 An equal raw ID supplies no such agreement. These laws reuse the interpretation
 of `ModelSelections`; they do not establish satisfaction or answer-set membership.
+Unique discovery positions may also be found by resolving a canonical identity
+and then consulting a separate inverse discovery map. Canonical presence alone
+does not establish a discovery position.
 Rust bounds checks, interning uniqueness, snapshot lifetimes, allocation and
 resource accounting remain implementation obligations.
 -/
@@ -26,6 +29,99 @@ Missing occurrences and missing canonical identities both remain absent. -/
 def lookup (decode : Id → Option Atom) (occurrences : Slot → Option Id)
     (position : Slot) : Option Atom :=
   (occurrences position).bind decode
+
+/-- Resolve an atom's canonical identity, then its optional discovery position.
+The inverse map may omit canonical atoms retained without discovery. -/
+def find_discovery (query : Atom → Option Id) (inverse : Id → Option Slot)
+    (atom : Atom) : Option Slot :=
+  (query atom).bind inverse
+
+/-- Canonical query followed by inverse discovery is exactly structural lookup
+at the returned position. Successful queries decode to the requested atom;
+coverage supplies a result for every decoded atom, and canonical uniqueness
+identifies that result. The inverse agrees with the forward discovery map in
+both directions. This premise requires unique discovery positions per identity,
+unlike an arbitrary occurrence catalog with repeated IDs.
+
+Soundness composes the successful query and inverse entries through `lookup`.
+Completeness decodes the discovered atom, obtains a query result, uses uniqueness
+to identify it, then applies the inverse map. No order on IDs or positions occurs.
+-/
+theorem discovery_lookup_exact (decode : Id → Option Atom)
+    (discovery : Slot → Option Id) (inverse : Id → Option Slot)
+    (query : Atom → Option Id)
+    (inverse_exact : ∀ identity position,
+      inverse identity = some position ↔ discovery position = some identity)
+    (unique : ∀ first second atom,
+      decode first = some atom → decode second = some atom → first = second)
+    (sound : ∀ atom identity, query atom = some identity → decode identity = some atom)
+    (covered : ∀ atom identity, decode identity = some atom →
+      ∃ found, query atom = some found)
+    (atom : Atom) (position : Slot) :
+    find_discovery query inverse atom = some position ↔
+      lookup decode discovery position = some atom := by
+  constructor
+  · intro found
+    cases queried : query atom with
+    | none =>
+      have missing : (none : Option Slot) = some position := by
+        simpa only [find_discovery, queried, Option.bind_none] using found
+      cases missing
+    | some identity =>
+      have translated : inverse identity = some position := by
+        simpa only [find_discovery, queried, Option.bind_some] using found
+      have discovered : discovery position = some identity :=
+        (inverse_exact identity position).mp translated
+      have decoded : decode identity = some atom := sound atom identity queried
+      simp only [lookup, discovered, Option.bind_some, decoded]
+  · intro found
+    cases discovered : discovery position with
+    | none =>
+      have missing : (none : Option Atom) = some atom := by
+        simpa only [lookup, discovered, Option.bind_none] using found
+      cases missing
+    | some identity =>
+      have decoded : decode identity = some atom := by
+        simpa only [lookup, discovered, Option.bind_some] using found
+      obtain ⟨resolved, queried⟩ := covered atom identity decoded
+      have same_identity : resolved = identity :=
+        unique resolved identity atom (sound atom resolved queried) decoded
+      have translated : inverse resolved = some position := by
+        rw [same_identity]
+        exact (inverse_exact identity position).mpr discovered
+      simp only [find_discovery, queried, Option.bind_some, translated]
+
+/-- A canonical atom with no discovery entry is absent at every discovery slot.
+If a structural discovery lookup returned that atom, uniqueness would identify
+its canonical ID with the undiscovered one. Exact inversion would then supply
+the missing discovery entry, a contradiction. This covers retained canonical
+rows whose discovery was never published; it makes no assertion about truth.
+-/
+theorem undiscovered_identity_absent (decode : Id → Option Atom)
+    (discovery : Slot → Option Id) (inverse : Id → Option Slot)
+    (inverse_exact : ∀ identity position,
+      inverse identity = some position ↔ discovery position = some identity)
+    (unique : ∀ first second atom,
+      decode first = some atom → decode second = some atom → first = second)
+    (identity : Id) (atom : Atom)
+    (decoded : decode identity = some atom) (absent : inverse identity = none)
+    (position : Slot) : lookup decode discovery position ≠ some atom := by
+  intro found
+  cases discovered : discovery position with
+  | none =>
+    have missing : (none : Option Atom) = some atom := by
+      simpa only [lookup, discovered, Option.bind_none] using found
+    cases missing
+  | some other =>
+    have other_decoded : decode other = some atom := by
+      simpa only [lookup, discovered, Option.bind_some] using found
+    have same_identity : other = identity :=
+      unique other identity atom other_decoded decoded
+    have translated : inverse other = some position :=
+      (inverse_exact other position).mpr discovered
+    have missing : (none : Option Slot) = some position := by
+      simpa only [same_identity, absent] using translated
+    cases missing
 
 /-- Selecting original occurrences is equivalent to selecting their canonical
 identities. No injectivity premise is required: several positions may name one

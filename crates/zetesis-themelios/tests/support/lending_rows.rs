@@ -60,13 +60,55 @@ fn relational_instantiation_borrows_its_complete_rows() {
             .iter()
             .all(|record| record.work.binding_snapshots == Some(0))
     );
-    assert!(
-        records
+}
+
+#[test]
+fn support_generation_borrows_relational_bindings() {
+    let observer = Observer::default();
+    compile(
+        "v(1..4).e(X,Y):-v(X),v(Y),X<Y.reach(X,Y):-e(X,Y).reach(X,Z):-reach(X,Y),e(Y,Z).",
+        &FormulaLimits::default(),
+        Some(&observer),
+    )
+    .unwrap();
+    let records = observer.records.borrow();
+    let support = records
+        .iter()
+        .find(|record| record.phase == GroundingPhase::SupportCompletion)
+        .unwrap();
+    assert!(support.work.join_rows.is_some_and(|rows| rows > 0));
+    assert_eq!(support.work.binding_snapshots, Some(0));
+}
+
+#[test]
+fn nested_support_joins_borrow_local_bindings() {
+    for source in ["d(1;2).{p(X):d(X)}.", "d(1;2).p(X):d(X)."] {
+        let observer = Observer::default();
+        let admitted = compile(source, &FormulaLimits::default(), Some(&observer)).unwrap();
+        assert_eq!(admitted.atoms().len(), 4);
+        let records = observer.records.borrow();
+        let support = records
             .iter()
-            .filter(|record| record.phase == GroundingPhase::SupportCompletion)
-            .any(|record| record.work.binding_snapshots.is_some_and(|count| count > 0)),
-        "support's owning adapter still snapshots"
-    );
+            .find(|record| record.phase == GroundingPhase::SupportCompletion)
+            .unwrap();
+        assert!(support.work.join_rows.is_some_and(|rows| rows > 0));
+        assert_eq!(support.work.binding_snapshots, Some(0));
+    }
+}
+
+#[test]
+fn local_support_lending_preserves_outer_correlation() {
+    let facts = "d(1;2).e(1,a).e(1,b).e(2,c).";
+    for (source, ground) in [
+        ("{p(K,X):e(K,X)}:-d(K).", "{p(1,a);p(1,b)}.{p(2,c)}."),
+        ("p(K,X):e(K,X):-d(K).", "p(1,a);p(1,b).p(2,c)."),
+    ] {
+        let admitted =
+            compile(&format!("{facts}{source}"), &FormulaLimits::default(), None).unwrap();
+        let expected =
+            compile(&format!("{facts}{ground}"), &FormulaLimits::default(), None).unwrap();
+        assert_eq!(family(&admitted), family(&expected));
+    }
 }
 
 #[test]
@@ -120,5 +162,33 @@ fn nested_arithmetic_keeps_each_outer_binding() {
         None,
     )
     .unwrap();
+    assert_eq!(family(&admitted), family(&expected));
+}
+
+#[test]
+fn generated_support_rows_keep_their_owned_continuation() {
+    let observer = Observer::default();
+    compile(
+        "d(1;2).q(X,Y):-d(X),Y=1..X.",
+        &FormulaLimits::default(),
+        Some(&observer),
+    )
+    .unwrap();
+    assert!(
+        observer
+            .records
+            .borrow()
+            .iter()
+            .filter(|record| record.phase == GroundingPhase::SupportCompletion)
+            .any(|record| record.work.binding_snapshots.is_some_and(|count| count > 0))
+    );
+}
+
+#[test]
+fn selected_support_keeps_defined_false_witnesses() {
+    // A selected-row consumer yields no head, but the defined false instance
+    // still witnesses arithmetic admission for this source family.
+    let admitted = compile("d(0;1).p(X):-d(X),1/X<0.", &FormulaLimits::default(), None).unwrap();
+    let expected = compile("d(0;1).", &FormulaLimits::default(), None).unwrap();
     assert_eq!(family(&admitted), family(&expected));
 }

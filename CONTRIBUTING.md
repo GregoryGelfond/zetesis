@@ -196,7 +196,7 @@ Their checks remain separate from the workspace coverage population. Run
 `scripts/check.sh oracle` for the relevant external
 clingo comparisons, `scripts/check.sh coverage` for both independent 91% line
 coverage floors, and `scripts/check.sh proofs` when proof sources or records change.
-Local `scripts/check.sh coverage --metal` adds 59 exact physical tests within
+Local `scripts/check.sh coverage --metal` adds 60 exact physical tests within
 workspace coverage: static constructor and complete closure/reference checks,
 native aggregate reduction and measurement, lazy transport
 and source closure, typed relation masks and measurement, tight and formula
@@ -204,7 +204,8 @@ oracles, shared-context composition and failure handling, and ordinary
 lazy/formula CLI paths, complete-world-view collection and caller-owned session
 resources with exact executor context and compiled-profile identity, and combined
 head, objective and output contracts over complete answer-set families. The
-session group also checks automatic tight membership on the device, general
+session group also checks complete terminal-definition reconstruction over
+device-verified base answers, automatic tight membership on the device, general
 device checking for non-tight theories, and tight work refusal before dispatch.
 These are the current required tests, not a claim that a newer source has been
 physically qualified; recorded coverage remains bound to its stated source.
@@ -214,7 +215,7 @@ Every target group must report its
 expected named passing tests. `scripts/check.sh hardware` qualifies the host's
 own device backend without instrumentation, Metal on macOS and Vulkan
 elsewhere, or the one named by `--metal` or `--vulkan`: the same sixteen groups
-of 59 exact tests, each backend's reviewed selection, checking complete CPU/device
+of 60 exact tests, each backend's reviewed selection, checking complete CPU/device
 answer families and explicit failure boundaries; a change to a device route is qualified on
 every backend the hosts at hand expose, and the record says which. The
 portable report is retained separately; the CPU-only profile independently

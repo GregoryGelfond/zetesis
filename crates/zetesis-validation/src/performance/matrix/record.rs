@@ -151,6 +151,29 @@ pub struct Observation {
     /// Core search counters remain separate from original-program acceptance.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hybrid: Option<HybridStatistics>,
+    /// Completed full-answer reconstruction from a verified base. Absent for
+    /// ordinary and streamed-constraint routes and older records.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub terminal: Option<TerminalStatistics>,
+}
+
+/// Original-answer reconstruction receipt, independent of base membership work.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub struct TerminalStatistics {
+    /// Base answers consumed by reconstruction.
+    pub base_answers: u64,
+    /// Complete original answers.
+    pub reconstructed: u64,
+    /// Consumed unfinished reconstructions; zero for a complete observation.
+    pub pending: u64,
+    /// Reconstruction calls, including refused attempts.
+    pub attempts: u64,
+    /// Completed frontend reconstructions.
+    pub completed: u64,
+    /// Accepted work including source admission; excludes base membership work.
+    pub work: u64,
+    /// Accepted source and reconstruction substitutions.
+    pub substitutions: u64,
 }
 
 /// Completed hybrid source-checking receipt, independent of device execution.

@@ -24,6 +24,8 @@ fn every_attribution_prefix_preserves_writer_failure() {
     super::write(&mut expected, &timings).unwrap();
     let text = std::str::from_utf8(&expected).unwrap();
     assert!(text.contains("completed=1;"));
+    assert!(text.contains("support_join_work=0;"));
+    assert!(text.contains("support_head_work=0;"));
     assert_eq!(
         text.matches(": unmeasured\n").count(),
         GroundingPhase::ALL.len() - 1
@@ -45,12 +47,18 @@ fn every_attribution_prefix_preserves_writer_failure() {
 fn attribution_output_preserves_unavailable_values() {
     let mut measurement = GroundingMeasurement::default();
     measurement.work.join_rows = None;
+    measurement.work.support_order_work = None;
+    measurement.work.support_join_work = None;
+    measurement.work.support_head_work = None;
     measurement.elapsed = None;
     let mut expected = Vec::new();
     super::write_measurement(&mut expected, &measurement).unwrap();
     let text = std::str::from_utf8(&expected).unwrap();
     assert!(text.contains("elapsed_ns=unavailable;"));
     assert!(text.contains("join_rows=unavailable;"));
+    assert!(text.contains("support_order_work=unavailable;"));
+    assert!(text.contains("support_join_work=unavailable;"));
+    assert!(text.contains("support_head_work=unavailable;"));
     for capacity in 0..expected.len() {
         let mut writer = BoundedWriter::new(capacity);
         assert_eq!(

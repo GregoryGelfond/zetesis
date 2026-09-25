@@ -53,6 +53,10 @@ pub enum GroundingMode {
     LazyInterleaved,
     /// Measured eager attempts coexist with unseparated lazy source joins.
     Mixed,
+    /// Eager base materialization followed by terminal-definition reconstruction
+    /// during solving. Grounding intervals do not cover the full original theory.
+    /// A shared recorder can also contain other eager attempts.
+    EagerBaseTerminalDefinitions,
 }
 impl GroundingMode {
     /// Stable machine-readable identifier.
@@ -63,6 +67,7 @@ impl GroundingMode {
             Self::Eager => "eager",
             Self::LazyInterleaved => "lazy_interleaved",
             Self::Mixed => "mixed",
+            Self::EagerBaseTerminalDefinitions => "eager_base_terminal_definitions",
         }
     }
 }
@@ -100,7 +105,7 @@ pub struct StageTimings {
     /// Recorder host interval from construction through this snapshot.
     /// Callers define its scope; no CLI or process-wide boundary is implied.
     pub driver_elapsed: Duration,
-    /// Explicit indication of unseparated lazy work, if applicable.
+    /// Materialization and source work retained in the measured scope.
     pub grounding_mode: GroundingMode,
     /// Recorder time outside measured stages. Instrumentation overhead is not
     /// subtracted; bookkeeping can also fall inside the measured stage spans.
@@ -260,6 +265,9 @@ impl StageRecorder {
                 record.mode = match record.mode {
                     GroundingMode::Unentered | GroundingMode::Eager => GroundingMode::Eager,
                     GroundingMode::LazyInterleaved | GroundingMode::Mixed => GroundingMode::Mixed,
+                    GroundingMode::EagerBaseTerminalDefinitions => {
+                        GroundingMode::EagerBaseTerminalDefinitions
+                    }
                 };
             }
         }
@@ -279,7 +287,26 @@ impl StageRecorder {
                 GroundingMode::Unentered | GroundingMode::LazyInterleaved => {
                     GroundingMode::LazyInterleaved
                 }
-                GroundingMode::Eager | GroundingMode::Mixed => GroundingMode::Mixed,
+                GroundingMode::Eager
+                | GroundingMode::Mixed
+                | GroundingMode::EagerBaseTerminalDefinitions => GroundingMode::Mixed,
+            };
+        }
+    }
+
+    /// Record an eager base whose terminal definitions are reconstructed during
+    /// solving. No eager interval for the full original theory is implied, and
+    /// no duration is created. Lazy routes sharing this recorder remain mixed.
+    pub fn mark_terminal_definitions(&self) {
+        if self.enabled() {
+            let mut state = self.lock_state();
+            state.mode = match state.mode {
+                GroundingMode::Unentered
+                | GroundingMode::Eager
+                | GroundingMode::EagerBaseTerminalDefinitions => {
+                    GroundingMode::EagerBaseTerminalDefinitions
+                }
+                GroundingMode::LazyInterleaved | GroundingMode::Mixed => GroundingMode::Mixed,
             };
         }
     }

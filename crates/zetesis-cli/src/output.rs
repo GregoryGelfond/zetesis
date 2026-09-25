@@ -203,7 +203,7 @@ fn phases(out: &mut Buffer, timings: Option<&PhaseTimings>) -> Result<(), RunErr
         return out.text("null");
     };
     out.text(&format!(
-        "{{\"schema\":3,\"clock\":\"host_monotonic\",\"driver_elapsed_ns\":{},\"measurements\":{{",
+        "{{\"schema\":4,\"clock\":\"host_monotonic\",\"driver_elapsed_ns\":{},\"measurements\":{{",
         timings.driver_elapsed.as_nanos()
     ))?;
     for (index, phase) in SolvePhase::ALL.into_iter().enumerate() {
@@ -269,6 +269,8 @@ fn stages(out: &mut Buffer, timings: Option<&crate::StageTimings>) -> Result<(),
 
 fn error_kind(error: &RunError) -> &'static str {
     match error {
+        RunError::Reconstruction(error) => reconstruction_kind(error),
+        RunError::TerminalStatisticsOverflow => "terminal_statistics_overflow",
         RunError::Constraint(_) => "constraint",
         RunError::ConstraintFailureMissing => "constraint_failure_missing",
         RunError::HybridStatisticsOverflow => "hybrid_statistics_overflow",
@@ -317,11 +319,29 @@ fn error_kind(error: &RunError) -> &'static str {
     }
 }
 
+fn reconstruction_kind(error: &zetesis_themelios::ReconstructionError) -> &'static str {
+    use zetesis_core::{ModelError, ModelFailure};
+    use zetesis_themelios::{FormulaFailure, ReconstructionError};
+    match error {
+        ReconstructionError::Source(error)
+        | ReconstructionError::Model(ModelFailure::Stopped(error))
+            if matches!(error.as_ref(), FormulaFailure::Limit { .. }) =>
+        {
+            "answer_reconstruction_limit"
+        }
+        ReconstructionError::Model(ModelFailure::Model(ModelError::Bytes { .. })) => {
+            "answer_reconstruction_limit"
+        }
+        _ => "answer_reconstruction",
+    }
+}
+
 fn reason_code(reason: Interruption) -> &'static str {
     match reason {
         Interruption::Preparation(reason)
         | Interruption::Oracle(reason)
-        | Interruption::Constraint(reason) => stop_code(reason),
+        | Interruption::Constraint(reason)
+        | Interruption::Reconstruction(reason) => stop_code(reason),
         Interruption::Countermodel(reason) => {
             use zetesis_sat::Incomplete;
             match reason {
@@ -499,6 +519,7 @@ fn write_interruption(
             Interruption::Oracle(_) => "oracle",
             Interruption::Countermodel(_) => "countermodel",
             Interruption::Constraint(_) => "constraint",
+            Interruption::Reconstruction(_) => "answer_reconstruction",
             Interruption::Objective(_) => "objective",
             Interruption::Incumbent(_) => "incumbent",
         };
@@ -520,9 +541,21 @@ fn statistics(out: &mut Buffer, view: &SummaryView<'_>) -> Result<(), RunError> 
     // serialization of debug text or the human statistics protocol.
     if view.timings.is_some() {
         out.text("{\"search\":")?;
-        search_statistics(out, view.search, view.hybrid_execution.is_some())?;
+        search_statistics(
+            out,
+            view.search,
+            if view.terminal_execution.is_some() {
+                "terminal_base"
+            } else if view.hybrid_execution.is_some() {
+                "retained_core"
+            } else {
+                "original_theory"
+            },
+        )?;
         out.text(",\"hybrid_execution\":")?;
         hybrid_statistics(out, view.hybrid_execution)?;
+        out.text(",\"terminal_execution\":")?;
+        terminal_statistics(out, view.terminal_execution)?;
         out.text(",\"candidate_restrictions\":")?;
         candidate_statistics(out, view.candidates)?;
         out.text(",\"execution\":")?;
@@ -655,6 +688,7 @@ struct SummaryView<'a> {
     candidates: Option<zetesis_cpu::CandidateStatistics>,
     execution: Option<&'a crate::FormulaExecutionStatistics>,
     hybrid_execution: Option<&'a zetesis_solve::HybridExecutionStatistics>,
+    terminal_execution: Option<&'a zetesis_solve::TerminalExecutionStatistics>,
     lazy_execution: Option<&'a crate::LazyExecutionStatistics>,
     shared_execution: Option<&'a crate::SharedExecutionStatistics>,
     closure_execution: Option<&'a crate::ClosureExecutionStatistics>,
@@ -680,6 +714,8 @@ impl<'a> SummaryView<'a> {
                     candidates: semantic.and_then(crate::SemanticOutcome::candidate_statistics),
                     execution: semantic.and_then(crate::SemanticOutcome::formula_execution),
                     hybrid_execution: semantic.and_then(crate::SemanticOutcome::hybrid_execution),
+                    terminal_execution: semantic
+                        .and_then(crate::SemanticOutcome::terminal_execution),
                     lazy_execution: semantic.and_then(crate::SemanticOutcome::lazy_execution),
                     shared_execution: semantic.and_then(crate::SemanticOutcome::shared_execution),
                     closure_execution: semantic.and_then(crate::SemanticOutcome::closure_execution),
@@ -707,6 +743,7 @@ impl<'a> SummaryView<'a> {
                     candidates: partial.and_then(|p| p.candidate_statistics),
                     execution: partial.and_then(|p| p.formula_execution.as_ref()),
                     hybrid_execution: partial.and_then(|p| p.hybrid_execution.as_ref()),
+                    terminal_execution: partial.and_then(|p| p.terminal_execution.as_ref()),
                     lazy_execution: partial.and_then(|p| p.lazy_execution.as_ref()),
                     shared_execution: partial.and_then(|p| p.shared_execution.as_ref()),
                     closure_execution: partial.and_then(|p| p.closure_execution.as_ref()),
@@ -722,7 +759,7 @@ impl<'a> SummaryView<'a> {
 fn search_statistics(
     out: &mut Buffer,
     statistics: Option<&zetesis_sat::Statistics>,
-    hybrid: bool,
+    scope: &str,
 ) -> Result<(), RunError> {
     let Some(stats) = statistics else {
         return out.text("null");
@@ -730,11 +767,7 @@ fn search_statistics(
     out.text("{\"work\":")?;
     out.text(&stats.search.work.to_string())?;
     out.text(",\"scope\":")?;
-    out.string(if hybrid {
-        "retained_core"
-    } else {
-        "original_theory"
-    })?;
+    out.string(scope)?;
     out.number_field("decisions", stats.search.decisions)?;
     out.number_field("candidate_queries", stats.candidate_queries)?;
     out.number_field("candidate_restrictions", stats.candidate_restrictions)?;
@@ -779,6 +812,25 @@ fn region_filter_statistics(
     out.text(",\"overflowed\":")?;
     out.text(if stats.overflowed { "true" } else { "false" })?;
     out.text("}")
+}
+
+fn terminal_statistics(
+    out: &mut Buffer,
+    statistics: Option<&zetesis_solve::TerminalExecutionStatistics>,
+) -> Result<(), RunError> {
+    let Some(statistics) = statistics else {
+        return out.text("null");
+    };
+    out.text("{\"base_answers\":")?;
+    out.text(&statistics.base_answers.to_string())?;
+    out.number_field("reconstructed", statistics.reconstructed)?;
+    out.number_field("pending", statistics.pending)?;
+    out.text(",\"reconstruction\":{\"attempts\":")?;
+    out.text(&statistics.reconstruction.attempts.to_string())?;
+    out.number_field("completed", statistics.reconstruction.completed)?;
+    out.number_field("work", statistics.reconstruction.work)?;
+    out.number_field("substitutions", statistics.reconstruction.substitutions)?;
+    out.text("}}")
 }
 
 fn hybrid_statistics(
@@ -1298,3 +1350,7 @@ mod footer_admission_tests;
 #[cfg(test)]
 #[path = "../tests/support/frontier_output.rs"]
 mod frontier_tests;
+
+#[cfg(test)]
+#[path = "../tests/support/terminal_statistics.rs"]
+mod terminal_tests;

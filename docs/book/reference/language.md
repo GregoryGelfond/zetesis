@@ -9,8 +9,10 @@ claim or a promise that every combination of individually supported forms works.
 The ordinary source driver selects a supported profile automatically. Explicit
 library admission doors are narrower: `admit` accepts the strict relational
 profile, `admit_extended` adds its scalar expansions, and `admit_formula` builds
-the broader finite Ferraris representation. Formula programs default to eager
-grounding. Explicit lazy CPU execution can retain a producer core and stream
+the broader finite Ferraris representation. Automatic formula admission can
+defer eligible terminal positive definitions and reconstruct them from verified
+base answers; the remaining rules are materialized eagerly.
+Explicit lazy CPU execution can retain a producer core and stream
 eligible ordinary constraints; objectives and table joins are currently refused
 by this hybrid profile. Complete possible support and source arithmetic
 admission remain required. See the [grounding profiles](../architecture/grounding.md#eager-and-lazy-execution).

@@ -68,3 +68,19 @@ fn frozen_computation_refuses_unadmitted_identity() {
     let result = computation.number(731, &limits, &mut counters, location());
     assert!(matches!(result, Err(FormulaFailure::UnadmittedTerm { .. })));
 }
+
+#[test]
+fn lease_allowance_keeps_query_metadata_charged() {
+    Fixture::default().with(location(), |support, computation, _counters| {
+        let lease = computation.lease();
+        let spare = 32;
+        let limits = FormulaLimits {
+            max_support_bytes: support.live_bytes() + spare,
+            ..FormulaLimits::default()
+        };
+        assert_eq!(
+            computation.allowance(&lease, &limits, location()).unwrap(),
+            spare
+        );
+    });
+}

@@ -14,7 +14,7 @@ use crate::{
     AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
     GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork,
 };
-use zetesis_core::{Atom, Sign};
+use zetesis_core::{Atom, AtomCatalog, Sign};
 
 #[derive(Default)]
 struct Observer {
@@ -187,12 +187,22 @@ fn reverse_postings_preserve_signed_predicate_identity() {
         .unwrap()
         .unwrap();
     for (changed, expected) in [
-        (atom("p", Sign::Negative, &[2]), vec!["b"]),
-        (atom("p", Sign::Positive, &[3, 4]), vec!["c"]),
-        (atom("p", Sign::Positive, &[1]), vec!["a", "twice"]),
+        (vec![atom("p", Sign::Negative, &[2])], vec!["b"]),
+        (vec![atom("p", Sign::Positive, &[3, 4])], vec!["c"]),
+        (vec![atom("p", Sign::Positive, &[1])], vec!["a", "twice"]),
+        (
+            vec![
+                atom("p", Sign::Positive, &[1]),
+                atom("p", Sign::Positive, &[2]),
+                atom("p", Sign::Negative, &[1]),
+                atom("p", Sign::Negative, &[2]),
+            ],
+            vec!["a", "b", "twice"],
+        ),
     ] {
+        let changed = AtomCatalog::new(changed).unwrap();
         plan.advance(
-            std::iter::once((&changed).into()),
+            changed.atoms().iter(),
             &FormulaLimits::default(),
             &mut Counters::default(),
             location(prepared),
@@ -229,6 +239,85 @@ fn reverse_postings_preserve_signed_predicate_identity() {
         actual.sort_unstable();
         assert_eq!(actual, expected);
     }
+}
+
+fn selected_rules(plan: &ProducerPlan<'_>, location: themelios_base::span::Location) -> Vec<usize> {
+    let mut schedule = plan.schedule();
+    let mut selected = Vec::new();
+    while let Some(rule) = schedule
+        .next(
+            &FormulaLimits::default(),
+            &mut Counters::default(),
+            location,
+        )
+        .unwrap()
+    {
+        selected.push(rule);
+    }
+    selected
+}
+
+#[test]
+fn repeated_canonical_predicates_need_only_identity_work() {
+    let owner = prepare("long_predicate(1).a(X):-long_predicate(X).");
+    let prepared = &owner.program;
+    let mut plan = plan(prepared, &owner.catalog);
+    let atoms = AtomCatalog::new(vec![
+        atom("long_predicate", Sign::Positive, &[1]),
+        atom("long_predicate", Sign::Positive, &[2]),
+    ])
+    .unwrap();
+    let limits = FormulaLimits::default();
+    let mut first = Counters::default();
+    plan.advance(
+        atoms.atoms().iter().take(1),
+        &limits,
+        &mut first,
+        location(prepared),
+    )
+    .unwrap();
+    let expected = selected_rules(&plan, location(prepared));
+    assert_eq!(expected.len(), 1);
+
+    // The extra row requires one iterator permit and one scoped identity
+    // permit. Neither repeats the foreign graph lookup nor scans the name.
+    let exact = FormulaLimits {
+        max_work: first.accounting.work + 2,
+        ..limits
+    };
+    let mut repeated = Counters::default();
+    plan.advance(
+        atoms.atoms().iter(),
+        &exact,
+        &mut repeated,
+        location(prepared),
+    )
+    .unwrap();
+    assert_eq!(repeated.accounting.work, exact.max_work);
+    assert_eq!(selected_rules(&plan, location(prepared)), expected);
+
+    // Replacing the first call's terminal iterator permit with the second
+    // row's visit leaves exactly the equality permit unadmitted.
+    let stopped = FormulaLimits {
+        max_work: first.accounting.work,
+        ..limits
+    };
+    let visited = Cell::new(0);
+    let mut failed = Counters::default();
+    let result = plan.advance(
+        atoms
+            .atoms()
+            .iter()
+            .inspect(|_| visited.set(visited.get() + 1)),
+        &stopped,
+        &mut failed,
+        location(prepared),
+    );
+    assert!(matches!(result, Err(FormulaFailure::Limit {
+        resource: FormulaResource::Work, observed, limit, ..
+    }) if limit == u128::from(stopped.max_work) && observed == limit + 1));
+    assert_eq!(visited.get(), 2);
+    assert_eq!(failed.accounting.work, stopped.max_work);
 }
 
 #[test]

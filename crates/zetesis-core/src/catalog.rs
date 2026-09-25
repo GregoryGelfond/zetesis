@@ -385,6 +385,11 @@ pub struct Atoms<'a> {
 }
 
 impl<'a> Atoms<'a> {
+    /// Borrow the already-bound canonical prefix, without another scope handle.
+    pub(crate) fn read(self) -> CatalogRead<'a> {
+        CatalogRead(self.snapshot)
+    }
+
     fn new(snapshot: impl Into<storage::Read<'a>>, positions: &'a [storage::AtomId]) -> Self {
         Self {
             snapshot: snapshot.into(),

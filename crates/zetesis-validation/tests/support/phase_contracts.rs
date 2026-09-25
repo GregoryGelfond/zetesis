@@ -1,6 +1,6 @@
 //! Timing evidence is optional and never substitutes for answer-set qualification.
 
-use super::{CERTIFICATE_HEADER, CERTIFICATE_LABELS, FOOTER, HEADER, LABELS, parse};
+use super::{CERTIFICATE_HEADER, CERTIFICATE_LABELS, FOOTER, HEADER, LABELS, REDUCT_HEADER, parse};
 
 fn section() -> String {
     section_for(HEADER, &LABELS)
@@ -117,7 +117,7 @@ fn certificate_schema_is_distinct_and_legacy_evidence_remains_readable() {
 
 #[test]
 fn reduct_preparation_requires_its_own_phase_schema() {
-    let current = section().replace(
+    let current = section_for(REDUCT_HEADER, &LABELS[..14]).replace(
         "phase reduct_preparation: unmeasured",
         "phase reduct_preparation: calls=1; elapsed_ns=12; complete=true",
     );
@@ -138,4 +138,27 @@ fn reduct_preparation_requires_its_own_phase_schema() {
     ] {
         assert!(parse(&malformed).is_err());
     }
+}
+
+#[test]
+fn reconstruction_phase_requires_schema_four_and_retains_failed_attempts() {
+    let current = section().replace(
+        "phase answer_reconstruction: unmeasured",
+        "phase answer_reconstruction: calls=3; elapsed_ns=12; complete=false",
+    );
+    let parsed = parse(&current).unwrap().unwrap();
+    assert_eq!((parsed.schema_version, parsed.phases.len()), (4, 15));
+    assert!(!parsed.complete);
+    let value = parsed.phases["answer_reconstruction"].as_ref().unwrap();
+    assert_eq!((value.calls, value.elapsed_ns), (3, 12));
+    for header in [REDUCT_HEADER, CERTIFICATE_HEADER] {
+        assert!(parse(&current.replace(HEADER, header)).is_err());
+    }
+    assert!(
+        parse(&current.replace(
+            "  phase answer_reconstruction: calls=3; elapsed_ns=12; complete=false\n",
+            "",
+        ))
+        .is_err()
+    );
 }

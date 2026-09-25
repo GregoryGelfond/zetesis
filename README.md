@@ -61,8 +61,9 @@ zetesis solve examples/network-repair.lp --all
 | `--time-limit 60s` | Set a cooperative deadline. |
 | `--memory-budget 4GiB` | Set the allowance for supported storage limits. |
 
-Execution defaults to CPU and uses lazy grounding where supported. Formula
-programs default to eager grounding; explicit lazy CPU execution can stream
+Execution defaults to CPU and uses lazy grounding where supported. For formula
+programs, automatic grounding can defer eligible definitions until their answers
+are known; other rules are grounded eagerly. Explicit lazy CPU execution can stream
 eligible constraints while retaining their producer core. See the
 [grounding profiles](docs/book/architecture/grounding.md#eager-and-lazy-execution)
 for the current limits. Use `zetesis devices` to list devices and

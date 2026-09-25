@@ -33,7 +33,12 @@ pub(crate) struct Diagnostics<W> {
     writer: W,
     color: ColorMode,
     width: std::num::NonZeroUsize,
-    hybrid_core: bool,
+    core: Option<Core>,
+}
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Core {
+    Constraints,
+    TerminalDefinitions,
 }
 impl<W: Write> Diagnostics<W> {
     pub(crate) const fn new(writer: W, color: ColorMode) -> Self {
@@ -41,7 +46,7 @@ impl<W: Write> Diagnostics<W> {
             writer,
             color,
             width: std::num::NonZeroUsize::new(80).unwrap(),
-            hybrid_core: false,
+            core: None,
         }
     }
 
@@ -91,8 +96,12 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
             ),
             Event::LazyGrounding { requested } => self.metadata(Label::Grounding,
                 format_args!("requested={}, effective=lazy (source joins; no complete ground-rule store)", requested.label())),
+            Event::TerminalDefinitions { requested, deferred_templates } => {
+                self.core = Some(Core::TerminalDefinitions);
+                self.metadata(Label::Grounding, format_args!("requested={}, effective=eager_base_terminal_definitions (eager base; {deferred_templates} terminal definitions reconstructed on the host before each original answer)", requested.label()))
+            }
             Event::HybridGrounding { requested, streamed_templates, streamed_instances } => {
-                self.hybrid_core = true;
+                self.core = Some(Core::Constraints);
                 self.metadata(Label::Grounding,
                     format_args!("requested={}, effective=hybrid (eager retained core; streamed constraints: {streamed_templates} templates, {streamed_instances} admitted instances)", requested.label()))
             }
@@ -104,7 +113,9 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
                 format_args!("cpu (shared {} source rounds, {workers} workers; collective source and per-world evaluation budgets)", batching.label())),
             Event::CpuFormula { oracle, grounder, search } => {
                 let oracle = if oracle == crate::Oracle::Auto { "Ferraris reduct membership" } else { "Ferraris reduct countermodel" };
-                if self.hybrid_core {
+                if self.core == Some(Core::TerminalDefinitions) {
+                    self.metadata(Label::Backend, format_args!("cpu; base oracle: {oracle}; search: {}; base grounding: eager; original answer reconstruction: host", search.label()))
+                } else if self.core == Some(Core::Constraints) {
                     self.metadata(Label::Backend, format_args!("cpu; retained-core oracle: {oracle}; search: {}; core grounding: eager", search.label()))
                 } else {
                     self.metadata(Label::Backend, format_args!("cpu; oracle: {oracle}; search: {}; grounder: eager (requested {})", search.label(), grounder.label()))
@@ -135,16 +146,20 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
             #[cfg(feature = "gpu")]
             Event::DeviceTight { adapter, grounder, search, batch_size } => self.metadata(Label::Backend,
                 format_args!("GPU tight support ({}, {}; vendor=0x{:04x}); oracle: Ferraris ranked support; search: {}; grounder: eager (requested {}); batch={batch_size}", adapter.name, adapter.backend, adapter.vendor_id, search.label(), grounder.label())),
-            Event::Formula { atoms, nodes, roots, keyed_constraints } if self.hybrid_core => writeln!(self,
+            Event::Formula { atoms, nodes, roots, keyed_constraints } if self.core == Some(Core::TerminalDefinitions) => writeln!(self,
+                "Base formula: {atoms} atoms, {nodes} nodes, {roots} roots; {keyed_constraints} constraints asked by key; terminal definitions reconstructed separately"),
+            Event::Formula { atoms, nodes, roots, keyed_constraints } if self.core == Some(Core::Constraints) => writeln!(self,
                 "Retained core formula: {atoms} atoms, {nodes} nodes, {roots} roots; {keyed_constraints} constraints asked by key; streamed constraints checked separately"),
             Event::Formula { atoms, nodes, roots, keyed_constraints: 0 } => writeln!(self, "Formula: {atoms} atoms, {nodes} nodes, {roots} roots"),
             Event::Formula { atoms, nodes, roots, keyed_constraints } => writeln!(self,
                 "Formula: {atoms} atoms, {nodes} nodes, {roots} roots; {keyed_constraints} constraints asked by key"),
             Event::KeyAnalysisStopped(stop) => writeln!(self,
                 "Keyed constraints: the key analysis stopped, {stop}; every constraint not yet asked was grounded as written"),
-            Event::TightMembership if self.hybrid_core => writeln!(self, "Core membership: checked tight support certificate; original constraints still pending"),
+            Event::TightMembership if self.core == Some(Core::TerminalDefinitions) => writeln!(self, "Base membership: checked tight support certificate; full reconstruction still pending"),
+            Event::TightMembership if self.core == Some(Core::Constraints) => writeln!(self, "Core membership: checked tight support certificate; original constraints still pending"),
             Event::TightMembership => writeln!(self, "Membership: checked tight support certificate over the original theory"),
-            Event::PositiveMembership if self.hybrid_core => writeln!(self, "Core membership: positive atomic-head theory; original streamed constraints still pending"),
+            Event::PositiveMembership if self.core == Some(Core::TerminalDefinitions) => writeln!(self, "Base membership: positive atomic-head theory; full reconstruction still pending"),
+            Event::PositiveMembership if self.core == Some(Core::Constraints) => writeln!(self, "Core membership: positive atomic-head theory; original streamed constraints still pending"),
             Event::PositiveMembership => writeln!(self, "Membership: positive atomic-head theory; least consequences with original constraints"),
             Event::GeneralMembership(error) => writeln!(self, "Membership: general reduct; optional class certificate refused: {error}"),
             Event::ObjectiveUnavailable(error) => writeln!(self, "Objective pruning unavailable: {error}; exact search continues"),

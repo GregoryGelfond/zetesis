@@ -79,6 +79,12 @@ operation. Work and storage checks cover both retained component metadata and
 temporary argument frames. Preparing and grounding separately carries the same
 resource history across the boundary.
 
+An early head check reads only the variables and constants used by that head.
+If a required variable is not yet bound, the join continues. Otherwise a borrowed
+pattern lookup checks canonical identity and discovery, followed by the separate
+support test. It does not validate or copy unrelated binding slots. The later
+insertion still checks each argument's logical limits before publication.
+
 Several views can name the same atom without making the same claim about it:
 
 | View | Meaning of membership |
@@ -126,7 +132,10 @@ and each completed closure owes coverage of all instances enabled in its final
 snapshot. Laziness moves and limits materialization; it does not remove these
 obligations or guarantee smaller memory use on every input.
 
-The ordinary finite formula path materializes a bounded theory. An explicit
+The finite formula path materializes a bounded theory. Automatic admission can
+first separate [terminal positive definitions](#terminal-definition-analysis),
+ground the base and reconstruct those definitions from each verified base answer.
+Explicit eager admission materializes the complete theory. An explicit
 **hybrid formula** profile instead retains every producer and streams eligible
 integrity constraints. It currently runs on CPU with indexed joins and no
 objectives. Constraints containing aggregates, projected atoms or conditional
@@ -312,6 +321,13 @@ an absent outer input. Generator backtracking clears exhausted outputs before an
 earlier input changes. Owning frame capacities, including optional cells, are
 charged separately from copied value payloads.
 
+Support generation and rule instantiation consume ordinary completed bindings
+through the same borrowed-row mechanism. Head admission finishes before the join
+resumes its suspended undo; it does not need a second assignment vector. A nested
+join reads the borrowed outer prefix to initialize its own scoped frame. Arithmetic generators that
+retain a continuation still own their frames. Both routes apply the same scalar
+filters and source-family checks; their allocation and work costs differ.
+
 The [binding implementation](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_binding.rs)
 and [scope laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/BindingScopes.lean)
 state these distinct responsibilities. The laws prove restriction and checked
@@ -335,17 +351,18 @@ these lifetimes to prepared views and execution state.
 
 The final formula catalog uses the shared core
 [`AtomInterner`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/atom_interner.rs).
-It owns one canonical term/atom authority and indexes stable discovery positions
-with one AVL tree per predicate, the trees kept in predicate order. Lookup finds the
-predicate's tree by a checked binary search over the program's few relations,
-comparing the predicate once, then performs logarithmically many checked node
-probes comparing arguments only; compared descriptors and text prefixes are
-additional charged work.
-Insertion plans links and rotations in reusable scratch, admits capacity and
-publication work, then imports missing canonical components and publishes the
-new discovery position. Canonical interning separately hashes typed components
-and checks exact collisions; the AVL discovery index stores no second payload.
-Canonical traversal is separate from dense discovery order.
+It owns one canonical term/atom authority. Authenticated tuple queries reuse that
+store's exact identity index, then an integer-key inverse translates identity to
+discovery. A known same-authority atom ID avoids tuple lookup altogether. An
+interned row without a discovery entry remains absent from this population.
+
+A separate semantic AVL view, grouped by predicate, provides typed enumeration,
+foreign input lookup and insertion placement. It does not make canonical IDs
+into semantic ranks. Insertion plans both index updates in reusable scratch and
+admits all capacity and publication work before publishing discovery. Complete
+canonical rows can survive a refusal without entering either discovery index.
+Both views retain only metadata over the same authoritative payload; their
+actual capacities and growth overlap are charged.
 
 A committed prefix supplies the count-plan collector's exact dense occurrence
 view. The first commit transfers the pending ID map; later commits move only
@@ -378,8 +395,13 @@ matching does not invert arithmetic or introduce a global guessed value universe
 
 A checked `AtomKey` borrows a pattern and its current binding. Support and delta
 membership use that full typed identity without making a temporary atom. Formula
-interning imports the key's borrowed terms into its canonical authority before
-publishing a new discovery ID. Existing canonical components are reused.
+head admission validates a borrowed projection of constants and assigned
+variables. The same immutable coordinates serve discovery lookup and canonical
+row interning before publishing a discovery position. No argument vector,
+replacement assignment or owned atom is needed. The projection preserves repeated
+arguments and accounts for its fixed preparation metadata. Constant resolution
+may still read the canonical segment directory; borrowing avoids copying, not
+all lookup work.
 Missing required inputs still produce a located failure; an incomplete head
 prefix defers the membership check. Membership does not discharge authored-body
 validation. Existing support, current delta and formula atoms retain distinct
@@ -494,6 +516,24 @@ formula grounding. Intermediate snapshots have no completion capability, and a
 round, work, value or storage failure returns an error before objective activation.
 A finite snapshot during growth does not establish that value generation will
 terminate.
+
+Before publishing a round, the builder orders its new support positions by
+typed atom identity. Dense selections filter the canonical catalog's existing
+semantic ordering index; sparse selections use in-place comparison sorting.
+The dense route is selected only when the complete indexed population is at
+most twice the selected population, the selection has at least two entries,
+and its prospective temporary-storage envelope fits the current allowance.
+Actual allocator capacity is checked during execution and may still cause a
+refusal. Thus a chain adding one atom per round does not rescan its history.
+A failed chosen operation remains a failure; it does not trigger a retry through
+the other strategy.
+
+The selection contains exactly this round's newly supported discoveries. It can
+include an older discovery that was not previously supported, so neither an ID
+suffix nor the global support bitset is a substitute. The dense route uses a
+temporary membership mask and position vector, retaining the caller's selection
+until every replacement write is admitted. Both routes preserve the same typed
+publication order and use the same canonical payload.
 
 The shared [source-activity module](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_source_activity.rs)
 uses this completed view for objective and projection eligibility. Acyclic
@@ -615,19 +655,76 @@ observed capacity remain in receipts. Optional analysis may cost more work or
 storage than it saves. Its observations establish activity and completion scope,
 not elapsed-time, memory or scalability improvement.
 
+### Terminal definition analysis
+
+The domain library separately recognizes positive definitions whose predicates
+are never read by a logical rule or constraint. Every producer of a selected
+predicate must qualify; complementary strong negation blocks selection because
+coherence introduces a dependency. This is a structural property, independent
+of predicate names, constants, filenames and `#show` declarations. Choices may
+remain in the base program. Their possible atoms are an upper bound, even when
+an exact-one rule selects a single value in each answer set.
+
+For this one-layer class, the
+[`TerminalDefinitions` laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/TerminalDefinitions.lean)
+give each base answer set a unique extension: add all heads whose positive
+bodies hold in that answer. The
+[`terminal::analyze` API](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-domain/src/terminal.rs)
+classifies the source. Adaptive formula admission then checks complete
+source-to-IR correspondence before removing any producer from the base.
+Every producer must match a complete flat positive source rule, including its
+typed constants and one consistent variable mapping. A dependency projection
+cannot supply this certificate. Objectives and explicit projection currently
+exclude this schedule; ordinary eager materialization remains available.
+
+```text
+prepare original source and establish complete terminal partition
+ground the base using the original remaining allowance
+close its canonical storage without retaining possible-support indexes
+for each answer verified against the base reduct:
+    select exactly its true base rows
+    join true rows for each terminal definition
+    union the resulting heads with the base answer
+    publish the full answer, then evaluate its observations
+```
+
+The [source bridge](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_terminal.rs)
+retains the original program separately from the base theory and its analysis.
+Reconstruction shares immutable term and tuple storage, but starts with a fresh
+truth selection for every answer. Its joins use the shared whole-argument matcher
+and borrowed typed keys. It neither imports a second value universe nor treats
+possible support as truth. Duplicate witnesses coalesce only at head publication.
+
+The automatic formula route can choose this schedule. Explicit eager grounding
+still materializes the complete theory; the existing lazy constraint schedule is
+unchanged. Base membership uses the selected CPU or GPU executor. Reconstruction
+currently runs on the host. Work and substitutions remain cumulative across
+source admission and all reconstructions in a session. A refused extension
+publishes no original answer and cannot establish exhausted enumeration.
+
 ### Relation rows and vector operations
 
 A relation row is one complete typed tuple. Formula support's
 [`SupportCatalog`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/relations.rs)
 owns each possible atom once, with append-only, predicate-local row identities.
 A checked AVL index of those identities supports membership checks without
-another atom collection. The core relation owner retains its typed equality dictionary
-and argument columns across growth rounds. Each column has a
+another atom collection. The core relation owner retains its equality dictionary
+and argument columns across growth rounds. A dictionary entry refers to one
+whole canonical term; it does not copy that term. Each column has a
 `BTreeMap<u32, Vec<usize>>` from dictionary IDs to original row positions;
 insertion extends only the new row's postings. An immutable snapshot borrows
 these existing columns and postings. Row and equality IDs survive append, while
 queries remain bound to one particular immutable view. Numeric ID order is not
 ASP term order.
+
+The append dictionary also retains a sparse inverse from canonical term identity
+to local equality ID. Tuple insertion and equality queries share that lookup.
+It authenticates the term's vocabulary and readable prefix before probing the
+inverse. A hit returns the established local ID; an eligible miss proves absence
+from this relation's dictionary, not absence from the vocabulary or falsity.
+Foreign and ingress terms use typed comparison, as do valid query terms outside
+the supplied canonical prefix. The relation reader must still cover every
+retained row. Static sorted dictionaries retain their own immutable lookup.
 
 For a positive witness, the selector resolves known whole-column equalities and
 chooses the shortest posting list. Equal-length lists retain the first known
@@ -651,16 +748,24 @@ The catalog cannot grow while its snapshot is borrowed. Once a round finishes,
 the snapshot drops before new atoms are appended. A failed tuple or posting
 extension returns no usable support owner. The completed final snapshot supplies
 formula emission and objective eligibility. The core catalog uses the shared
-checked AVL implementation for row and dictionary identity. Nodes contain only
-IDs and links; typed comparisons inspect their actual descriptor/text prefixes.
-An insertion plans the new tuple's dictionary leaves in a bounded metadata
-overlay, then publishes row, equality and column changes after all fallible
-checks. No historical sorted row or dictionary sequence is shifted. If a tuple
+checked AVL implementation for row order, new dictionary-value placement and
+foreign-value lookup. Nodes contain only IDs and links; typed comparisons inspect
+their actual descriptor/text prefixes. An insertion resolves existing values
+through the inverse, and plans genuinely new dictionary leaves in a bounded
+metadata overlay. Repeated new values share the same tentative local ID.
+Row membership, dictionary representatives, inverse entries and columns publish
+together after all fallible checks. No historical sorted row or dictionary
+sequence is shifted. If a tuple
 introduces `a` new values into a dictionary of size `d`, tentative patches occupy
 O(a log d) cells; the checked overlay lookups can use O(a² log² d) metadata work.
 Typed comparisons, node inspection, append copies and posting construction
-consume the grounding work budget. Snapshot construction visits predicates
-without revisiting their rows.
+consume the grounding work budget. Inverse lookup uses fixed integer keys with
+expected constant-time hash lookup; internal hash probes are not individually
+cancellable. Reservations, relocation and publication are admitted before they
+run. Named storage includes addressable key/value capacity and conservative
+growth overlap, excluding opaque hash-control and allocator storage. It is not
+a process-memory bound. Snapshot construction visits predicates without
+revisiting their rows.
 
 Scalar reduct closure uses the same per-predicate catalog. Before each round it
 prepares a complete ordered ID view for each changed extent and reuses that view

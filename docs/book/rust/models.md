@@ -51,9 +51,10 @@ term workspaces can refer to this catalog without becoming model selections.
 `zetesis_core::atom_interner::AtomInterner` combines one canonical store with
 committed and pending discovery maps. Lookup returns an existing discovery
 position or a checked vacant entry. Insertion imports missing canonical
-components before publishing the new discovery position. Its AVL index contains
-positions and links; canonical interning indexes contain IDs and exact collision
-checks. Neither index retains another collection of logical payloads.
+components before publishing the new discovery position. An inverse index maps
+canonical atom IDs to discovery positions; a separate ordered view supports typed
+enumeration and foreign input. Both retain positions and links, not another
+collection of logical payloads.
 
 During a synchronous round, `split` lends an immutable committed prefix and a
 disjoint append capability. A source scan can borrow committed atoms while its
@@ -62,23 +63,51 @@ two regions only after those borrows end, preserving every dense position.
 Canonical order is an ordered position view; it never renumbers the owner.
 Committing an atom does not select it as true in any candidate interpretation.
 
-The builder uses one iterative AVL index per predicate, the relations kept in
-predicate order so that their trees in turn give the canonical atom order.
-`find_atom_with` and `find_key_with` borrow the owner immutably, allocate
-nothing, and return a local position or absence after a checked binary search
-for the predicate's relation and a checked search of that relation's committed
-and pending identities. Occupied
-entries use that same probe without changing retained mutation scratch. Entry
-records each descent in two target-sized words and a checked length, local to
-lookup and path preparation. The AVL height bound makes this record sufficient
-for every representable node population. A vacant entry replays those directions
-through the exclusively borrowed tree to prepare its insertion path, without
-repeating typed comparisons. Each search visits a logarithmic path, charging the
-predicate prefix once per relation probe and the value prefixes compared at
-each node. The node-work unit includes child
-selection and fixed local direction recording; replay admits each node visit and
-path-step write separately. These are operation units, not machine instructions.
-Canonical traversal visits the index once. Fallible reservations and work checks
+`find_atom_with` and `find_key_with` borrow the owner immutably and allocate
+nothing. An atom from this exact atom authority supplies its canonical ID;
+otherwise a tuple with authenticated vocabulary coordinates uses the store's
+existing collision-exact tuple index. A sparse inverse then finds its discovery
+position through logarithmic integer probes. Canonical rows retained after a
+refusal have no inverse entry until discovery succeeds. Shared vocabulary alone
+does not authorize an atom ID from a different tuple writer.
+
+`AtomAppender::find_pattern_with` looks up an admitted pattern directly against
+a borrowed assignment. It authenticates the predicate, assignment scope and
+referenced slots, including constant arguments. It neither copies an argument
+vector nor examines unrelated assignment cells. This selected-slot contract is
+distinct from the whole-frame check performed by `AssignmentSlice::bind_with`.
+Even a nullary pattern requires a valid assignment scope. A discovered position
+is still not evidence that the atom is supported or true.
+
+`pattern_lookup_bytes` reports the immutable lookup's named owner and fixed
+query-header envelope. Caller arrays and external owners are separate; insertion
+scratch is not included. The lookup changes no owner state, including on
+cancellation or a callback panic.
+
+Foreign and ingress queries use the typed-order view: one iterative AVL tree per
+predicate, kept in predicate order. This view also supplies semantic enumeration
+and new insertion placement; numeric IDs do not define term order. A vacant entry
+records its semantic descent in two target-sized words and replays those links
+to prepare insertion without repeating comparisons. Occupied entries do not
+change mutation scratch. Both indexes contain one node per discovered atom;
+the inverse needs no array spanning undiscovered canonical identities.
+
+`AtomAppender::order_selected_with` orders a unique selection of committed or
+pending discovery positions through that same semantic index. It validates the
+selection, marks it in a temporary bitset, and filters the index's ordered
+traversal into a temporary position vector. All replacement writes are admitted
+before the caller's selection changes. Refusal leaves that selection unchanged;
+no atom payload or permanent ordering index is added.
+
+`selected_order_storage` offers a prospective named storage envelope for dense
+selections: at least two positions, with the indexed population no more than
+twice the selected population. A caller can retain a sparse sorting strategy
+when that offer is absent or its scratch would not fit. The offer excludes the
+caller-owned selection and other live storage; the caller subtracts those from
+the available allowance. Once execution begins, allocation, work and cancellation
+failures propagate. `ordered_ids_with` remains the whole committed-order view.
+
+Fallible reservations and work checks
 precede publication, so a stopped insertion changes neither membership nor old
 links. Complete canonical components and acquired capacity can remain after a
 later discovery refusal; they assert neither discovery nor truth. The builder's
@@ -99,6 +128,30 @@ The bounded
 [`atom_interning` example](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/examples/README.md#appendable-atom-interning-probe)
 checks typed identities and append rounds, and reports work and storage separately.
 
+## Sharing a closed catalog
+
+`AtomInterner::into_closed_with` consumes a writer into a `ClosedCatalog`, retaining
+its canonical rows, vocabulary and exact lookup index. `for_closed_catalog`
+creates an independent writer over that shared base. Its discovery set starts
+empty; later discoveries may select an existing base row or append a new row
+using the closed vocabulary. Each writer has a fresh atom identity scope. A
+snapshot retains row payload without retaining the construction index.
+
+This is a storage operation. A stored atom is neither a discovered atom nor a
+true atom. In particular, a caller extending a selected interpretation must
+discover its selected atoms explicitly; it must not select the entire base.
+Vocabulary cannot grow after closure, and a descendant cannot be closed again
+to create chains of storage overlays. `max_atoms` continues to bound discoveries,
+independently of the number of stored base rows.
+
+`CloseFailure` retains the actual named peak and the typed cause. The caller
+accounts for external owners separately. `prior_publication_metadata_bytes`
+authenticates a publication from the original writer and reports only its
+independent metadata. Equal content or a shared vocabulary is insufficient to
+deduct shared storage. See the
+[`closed-catalog API`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/atom_interner/closed.rs)
+and [`lookup correspondence`](../lean/correspondence.md).
+
 ## Borrowing and explicit copies
 
 `model.atoms()` returns `ModelAtoms`, an immutable semantic collection view.
@@ -108,6 +161,20 @@ canonical, double-ended, exact-size and fused. Iteration yields `AtomRef` by
 value; its predicate and arguments yield `PredicateRef` and `TermRef`. These
 small references borrow an immutable owner and contain no copied payload.
 Equality, ordering and hashing use logical contents across independent owners.
+For references carrying canonical identities in the same scope,
+`TermRef::equals_ref_with`, `PredicateRef::equals_ref_with` and
+`AtomRef::equals_ref_with` decide equality
+from authenticated identities after one caller-work check. Across vocabularies
+they compare typed contents.
+Use these operations for equality tests; an ordering comparison must still
+inspect unequal values because identity numbers do not encode semantic order.
+
+`PatternTerms::unify_with` matches whole arguments against a caller-owned binding
+frame. It reuses checked typed equality and borrows captured terms. The caller
+selects the predicate and reserves the undo trail; the operation allocates
+nothing. Mismatches and interrupted attempts can leave prefix captures, so the
+caller must undo that trail suffix before trying another row. Only a successful
+match establishes complete arity. Matching arguments does not establish truth.
 
 Use `model.clone()` to retain an interpretation cheaply. Cloning `ModelAtoms`
 only copies its borrows and cannot extend the owner's lifetime. A caller needing
@@ -147,6 +214,22 @@ slot. `TermSet` separately records explicitly selected roots; interning a child
 does not make it a domain member, and ID order is not semantic term order.
 The [`scoped metadata API`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/catalog/terms.rs)
 documents each frame's storage allowance and stopped-operation behavior.
+
+`AtomAppender::insert_pattern_with` discovers an atom from a canonical pattern
+and a scoped assignment. It validates the predicate, constants and selected
+variable slots, preserving argument order and repetitions. One checked borrowed
+projection serves discovery lookup and canonical row admission, including new
+rows. It reads the immutable pattern and assignment without copying their IDs
+into an argument vector. Per-argument logical bounds apply even when the atom
+already exists. A refused discovery can leave a complete canonical row for a later
+retry, but establishes neither discovery nor support membership.
+
+For authenticated canonical inputs, the exclusive insertion entry retains its
+exact row lookup for publication. Index allocation may move storage without
+changing that lookup's meaning. The fixed projection and prepared-result headers
+count as named scratch alongside the owner; their borrowed inputs retain their
+existing ownership. A retry performs a fresh lookup; it does not reuse a decision
+left by a failed insertion.
 
 For evaluation over existing immutable owners, `DerivedTerms::new_with`
 registers their `CatalogRead` prefixes without copying payload.
@@ -194,8 +277,15 @@ error. `Model::from_ordered` imports descriptions already in strict semantic
 order without sorting; a debug build checks that producer precondition.
 `from_ordered_catalog_with` instead validates an already-canonical catalog's
 strict order under caller work and selection-storage bounds, without importing
-payload again. `ModelAtoms::of_predicate` borrows one
-predicate's atoms as the contiguous range they occupy.
+payload again. `publish_ordered_catalog_with` performs the same checks and also
+returns the actual selection-buffer peak with a refusal. Rejected capacity
+requests and the unallocated final header do not count as observations. A
+successful attempt's peak is `selection_bytes`; both measures exclude the
+retained catalog and caller storage. This receipt lets a caller account for a
+consumed failed attempt without enabling statistics.
+
+`ModelAtoms::of_predicate` borrows one predicate's atoms as the contiguous range
+they occupy.
 `Model::from_positions` returns a typed invalid-position or selection-reservation
 error without a partial model. Arc envelope allocations remain infallible.
 Neither constructor implicitly grounds or solves a program.

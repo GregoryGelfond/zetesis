@@ -167,17 +167,19 @@ The [ownership chapter](../architecture/ownership.md) and
 to the maintained implementation.
 
 The CPU source join borrows bound values from its immutable relation snapshot.
-Backtracking clears references; emitting a ground instance constructs its owned
-values. This changes storage ownership without changing the substitution used by
-whole-tuple matching, filters or frozen gates. The implementation obligation is
-that each live binding denotes its matched source value until that branch ends,
-and emitted values preserve full typed identity. Rust lifetimes prevent the
-snapshot from being invalidated while those references are live; identity and
-join tests check the concrete behavior. This does not establish source-join
-coverage or a Lean-to-Rust refinement.
+Backtracking clears slots; a ground instance lends checked keys over those
+bindings, and retained consequences select canonical identities. This changes
+storage ownership without changing the substitution used by whole-tuple
+matching, filters or frozen gates. Each live binding must denote its matched
+source value until that branch ends, and consequence admission must preserve
+full typed identity. Rust lifetimes prevent the snapshot from being invalidated
+while those references are live; identity and join tests check the concrete
+behavior. This does not establish source-join coverage or a Lean-to-Rust
+refinement.
 
-The eager formula join likewise lends its completed partial frame through the
-same `Binding` interface when no generator needs ownership. The relevant existing
+The formula join lends its completed partial frame to both support generation
+and rule instantiation through the same `Binding` interface when no generator
+needs ownership. The relevant existing
 laws are `BindingScopes.readAll_agrees`, `AtomKeys.tuple_agrees` and
 `TableBindings.join_family_preserved`: equal checked reads and equal ordered
 join-step families preserve typed atom identities and the joined family. The
@@ -380,6 +382,17 @@ ordering, transactional publication, allocation, machine bounds and Rust borrows
 remain implementation obligations. These representation laws do not replace the
 reduct or establish answer-set membership.
 
+[`ClosedCatalog`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ClosedCatalog.lean)
+composes a base-row lookup with a local lookup whose result is offset by the
+base length. Sound component queries return the same atom as the concatenated
+row decoder; complete component queries make absence exact. Only identifying
+one exact row position additionally requires uniqueness across the whole
+base and suffix. These laws reuse `AtomCatalogs` and supply the query premises
+for canonical discovery below. They do not establish hash collision handling,
+scope authentication, machine offsets, physical sharing or publication. The
+storage prefix/suffix partition is independent of the semantic base/defined-atom
+partition in `TerminalDefinitions`.
+
 [`CanonicalCatalog`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/CanonicalCatalog.lean)
 separates original occurrences from canonical IDs. `selection_exact` composes
 those two decoders, including duplicate occurrences; `normalized_selection_exact`
@@ -391,6 +404,36 @@ atoms, and `raw_ids_do_not_determine_interpretation` shows why raw equality is
 insufficient. The laws reuse `ModelSelections`; they do not establish DAG
 interning uniqueness, Rust comparison/hash consistency, lifetimes or storage
 accounting.
+
+`CanonicalCatalog.find_discovery` separates canonical query resolution from a
+unique discovery map. `discovery_lookup_exact` equates that composition with the
+existing structural occurrence lookup, assuming sound and complete canonical
+queries, injective successful decoding, and an exact inverse of discovery.
+`undiscovered_identity_absent` shows that a canonical row without a discovery
+entry remains absent from every discovery slot. The inverse premise does not
+apply to occurrence catalogs that repeat an identity at different positions.
+Rust must maintain the inverse at publication, authenticate the readable scope
+and prefix, and preserve refusal and allocation boundaries. These laws establish
+neither a concrete hash/index implementation nor support or answer-set membership.
+
+The selected discovery-order operation reuses `normalized_selection_exact` once
+its result is a permutation of the supplied identities. Rust must establish
+that the semantic index visits each discovery once, that the temporary mask
+selects exactly the supplied positions, and that filtering preserves typed
+order. `ColumnRelations.row_mask_roundtrip` uses the same membership,
+uniqueness and ordered-filter argument for numeric row order; it is not a
+verification of the AVL traversal. Dense traversal and sparse sorting therefore
+share the denotation obligation while retaining separate executable checks for
+ordering, scratch, interruption and transactional replacement.
+
+Checked equality can reuse a canonical identity only after authenticating its
+scope and readable prefix. Equal IDs then use the same decoder; deciding that
+unequal IDs denote unequal terms additionally requires interning uniqueness.
+The Rust stores must establish that stronger invariant, including normalized
+aliases and exact hash-collision checks. These catalog laws do not prove it.
+Foreign scopes and sign-adjusted predicate views require typed comparison.
+Neither equality shortcut establishes numeric or ASP order. The callback before
+the identity probe and preservation of its refusal are executable obligations.
 
 `TemplateCatalog` stores shared ordered terms, patterns and filters beneath
 separate rule and objective policies. `Program` retains rule topology and its
@@ -412,6 +455,28 @@ that make its decoder total. Refinement of the concrete template storage and
 flat condition-node evaluator to these definitions and
 `ObjectiveConditions.Query` remains an implementation obligation. These laws
 neither prove source compilation nor infer answer-set membership from identity.
+
+`AtomAppender::insert_pattern_with` borrows a checked projection of constants and
+assigned variables, reused for discovery lookup and row admission. The tuple
+is a mathematical sequence; the implementation need not materialize an ID vector.
+`CanonicalTemplates.substitute_decodes` supplies its substitution obligation;
+`AtomKeys.key_identity` and `membership_identity` relate the decoded tuple and
+signed predicate to extensional lookup. Rust must establish the scope, prefix,
+arity and complete-binding premises, preserve repeated arguments, and apply
+logical limits even on an occupied lookup. Shared immutable input borrows must
+keep each projected coordinate unchanged from validation through publication.
+Fixed preparation metadata, scratch/growth accounting and
+publication after all fallible checks remain executable obligations. Retaining
+a complete canonical row after refusal does not establish discovery or support
+membership.
+
+Reusing a prepared canonical lookup additionally requires the same immutable
+tuple and unchanged logical row index until publication. The exclusive Rust
+entry enforces the writer boundary; index reservations may rehash storage but
+must not change logical membership. The prepared result contains no bucket
+address and is discarded on failure. These are implementation obligations for
+the existing lookup law, not a separate answer-set semantics or a new proof of
+the Rust implementation.
 
 `DerivedTerms` gives registered input aliases and newly constructed terms one
 fresh identity scope. Input edges borrow exact immutable catalog prefixes;
@@ -696,6 +761,17 @@ accounting, fallible matching and any device masks still need executable
 correspondence arguments. The [proof guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/column-relations.md)
 explains the hypotheses with a correlated-tuple example.
 
+The append dictionary's canonical inverse implements the same encoder. Each
+published representative must have exactly one inverse entry naming its local
+equality ID, and every inverse entry must name that representative's whole
+canonical term. Under this invariant, an authenticated identity miss is a true
+dictionary absence. The semantic AVL remains responsible for new-value placement
+and queries without an eligible canonical identity. Rust must preserve the
+invariant through append, refusal, capacity growth and clear, and validate the
+vocabulary and readable prefix before lookup. These transaction and resource
+properties are executable obligations; the dictionary round-trip laws do not
+prove a particular hash-map implementation.
+
 [`FiniteTables`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/FiniteTables.lean)
 relates intersections of value supports to surviving complete rows. Projection
 preserves these rows, contracts their domains and is idempotent for a single
@@ -824,6 +900,37 @@ producer is an invariant refusal, not a constraint verdict. Exact evaluation
 consumes remaining work and counts its actual capacity beside the retained least
 interpretation after CSR release. The append/partition law does not prove those
 Rust ownership, work, first-error or source-completeness obligations.
+
+[`TerminalDefinitions`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/TerminalDefinitions.lean)
+separates arbitrary base atoms from new derived atoms using a disjoint sum. Each
+definition has one derived head and a positive conjunction of base atoms; the
+base theory never reads derived atoms. `stable_iff` characterizes every full
+answer set as a base answer set plus exactly its definition consequences.
+`stable_extend_iff` and `unique_stable_extension` give membership preservation
+and a unique full extension of each base answer set. Several producers of one
+head contribute by existential union; empty bodies and duplicate occurrences
+are allowed. The frozen-reduct characterization requires a subset of a candidate
+satisfying the definitions and imposes consequence containment. Minimality,
+rather than classical satisfaction alone, excludes extra derived atoms.
+
+Applying this law to source programs still requires a complete semantic
+partition: every producer occurrence, all body scopes and implicit coherence
+constraints must respect the base/derived separation. Ground-instance coverage,
+preserved source diagnostics, canonical owner correspondence, reconstruction
+before publishing a full answer, and failure and coverage accounting remain
+unproved implementation obligations. This one-layer theorem does not establish
+a recursive definition schedule or certify a source or runtime optimization.
+
+The executable consumer is
+[`formula_terminal`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_terminal.rs).
+Its partition matches the exact normalized source to every selected IR producer
+and scans remaining semantic reads. Reconstruction joins true base-model rows
+and publishes their union with derived heads through one canonical descendant
+store. [`TerminalSession`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/src/terminal_session.rs)
+retains the original subject, counts only completed extensions as original
+answers, and records an unfinished extension separately. These Rust checks
+implement the stated obligations; the existing theorem does not prove their
+source-to-proposition or machine-execution correspondence.
 
 [`StreamedConstraints`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/StreamedConstraints.lean)
 adds an executable finite scan beneath that filtering law. A violation names an

@@ -12,6 +12,15 @@ use zetesis_themelios::objective_bound::ObjectiveBoundError;
 /// its own storage policy. Its work and storage are outside solver resource limits.
 #[derive(Debug)]
 pub enum ExecutionObservation<'a> {
+    /// The original source is represented by a checked base theory and terminal
+    /// definitions. Formula populations and membership events that follow refer
+    /// to that base; host reconstruction precedes every original answer.
+    TerminalDefinitions {
+        /// Requested schedule; this initial composite profile requires Auto.
+        requested: Grounder,
+        /// Admitted deferred rule occurrences, not a count of ground answers.
+        deferred_templates: usize,
+    },
     /// The complete producer core is retained; eligible source constraints are
     /// checked on the host before any original-program answer is accepted.
     HybridGrounding {
@@ -139,7 +148,8 @@ pub enum ExecutionObservation<'a> {
         atoms: usize,
         /// DAG node count.
         nodes: usize,
-        /// Original asserted root count.
+        /// Asserted roots of this membership subproblem. Under a preceding
+        /// `TerminalDefinitions` event these are base roots, not the full source.
         roots: usize,
         /// Written constraints over a keyed value asked as the one atom their
         /// key admits before grounding; zero when no constraint had the form.

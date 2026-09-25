@@ -82,10 +82,9 @@ impl<'a> Pattern<'a> {
         context: &mut MatchContext<'_>,
     ) -> Result<Option<Vec<(usize, TermRef<'source>)>>, FormulaFailure> {
         context.work()?;
-        if atom
+        if !atom
             .predicate()
-            .compare_ref_with(self.atom.predicate(), || context.work())?
-            .is_ne()
+            .equals_ref_with(self.atom.predicate(), || context.work())?
         {
             return Ok(None);
         }
@@ -173,8 +172,7 @@ impl MatchContext<'_> {
             .charge_work(amount, self.work.limits, self.work.location)
     }
     fn equal(&mut self, left: TermRef<'_>, right: TermRef<'_>) -> Result<bool, FormulaFailure> {
-        left.compare_ref_with(right, || self.work())
-            .map(std::cmp::Ordering::is_eq)
+        left.equals_ref_with(right, || self.work())
     }
 }
 

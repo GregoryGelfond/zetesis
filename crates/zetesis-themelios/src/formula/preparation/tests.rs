@@ -171,3 +171,79 @@ fn grounding_retains_an_independent_scalar_budget_charge() {
         ));
     }
 }
+
+#[test]
+fn prepared_einstein_retains_a_terminal_flat_definition() {
+    let prepared = prepare_formula(
+        include_str!("../../../../../examples/einstein-riddle.lp").into(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .unwrap();
+    assert_eq!(
+        prepared.analysis_basis(),
+        crate::AnalysisBasis::NormalizedProgram
+    );
+    let analysis = zetesis_domain::terminal::analyze(
+        prepared.analyzed_program(),
+        crate::DomainLimits::default(),
+    );
+    assert_eq!(
+        analysis.status(),
+        zetesis_domain::terminal::Status::Complete
+    );
+    assert!(analysis.belongs_to(prepared.analyzed_program()));
+    assert_eq!(analysis.definitions().len(), 1);
+    let themelios_program::program::Statement::Rule(source_rule) = analysis.definitions()[0].get()
+    else {
+        panic!("a terminal definition is a rule");
+    };
+    let themelios_program::program::Head::Literal(literal) = source_rule.head().get() else {
+        panic!("a terminal definition has one ordinary head");
+    };
+    let themelios_program::program::LiteralInner::Atom(atom) = &literal.inner else {
+        panic!("a terminal head is an atom");
+    };
+    assert_eq!(atom.get().name.as_str(), "solution");
+    assert_eq!(source_rule.body().get().elements().count(), 5);
+    // This establishes the prepared fixture's profile, not the future complete
+    // source-to-IR correspondence or answer-reconstruction equivalence.
+    let preparation = &prepared.preparation;
+    let mut counters = Counters::default();
+    let components = preparation
+        .catalog
+        .component_view(&preparation.limits, &mut counters, preparation.location)
+        .unwrap()
+        .unwrap();
+    let rules: Vec<_> = preparation
+        .program
+        .rules
+        .iter()
+        .filter(|rule| {
+            let crate::formula_ir::HeadIr::Normal(Some(head)) = rule.head else {
+                return false;
+            };
+            head.get(
+                components,
+                &preparation.limits,
+                &mut counters,
+                rule.location,
+            )
+            .unwrap()
+            .predicate()
+            .name()
+                == "solution"
+        })
+        .collect();
+    assert_eq!(rules.len(), 1);
+    let rule = rules[0];
+    assert_eq!(rule.variables, 6);
+    assert_eq!(rule.body_variables, rule.variables);
+    assert!(rule.bindings.is_none());
+    assert_eq!(rule.body.len(), 5);
+    assert!(rule.body.iter().all(|literal| matches!(
+        literal,
+        crate::formula_ir::LiteralIr::Atom(themelios_program::program::DefaultNegation::None, _)
+    )));
+}

@@ -34,6 +34,10 @@ fn round_reservation_counts_the_live_source_owner() {
         .retain_atom((&atom).into(), Activity::Optional, 0, &mut context)
         .unwrap();
     owner.publish_predicate(&mut context).unwrap();
+    let selected = owner
+        .atoms
+        .source(0, &limits, context.counters, location)
+        .unwrap();
     owner.round = Some(Round::new(&context));
     let unused = context.computation.lease();
     let current = limits.max_support_bytes
@@ -41,8 +45,9 @@ fn round_reservation_counts_the_live_source_owner() {
             .computation
             .allowance(&unused, &limits, location)
             .unwrap();
-    // Existing source identity needs no payload allocation. The new round's
-    // one classification cell still coexists with every source/selection byte.
+    // Stage the admitted source identity directly: re-entering atom admission
+    // would test its prepared-entry scratch before this round reservation.
+    // The classification cell coexists with every live source/selection byte.
     let required = current + size_of::<Option<Activity>>();
     let tight = FormulaLimits {
         max_support_bytes: required - 1,
@@ -56,9 +61,12 @@ fn round_reservation_counts_the_live_source_owner() {
         location,
     };
     assert!(
-        matches!(owner.retain_atom((&atom).into(), Activity::Required, 1, &mut refused),
+        matches!(owner.stage(&selected, Activity::Required, 1, &mut refused),
         Err(FormulaFailure::Limit { resource: FormulaResource::SupportBytes, observed, .. })
             if observed == required as u128)
     );
+    let round = owner.round.as_ref().unwrap();
+    assert!(round.updates.is_empty());
+    assert_eq!(round.updates.capacity(), 0);
     assert!(owner.activity[0] == Activity::Optional);
 }

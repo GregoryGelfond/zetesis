@@ -604,7 +604,7 @@ fn round_heads_share_one_discovery_without_entering_the_borrowed_snapshot() {
             assert_eq!(relations.current_bytes(), retained);
             assert!(
                 computation
-                    .contains(key, &limits, &mut counters, location())
+                    .contains_pattern(pattern, &binding, &limits, &mut counters, location())
                     .unwrap()
             );
         }
@@ -678,6 +678,134 @@ fn round_publication_orders_new_rows_by_typed_identity() {
             ValueNodeRef::Number(3)
         ]
     );
+}
+
+fn signed_row(name: &str, sign: Sign, value: i32) -> Atom {
+    Atom::new(
+        Predicate::with_sign(name, 1, sign).unwrap(),
+        vec![Value::Number(value)],
+    )
+    .unwrap()
+}
+
+#[test]
+fn predicate_runs_survive_new_directory_insertions() {
+    let limits = FormulaLimits::default();
+    let mut counters = Counters::default();
+    let mut catalog = SupportCatalog::default();
+    for name in ["b", "z"] {
+        insert(&mut catalog, &signed_row(name, Sign::Positive, 0));
+    }
+    {
+        let (_, mut append) = catalog.split(&limits, &mut counters, location()).unwrap();
+        for (name, sign) in [
+            ("z", Sign::Positive),
+            ("b", Sign::Negative),
+            ("c", Sign::Positive),
+            ("b", Sign::Positive),
+            ("a", Sign::Positive),
+        ] {
+            for value in [2, 1] {
+                append
+                    .atom(
+                        (&signed_row(name, sign, value)).into(),
+                        &limits,
+                        &mut counters,
+                        location(),
+                    )
+                    .unwrap();
+            }
+        }
+        append.order(&limits, &mut counters, location()).unwrap();
+    }
+    catalog.publish(&limits, &mut counters, location()).unwrap();
+    let relations = catalog
+        .snapshot(&limits, &mut counters, location())
+        .unwrap();
+    for (name, sign, old) in [
+        ("a", Sign::Positive, 0),
+        ("b", Sign::Positive, 1),
+        ("b", Sign::Negative, 0),
+        ("c", Sign::Positive, 0),
+        ("z", Sign::Positive, 1),
+    ] {
+        let predicate = Predicate::with_sign(name, 1, sign).unwrap();
+        let expected = if old == 0 {
+            vec![ValueNodeRef::Number(1), ValueNodeRef::Number(2)]
+        } else {
+            vec![
+                ValueNodeRef::Number(0),
+                ValueNodeRef::Number(1),
+                ValueNodeRef::Number(2),
+            ]
+        };
+        assert_eq!(relations.old_rows(&predicate), old);
+        assert_eq!(
+            relations
+                .rows(&predicate)
+                .map(|row| row.value(0).unwrap().descriptor())
+                .collect::<Vec<_>>(),
+            expected
+        );
+    }
+    assert_eq!(relations.predicates().count(), 5);
+}
+
+fn publication_work(grouped: bool) -> u64 {
+    let limits = FormulaLimits::default();
+    let mut catalog = SupportCatalog::default();
+    for name in ["a", "z"] {
+        insert(&mut catalog, &signed_row(name, Sign::Positive, 0));
+    }
+    {
+        let mut counters = Counters::default();
+        let (_, mut append) = catalog.split(&limits, &mut counters, location()).unwrap();
+        for name in ["a", "z"] {
+            for value in [1, 2] {
+                append
+                    .atom(
+                        (&signed_row(name, Sign::Positive, value)).into(),
+                        &limits,
+                        &mut counters,
+                        location(),
+                    )
+                    .unwrap();
+            }
+        }
+    }
+    if !grouped {
+        // Change only cross-predicate publication order: each relation still
+        // receives 1 then 2, with identical canonical identities and capacities.
+        catalog.pending.swap(1, 2);
+    }
+    let mut counters = Counters::default();
+    catalog.publish(&limits, &mut counters, location()).unwrap();
+    let work = counters.accounting.work;
+    let relations = catalog
+        .snapshot(&limits, &mut counters, location())
+        .unwrap();
+    for name in ["a", "z"] {
+        let predicate = Predicate::new(name, 1).unwrap();
+        assert_eq!(
+            relations
+                .rows(&predicate)
+                .map(|row| row.value(0).unwrap().descriptor())
+                .collect::<Vec<_>>(),
+            vec![
+                ValueNodeRef::Number(0),
+                ValueNodeRef::Number(1),
+                ValueNodeRef::Number(2)
+            ]
+        );
+    }
+    work
+}
+
+#[test]
+fn predicate_runs_avoid_repeated_directory_searches() {
+    // A per-row directory search performs the same total work for these two
+    // populations. Reusing each contiguous run removes those repeated searches.
+    assert!(publication_work(true) < publication_work(false));
 }
 
 #[test]

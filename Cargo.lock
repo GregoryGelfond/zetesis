@@ -1956,7 +1956,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-cli"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "clap",
  "rayon",
@@ -1980,14 +1980,14 @@ dependencies = [
 
 [[package]]
 name = "zetesis-core"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "proptest",
 ]
 
 [[package]]
 name = "zetesis-cpu"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "criterion",
  "rayon",
@@ -1996,7 +1996,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-domain"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "proptest",
  "themelios-base",
@@ -2006,7 +2006,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-experiments"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "clap",
  "criterion",
@@ -2028,7 +2028,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-ferraris"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "criterion",
  "proptest",
@@ -2040,7 +2040,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-maintenance"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "clap",
  "regex",
@@ -2053,7 +2053,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-objective"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "proptest",
  "zetesis-core",
@@ -2062,7 +2062,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-presentation"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "clap",
  "unicode-width",
@@ -2070,7 +2070,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-sat"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "proptest",
  "rayon",
@@ -2081,7 +2081,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-solve"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "rayon",
  "zetesis-core",
@@ -2097,11 +2097,11 @@ dependencies = [
 
 [[package]]
 name = "zetesis-telemetry"
-version = "0.1.4"
+version = "0.1.5"
 
 [[package]]
 name = "zetesis-themelios"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "hashbrown 0.17.1",
  "proptest",
@@ -2122,7 +2122,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-validation"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "clap",
  "nix",
@@ -2141,7 +2141,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-wgpu"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "bytemuck",
  "naga",

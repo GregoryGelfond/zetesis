@@ -14,10 +14,29 @@ pub(crate) fn validate_symbol(symbol: &Symbol) -> Result<(), ValueError> {
     traverse(symbol, ValueLimits::default(), Validation::default())
 }
 
-trait Sink {
+pub(crate) trait Sink {
     type Output;
-    fn node(&mut self, node: ValueNodeRef<'_>) -> Result<(), ValueError>;
-    fn finish(self, bytes: u128, limits: ValueLimits) -> Result<Self::Output, ValueError>;
+    type Error: From<ValueError>;
+    fn node(&mut self, node: ValueNodeRef<'_>) -> Result<(), Self::Error>;
+    fn finish(self, bytes: u128, limits: ValueLimits) -> Result<Self::Output, Self::Error>;
+    fn before(&mut self) -> Result<(), Self::Error> {
+        Ok(())
+    }
+    fn continues(&self) -> bool {
+        true
+    }
+    fn start<'a>(&mut self, symbol: &'a Symbol) -> Result<Vec<(&'a Symbol, usize)>, Self::Error> {
+        Ok(vec![(symbol, 1)])
+    }
+    fn reserve(
+        &mut self,
+        pending: &mut Vec<(&Symbol, usize)>,
+        additional: usize,
+    ) -> Result<(), Self::Error> {
+        pending
+            .try_reserve(additional)
+            .map_err(|_| ValueError::Allocation.into())
+    }
 }
 
 #[derive(Default)]
@@ -27,6 +46,7 @@ struct Construction {
 
 impl Sink for Construction {
     type Output = Value;
+    type Error = ValueError;
 
     fn node(&mut self, node: ValueNodeRef<'_>) -> Result<(), ValueError> {
         self.nodes
@@ -50,6 +70,7 @@ struct Validation {
 
 impl Sink for Validation {
     type Output = ();
+    type Error = ValueError;
 
     fn node(&mut self, node: ValueNodeRef<'_>) -> Result<(), ValueError> {
         self.spelling_bytes += node.rendered_bytes();
@@ -81,15 +102,17 @@ fn check(resource: ValueResource, observed: u128, limit: usize) -> Result<(), Va
 /// counts the completed preorder prefix. Each typed Symbol is visited once,
 /// independently of the sink. Work is O(nodes + text), with O(frontier) borrowed
 /// traversal storage in addition to the chosen sink's owned output.
-fn traverse<S: Sink>(
+pub(crate) fn traverse<S: Sink>(
     symbol: &Symbol,
     limits: ValueLimits,
     mut sink: S,
-) -> Result<S::Output, ValueError> {
-    let mut pending = vec![(symbol, 1usize)];
+) -> Result<S::Output, S::Error> {
+    let mut pending = sink.start(symbol)?;
     let mut nodes = 0_u128;
     let mut bytes = 0_u128;
-    while let Some((symbol, depth)) = pending.pop() {
+    while !pending.is_empty() && sink.continues() {
+        sink.before()?;
+        let (symbol, depth) = pending.pop().expect("checked nonempty frontier");
         for (resource, observed, limit) in [
             (ValueResource::Nodes, nodes + 1, limits.max_nodes),
             (ValueResource::Depth, depth as u128, limits.max_depth),
@@ -105,9 +128,7 @@ fn traverse<S: Sink>(
             nodes + pending.len() as u128 + children.len() as u128 + 1,
             limits.max_nodes,
         )?;
-        pending
-            .try_reserve(children.len())
-            .map_err(|_| ValueError::Allocation)?;
+        sink.reserve(&mut pending, children.len())?;
         pending.extend(children.iter().rev().map(|child| (child, depth + 1)));
         sink.node(node)?;
         nodes += 1;

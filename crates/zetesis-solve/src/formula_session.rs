@@ -403,6 +403,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             closure_execution: None,
             query_execution: None,
             hybrid_execution: None,
+            terminal_execution: None,
             formula_execution: self
                 .models
                 .as_ref()

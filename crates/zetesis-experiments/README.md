@@ -466,6 +466,25 @@ phase is absent, unused detailed counters are zero, and unavailable work remains
 null and refuses complete attribution. Logical limits and named support capacity
 are not allocator or RSS measurements, nor a wall-clock deadline.
 
+Support attribution includes `support_construction_work`, the accepted formula
+work of the complete support build, and four disjoint operation subtotals:
+`support_production_work`, `support_order_work`, `support_wake_work` and
+`support_publication_work`. Production includes selected-rule traversal,
+variants, domain guards and head production; publication includes canonical
+commit and relation postings. The remainder covers plan preparation, initial
+scheduling, snapshots/query preparation and round control. Preparation before
+the build and later completed-support query setup are outside the total. These
+fields retain accepted charges before refusal or unwind, exclude the refused
+charge, and add no new phase callbacks. They are neither elapsed times nor
+expansion-budget units. Do not add the subtotals to their containing total.
+
+Production also reports two disjoint subsets: `support_join_work` measures
+advancing support-generation joins, including local joins, and
+`support_head_work` measures resolving, admitting and selecting a derived head.
+Join setup and keyed-group validation remain in the production remainder. These
+subsets must not be added to production or to the four construction subtotals;
+they preserve the same accepted-prefix, zero and unavailable-field rules.
+
 After timing, each result is checked against the reference atom/formula catalog,
 source evidence and complete native model collection. A fingerprint is available
 only when its full specified identity view can be formed; unavailability is

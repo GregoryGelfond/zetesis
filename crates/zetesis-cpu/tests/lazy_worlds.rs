@@ -305,22 +305,37 @@ fn mask_work_uses_the_shared_source_quota() {
 fn mask_preparation_can_stop_without_offering_instances() {
     let program = program(vec![]);
     let seeds = vec![Seed::new(&program, []).unwrap(); 33];
-    let failure = lazy::check_with_source(
-        &program,
-        &seeds,
-        lazy::Limits {
-            max_source_work: 1,
-            ..Default::default()
-        },
-        lazy::SourceSelection::Worlds,
-        &Cancellation::default(),
-        lazy::evaluate,
-    )
-    .unwrap_err();
-    assert!(matches!(
-        failure.cause,
-        lazy::Cause::Source(Stop::WorkLimit)
-    ));
+    let complete = run(&program, &seeds, lazy::SourceSelection::Worlds);
+    assert_eq!(complete.progress.mask_words, 2);
+    // Locate partial root-mask preparation independently of the canonical
+    // ordering work preceding it. The complete empty fixture bounds the search.
+    let failure = (0..complete.progress.source_work)
+        .find_map(|maximum| {
+            let mut invoked = false;
+            let failure = lazy::check_with_source(
+                &program,
+                &seeds,
+                lazy::Limits {
+                    max_source_work: maximum,
+                    ..Default::default()
+                },
+                lazy::SourceSelection::Worlds,
+                &Cancellation::default(),
+                |chunk| {
+                    invoked = true;
+                    lazy::evaluate(chunk)
+                },
+            )
+            .unwrap_err();
+            assert!(!invoked, "executor reached at work ceiling {maximum}");
+            assert!(matches!(
+                failure.cause,
+                lazy::Cause::Source(Stop::WorkLimit)
+            ));
+            assert_eq!(failure.progress.source_work, maximum);
+            (failure.progress.mask_words > 0).then_some(failure)
+        })
+        .expect("a work cutoff must reach partial two-word mask preparation");
     assert_eq!(failure.progress.rounds, 0);
     assert_eq!(failure.progress.instances, 0);
     assert_eq!(failure.progress.mask_words, 1);

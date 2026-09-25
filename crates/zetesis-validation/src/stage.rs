@@ -53,6 +53,7 @@ pub(crate) fn parse(stderr: &str) -> Result<Option<StageTimings>, String> {
         Some("eager") => "eager",
         Some("lazy_interleaved") => "lazy_interleaved",
         Some("mixed") => "mixed",
+        Some("eager_base_terminal_definitions") => "eager_base_terminal_definitions",
         _ => return Err("missing or unsupported stage grounding mode".into()),
     };
     let mut stages = BTreeMap::new();

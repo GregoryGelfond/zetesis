@@ -321,10 +321,11 @@ fn missing_completion_prevents_a_human_summary() {
     let mut unclassified = Progress::new();
     unclassified.apply(session.stop());
     assert_eq!(unclassified.semantic().unwrap().verified_models(), 1);
-    for progress in [Progress::new(), unclassified] {
+    let unstarted = Progress::new();
+    for progress in [&unstarted, &unclassified] {
         let mut bytes = Vec::new();
         assert!(matches!(
-            crate::view::human::finish(&mut bytes, &progress, crate::ColorMode::Never),
+            crate::view::human::finish(&mut bytes, progress, crate::ColorMode::Never),
             Err(RunError::CompletionUnavailable)
         ));
         assert!(bytes.is_empty());

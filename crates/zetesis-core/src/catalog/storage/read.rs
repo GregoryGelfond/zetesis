@@ -126,9 +126,7 @@ impl<'a> Read<'a> {
     }
     fn row_segment(self, id: usize) -> Option<&'a RowSegment> {
         match self {
-            Self::Snapshot(snapshot) => {
-                locate(&snapshot.data.segments, id, |segment| segment.start)
-            }
+            Self::Snapshot(snapshot) => snapshot.rows().segment(id),
             Self::Writer(store) => store.row_segment(id),
             Self::Frozen(_) => None,
         }

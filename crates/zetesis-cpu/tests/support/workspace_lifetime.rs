@@ -45,10 +45,21 @@ fn completed_scans_retain_the_join_reservation() {
     // owners, including the workspace from the completed source scan.
     state.intern(&atom, limits, &mut work).unwrap();
     let identity = state.catalog.get(0).unwrap().predicate().name().as_ptr();
+    // Measure the entry's own envelope independently of the transport owner.
+    // Even an occupied lookup retains its prepared-result slot while the
+    // completed source workspace remains live.
+    let bounds = state
+        .transport
+        .catalog_limits(limits, state.catalog.len())
+        .unwrap();
+    let entry_bytes = state
+        .catalog
+        .entry_atom_with(&atom, bounds, || work.tick())
+        .unwrap()
+        .storage_bytes();
     let ceiling = state.transport.fixed_bytes
         + size_of::<usize>()
-        + usize::try_from(state.catalog.storage_bytes() - program.shared_vocabulary_bytes())
-            .unwrap()
+        + usize::try_from(entry_bytes - program.shared_vocabulary_bytes()).unwrap()
         + retained;
     let below = Limits {
         max_host_bytes: ceiling - 1,

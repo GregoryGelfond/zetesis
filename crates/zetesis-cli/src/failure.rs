@@ -39,6 +39,8 @@ pub struct PartialReport {
     /// Retained-core answers and source-constraint decisions, including pending
     /// checks that establish no membership in the original program.
     pub hybrid_execution: Option<zetesis_solve::HybridExecutionStatistics>,
+    /// Base answers and completed original reconstruction, including a pending attempt.
+    pub terminal_execution: Option<zetesis_solve::TerminalExecutionStatistics>,
     /// Actual lazy device work, including incomplete batch progress.
     pub lazy_execution: Option<crate::LazyExecutionStatistics>,
     /// Shared CPU source/world work, including incomplete batch progress.
@@ -161,6 +163,7 @@ impl Progress {
             countermodel_statistics: semantic.countermodel_statistics().copied(),
             formula_execution: semantic.formula_execution().cloned(),
             hybrid_execution: semantic.hybrid_execution().copied(),
+            terminal_execution: semantic.terminal_execution().copied(),
             lazy_execution: semantic.lazy_execution().cloned(),
             shared_execution: semantic.shared_execution().cloned(),
             closure_execution: semantic.closure_execution().cloned(),
@@ -229,6 +232,9 @@ impl Progress {
                 .cloned(),
             hybrid_execution: semantic
                 .and_then(crate::SemanticOutcome::hybrid_execution)
+                .copied(),
+            terminal_execution: semantic
+                .and_then(crate::SemanticOutcome::terminal_execution)
                 .copied(),
             lazy_execution: semantic
                 .and_then(crate::SemanticOutcome::lazy_execution)

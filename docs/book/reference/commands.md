@@ -77,14 +77,20 @@ matters. The reduct remains the criterion for accepting an answer.
 | --- | --- |
 | `--device auto` | CPU execution. Explicit GPU requests are honored or refused. |
 | `--threads auto` | At most four available host threads; one if availability is unknown. |
-| `--grounder auto` | Prefer lazy source joins where admitted; use eager admission for general formulas. |
+| `--grounder auto` | Prefer lazy source joins where admitted; formula admission can defer eligible terminal definitions and ground the remaining rules eagerly. |
 | `--time-limit DURATION` | No deadline when omitted; accepts whole seconds or `s`, `m`, `h`. |
 | `--memory-budget SIZE` | Host-based allowance for named storage; accepts bytes or `B`, `KiB`, `MiB`, `GiB`, `TiB`. |
 
+For formula inputs, automatic admission can reconstruct terminal positive
+definitions from each verified base answer. It returns full original answers;
+`#show` does not determine which definitions qualify. See the
+[grounding contract](../architecture/grounding.md#terminal-definition-analysis).
+Explicit `--grounder eager` still requests complete materialization.
+
 For a formula input, explicit `--grounder lazy` selects CPU hybrid grounding:
 the producer core is materialized, while eligible integrity constraints are
-checked from their admitted source families. Automatic formula admission remains
-eager. The first hybrid profile accepts `--device cpu` or `auto`, uses indexed
+checked from their admitted source families. This hybrid profile is separate from
+automatic terminal-definition reconstruction. It accepts `--device cpu` or `auto`, uses indexed
 joins and refuses objective declarations and table joins. Relational lazy
 closure retains its existing CPU and device routes.
 
@@ -150,6 +156,32 @@ receipts remain unavailable, even when hardware or instrumentation was requested
 The full counter catalog remains in JSON statistics, the compatibility record
 view and the typed library values.
 
+Detailed grounding attribution reports accepted formula work for support
+construction. `support_construction_work` includes the complete fixed-point
+build. Four disjoint subtotals identify its operations:
+
+- `support_production_work`: selected-rule traversal, variants, domain guards,
+  head production and subsequent producer selection.
+- `support_order_work`: sorting pending support rows by typed identity.
+- `support_wake_work`: preparing the next producer wake set.
+- `support_publication_work`: initial, round and final publication, including
+  canonical commit and relation postings.
+
+Within production, `support_join_work` measures advancing support-generation
+joins, including local joins, and `support_head_work` measures resolving,
+admitting and selecting a derived head. These two disjoint subsets exclude join
+setup and keyed-group validation. Do not add them to production or to the four
+construction subtotals; the remaining production work includes those excluded
+steps, rule traversal, variants, domain guards and subsequent producer selection.
+
+Subtracting these subtotals from construction work leaves plan preparation,
+initial scheduling, snapshot/query preparation and round control. Preparation
+before this build and later completed-support query setup are outside the total.
+These are accepted charges against the formula work limit, not durations or
+expansion-budget units. Failed and unwinding operations retain their accepted
+prefix; a refused charge itself is excluded. A partial count does not establish
+completed support. The existing public phase sequence is unchanged.
+
 ```sh
 zetesis solve program.lp --all --stats
 zetesis solve program.lp --all --json > answers.json
@@ -199,7 +231,7 @@ tight support, a general reduct query, and optimum ties. It compares the
 selected route with CPU execution and known full-model contracts. Actual route
 and work evidence is mandatory; a requested device name alone cannot pass a
 check. This small installed check is distinct from the repository's maintained
-59-test physical qualification suite.
+60-test physical qualification suite.
 
 Corpus and backend checks accept `--device cpu` (the default) or `--device metal`.
 Metal corpus checks request the eager general formula route. This is the scope

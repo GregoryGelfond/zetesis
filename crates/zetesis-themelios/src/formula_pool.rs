@@ -516,6 +516,18 @@ impl Rewrite for Expand<'_, '_> {
     }
 }
 
+/// Logical syntax-copy units shared by source normalization and terminal
+/// partitioning. These exclude other AST carriers, provenance and allocator
+/// overhead; they are not retained-capacity or whole-heap measurements.
+pub(crate) fn source_copy_cost(statement: &Statement) -> (u128, u128) {
+    let mut footprint = Footprint {
+        nodes: 1,
+        ..Footprint::default()
+    };
+    footprint.visit_statement(statement);
+    (footprint.nodes, footprint.bytes)
+}
+
 #[derive(Default)]
 struct Footprint {
     nodes: u128,

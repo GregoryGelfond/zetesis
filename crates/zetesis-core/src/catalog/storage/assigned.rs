@@ -2,25 +2,22 @@
 
 use super::control::Work;
 use super::nodes::ceiling;
-use super::{AtomId, Failure, Fault, PredicateId, Store, TermId, budget};
+use super::{Failure, Fault, Store, TermId, budget};
 use crate::catalog::Limits;
 use crate::{ValueNodeRef, ValueResource};
 
 impl Store {
-    pub(crate) fn check_assigned_with<E>(
+    /// The caller has authenticated the coordinate and accessible prefix. Check
+    /// its cached logical measures once before a projected row can be queried.
+    pub(crate) fn check_projected_term_with<E>(
         &self,
-        values: &[Option<TermId>],
-        slots: &[usize],
+        id: TermId,
         limits: Limits,
         mut before: impl FnMut() -> Result<(), E>,
     ) -> Result<(), Failure<E>> {
         let mut work = Work::new(&mut before);
-        for &slot in slots {
-            work.step()?;
-            let id = values.get(slot).copied().flatten().ok_or(Fault::Shape)?;
-            work.step()?;
-            self.term_measures(id).check(limits)?;
-        }
+        work.step()?;
+        self.term_measures(id).check(limits)?;
         Ok(())
     }
 
@@ -55,32 +52,6 @@ impl Store {
                 limits,
                 &mut work,
             )
-        })();
-        self.budget.used -= budget::capacity(&ids);
-        result
-    }
-
-    pub(crate) fn import_assigned_row_with<E>(
-        &mut self,
-        predicate: PredicateId,
-        values: &[Option<TermId>],
-        slots: &[usize],
-        limits: Limits,
-        mut before: impl FnMut() -> Result<(), E>,
-    ) -> Result<AtomId, Failure<E>> {
-        let mut work = Work::new(&mut before);
-        let mut ids = Vec::new();
-        let result = (|| {
-            work.reserve(&mut ids, slots.len(), &mut self.budget)?;
-            for &slot in slots {
-                work.step()?;
-                let id = values.get(slot).copied().flatten().ok_or(Fault::Shape)?;
-                work.step()?;
-                self.term_measures(id).check(limits)?;
-                work.step()?;
-                ids.push(id);
-            }
-            self.intern_atom_with(predicate, &ids, &mut work)
         })();
         self.budget.used -= budget::capacity(&ids);
         result

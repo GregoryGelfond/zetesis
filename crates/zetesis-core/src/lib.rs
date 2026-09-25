@@ -29,6 +29,7 @@ mod term_order;
 mod term_hash;
 mod template;
 mod atom_key;
+mod argument_unification;
 mod program;
 mod candidate;
 mod model;
@@ -42,6 +43,7 @@ mod carrier;
 mod ground;
 pub mod relation;
 
+pub use argument_unification::{UnificationError, UnificationFailure};
 pub use atom_key::{AtomKey, BindingView};
 pub use atom_lookup::{AtomIndex, AtomIndexError, AtomLookup, AtomRow, AtomRows};
 pub use candidate::{
@@ -52,6 +54,7 @@ pub use carrier::{AtomIter, CarrierAtom, CarrierError, CarrierFailure};
 pub use ground::{AtomId, GroundProgram, GroundRule, StaticError, StaticLimits, WordError};
 pub use model::{
     AtomCatalog, Interpretation, Model, ModelAtoms, ModelError, ModelFailure, ModelIter,
+    ModelPublicationFailure,
 };
 pub use program::{
     AdmissionError, AdmissionLimits, AdmissionResource, Domain, FilterRef, Filters, PatternRef,

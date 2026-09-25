@@ -2,11 +2,13 @@
 
 use std::sync::Arc;
 
-use zetesis_core::catalog::{AssignmentSlice, DeclaredPredicate};
+use crate::formula_support::GroundingWork;
+use zetesis_core::PatternRef;
+use zetesis_core::catalog::AssignmentSlice;
 
 use super::{
     AtomRef, Counters, Failure, FormulaFailure, FormulaLimits, Location, Memory, SupportAppend,
-    atom_failure, atom_interner, failure, owner_limits, size_of,
+    atom_failure, atom_interner, failure, owner_limits, record_owner_peak, size_of,
 };
 
 /// One evolving source authority, independent of every relation membership and
@@ -38,14 +40,44 @@ pub(crate) struct SourceAtom {
     pub(in crate::formula_support) position: usize,
 }
 
-#[derive(Clone, Copy)]
-pub(in crate::formula_support) struct AssignedAtom<'a> {
-    pub(in crate::formula_support) predicate: &'a DeclaredPredicate,
-    pub(in crate::formula_support) values: AssignmentSlice<'a>,
-    pub(in crate::formula_support) arguments: &'a [usize],
-}
-
 impl SupportAppend<'_> {
+    /// Selected-slot lookup resolves discovery, then independently tests support.
+    /// It cannot add rows or change the shared owner's retained/peak counters.
+    pub(in crate::formula_support) fn contains_pattern(
+        &self,
+        pattern: PatternRef<'_>,
+        values: AssignmentSlice<'_>,
+        workspace: usize,
+        work: GroundingWork<'_>,
+    ) -> Result<bool, FormulaFailure> {
+        let GroundingWork {
+            limits,
+            counters,
+            location,
+        } = work;
+        let outer = self.outer_bytes(workspace);
+        let checked = owner_limits(limits, outer, location)?;
+        let bytes = self.owner.pattern_lookup_bytes();
+        // Record only an admitted envelope, before any callback can stop or
+        // unwind. The core lookup applies these same checks in this order.
+        if self.owner.len() <= checked.max_atoms && bytes <= checked.max_bytes {
+            record_owner_peak(bytes, outer, counters);
+        }
+        let position = self
+            .owner
+            .find_pattern_with(pattern, values, checked, || counters.work(limits, location))
+            .map_err(|error| match error {
+                atom_interner::AssignedFailure::Assignment(error) => {
+                    crate::formula_binding::assignment(error, location)
+                }
+                atom_interner::AssignedFailure::Interner(error) => {
+                    atom_failure(error, limits, outer, location)
+                }
+            })?;
+        counters.work(limits, location)?;
+        Ok(position.is_some_and(|position| self.is_supported(position)))
+    }
+
     pub(in crate::formula_support) fn signed(
         &self,
         atom: &SourceAtom,
@@ -118,12 +150,16 @@ impl SupportAppend<'_> {
     /// reserved capacity may survive refusal; the live growth receipt always does.
     pub(in crate::formula_support) fn assigned(
         &mut self,
-        atom: AssignedAtom<'_>,
+        pattern: PatternRef<'_>,
+        values: AssignmentSlice<'_>,
         workspace: usize,
-        limits: &FormulaLimits,
-        counters: &mut Counters,
-        location: Location,
+        work: GroundingWork<'_>,
     ) -> Result<SourceAtom, FormulaFailure> {
+        let GroundingWork {
+            limits,
+            counters,
+            location,
+        } = work;
         let outer = self.outer_bytes(workspace);
         let checked = owner_limits(limits, outer, location)?;
         self.owner.restart_storage_peak();
@@ -134,14 +170,11 @@ impl SupportAppend<'_> {
             max_depth: usize::MAX,
             max_bytes: usize::MAX,
         };
-        let result = self.owner.insert_assigned_with(
-            atom.predicate,
-            atom.values,
-            atom.arguments,
-            term_limits,
-            checked,
-            || counters.work(limits, location),
-        );
+        let result = self
+            .owner
+            .insert_pattern_with(pattern, values, term_limits, checked, || {
+                counters.work(limits, location)
+            });
         let refreshed = self.refresh(workspace, limits, counters, location);
         let position = result.map_err(|error| match error {
             atom_interner::AssignedFailure::Assignment(error) => {
@@ -225,3 +258,7 @@ impl SupportAppend<'_> {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[path = "assigned_lookup_tests.rs"]
+mod lookup_tests;

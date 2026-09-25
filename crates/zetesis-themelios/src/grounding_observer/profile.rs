@@ -106,6 +106,31 @@ impl GroundingOutcome {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct GroundingWork {
+    /// Actual accepted formula-work deltas, not estimates or durations.
+    /// Production, ordering, wake and publication are disjoint subsets of this total;
+    /// its remainder covers planning, initial scheduling, snapshot/query
+    /// preparation and round control. Preparation before construction and later
+    /// completed-support query setup are outside this total.
+    pub support_construction_work: Option<u64>,
+    /// Selected-rule traversal, variants, domain guards, head production and subsequent schedule selection.
+    /// Includes accepted work before refusal or unwind.
+    pub support_production_work: Option<u64>,
+    /// Advancing support-generation joins, including local joins, but excluding
+    /// join setup and keyed-group validation. A subset of production work,
+    /// disjoint from head work; includes accepted work before refusal or unwind.
+    pub support_join_work: Option<u64>,
+    /// Resolving, admitting and selecting a derived head. A subset of production
+    /// work, disjoint from join work; includes accepted work before refusal or unwind.
+    pub support_head_work: Option<u64>,
+    /// Sorting the pending support rows by typed identity.
+    /// Includes accepted work before refusal or unwind.
+    pub support_order_work: Option<u64>,
+    /// Preparing the next producer wake set from the ordered pending rows.
+    /// Includes accepted work before refusal or unwind.
+    pub support_wake_work: Option<u64>,
+    /// Initial, round and final support publication, including canonical commit and postings.
+    /// Includes accepted work before refusal or unwind.
+    pub support_publication_work: Option<u64>,
     /// Support rounds admitted by the existing round ceiling.
     pub support_rounds: Option<u64>,
     /// Original producer occurrences entered for variant traversal, after an
@@ -184,6 +209,13 @@ pub struct GroundingWork {
 impl Default for GroundingWork {
     fn default() -> Self {
         Self {
+            support_construction_work: Some(0),
+            support_production_work: Some(0),
+            support_join_work: Some(0),
+            support_head_work: Some(0),
+            support_order_work: Some(0),
+            support_wake_work: Some(0),
+            support_publication_work: Some(0),
             support_rounds: Some(0),
             support_producer_visits: Some(0),
             support_snapshot_preparations: Some(0),
@@ -220,6 +252,13 @@ impl Default for GroundingWork {
 
 #[derive(Clone, Copy)]
 pub(crate) enum Event {
+    SupportConstructionWork(u64),
+    SupportProductionWork(u64),
+    SupportJoinWork(u64),
+    SupportHeadWork(u64),
+    SupportOrderWork(u64),
+    SupportWakeWork(u64),
+    SupportPublicationWork(u64),
     SupportRound,
     SupportProducerVisit,
     SupportSnapshotPreparation,
@@ -265,6 +304,22 @@ impl GroundingWork {
             left.and_then(|left| right.and_then(|right| left.checked_add(right)))
         };
         Self {
+            support_construction_work: sum(
+                self.support_construction_work,
+                other.support_construction_work,
+            ),
+            support_production_work: sum(
+                self.support_production_work,
+                other.support_production_work,
+            ),
+            support_join_work: sum(self.support_join_work, other.support_join_work),
+            support_head_work: sum(self.support_head_work, other.support_head_work),
+            support_order_work: sum(self.support_order_work, other.support_order_work),
+            support_wake_work: sum(self.support_wake_work, other.support_wake_work),
+            support_publication_work: sum(
+                self.support_publication_work,
+                other.support_publication_work,
+            ),
             support_rounds: sum(self.support_rounds, other.support_rounds),
             support_producer_visits: sum(
                 self.support_producer_visits,
@@ -312,7 +367,14 @@ impl GroundingWork {
 
     fn record(&mut self, event: Event) {
         let amount = match event {
-            Event::TablePrepareWork(work)
+            Event::SupportConstructionWork(work)
+            | Event::SupportProductionWork(work)
+            | Event::SupportJoinWork(work)
+            | Event::SupportHeadWork(work)
+            | Event::SupportOrderWork(work)
+            | Event::SupportWakeWork(work)
+            | Event::SupportPublicationWork(work)
+            | Event::TablePrepareWork(work)
             | Event::TableQueryWork(work)
             | Event::DomainPrepareWork(work) => Some(work),
             Event::TableIndexBytes(bytes) => u64::try_from(bytes).ok(),
@@ -324,6 +386,13 @@ impl GroundingWork {
             return;
         }
         let field = match event {
+            Event::SupportConstructionWork(_) => &mut self.support_construction_work,
+            Event::SupportProductionWork(_) => &mut self.support_production_work,
+            Event::SupportJoinWork(_) => &mut self.support_join_work,
+            Event::SupportHeadWork(_) => &mut self.support_head_work,
+            Event::SupportOrderWork(_) => &mut self.support_order_work,
+            Event::SupportWakeWork(_) => &mut self.support_wake_work,
+            Event::SupportPublicationWork(_) => &mut self.support_publication_work,
             Event::SupportRound => &mut self.support_rounds,
             Event::SupportProducerVisit => &mut self.support_producer_visits,
             Event::SupportSnapshotPreparation => &mut self.support_snapshot_preparations,
@@ -368,6 +437,10 @@ impl GroundingWork {
 pub(crate) struct Work(Option<Rc<RefCell<GroundingWork>>>);
 
 impl Work {
+    pub(crate) fn enabled(&self) -> bool {
+        self.0.is_some()
+    }
+
     pub(crate) fn record(&self, event: Event) {
         if let Some(work) = &self.0 {
             work.borrow_mut().record(event);
@@ -526,6 +599,23 @@ mod tests {
         assert_eq!(records[0].1.nodes_inserted, Some(1));
         assert_eq!(records[1].1.join_rows, Some(1));
         assert_eq!(records[1].1.nodes_inserted, Some(1));
+    }
+
+    #[test]
+    fn support_subdivision_overflow_does_not_change_its_parent_receipt() {
+        let mut work = GroundingWork::default();
+        assert_eq!(work.support_join_work, Some(0));
+        assert_eq!(work.support_head_work, Some(0));
+        work.record(Event::SupportProductionWork(11));
+        let events: [fn(u64) -> Event; 2] = [Event::SupportJoinWork, Event::SupportHeadWork];
+        for event in events {
+            work.record(event(u64::MAX));
+            work.record(event(1));
+        }
+        assert_eq!(work.support_join_work, None);
+        assert_eq!(work.support_head_work, None);
+        assert_eq!(work.support_production_work, Some(11));
+        assert_eq!(work.support_order_work, Some(0));
     }
 
     #[test]

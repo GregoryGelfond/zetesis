@@ -8,6 +8,38 @@ use super::nodes::{Compound, Kind, arity, ceiling, node_measures, normalized};
 use super::segments::{Columns, Locator, Signature, Text};
 use super::{AtomId, Failure, Fault, PredicateId, Store, TermId, TextId, budget, next_id};
 
+/// Exact row result for one unchanged input under exclusive writer access.
+/// It owns no tuple, bucket address or permission to use another authority.
+pub(crate) struct PreparedAtom(RowPreparation);
+
+enum RowPreparation {
+    Present(AtomId),
+    Vacant {
+        predicate: PredicateId,
+        arity: usize,
+        hash: u64,
+    },
+}
+
+impl PreparedAtom {
+    /// Transfer the opaque single-use result into its publication state.
+    fn into_preparation(self) -> RowPreparation {
+        self.0
+    }
+
+    /// The caller has authenticated this identity in the same atom authority.
+    pub(crate) const fn existing(id: AtomId) -> Self {
+        Self(RowPreparation::Present(id))
+    }
+
+    pub(crate) const fn present(&self) -> Option<AtomId> {
+        match self.0 {
+            RowPreparation::Present(id) => Some(id),
+            RowPreparation::Vacant { .. } => None,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Hash)]
 struct NodeKey {
     kind: Kind,
@@ -356,30 +388,53 @@ impl Store {
     ) -> Result<AtomId, Failure<E>> {
         work.step()?;
         self.budget.check()?;
+        let prepared =
+            self.prepare_atom(predicate, arguments.len(), |index| arguments[index], work)?;
+        self.publish_atom(prepared, |index| arguments[index], work)
+    }
+
+    /// Consume an exact result for the same authenticated tuple under one
+    /// exclusive writer. No logical atom insertion may intervene. Reservations
+    /// may rehash: only the hash survives preparation, never a bucket position.
+    /// `argument` is the same already authenticated immutable internal source:
+    /// it performs only infallible coordinate reads, with no caller callback or
+    /// deferred validation. All permits precede row writes. An arbitrary stateful
+    /// or panicking accessor would violate this private publication contract.
+    pub(crate) fn publish_prepared_atom_with<E>(
+        &mut self,
+        prepared: PreparedAtom,
+        argument: impl FnMut(usize) -> TermId,
+        mut before: impl FnMut() -> Result<(), E>,
+    ) -> Result<AtomId, Failure<E>> {
+        let mut work = Work::new(&mut before);
         work.step()?;
-        if self.signature(predicate).arity != arguments.len() {
-            return Err(Fault::Shape.into());
-        }
-        let hash = work.key_hash(predicate, arguments)?;
-        if let Some(id) = self.atoms.find_with(hash, work, |id, work| {
-            work.step()?;
-            let (columns, locator) = self.atom_columns(AtomId(id));
-            if locator.predicate != predicate {
-                return Ok(false);
-            }
-            for (index, argument) in arguments.iter().enumerate() {
-                work.step()?;
-                if columns.arguments[index][locator.row] != *argument {
-                    return Ok(false);
-                }
-            }
-            Ok(true)
-        })? {
-            return Ok(AtomId(id));
-        }
+        self.budget.check()?;
+        self.publish_atom(prepared, argument, &mut work)
+    }
+
+    fn publish_atom<E>(
+        &mut self,
+        prepared: PreparedAtom,
+        mut argument: impl FnMut(usize) -> TermId,
+        work: &mut Work<'_, E>,
+    ) -> Result<AtomId, Failure<E>> {
+        let (predicate, arity, hash) = match prepared.into_preparation() {
+            RowPreparation::Present(id) => return Ok(id),
+            RowPreparation::Vacant {
+                predicate,
+                arity,
+                hash,
+            } => (predicate, arity, hash),
+        };
         work.step()?;
         let id = AtomId(next_id(self.counts().atoms)?);
-        let block = self.column_block(predicate, arguments.len(), work)?;
+        let local = u32::try_from(
+            (id.0 as usize)
+                .checked_sub(self.base_count())
+                .ok_or(Fault::Shape)?,
+        )
+        .map_err(|_| Fault::IdExhausted)?;
+        let block = self.column_block(predicate, arity, work)?;
         for column in &mut self.tail.columns[block].arguments {
             work.reserve(column, 1, &mut self.budget)?;
         }
@@ -388,9 +443,13 @@ impl Store {
         let columns = &mut self.tail.columns[block];
         let row = columns.rows;
         let rows = row.checked_add(1).ok_or(Fault::Overflow)?;
-        work.steps(arguments.len().checked_add(4).ok_or(Fault::Overflow)?)?;
-        for (column, argument) in columns.arguments.iter_mut().zip(arguments) {
-            column.push(*argument);
+        // As with relocation, one coordinate-copy permit covers its immutable
+        // source read and destination write. Admit the complete copy first.
+        work.steps(arity.checked_add(4).ok_or(Fault::Overflow)?)?;
+        // The private accessor only reads the validated, unchanged coordinate
+        // source; no caller code, validation or allocation occurs among writes.
+        for (index, column) in columns.arguments.iter_mut().enumerate() {
+            column.push(argument(index));
         }
         columns.rows = rows;
         self.tail.atoms.push(Locator {
@@ -398,8 +457,104 @@ impl Store {
             block,
             row,
         });
-        self.atoms.insert(hash, id.0);
+        self.atoms.insert(hash, local);
         Ok(id)
+    }
+
+    /// Exact immutable lookup over an already authenticated, immutable tuple.
+    /// Retaining this result requires exclusive access to the same writer until
+    /// publication. The input source must stay identical throughout that interval.
+    pub(crate) fn prepare_atom_by_with<E>(
+        &self,
+        predicate: PredicateId,
+        arity: usize,
+        argument: impl FnMut(usize) -> TermId,
+        mut before: impl FnMut() -> Result<(), E>,
+    ) -> Result<PreparedAtom, Failure<E>> {
+        let mut work = Work::new(&mut before);
+        self.prepare_atom(predicate, arity, argument, &mut work)
+    }
+
+    fn prepare_atom<E>(
+        &self,
+        predicate: PredicateId,
+        arity: usize,
+        mut argument: impl FnMut(usize) -> TermId,
+        work: &mut Work<'_, E>,
+    ) -> Result<PreparedAtom, Failure<E>> {
+        work.step()?;
+        if self.signature(predicate).arity != arity {
+            return Err(Fault::Shape.into());
+        }
+        let hash = work.key_hash_by(predicate, arity, &mut argument)?;
+        self.prepare_atom_hash(predicate, arity, argument, hash, work)
+    }
+
+    fn prepare_atom_hash<E>(
+        &self,
+        predicate: PredicateId,
+        arity: usize,
+        argument: impl FnMut(usize) -> TermId,
+        hash: u64,
+        work: &mut Work<'_, E>,
+    ) -> Result<PreparedAtom, Failure<E>> {
+        let found = self.find_atom_hash_with(predicate, arity, argument, hash, work)?;
+        Ok(PreparedAtom(found.map_or(
+            RowPreparation::Vacant {
+                predicate,
+                arity,
+                hash,
+            },
+            RowPreparation::Present,
+        )))
+    }
+
+    fn find_atom_hash_with<E>(
+        &self,
+        predicate: PredicateId,
+        arity: usize,
+        mut argument: impl FnMut(usize) -> TermId,
+        hash: u64,
+        work: &mut Work<'_, E>,
+    ) -> Result<Option<AtomId>, Failure<E>> {
+        if let Some(base) = &self.base
+            && let Some(id) = base.index.find_with(hash, work, |id, work| {
+                self.atom_matches(AtomId(id), predicate, arity, &mut argument, work)
+            })?
+        {
+            return Ok(Some(AtomId(id)));
+        }
+        let offset = self.base_count();
+        self.atoms
+            .find_with(hash, work, |local, work| {
+                let id = atom_offset(offset, local)?;
+                self.atom_matches(id, predicate, arity, &mut argument, work)
+            })?
+            .map(|local| atom_offset(offset, local))
+            .transpose()
+            .map_err(Failure::Storage)
+    }
+
+    fn atom_matches<E>(
+        &self,
+        id: AtomId,
+        predicate: PredicateId,
+        arity: usize,
+        argument: &mut impl FnMut(usize) -> TermId,
+        work: &mut Work<'_, E>,
+    ) -> Result<bool, Failure<E>> {
+        work.step()?;
+        let (columns, locator) = self.atom_columns(id);
+        if locator.predicate != predicate {
+            return Ok(false);
+        }
+        for index in 0..arity {
+            work.step()?;
+            if columns.arguments[index][locator.row] != argument(index) {
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
 
     fn column_block<E>(
@@ -465,6 +620,13 @@ impl Store {
     }
 }
 
+fn atom_offset(offset: usize, local: u32) -> Result<AtomId, Fault> {
+    let global = offset.checked_add(local as usize).ok_or(Fault::Overflow)?;
+    u32::try_from(global)
+        .map(AtomId)
+        .map_err(|_| Fault::IdExhausted)
+}
+
 /// Writer and immutable lookup build exactly the same typed hash key. Only the
 /// authority to add a missing spelling differs at their text boundary.
 fn node_key<E>(
@@ -509,3 +671,7 @@ fn node_key<E>(
     }
     Ok(Some(key))
 }
+
+#[cfg(test)]
+#[path = "intern/tests.rs"]
+mod tests;

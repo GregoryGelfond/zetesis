@@ -56,9 +56,7 @@ impl Work<'_> {
         left.checked_add(right)
             .ok_or_else(|| self.stop(Stop::ArithmeticOverflow))
     }
-    // One checked canonical identity operation is shared with catalog lookup.
-    // Source comparisons use ASP term order instead; these callers test equality
-    // or sort complete contribution keys consistently.
+    // Contribution keys use typed storage order; matching needs only equality.
     fn compare_identity(
         &mut self,
         left: TermRef<'_>,
@@ -270,13 +268,13 @@ impl<'input> Evaluator<'input, '_> {
             let value = atom.values().at(column).expect("matched predicate arity");
             match term {
                 TemplateTerm::Constant(constant) => {
-                    if self.work.compare_identity(constant, value)? != Ordering::Equal {
+                    if !constant.equals_ref_with(value, || self.work.tick())? {
                         return Ok(false);
                     }
                 }
                 TemplateTerm::Variable(variable) => {
                     if let Some(previous) = binding[variable] {
-                        if self.work.compare_identity(previous, value)? != Ordering::Equal {
+                        if !previous.equals_ref_with(value, || self.work.tick())? {
                             return Ok(false);
                         }
                     } else {
@@ -306,7 +304,7 @@ impl<'input> Evaluator<'input, '_> {
             let (left, right) = filter.terms();
             let left = self.work.resolve(left, binding)?;
             let right = self.work.resolve(right, binding)?;
-            let equal = self.work.compare_identity(left, right)? == Ordering::Equal;
+            let equal = left.equals_ref_with(right, || self.work.tick())?;
             if equal != filter.is_equality() {
                 return Ok(());
             }
@@ -328,7 +326,7 @@ impl<'input> Evaluator<'input, '_> {
             let term = template.tuple().at(index).expect("bounded tuple field");
             tuple.push(self.work.resolve(term, binding)?);
         }
-        self.contribute(template.priority(), weight, &tuple, slot)
+        self.contribute(template.priority(), weight, tuple, slot)
     }
 
     fn compare_key(
@@ -357,14 +355,14 @@ impl<'input> Evaluator<'input, '_> {
         &mut self,
         priority: i32,
         weight: i32,
-        tuple: &[TermRef<'input>],
+        tuple: Vec<TermRef<'input>>,
         slot: usize,
     ) -> Result<(), Error> {
         let mut low = 0;
         let mut high = self.keys.len();
         while low < high {
             let middle = low + (high - low) / 2;
-            match self.compare_key(middle, priority, weight, tuple)? {
+            match self.compare_key(middle, priority, weight, &tuple)? {
                 Ordering::Less => low = middle + 1,
                 Ordering::Greater => high = middle,
                 Ordering::Equal => {
@@ -377,15 +375,10 @@ impl<'input> Evaluator<'input, '_> {
         if self.keys.len() >= self.work.limits.max_keys {
             return Err(self.work.stop(Stop::KeyLimit));
         }
-        let bytes = self.key_bytes(tuple)?;
+        let bytes = self.key_bytes(&tuple)?;
         let total_bytes = self.work.add_size(self.work.statistics.key_bytes, bytes)?;
         if total_bytes > self.work.limits.max_key_bytes {
             return Err(self.work.stop(Stop::KeyBytesLimit));
-        }
-        let mut retained = self.work.reserve(tuple.len())?;
-        for value in tuple {
-            self.work.tick()?;
-            retained.push(*value);
         }
         // Sorted storage avoids opaque hash/set allocation. Charge each moved
         // key before Vec::insert's memmove; this intentionally bounds its O(k) work.
@@ -403,7 +396,7 @@ impl<'input> Evaluator<'input, '_> {
             Contribution {
                 priority,
                 weight,
-                tuple: retained,
+                tuple,
             },
         );
         self.totals[slot] = total;
@@ -428,6 +421,34 @@ impl<'input> Evaluator<'input, '_> {
 mod tests {
     use super::final_cost;
     use crate::ErrorKind;
+
+    #[test]
+    fn accepted_contribution_retains_the_resolved_tuple() {
+        let source = [
+            zetesis_core::Value::Number(1),
+            zetesis_core::Value::Number(2),
+        ];
+        let tuple: Vec<_> = source
+            .iter()
+            .map(zetesis_core::catalog::TermRef::from)
+            .collect();
+        let allocation = tuple.as_ptr();
+        let cancellation = zetesis_cpu::Cancellation::default();
+        let mut evaluator = super::Evaluator {
+            work: super::Work {
+                limits: crate::Limits::default(),
+                cancellation: &cancellation,
+                statistics: crate::Statistics::default(),
+                template: None,
+            },
+            keys: Vec::new(),
+            totals: vec![0],
+        };
+        evaluator.contribute(0, 7, tuple, 0).unwrap();
+        // The resolved cells become retained evidence without a second buffer.
+        assert_eq!(evaluator.keys[0].tuple.as_ptr(), allocation);
+        assert_eq!(evaluator.keys[0].tuple.len(), source.len());
+    }
 
     #[test]
     fn contribution_evidence_borrows_model_payload() {

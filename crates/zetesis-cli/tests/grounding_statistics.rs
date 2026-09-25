@@ -43,6 +43,7 @@ fn json_attribution_preserves_typed_measurements() {
     for phase in GroundingPhase::ALL {
         let json = &view["measurements"][phase.label()];
         let measurement = typed.get(phase).unwrap();
+        assert_eq!(json["work"].as_object().unwrap().len(), 37);
         assert_eq!(
             json["elapsed_ns"].as_u64().map(u128::from),
             measurement.elapsed.map(|value| value.as_nanos())
@@ -55,6 +56,22 @@ fn json_attribution_preserves_typed_measurements() {
         }
         assert_eq!(json["work"]["roots"].as_u64(), measurement.work.roots);
         for (name, count) in [
+            (
+                "support_construction_work",
+                measurement.work.support_construction_work,
+            ),
+            (
+                "support_production_work",
+                measurement.work.support_production_work,
+            ),
+            ("support_join_work", measurement.work.support_join_work),
+            ("support_head_work", measurement.work.support_head_work),
+            ("support_order_work", measurement.work.support_order_work),
+            ("support_wake_work", measurement.work.support_wake_work),
+            (
+                "support_publication_work",
+                measurement.work.support_publication_work,
+            ),
             ("domain_prepare_work", measurement.work.domain_prepare_work),
             ("domain_guard_rows", measurement.work.domain_guard_rows),
             ("domain_guard_checks", measurement.work.domain_guard_checks),
@@ -144,12 +161,12 @@ fn the_ordinary_command_narrows_candidates_by_comparison() {
 }
 
 #[test]
-fn ordinary_formula_solving_uses_requested_table_joins() {
+fn eager_formula_solving_uses_requested_table_joins() {
     let mut output = Vec::new();
     let mut diagnostics = Vec::new();
     let report = run_detailed_with_diagnostics(
         "edge(1,1). edge(1,2). edge(2,1). edge(2,2). 1{choose(1);choose(2)}1. witness(X,Y):-choose(X),edge(X,Y). diagonal(X):-edge(X,X).".into(),
-        &options(&["--formula-joins", "table"]),
+        &options(&["--grounder", "eager", "--formula-joins", "table"]),
         &mut output,
         &mut diagnostics,
         &Cancellation::default(),
@@ -166,6 +183,39 @@ fn ordinary_formula_solving_uses_requested_table_joins() {
     assert!(work.table_probes.unwrap() > 0);
     assert!(work.table_rows.unwrap() > 0);
     let document: Value = serde_json::from_slice(&output).unwrap();
+    // The native decoder resolves shared dictionary entries across records.
+    let mut family = zetesis_validation::answers::native_json::parse(
+        &output,
+        zetesis_validation::answers::native_json::Limits::default(),
+    )
+    .unwrap()
+    .full_model_symbols(8 * 1024 * 1024)
+    .unwrap();
+    for model in &mut family {
+        model.sort();
+    }
+    family.sort();
+    let mut expected: Vec<_> = [1, 2]
+        .into_iter()
+        .map(|chosen| {
+            let mut atoms = vec![
+                "edge(1,1)".to_owned(),
+                "edge(1,2)".to_owned(),
+                "edge(2,1)".to_owned(),
+                "edge(2,2)".to_owned(),
+                format!("choose({chosen})"),
+                format!("witness({chosen},1)"),
+                format!("witness({chosen},2)"),
+                "diagonal(1)".to_owned(),
+                "diagonal(2)".to_owned(),
+            ];
+            atoms.sort();
+            atoms
+        })
+        .collect();
+    expected.sort();
+    assert_eq!(family, expected);
+    assert_eq!(document["outcome"]["completion"], "exhausted");
     for phase in GroundingPhase::ALL {
         let Some(measurement) = grounding.get(phase) else {
             assert_eq!(phase, GroundingPhase::DomainAnalysis);

@@ -64,6 +64,5 @@ pub(in crate::observation::evaluate) fn equal(
     right: TermRef<'_>,
     work: &mut Work<'_>,
 ) -> Result<bool, Error> {
-    left.compare_ref_with(right, || work.step(1))
-        .map(std::cmp::Ordering::is_eq)
+    left.equals_ref_with(right, || work.step(1))
 }

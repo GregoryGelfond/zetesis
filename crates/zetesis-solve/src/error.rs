@@ -7,6 +7,10 @@ use crate::{Backend, Grounder, Oracle, PhaseTimings, PreparedProfile, SemanticOu
 /// An unsuccessful preparation or execution operation; never evidence of UNSAT.
 #[derive(Debug)]
 pub enum SolveError {
+    /// A verified base answer could not be completely reconstructed.
+    Reconstruction(zetesis_themelios::ReconstructionError),
+    /// Consumed base-answer accounting cannot represent another answer.
+    TerminalStatisticsOverflow,
     /// A streamed source constraint could not be completely evaluated.
     Constraint(zetesis_themelios::ConstraintCheckFailure),
     /// The candidate traversal reported a source failure without its typed cause.
@@ -91,6 +95,8 @@ pub enum SolveError {
 impl fmt::Display for SolveError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Reconstruction(error) => error.fmt(formatter),
+            Self::TerminalStatisticsOverflow => formatter.write_str("terminal answer accounting overflow"),
             Self::Constraint(error) => error.fmt(formatter),
             Self::ConstraintFailureMissing => formatter.write_str("source region check stopped without its failure receipt"),
             Self::HybridStatisticsOverflow => formatter.write_str("hybrid answer accounting overflow"),
@@ -139,6 +145,7 @@ impl fmt::Display for SolveError {
 impl std::error::Error for SolveError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
+            Self::Reconstruction(error) => Some(error),
             Self::Constraint(error) => Some(error),
             Self::Executor(error) => Some(error),
             Self::Projection(error) => Some(error),
@@ -155,6 +162,7 @@ impl std::error::Error for SolveError {
             Self::Words(error) => Some(error),
             Self::Model(error) => Some(error),
             Self::BackendUnavailable
+            | Self::TerminalStatisticsOverflow
             | Self::ConstraintFailureMissing
             | Self::HybridStatisticsOverflow
             | Self::HybridBackend { .. }

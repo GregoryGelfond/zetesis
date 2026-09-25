@@ -40,6 +40,7 @@ pub struct SemanticOutcome {
     pub(crate) closure_execution: Option<crate::ClosureExecutionStatistics>,
     pub(crate) query_execution: Option<crate::QueryExecutionObservation>,
     pub(crate) hybrid_execution: Option<crate::HybridExecutionStatistics>,
+    pub(crate) terminal_execution: Option<crate::TerminalExecutionStatistics>,
 }
 
 impl SemanticOutcome {
@@ -69,6 +70,7 @@ impl SemanticOutcome {
             closure_execution: None,
             query_execution: None,
             hybrid_execution: None,
+            terminal_execution: None,
         }
     }
 
@@ -115,8 +117,9 @@ impl SemanticOutcome {
     }
 
     /// Formula candidate/reduct accounting, when that stream was initialized.
-    /// For hybrid input this describes the retained core. Its stable-model count
-    /// does not include subsequent source-constraint rejection; use
+    /// For hybrid or terminal-definition input this describes the retained base.
+    /// Its stable-model count does not include subsequent source-constraint
+    /// checking or full-answer reconstruction; use
     /// [`Self::verified_models`] for original-program membership.
     #[must_use]
     pub const fn countermodel_statistics(&self) -> Option<&zetesis_sat::Statistics> {
@@ -128,6 +131,14 @@ impl SemanticOutcome {
     #[must_use]
     pub const fn hybrid_execution(&self) -> Option<&crate::HybridExecutionStatistics> {
         self.hybrid_execution.as_ref()
+    }
+
+    /// Base answers consumed by terminal-definition reconstruction, including
+    /// interrupted attempts. Only completed reconstruction establishes a full
+    /// answer of the original subject; buffered base answers do not.
+    #[must_use]
+    pub const fn terminal_execution(&self) -> Option<&crate::TerminalExecutionStatistics> {
+        self.terminal_execution.as_ref()
     }
 
     /// Host batch receipts for an explicitly supplied executor. Absent for
@@ -165,7 +176,9 @@ impl SemanticOutcome {
     pub const fn query_execution(&self) -> Option<&crate::QueryExecutionObservation> {
         self.query_execution.as_ref()
     }
-    /// Completed exact stable-model memberships, including still-queued results.
+    /// Completed exact stable-model memberships of the original subject,
+    /// including still-queued results. A terminal-definition input counts only
+    /// completed full reconstruction, never queued or consumed base answers.
     #[must_use]
     pub const fn verified_models(&self) -> u64 {
         self.verified

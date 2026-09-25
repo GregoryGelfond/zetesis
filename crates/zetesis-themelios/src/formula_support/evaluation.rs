@@ -147,8 +147,7 @@ impl Evaluation {
                         let read = computation.read();
                         let left = read.term(&left).map_err(|error| scope(error, location))?;
                         let right = read.term(&right).map_err(|error| scope(error, location))?;
-                        left.compare_ref_with(right, || counters.work(limits, location))
-                            .map(std::cmp::Ordering::is_eq)
+                        left.equals_ref_with(right, || counters.work(limits, location))
                     }),
                 (Some(value), None) | (None, Some(value)) => self
                     .source_expression(value, &variable, computation, limits, counters, location)

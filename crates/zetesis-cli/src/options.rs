@@ -141,17 +141,19 @@ pub struct Options {
     /// Omitted, it is the library default scaled by `--memory`.
     #[arg(long, hide_short_help = true)]
     pub max_projection_bytes: Option<usize>,
-    /// Override source-expansion and eager formula-grounding work ceilings.
+    /// Override source-expansion and cumulative formula-work ceilings.
     ///
     /// Omission preserves each library default: 1,048,576 source-term operations
     /// and 10,000,000 formula-grounding operations. An explicit value applies
-    /// independently to both counters. Formula work includes checked typed
-    /// lookup, index construction, copying and commit work.
+    /// independently to both counters. Formula work includes admission, checked
+    /// lookups, index construction and reconstruction of deferred definitions.
     #[arg(long, hide_short_help = true)]
     pub max_expansion_work: Option<usize>,
-    /// Maximum reserved capacity for eager formula support views, indexes and queries.
+    /// Maximum named storage for formula support and reconstruction.
     ///
-    /// Source atoms, allocator/tree overhead and other grounding state are excluded.
+    /// Includes shared canonical payload, indexes, query buffers and growth
+    /// overlap. Other grounding state and allocator overhead remain separate;
+    /// this is not a process-memory limit.
     #[arg(long, default_value_t = zetesis_themelios::FormulaLimits::default().max_support_bytes, hide_short_help = true)]
     pub max_support_bytes: usize,
     /// Maximum output templates from source expansion.
@@ -160,9 +162,10 @@ pub struct Options {
     /// Maximum scalar alternatives/emitted arguments in source expansion.
     #[arg(long, default_value_t = 1_000_000, hide_short_help = true)]
     pub max_expansion_values: usize,
-    /// Cumulative canonical payload bytes source expansion and eager formula
-    /// grounding may copy: term cells, values, atoms and plan storage, each
-    /// counted once when retained. Transient binding frames are excluded.
+    /// Cumulative source-expansion bytes for copied scalar payload, plans and
+    /// checked construction scratch. Structural captures borrow canonical terms
+    /// but charge their delta cells. ID-only binding copies add no payload charge.
+    /// This is separate from live canonical storage and process memory.
     #[arg(long, default_value_t = zetesis_themelios::ExpansionLimits::default().max_scalar_bytes, hide_short_help = true)]
     pub max_expansion_bytes: usize,
     /// Override distinct source-domain values in each selected admission profile.
@@ -263,9 +266,9 @@ pub struct Options {
     /// Maximum candidate seeds; reaching a limit leaves search incomplete.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_candidates, hide_short_help = true)]
     pub max_candidates: u64,
-    /// Maximum copied payload for necessary candidate restrictions, including
-    /// temporary templates: canonical bytes, excluding spare capacity and
-    /// allocator/index overhead.
+    /// Maximum reserved capacity for necessary candidate restrictions, including
+    /// indexes, join scratch and replacement overlap. Shared program storage and
+    /// allocator overhead are excluded.
     /// Omitted, it is the library default scaled by `--memory`.
     #[arg(long, hide_short_help = true)]
     pub max_candidate_bytes: Option<usize>,

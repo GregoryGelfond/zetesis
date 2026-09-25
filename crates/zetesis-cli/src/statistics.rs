@@ -101,6 +101,7 @@ pub(crate) fn write_progress(
             countermodel_statistics: semantic.countermodel_statistics(),
             formula_execution: semantic.formula_execution(),
             hybrid_execution: semantic.hybrid_execution(),
+            terminal_execution: semantic.terminal_execution(),
             lazy_execution: semantic.lazy_execution(),
             shared_execution: semantic.shared_execution(),
             closure_execution: semantic.closure_execution(),
@@ -286,6 +287,7 @@ struct Details<'a> {
     countermodel_statistics: Option<&'a zetesis_sat::Statistics>,
     formula_execution: Option<&'a crate::FormulaExecutionStatistics>,
     hybrid_execution: Option<&'a zetesis_solve::HybridExecutionStatistics>,
+    terminal_execution: Option<&'a zetesis_solve::TerminalExecutionStatistics>,
     lazy_execution: Option<&'a crate::LazyExecutionStatistics>,
     shared_execution: Option<&'a crate::SharedExecutionStatistics>,
     closure_execution: Option<&'a crate::ClosureExecutionStatistics>,
@@ -306,6 +308,7 @@ impl<'a> From<&'a Report> for Details<'a> {
             countermodel_statistics: report.countermodel_statistics.as_ref(),
             formula_execution: report.formula_execution.as_ref(),
             hybrid_execution: report.hybrid_execution.as_ref(),
+            terminal_execution: report.terminal_execution.as_ref(),
             lazy_execution: report.lazy_execution.as_ref(),
             shared_execution: report.shared_execution.as_ref(),
             closure_execution: report.closure_execution.as_ref(),
@@ -328,6 +331,7 @@ impl<'a> From<&'a crate::PartialReport> for Details<'a> {
             countermodel_statistics: report.countermodel_statistics.as_ref(),
             formula_execution: report.formula_execution.as_ref(),
             hybrid_execution: report.hybrid_execution.as_ref(),
+            terminal_execution: report.terminal_execution.as_ref(),
             lazy_execution: report.lazy_execution.as_ref(),
             shared_execution: report.shared_execution.as_ref(),
             closure_execution: report.closure_execution.as_ref(),
@@ -375,6 +379,9 @@ fn details(
     if let Some(stats) = report.hybrid_execution {
         hybrid(sink, config, stats)?;
     }
+    if let Some(stats) = report.terminal_execution {
+        terminal(sink, stats)?;
+    }
     let examined = if report.shared_execution.is_some() {
         "closure result/control records examined"
     } else {
@@ -390,7 +397,18 @@ fn details(
     }
     if let Some(stats) = report.countermodel_statistics {
         formula(sink, options, config, report)?;
-        countermodel(sink, config, stats, report.hybrid_execution.is_some())?;
+        countermodel(
+            sink,
+            config,
+            stats,
+            if report.terminal_execution.is_some() {
+                "verified base models"
+            } else if report.hybrid_execution.is_some() {
+                "verified core models"
+            } else {
+                "verified stable models"
+            },
+        )?;
         writeln!(
             sink,
             "  discovered gate tuples: inapplicable (complete semantic candidates)"
@@ -421,6 +439,10 @@ fn details(
             report.discovered_gate_atoms
         )?;
     }
+    objective(sink, report)
+}
+
+fn objective(sink: &mut impl Write, report: &Details<'_>) -> io::Result<()> {
     if let Some(optimum) = report.optimization {
         let qualification = if report.optimum_proved {
             "optimal"
@@ -485,6 +507,25 @@ fn candidates(sink: &mut impl Write, stats: zetesis_cpu::CandidateStatistics) ->
         )?;
     }
     Ok(())
+}
+
+fn terminal(
+    sink: &mut impl Write,
+    stats: &zetesis_solve::TerminalExecutionStatistics,
+) -> io::Result<()> {
+    writeln!(
+        sink,
+        "  terminal definitions: eager base; full reconstruction before original membership; base answers={}; reconstructed={}; pending={}",
+        stats.base_answers, stats.reconstructed, stats.pending
+    )?;
+    writeln!(
+        sink,
+        "  answer reconstruction: attempts={}; completed={}; work={}; substitutions={}; source admission included; base search work separate",
+        stats.reconstruction.attempts,
+        stats.reconstruction.completed,
+        stats.reconstruction.work,
+        stats.reconstruction.substitutions
+    )
 }
 
 fn hybrid(
@@ -662,7 +703,7 @@ fn countermodel(
     sink: &mut impl Write,
     config: &crate::SolveConfig,
     stats: &zetesis_sat::Statistics,
-    hybrid: bool,
+    membership: &str,
 ) -> io::Result<()> {
     if let Some(filter) = stats.region_filter {
         writeln!(
@@ -697,11 +738,6 @@ fn countermodel(
             counts.work,
         )?;
     }
-    let membership = if hybrid {
-        "verified core models"
-    } else {
-        "verified stable models"
-    };
     writeln!(
         sink,
         "  countermodel: search work={}; decisions={}; candidates={}; queries={}; witnesses={}; candidate restrictions={}; classical queries={}; {membership}={}",
@@ -828,7 +864,9 @@ fn formula(
     config: &crate::SolveConfig,
     report: &Details<'_>,
 ) -> io::Result<()> {
-    let grounder = if report.hybrid_execution.is_some() {
+    let grounder = if report.terminal_execution.is_some() {
+        "eager_base_terminal_definitions"
+    } else if report.hybrid_execution.is_some() {
         "hybrid"
     } else {
         "eager"

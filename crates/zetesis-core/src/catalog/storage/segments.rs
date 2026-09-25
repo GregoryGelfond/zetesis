@@ -107,11 +107,6 @@ impl RowSegment {
     pub(super) fn is_empty(&self) -> bool {
         self.atoms.is_empty()
     }
-    pub(super) fn bytes(&self) -> u128 {
-        self.bytes_with(|| Ok::<_, std::convert::Infallible>(()))
-            .unwrap_or_else(|never| match never {})
-    }
-
     pub(super) fn bytes_with<E>(
         &self,
         mut before: impl FnMut() -> Result<(), E>,

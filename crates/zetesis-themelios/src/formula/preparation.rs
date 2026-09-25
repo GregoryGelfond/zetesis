@@ -188,6 +188,52 @@ impl PreparedFormula {
         self.ground_with_observer(None)
     }
 
+    /// Materialize a certified base and defer terminal positive definitions
+    /// when their complete source/IR correspondence is established. Otherwise
+    /// materialize the original theory. Both routes retain preparation charges.
+    /// No answer sets are computed by this operation.
+    ///
+    /// # Errors
+    /// Returns source, allocation or resource refusals; an applicable terminal
+    /// plan is never silently replaced after its materialization has failed.
+    pub fn ground_adaptive(
+        self,
+    ) -> Result<crate::FormulaMaterialization<AdmittedFormula>, FormulaFailure> {
+        self.ground_adaptive_with_observer(None)
+    }
+
+    /// Adaptive materialization with caller-owned grounding observations.
+    ///
+    /// # Errors
+    /// Returns the same failures as [`Self::ground_adaptive`].
+    pub fn ground_adaptive_with_observer(
+        self,
+        observer: Option<&dyn GroundingObserver>,
+    ) -> Result<crate::FormulaMaterialization<AdmittedFormula>, FormulaFailure> {
+        use crate::formula_terminal::Materialized;
+        Ok(
+            match crate::formula_terminal::materialize(self.preparation, observer)? {
+                Materialized {
+                    compiled,
+                    terminal: None,
+                } => crate::FormulaMaterialization::Complete(AdmittedFormula {
+                    compiled,
+                    source: self.source,
+                    metadata: self.metadata,
+                }),
+                Materialized {
+                    compiled,
+                    terminal: Some(extension),
+                } => crate::FormulaMaterialization::Terminal(crate::TerminalFormula::new(
+                    compiled,
+                    extension,
+                    crate::formula_hybrid::SourceOwner::Single(self.source),
+                    self.metadata,
+                )),
+            },
+        )
+    }
+
     /// Materialize the same original theory while independently attempting
     /// bounded source-count partition consequences. Planning is opt-in; its
     /// status is retained by [`AdmittedFormula::count_plan`]. Its control applies
@@ -255,6 +301,54 @@ impl fmt::Debug for PreparedFormulaBundle {
 }
 
 impl PreparedFormulaBundle {
+    /// Bundle counterpart of [`PreparedFormula::ground_adaptive`].
+    ///
+    /// # Errors
+    /// Retains the original bundle on source, allocation or resource refusal.
+    pub fn ground_adaptive(
+        self,
+    ) -> Result<crate::FormulaMaterialization<AdmittedFormulaBundle>, FormulaBundleFailure> {
+        self.ground_adaptive_with_observer(None)
+    }
+
+    /// Adaptive bundle materialization with grounding observations.
+    ///
+    /// # Errors
+    /// Returns the same failures as [`Self::ground_adaptive`].
+    pub fn ground_adaptive_with_observer(
+        self,
+        observer: Option<&dyn GroundingObserver>,
+    ) -> Result<crate::FormulaMaterialization<AdmittedFormulaBundle>, FormulaBundleFailure> {
+        use crate::formula_terminal::Materialized;
+        match crate::formula_terminal::materialize(self.preparation, observer) {
+            Ok(Materialized {
+                compiled,
+                terminal: None,
+            }) => Ok(crate::FormulaMaterialization::Complete(
+                AdmittedFormulaBundle {
+                    compiled,
+                    bundle: self.bundle,
+                    metadata: self.metadata,
+                },
+            )),
+            Ok(Materialized {
+                compiled,
+                terminal: Some(extension),
+            }) => Ok(crate::FormulaMaterialization::Terminal(
+                crate::TerminalFormula::new(
+                    compiled,
+                    extension,
+                    crate::formula_hybrid::SourceOwner::Bundle(self.bundle),
+                    self.metadata,
+                ),
+            )),
+            Err(error) => Err(FormulaBundleFailure {
+                bundle: self.bundle,
+                error: Box::new(error),
+            }),
+        }
+    }
+
     pub(super) fn new(
         preparation: Preparation,
         bundle: SourceBundle,

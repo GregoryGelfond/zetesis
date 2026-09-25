@@ -137,8 +137,7 @@ impl<'a> AtomIndex<'a> {
         for pair in keys.windows(2) {
             if atoms
                 .at(pair[0])
-                .compare_ref_with(atoms.at(pair[1]), &mut checked)?
-                .is_eq()
+                .equals_ref_with(atoms.at(pair[1]), &mut checked)?
             {
                 return Err(AtomIndexError::Duplicate {
                     first: pair[0],

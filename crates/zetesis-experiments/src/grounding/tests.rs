@@ -283,3 +283,67 @@ fn unavailable_domain_work_refuses_complete_capture() {
     assert_eq!(json["phase"], "domain_analysis");
     assert!(json["work"]["domain_prepare_work"].is_null());
 }
+
+#[test]
+fn unavailable_support_work_refuses_complete_capture() {
+    let observer = Observer::new(Mode::Detailed, 1).unwrap();
+    let mut work = GroundingWork::default();
+    work.support_construction_work = Some(23);
+    work.support_production_work = Some(11);
+    work.support_join_work = Some(5);
+    work.support_head_work = Some(4);
+    work.support_order_work = None;
+    work.support_wake_work = Some(2);
+    work.support_publication_work = Some(3);
+    observer.enter();
+    observer.phase_enter(GroundingPhase::SupportCompletion, None);
+    observer.phase_exit(
+        GroundingPhase::SupportCompletion,
+        None,
+        GroundingOutcome::Failed,
+        work,
+    );
+    observer.exit();
+    let (_, records, refusal) = observer.finish();
+    assert_eq!(refusal, Some(CaptureRefusal::WorkUnavailable));
+    let json = serde_json::to_value(records[0]).unwrap();
+    for (name, expected) in [
+        ("support_construction_work", 23),
+        ("support_production_work", 11),
+        ("support_join_work", 5),
+        ("support_head_work", 4),
+        ("support_wake_work", 2),
+        ("support_publication_work", 3),
+    ] {
+        assert_eq!(json["work"][name], expected);
+    }
+    assert!(json["work"]["support_order_work"].is_null());
+}
+
+#[test]
+fn unavailable_support_subdivision_refuses_complete_capture() {
+    for name in ["support_join_work", "support_head_work"] {
+        let observer = Observer::new(Mode::Detailed, 1).unwrap();
+        let mut work = GroundingWork::default();
+        if name == "support_join_work" {
+            work.support_join_work = None;
+        } else {
+            work.support_head_work = None;
+        }
+        observer.enter();
+        observer.phase_enter(GroundingPhase::SupportCompletion, None);
+        observer.phase_exit(
+            GroundingPhase::SupportCompletion,
+            None,
+            GroundingOutcome::Failed,
+            work,
+        );
+        observer.exit();
+        let (_, records, refusal) = observer.finish();
+        assert_eq!(refusal, Some(CaptureRefusal::WorkUnavailable));
+        let json = serde_json::to_value(records[0]).unwrap();
+        assert!(json["work"][name].is_null());
+        assert_eq!(json["work"]["support_production_work"], 0);
+        assert_eq!(json["work"].as_object().unwrap().len(), 37);
+    }
+}

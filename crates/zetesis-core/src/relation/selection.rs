@@ -218,8 +218,10 @@ impl<'source> Relation<'source> {
     /// ingress via [`TermRef::from`]. Exact typed identity resolves each through
     /// the same dictionary; raw IDs from distinct catalogs are never compared.
     ///
-    /// Construction performs logarithmic dictionary lookup per equality,
-    /// including typed payload costs. Input order and repeated columns remain
+    /// Append dictionaries use expected-constant canonical-ID lookup for a
+    /// compatible prefix; other input uses logarithmic semantic lookup,
+    /// including typed payload costs. Hash operations admit one fixed-key
+    /// container operation, not each internal probe. Input order and repeated columns remain
     /// explicit. A missing value cannot make a later invalid column valid.
     ///
     /// # Errors

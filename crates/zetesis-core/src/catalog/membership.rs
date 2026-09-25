@@ -56,14 +56,21 @@ impl<'a> CatalogRead<'a> {
         self,
         term: super::TermRef<'_>,
     ) -> Result<storage::TermId, ReadError> {
-        self.term_key(term).map(|key| key.id)
+        super::TermRead::from(self).selected_term(term)
     }
 
     pub(crate) fn selected_predicate(
         self,
         predicate: PredicateRef<'_>,
     ) -> Result<storage::PredicateId, ReadError> {
-        self.declare_existing(predicate).map(|key| key.id)
+        let (read, id) = predicate.canonical().ok_or(ReadError::Uninterned)?;
+        if !self.0.same_vocabulary(read) {
+            return Err(ReadError::ForeignCatalog);
+        }
+        if !self.0.contains_predicate(id) {
+            return Err(ReadError::OutsidePrefix);
+        }
+        Ok(id)
     }
 
     /// Retain a declaration for a predicate already present in this read prefix.
@@ -75,13 +82,7 @@ impl<'a> CatalogRead<'a> {
         self,
         predicate: PredicateRef<'_>,
     ) -> Result<DeclaredPredicate, ReadError> {
-        let (read, id) = predicate.canonical().ok_or(ReadError::Uninterned)?;
-        if !self.0.accepts_vocabulary_scope(&read.vocabulary_scope()) {
-            return Err(ReadError::ForeignCatalog);
-        }
-        if !self.0.contains_predicate(id) {
-            return Err(ReadError::OutsidePrefix);
-        }
+        let id = self.selected_predicate(predicate)?;
         Ok(DeclaredPredicate::new(self.0, id))
     }
 
@@ -90,10 +91,22 @@ impl<'a> CatalogRead<'a> {
     /// # Errors
     /// Refuses a foreign vocabulary or an older prefix missing the predicate.
     pub fn predicate(self, key: &DeclaredPredicate) -> Result<PredicateRef<'a>, ReadError> {
+        self.resolve_predicate(key).map(|(_, predicate)| predicate)
+    }
+
+    /// Resolve a declaration once for consumers that need both its admitted ID
+    /// and borrowed signature. The pair comes from the same scope/prefix check;
+    /// callers need no second conversion from a general predicate view.
+    pub(crate) fn resolve_predicate(
+        self,
+        key: &DeclaredPredicate,
+    ) -> Result<(storage::PredicateId, PredicateRef<'a>), ReadError> {
         if !self.0.accepts_vocabulary_scope(&key.scope) {
             return Err(ReadError::ForeignCatalog);
         }
-        PredicateRef::new(self.0, key.id).ok_or(ReadError::OutsidePrefix)
+        PredicateRef::new(self.0, key.id)
+            .map(|predicate| (key.id, predicate))
+            .ok_or(ReadError::OutsidePrefix)
     }
 }
 

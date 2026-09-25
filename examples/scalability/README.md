@@ -27,7 +27,14 @@ From the repository root, using the installed solver:
 ```sh
 zetesis solve examples/scalability/n-queens.lp --all
 zetesis solve examples/scalability/pigeonhole.lp --stats
+zetesis solve examples/einstein-riddle.lp --all
 ```
+
+Einstein uses automatic grounding and ordinary resource defaults. The solver
+can defer eligible terminal definitions until it has checked each base answer;
+it then reconstructs the complete answer before displaying it. Explicit eager
+grounding instead materializes the entire program and can require a larger
+grounding allowance.
 
 The recorded contracts apply to the default `#const` values shown above. To select
 a different size for an experiment, the maintained matrix runner performs a
@@ -87,5 +94,6 @@ expected complete results. `cargo test -p zetesis-validation --test
 authored_examples` checks source integrity and contract registration without
 solving large instances. `scripts/check.sh oracle` also runs the complete clingo
 contracts for both defaults and Einstein. Native default checks live in
-`zetesis-cli/tests/authored_examples.rs`; the larger Einstein native test is an
-explicit release qualification, separate from the portable population.
+`zetesis-cli/tests/authored_examples.rs`, including Einstein with automatic
+grounding and unchanged resource defaults. These checks run in the portable
+test suite.

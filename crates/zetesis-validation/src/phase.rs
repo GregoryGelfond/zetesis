@@ -8,6 +8,8 @@ use std::collections::BTreeMap;
 use serde::Serialize;
 
 const HEADER: &str =
+    "Phase timings: clock=host-monotonic; scope=driver; failed_attempts=included; schema=4";
+const REDUCT_HEADER: &str =
     "Phase timings: clock=host-monotonic; scope=driver; failed_attempts=included; schema=3";
 const CERTIFICATE_HEADER: &str =
     "Phase timings: clock=host-monotonic; scope=driver; failed_attempts=included; schema=2";
@@ -44,7 +46,7 @@ const CERTIFICATE_LABELS: [&str; 13] = [
     "observation_output",
 ];
 
-const LABELS: [&str; 14] = [
+const LABELS: [&str; 15] = [
     "admission_materialization",
     "execution_setup",
     "candidate_setup",
@@ -59,11 +61,13 @@ const LABELS: [&str; 14] = [
     "objective_scoring_retention",
     "objective_feedback",
     "observation_output",
+    "answer_reconstruction",
 ];
 
 #[derive(Debug, Serialize)]
 pub(crate) struct PhaseTimings {
-    /// Exact recognized schema: 1 omits certificates; 2 omits reduct preparation.
+    /// Exact recognized schema: 1 omits certificates; 2 omits reduct preparation;
+    /// 3 omits answer reconstruction.
     pub(crate) schema_version: u8,
     /// Driver host interval; source loading and statistics output are excluded.
     pub(crate) driver_elapsed_ns: u64,
@@ -93,7 +97,8 @@ pub(crate) fn parse(stderr: &str) -> Result<Option<PhaseTimings>, String> {
         return Ok(None);
     }
     let (schema_version, labels): (u8, &[&'static str]) = match lines[0] {
-        HEADER => (3, &LABELS),
+        HEADER => (4, &LABELS),
+        REDUCT_HEADER => (3, &LABELS[..14]),
         CERTIFICATE_HEADER => (2, &CERTIFICATE_LABELS),
         LEGACY_HEADER => (1, &LEGACY_LABELS),
         _ => return Err("unsupported phase timing schema".into()),

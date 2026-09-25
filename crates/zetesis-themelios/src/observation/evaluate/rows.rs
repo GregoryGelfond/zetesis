@@ -3,12 +3,13 @@
 //! Canonical atom order groups equal predicates contiguously. Binary bounds
 //! select exactly that group; tuple matching still checks the complete row.
 //! A query retains ranges, never copied atoms or materialized matching positions.
+//! Ranges address the model's selected order, not original catalog occurrences.
 
 use std::cmp::Ordering;
 use std::ops::Range;
 
 use zetesis_core::{
-    Model, Sign,
+    Model,
     catalog::{AtomRef, PredicateRef},
 };
 
@@ -30,7 +31,7 @@ impl<'a> ModelRows<'a> {
 
     fn bound(
         &self,
-        key: (&str, usize, Sign),
+        key: PredicateRef<'_>,
         after_equal: bool,
         work: &mut Work<'_>,
     ) -> Result<usize, Error> {
@@ -40,9 +41,7 @@ impl<'a> ModelRows<'a> {
             let middle = lower + (upper - lower) / 2;
             work.step(1)?;
             let predicate = self.get(middle).predicate();
-            work.step(1 + key.0.len() as u128 + predicate.name().len() as u128)?;
-            // Predicate::Ord is name, arity, sign. No owned key is constructed.
-            let order = (predicate.name(), predicate.arity(), predicate.sign()).cmp(&key);
+            let order = predicate.compare_ref_with(key, || work.step(1))?;
             if order == Ordering::Less || (after_equal && order == Ordering::Equal) {
                 lower = middle + 1;
             } else {
@@ -52,7 +51,7 @@ impl<'a> ModelRows<'a> {
         Ok(lower)
     }
 
-    fn range(&self, key: (&str, usize, Sign), work: &mut Work<'_>) -> Result<Range<usize>, Error> {
+    fn range(&self, key: PredicateRef<'_>, work: &mut Work<'_>) -> Result<Range<usize>, Error> {
         let lower = self.bound(key, false, work)?;
         let upper = self.bound(key, true, work)?;
         Ok(lower..upper)
@@ -63,13 +62,12 @@ impl<'a> ModelRows<'a> {
         predicate: impl Into<PredicateRef<'predicate>>,
         work: &mut Work<'_>,
     ) -> Result<Range<usize>, Error> {
-        let predicate = predicate.into();
-        self.range(
-            (predicate.name(), predicate.arity(), predicate.sign()),
-            work,
-        )
+        self.range(predicate.into(), work)
     }
 }
+
+#[cfg(test)]
+mod tests;
 
 /// Original alternative order followed by canonical row order within each.
 /// Exhaustion restores the initial cursor for the next enclosing binding.

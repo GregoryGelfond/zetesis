@@ -15,13 +15,19 @@ fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples")
 }
 
-fn check(workload: &Workload, expansion_work: Option<usize>) {
-    let profile = scalability::profiles(expansion_work)[0];
-    let options = Options::try_parse_from(
-        std::iter::once("zetesis".into())
-            .chain(NativeInvocation::Legacy.arguments(&profile))
-            .chain(["--json".into(), "--time-limit".into(), "60".into()]),
-    )
+fn check(workload: &Workload) {
+    // Exercise ordinary automatic admission with unchanged resource defaults.
+    // The scalability profiles intentionally request complete eager grounding.
+    let options = Options::try_parse_from([
+        "zetesis",
+        "--backend",
+        "cpu",
+        "--models",
+        "0",
+        "--json",
+        "--time-limit",
+        "60",
+    ])
     .unwrap();
     let source = std::fs::read_to_string(root().join(workload.entry())).unwrap();
     let mut output = Vec::new();
@@ -49,17 +55,13 @@ fn check(workload: &Workload, expansion_work: Option<usize>) {
 #[test]
 fn default_scalability_sources_satisfy_complete_contracts() {
     for workload in scalability::defaults(&root(), WorkloadLimits::default()).unwrap() {
-        check(&workload, None);
+        check(&workload);
     }
 }
 
 #[test]
-#[ignore = "bounded full Einstein solve; run explicitly in release qualification"]
-fn einstein_has_the_exact_unique_house_assignment() {
-    check(
-        &scalability::einstein(&root(), WorkloadLimits::default()).unwrap(),
-        Some(300_000_000),
-    );
+fn default_limits_admit_the_unique_einstein_assignment() {
+    check(&scalability::einstein(&root(), WorkloadLimits::default()).unwrap());
 }
 
 #[test]

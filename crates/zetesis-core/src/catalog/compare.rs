@@ -172,10 +172,25 @@ impl<'a> Nodes<'a> {
         Self::canonical(TermRef::from(value))
     }
 
-    fn root(&self) -> ValueNodeRef<'a> {
+    /// Read the root once and leave the cursor ready for its descendants.
+    /// Admitted terms are nonempty; the first node needs no rank navigation.
+    fn take_root<E>(
+        &mut self,
+        before: &mut impl FnMut() -> Result<(), E>,
+    ) -> Result<ValueNodeRef<'a>, E> {
+        before()?;
         match self {
-            Self::Canonical(cursor) => cursor.root.descriptor(),
-            Self::Ingress { term, .. } => term.descriptor(),
+            Self::Canonical(cursor) => {
+                let descriptor = cursor.root.descriptor();
+                cursor.position = 1;
+                cursor.current = Some(cursor.root);
+                Ok(descriptor)
+            }
+            Self::Ingress { term, position } => {
+                let descriptor = term.descriptor();
+                *position = 1;
+                Ok(descriptor)
+            }
         }
     }
 
@@ -209,22 +224,50 @@ enum Order {
     Asp { metered: bool },
 }
 
+impl Order {
+    fn compare<E>(
+        self,
+        left: ValueNodeRef<'_>,
+        right: ValueNodeRef<'_>,
+        before: &mut impl FnMut() -> Result<(), E>,
+    ) -> Result<Ordering, E> {
+        before()?;
+        let metered = match self {
+            Self::Storage { metered } | Self::Asp { metered } => metered,
+        };
+        let text = |left: &str, right: &str| {
+            if metered {
+                crate::identity::bytes(left.as_bytes(), right.as_bytes(), before)
+            } else {
+                Ok(left.cmp(right))
+            }
+        };
+        match self {
+            Self::Storage { .. } => crate::term_order::storage_with(left, right, text),
+            Self::Asp { .. } => crate::term_order::asp_with(left, right, text),
+        }
+    }
+}
+
 fn nodes_with<E>(
     mut left: Nodes<'_>,
     mut right: Nodes<'_>,
     order: Order,
     before: &mut impl FnMut() -> Result<(), E>,
 ) -> Result<Ordering, E> {
+    let left_root = left.take_root(before)?;
+    let right_root = right.take_root(before)?;
     if matches!(order, Order::Storage { .. }) {
         before()?;
-        let left_rank = crate::term_order::root_storage_rank(left.root());
-        before()?;
-        let right_rank = crate::term_order::root_storage_rank(right.root());
-        before()?;
-        let comparison = left_rank.cmp(&right_rank);
+        let comparison = crate::term_order::root_storage_rank(left_root)
+            .cmp(&crate::term_order::root_storage_rank(right_root));
         if !comparison.is_eq() {
             return Ok(comparison);
         }
+    }
+    let comparison = order.compare(left_root, right_root, before)?;
+    if !comparison.is_eq() || (arity(left_root) == 0 && arity(right_root) == 0) {
+        return Ok(comparison);
     }
     loop {
         let left = left.next_with(before)?;
@@ -233,25 +276,7 @@ fn nodes_with<E>(
             before()?;
             return Ok(left.is_some().cmp(&right.is_some()));
         };
-        before()?;
-        let comparison = match order {
-            Order::Storage { metered } => {
-                crate::term_order::storage_with(left, right, |left, right| {
-                    if metered {
-                        crate::identity::bytes(left.as_bytes(), right.as_bytes(), before)
-                    } else {
-                        Ok(left.cmp(right))
-                    }
-                })?
-            }
-            Order::Asp { metered } => crate::term_order::asp_with(left, right, |left, right| {
-                if metered {
-                    crate::identity::bytes(left.as_bytes(), right.as_bytes(), before)
-                } else {
-                    Ok(left.cmp(right))
-                }
-            })?,
-        };
+        let comparison = order.compare(left, right, before)?;
         if !comparison.is_eq() {
             return Ok(comparison);
         }
@@ -272,6 +297,19 @@ pub(super) fn term(left: TermRef<'_>, right: TermRef<'_>) -> Ordering {
 }
 
 pub(super) fn term_with<E>(
+    left: TermRef<'_>,
+    right: TermRef<'_>,
+    before: &mut impl FnMut() -> Result<(), E>,
+) -> Result<Ordering, E> {
+    if same_term_with(left, right, before)? {
+        return Ok(Ordering::Equal);
+    }
+    term_contents_with(left, right, before)
+}
+
+/// Compare contents after the caller has ruled out a canonical identity result.
+/// This is also the cross-owner fallback for checked equality.
+pub(super) fn term_contents_with<E>(
     left: TermRef<'_>,
     right: TermRef<'_>,
     before: &mut impl FnMut() -> Result<(), E>,
@@ -319,12 +357,29 @@ pub(super) fn asp_with<E>(
     right: TermRef<'_>,
     before: &mut impl FnMut() -> Result<(), E>,
 ) -> Result<Ordering, E> {
+    if same_term_with(left, right, before)? {
+        return Ok(Ordering::Equal);
+    }
     nodes_with(
         Nodes::canonical(left),
         Nodes::canonical(right),
         Order::Asp { metered: true },
         before,
     )
+}
+
+/// Scoped canonical identity proves equality in either order without reading
+/// descriptors or text. Unequal IDs establish no ordering, even in one owner.
+fn same_term_with<E>(
+    left: TermRef<'_>,
+    right: TermRef<'_>,
+    before: &mut impl FnMut() -> Result<(), E>,
+) -> Result<bool, E> {
+    if !left.is_canonical() || !right.is_canonical() {
+        return Ok(false);
+    }
+    before()?;
+    Ok(left.same_identity(right))
 }
 
 pub(super) fn atom(left: AtomRef<'_>, right: AtomRef<'_>) -> Ordering {
@@ -342,22 +397,33 @@ pub(super) fn atom_with<E>(
     right: AtomRef<'_>,
     before: &mut impl FnMut() -> Result<(), E>,
 ) -> Result<Ordering, E> {
+    if left.canonical().is_some() && right.canonical().is_some() {
+        before()?;
+        if left.same_identity(right) {
+            return Ok(Ordering::Equal);
+        }
+    }
+    atom_contents_with(left, right, before)
+}
+
+/// Compare contents after the caller has ruled out a canonical identity result.
+/// Checked equality uses this foreign-authority fallback without probing again.
+pub(super) fn atom_contents_with<E>(
+    left: AtomRef<'_>,
+    right: AtomRef<'_>,
+    before: &mut impl FnMut() -> Result<(), E>,
+) -> Result<Ordering, E> {
     before()?;
     let left_predicate = left.predicate();
     before()?;
     let right_predicate = right.predicate();
-    before()?;
-    let predicate = crate::identity::bytes(
-        left_predicate.name().as_bytes(),
-        right_predicate.name().as_bytes(),
-        before,
-    )?
-    .then_with(|| left_predicate.arity().cmp(&right_predicate.arity()))
-    .then_with(|| left_predicate.sign().cmp(&right_predicate.sign()));
+    let predicate = left_predicate.compare_ref_with(right_predicate, &mut *before)?;
     if !predicate.is_eq() {
         return Ok(predicate);
     }
-    for column in 0..left_predicate.arity() {
+    before()?;
+    let arity = left_predicate.arity();
+    for column in 0..arity {
         before()?;
         let left = left.values().at(column).expect("admitted argument");
         before()?;
@@ -386,29 +452,14 @@ pub(super) fn atom_value_with<E>(
     right: &Atom,
     before: &mut impl FnMut() -> Result<(), E>,
 ) -> Result<Ordering, E> {
-    before()?;
-    let predicate = left.predicate();
-    before()?;
-    let order = crate::identity::bytes(
-        predicate.name().as_bytes(),
-        right.predicate().name().as_bytes(),
-        before,
-    )?
-    .then_with(|| predicate.arity().cmp(&right.predicate().arity()))
-    .then_with(|| predicate.sign().cmp(&right.predicate().sign()));
-    if !order.is_eq() {
-        return Ok(order);
-    }
-    for (column, right) in right.values().iter().enumerate() {
-        before()?;
-        let left = left.values().at(column).expect("admitted argument");
-        let order = term_value_with(left, right, before)?;
-        if !order.is_eq() {
-            return Ok(order);
-        }
-    }
-    Ok(Ordering::Equal)
+    atom_with(left, AtomRef::from(right), before)
 }
+
+#[cfg(test)]
+mod identity_tests;
+
+#[cfg(test)]
+mod root_tests;
 
 #[cfg(test)]
 mod tests {

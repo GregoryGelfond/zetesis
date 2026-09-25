@@ -20,6 +20,47 @@ analysis does not construct the argument product or claim that every pair is
 reachable. The result describes possible values, rather than concrete atoms or
 stable answers.
 
+## Terminal positive definitions
+
+`terminal::analyze(&Program, Limits) -> terminal::Analysis<'_>` classifies a
+separate structural profile. It returns every original rule carrier for signed
+predicates whose producers are all normal positive flat definitions and whose
+atoms are never read by any rule, constraint, or local condition. Each head
+variable must have a whole-argument positive body binding. Repeated variables,
+facts and already closed `Symbol` constants are allowed. Unevaluated arithmetic,
+ranges, pools and constructors disqualify a producer; they are not evaluated.
+Choices can remain in the base program, without any assumption that their
+possible support is functional.
+
+For example, `1 { assigned(K,V):value(V) } 1 :- key(K).` chooses one value
+per key in each answer set. If `value(red)` and `value(blue)` are possible,
+grounding must retain both alternatives. A separate definition
+`receipt(K,V) :- assigned(K,V).` can qualify as terminal when no logical rule
+reads `receipt`. Eligibility depends on the complete definitions and
+dependencies, not these names, the number of choices, or a particular encoding.
+
+The complete occurrence scan includes choice, disjunction, aggregate and
+conditional head/body scopes. A complementary strong-sign occurrence prevents
+selection because coherence is an implicit dependency. Every producer of a
+selected signature is returned in Program iteration order, retaining its exact
+carrier and combined provenance. The result belongs only to the borrowed input
+instance. `#show` and `#defined` neither select nor suppress definitions.
+Objectives, explicit projection and unresolved source contexts produce
+`Unknown`; a logical ceiling produces `Stopped`. Either discards the selection.
+
+This profile uses work, inspected text, signed predicate/argument populations,
+submitted occurrence/reference links and per-symbol structural limits. The
+finite-domain width, value-entry and fixed-point-round limits are unrelated and
+unused. Names, values and rule carriers stay borrowed. Standard collection
+allocations are bounded by the admitted logical populations; this is not a
+fallible physical-byte allocation contract or a total memory limit.
+
+The classifier does not omit grounding, reconstruct an answer, or establish
+answer-set correspondence. A consumer must validate source/IR correspondence,
+preserve original diagnostics and reconstruct complete interpretations before
+membership evidence, projection or output. Those execution obligations remain
+separate from this structural result.
+
 ## Keyed relations
 
 `keys(&Program, &mut KeyWork) -> Result<Vec<KeyedRelation<'_>>, Stop>` lists the relations
@@ -136,6 +177,7 @@ external-oracle coverage is claimed for this crate.
 Different immutable Programs can be analyzed independently. A future synchronous
 transfer/reduction implementation could parallelize independent components after
 profiling. This first bounded implementation has no threading/device dependency
-and makes no hardware speedup claim. Runtime pruning, abstract intervals,
-arithmetic transfer, demand/magic-set rewriting and source-fragment recognition
-remain separate work.
+and makes no hardware speedup claim. The source bridge consumes domain analysis
+for eligible grounding guards and terminal-definition reconstruction; those
+operations belong to the grounder and solver, not this analysis crate. Abstract
+intervals, arithmetic transfer and demand/magic-set rewriting remain future work.

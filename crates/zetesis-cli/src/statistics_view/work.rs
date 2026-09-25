@@ -7,6 +7,15 @@ use zetesis_presentation::{Alignment, Column, Row, Table};
 use crate::{GroundingPhase, GroundingTimings, SemanticOutcome};
 
 pub(super) fn execution(semantic: Option<&SemanticOutcome>) -> String {
+    let base = base_execution(semantic);
+    if semantic.is_some_and(|value| value.terminal_execution().is_some()) {
+        format!("{base}; eager base with host answer reconstruction")
+    } else {
+        base
+    }
+}
+
+fn base_execution(semantic: Option<&SemanticOutcome>) -> String {
     let Some(semantic) = semantic else {
         return "unavailable".into();
     };
@@ -72,7 +81,9 @@ pub(super) fn table(
         rows.push(count(
             "Verified memberships",
             semantic.verified_models(),
-            if semantic.hybrid_execution().is_some() {
+            if semantic.terminal_execution().is_some() {
+                "original answers after complete reconstruction"
+            } else if semantic.hybrid_execution().is_some() {
                 "original answers after completed constraint checks"
             } else {
                 "includes queued results"
@@ -80,6 +91,9 @@ pub(super) fn table(
         ));
         if let Some(execution) = semantic.hybrid_execution() {
             hybrid(&mut rows, execution);
+        }
+        if let Some(execution) = semantic.terminal_execution() {
+            terminal(&mut rows, execution);
         }
         if let Some(statistics) = semantic.countermodel_statistics() {
             formula(&mut rows, statistics);
@@ -160,6 +174,38 @@ pub(super) fn table(
         rows,
     )
     .map_err(io::Error::other)
+}
+
+fn terminal(rows: &mut Vec<Row>, execution: &zetesis_solve::TerminalExecutionStatistics) {
+    for (label, value, scope) in [
+        (
+            "Base answers consumed",
+            execution.base_answers,
+            "base membership before full reconstruction",
+        ),
+        (
+            "Original answers reconstructed",
+            execution.reconstructed,
+            "complete original membership",
+        ),
+        (
+            "Reconstruction pending",
+            execution.pending,
+            "no original membership established",
+        ),
+        (
+            "Reconstruction work",
+            execution.reconstruction.work,
+            "cumulative source admission and reconstruction; excludes base search",
+        ),
+        (
+            "Reconstruction substitutions",
+            execution.reconstruction.substitutions,
+            "cumulative source admission and reconstruction",
+        ),
+    ] {
+        rows.push(count(label, value, scope));
+    }
 }
 
 fn hybrid(rows: &mut Vec<Row>, execution: &zetesis_solve::HybridExecutionStatistics) {

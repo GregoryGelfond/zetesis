@@ -21,9 +21,10 @@ use crate::{FormulaFailure, FormulaLimits, FormulaResource};
 
 mod append;
 mod publication;
-pub(super) use append::AssignedAtom;
+mod close;
 pub(super) use append::SupportAppend;
 pub(crate) use append::{SourceAtom, SourceScope};
+pub(crate) use close::ClosedSource;
 
 #[cfg(test)]
 mod tests;
@@ -156,6 +157,17 @@ impl SupportCatalog {
         counters: &mut Counters,
         location: Location,
     ) -> Result<(), FormulaFailure> {
+        counters.observe_work(Event::SupportPublicationWork, |counters| {
+            self.publish_rows(limits, counters, location)
+        })
+    }
+
+    fn publish_rows(
+        &mut self,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: Location,
+    ) -> Result<(), FormulaFailure> {
         for source in &mut self.rows {
             counters.work(limits, location)?;
             source.old_rows = source.catalog.len();
@@ -172,6 +184,7 @@ impl SupportCatalog {
         record_owner_peak(self.owner.storage_peak_bytes(), outer, counters);
         committed.map_err(|error| atom_failure(error, limits, outer, location))?;
         *self.growth.get_mut() = 0;
+        let mut previous: Option<(PredicateRef<'_>, usize)> = None;
         for position in 0..self.pending.len() {
             counters.work(limits, location)?;
             let discovery = self.pending[position];
@@ -183,17 +196,17 @@ impl SupportCatalog {
                 .get(discovery)
                 .expect("same authority's pending discovery");
             let predicate = atom.predicate();
-            let found = find_catalog(&self.rows, read, predicate, limits, counters, location)?;
-            let index = match found {
-                Ok(index) => index,
-                Err(index) => {
-                    let source = CatalogRows::new(read, predicate, &mut memory, counters)?;
-                    counters.charge_work(self.rows.len() as u128, limits, location)?;
-                    memory.reserve(&mut self.rows, 1)?;
-                    self.rows.insert(index, source);
+            let index = match previous {
+                Some((prior, index))
+                    if predicate.equals_ref_with(prior, || counters.work(limits, location))? =>
+                {
                     index
                 }
+                _ => catalog_index(&mut self.rows, read, predicate, &mut memory, counters)?,
             };
+            // Only this contiguous predicate run reuses the index: inserting a
+            // different relation may shift every later directory position.
+            previous = Some((predicate, index));
             let source = &mut self.rows[index];
             let old_bytes = source.catalog.retained_bytes();
             let outer_bytes = memory.outside(old_bytes)?;
@@ -357,7 +370,34 @@ fn find_catalog(
     Ok(Err(start))
 }
 
-pub(super) fn owner_limits(
+/// Resolve a predicate run, admitting its relation and directory slot if absent.
+fn catalog_index(
+    rows: &mut Vec<CatalogRows>,
+    read: CatalogRead<'_>,
+    predicate: PredicateRef<'_>,
+    memory: &mut Memory<'_>,
+    counters: &mut Counters,
+) -> Result<usize, FormulaFailure> {
+    match find_catalog(
+        rows,
+        read,
+        predicate,
+        memory.limits,
+        counters,
+        memory.location,
+    )? {
+        Ok(index) => Ok(index),
+        Err(index) => {
+            let source = CatalogRows::new(read, predicate, memory, counters)?;
+            counters.charge_work(rows.len() as u128, memory.limits, memory.location)?;
+            memory.reserve(rows, 1)?;
+            rows.insert(index, source);
+            Ok(index)
+        }
+    }
+}
+
+pub(crate) fn owner_limits(
     limits: &FormulaLimits,
     outer: u128,
     location: Location,
@@ -378,7 +418,7 @@ fn record_owner_peak(peak: u128, outer: u128, counters: &Counters) {
     counters.record(Event::SupportPeakBytes(peak.saturating_add(outer)));
 }
 
-pub(super) fn atom_failure(
+pub(crate) fn atom_failure(
     error: atom_interner::Failure<FormulaFailure>,
     limits: &FormulaLimits,
     outer: u128,

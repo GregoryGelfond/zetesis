@@ -6,6 +6,22 @@ fn pattern() -> AtomPattern {
     AtomPattern::new(Predicate::new("p", 1).unwrap(), vec![Term::Variable(0)]).unwrap()
 }
 
+// These fixtures query canonical rows with borrowed ingress signatures/values,
+// so they do not take the same-canonical-ID shortcut. Finding p/1 reads the
+// query signature, probes its relation, resolves both signatures, compares the
+// signature descriptor, then compares the 'p' byte and the string terminator.
+const SIGNATURE_WORK: usize = 7;
+// Inspect the query and its predicate representation before selecting the
+// semantic ingress fallback. These fixtures contain no canonical query IDs.
+const CANONICAL_APPLICABILITY_WORK: usize = 2;
+// Each visited numeric row resolves the row, arity and argument, then reads
+// each root descriptor once, compares storage ranks and compares the numbers.
+// Scalars have no descendants; equality no longer visits two cursor ends or
+// compares their lengths. Equal and unequal numeric rows cost the same here.
+const NUMERIC_NODE_WORK: usize = 3 + 2 + 1 + 1;
+// A prepared vacant route replays one node/direction and writes one Step.
+const REPLAY_NODE_WORK: usize = 2;
+
 #[test]
 fn queries_borrow_committed_and_pending_identities() {
     let mut owner = owner(&[2, 1, 3]);
@@ -92,7 +108,7 @@ fn occupied_entries_need_no_scratch_capacity() {
     owner.index.path = Vec::new();
     let live = owner.storage_bytes();
     let bounds = Limits {
-        max_bytes: live,
+        max_bytes: live + PREPARED_BYTES,
         ..limits()
     };
     let duplicate = atom(1);
@@ -154,20 +170,15 @@ fn read_only_misses_need_no_mutation_storage() {
 fn probe_work_matches_visited_typed_prefixes() {
     let owner = owner(&[2, 1, 3]);
     let pattern = pattern();
-    // Finding p/1 costs query signature resolution, one relation probe, two
-    // compared signature resolutions, one descriptor, the 'p' byte and its
-    // terminator: seven operations. A numeric
-    // node costs three row/arity/argument resolutions and seven comparison
-    // operations through its descriptor; equality also visits both ends and
-    // compares their lengths. Thus unequal nodes cost ten and equal nodes
-    // thirteen. p(2) is the root; the other queries visit two nodes.
-    for (value, expected, work) in [
-        (2, Some(0), 20),
-        (1, Some(1), 30),
-        (3, Some(2), 30),
-        (0, None, 27),
-        (4, None, 27),
+    // p(2) is the root; the other queries visit two numeric nodes.
+    for (value, expected, nodes) in [
+        (2, Some(0), 1),
+        (1, Some(1), 2),
+        (3, Some(2), 2),
+        (0, None, 2),
+        (4, None, 2),
     ] {
+        let work = CANONICAL_APPLICABILITY_WORK + SIGNATURE_WORK + nodes * NUMERIC_NODE_WORK;
         let mut spent = 0;
         let actual = owner
             .find_atom_with(&atom(value), limits(), || {
@@ -197,7 +208,7 @@ fn query_work_limits_are_inclusive() {
     for value in [3, 4] {
         let values = [Value::Number(value)];
         let key = pattern.key(values.as_slice()).unwrap();
-        let total = if value == 3 { 30 } else { 27 };
+        let total = CANONICAL_APPLICABILITY_WORK + SIGNATURE_WORK + 2 * NUMERIC_NODE_WORK;
         for limit in 0..=total {
             let cause = ("query stopped", limit);
             let mut spent = 0;
@@ -286,8 +297,8 @@ fn empty_queries_charge_signature_resolution() {
             .unwrap(),
         None
     );
-    assert_eq!(atom_work, 1);
-    assert_eq!(key_work, 1);
+    assert_eq!(atom_work, CANONICAL_APPLICABILITY_WORK + 1);
+    assert_eq!(key_work, CANONICAL_APPLICABILITY_WORK + 1);
 }
 
 #[test]
@@ -303,10 +314,12 @@ fn vacant_entries_charge_link_replay() {
         })
         .unwrap();
     assert_eq!(entry.position(), None);
-    // Seven signature operations and two ten-operation unequal typed probes
-    // include direction recording. Replay adds a node/decode and Step write
-    // per visited node, without repeating typed comparisons or growing storage.
-    assert_eq!(spent, 7 + 2 * 10 + 2 * 2);
+    // The two typed probes record the route. Replay does not repeat those
+    // comparisons or grow the already available path storage.
+    assert_eq!(
+        spent,
+        CANONICAL_APPLICABILITY_WORK + SIGNATURE_WORK + 2 * (NUMERIC_NODE_WORK + REPLAY_NODE_WORK)
+    );
     assert_eq!(
         entry
             .insert_with(limits(), || Ok::<(), Infallible>(()))
@@ -351,10 +364,10 @@ fn full_direction_record_refuses_without_change() {
 
 #[test]
 fn replay_refusal_preserves_published_membership() {
-    // p(4) takes the relation lookup and two unequal typed probes (27
-    // operations), followed by two replay node/Step pairs. Refuse each pair's
-    // node inspection and Step write in turn.
-    for limit in 27..31 {
+    // p(4) takes the relation lookup and two unequal typed probes, followed by
+    // two replay node/Step pairs. Refuse each pair's node read and Step write.
+    let lookup = SIGNATURE_WORK + 2 * NUMERIC_NODE_WORK;
+    for limit in lookup..lookup + 2 * REPLAY_NODE_WORK {
         let mut owner = owner(&[2, 1, 3]);
         assert!(owner.index.path.capacity() >= 2);
         owner

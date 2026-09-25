@@ -100,8 +100,7 @@ fn validate(
         let atom = source.atom(row).ok_or(Failure::CatalogIndex)?;
         if !atom
             .predicate()
-            .compare_ref_with(predicate, || work.tick(1))?
-            .is_eq()
+            .equals_ref_with(predicate, || work.tick(1))?
         {
             return Err(Failure::Predicate);
         }
@@ -207,7 +206,9 @@ fn differs(
     work: &mut Work,
 ) -> Result<bool, Failure> {
     if let Some(previous) = previous {
-        Ok(work.compare(previous.value(source)?, value.value(source)?)? != Ordering::Equal)
+        Ok(!previous
+            .value(source)?
+            .equals_ref_with(value.value(source)?, || work.tick(1))?)
     } else {
         work.tick(1)?;
         Ok(true)
@@ -250,16 +251,24 @@ pub(super) fn lookup_with<E: From<Failure>>(
             }
             Ok(None)
         }
-        DictionaryIndex::Append(index) => crate::ordered_index::search(
-            &index.nodes,
-            index.root,
-            |id| {
-                before()?;
-                value.compare_ref_with(layout.dictionary[id].value(source)?, &mut *before)
-            },
-            |_| {},
-        )?
-        .map(|id| u32::try_from(id).map_err(|_| Failure::Overflow.into()))
-        .transpose(),
+        DictionaryIndex::Append(index) => {
+            if let Some(read) = source.read()
+                && let super::dictionary::Probe::Local { equality, .. } =
+                    index.identities.probe_with(read, value, before)?
+            {
+                return Ok(equality);
+            }
+            crate::ordered_index::search(
+                &index.order.nodes,
+                index.order.root,
+                |id| {
+                    before()?;
+                    value.compare_ref_with(layout.dictionary[id].value(source)?, &mut *before)
+                },
+                |_| {},
+            )?
+            .map(|id| u32::try_from(id).map_err(|_| Failure::Overflow.into()))
+            .transpose()
+        }
     }
 }

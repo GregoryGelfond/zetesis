@@ -31,7 +31,7 @@ pub use config::{Plan, Producer, ReferencePolicy, Request, Slot, Suite};
 pub use invocation::NativeInvocation;
 pub use record::{
     Decision, DeviceWork, Execution, FormulaResidualStatistics, HybridStatistics, Observation,
-    Procedure, RegionChecks, Sample,
+    Procedure, RegionChecks, Sample, TerminalStatistics,
 };
 pub(crate) use workload::workload_label;
 pub use workload::{AuthoredProgram, ConstantAmendment, Workload, WorkloadLimits};

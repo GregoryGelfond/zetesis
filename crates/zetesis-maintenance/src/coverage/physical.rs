@@ -69,7 +69,7 @@ pub fn selection(table: &str) -> Result<Selection, Error> {
         ("relation-measurement", "relation_measurement", 1),
         ("context", "hardware_context", 1),
         ("solve-context", "lib", 3),
-        ("session-resources", "session_resources_gpu", 8),
+        ("session-resources", "session_resources_gpu", 9),
         ("language-consumers", "language_consumers", 2),
         ("static", "hardware", 2),
     ];
@@ -79,13 +79,13 @@ pub fn selection(table: &str) -> Result<Selection, Error> {
         .map(|(backend, _)| *backend)
         .ok_or_else(|| {
             Error::Invalid(
-                "physical qualification requires one reviewed selection of 59 exact test identities".into(),
+                "physical qualification requires one reviewed selection of 60 exact test identities".into(),
             )
         })?;
     let rows: Vec<_> = table.lines().collect();
     require(
         rows.len() == EXPECTED.len(),
-        "physical qualification requires all sixteen groups and 59 named tests",
+        "physical qualification requires all sixteen groups and 60 named tests",
     )?;
     let mut groups = Vec::new();
     let mut all_names = BTreeSet::new();

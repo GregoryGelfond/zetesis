@@ -1,15 +1,17 @@
 //! A round's private discovery coordinates stay attached to their append authority.
 
 use super::{
-    AtomAppender, AtomKey, AtomRef, AtomicUsize, CatalogRead, Counters, Failure, FormulaFailure,
+    AtomAppender, AtomRef, AtomicUsize, CatalogRead, Counters, Failure, FormulaFailure,
     FormulaLimits, FormulaResource, Location, Memory, Ordering, TermRef, atom_failure,
     atom_interner, ceiling, failure, owner_limits, record_owner_peak, size_of,
 };
 use crate::formula_support::GroundingWork;
 
 mod assigned;
-pub(in crate::formula_support) use assigned::AssignedAtom;
 pub(crate) use assigned::{SourceAtom, SourceScope};
+
+#[cfg(test)]
+mod order_tests;
 
 pub(super) struct Base {
     pub(super) bytes: usize,
@@ -169,25 +171,6 @@ impl<'a> SupportAppend<'a> {
             .map(|&id| self.owner.get(id).expect("round-local discovery"))
     }
 
-    pub(in crate::formula_support) fn contains(
-        &self,
-        key: AtomKey<'_>,
-        workspace: usize,
-        limits: &FormulaLimits,
-        counters: &mut Counters,
-        location: Location,
-    ) -> Result<bool, FormulaFailure> {
-        let outer = self.outer_bytes(workspace);
-        let position = self
-            .owner
-            .find_key_with(key, owner_limits(limits, outer, location)?, || {
-                counters.work(limits, location)
-            })
-            .map_err(|error| atom_failure(error, limits, outer, location))?;
-        counters.work(limits, location)?;
-        Ok(position.is_some_and(|position| self.is_supported(position)))
-    }
-
     #[cfg(test)]
     pub(in crate::formula_support) fn atom(
         &mut self,
@@ -200,14 +183,25 @@ impl<'a> SupportAppend<'a> {
         self.retain(&atom, 0, limits, counters, location)
     }
 
-    /// Checked in-place sorting preserves typed atom publication order without
-    /// copying payload or allocating a sorting workspace.
+    /// Dense selections reuse the catalog's semantic order. Sparse selections
+    /// keep constant-scratch sorting, avoiding scans of unrelated history.
     pub(in crate::formula_support) fn order(
         &mut self,
         limits: &FormulaLimits,
         counters: &mut Counters,
         location: Location,
     ) -> Result<(), FormulaFailure> {
+        if let Some(checked) = self.selected_order_limits(limits, counters, location)? {
+            let workspace = counters.accounting.workspace.bytes();
+            let outer = self.outer_bytes(workspace);
+            self.owner.restart_storage_peak();
+            let result = self
+                .owner
+                .order_selected_with(self.pending, checked, || counters.work(limits, location));
+            let refreshed = self.refresh(workspace, limits, counters, location);
+            result.map_err(|error| atom_failure(error, limits, outer, location))?;
+            return refreshed;
+        }
         let owner = &self.owner;
         crate::formula_support::sort::by(
             self.pending,
@@ -218,5 +212,22 @@ impl<'a> SupportAppend<'a> {
                 left.compare_ref_with(right, || work.counters.work(work.limits, work.location))
             },
         )
+    }
+
+    /// Decline before execution if the selected population is sparse or the
+    /// prospective scratch does not fit. A chosen operation's failure is never
+    /// retried through the comparison route.
+    fn selected_order_limits(
+        &self,
+        limits: &FormulaLimits,
+        counters: &Counters,
+        location: Location,
+    ) -> Result<Option<atom_interner::Limits>, FormulaFailure> {
+        let Some(required) = self.owner.selected_order_storage(self.pending.len()) else {
+            return Ok(None);
+        };
+        let outer = self.outer_bytes(counters.accounting.workspace.bytes());
+        let checked = owner_limits(limits, outer, location)?;
+        Ok((required <= checked.max_bytes).then_some(checked))
     }
 }

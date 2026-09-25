@@ -1,12 +1,12 @@
 //! Assigned source atoms carry identity without claiming any membership.
 
-use crate::formula_support::Context;
+use zetesis_core::PatternRef;
 use zetesis_core::catalog::AtomRef;
-use zetesis_core::{AtomKey, PatternRef, TemplateTerm};
 
-use super::{Computation, Counters, FormulaFailure, FormulaLimits, Location, StorageLease, Terms};
+use super::{Computation, Counters, FormulaFailure, FormulaLimits, Location, Terms};
 use crate::formula_binding::Binding;
-use crate::formula_support::relations::{AssignedAtom, SourceAtom, SourceScope};
+use crate::formula_support::GroundingWork;
+use crate::formula_support::relations::{SourceAtom, SourceScope};
 
 impl Computation<'_, '_> {
     pub(crate) fn signed(
@@ -51,9 +51,9 @@ impl Computation<'_, '_> {
         }
     }
 
-    /// Resolve borrowed constants and copy variable IDs into one leased argument
-    /// frame. Repeated arguments preserve their original positions. No borrowed
-    /// resolver remains live across admission into the same source authority.
+    /// Project constants and assigned variables directly into canonical atom
+    /// arguments. Admission reuses that projection for lookup and row interning;
+    /// no replacement assignment or argument-position vector is constructed.
     pub(crate) fn atom(
         &mut self,
         pattern: PatternRef<'_>,
@@ -62,57 +62,14 @@ impl Computation<'_, '_> {
         counters: &mut Counters,
         location: Location,
     ) -> Result<SourceAtom, FormulaFailure> {
-        if matches!(&self.terms, Terms::Frozen(_)) {
-            return Err(owner_failure(location));
-        }
-        let mut values = Binding::new(self, limits, counters, location)?;
-        values.extend_scope(pattern.terms().len(), self, limits, counters, location)?;
-        let mut arguments = Vec::new();
-        let mut lease = self.lease();
-        let header = size_of::<Vec<usize>>() + size_of::<StorageLease>();
-        lease.observe(header, location)?;
-        self.storage_observed(&lease, 0, header, limits, counters, location)?;
-        crate::formula_support::reserve(
-            &mut arguments,
-            pattern.terms().len(),
-            &mut lease,
-            header,
-            Context::new(self, limits, counters, location),
-        )?;
-        let terms = pattern.terms();
-        for position in 0..terms.len() {
-            counters.work(limits, location)?;
-            let term = terms.at(position).expect("checked pattern arity");
-            let key = match term {
-                TemplateTerm::Constant(value) => self
-                    .read()
-                    .term_key(value)
-                    .map_err(|error| crate::formula_binding::assignment(error.into(), location))?,
-                TemplateTerm::Variable(variable) => binding.key(variable, location)?,
-            };
-            values.set(position, &key, limits, counters, location)?;
-            counters.work(limits, location)?;
-            arguments.push(position);
-        }
         let Terms::Append(append) = &mut self.terms else {
             return Err(owner_failure(location));
         };
-        let workspace = self.support.workspace_bytes();
-        counters.work(limits, location)?;
-        let predicate = append
-            .read()
-            .declare_existing(pattern.predicate())
-            .map_err(|error| crate::formula_binding::assignment(error.into(), location))?;
         append.assigned(
-            AssignedAtom {
-                predicate: &predicate,
-                values: values.slots(),
-                arguments: &arguments,
-            },
-            workspace,
-            limits,
-            counters,
-            location,
+            pattern,
+            binding.slots(),
+            self.support.workspace_bytes(),
+            GroundingWork::new(limits, counters, location),
         )
     }
 
@@ -138,22 +95,31 @@ impl Computation<'_, '_> {
     }
 
     /// Test published or pending support, rather than mere identity admission.
-    pub(crate) fn contains(
+    pub(crate) fn contains_pattern(
         &self,
-        key: AtomKey<'_>,
+        pattern: PatternRef<'_>,
+        binding: &Binding<'_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
         location: Location,
     ) -> Result<bool, FormulaFailure> {
         match &self.terms {
-            Terms::Append(append) => append.contains(
-                key,
+            Terms::Append(append) => append.contains_pattern(
+                pattern,
+                binding.slots(),
                 self.support.workspace_bytes(),
-                limits,
-                counters,
-                location,
+                GroundingWork::new(limits, counters, location),
             ),
-            Terms::Frozen(_) => self.support.contains(&key, limits, counters, location),
+            Terms::Frozen(_) => {
+                let view = binding.view(self.read(), limits, counters, location)?;
+                let key = pattern
+                    .key(view)
+                    .map_err(|error| FormulaFailure::UnsafeVariable {
+                        variable: error.variable,
+                        location,
+                    })?;
+                self.support.contains(&key, limits, counters, location)
+            }
         }
     }
 

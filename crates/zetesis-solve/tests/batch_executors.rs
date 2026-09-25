@@ -578,6 +578,45 @@ fn relational_inputs_are_not_silently_materialized() {
 }
 
 #[test]
+fn terminal_inputs_do_not_inject_an_original_membership_executor_into_the_base() {
+    let materialized = zetesis_themelios::prepare_formula(
+        "{seed}. receipt:-seed.".into(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .unwrap()
+    .ground_adaptive()
+    .unwrap();
+    let zetesis_themelios::FormulaMaterialization::Terminal(owner) = materialized else {
+        panic!("fixture requires terminal definitions");
+    };
+    let executor = ReferenceExecutor::new(ExecutorCapabilities::General, Behavior::Reference);
+    let activity = Arc::clone(&executor.activity);
+    let failure = Session::builder(
+        PreparedInput::terminal(&owner),
+        SolveConfig {
+            grounder: Grounder::Auto,
+            ..config()
+        },
+        Cancellation::default(),
+    )
+    .executor(executor)
+    .start()
+    .err()
+    .expect("executor input restriction remains explicit");
+    assert!(matches!(
+        *failure.cause,
+        SolveError::Executor(ExecutorError::Input(
+            zetesis_solve::PreparedProfile::TerminalDefinitions
+        ))
+    ));
+    let activity = activity.lock().unwrap();
+    assert!(activity.prepared.is_none());
+    assert_eq!(activity.calls, 0);
+}
+
+#[test]
 fn failed_later_batch_retains_the_verified_prefix() {
     let owner = input("{a;b}.");
     let mut session = Session::builder(

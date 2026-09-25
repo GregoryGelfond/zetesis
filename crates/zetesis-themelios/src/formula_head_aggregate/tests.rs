@@ -387,12 +387,9 @@ fn validation_discovers_identity_without_selecting_support() {
                 location(),
             )
             .unwrap();
-        let view = assignment
-            .view(computation.read(), &limits, counters, location())
-            .unwrap();
         assert!(
             !computation
-                .contains(pattern.key(view).unwrap(), &limits, counters, location())
+                .contains_pattern(pattern, &assignment, &limits, counters, location())
                 .unwrap()
         );
     });

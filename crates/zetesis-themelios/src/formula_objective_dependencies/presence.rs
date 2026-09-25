@@ -64,10 +64,7 @@ impl<'source> Predicates<'source> {
         location: themelios_base::span::Location,
     ) -> Result<bool, FormulaFailure> {
         for current in &self.0 {
-            if current
-                .compare_ref_with(predicate, || counters.work(limits, location))?
-                .is_eq()
-            {
+            if current.equals_ref_with(predicate, || counters.work(limits, location))? {
                 return Ok(true);
             }
         }

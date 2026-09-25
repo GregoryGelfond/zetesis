@@ -6,6 +6,8 @@ use super::{Canonical, Catalog, CatalogFailure, Insertion, Lookup, Preparation, 
 use crate::relation::{Failure, Limits, Relation, Resource, Storage};
 use crate::{Atom, Predicate, Sign, Value, ValueLimits, ValueNode};
 
+mod dictionary;
+
 fn atom(left: i32, right: i32) -> Atom {
     Atom::new(
         Predicate::new("pair", 2).unwrap(),
@@ -163,6 +165,7 @@ fn failed_work_admission_preserves_all_rows() {
                 ..
             })
         ));
+        dictionary::assert_translation(&catalog);
         assert_eq!(catalog.atoms(), &[atom(4, 7)]);
         let view = catalog.view();
         assert_eq!(view.row_count(), 1);
@@ -441,6 +444,7 @@ fn insertion_admits_exact_peak_capacity() {
     ));
     assert_eq!(short.atoms(), &[atom(4, 7)]);
     assert_eq!(failure.retained_bytes, short.retained_bytes());
+    dictionary::assert_translation(&short);
     assert!(
         short
             .insert(&atom(1, 9), Limits::default())
@@ -539,12 +543,15 @@ fn rotating_tuple() -> Atom {
 #[test]
 fn refused_rotation_preserves_the_published_extent() {
     let mut reference = rotation_owner();
+    let before = dictionary::inverse_bytes(&reference);
     let required = reference
         .insert(&rotating_tuple(), Limits::default())
         .unwrap()
         .storage
         .construction_work;
     assert_eq!(reference.rows.layout.dictionary.len(), 5);
+    assert!(dictionary::inverse_bytes(&reference) > before);
+    dictionary::assert_translation(&reference);
     for limit in 0..required {
         let mut catalog = rotation_owner();
         let original: Vec<Atom> = catalog
@@ -589,6 +596,11 @@ fn refused_rotation_preserves_the_published_extent() {
             None
         );
         assert_eq!(failure.retained_bytes, catalog.retained_bytes());
+        dictionary::assert_translation(&catalog);
+        catalog
+            .insert(&rotating_tuple(), Limits::default())
+            .unwrap();
+        dictionary::assert_translation(&catalog);
     }
     let mut exact = rotation_owner();
     let insertion = exact
@@ -698,6 +710,7 @@ fn clear_starts_a_new_local_extent() {
     assert_eq!(inserted.row, 0);
     assert_eq!(catalog.view().column(0), Some([0].as_slice()));
     assert_eq!(catalog.view().column(1), Some([1].as_slice()));
+    dictionary::assert_translation(&catalog);
     // Clearing extensional truth neither transfers nor deletes canonical identity.
     assert_eq!(catalog.authority.get(0).unwrap(), atom(9, 3));
     assert_eq!(catalog.authority.get(1).unwrap(), atom(1, 8));
@@ -708,7 +721,16 @@ fn refused_clear_preserves_the_prepared_extent() {
     let mut catalog = owner();
     catalog.insert(&atom(9, 3), Limits::default()).unwrap();
     catalog.prepare_ordered(Limits::default()).unwrap();
-    let required = 13;
+    let mut reference = owner();
+    reference.insert(&atom(9, 3), Limits::default()).unwrap();
+    reference.prepare_ordered(Limits::default()).unwrap();
+    let required = u64::try_from(
+        reference
+            .clear(Limits::default())
+            .unwrap()
+            .construction_work,
+    )
+    .unwrap();
     let Err(failure) = catalog.clear(Limits {
         max_work: required - 1,
         ..Limits::default()
@@ -1125,4 +1147,153 @@ fn existing_identity_can_be_new_relation_truth() {
     assert_eq!(insertion.row, 0);
     assert_eq!(catalog.authority.len(), 1);
     assert_eq!(catalog.atoms(), [atom(1, 2)]);
+}
+
+#[test]
+fn canonical_insertion_does_not_recheck_predicate() {
+    let mut catalog = owner();
+    catalog.insert(&atom(4, 7), Limits::default()).unwrap();
+    let canonical = catalog.authority.get(0).unwrap();
+    let lookup = catalog
+        .rows
+        .lookup(catalog.authority.read(), canonical, Limits::default())
+        .unwrap();
+    let occupied = catalog.rows.insert(canonical, Limits::default()).unwrap();
+    assert_eq!(lookup.row, Some(occupied.row));
+    assert!(!occupied.inserted);
+    // Both paths admit the operation, bind the rows, and search the same AVL.
+    // Only public lookup must compare the query's canonical predicate after
+    // binding; insertion already established it through Membership::member.
+    assert_eq!(
+        lookup.storage.construction_work,
+        occupied.storage.construction_work + 1
+    );
+}
+
+#[test]
+fn occupied_insertion_refuses_each_work_cutoff() {
+    let mut catalog = owner();
+    catalog.insert(&atom(4, 7), Limits::default()).unwrap();
+    let canonical = catalog.authority.get(0).unwrap();
+    let receipt = catalog.rows.insert(canonical, Limits::default()).unwrap();
+    let required = u64::try_from(receipt.storage.construction_work).unwrap();
+    let bytes = catalog.rows.retained_bytes();
+    for maximum in 0..required {
+        let failure = catalog
+            .rows
+            .insert(
+                canonical,
+                Limits {
+                    max_work: maximum,
+                    max_bytes: bytes,
+                    ..Limits::default()
+                },
+            )
+            .unwrap_err();
+        assert_eq!(failure.work, u128::from(maximum));
+        assert_eq!(
+            failure.error,
+            Failure::Limit {
+                resource: Resource::Work,
+                observed: u128::from(maximum) + 1,
+                limit: u128::from(maximum),
+            }
+        );
+        assert_eq!(failure.retained_bytes, bytes);
+        assert_eq!(failure.peak_construction_bytes, bytes);
+        assert_eq!(catalog.rows.len(), 1);
+    }
+    assert_eq!(
+        catalog
+            .rows
+            .insert(
+                canonical,
+                Limits {
+                    max_work: required,
+                    max_bytes: bytes,
+                    ..Limits::default()
+                },
+            )
+            .unwrap(),
+        receipt
+    );
+}
+
+#[test]
+fn public_lookup_rejects_a_foreign_reader() {
+    let mut catalog = owner();
+    catalog.insert(&atom(1, 2), Limits::default()).unwrap();
+    let mut foreign = owner();
+    foreign.insert(&atom(1, 2), Limits::default()).unwrap();
+    let failure = catalog
+        .rows
+        .lookup(
+            foreign.authority.read(),
+            catalog.authority.get(0).unwrap(),
+            Limits::default(),
+        )
+        .unwrap_err();
+    assert_eq!(failure.error, Failure::Read(ReadError::ForeignCatalog));
+}
+
+#[test]
+fn public_lookup_accepts_a_foreign_equal_atom() {
+    let mut catalog = owner();
+    catalog.insert(&atom(1, 2), Limits::default()).unwrap();
+    let mut foreign = owner();
+    foreign.insert(&atom(1, 2), Limits::default()).unwrap();
+    assert_eq!(
+        catalog
+            .lookup(foreign.authority.get(0).unwrap(), Limits::default())
+            .unwrap()
+            .row,
+        Some(0)
+    );
+}
+
+#[test]
+fn public_lookup_refuses_an_opposite_sign() {
+    let predicate = Predicate::new("p", 0).unwrap();
+    let mut catalog = Fixture::new(&predicate, Limits::default()).unwrap();
+    catalog
+        .insert(&Atom::new(predicate, vec![]).unwrap(), Limits::default())
+        .unwrap();
+    let negative = Atom::new(
+        Predicate::with_sign("p", 0, Sign::Negative).unwrap(),
+        vec![],
+    )
+    .unwrap();
+    assert_eq!(
+        catalog
+            .lookup(&negative, Limits::default())
+            .unwrap_err()
+            .error,
+        Failure::Predicate
+    );
+}
+
+#[test]
+fn public_lookup_requires_the_membership_prefix() {
+    let mut catalog = owner();
+    catalog.insert(&atom(1, 2), Limits::default()).unwrap();
+    catalog
+        .authority
+        .commit_with(atom_limits(), || Ok::<_, ()>(()))
+        .unwrap();
+    let (committed, mut append) = catalog.authority.split();
+    let original = committed.get(0).unwrap();
+    let later = atom(3, 4);
+    let canonical = append
+        .entry_atom_with(&later, atom_limits(), || Ok::<_, ()>(()))
+        .unwrap()
+        .insert_ref_with(atom_limits(), || Ok::<_, ()>(()))
+        .unwrap();
+    catalog.rows.insert(canonical, Limits::default()).unwrap();
+    // The query itself is in the old prefix. The reader must also cover all
+    // retained relation members before any search, even for an existing hit.
+    let failure = catalog
+        .rows
+        .lookup(committed.read(), original, Limits::default())
+        .unwrap_err();
+    assert_eq!(failure.error, Failure::Read(ReadError::OutsidePrefix));
 }

@@ -46,6 +46,11 @@ impl<'a> Publication<'a> {
             + counters.accounting.workspace.bytes() as u128)
     }
 
+    /// Canonical/support storage outside this account's complete workspace.
+    pub(crate) fn source_bytes(&self, location: Location) -> Result<usize, FormulaFailure> {
+        self.source.catalog.bytes(location)
+    }
+
     pub(crate) fn remaining_bytes(
         &self,
         limits: &FormulaLimits,
@@ -103,6 +108,14 @@ impl<'a> Publication<'a> {
         let mut lease = counters.accounting.workspace.lease();
         lease.observe(size_of::<Self>(), location)?;
         Ok(Self { source, lease })
+    }
+
+    /// Transfer only retained output receipts. This publication coordinator no
+    /// longer exists after the move; its caller admits its own fixed envelope.
+    pub(crate) fn into_lease(mut self, location: Location) -> Result<StorageLease, FormulaFailure> {
+        self.lease
+            .observe(self.lease.bytes() - size_of::<Self>(), location)?;
+        Ok(self.lease)
     }
 
     /// Supplied occurrence order is preserved exactly. A selected view cannot

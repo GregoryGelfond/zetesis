@@ -123,6 +123,50 @@ fn lazy_grounding_has_no_separate_duration() {
 }
 
 #[test]
+fn terminal_definitions_do_not_invent_full_grounding_duration() {
+    let recorder = StageRecorder::new(true);
+    recorder.mark_terminal_definitions();
+    let initial = recorder.snapshot().unwrap();
+    assert_eq!(
+        initial.grounding_mode,
+        GroundingMode::EagerBaseTerminalDefinitions
+    );
+    assert!(initial.get(SolveStage::Grounding).is_none());
+    {
+        let _base = recorder.enter(SolveStage::Grounding);
+    }
+    let base = recorder.snapshot().unwrap();
+    assert_eq!(
+        base.grounding_mode,
+        GroundingMode::EagerBaseTerminalDefinitions
+    );
+    assert_eq!(base.get(SolveStage::Grounding).unwrap().calls, 1);
+    recorder.mark_terminal_definitions();
+    assert_eq!(
+        recorder
+            .snapshot()
+            .unwrap()
+            .get(SolveStage::Grounding)
+            .unwrap()
+            .calls,
+        1
+    );
+    recorder.mark_lazy_grounding();
+    assert_eq!(
+        recorder.snapshot().unwrap().grounding_mode,
+        GroundingMode::Mixed
+    );
+    recorder.mark_terminal_definitions();
+    assert_eq!(
+        recorder.snapshot().unwrap().grounding_mode,
+        GroundingMode::Mixed
+    );
+    let disabled = StageRecorder::new(false);
+    disabled.mark_terminal_definitions();
+    assert!(disabled.snapshot().is_none());
+}
+
+#[test]
 fn mixed_grounding_retains_eager_measurements() {
     // Both encounter orders describe the same mixed route.
     for lazy_first in [true, false] {

@@ -55,6 +55,11 @@ fn eager_lazy_formula_certified_and_parallel_routes_preserve_results() {
         ),
         ("1{p;q}1.", vec![], GroundingMode::Eager),
         (
+            "{seed(1);seed(2)}. receipt(X):-seed(X).",
+            vec![],
+            GroundingMode::EagerBaseTerminalDefinitions,
+        ),
+        (
             "a|b.",
             vec!["--oracle", "countermodel", "--completion-workers", "2"],
             GroundingMode::Eager,
@@ -88,12 +93,15 @@ fn eager_lazy_formula_certified_and_parallel_routes_preserve_results() {
                 }
                 assert_eq!(
                     timings.stages.get(SolveStage::Grounding).is_some(),
-                    mode == GroundingMode::Eager
+                    matches!(
+                        mode,
+                        GroundingMode::Eager | GroundingMode::EagerBaseTerminalDefinitions
+                    )
                 );
                 assert!(
                     text.find("Stage timings:").unwrap() < text.find("Phase timings:").unwrap()
                 );
-                assert!(text.contains("failed_attempts=included; schema=3"));
+                assert!(text.contains("failed_attempts=included; schema=4"));
                 if source == "1{p;q}1." {
                     // One parse, one closure admission and one formula admission.
                     // Retrying the grammar reuses the original parsed owner.

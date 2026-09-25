@@ -3,7 +3,7 @@
 //! A binding owns no value. Shared typed comparisons charge each visited logical
 //! navigation, descriptor and text-prefix operation before it proceeds.
 
-use zetesis_core::{PatternRef, TemplateRef, TemplateTerm, catalog::TermRef};
+use zetesis_core::{PatternRef, TemplateRef, TemplateTerm, UnificationFailure, catalog::TermRef};
 
 use super::{Gates, Work, relations::Row};
 use crate::Stop;
@@ -15,29 +15,13 @@ pub(super) fn bind<'source>(
     undo: &mut Vec<usize>,
     work: &mut Work<'_>,
 ) -> Result<bool, Stop> {
-    let mut values = row.values();
-    for term in pattern.terms() {
-        work.tick()?;
-        let value = values.next().ok_or(Stop::InvalidProgram)?;
-        match term {
-            TemplateTerm::Constant(expected) => {
-                if !expected.compare_ref_with(value, || work.tick())?.is_eq() {
-                    return Ok(false);
-                }
-            }
-            TemplateTerm::Variable(variable) => {
-                if let Some(expected) = assignment[variable] {
-                    if !expected.compare_ref_with(value, || work.tick())?.is_eq() {
-                        return Ok(false);
-                    }
-                } else {
-                    assignment[variable] = Some(value);
-                    undo.push(variable);
-                }
-            }
-        }
-    }
-    Ok(true)
+    pattern
+        .terms()
+        .unify_with(row.values(), assignment, undo, || work.tick())
+        .map_err(|failure| match failure {
+            UnificationFailure::Input(_) => Stop::InvalidProgram,
+            UnificationFailure::Stopped(stop) => stop,
+        })
 }
 
 pub(super) fn clear(assignment: &mut [Option<TermRef<'_>>], undo: &mut Vec<usize>) {
@@ -66,7 +50,7 @@ pub(super) fn guards(
         work.tick()?;
         let (left, right) = filter.terms();
         if let (Some(left), Some(right)) = (resolve(left, assignment), resolve(right, assignment)) {
-            let equal = left.compare_ref_with(right, || work.tick())?.is_eq();
+            let equal = left.equals_ref_with(right, || work.tick())?;
             if filter.is_equality() != equal {
                 return Ok(false);
             }
@@ -89,3 +73,6 @@ pub(super) fn guards(
     }
     Ok(true)
 }
+
+#[cfg(test)]
+mod tests;

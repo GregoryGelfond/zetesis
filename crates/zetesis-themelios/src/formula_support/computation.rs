@@ -13,7 +13,11 @@ use zetesis_core::catalog::{
     AssignmentError, AssignmentFailure, AssignmentSlice, CatalogRead, Error, TermKey, TermRef,
 };
 
-use super::{Counters, Support, relations::SupportAppend, storage::StorageLease};
+use super::{
+    Counters, Support,
+    relations::SupportAppend,
+    storage::{Scope, StorageLease},
+};
 use crate::formula::ceiling;
 use crate::grounding_observer::Event;
 use crate::{FormulaFailure, FormulaLimits, FormulaResource};
@@ -68,15 +72,14 @@ impl<'a, 'source> Computation<'a, 'source> {
         limits: &FormulaLimits,
         location: Location,
     ) -> Result<usize, FormulaFailure> {
-        self.check_lease(lease, location)?;
-        let total = self.support.live_bytes();
+        let storage = self.storage(lease, location)?;
         ceiling(
             FormulaResource::SupportBytes,
-            total as u128,
+            storage.live_bytes(),
             limits.max_support_bytes as u128,
             location,
         )?;
-        Ok(limits.max_support_bytes - (total - lease.bytes()))
+        storage.allowance(limits, location)
     }
 
     /// Record actual capacity even after an operation refused. Growing a buffer
@@ -90,20 +93,8 @@ impl<'a, 'source> Computation<'a, 'source> {
         counters: &Counters,
         location: Location,
     ) -> Result<(), FormulaFailure> {
-        self.check_lease(lease, location)?;
-        let old = if lease.bytes() > previous {
-            previous.saturating_sub(header)
-        } else {
-            0
-        };
-        let peak = self.support.live_bytes() as u128 + old as u128;
-        counters.record(Event::SupportPeakBytes(peak));
-        ceiling(
-            FormulaResource::SupportBytes,
-            peak,
-            limits.max_support_bytes as u128,
-            location,
-        )
+        self.storage(lease, location)?
+            .observed(previous, header, limits, counters, location)
     }
 
     /// Record a component owner's explicit capacity peak, counting all other
@@ -116,15 +107,8 @@ impl<'a, 'source> Computation<'a, 'source> {
         counters: &Counters,
         location: Location,
     ) -> Result<(), FormulaFailure> {
-        self.check_lease(lease, location)?;
-        let peak = (self.support.live_bytes() - lease.bytes()) as u128 + component_peak;
-        counters.record(Event::SupportPeakBytes(peak));
-        ceiling(
-            FormulaResource::SupportBytes,
-            peak,
-            limits.max_support_bytes as u128,
-            location,
-        )
+        self.storage(lease, location)?
+            .peak(component_peak, limits, counters, location)
     }
 
     /// Planner scratch is local to one preparation call. Its cumulative
@@ -162,21 +146,43 @@ impl<'a, 'source> Computation<'a, 'source> {
         location: Location,
     ) -> Result<T, FormulaFailure> {
         self.check_lease(lease, location)?;
-        result.map_err(|error| match error {
-            AssignmentFailure::Assignment(AssignmentError::Storage(Error::Storage {
-                required,
-                ..
-            })) => {
-                let observed = self.support.live_bytes() as u128 - lease.bytes() as u128 + required;
-                FormulaFailure::Limit {
-                    resource: FormulaResource::SupportBytes,
-                    observed,
-                    limit: limits.max_support_bytes as u128,
-                    location,
-                }
-            }
-            error => crate::formula_binding::failure(error, location),
-        })
+        // Successful operations and non-storage refusals require no capacity
+        // traversal. Preserve that fast path while sharing byte-error mapping.
+        if !matches!(
+            &result,
+            Err(AssignmentFailure::Assignment(AssignmentError::Storage(
+                Error::Storage { .. }
+            )))
+        ) {
+            return result.map_err(|error| crate::formula_binding::failure(error, location));
+        }
+        self.storage(lease, location)?
+            .result(result, limits, location)
+    }
+
+    /// Named support storage outside the entire shared workspace. Authentication
+    /// precedes capacity reads; a reservation cannot borrow another owner's lease.
+    pub(super) fn external_bytes(
+        &self,
+        lease: &StorageLease,
+        location: Location,
+    ) -> Result<usize, FormulaFailure> {
+        self.check_lease(lease, location)?;
+        Ok(self.support.live_bytes() - self.support.workspace().bytes())
+    }
+
+    fn storage<'b>(
+        &'b self,
+        lease: &'b StorageLease,
+        location: Location,
+    ) -> Result<Scope<'b>, FormulaFailure> {
+        let external = self.external_bytes(lease, location)?;
+        self.support
+            .workspace()
+            .scope(lease, external)
+            .map_err(|error| {
+                crate::formula_binding::assignment(AssignmentError::Read(error), location)
+            })
     }
 
     fn check_lease(&self, lease: &StorageLease, location: Location) -> Result<(), FormulaFailure> {

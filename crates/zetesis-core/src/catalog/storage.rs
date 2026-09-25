@@ -25,9 +25,15 @@ pub(super) use derived::DerivedTerm;
 pub use derived::{DerivedFailure, DerivedTerms};
 mod vocabulary;
 mod publication;
+mod rows;
+mod closed;
+use closed::IndexedRows;
+pub(crate) use closed::{CloseError, Closed};
+use rows::{RowBase, RowView};
 
 use budget::Budget;
 use index::Index;
+pub(crate) use intern::PreparedAtom;
 pub(crate) use lookup::TermLookup;
 pub(crate) use read::{AtomScope, Read, VocabularyScope};
 pub(super) use segments::{Atom, Predicate, Term};
@@ -78,6 +84,8 @@ pub enum Fault {
     VocabularyHasAtoms,
     /// A published read snapshot does not retain indexed vocabulary admission.
     UnindexedVocabulary,
+    /// A closed-catalog descendant cannot itself become another shared base.
+    CatalogHasBase,
 }
 
 impl From<ValueError> for Fault {
@@ -106,6 +114,7 @@ impl fmt::Display for Fault {
             Self::UnindexedVocabulary => {
                 f.write_str("canonical snapshot has no vocabulary lookup indexes")
             }
+            Self::CatalogHasBase => f.write_str("canonical catalog already extends a closed base"),
         }
     }
 }
@@ -153,6 +162,7 @@ struct Owner;
 pub(crate) struct Store {
     atom_owner: Arc<Owner>,
     vocabulary: Vocabulary,
+    base: Option<Arc<IndexedRows>>,
     sealed: Vec<Arc<RowSegment>>,
     tail: RowSegment,
     atoms: Index,
@@ -179,6 +189,7 @@ impl Store {
         Self {
             atom_owner: Arc::new(Owner),
             vocabulary: Vocabulary::new(),
+            base: None,
             sealed: Vec::new(),
             tail: RowSegment::new(0),
             atoms: Index::default(),
@@ -197,6 +208,7 @@ impl Store {
         Ok(Self {
             atom_owner: Arc::new(Owner),
             vocabulary: Vocabulary::Frozen(base),
+            base: None,
             sealed: Vec::new(),
             tail: RowSegment::new(0),
             atoms: Index::default(),
@@ -217,15 +229,17 @@ impl Store {
         !self.tail.is_empty() || self.vocabulary.has_unpublished()
     }
 
-    /// Same identity scopes with no atom rows. Growing vocabulary starts at its
-    /// empty prefix; a frozen vocabulary is available in full without copying.
+    /// Initial read for empty discovery. Growing vocabulary starts empty; a
+    /// closed vocabulary and shared row base are available in full. Base rows
+    /// acquire this writer's fresh atom scope, without asserting discovery.
     pub(crate) fn empty_snapshot(&self) -> Snapshot {
         Snapshot {
             atom_owner: Arc::clone(&self.atom_owner),
             data: Arc::new(SnapshotData {
                 vocabulary: self.vocabulary.empty_prefix(),
+                base: self.base.as_ref().map(|base| Arc::clone(&base.payload)),
                 segments: Vec::new(),
-                atoms: 0,
+                atoms: self.base_count(),
             }),
         }
     }
@@ -252,14 +266,26 @@ impl Store {
         if id >= self.tail.start {
             Some(&self.tail)
         } else {
-            locate(&self.sealed, id, |segment| segment.start)
+            self.rows().segment(id)
         }
+    }
+
+    fn rows(&self) -> RowView<'_> {
+        RowView {
+            base: self.base.as_ref().map(|base| base.payload.as_ref()),
+            segments: &self.sealed,
+        }
+    }
+
+    fn base_count(&self) -> usize {
+        self.base.as_ref().map_or(0, |base| base.payload.atoms)
     }
 }
 
 #[derive(Debug)]
 struct SnapshotData {
     vocabulary: Arc<VocabularyData>,
+    base: Option<Arc<RowBase>>,
     segments: Vec<Arc<RowSegment>>,
     atoms: usize,
 }
@@ -282,6 +308,7 @@ impl Snapshot {
             atom_owner: Arc::new(Owner),
             data: Arc::new(SnapshotData {
                 vocabulary: Arc::new(VocabularyData::empty(Arc::new(Owner))),
+                base: None,
                 segments: Vec::new(),
                 atoms: 0,
             }),
@@ -307,14 +334,8 @@ impl Snapshot {
     pub(super) fn retained_bytes(&self) -> u128 {
         size_of::<Self>() as u128
             + size_of::<SnapshotData>() as u128
-            + budget::capacity(&self.data.segments)
             + self.data.vocabulary.retained_bytes()
-            + self
-                .data
-                .segments
-                .iter()
-                .map(|segment| segment.bytes())
-                .sum::<u128>()
+            + self.rows().bytes()
     }
 
     pub(super) fn retained_bytes_with<E>(
@@ -324,16 +345,20 @@ impl Snapshot {
         before()?;
         let mut bytes = size_of::<Self>() as u128
             + size_of::<SnapshotData>() as u128
-            + budget::capacity(&self.data.segments)
             + self.data.vocabulary.metadata_bytes();
         for segment in &self.data.vocabulary.segments {
             before()?;
             bytes += segment.bytes();
         }
-        for segment in &self.data.segments {
-            bytes += segment.bytes_with(&mut before)?;
-        }
+        bytes += self.rows().bytes_with(&mut before)?;
         Ok(bytes)
+    }
+
+    fn rows(&self) -> RowView<'_> {
+        RowView {
+            base: self.data.base.as_deref(),
+            segments: &self.data.segments,
+        }
     }
 }
 

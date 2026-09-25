@@ -191,6 +191,7 @@ impl Stop {
             | Error::FrozenVocabulary
             | Error::UnindexedVocabulary
             | Error::VocabularyHasAtoms
+            | Error::CatalogHasBase
             | Error::Value(ValueError::Shape) => Self::InvalidProgram,
         }
     }

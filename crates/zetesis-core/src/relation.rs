@@ -38,6 +38,7 @@ use crate::{Atom, Predicate};
 mod storage;
 mod selection;
 mod catalog;
+mod dictionary;
 
 pub use catalog::{Canonical, Catalog, CatalogFailure, Insertion, Lookup, Preparation, Runs};
 
@@ -53,9 +54,13 @@ pub struct Limits {
     /// Maximum distinct typed dictionary values.
     pub max_values: usize,
     /// Maximum operation-scoped named capacity, including input views and the
-    /// conservative old/replacement-buffer overlap of a growing owner.
+    /// conservative old/replacement-buffer overlap of a growing owner. Hash
+    /// storage measures addressable entry capacity, not opaque bucket/control
+    /// allocation or allocator bookkeeping.
     pub max_bytes: usize,
-    /// Maximum charged inspections, comparisons, copied reference/ID cells and payload bytes.
+    /// Maximum charged inspections, comparisons, copied reference/ID cells,
+    /// payload bytes and fixed-key hash operations. Internal container probes
+    /// are not individually charged or cancellable.
     pub max_work: u64,
 }
 
@@ -80,7 +85,8 @@ pub enum Resource {
     Columns,
     /// Distinct typed dictionary entries.
     Values,
-    /// Operation-scoped live owned capacity.
+    /// Operation-scoped named capacity, including addressable hash entries but
+    /// excluding opaque bucket/control allocation and allocator bookkeeping.
     Bytes,
     /// Charged logical work.
     Work,
@@ -162,7 +168,9 @@ impl std::error::Error for Failure {
 /// Capacity and work observed during one relation or catalog operation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Storage {
-    /// Operation owner's object and retained vector capacities. A borrowed
+    /// Operation owner's object, retained vector capacities and addressable
+    /// dictionary hash-entry capacity; opaque bucket/control allocation and
+    /// allocator bookkeeping are excluded. A borrowed
     /// catalog view excludes the catalog's separately reported owner capacity.
     pub retained_bytes: usize,
     /// Largest operation-scoped capacity envelope, including temporary buffers
@@ -205,7 +213,7 @@ struct Layout {
 
 enum DictionaryIndex {
     Sorted(Vec<u32>),
-    Append(crate::ordered_index::Index),
+    Append(dictionary::Append),
 }
 
 #[derive(Clone, Copy)]
@@ -252,6 +260,13 @@ enum Source<'source> {
 }
 
 impl<'source> Source<'source> {
+    fn read(&self) -> Option<crate::catalog::CatalogRead<'source>> {
+        match self {
+            Self::Canonical(atoms) | Self::CanonicalCatalog { atoms, .. } => Some(atoms.read()),
+            Self::Atoms(_) | Self::Catalog { .. } => None,
+        }
+    }
+
     fn len(&self) -> usize {
         match self {
             Self::Atoms(atoms) => atoms.len(),
@@ -607,9 +622,17 @@ impl Work {
             .map_err(|_| Failure::Allocation)?;
         // Reservation may transiently retain both old and replacement buffers.
         // Record actual slack even when that post-allocation envelope is refused.
-        let overlap = self.live as u128 + values.capacity() as u128 * size_of::<T>() as u128;
-        let actual =
-            self.live as u128 + (values.capacity() - previous) as u128 * size_of::<T>() as u128;
+        self.replacement(
+            previous * size_of::<T>(),
+            values.capacity() * size_of::<T>(),
+        )
+    }
+
+    /// Observe actual replacement capacity, including old/new overlap before
+    /// any post-allocation refusal. The owner's retained capacity already changed.
+    fn replacement(&mut self, previous: usize, current: usize) -> Result<(), Failure> {
+        let overlap = self.live as u128 + current as u128;
+        let actual = self.live as u128 + (current - previous) as u128;
         self.live = usize::try_from(actual).map_err(|_| Failure::Overflow)?;
         self.peak = self
             .peak

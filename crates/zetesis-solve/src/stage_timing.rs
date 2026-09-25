@@ -34,6 +34,9 @@ impl zetesis_themelios::GroundingObserver for Observer<'_> {
     fn details_enabled(&self) -> bool {
         true
     }
+    fn terminal_definitions(&self) {
+        self.recorder.mark_terminal_definitions();
+    }
     fn phase_enter(
         &self,
         phase: crate::GroundingPhase,

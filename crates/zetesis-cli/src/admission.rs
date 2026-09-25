@@ -23,6 +23,7 @@ enum FormulaInput {
     Source(zetesis_themelios::AdmittedFormula),
     Bundle(zetesis_themelios::AdmittedFormulaBundle),
     Hybrid(zetesis_themelios::HybridFormula),
+    Terminal(zetesis_themelios::TerminalFormula),
 }
 
 impl FormulaInput {
@@ -31,6 +32,7 @@ impl FormulaInput {
             Self::Source(owner) => crate::PreparedInput::formula(owner),
             Self::Bundle(owner) => crate::PreparedInput::formula_bundle(owner),
             Self::Hybrid(owner) => crate::PreparedInput::hybrid(owner),
+            Self::Terminal(owner) => crate::PreparedInput::terminal(owner),
         }
     }
 
@@ -45,6 +47,9 @@ impl FormulaInput {
             Self::Hybrid(owner) if !owner.warnings().is_empty() => {
                 diagnostics.diagnostic(&owner.warning_view())
             }
+            Self::Terminal(owner) if !owner.warnings().is_empty() => {
+                diagnostics.diagnostic(&owner.warning_view())
+            }
             _ => Ok(()),
         }
     }
@@ -54,6 +59,15 @@ impl FormulaInput {
             Self::Source(owner) => source_failure(failure, "<input>", owner.source()),
             Self::Bundle(owner) => bundle_failure(failure, owner.bundle()),
             Self::Hybrid(owner) => {
+                if let Some(bundle) = owner.bundle() {
+                    bundle_failure(failure, bundle)
+                } else if let Some(source) = owner.source() {
+                    source_failure(failure, "<input>", source)
+                } else {
+                    failure
+                }
+            }
+            Self::Terminal(owner) => {
                 if let Some(bundle) = owner.bundle() {
                     bundle_failure(failure, bundle)
                 } else if let Some(source) = owner.source() {
@@ -173,6 +187,17 @@ pub(crate) fn source(
                 prepared
                     .ground_hybrid_with_observer(observer)
                     .map(FormulaInput::Hybrid)
+            } else if options.grounder == crate::Grounder::Auto {
+                prepared
+                    .ground_adaptive_with_observer(observer)
+                    .map(|admitted| match admitted {
+                        zetesis_themelios::FormulaMaterialization::Complete(owner) => {
+                            FormulaInput::Source(owner)
+                        }
+                        zetesis_themelios::FormulaMaterialization::Terminal(owner) => {
+                            FormulaInput::Terminal(owner)
+                        }
+                    })
             } else {
                 prepared
                     .ground_with_observer(observer)
@@ -264,6 +289,17 @@ pub(crate) fn bundle(
                 prepared
                     .ground_hybrid_with_observer(observer)
                     .map(FormulaInput::Hybrid)
+            } else if options.grounder == crate::Grounder::Auto {
+                prepared
+                    .ground_adaptive_with_observer(observer)
+                    .map(|admitted| match admitted {
+                        zetesis_themelios::FormulaMaterialization::Complete(owner) => {
+                            FormulaInput::Bundle(owner)
+                        }
+                        zetesis_themelios::FormulaMaterialization::Terminal(owner) => {
+                            FormulaInput::Terminal(owner)
+                        }
+                    })
             } else {
                 prepared
                     .ground_with_observer(observer)

@@ -162,6 +162,8 @@ import Zetesis
 #print axioms Zetesis.CandidateCursor.stable_outputs_exact
 #print axioms Zetesis.CandidateCursor.repeated_auxiliary_complete
 #print axioms Zetesis.CandidateCursor.zero_fuel_keeps_open_tree
+#print axioms Zetesis.CanonicalCatalog.discovery_lookup_exact
+#print axioms Zetesis.CanonicalCatalog.undiscovered_identity_absent
 #print axioms Zetesis.CanonicalCatalog.selection_exact
 #print axioms Zetesis.CanonicalCatalog.normalized_selection_exact
 #print axioms Zetesis.CanonicalCatalog.append_preserves_interpretation
@@ -244,6 +246,9 @@ import Zetesis
 #print axioms Zetesis.ClauseValidation.validate_accepts_iff
 #print axioms Zetesis.ClauseValidation.validate_work_bound
 #print axioms Zetesis.ClauseValidation.empty_clause_rejects
+#print axioms Zetesis.ClosedCatalog.find_sound
+#print axioms Zetesis.ClosedCatalog.find_none_iff
+#print axioms Zetesis.ClosedCatalog.find_exact
 #print axioms Zetesis.ColumnRelations.encoding_exact
 #print axioms Zetesis.ColumnRelations.identifier_equality
 #print axioms Zetesis.ColumnRelations.reconstruction_exact
@@ -1198,6 +1203,18 @@ import Zetesis
 #print axioms Zetesis.TableBindings.flat_match_survives
 #print axioms Zetesis.TableBindings.indexed_matches_preserved
 #print axioms Zetesis.TableBindings.join_family_preserved
+#print axioms Zetesis.TerminalDefinitions.satisfies_definition
+#print axioms Zetesis.TerminalDefinitions.models_definitions_iff
+#print axioms Zetesis.TerminalDefinitions.original_models_iff
+#print axioms Zetesis.TerminalDefinitions.reduct_models_iff
+#print axioms Zetesis.TerminalDefinitions.consequences_monotone
+#print axioms Zetesis.TerminalDefinitions.base_extend
+#print axioms Zetesis.TerminalDefinitions.derived_extend
+#print axioms Zetesis.TerminalDefinitions.extend_monotone
+#print axioms Zetesis.TerminalDefinitions.extend_sub_of_models
+#print axioms Zetesis.TerminalDefinitions.stable_iff
+#print axioms Zetesis.TerminalDefinitions.stable_extend_iff
+#print axioms Zetesis.TerminalDefinitions.unique_stable_extension
 #print axioms Zetesis.TernaryWatch.remaining_unique
 #print axioms Zetesis.TernaryWatch.replacement_exact
 #print axioms Zetesis.Thresholds.threshold_query_exact

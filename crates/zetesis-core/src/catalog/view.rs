@@ -193,14 +193,22 @@ impl<'a> TermRef<'a> {
     }
 
     pub(super) fn same_identity(self, other: Self) -> bool {
-        if let (Some((left, left_id)), Some((right, right_id))) = (self.scoped(), other.scoped()) {
-            return left.same(right) && left_id == right_id;
+        if let Some(equal) = self.canonical_equality(other) {
+            return equal;
         }
         match (self.0, other.0) {
             (TermSource::Ingress(left), TermSource::Ingress(right)) => std::ptr::eq(left, right),
             (TermSource::Nodes(left), TermSource::Nodes(right)) => std::ptr::eq(left, right),
             _ => false,
         }
+    }
+
+    // Exact scope plus admitted IDs is sufficient because each scope interns
+    // equal typed terms to one ID. Prefix validation belongs to construction of
+    // these views. Different scopes need content comparison, even for equal IDs.
+    fn canonical_equality(self, other: Self) -> Option<bool> {
+        let ((left, left_id), (right, right_id)) = (self.scoped()?, other.scoped()?);
+        left.same(right).then_some(left_id == right_id)
     }
 
     /// The root's typed description, borrowing its text. No traversal or
@@ -437,7 +445,8 @@ impl<'a> TermRef<'a> {
     }
 
     /// Compare in ASP term order with a check before every navigation step,
-    /// descriptor comparison and compared text-byte pair. No payload is copied.
+    /// descriptor comparison and compared text-byte pair. Equal canonical
+    /// identities require one check and no payload traversal. No payload is copied.
     ///
     /// # Errors
     /// Returns the caller's first refusal without claiming an ordering.
@@ -461,6 +470,7 @@ impl<'a> TermRef<'a> {
     /// compared text-byte pair and sequence termination. Navigation events make
     /// this a different work schedule from [`Value::compare_identity_with`].
     /// It allocates nothing and does not inspect an unneeded payload suffix.
+    /// Equal canonical identities require one check and no payload traversal.
     /// Two complete ingress values retain their legacy comparison trace.
     ///
     /// # Errors
@@ -474,6 +484,29 @@ impl<'a> TermRef<'a> {
             return left.compare_identity_with(right, before);
         }
         compare::term_with(self, other, &mut before)
+    }
+
+    /// Test typed equality without allocation. Terms in the same canonical
+    /// scope require one check and no payload traversal, whether equal or not.
+    /// This relies on that scope's unique interning of equal typed terms.
+    /// Different scopes use checked content comparison; two complete ingress
+    /// values retain their legacy comparison trace. IDs never determine term order.
+    ///
+    /// # Errors
+    /// Returns the first callback error before its operation, without an answer.
+    pub fn equals_ref_with<E>(
+        self,
+        other: Self,
+        mut before: impl FnMut() -> Result<(), E>,
+    ) -> Result<bool, E> {
+        if self.is_canonical() && other.is_canonical() {
+            before()?;
+            if let Some(equal) = self.canonical_equality(other) {
+                return Ok(equal);
+            }
+            return compare::term_contents_with(self, other, &mut before).map(Ordering::is_eq);
+        }
+        self.compare_ref_with(other, before).map(Ordering::is_eq)
     }
 
     /// Checked storage comparison against an ingress value, with the navigation
@@ -543,12 +576,8 @@ impl fmt::Display for TermRef<'_> {
 
 impl PartialEq for TermRef<'_> {
     fn eq(&self, other: &Self) -> bool {
-        if let (Some((left, left_id)), Some((right, right_id))) = (self.scoped(), other.scoped())
-            && left.same(right)
-        {
-            return left_id == right_id;
-        }
-        compare::term(*self, *other).is_eq()
+        self.canonical_equality(*other)
+            .unwrap_or_else(|| compare::term(*self, *other).is_eq())
     }
 }
 impl Eq for TermRef<'_> {}
@@ -650,6 +679,11 @@ impl<'a> PredicateRef<'a> {
         }
     }
 
+    fn canonical_equality(self, other: Self) -> Option<bool> {
+        let ((left, left_id), (right, right_id)) = (self.canonical()?, other.canonical()?);
+        left.same_vocabulary(right).then_some(left_id == right_id)
+    }
+
     fn read(self) -> PredicateRead<'a> {
         match self.0 {
             PredicateSource::Canonical { snapshot, id } => PredicateRead::Canonical(
@@ -696,7 +730,8 @@ impl<'a> PredicateRef<'a> {
         self.cmp(&PredicateRef::from(other))
     }
     /// Checked signature comparison. Borrowed ingress pairs preserve the legacy
-    /// shared-name shortcut and callback trace; canonical views charge resolution.
+    /// shared-name shortcut and callback trace. Equal canonical identities need
+    /// one check; other canonical comparisons charge resolution and text reads.
     ///
     /// # Errors
     /// Returns the first callback refusal before its operation.
@@ -709,13 +744,29 @@ impl<'a> PredicateRef<'a> {
         {
             return crate::identity::predicate(left, right, &mut before);
         }
+        if matches!(self.0, PredicateSource::Canonical { .. })
+            && matches!(other.0, PredicateSource::Canonical { .. })
+        {
+            before()?;
+            if self.canonical_equality(other) == Some(true) {
+                return Ok(Ordering::Equal);
+            }
+        }
+        self.compare_signature_with(other, &mut before)
+    }
+
+    fn compare_signature_with<E>(
+        self,
+        other: Self,
+        before: &mut impl FnMut() -> Result<(), E>,
+    ) -> Result<Ordering, E> {
         before()?;
         let left = self.read().signature();
         before()?;
         let right = other.read().signature();
         before()?;
         Ok(
-            crate::identity::bytes(left.0.as_bytes(), right.0.as_bytes(), &mut before)?
+            crate::identity::bytes(left.0.as_bytes(), right.0.as_bytes(), before)?
                 .then_with(|| left.1.cmp(&right.1))
                 .then_with(|| left.2.cmp(&right.2)),
         )
@@ -731,10 +782,37 @@ impl<'a> PredicateRef<'a> {
     ) -> Result<Ordering, E> {
         self.compare_ref_with(PredicateRef::from(other), before)
     }
+
+    /// Test signed predicate equality. A shared canonical vocabulary interns
+    /// each name, arity and sign once, so its IDs answer after one check without
+    /// reading text. Other pairs use checked signature comparison; ingress pairs
+    /// preserve their legacy callback trace. IDs do not determine predicate order.
+    ///
+    /// # Errors
+    /// Returns the first callback refusal before its operation.
+    pub fn equals_ref_with<E>(
+        self,
+        other: Self,
+        mut before: impl FnMut() -> Result<(), E>,
+    ) -> Result<bool, E> {
+        if matches!(self.0, PredicateSource::Canonical { .. })
+            && matches!(other.0, PredicateSource::Canonical { .. })
+        {
+            before()?;
+            if let Some(equal) = self.canonical_equality(other) {
+                return Ok(equal);
+            }
+            return self
+                .compare_signature_with(other, &mut before)
+                .map(Ordering::is_eq);
+        }
+        self.compare_ref_with(other, before).map(Ordering::is_eq)
+    }
 }
 impl PartialEq for PredicateRef<'_> {
     fn eq(&self, other: &Self) -> bool {
-        self.cmp(other).is_eq()
+        self.canonical_equality(*other)
+            .unwrap_or_else(|| self.cmp(other).is_eq())
     }
 }
 impl Eq for PredicateRef<'_> {}
@@ -855,21 +933,22 @@ impl<'a> AtomRef<'a> {
         }
     }
     pub(super) fn same_identity(self, other: Self) -> bool {
+        if let Some(equal) = self.canonical_equality(other) {
+            return equal;
+        }
         match (self.0, other.0) {
-            (
-                AtomSource::Canonical {
-                    snapshot: left,
-                    id: left_id,
-                },
-                AtomSource::Canonical {
-                    snapshot: right,
-                    id: right_id,
-                },
-            ) => left.same_atoms(right) && left_id == right_id,
             (AtomSource::Ingress(left), AtomSource::Ingress(right)) => std::ptr::eq(left, right),
             (AtomSource::Carrier(left), AtomSource::Carrier(right)) => left.same_identity(right),
             _ => false,
         }
+    }
+
+    // An atom scope interns each complete signed tuple to one ID. The view's
+    // constructor has already admitted its prefix. Sharing vocabulary alone is
+    // insufficient: independent tuple writers have different atom scopes.
+    fn canonical_equality(self, other: Self) -> Option<bool> {
+        let ((left, left_id), (right, right_id)) = (self.canonical()?, other.canonical()?);
+        left.same_atoms(right).then_some(left_id == right_id)
     }
     /// Borrow the signed signature without copying its name.
     #[must_use]
@@ -893,6 +972,7 @@ impl<'a> AtomRef<'a> {
     }
     /// Checked semantic comparison with another borrowed atom. Charges logical
     /// signature/argument resolution, term navigation and compared text bytes.
+    /// Equal canonical row identities require one check without visiting fields.
     /// Two ingress atoms retain the legacy comparison trace and name sharing.
     ///
     /// # Errors
@@ -906,6 +986,30 @@ impl<'a> AtomRef<'a> {
             return crate::identity::atom(left, right, &mut before);
         }
         compare::atom_with(self, other, &mut before)
+    }
+
+    /// Test complete typed equality without deriving an order from row IDs.
+    /// Two admitted canonical rows from the same atom authority require one
+    /// permit before checking scope and IDs, whether equal or unequal. Foreign
+    /// authorities compare predicate and argument contents; sharing only a
+    /// frozen vocabulary does not establish shared atom identity. Two ingress
+    /// atoms retain the legacy comparison trace and name sharing.
+    ///
+    /// # Errors
+    /// Returns the first callback refusal before its operation, never absence.
+    pub fn equals_ref_with<E>(
+        self,
+        other: Self,
+        mut before: impl FnMut() -> Result<(), E>,
+    ) -> Result<bool, E> {
+        if self.canonical().is_some() && other.canonical().is_some() {
+            before()?;
+            if let Some(equal) = self.canonical_equality(other) {
+                return Ok(equal);
+            }
+            return compare::atom_contents_with(self, other, &mut before).map(Ordering::is_eq);
+        }
+        self.compare_ref_with(other, before).map(Ordering::is_eq)
     }
     /// Checked semantic comparison with ingress, using the work boundaries of
     /// [`Self::compare_ref_with`], not the legacy flat-value callback trace.
@@ -997,21 +1101,8 @@ impl<'a> AtomRef<'a> {
 }
 impl PartialEq for AtomRef<'_> {
     fn eq(&self, other: &Self) -> bool {
-        if let (
-            AtomSource::Canonical {
-                snapshot: left,
-                id: left_id,
-            },
-            AtomSource::Canonical {
-                snapshot: right,
-                id: right_id,
-            },
-        ) = (self.0, other.0)
-            && left.same_atoms(right)
-        {
-            return left_id == right_id;
-        }
-        compare::atom(*self, *other).is_eq()
+        self.canonical_equality(*other)
+            .unwrap_or_else(|| compare::atom(*self, *other).is_eq())
     }
 }
 impl Eq for AtomRef<'_> {}
@@ -1295,6 +1386,13 @@ fn copy_node(
         ValueNodeRef::Tuple { arity } => ValueNode::Tuple { arity },
     })
 }
+
+#[cfg(test)]
+#[path = "equality_tests.rs"]
+mod equality_tests;
+#[cfg(test)]
+#[path = "atom_equality_tests.rs"]
+mod atom_equality_tests;
 
 #[cfg(test)]
 mod tests {

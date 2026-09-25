@@ -4,6 +4,7 @@ use crate::selected::{Backend, Grounder, NativeExecution, Oracle};
 use serde_json::Value;
 
 mod hybrid;
+mod terminal;
 
 pub(super) fn observe(
     document: &Value,
@@ -12,12 +13,17 @@ pub(super) fn observe(
 ) -> Result<Observation, String> {
     let timing = super::super::timing::parse_any(stderr)?;
     let hybrid = hybrid::read(document)?;
+    let terminal = terminal::read(document)?;
+    if terminal.is_some() && (hybrid.is_some() || request.grounder != Grounder::Auto) {
+        return Err("terminal definitions require automatic grounding and a distinct route".into());
+    }
     // An explicit request names the mode the cell must have taken; an
     // automatic request accepts either mode and retains the one observed.
     let taken = match timing.grounding_mode.as_str() {
         "eager" => Grounder::Eager,
         "lazy_interleaved" => Grounder::Lazy,
         "mixed" if hybrid.is_some() => Grounder::Lazy,
+        "eager_base_terminal_definitions" if terminal.is_some() => Grounder::Eager,
         _ => return Err("unsupported reported grounding mode".into()),
     };
     if request.grounder != Grounder::Auto && taken != request.grounder {
@@ -48,7 +54,9 @@ pub(super) fn observe(
         "effective execution",
     )?;
     let effective_backend = field(effective, "backend")?;
-    let grounding = if hybrid.is_some() {
+    let grounding = if terminal.is_some() {
+        "eager_base_terminal_definitions"
+    } else if hybrid.is_some() {
         "hybrid"
     } else {
         taken.label()
@@ -56,21 +64,7 @@ pub(super) fn observe(
     if field(effective, "grounder")? != grounding {
         return Err("effective execution and measured grounding disagree".into());
     }
-    let procedure = match field(effective, "oracle")? {
-        "closure" => Procedure::Closure,
-        "countermodel" => Procedure::Countermodel,
-        "tight-support" => Procedure::TightSupport,
-        "positive-consequences" => Procedure::PositiveConsequences,
-        _ => return Err("unsupported actual oracle metadata".into()),
-    };
-    let matches_request = match request.oracle {
-        Oracle::Auto => true,
-        Oracle::Closure => procedure == Procedure::Closure,
-        Oracle::Countermodel => procedure == Procedure::Countermodel,
-    };
-    if !matches_request {
-        return Err("actual oracle differs from explicit requested procedure".into());
-    }
+    let procedure = procedure(effective, request.oracle)?;
     if hybrid.is_some()
         && (timing.grounding_mode != "mixed"
             || backend != Backend::Cpu
@@ -79,6 +73,9 @@ pub(super) fn observe(
         return Err(
             "hybrid source checking requires mixed grounding and CPU formula membership".into(),
         );
+    }
+    if let Some(receipt) = &terminal {
+        terminal::execution(receipt, &timing, procedure)?;
     }
     if procedure == Procedure::PositiveConsequences
         && (backend != Backend::Cpu || (taken != Grounder::Eager && hybrid.is_none()))
@@ -97,6 +94,7 @@ pub(super) fn observe(
     Ok(Observation {
         timing,
         hybrid,
+        terminal,
         execution: Execution {
             backend,
             procedure,
@@ -104,6 +102,25 @@ pub(super) fn observe(
             device,
         },
     })
+}
+
+fn procedure(effective: &str, request: Oracle) -> Result<Procedure, String> {
+    let procedure = match field(effective, "oracle")? {
+        "closure" => Procedure::Closure,
+        "countermodel" => Procedure::Countermodel,
+        "tight-support" => Procedure::TightSupport,
+        "positive-consequences" => Procedure::PositiveConsequences,
+        _ => return Err("unsupported actual oracle metadata".into()),
+    };
+    let matches_request = match request {
+        Oracle::Auto => true,
+        Oracle::Closure => procedure == Procedure::Closure,
+        Oracle::Countermodel => procedure == Procedure::Countermodel,
+    };
+    if !matches_request {
+        return Err("actual oracle differs from explicit requested procedure".into());
+    }
+    Ok(procedure)
 }
 
 /// Decode the hardware actually named by the unique backend record. Requested

@@ -68,12 +68,9 @@ fn head_binding(
         let value = atom.value(column).expect("checked head arity");
         match term {
             Term::Constant(constant) => {
-                if !constant
-                    .compare_ref_with(value, || {
-                        builder.counters.work(builder.limits, rule.location)
-                    })?
-                    .is_eq()
-                {
+                if !constant.equals_ref_with(value, || {
+                    builder.counters.work(builder.limits, rule.location)
+                })? {
                     return Ok(None);
                 }
             }
@@ -81,12 +78,9 @@ fn head_binding(
                 if fixed.is_bound(variable, rule.location)? {
                     let previous =
                         fixed.read(variable, builder.computation.read(), rule.location)?;
-                    if !previous
-                        .compare_ref_with(value, || {
-                            builder.counters.work(builder.limits, rule.location)
-                        })?
-                        .is_eq()
-                    {
+                    if !previous.equals_ref_with(value, || {
+                        builder.counters.work(builder.limits, rule.location)
+                    })? {
                         return Ok(None);
                     }
                 } else {

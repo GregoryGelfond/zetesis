@@ -6,8 +6,15 @@ use crate::{
 use std::io::{self, Write};
 
 /// Shared field vocabulary for the human and JSON views of the same data.
-pub(crate) fn work_fields(work: &GroundingWork) -> [(&'static str, Option<u64>); 30] {
+pub(crate) fn work_fields(work: &GroundingWork) -> [(&'static str, Option<u64>); 37] {
     [
+        ("support_construction_work", work.support_construction_work),
+        ("support_production_work", work.support_production_work),
+        ("support_join_work", work.support_join_work),
+        ("support_head_work", work.support_head_work),
+        ("support_order_work", work.support_order_work),
+        ("support_wake_work", work.support_wake_work),
+        ("support_publication_work", work.support_publication_work),
         ("support_rounds", work.support_rounds),
         ("support_producer_visits", work.support_producer_visits),
         (

@@ -10,6 +10,9 @@ mod metadata;
 mod projection;
 mod cache;
 mod aggregate_order;
+mod retained;
+use retained::RetainedState;
+pub(crate) use retained::{RetainedGrounding, ground_retained};
 #[cfg(test)]
 mod constants;
 
@@ -54,6 +57,7 @@ pub(super) const fn boolean(truth: bool) -> usize {
 #[derive(Clone, Copy)]
 enum Schedule<'a> {
     Eager(Option<crate::formula_count_plan::Request<'a>>),
+    Retained,
     Hybrid,
 }
 
@@ -88,7 +92,7 @@ pub(crate) fn ground(
     count_plan: Option<crate::formula_count_plan::Request<'_>>,
 ) -> Result<Compiled, FormulaFailure> {
     ground_with_schedule(preparation, observer, Schedule::Eager(count_plan))
-        .map(|(compiled, _)| compiled)
+        .map(|grounded| grounded.compiled)
 }
 
 pub(crate) fn ground_hybrid(
@@ -107,19 +111,27 @@ pub(crate) fn ground_hybrid(
             location: preparation.location,
         });
     }
-    ground_with_schedule(preparation, observer, Schedule::Hybrid).map(|(compiled, constraints)| {
+    ground_with_schedule(preparation, observer, Schedule::Hybrid).map(|grounded| {
         (
-            compiled,
-            constraints.expect("hybrid schedule retains its constraints"),
+            grounded.compiled,
+            grounded
+                .constraints
+                .expect("hybrid schedule retains its constraints"),
         )
     })
+}
+
+struct Grounded {
+    compiled: Compiled,
+    constraints: Option<crate::formula_hybrid::Constraints>,
+    retained: Option<RetainedState>,
 }
 
 fn ground_with_schedule(
     preparation: crate::formula::Preparation,
     observer: Option<&dyn crate::GroundingObserver>,
     schedule: Schedule<'_>,
-) -> Result<(Compiled, Option<crate::formula_hybrid::Constraints>), FormulaFailure> {
+) -> Result<Grounded, FormulaFailure> {
     use crate::GroundingPhase;
 
     let profile = Profile::new(observer);
@@ -139,6 +151,7 @@ fn ground_with_schedule(
         warnings,
         constraints,
         expansion,
+        retained,
     } = instantiate(preparation, &profile, schedule)?;
     let Emission {
         atoms,
@@ -155,8 +168,8 @@ fn ground_with_schedule(
         crate::formula_count_plan::Outcome::NotRequested,
         |collector| collector.finish(&theory),
     );
-    Ok((
-        Compiled {
+    Ok(Grounded {
+        compiled: Compiled {
             warnings,
             projection,
             analysis_basis,
@@ -174,7 +187,8 @@ fn ground_with_schedule(
             expansion,
         },
         constraints,
-    ))
+        retained,
+    })
 }
 
 /// Emitted occurrences and completed support select one canonical source
@@ -192,6 +206,7 @@ struct Instantiation {
     objective_declarations: Vec<Location>,
     warnings: Vec<crate::FormulaWarning>,
     constraints: Option<crate::formula_hybrid::Constraints>,
+    retained: Option<RetainedState>,
 }
 
 fn instantiate(
@@ -203,44 +218,24 @@ fn instantiate(
 
     let crate::formula::Preparation {
         program: prepared,
-        catalog: mut source_catalog,
+        catalog: source_catalog,
         accounting,
-        mut budget,
+        budget: mut expansion_budget,
         limits,
         location,
         options,
     } = preparation;
     let limits = &limits;
-    let budget = &mut budget;
+    let budget = &mut expansion_budget;
     let mut counters = Counters::resume(accounting, profile.work());
-    let domains = if options.domains.is_some() {
-        profile.phase(GroundingPhase::DomainAnalysis, None, || {
-            let (relations, mut append) = source_catalog.split(limits, &mut counters, location)?;
-            let support = Support::indexed(&relations, limits, &counters, location)?;
-            let mut computation = formula_support::Computation::new(&mut append, &support);
-            crate::formula_domains::analyze(
-                &prepared,
-                options.domains,
-                budget,
-                profile,
-                Context::new(&mut computation, limits, &mut counters, location),
-            )
-        })?
-    } else {
-        profile.domain_analysis(crate::DomainObservation::Disabled);
-        None
-    };
-    let mut catalog = profile.phase(GroundingPhase::SupportCompletion, None, || {
-        formula_support::build(
-            source_catalog,
-            &prepared,
-            domains.as_ref(),
-            limits,
-            budget,
-            &mut counters,
-            location,
-        )
-    })?;
+    let (mut catalog, domains) = complete_support(
+        &prepared,
+        source_catalog,
+        options.domains,
+        budget,
+        profile,
+        GroundingWork::new(limits, &mut counters, location),
+    )?;
     let pending = {
         let (completed, mut append) =
             profile.phase(GroundingPhase::SupportCompletion, None, || {
@@ -268,16 +263,38 @@ fn instantiate(
         objective_origins,
         warnings,
         streamed_instances,
-    } = pending.publish(&mut catalog, limits, location)?;
-    let constraints = schedule.retain_constraints(
-        prepared.rules,
-        catalog,
-        streamed_instances,
+        retained_account,
+    } = pending.publish(
+        &mut catalog,
         limits,
         location,
-    );
+        matches!(schedule, Schedule::Retained),
+    )?;
+    let expansion = budget.usage();
+    let (constraints, retained) = if let Some((accounting, output_storage)) = retained_account {
+        (
+            None,
+            Some(RetainedState {
+                catalog,
+                accounting,
+                budget: expansion_budget,
+                output_storage,
+            }),
+        )
+    } else {
+        (
+            schedule.retain_constraints(
+                prepared.rules,
+                catalog,
+                streamed_instances,
+                limits,
+                location,
+            ),
+            None,
+        )
+    };
     Ok(Instantiation {
-        expansion: budget.usage(),
+        expansion,
         projection,
         emission,
         objectives,
@@ -288,7 +305,60 @@ fn instantiate(
         objective_declarations: prepared.objective_declarations,
         warnings: warnings.into_values(),
         constraints,
+        retained,
     })
+}
+
+/// Prepare optional domains and complete support under the same cumulative
+/// account. The domain certificate remains tied to the prepared program.
+fn complete_support<'source>(
+    prepared: &'source crate::formula_ir::Prepared,
+    mut catalog: formula_support::SupportCatalog,
+    options: Option<crate::DomainLimits>,
+    budget: &mut Budget,
+    profile: &Profile<'_>,
+    work: GroundingWork<'_>,
+) -> Result<
+    (
+        formula_support::CompletedCatalog,
+        Option<crate::formula_domains::Domains<'source>>,
+    ),
+    FormulaFailure,
+> {
+    let GroundingWork {
+        limits,
+        counters,
+        location,
+    } = work;
+    let domains = if options.is_some() {
+        profile.phase(crate::GroundingPhase::DomainAnalysis, None, || {
+            let (relations, mut append) = catalog.split(limits, counters, location)?;
+            let support = Support::indexed(&relations, limits, counters, location)?;
+            let mut computation = Computation::new(&mut append, &support);
+            crate::formula_domains::analyze(
+                prepared,
+                options,
+                budget,
+                profile,
+                Context::new(&mut computation, limits, counters, location),
+            )
+        })?
+    } else {
+        profile.domain_analysis(crate::DomainObservation::Disabled);
+        None
+    };
+    let catalog = profile.phase(crate::GroundingPhase::SupportCompletion, None, || {
+        formula_support::build(
+            catalog,
+            prepared,
+            domains.as_ref(),
+            limits,
+            budget,
+            counters,
+            location,
+        )
+    })?;
+    Ok((catalog, domains))
 }
 
 /// Completed support may grow canonical terms during emission. Only owned
@@ -353,7 +423,7 @@ fn emit<'source>(
             match schedule {
                 Schedule::Eager(request) => request
                     .map(|request| crate::formula_count_plan::Collector::new(request, location)),
-                Schedule::Hybrid => None,
+                Schedule::Hybrid | Schedule::Retained => None,
             },
             location,
         )?;
@@ -374,6 +444,7 @@ fn emit<'source>(
 }
 
 struct PublishedEmission {
+    retained_account: Option<(formula_support::Accounting, formula_support::StorageLease)>,
     projection: crate::PreparedProjection,
     emission: Emission,
     objectives: zetesis_objective::ObjectiveProgram,
@@ -388,6 +459,7 @@ impl PendingEmission {
         catalog: &mut formula_support::CompletedCatalog,
         limits: &FormulaLimits,
         location: Location,
+        retain: bool,
     ) -> Result<PublishedEmission, FormulaFailure> {
         let Self {
             projection,
@@ -416,7 +488,26 @@ impl PendingEmission {
             origins,
             count_plan,
         };
+        let retained_account = if retain {
+            let external = publication.source_bytes(location)?;
+            let mut output_storage = publication.into_lease(location)?;
+            RetainedGrounding::admit_envelope(
+                &mut output_storage,
+                external,
+                &counters,
+                limits,
+                location,
+            )?;
+            Some((counters.into_accounting(), output_storage))
+        } else {
+            // Preserve the ordinary publication boundary: both coordinator and
+            // history drop here, before later theory validation.
+            drop(publication);
+            drop(counters);
+            None
+        };
         Ok(PublishedEmission {
+            retained_account,
             projection,
             emission,
             objectives,
@@ -1054,8 +1145,7 @@ impl Builder<'_, '_, '_> {
                     )?;
                     let expected = assignment.resolve(term, self.computation.read(), location)?;
                     matches &= expected
-                        .compare_ref_with(value, || self.counters.work(self.limits, location))?
-                        .is_eq();
+                        .equals_ref_with(value, || self.counters.work(self.limits, location))?;
                 }
             }
             if matches {

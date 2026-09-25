@@ -50,6 +50,7 @@ different types of value.
 | Instantiate a rule body | Join positive witnesses, agree on repeated variables, filter scalar conditions, project an instance | [`source::scan`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/oracle/source.rs); [source preparation](grounding.md) |
 | Determine the normal reduct | Evaluate positive/negative gates against one immutable seed | [`check_static`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/static_oracle.rs) |
 | Derive positive consequences | Test enabled bodies, union their heads, repeat until closed | [`check_static`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/static_oracle.rs); [lazy batches](../rust/parallel.md) |
+| Reconstruct terminal positive definitions | Join true rows from a verified base answer, project heads, union with that answer | [`TerminalReconstruction`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_terminal/reconstruct.rs); [applicability and extension law](grounding.md#terminal-definition-analysis) |
 | Test formula satisfaction | Evaluate an acyclic Boolean graph; require every asserted root | [`models`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/oracle.rs) |
 | Compute least consequences of positive atomic-head formulas | Propagate newly true atom/body vertices through sparse incidences; check original constraints on the completed interpretation | [`PositivePlan`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/positive.rs) |
 | Construct and reuse a formula reduct | Freeze candidate truth at every graph node; mask candidate-false nodes during later queries | [`FrozenReduct`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/reduct.rs) |
@@ -60,8 +61,10 @@ different types of value.
 | Check several proposals | Share program data while keeping each interpretation, reduct and verdict separate | [`BatchOracle`](../rust/parallel.md); [commit boundaries](execution.md#immutable-rounds-and-commit-boundaries) |
 
 These are capability mappings. Ordinary relational solving supports lazy source
-rounds, Rayon and GPU closure. Ordinary formula solving defaults to eager grounding;
-explicit lazy CPU execution can compose core answer enumeration with streamed
+rounds, Rayon and GPU closure. Automatic formula admission can defer terminal
+positive definitions, joining true rows after base membership to reconstruct each
+full original answer. Other rules remain eager; explicit lazy CPU execution can
+compose core answer enumeration with streamed
 constraint satisfaction. Formula solving combines host candidate production with membership checking on the selected
 backend. Automatic device execution uses complete tight certificates when
 available; other formulas use GPU propagation and exact host completion.

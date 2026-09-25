@@ -43,6 +43,13 @@ pub trait GroundingObserver {
         false
     }
 
+    /// The certified source partition will ground a base formula and retain
+    /// terminal definitions for reconstruction after base membership checks.
+    /// Called before that base materialization attempt, including one that later
+    /// refuses. This identifies the attempted route, not completed grounding or
+    /// reconstructed answers; it introduces no measurement or work charge.
+    fn terminal_definitions(&self) {}
+
     /// Observe the actual optional domain attempt before final rule guards.
     /// Called synchronously, independently of detailed work-counter opt-in.
     /// A prior grounding failure may prevent the attempt and this callback.

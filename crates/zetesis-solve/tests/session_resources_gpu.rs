@@ -1075,3 +1075,91 @@ fn metal_tight_refusal_preserves_pending_coverage() {
 fn vulkan_tight_refusal_preserves_pending_coverage() {
     tight_refusal(Device::Vulkan);
 }
+
+fn terminal_families(device: Device) {
+    const SOURCE: &str = "{seed(1);seed(2)}. receipt(X):-seed(X). #show X:receipt(X).";
+    let reference_owner = formula(SOURCE);
+    let reference = solve(
+        PreparedInput::formula(&reference_owner),
+        &Subject::Theory(reference_owner.theory().clone()),
+        config(Backend::Cpu, Profile::Formula),
+        &ExecutionResources::default(),
+        AnswerSelection::All,
+    );
+    assert_eq!(reference.outcome.completion(), Some(Completion::Exhausted));
+    assert_eq!(reference.records.len(), 4);
+
+    let materialized = zetesis_themelios::prepare_formula(
+        SOURCE.into(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .unwrap()
+    .ground_adaptive()
+    .unwrap();
+    let zetesis_themelios::FormulaMaterialization::Terminal(owner) = materialized else {
+        panic!("fixture requires actual terminal source materialization");
+    };
+    assert_eq!(owner.deferred_templates(), 1);
+    let subject = Subject::TerminalDefinitions(owner.clone());
+    assert!(!subject.same_instance(&Subject::Theory(owner.base_theory().clone())));
+    let resources = ExecutionResources::with_gpu(&device.context());
+    let capture = solve(
+        PreparedInput::terminal(&owner),
+        &subject,
+        SolveConfig {
+            grounder: Grounder::Auto,
+            ..config(device.backend(), Profile::Formula)
+        },
+        &resources,
+        AnswerSelection::All,
+    );
+    // The common helper checks every answer and final outcome against the
+    // original terminal subject; this additionally requires real device work.
+    require_device(&capture, device, Profile::Formula);
+    require_complete(&capture, &reference.records);
+    let terminal = capture.outcome.terminal_execution().unwrap();
+    assert_eq!(
+        (
+            terminal.base_answers,
+            terminal.reconstructed,
+            terminal.pending
+        ),
+        (4, 4, 0)
+    );
+    assert_eq!(terminal.reconstruction.completed, 4);
+    assert_eq!(capture.outcome.verified_models(), 4);
+    for record in &capture.records {
+        let shown = owner
+            .metadata()
+            .observations()
+            .evaluate(
+                &record.atoms,
+                zetesis_themelios::observation::Limits::default(),
+                &Cancellation::default(),
+            )
+            .unwrap();
+        let expected: Vec<_> = (1..=2)
+            .filter(|number| {
+                record
+                    .atoms
+                    .contains(&atom("seed", Sign::Positive, vec![Value::Number(*number)]))
+            })
+            .map(zetesis_themelios::observation::Symbol::Number)
+            .collect();
+        assert_eq!(shown.symbols(), expected);
+    }
+}
+
+#[test]
+#[ignore = "requires actual Metal; terminal reconstruction preserves complete original families"]
+fn metal_terminal_sessions_preserve_complete_families() {
+    terminal_families(Device::Metal);
+}
+
+#[test]
+#[ignore = "requires actual Vulkan; terminal reconstruction preserves complete original families"]
+fn vulkan_terminal_sessions_preserve_complete_families() {
+    terminal_families(Device::Vulkan);
+}

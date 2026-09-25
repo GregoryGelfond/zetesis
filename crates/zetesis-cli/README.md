@@ -205,7 +205,9 @@ crossover for a supported execution profile. An explicit GPU request prepares
 its device during session setup and never silently falls back to CPU. Static
 GPU closure admits at most 4,096 atoms.
 
-Finite formula execution defaults to eager admission. Explicit lazy CPU execution
+Automatic finite formula admission can defer eligible terminal positive definitions
+and reconstruct them from verified base answers; it grounds the remaining rules
+eagerly. Explicit lazy CPU execution
 can stream ordinary constraints after complete support and arithmetic admission,
 while retaining producers and ineligible constraints. This hybrid profile currently
 refuses objectives, table joins and explicit devices; see the

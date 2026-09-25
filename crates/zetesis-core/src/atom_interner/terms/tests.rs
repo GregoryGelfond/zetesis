@@ -457,3 +457,6 @@ fn assigned_atom_refusal_withholds_discovery() {
         assert_eq!(owner.len(), 1);
     }
 }
+
+#[path = "projected_tests.rs"]
+mod projected;

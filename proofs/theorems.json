@@ -810,29 +810,39 @@
     "line": 320
   },
   {
+    "name": "Zetesis.CanonicalCatalog.discovery_lookup_exact",
+    "file": "Zetesis/CanonicalCatalog.lean",
+    "line": 50
+  },
+  {
+    "name": "Zetesis.CanonicalCatalog.undiscovered_identity_absent",
+    "file": "Zetesis/CanonicalCatalog.lean",
+    "line": 100
+  },
+  {
     "name": "Zetesis.CanonicalCatalog.selection_exact",
     "file": "Zetesis/CanonicalCatalog.lean",
-    "line": 33
+    "line": 129
   },
   {
     "name": "Zetesis.CanonicalCatalog.normalized_selection_exact",
     "file": "Zetesis/CanonicalCatalog.lean",
-    "line": 63
+    "line": 159
   },
   {
     "name": "Zetesis.CanonicalCatalog.append_preserves_interpretation",
     "file": "Zetesis/CanonicalCatalog.lean",
-    "line": 93
+    "line": 189
   },
   {
     "name": "Zetesis.CanonicalCatalog.owner_transfer_preserves_interpretation",
     "file": "Zetesis/CanonicalCatalog.lean",
-    "line": 117
+    "line": 213
   },
   {
     "name": "Zetesis.CanonicalCatalog.raw_ids_do_not_determine_interpretation",
     "file": "Zetesis/CanonicalCatalog.lean",
-    "line": 137
+    "line": 233
   },
   {
     "name": "Zetesis.CanonicalTemplates.read_decodes",
@@ -1218,6 +1228,21 @@
     "name": "Zetesis.ClauseValidation.empty_clause_rejects",
     "file": "Zetesis/ClauseValidation.lean",
     "line": 127
+  },
+  {
+    "name": "Zetesis.ClosedCatalog.find_sound",
+    "file": "Zetesis/ClosedCatalog.lean",
+    "line": 40
+  },
+  {
+    "name": "Zetesis.ClosedCatalog.find_none_iff",
+    "file": "Zetesis/ClosedCatalog.lean",
+    "line": 86
+  },
+  {
+    "name": "Zetesis.ClosedCatalog.find_exact",
+    "file": "Zetesis/ClosedCatalog.lean",
+    "line": 144
   },
   {
     "name": "Zetesis.ColumnRelations.encoding_exact",
@@ -5988,6 +6013,66 @@
     "name": "Zetesis.TableBindings.join_family_preserved",
     "file": "Zetesis/TableBindings.lean",
     "line": 161
+  },
+  {
+    "name": "Zetesis.TerminalDefinitions.satisfies_definition",
+    "file": "Zetesis/TerminalDefinitions.lean",
+    "line": 67
+  },
+  {
+    "name": "Zetesis.TerminalDefinitions.models_definitions_iff",
+    "file": "Zetesis/TerminalDefinitions.lean",
+    "line": 75
+  },
+  {
+    "name": "Zetesis.TerminalDefinitions.original_models_iff",
+    "file": "Zetesis/TerminalDefinitions.lean",
+    "line": 93
+  },
+  {
+    "name": "Zetesis.TerminalDefinitions.reduct_models_iff",
+    "file": "Zetesis/TerminalDefinitions.lean",
+    "line": 110
+  },
+  {
+    "name": "Zetesis.TerminalDefinitions.consequences_monotone",
+    "file": "Zetesis/TerminalDefinitions.lean",
+    "line": 159
+  },
+  {
+    "name": "Zetesis.TerminalDefinitions.base_extend",
+    "file": "Zetesis/TerminalDefinitions.lean",
+    "line": 166
+  },
+  {
+    "name": "Zetesis.TerminalDefinitions.derived_extend",
+    "file": "Zetesis/TerminalDefinitions.lean",
+    "line": 170
+  },
+  {
+    "name": "Zetesis.TerminalDefinitions.extend_monotone",
+    "file": "Zetesis/TerminalDefinitions.lean",
+    "line": 174
+  },
+  {
+    "name": "Zetesis.TerminalDefinitions.extend_sub_of_models",
+    "file": "Zetesis/TerminalDefinitions.lean",
+    "line": 184
+  },
+  {
+    "name": "Zetesis.TerminalDefinitions.stable_iff",
+    "file": "Zetesis/TerminalDefinitions.lean",
+    "line": 203
+  },
+  {
+    "name": "Zetesis.TerminalDefinitions.stable_extend_iff",
+    "file": "Zetesis/TerminalDefinitions.lean",
+    "line": 260
+  },
+  {
+    "name": "Zetesis.TerminalDefinitions.unique_stable_extension",
+    "file": "Zetesis/TerminalDefinitions.lean",
+    "line": 271
   },
   {
     "name": "Zetesis.TernaryWatch.remaining_unique",

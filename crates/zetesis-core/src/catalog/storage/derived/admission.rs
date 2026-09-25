@@ -272,7 +272,7 @@ impl DerivedTerms<'_> {
             work.step()?;
             let existing = candidate.child(position).ok_or(Fault::Shape)?;
             let supplied = TermRef::derived(self, *child).ok_or(Fault::Shape)?;
-            if !existing.compare_ref_with(supplied, || work.step())?.is_eq() {
+            if !existing.equals_ref_with(supplied, || work.step())? {
                 return Ok(false);
             }
         }

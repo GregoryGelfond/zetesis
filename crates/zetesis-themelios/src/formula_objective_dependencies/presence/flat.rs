@@ -91,8 +91,7 @@ impl<'source> Context<'_, '_, 'source> {
         left: PredicateRef<'_>,
         right: PredicateRef<'_>,
     ) -> Result<bool, FormulaFailure> {
-        left.compare_ref_with(right, || self.inspect())
-            .map(std::cmp::Ordering::is_eq)
+        left.equals_ref_with(right, || self.inspect())
     }
     fn same_atom(
         &mut self,
@@ -112,7 +111,7 @@ impl<'source> Context<'_, '_, 'source> {
             match (left, right) {
                 (TemplateTerm::Variable(left), TemplateTerm::Variable(right)) if left == right => {}
                 (TemplateTerm::Constant(left), TemplateTerm::Constant(right)) => {
-                    if !left.compare_ref_with(right, || self.inspect())?.is_eq() {
+                    if !left.equals_ref_with(right, || self.inspect())? {
                         return Ok(false);
                     }
                 }

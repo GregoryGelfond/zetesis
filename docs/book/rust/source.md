@@ -31,6 +31,56 @@ so repeated arguments and variable positions retain their meaning. An empty
 support relation may coexist with a nonempty vocabulary. Neither term admission
 nor a compiled pattern asserts an atom's truth.
 
+## Defer terminal positive definitions
+
+`PreparedFormula::ground_adaptive()` returns
+`FormulaMaterialization::Complete(AdmittedFormula)` or
+`FormulaMaterialization::Terminal(TerminalFormula)`. Bundle preparation has the
+same consuming operation. Use `PreparedInput::formula` for the first result and
+`PreparedInput::terminal` for the second. The terminal session accepts automatic
+grounding and reconstructs full answers before applying original observations.
+
+A terminal definition has a positive, flat body and an ordinary head whose
+predicate is read by no logical rule or constraint. All producers must qualify;
+strong-negation coherence, objectives and explicit projection are checked before
+partitioning. This is a general source classification, independent of a program's
+name or constants. See [the grounding architecture](../architecture/grounding.md#terminal-definition-analysis)
+for its exact semantic boundary.
+
+`TerminalFormula::base_theory()` and `base_analysis()` describe the filtered base.
+`analyzed_program()`, `source_analysis()` and `metadata()` retain the original
+source contract. A base answer alone is not an original answer. For direct
+composition, `reconstruction()` returns an independent cursor whose
+`reconstruct(&base_model, &cancellation)` extends the supplied interpretation.
+That lower-level operation checks exact catalog ownership, not base stability;
+the ordinary session supplies the verified-base premise.
+
+The cursor borrows canonical terms and uses private binding and row-selection
+metadata. Each call starts with exactly the supplied true rows. Its cumulative
+work and substitutions include source admission and earlier calls. A refusal
+fuses the cursor without invalidating prior returned models. Retained model
+families have their own consumer-side memory limits. These named capacities are
+not process RSS, and the checked mathematical extension law is not yet a proof
+of the Rust source classifier or reconstruction implementation.
+
+This runnable example handles both materialization results and collects a
+complete `WorldView` through the ordinary session API. Its four interpretations
+include precisely the receipts entailed by their chosen seeds.
+
+```rust
+# extern crate zetesis_core;
+# extern crate zetesis_cpu;
+# extern crate zetesis_solve;
+# extern crate zetesis_themelios;
+{{#include ../examples/terminal.rs:example}}
+```
+
+Run it with:
+
+```sh
+cargo run --locked -p zetesis-solve --no-default-features --example book-terminal
+```
+
 ## Stream ordinary constraints
 
 `PreparedFormula::ground_hybrid()` and the corresponding bundle method return
@@ -360,6 +410,30 @@ with an anonymous variable in a key position: the asked atom stands under
 `not`, where `p(_, t)` holds when some key has the value `t`, so
 `not p(_, t)` would forbid only that no key has it, while the written
 constraint forbids a wrong value at every key.
+
+## Inspect terminal positive definitions
+
+`zetesis_domain::terminal::analyze(&program, limits)` identifies predicates whose
+producers are all flat positive normal rules and whose atoms have no semantic
+consumer elsewhere in the supplied program. It returns the original rule
+carriers, borrowed from that exact program. All producers must qualify;
+recursion, feedback and complementary strong-sign occurrences prevent selection.
+Predicate spelling, source filenames and `#show` do not determine eligibility.
+
+The result distinguishes a complete scan, unsupported context and a resource
+stop. Only a complete scan publishes a selection, which may be empty. Limits
+bound logical work and metadata populations; they do not promise fallible
+allocation or cancellation. See the
+[crate contract](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-domain/README.md#terminal-positive-definitions)
+for the admitted profile.
+
+The classifier alone does not change grounding. The adaptive formula API
+[described above](#defer-terminal-positive-definitions) consumes its result,
+establishes source-to-execution correspondence and reconstructs the full
+interpretation before answer-set evidence or observation. The
+[`TerminalDefinitions` laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/TerminalDefinitions.lean)
+prove the propositional extension theorem; they do not certify those execution
+steps.
 
 ## Know which program was analyzed
 

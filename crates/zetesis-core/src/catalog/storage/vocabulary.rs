@@ -221,40 +221,70 @@ impl Store {
             base.publication_peak = self.budget.used + extra;
             return Ok(base);
         }
-        let Vocabulary::Growing(growing) = &mut self.vocabulary else {
-            unreachable!("frozen case returned");
-        };
-        let append = !growing.tail.is_empty();
         let envelopes = extra
-            .checked_add(size_of::<VocabularyData>() as u128)
-            .and_then(|bytes| bytes.checked_add(size_of::<Indexes>() as u128))
-            .and_then(|bytes| {
-                bytes.checked_add(if append {
-                    size_of::<VocabularySegment>() as u128
-                } else {
-                    0
-                })
-            })
+            .checked_add(self.vocabulary.freeze_envelopes())
             .ok_or(Fault::Overflow)?;
         self.budget.check_extra(envelopes)?;
         let mut admission = self.budget.clone();
         admission.used += envelopes;
-        if append {
-            work.reserve(&mut growing.sealed, 1, &mut admission)?;
-        }
-        work.steps(
-            growing
-                .sealed
-                .len()
-                .checked_add(usize::from(append))
-                .and_then(|count| count.checked_add(6))
-                .ok_or(Fault::Overflow)?,
-        )?;
+        self.vocabulary.prepare_freeze(&mut admission, &mut work)?;
         // All remaining envelopes are allocated below after the final permit.
         // The reserved directory's actual replacement overlap is already in peak.
         let publication_peak = admission.peak.max(admission.used);
-        let Vocabulary::Growing(growing) = self.vocabulary else {
-            unreachable!("checked growing vocabulary");
+        self.vocabulary
+            .finish_freeze(publication_peak)
+            .map_err(Failure::Storage)
+    }
+}
+
+impl Vocabulary {
+    pub(super) fn freeze_envelopes(&self) -> u128 {
+        match self {
+            Self::Frozen(_) => 0,
+            Self::Growing(growing) => {
+                size_of::<VocabularyData>() as u128
+                    + size_of::<Indexes>() as u128
+                    + if growing.tail.is_empty() {
+                        0
+                    } else {
+                        size_of::<VocabularySegment>() as u128
+                    }
+            }
+        }
+    }
+
+    /// Reserve the moved directory and admit all subsequent metadata visits.
+    pub(super) fn prepare_freeze<E>(
+        &mut self,
+        admission: &mut super::Budget,
+        work: &mut Work<'_, E>,
+    ) -> Result<(), Failure<E>> {
+        if let Self::Growing(growing) = self {
+            let append = !growing.tail.is_empty();
+            if append {
+                work.reserve(&mut growing.sealed, 1, admission)?;
+            }
+            work.steps(
+                growing
+                    .sealed
+                    .len()
+                    .checked_add(usize::from(append))
+                    .and_then(|count| count.checked_add(6))
+                    .ok_or(Fault::Overflow)?,
+            )?;
+        }
+        Ok(())
+    }
+
+    /// The caller reserved the directory and admitted every remaining move.
+    /// Fixed Arc envelopes retain the established infallible allocation boundary.
+    pub(super) fn finish_freeze(self, publication_peak: u128) -> Result<FrozenVocabulary, Fault> {
+        let growing = match self {
+            Self::Growing(growing) => growing,
+            Self::Frozen(mut base) => {
+                base.publication_peak = publication_peak;
+                return Ok(base);
+            }
         };
         let Growing {
             owner,
@@ -263,7 +293,7 @@ impl Store {
             indexes,
         } = *growing;
         let counts = tail.counts();
-        if append {
+        if !tail.is_empty() {
             sealed.push(Arc::new(tail));
         }
         let data = Arc::new(VocabularyData {

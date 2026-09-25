@@ -14,8 +14,11 @@ mod publication;
 pub(crate) use computation::Computation;
 pub(crate) use publication::Publication;
 pub(crate) use selection::SourceSelection;
-pub(crate) use storage::{StorageLease, growth_capacity, reserve, reserve_exact};
+pub(crate) use storage::{
+    StorageLease, growth_capacity, reserve, reserve_exact, reserve_exact_scoped,
+};
 mod accounting;
+mod observation;
 mod generated;
 mod term_selection;
 mod term_table;
@@ -57,13 +60,15 @@ use crate::grounding_observer::{Event, Work};
 use crate::{ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource};
 use rows::{Frame, Ownership, Staged};
 
-pub(crate) use accounting::Accounting;
+pub(crate) use accounting::{Accounting, AccountingBaseline};
 pub(crate) use evaluation::{Evaluation, Failures};
 pub(crate) use prepared::PreparedRule;
 pub(crate) use queries::{Candidates, Support};
 #[cfg(test)]
 use relations::RelationRows;
-pub(crate) use relations::{Relations, SourceAtom, SourceScope, SupportCatalog};
+pub(crate) use relations::{
+    ClosedSource, Relations, SourceAtom, SourceScope, SupportCatalog, atom_failure, owner_limits,
+};
 pub(crate) use rows::{FilteredRows, RowFilter};
 
 /// Possible atoms after a complete support round added no new head.
@@ -327,7 +332,7 @@ impl Counters {
         computation.storage_result(result, &generated.lease, limits, location)?;
         observed
     }
-    pub(super) fn substitution(
+    pub(crate) fn substitution(
         &mut self,
         limits: &FormulaLimits,
         location: Location,
@@ -381,15 +386,18 @@ pub(crate) fn build(
     counters: &mut Counters,
     fallback: Location,
 ) -> Result<CompletedCatalog, FormulaFailure> {
-    let plan = producers::ProducerPlan::prepare(prepared, &catalog, limits, counters, fallback)?;
-    complete(
-        catalog,
-        prepared,
-        plan,
-        domains,
-        budget,
-        GroundingWork::new(limits, counters, fallback),
-    )
+    counters.observe_work(Event::SupportConstructionWork, |counters| {
+        let plan =
+            producers::ProducerPlan::prepare(prepared, &catalog, limits, counters, fallback)?;
+        complete(
+            catalog,
+            prepared,
+            plan,
+            domains,
+            budget,
+            GroundingWork::new(limits, counters, fallback),
+        )
+    })
 }
 
 /// Every round joins each selected rule under its domain guards, when the
@@ -443,44 +451,48 @@ fn complete(
             counters.record(Event::SupportSnapshotPreparation);
             let (relations, mut delta) = catalog.split(limits, counters, fallback)?;
             let support = Support::indexed(&relations, limits, counters, fallback)?;
-            while let Some(index) = selected {
-                let rule = &prepared.rules[index];
-                counters.work(limits, rule.location)?;
-                counters.record(Event::SupportProducerVisit);
-                let mut variants = match &plan {
-                    Some(plan) => {
-                        plan.variants(index, rule, &support, rounds == 1, limits, counters)?
-                    }
-                    None => delta::variants(rule, &support, rounds == 1, limits, counters)?,
-                };
-                let mut computation = Computation::new(&mut delta, &support);
-                let guards = match domains {
-                    Some(domains) => support.domain_guards(
+            counters.observe_work(Event::SupportProductionWork, |counters| {
+                while let Some(index) = selected {
+                    let rule = &prepared.rules[index];
+                    counters.work(limits, rule.location)?;
+                    counters.record(Event::SupportProducerVisit);
+                    let mut variants = match &plan {
+                        Some(plan) => {
+                            plan.variants(index, rule, &support, rounds == 1, limits, counters)?
+                        }
+                        None => delta::variants(rule, &support, rounds == 1, limits, counters)?,
+                    };
+                    let mut computation = Computation::new(&mut delta, &support);
+                    let guards = match domains {
+                        Some(domains) => support.domain_guards(
+                            rule,
+                            domains.for_rule(index, rule)?,
+                            &computation,
+                            limits,
+                            counters,
+                        )?,
+                        None => None,
+                    };
+                    derive_variants(
                         rule,
-                        domains.for_rule(index, rule)?,
-                        &computation,
-                        limits,
-                        counters,
-                    )?,
-                    None => None,
-                };
-                derive_variants(
-                    rule,
-                    &mut variants,
-                    guards.as_ref(),
-                    &support,
-                    budget,
-                    Context::new(&mut computation, limits, counters, rule.location),
-                )?;
-                selected = schedule.next(limits, counters, fallback)?;
-            }
-            if !delta.is_empty() {
-                delta.order(limits, counters, fallback)?;
-                if let Some(plan) = &mut plan {
-                    plan.advance(delta.atoms(), limits, counters, fallback)?;
+                        &mut variants,
+                        guards.as_ref(),
+                        &support,
+                        budget,
+                        Context::new(&mut computation, limits, counters, rule.location),
+                    )?;
+                    selected = schedule.next(limits, counters, fallback)?;
                 }
-            }
-            !delta.is_empty()
+                Ok::<_, FormulaFailure>(())
+            })?;
+            // No join remains live. Release its query descriptor before the
+            // pending selection borrows the catalog's semantic ordering index.
+            drop(support);
+            advance_round(
+                &mut delta,
+                plan.as_mut(),
+                GroundingWork::new(limits, counters, fallback),
+            )?
         };
         if !changed {
             return finish(
@@ -491,6 +503,32 @@ fn complete(
         }
         catalog.publish(limits, counters, fallback)?;
     }
+}
+
+/// Prepare the next wake set only after the complete pending population has its
+/// publication order. Refusal leaves private round metadata, never completion.
+fn advance_round(
+    delta: &mut SupportAppend<'_>,
+    plan: Option<&mut producers::ProducerPlan<'_>>,
+    work: GroundingWork<'_>,
+) -> Result<bool, FormulaFailure> {
+    let GroundingWork {
+        limits,
+        counters,
+        location,
+    } = work;
+    if delta.is_empty() {
+        return Ok(false);
+    }
+    counters.observe_work(Event::SupportOrderWork, |counters| {
+        delta.order(limits, counters, location)
+    })?;
+    if let Some(plan) = plan {
+        counters.observe_work(Event::SupportWakeWork, |counters| {
+            plan.advance(delta.atoms(), limits, counters, location)
+        })?;
+    }
+    Ok(true)
 }
 
 /// The fixed point drops its scheduling metadata before final publication.
@@ -570,23 +608,11 @@ fn derive_rule(
         budget,
         counters,
     };
-    while let Some(binding) = match &rule.head {
-        HeadIr::Normal(Some(head)) => outer.next_support(
-            *head,
-            derivation.computation,
-            limits,
-            derivation.budget,
-            derivation.counters,
-            rule.location,
-        )?,
-        _ => outer.next(
-            derivation.computation,
-            limits,
-            derivation.budget,
-            derivation.counters,
-            rule.location,
-        )?,
-    } {
+    let projected = match &rule.head {
+        HeadIr::Normal(head) => *head,
+        _ => None,
+    };
+    while let Some(binding) = derivation.next(outer, projected, rule.location)? {
         match &rule.head {
             HeadIr::Normal(Some(head)) => derivation.head(*head, &binding, rule.location)?,
             HeadIr::Disjunction(heads) => {
@@ -614,13 +640,7 @@ fn derive_rule(
                             rule.location,
                         ),
                     )?;
-                    while let Some(binding) = local.next(
-                        derivation.computation,
-                        limits,
-                        derivation.budget,
-                        derivation.counters,
-                        rule.location,
-                    )? {
+                    while let Some(binding) = derivation.next(&mut local, None, rule.location)? {
                         if let Some(head) = element.head.positive_atom() {
                             derivation.head(*head, &binding, rule.location)?;
                         }
@@ -646,6 +666,27 @@ struct Derivation<'a, 'source, 'round> {
 }
 
 impl Derivation<'_, '_, '_> {
+    /// Select a complete support binding before the consumer borrows its frame.
+    /// Attribution observes admitted operations; it adds no work charges.
+    fn next<'join>(
+        &mut self,
+        join: &'join mut Join<'_, '_>,
+        projected: Option<AtomPattern>,
+        location: Location,
+    ) -> Result<Option<Binding<'join>>, FormulaFailure> {
+        self.counters
+            .observe_work(Event::SupportJoinWork, |counters| {
+                join.next_support(
+                    projected,
+                    self.computation,
+                    self.limits,
+                    self.budget,
+                    counters,
+                    location,
+                )
+            })
+    }
+
     fn choice(
         &mut self,
         group: &crate::formula_ir::ChoiceIr,
@@ -668,13 +709,7 @@ impl Derivation<'_, '_, '_> {
                 self.budget,
                 Context::new(self.computation, self.limits, self.counters, location),
             )?;
-            while let Some(binding) = local.next(
-                self.computation,
-                self.limits,
-                self.budget,
-                self.counters,
-                location,
-            )? {
+            while let Some(binding) = self.next(&mut local, None, location)? {
                 if let Some(head) = element.head.positive_atom() {
                     self.head(*head, &binding, location)?;
                 }
@@ -689,15 +724,17 @@ impl Derivation<'_, '_, '_> {
         binding: &Binding,
         location: Location,
     ) -> Result<(), FormulaFailure> {
-        let pattern =
-            self.computation
-                .static_pattern(pattern, self.limits, self.counters, location)?;
-        let atom = self
-            .computation
-            .atom(pattern, binding, self.limits, self.counters, location)?;
-        self.computation
-            .support(&atom, self.limits, self.counters, location)?;
-        Ok(())
+        self.counters
+            .observe_work(Event::SupportHeadWork, |counters| {
+                let pattern =
+                    self.computation
+                        .static_pattern(pattern, self.limits, counters, location)?;
+                let atom =
+                    self.computation
+                        .atom(pattern, binding, self.limits, counters, location)?;
+                self.computation
+                    .support(&atom, self.limits, counters, location)
+            })
     }
 }
 
@@ -1481,7 +1518,14 @@ impl<'a, 'source> Join<'a, 'source> {
         counters: &mut Counters,
         location: Location,
     ) -> Result<Option<Binding<'static>>, FormulaFailure> {
-        self.next_selected(None, computation, limits, budget, counters, location)
+        Ok(self
+            .next_selected(
+                Ownership::Own,
+                None,
+                budget,
+                Context::new(computation, limits, counters, location),
+            )?
+            .map(Frame::into_owned))
     }
     /// Return each completed positive binding with its scalar selection result.
     /// Ordinary admission joins have no external row filter and visit the full family.
@@ -1525,18 +1569,10 @@ impl<'a, 'source> Join<'a, 'source> {
             passes: row.passes,
         }))
     }
+    /// Support consumes a selected binding before advancing this join. Lend the
+    /// current frame; retained arithmetic generators still produce owned frames.
+    /// The next advance performs the suspended undo after head admission.
     fn next_support(
-        &mut self,
-        head: AtomPattern,
-        computation: &mut Computation<'_, '_>,
-        limits: &FormulaLimits,
-        budget: &mut Budget,
-        counters: &mut Counters,
-        location: Location,
-    ) -> Result<Option<Binding<'static>>, FormulaFailure> {
-        self.next_selected(Some(head), computation, limits, budget, counters, location)
-    }
-    fn next_selected(
         &mut self,
         projected: Option<AtomPattern>,
         computation: &mut Computation<'_, '_>,
@@ -1544,15 +1580,41 @@ impl<'a, 'source> Join<'a, 'source> {
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
-    ) -> Result<Option<Binding<'static>>, FormulaFailure> {
+    ) -> Result<Option<Binding<'_>>, FormulaFailure> {
+        let frame = self.next_selected(
+            Ownership::Lend,
+            projected,
+            budget,
+            Context::new(computation, limits, counters, location),
+        )?;
+        Ok(frame.map(|frame| frame.into_binding(&self.values)))
+    }
+    /// Select complete rows before borrowing their frame, so rejected rows can
+    /// resume traversal without extending a borrow across the mutation loop.
+    fn next_selected(
+        &mut self,
+        ownership: Ownership,
+        projected: Option<AtomPattern>,
+        budget: &mut Budget,
+        context: Context<'_, &mut Computation<'_, '_>>,
+    ) -> Result<Option<Frame>, FormulaFailure> {
+        let Context {
+            computation,
+            work:
+                GroundingWork {
+                    limits,
+                    counters,
+                    location,
+                },
+        } = context;
         while let Some(row) = self.next_staged(
-            Ownership::Own,
+            ownership,
             projected,
             budget,
             Context::new(computation, limits, counters, location),
         )? {
             if row.passes {
-                return Ok(Some(row.frame.into_owned()));
+                return Ok(Some(row.frame));
             }
         }
         Ok(None)
@@ -1885,25 +1947,19 @@ impl<'a, 'source> Join<'a, 'source> {
                 },
         } = context;
         if self.probes[self.depth].is_none() {
+            let binding = self
+                .values
+                .view(computation.read(), limits, counters, location)?;
             self.probes[self.depth] = Some(
-                if let Some(rows) = self.support.select(
-                    pattern.pattern,
-                    self.values
-                        .view(computation.read(), limits, counters, location)?,
-                    limits,
-                    counters,
-                    location,
-                )? {
+                if let Some(rows) =
+                    self.support
+                        .select(pattern.pattern, binding, limits, counters, location)?
+                {
                     Probe::Table(rows)
                 } else {
-                    let posting = self.support.probe(
-                        pattern.atom(),
-                        self.values
-                            .view(computation.read(), limits, counters, location)?,
-                        limits,
-                        counters,
-                        location,
-                    )?;
+                    let posting =
+                        self.support
+                            .probe(pattern.atom(), binding, limits, counters, location)?;
                     let total = self.support.row_count(pattern.atom().predicate());
                     Probe::Indexed(if self.delta.is_some() {
                         let old = self.support.old_rows(pattern.atom().predicate());
@@ -2010,9 +2066,7 @@ impl<'a, 'source> Join<'a, 'source> {
                 }
             };
             if let Some(expected) = expected
-                && !expected
-                    .compare_ref_with(value, || counters.work(limits, location))?
-                    .is_eq()
+                && !expected.equals_ref_with(value, || counters.work(limits, location))?
             {
                 return Ok(false);
             }
@@ -2148,16 +2202,7 @@ impl<'a, 'source> Join<'a, 'source> {
                 return Ok(false);
             }
         }
-        let view = self
-            .values
-            .view(computation.read(), limits, counters, location)?;
-        let key = head
-            .key(view)
-            .map_err(|error| FormulaFailure::UnsafeVariable {
-                variable: error.variable,
-                location,
-            })?;
-        computation.contains(key, limits, counters, location)
+        computation.contains_pattern(head, &self.values, limits, counters, location)
     }
     /// Materialization, when requested, remains before complete-row filters.
     /// Its failure leaves the same unfinished depth and counters as before.

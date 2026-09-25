@@ -9,21 +9,45 @@
 use std::{cmp::Ordering, mem::size_of};
 
 use crate::{
-    catalog::{AtomRef, Atoms, TermRef},
+    catalog::{AtomRef, Atoms, TermRef, storage::TermId},
     ordered_index::{Directions, Index, Link, Node, Step, position},
 };
 
-use super::super::{Cell, DictionaryIndex, Failure, Layout, Resource, Work, ceiling};
+use super::super::{
+    Cell, DictionaryIndex, Failure, Layout, Resource, Work, ceiling, dictionary::Probe,
+};
+
+pub(super) struct Added {
+    pub cell: Cell,
+    pub term: TermId,
+}
 
 pub(super) struct Plan {
     pub ids: Vec<u32>,
-    pub added: Vec<Cell>,
+    pub added: Vec<Added>,
     pub patches: Vec<Step>,
     pub root: Link,
     pub encoding_bytes: u128,
 }
 
 impl Plan {
+    /// Only this tuple's unpublished distinct values are scanned. Historical
+    /// dictionary hits use the complete canonical inverse instead.
+    fn staged(
+        &self,
+        term: TermId,
+        start: usize,
+        work: &mut Work,
+    ) -> Result<Option<usize>, Failure> {
+        for (offset, added) in self.added.iter().enumerate() {
+            work.tick(1)?;
+            if added.term == term {
+                return start.checked_add(offset).map(Some).ok_or(Failure::Overflow);
+            }
+        }
+        Ok(None)
+    }
+
     fn node(&self, nodes: &[Node], id: usize, work: &mut Work) -> Result<Node, Failure> {
         for patch in self.patches.iter().rev() {
             work.tick(1)?;
@@ -50,6 +74,7 @@ impl Plan {
         } else {
             self.added
                 .get(id - dictionary.len())
+                .map(|added| &added.cell)
                 .ok_or(Failure::Dictionary)?
         };
         atom.values().get(cell.column).ok_or(Failure::Dictionary)
@@ -159,7 +184,7 @@ pub(super) fn values(
         ids: work.reserve(atom.values().len())?,
         added: work.reserve(atom.values().len())?,
         patches: Vec::new(),
-        root: index.root,
+        root: index.order.root,
         encoding_bytes,
     };
     for (column, value) in atom.values().iter().enumerate() {
@@ -168,10 +193,24 @@ pub(super) fn values(
             .encoding_bytes
             .checked_add(value.canonical_bytes_with(|| work.tick(1))? as u128)
             .ok_or(Failure::Overflow)?;
-        let (found, route) = plan.locate(index, dictionary, atoms, atom, value, work)?;
+        let (term, found) = match index
+            .identities
+            .probe_with(atoms.read(), value, &mut || work.tick(1))?
+        {
+            Probe::Local { term, equality } => (term, equality.map(|id| id as usize)),
+            Probe::Unavailable(error) => return Err(Failure::Read(error)),
+        };
+        let found = match found {
+            Some(id) => Some(id),
+            None => plan.staged(term, dictionary.len(), work)?,
+        };
         let id = if let Some(id) = found {
             id
         } else {
+            let (found, route) = plan.locate(&index.order, dictionary, atoms, atom, value, work)?;
+            if found.is_some() {
+                return Err(Failure::Dictionary);
+            }
             let id = dictionary
                 .len()
                 .checked_add(plan.added.len())
@@ -181,11 +220,14 @@ pub(super) fn values(
                 id as u128 + 1,
                 (work.limits.max_values as u128).min(u128::from(u32::MAX) + 1),
             )?;
-            plan.extend(index, id, &route, work)?;
+            plan.extend(&mut index.order, id, &route, work)?;
             work.tick(1)?;
-            plan.added.push(Cell {
-                row: atoms.len(),
-                column,
+            plan.added.push(Added {
+                cell: Cell {
+                    row: atoms.len(),
+                    column,
+                },
+                term,
             });
             id
         };

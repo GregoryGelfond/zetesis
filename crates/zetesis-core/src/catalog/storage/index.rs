@@ -68,6 +68,21 @@ impl Index {
         self.heads.capacity() as u128 * size_of::<(u64, u32)>() as u128
     }
 
+    /// Distinguish hash-head growth from collision-link growth in regressions.
+    #[cfg(test)]
+    pub(super) fn head_capacity(&self) -> usize {
+        self.heads.capacity()
+    }
+
+    /// Allocation identities distinguish ownership transfer from a copied index.
+    #[cfg(test)]
+    pub(super) fn allocation_identity(&self) -> (*const Option<u32>, Option<*const u64>) {
+        (
+            self.next.as_ptr(),
+            self.heads.keys().next().map(std::ptr::from_ref),
+        )
+    }
+
     #[cfg(test)]
     pub(super) fn find(&self, hash: u64, mut equal: impl FnMut(u32) -> bool) -> Option<u32> {
         let mut before = || Ok::<(), std::convert::Infallible>(());

@@ -140,14 +140,14 @@ pub struct Breakdown {
     pub proposal: Option<u64>,
     /// Membership, nanoseconds: certificate setup and checks, closure and
     /// exact reduct membership, reduct preparation, original validation and
-    /// the device's host oracle.
+    /// the device's host oracle, and full-answer reconstruction when applicable.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub membership: Option<u64>,
 }
 
 /// The phases each part of the breakdown sums.
 const PROPOSAL_PHASES: [&str; 2] = ["candidate_setup", "candidate_generation"];
-const MEMBERSHIP_PHASES: [&str; 7] = [
+const MEMBERSHIP_PHASES: [&str; 8] = [
     "certificate_setup",
     "certified_membership",
     "closure_membership",
@@ -155,6 +155,7 @@ const MEMBERSHIP_PHASES: [&str; 7] = [
     "reduct_preparation",
     "original_validation",
     "gpu_host_oracle",
+    "answer_reconstruction",
 ];
 
 /// One native profile's record for one cell in one report.

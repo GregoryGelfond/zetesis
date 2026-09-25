@@ -1,25 +1,155 @@
-//! Borrowed complete identities for the shared ordered discovery index.
+//! Checked atom queries for exact identity and ordered discovery.
 
-use crate::catalog::storage::{self, AtomId, Store};
-use crate::catalog::{AssignmentSlice, AtomRef, PredicateRef, TermRef};
-use crate::{AtomKey, ordered_index};
+use crate::catalog::storage::{self, AtomId, PreparedAtom, Store, TermId};
+use crate::catalog::{AtomRef, PredicateRef, TermRef};
+use crate::{AtomKey, PatternTerms, TemplateTerm, ordered_index};
 
+use super::Failure;
 use super::index::{Link, Node};
+
+/// Unauthenticated coordinates require the general semantic lookup. A local
+/// miss, by contrast, establishes absence from the exact canonical row index.
+pub(super) enum Identity {
+    Foreign,
+    Local(PreparedAtom),
+}
+
+/// Concrete immutable inputs, rather than a stateful caller iterator.
+#[derive(Clone, Copy)]
+pub(super) enum ProjectionSource<'a> {
+    Slots(&'a [usize]),
+    Pattern(PatternTerms<'a>),
+}
+impl<'a> ProjectionSource<'a> {
+    pub(super) fn len(self) -> usize {
+        match self {
+            Self::Slots(slots) => slots.len(),
+            Self::Pattern(terms) => terms.len(),
+        }
+    }
+
+    pub(super) fn at(self, column: usize) -> TemplateTerm<'a> {
+        match self {
+            Self::Slots(slots) => TemplateTerm::Variable(slots[column]),
+            Self::Pattern(terms) => terms.at(column).expect("projected argument arity"),
+        }
+    }
+}
+
+/// Borrowed coordinates shared by ordered lookup and canonical row admission.
+/// The producer authenticates the scope, prefix and selected slots before this
+/// becomes a Query. Insertion additionally checks its logical term limits.
+/// No Store read is retained from the mutable writer.
+pub(super) struct Projected<'a> {
+    pub(super) predicate: storage::PredicateId,
+    pub(super) values: &'a [Option<TermId>],
+    pub(super) arguments: ProjectionSource<'a>,
+}
+
+impl Projected<'_> {
+    pub(super) const HEADER_BYTES: u128 = size_of::<Self>() as u128;
+
+    /// The source is immutable and fully validated before this accessor runs.
+    /// Admitted constants may resolve immutable segment metadata; this is not
+    /// necessarily a raw constant-time ID load. No user callback, allocation or
+    /// recoverable validation occurs during prepared row publication.
+    fn argument(&self, column: usize) -> TermId {
+        match self.arguments.at(column) {
+            TemplateTerm::Variable(slot) => self.values[slot].expect("validated bound slot"),
+            TemplateTerm::Constant(term) => {
+                term.canonical().expect("validated canonical constant").1
+            }
+        }
+    }
+}
 
 #[derive(Clone, Copy)]
 pub(super) enum Query<'a> {
     Atom(AtomRef<'a>),
     SignedAtom(AtomRef<'a>, crate::Sign),
     Key(AtomKey<'a>),
-    Assigned {
-        predicate: storage::PredicateId,
-        values: AssignmentSlice<'a>,
-        slots: &'a [usize],
-        limits: crate::catalog::Limits,
-    },
+    Projected(&'a Projected<'a>),
 }
 
 impl<'a> Query<'a> {
+    /// Reuse canonical identity only under this writer's exact scope and prefix.
+    /// No temporary vector or retained mutation is required for borrowed keys.
+    pub(super) fn identity_with<E>(
+        self,
+        store: &Store,
+        before: &mut impl FnMut() -> Result<(), E>,
+    ) -> Result<Identity, Failure<E>> {
+        before().map_err(Failure::Stopped)?;
+        if let Self::Projected(projected) = self {
+            return store
+                .prepare_atom_by_with(
+                    projected.predicate,
+                    projected.arguments.len(),
+                    |column| projected.argument(column),
+                    before,
+                )
+                .map(Identity::Local)
+                .map_err(|error| match error {
+                    storage::Failure::Storage(error) => Failure::Catalog(error),
+                    storage::Failure::Stopped(error) => Failure::Stopped(error),
+                });
+        }
+        let read = storage::Read::from(store);
+        if let Self::Atom(atom) = self
+            && let Some((source, id)) = atom.canonical()
+        {
+            before().map_err(Failure::Stopped)?;
+            if read.same_atoms(source) && read.contains_atom(id) {
+                return Ok(Identity::Local(PreparedAtom::existing(id)));
+            }
+        }
+        before().map_err(Failure::Stopped)?;
+        let predicate = self.predicate(store);
+        let Some((source, id)) = predicate.canonical() else {
+            return Ok(Identity::Foreign);
+        };
+        before().map_err(Failure::Stopped)?;
+        if !read.same_vocabulary(source) || !read.contains_predicate(id) {
+            return Ok(Identity::Foreign);
+        }
+        before().map_err(Failure::Stopped)?;
+        let arity = predicate.arity();
+        for column in 0..arity {
+            before().map_err(Failure::Stopped)?;
+            let Some((source, term)) = self.argument(column, store).canonical() else {
+                return Ok(Identity::Foreign);
+            };
+            before().map_err(Failure::Stopped)?;
+            if !read.same_vocabulary(source) || !read.contains_term(term) {
+                return Ok(Identity::Foreign);
+            }
+        }
+        store
+            .prepare_atom_by_with(
+                id,
+                arity,
+                |column| {
+                    self.argument(column, store)
+                        .canonical()
+                        .expect("authenticated argument retains its borrowed prefix")
+                        .1
+                },
+                before,
+            )
+            .map(Identity::Local)
+            .map_err(|error| match error {
+                storage::Failure::Storage(error) => Failure::Catalog(error),
+                storage::Failure::Stopped(error) => Failure::Stopped(error),
+            })
+    }
+
+    pub(super) fn extra_bytes(self) -> u128 {
+        match self {
+            Self::Projected(_) => Projected::HEADER_BYTES,
+            Self::Atom(_) | Self::SignedAtom(_, _) | Self::Key(_) => 0,
+        }
+    }
+
     pub(super) fn predicate<'read>(self, store: &'read Store) -> PredicateRef<'read>
     where
         'a: 'read,
@@ -28,8 +158,8 @@ impl<'a> Query<'a> {
             Self::Atom(atom) => atom.predicate(),
             Self::SignedAtom(atom, sign) => atom.predicate().with_sign(sign),
             Self::Key(key) => key.predicate(),
-            Self::Assigned { predicate, .. } => {
-                PredicateRef::new(storage::Read::from(store), predicate)
+            Self::Projected(projected) => {
+                PredicateRef::new(storage::Read::from(store), projected.predicate)
                     .expect("validated assigned predicate")
             }
         }
@@ -44,11 +174,9 @@ impl<'a> Query<'a> {
                 atom.values().at(column).expect("admitted argument")
             }
             Self::Key(key) => key.argument(column),
-            Self::Assigned { values, slots, .. } => TermRef::new(
-                store,
-                values.slots[slots[column]].expect("validated assigned slot"),
-            )
-            .expect("validated assigned prefix"),
+            Self::Projected(projected) => {
+                TermRef::new(store, projected.argument(column)).expect("validated projected prefix")
+            }
         }
     }
 
@@ -93,12 +221,7 @@ impl<'a> Query<'a> {
         before: impl FnMut() -> Result<(), E>,
     ) -> Result<AtomId, storage::Failure<E>> {
         match self {
-            Self::Assigned {
-                predicate,
-                values,
-                slots,
-                limits,
-            } => store.import_assigned_row_with(predicate, values.slots, slots, limits, before),
+            Self::Projected(_) => unreachable!("projected queries retain their prepared identity"),
             Self::Atom(atom) => store.import_atom_with(atom, limits, before),
             Self::SignedAtom(atom, sign) => store.import_row_with(
                 atom.predicate().with_sign(sign),
@@ -113,6 +236,38 @@ impl<'a> Query<'a> {
                 before,
             ),
         }
+    }
+
+    /// The same source authenticated by `identity_with`; preparation and this
+    /// consumption are tied by the exclusive `AtomEntry`. Present rows read no
+    /// arguments. Vacant rows reuse the exact tuple without another hash/probe.
+    pub(super) fn publish_with<E>(
+        self,
+        store: &mut Store,
+        prepared: PreparedAtom,
+        before: impl FnMut() -> Result<(), E>,
+    ) -> Result<AtomId, storage::Failure<E>> {
+        store.publish_prepared_atom_with(
+            prepared,
+            |column| match self {
+                Self::Projected(projected) => projected.argument(column),
+                Self::Atom(atom) | Self::SignedAtom(atom, _) => {
+                    atom.values()
+                        .at(column)
+                        .expect("authenticated arity")
+                        .canonical()
+                        .expect("authenticated term")
+                        .1
+                }
+                Self::Key(key) => {
+                    key.argument(column)
+                        .canonical()
+                        .expect("authenticated term")
+                        .1
+                }
+            },
+            before,
+        )
     }
 }
 

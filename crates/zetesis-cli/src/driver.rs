@@ -45,6 +45,8 @@ pub struct Report {
     /// Retained-core answers and their source-constraint decisions. Only accepted
     /// checks establish membership in the original hybrid program.
     pub hybrid_execution: Option<zetesis_solve::HybridExecutionStatistics>,
+    /// Base answers and completed original-answer reconstruction.
+    pub terminal_execution: Option<zetesis_solve::TerminalExecutionStatistics>,
     /// Actual lazy device execution, including shared source work and failed
     /// batch progress. Absent when no lazy device executor was initialized.
     pub lazy_execution: Option<crate::LazyExecutionStatistics>,
@@ -68,6 +70,10 @@ pub struct Report {
 /// A failed input, transport, or backend operation; never a claim of UNSAT.
 #[derive(Debug)]
 pub enum RunError {
+    /// A verified base answer could not be completely reconstructed.
+    Reconstruction(zetesis_themelios::ReconstructionError),
+    /// Consumed base-answer accounting cannot represent another answer.
+    TerminalStatisticsOverflow,
     /// A streamed source constraint could not be completely evaluated.
     Constraint(zetesis_themelios::ConstraintCheckFailure),
     /// A source region refusal lost its required typed cause.
@@ -211,6 +217,8 @@ impl fmt::Display for RunError {
             f.write_str("source admission: ")?;
         }
         match self {
+            Self::Reconstruction(error) => error.fmt(f),
+            Self::TerminalStatisticsOverflow => f.write_str("terminal answer accounting overflow"),
             Self::Constraint(error) => error.fmt(f),
             Self::ConstraintFailureMissing => f.write_str("source region check stopped without its failure receipt"),
             Self::HybridStatisticsOverflow => f.write_str("hybrid answer accounting overflow"),
@@ -327,6 +335,7 @@ impl RunError {
 impl std::error::Error for RunError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
+            Self::Reconstruction(error) => Some(error),
             Self::Constraint(error) => Some(error),
             Self::Projection(error) => Some(error),
             Self::Input(error) => Some(error),
@@ -347,6 +356,7 @@ impl std::error::Error for RunError {
             Self::ObservationOutputLimit { .. } | Self::TimeLimitRange { .. } => None,
             Self::MixedStandardInput
             | Self::ConstraintFailureMissing
+            | Self::TerminalStatisticsOverflow
             | Self::HybridStatisticsOverflow
             | Self::HybridBackend { .. }
             | Self::BackendUnavailable
@@ -752,6 +762,8 @@ impl From<zetesis_solve::SolveError> for RunError {
     fn from(error: zetesis_solve::SolveError) -> Self {
         use zetesis_solve::SolveError;
         match error {
+            SolveError::Reconstruction(error) => Self::Reconstruction(error),
+            SolveError::TerminalStatisticsOverflow => Self::TerminalStatisticsOverflow,
             SolveError::Constraint(error) => Self::Constraint(error),
             SolveError::ConstraintFailureMissing => Self::ConstraintFailureMissing,
             SolveError::HybridStatisticsOverflow => Self::HybridStatisticsOverflow,

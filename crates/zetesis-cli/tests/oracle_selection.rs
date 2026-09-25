@@ -215,7 +215,7 @@ fn support_byte_default_matches_formula_admission() {
 }
 
 #[test]
-fn explicit_work_override_bounds_formula_admission() {
+fn explicit_work_override_bounds_eager_admission() {
     let source = "a|b. c:-a. c:-b.";
     let attempt = |work: usize| {
         run(
@@ -223,6 +223,8 @@ fn explicit_work_override_bounds_formula_admission() {
             &options(&[
                 "--oracle",
                 "countermodel",
+                "--grounder",
+                "eager",
                 "--stats",
                 "--max-expansion-work",
                 &work.to_string(),

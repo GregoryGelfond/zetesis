@@ -222,6 +222,7 @@ impl<'a> ClosureSession<'a> {
             batch_execution: None,
             formula_execution: None,
             hybrid_execution: None,
+            terminal_execution: None,
             query_execution: self
                 .engine
                 .as_ref()

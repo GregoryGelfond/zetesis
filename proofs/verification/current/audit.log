@@ -160,6 +160,8 @@
 'Zetesis.CandidateCursor.stable_outputs_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.CandidateCursor.repeated_auxiliary_complete' depends on axioms: [propext]
 'Zetesis.CandidateCursor.zero_fuel_keeps_open_tree' depends on axioms: [propext]
+'Zetesis.CanonicalCatalog.discovery_lookup_exact' depends on axioms: [propext]
+'Zetesis.CanonicalCatalog.undiscovered_identity_absent' does not depend on any axioms
 'Zetesis.CanonicalCatalog.selection_exact' depends on axioms: [propext, Quot.sound]
 'Zetesis.CanonicalCatalog.normalized_selection_exact' depends on axioms: [propext, Quot.sound]
 'Zetesis.CanonicalCatalog.append_preserves_interpretation' depends on axioms: [propext, Quot.sound]
@@ -252,6 +254,9 @@
 'Zetesis.ClauseValidation.validate_accepts_iff' depends on axioms: [propext, Quot.sound]
 'Zetesis.ClauseValidation.validate_work_bound' depends on axioms: [propext, Quot.sound]
 'Zetesis.ClauseValidation.empty_clause_rejects' depends on axioms: [propext, Quot.sound]
+'Zetesis.ClosedCatalog.find_sound' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ClosedCatalog.find_none_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ClosedCatalog.find_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ColumnRelations.encoding_exact' does not depend on any axioms
 'Zetesis.ColumnRelations.identifier_equality' does not depend on any axioms
 'Zetesis.ColumnRelations.reconstruction_exact' depends on axioms: [Quot.sound]
@@ -1248,6 +1253,18 @@
 'Zetesis.TableBindings.flat_match_survives' depends on axioms: [propext, Quot.sound]
 'Zetesis.TableBindings.indexed_matches_preserved' depends on axioms: [propext]
 'Zetesis.TableBindings.join_family_preserved' depends on axioms: [propext, Quot.sound]
+'Zetesis.TerminalDefinitions.satisfies_definition' depends on axioms: [propext, Quot.sound]
+'Zetesis.TerminalDefinitions.models_definitions_iff' depends on axioms: [propext, Quot.sound]
+'Zetesis.TerminalDefinitions.original_models_iff' depends on axioms: [propext, Quot.sound]
+'Zetesis.TerminalDefinitions.reduct_models_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.TerminalDefinitions.consequences_monotone' does not depend on any axioms
+'Zetesis.TerminalDefinitions.base_extend' does not depend on any axioms
+'Zetesis.TerminalDefinitions.derived_extend' does not depend on any axioms
+'Zetesis.TerminalDefinitions.extend_monotone' does not depend on any axioms
+'Zetesis.TerminalDefinitions.extend_sub_of_models' depends on axioms: [propext, Quot.sound]
+'Zetesis.TerminalDefinitions.stable_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.TerminalDefinitions.stable_extend_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.TerminalDefinitions.unique_stable_extension' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.TernaryWatch.remaining_unique' depends on axioms: [propext, Quot.sound]
 'Zetesis.TernaryWatch.replacement_exact' depends on axioms: [propext, Quot.sound]
 'Zetesis.Thresholds.threshold_query_exact' depends on axioms: [propext, Classical.choice, Quot.sound]

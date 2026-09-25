@@ -395,10 +395,10 @@ impl<'owner, 'source> Table<'owner, 'source> {
         }
         sort(&mut rows, work)?;
         let start = self.values.len();
-        let mut previous = None;
+        let mut previous: Option<TermRef<'_>> = None;
         for row in &rows {
             let distinct = match previous {
-                Some(value) => work.compare(value, row.value)? != std::cmp::Ordering::Equal,
+                Some(value) => !value.equals_ref_with(row.value, || work.tick(1))?,
                 None => true,
             };
             if distinct {

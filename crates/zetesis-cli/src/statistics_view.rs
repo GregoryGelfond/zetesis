@@ -186,6 +186,12 @@ fn stage_scope(
         (SolveStage::Grounding, crate::GroundingMode::Mixed, _) => {
             "eager attempts; lazy work interleaved"
         }
+        (SolveStage::Grounding, crate::GroundingMode::EagerBaseTerminalDefinitions, _) => {
+            "eager base; terminal definitions reconstructed during solving"
+        }
+        (SolveStage::Solving, crate::GroundingMode::EagerBaseTerminalDefinitions, _) => {
+            "base search and full-answer reconstruction"
+        }
         (_, _, Some(_)) => "host elapsed",
         (_, _, None) => "not measured",
     };

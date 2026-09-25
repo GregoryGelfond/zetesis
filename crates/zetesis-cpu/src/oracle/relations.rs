@@ -288,9 +288,7 @@ impl<'a> Relations<'a> {
         work.tick()?;
         let predicate = atom.predicate();
         let same = match self.0.last() {
-            Some((previous, _)) => previous
-                .compare_ref_with(predicate, || work.tick())?
-                .is_eq(),
+            Some((previous, _)) => previous.equals_ref_with(predicate, || work.tick())?,
             None => false,
         };
         if same {

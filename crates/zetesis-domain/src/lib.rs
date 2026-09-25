@@ -4,6 +4,8 @@
 //! Finite domains are upper bounds; [`Domain::Unknown`] permits every symbol.
 //! [`Status::FixedPoint`] describes abstract convergence, not source admission,
 //! finite grounding, or precise correlations between predicate arguments.
+//! [`terminal`] independently classifies flat positive terminal definitions,
+//! preserving their exact input carriers without rewriting or executing them.
 //!
 //! ```
 //! use themelios_program::program::{Atom, Program, Rule};
@@ -28,6 +30,8 @@ mod compile;
 mod keys;
 mod limits;
 mod value;
+
+pub mod terminal;
 
 pub use analysis::analyze;
 pub use keys::{KeyWork, KeyedRelation, atom_signature, facts, keys};

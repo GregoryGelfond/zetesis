@@ -396,6 +396,8 @@ fn legacy_refusal_envelopes_keep_their_existing_diagnostic() {
 fn typed_failure_detail_is_preserved_without_changing_classification() {
     for (kind, expected) in [
         ("bundle_admission", Decision::Refused),
+        ("answer_reconstruction_limit", Decision::Refused),
+        ("answer_reconstruction", Decision::InvocationFailure),
         ("gpu", Decision::InvocationFailure),
     ] {
         let mut value = failed(kind);

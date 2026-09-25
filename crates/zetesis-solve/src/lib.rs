@@ -92,6 +92,7 @@ mod closure_session;
 mod formula_session;
 mod hybrid_regions;
 mod hybrid_session;
+mod terminal_session;
 mod session;
 mod world_view;
 mod projection;
@@ -130,6 +131,7 @@ pub use session::{
 };
 pub use shared_execution::SharedExecutionStatistics;
 pub use solve_config::SolveConfig;
+pub use terminal_session::TerminalExecutionStatistics;
 pub use world_view::{
     WorldView, WorldViewError, WorldViewFailure, WorldViewFailureParts, WorldViewLimits,
 };

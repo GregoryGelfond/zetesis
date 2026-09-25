@@ -130,3 +130,67 @@ fn absent_head_input_defers_membership() {
         None
     ));
 }
+
+fn partial_probe(values: &[Option<Value>], bounded: bool) -> Result<bool, FormulaFailure> {
+    let limits = FormulaLimits::default();
+    let mut foreign = testing::Fixture::default();
+    let binding = foreign.with(location(), |_, computation, counters| {
+        testing::binding(values, computation, counters, location())
+    });
+    let mut fixture =
+        testing::Fixture::from_atoms([atom(Sign::Positive, Value::Number(3))], location());
+    let pattern = fixture.pattern(
+        &InputPattern::new(
+            Predicate::new("partial", 2).unwrap(),
+            vec![Term::Variable(0), Term::Variable(1)],
+        )
+        .unwrap(),
+        location(),
+    );
+    fixture.with(location(), |support, computation, counters| {
+        let empty = Binding::new(computation, &limits, counters, location()).unwrap();
+        let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
+        let mut join = Join::new(
+            &[],
+            &empty,
+            2,
+            support,
+            &mut budget,
+            Context::new(computation, &limits, counters, location()),
+        )
+        .unwrap();
+        // A foreign frame would be rejected if the complete lookup were reached.
+        join.values = binding;
+        let mut checked = limits;
+        if bounded {
+            checked.max_support_bytes = 0;
+            checked.theory.max_atoms = 0;
+        }
+        join.already_derived(Some(pattern), computation, &checked, counters, location())
+    })
+}
+
+#[test]
+fn partial_head_precedes_lookup_admission() {
+    // Both an absent cell and an out-of-range head slot defer lookup. A prior
+    // selected cell has foreign scope, and the lookup's owner ceilings are zero.
+    for values in [
+        vec![Some(Value::Number(7)), None],
+        vec![Some(Value::Number(7))],
+    ] {
+        assert!(!partial_probe(&values, true).unwrap());
+    }
+}
+
+#[test]
+fn complete_head_reaches_scope_authentication() {
+    assert!(matches!(
+        partial_probe(&[Some(Value::Number(7)), Some(Value::Number(8))], false),
+        Err(FormulaFailure::TermAssignment {
+            error: zetesis_core::catalog::AssignmentError::Read(
+                zetesis_core::catalog::ReadError::ForeignCatalog
+            ),
+            ..
+        })
+    ));
+}

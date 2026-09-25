@@ -111,6 +111,15 @@ impl<'a> TermRead<'a> {
     /// # Errors
     /// Refuses ingress, foreign vocabulary, and an inaccessible newer term.
     pub fn term_key(self, value: TermRef<'_>) -> Result<TermKey, ReadError> {
+        let id = self.selected_term(value)?;
+        Ok(TermKey {
+            scope: self.scope(),
+            id,
+        })
+    }
+
+    /// Authenticate a borrowed coordinate without retaining another scope handle.
+    pub(super) fn selected_term(self, value: TermRef<'_>) -> Result<storage::TermId, ReadError> {
         let (read, id) = value.scoped().ok_or(ReadError::Uninterned)?;
         if !self.same(read) {
             return Err(ReadError::ForeignCatalog);
@@ -118,10 +127,7 @@ impl<'a> TermRead<'a> {
         if !self.contains(id) {
             return Err(ReadError::OutsidePrefix);
         }
-        Ok(TermKey {
-            scope: self.scope(),
-            id,
-        })
+        Ok(id)
     }
 
     /// Resolve a scoped key into a payload-borrowing view.

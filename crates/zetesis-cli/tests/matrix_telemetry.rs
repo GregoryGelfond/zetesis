@@ -81,7 +81,7 @@ fn positive_publication_retains_its_actual_matrix_procedure() {
             Procedure::PositiveConsequences
         );
         assert!(matches!(observation.execution.device, DeviceWork::Cpu));
-        assert_eq!(observation.timing.phase_schema, 3);
+        assert_eq!(observation.timing.phase_schema, 4);
         assert!(observation.timing.phases["reduct_preparation"].is_none());
     }
 }
@@ -102,7 +102,7 @@ fn residual_publication_retains_cold_preparation_measurement() {
         };
         let observation = Observation::from_statistics(&document, &text, request).unwrap();
         assert_eq!(observation.execution.procedure, Procedure::Countermodel);
-        assert_eq!(observation.timing.phase_schema, 3);
+        assert_eq!(observation.timing.phase_schema, 4);
         let observed = observation.timing.phases["reduct_preparation"]
             .as_ref()
             .unwrap();
@@ -113,3 +113,66 @@ fn residual_publication_retains_cold_preparation_measurement() {
         );
     }
 }
+
+#[test]
+fn terminal_publication_retains_base_and_reconstruction_scopes() {
+    let options = Options::try_parse_from([
+        "zetesis",
+        "--backend",
+        "cpu",
+        "--grounder",
+        "auto",
+        "--workers",
+        "1",
+        "--models",
+        "0",
+        "--json",
+        "--stats",
+    ])
+    .unwrap();
+    let mut output = Vec::new();
+    let mut diagnostics = Vec::new();
+    let report = run_detailed_with_diagnostics(
+        "{seed(1);seed(2)}. receipt(X):-seed(X). #show X:receipt(X).".into(),
+        &options,
+        &mut output,
+        &mut diagnostics,
+        &Cancellation::default(),
+    )
+    .unwrap();
+    assert_eq!(report.completion, Completion::Exhausted);
+    assert_eq!(report.models, 4);
+    let receipt = report.terminal_execution.unwrap();
+    assert_eq!(
+        (receipt.base_answers, receipt.reconstructed, receipt.pending),
+        (4, 4, 0)
+    );
+    let document: Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(document["statistics"]["search"]["scope"], "terminal_base");
+    assert_eq!(document["outcome"]["verified_models"], 4);
+    assert_eq!(
+        document["statistics"]["terminal_execution"]["reconstruction"]["work"],
+        receipt.reconstruction.work
+    );
+    let observation = Observation::from_statistics(
+        &document,
+        &diagnostics,
+        NativeExecution {
+            grounder: zetesis_validation::selected::Grounder::Auto,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        observation.timing.grounding_mode,
+        "eager_base_terminal_definitions"
+    );
+    assert_eq!(observation.terminal.unwrap().reconstructed, 4);
+    let text = std::str::from_utf8(&diagnostics).unwrap();
+    assert!(text.contains("base only; terminal definitions reconstructed during solving"));
+    assert!(text.contains("verified base models=4"));
+    assert!(text.contains("full reconstruction before original membership"));
+}
+
+#[path = "support/terminal_refusal.rs"]
+mod terminal_refusal;

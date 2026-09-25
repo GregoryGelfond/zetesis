@@ -6,7 +6,7 @@ members = ["crates/*"]
 edition = "2024"
 rust-version = "1.97"
 license = "MIT"
-version = "0.1.4"
+version = "0.1.5"
 
 # The enforced Rust subset of the estate baseline. Exceptions are named and argued at
 # their point of use; a prototype narrows features, not these checks.

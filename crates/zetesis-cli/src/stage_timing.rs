@@ -85,6 +85,14 @@ fn write_friendly(sink: &mut impl Write, timings: &StageTimings) -> io::Result<(
             if stage == SolveStage::Grounding && timings.grounding_mode == GroundingMode::Mixed {
                 write!(sink, " (eager only; lazy work interleaved with solving)")?;
             }
+            if stage == SolveStage::Grounding
+                && timings.grounding_mode == GroundingMode::EagerBaseTerminalDefinitions
+            {
+                write!(
+                    sink,
+                    " (base only; terminal definitions reconstructed during solving)"
+                )?;
+            }
         } else {
             write!(sink, "unentered")?;
         }

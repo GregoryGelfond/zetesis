@@ -47,3 +47,15 @@ fn lazy_and_mixed_rendering_never_label_missing_lazy_time_as_zero() {
     assert!(mixed.contains("eager only; lazy work interleaved with solving"));
     assert!(mixed.contains("  stage grounding: calls=1;"));
 }
+
+#[test]
+fn terminal_rendering_names_only_base_grounding_as_eager() {
+    let recorder = StageRecorder::new(true);
+    drop(recorder.enter(SolveStage::Grounding));
+    recorder.mark_terminal_definitions();
+    let mut bytes = Vec::new();
+    super::write(&mut bytes, &recorder.snapshot().unwrap()).unwrap();
+    let text = String::from_utf8(bytes).unwrap();
+    assert!(text.contains("stage grounding_mode: eager_base_terminal_definitions"));
+    assert!(text.contains("base only; terminal definitions reconstructed during solving"));
+}

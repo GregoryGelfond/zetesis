@@ -54,8 +54,7 @@ fn matches<'input>(
         .expect("compiled predicate");
     if !atom
         .predicate()
-        .compare_ref_with(predicate, || ctx.work.step(1))?
-        .is_eq()
+        .equals_ref_with(predicate, || ctx.work.step(1))?
     {
         return Ok(false);
     }
@@ -101,8 +100,7 @@ fn test_pattern<'input>(
         .expect("compiled predicate");
     if !atom
         .predicate()
-        .compare_ref_with(predicate, || ctx.work.step(1))?
-        .is_eq()
+        .equals_ref_with(predicate, || ctx.work.step(1))?
     {
         return Ok(false);
     }

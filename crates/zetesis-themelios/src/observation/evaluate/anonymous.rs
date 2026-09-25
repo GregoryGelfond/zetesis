@@ -445,9 +445,7 @@ fn matches(
                 .term_with(ctx.terms.read(), slot, || ctx.work.step(1))
                 .map_err(|error| super::binding::failure(error, ctx.work))?
                 .expect("ground key");
-            expected
-                .compare_ref_with(value, || ctx.work.step(1))
-                .map(Ordering::is_eq)
+            expected.equals_ref_with(value, || ctx.work.step(1))
         }
         Node::Construct(shape, children) => {
             let expected = ctx.metadata.constructor(shape).expect("compiled shape");

@@ -63,33 +63,45 @@ fn assigned_atoms_preserve_argument_occurrences() {
             ValueNodeRef::Number(7)
         ]
     );
-    let view = binding
-        .view(computation.read(), &limits, &mut counters, location())
-        .unwrap();
-    assert!(
-        !computation
-            .contains(
-                pattern.key(view).unwrap(),
-                &limits,
-                &mut counters,
-                location()
-            )
-            .unwrap()
+}
+
+#[test]
+fn discovered_heads_require_support_membership() {
+    let limits = FormulaLimits::default();
+    let mut fixture = crate::formula_support::testing::Fixture::default();
+    let pattern = fixture.pattern(
+        &AtomPattern::new(
+            Predicate::new("selected", 1).unwrap(),
+            vec![Term::Constant(Value::Number(4))],
+        )
+        .unwrap(),
+        location(),
     );
-    computation
-        .support(&source, &limits, &mut counters, location())
-        .unwrap();
-    let view = binding
-        .view(computation.read(), &limits, &mut counters, location())
-        .unwrap();
-    assert!(
+    fixture.with(location(), |_, computation, counters| {
+        let binding = Binding::new(computation, &limits, counters, location()).unwrap();
+        let pattern = computation
+            .static_pattern(pattern, &limits, counters, location())
+            .unwrap();
+        assert!(
+            !computation
+                .contains_pattern(pattern, &binding, &limits, counters, location())
+                .unwrap()
+        );
+        let source = computation
+            .atom(pattern, &binding, &limits, counters, location())
+            .unwrap();
+        assert!(
+            !computation
+                .contains_pattern(pattern, &binding, &limits, counters, location())
+                .unwrap()
+        );
         computation
-            .contains(
-                pattern.key(view).unwrap(),
-                &limits,
-                &mut counters,
-                location()
-            )
-            .unwrap()
-    );
+            .support(&source, &limits, counters, location())
+            .unwrap();
+        assert!(
+            computation
+                .contains_pattern(pattern, &binding, &limits, counters, location())
+                .unwrap()
+        );
+    });
 }

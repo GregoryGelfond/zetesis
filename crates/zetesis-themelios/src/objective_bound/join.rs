@@ -285,13 +285,13 @@ fn matches<'a>(
         let value = atom.values().at(column).expect("matched predicate arity");
         match term {
             TemplateTerm::Constant(constant)
-                if compare_identity(work, constant, value)? != Ordering::Equal =>
+                if !constant.equals_ref_with(value, || work.tick())? =>
             {
                 return Ok(false);
             }
             TemplateTerm::Variable(variable) => {
                 if let Some(previous) = binding[variable] {
-                    if compare_identity(work, previous, value)? != Ordering::Equal {
+                    if !previous.equals_ref_with(value, || work.tick())? {
                         return Ok(false);
                     }
                 } else {
@@ -320,7 +320,7 @@ fn resolve<'a>(
             .ok_or_else(|| work.error(Kind::UnboundVariable)),
     }
 }
-// Canonical typed identity for equality and contribution-key storage only.
+// Canonical typed identity order for contribution-key storage.
 // This is not ASP term order; use the shared checked comparator, not Value::Ord
 // behind a conservative payload-size estimate.
 fn compare_identity(
@@ -351,7 +351,7 @@ fn active<'a>(
         let (left, right) = filter.terms();
         let left = resolve(work, left, binding)?;
         let right = resolve(work, right, binding)?;
-        if (compare_identity(work, left, right)? == Ordering::Equal) != filter.is_equality() {
+        if left.equals_ref_with(right, || work.tick())? != filter.is_equality() {
             return Ok(());
         }
     }

@@ -369,3 +369,73 @@ fn resume_preserves_exact_shared_allowance_without_previous_cancellation() {
     assert_eq!(allowance.statistics().work, 3);
     assert_eq!(allowance.statistics().substitutions, 1);
 }
+
+#[test]
+fn flat_baseline_preserves_accepted_history() {
+    let mut accounting = Accounting::default();
+    let limits = FormulaLimits::default();
+    accounting.with_cancellation(&Cancellation::default(), |counters| {
+        counters.charge_work(7, &limits, location()).unwrap();
+        counters.substitution(&limits, location()).unwrap();
+    });
+    let baseline = accounting.into_flat_baseline().unwrap();
+    let mut first = baseline.start();
+    first.with_cancellation(&Cancellation::default(), |counters| {
+        counters.work(&limits, location()).unwrap();
+    });
+    let second = baseline.start();
+    assert_eq!((first.work, first.substitutions), (8, 1));
+    assert_eq!((second.work, second.substitutions), (7, 1));
+}
+
+#[test]
+fn flat_baseline_refuses_a_live_workspace() {
+    let accounting = Accounting::default();
+    let mut lease = accounting.workspace.lease();
+    lease.observe(37, location()).unwrap();
+    assert_eq!(
+        accounting.into_flat_baseline().unwrap_err(),
+        super::AccountingHandoffError::LiveWorkspace { bytes: 37 },
+    );
+    assert_eq!(
+        lease.bytes(),
+        37,
+        "refusal does not erase an owner's receipt"
+    );
+}
+
+#[test]
+fn flat_baseline_refuses_a_shared_allowance() {
+    let cancellation = Cancellation::default();
+    let accounting = super::Counters::with_allowance(
+        crate::ConstraintAllowance::new(crate::ConstraintCheckLimits::default()),
+        &cancellation,
+    )
+    .into_accounting();
+    assert_eq!(
+        accounting.into_flat_baseline().unwrap_err(),
+        super::AccountingHandoffError::SharedAllowance,
+    );
+}
+
+#[test]
+fn flat_baseline_retires_only_generated_metadata() {
+    let mut accounting = Accounting::default();
+    let mut owner = SupportCatalog::default();
+    let limits = FormulaLimits::default();
+    let value = Value::Number(83);
+    accounting.with_cancellation(&Cancellation::default(), |counters| {
+        let (relations, mut append) = owner.split(&limits, counters, location()).unwrap();
+        let support = Support::indexed(&relations, &limits, counters, location()).unwrap();
+        let mut computation = Computation::new(&mut append, &support);
+        let key = computation
+            .import((&value).into(), &limits, counters, location())
+            .unwrap();
+        counters
+            .generated(&key, &computation, &limits, location())
+            .unwrap();
+    });
+    let baseline = accounting.into_flat_baseline().unwrap();
+    assert_eq!(baseline.generated_values, 1);
+    assert_eq!(baseline.start().workspace.bytes(), 0);
+}

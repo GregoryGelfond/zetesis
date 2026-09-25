@@ -72,6 +72,7 @@ pub(super) fn check(document: &Value, exit: Option<Exit>) -> Result<(), Failure>
                 | "bundle_admission"
                 | "formula_admission"
                 | "formula_bundle_admission"
+                | "answer_reconstruction_limit"
                 | "expansion" => Decision::Refused,
                 _ => Decision::InvocationFailure,
             };
@@ -154,6 +155,7 @@ fn interruption(
                     | "oracle"
                     | "countermodel"
                     | "constraint"
+                    | "answer_reconstruction"
                     | "objective"
                     | "incumbent"
             )

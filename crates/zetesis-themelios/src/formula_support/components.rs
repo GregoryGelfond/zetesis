@@ -10,8 +10,7 @@ use std::mem::size_of;
 
 use themelios_base::span::Location;
 use zetesis_core::catalog::{
-    AssignmentError, AssignmentFailure, CatalogRead, Error, PredicateRef, ReadError, TermKey,
-    TermRef,
+    AssignmentFailure, CatalogRead, Error, PredicateRef, ReadError, TermKey, TermRef,
 };
 use zetesis_core::{
     FilterRef, PatternRef, TemplateCatalogFailure, TemplateComponents, TemplateComponentsRef,
@@ -19,7 +18,7 @@ use zetesis_core::{
 };
 
 use super::relations::{atom_failure, owner_limits};
-use super::storage::{StorageLease, Workspace};
+use super::storage::{Scope, StorageLease, Workspace};
 use super::{Counters, SupportCatalog};
 use crate::formula::ceiling;
 use crate::grounding_observer::Event;
@@ -129,12 +128,28 @@ impl Admission<'_> {
         )
     }
 
-    fn check_lease(&self, lease: &StorageLease, location: Location) -> Result<(), FormulaFailure> {
-        if self.workspace.owns(lease) {
-            Ok(())
-        } else {
-            Err(read_failure(ReadError::ForeignCatalog, location))
+    /// Canonical and compiled-component bytes outside this entire workspace.
+    /// Authenticate the selected lease before inspecting the owner capacities.
+    pub(crate) fn external_bytes(
+        &self,
+        lease: &StorageLease,
+        location: Location,
+    ) -> Result<usize, FormulaFailure> {
+        if !self.workspace.owns(lease) {
+            return Err(read_failure(ReadError::ForeignCatalog, location));
         }
+        Ok(self.total(location)? - self.workspace.bytes())
+    }
+
+    fn storage<'a>(
+        &'a self,
+        lease: &'a StorageLease,
+        location: Location,
+    ) -> Result<Scope<'a>, FormulaFailure> {
+        let external = self.external_bytes(lease, location)?;
+        self.workspace
+            .scope(lease, external)
+            .map_err(|error| read_failure(error, location))
     }
 
     pub(crate) fn allowance(
@@ -143,8 +158,7 @@ impl Admission<'_> {
         limits: &FormulaLimits,
         location: Location,
     ) -> Result<usize, FormulaFailure> {
-        self.check_lease(lease, location)?;
-        remaining(self.total(location)? - lease.bytes(), limits, location)
+        self.storage(lease, location)?.allowance(limits, location)
     }
 
     pub(crate) fn storage_observed(
@@ -156,38 +170,8 @@ impl Admission<'_> {
         counters: &Counters,
         location: Location,
     ) -> Result<(), FormulaFailure> {
-        self.check_lease(lease, location)?;
-        let overlap = if lease.bytes() > previous {
-            previous.saturating_sub(header)
-        } else {
-            0
-        };
-        self.storage_peak(
-            lease,
-            lease.bytes() as u128 + overlap as u128,
-            limits,
-            counters,
-            location,
-        )
-    }
-
-    pub(crate) fn storage_peak(
-        &self,
-        lease: &StorageLease,
-        peak: u128,
-        limits: &FormulaLimits,
-        counters: &Counters,
-        location: Location,
-    ) -> Result<(), FormulaFailure> {
-        self.check_lease(lease, location)?;
-        let total = (self.total(location)? - lease.bytes()) as u128 + peak;
-        counters.record(Event::SupportPeakBytes(total));
-        ceiling(
-            FormulaResource::SupportBytes,
-            total,
-            limits.max_support_bytes as u128,
-            location,
-        )
+        self.storage(lease, location)?
+            .observed(previous, header, limits, counters, location)
     }
 
     pub(crate) fn storage_result<T>(
@@ -197,20 +181,8 @@ impl Admission<'_> {
         limits: &FormulaLimits,
         location: Location,
     ) -> Result<T, FormulaFailure> {
-        self.check_lease(lease, location)?;
-        let outer = self.total(location)? - lease.bytes();
-        result.map_err(|error| match error {
-            AssignmentFailure::Assignment(AssignmentError::Storage(Error::Storage {
-                required,
-                ..
-            })) => FormulaFailure::Limit {
-                resource: FormulaResource::SupportBytes,
-                observed: outer as u128 + required,
-                limit: limits.max_support_bytes as u128,
-                location,
-            },
-            error => crate::formula_binding::failure(error, location),
-        })
+        self.storage(lease, location)?
+            .result(result, limits, location)
     }
 
     pub(crate) fn import(
@@ -537,7 +509,7 @@ fn remaining_u128(
     )
 }
 
-pub(super) fn failure(
+pub(crate) fn failure(
     error: TemplateCatalogFailure<FormulaFailure>,
     limits: &FormulaLimits,
     outer: u128,

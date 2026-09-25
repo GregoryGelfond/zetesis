@@ -13,6 +13,9 @@ mod residual_tests;
 #[path = "matrix_hybrid_telemetry.rs"]
 mod hybrid_tests;
 
+#[path = "matrix_terminal_telemetry.rs"]
+mod terminal_tests;
+
 #[test]
 fn actual_cpu_route_remains_distinct_from_requested_metal() {
     let (document, text) = fixture();

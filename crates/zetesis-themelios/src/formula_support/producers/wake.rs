@@ -152,13 +152,9 @@ impl<'source> Wake<'source> {
                 break;
             };
             let predicate = atom.predicate();
-            let bytes = previous.map_or(0, |previous| previous.name().len());
-            counters.charge_work(
-                1 + bytes as u128 + predicate.name().len() as u128,
-                limits,
-                location,
-            )?;
-            if previous == Some(predicate) {
+            if let Some(previous) = previous
+                && previous.equals_ref_with(predicate, || counters.work(limits, location))?
+            {
                 continue;
             }
             previous = Some(predicate);

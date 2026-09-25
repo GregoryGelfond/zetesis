@@ -113,6 +113,11 @@ pub use formula::{
 };
 pub use formula_warning::FormulaWarning;
 mod formula_hybrid;
+mod formula_terminal;
+pub use formula_terminal::{
+    FormulaMaterialization, ReconstructionError, ReconstructionStatistics, TerminalFormula,
+    TerminalReconstruction,
+};
 mod constraint_allowance;
 pub use constraint_allowance::ConstraintAllowance;
 pub use formula_hybrid::{

@@ -141,6 +141,37 @@ fn support_counts_describe_completed_rounds() {
 }
 
 #[test]
+fn support_operation_work_reaches_the_library_observer() {
+    let source = "p(3).p(1).p(2).q(X):-p(X).";
+    let observer = Observer::default();
+    let measured = compile(source, &FormulaLimits::default(), Some(&observer)).unwrap();
+    let plain = compile(source, &FormulaLimits::default(), None).unwrap();
+    assert_eq!(measured.atoms(), plain.atoms());
+    assert_eq!(measured.theory().nodes(), plain.theory().nodes());
+    assert_eq!(measured.theory().roots(), plain.theory().roots());
+    let records = observer.records.borrow();
+    let work = records
+        .iter()
+        .find(|record| record.phase == GroundingPhase::SupportCompletion)
+        .unwrap()
+        .work;
+    let operations = [
+        work.support_production_work,
+        work.support_order_work,
+        work.support_wake_work,
+        work.support_publication_work,
+    ]
+    .map(Option::unwrap);
+    assert!(operations.iter().all(|amount| *amount > 0));
+    assert!(operations.iter().sum::<u64>() < work.support_construction_work.unwrap());
+    let join = work.support_join_work.unwrap();
+    let head = work.support_head_work.unwrap();
+    assert!(join > 0 && head > 0);
+    assert!(join + head < work.support_production_work.unwrap());
+    assert_eq!(work.support_atoms, Some(6));
+}
+
+#[test]
 fn recursive_support_appends_each_posting_once() {
     for bound in [16, 100, 200, 400] {
         let observer = Observer::default();
@@ -387,18 +418,61 @@ fn bundle_rule_locations_identify_retained_sources() {
 #[test]
 fn work_aggregation_preserves_field_availability() {
     let mut left = GroundingWork::default();
+    left.support_construction_work = Some(u64::MAX);
+    left.support_production_work = None;
+    left.support_join_work = Some(u64::MAX);
+    left.support_head_work = Some(7);
+    left.support_order_work = Some(2);
+    left.support_wake_work = Some(3);
+    left.support_publication_work = Some(5);
     left.join_rows = Some(u64::MAX);
     left.expression_nodes = None;
     left.roots = Some(3);
     let mut right = GroundingWork::default();
+    right.support_construction_work = Some(1);
+    right.support_production_work = Some(2);
+    right.support_join_work = Some(1);
+    right.support_head_work = None;
+    right.support_order_work = Some(3);
+    right.support_wake_work = Some(4);
+    right.support_publication_work = Some(6);
     right.join_rows = Some(1);
     right.expression_nodes = Some(5);
     right.roots = Some(2);
     let sum = left.checked_sum(right);
+    assert_eq!(sum.support_construction_work, None);
+    assert_eq!(sum.support_production_work, None);
+    assert_eq!(sum.support_join_work, None);
+    assert_eq!(sum.support_head_work, None);
+    assert_eq!(sum.support_order_work, Some(5));
+    assert_eq!(sum.support_wake_work, Some(7));
+    assert_eq!(sum.support_publication_work, Some(11));
     assert_eq!(sum.join_rows, None);
     assert_eq!(sum.expression_nodes, None);
     assert_eq!(sum.roots, Some(5));
     assert_eq!(sum.atoms_inserted, Some(0));
+}
+
+#[test]
+fn support_subdivision_sums_preserve_exact_and_unavailable_counts() {
+    for (left, right, expected) in [
+        (Some(0), Some(0), Some(0)),
+        (Some(3), Some(5), Some(8)),
+        (Some(u64::MAX), Some(1), None),
+        (None, Some(0), None),
+        (Some(0), None, None),
+    ] {
+        let mut first = GroundingWork::default();
+        first.support_join_work = left;
+        first.support_head_work = left;
+        let mut second = GroundingWork::default();
+        second.support_join_work = right;
+        second.support_head_work = right;
+        let sum = first.checked_sum(second);
+        assert_eq!(sum.support_join_work, expected);
+        assert_eq!(sum.support_head_work, expected);
+        assert_eq!(sum.support_production_work, Some(0));
+    }
 }
 
 #[test]

@@ -33,6 +33,9 @@ Positive relational bindings and scalar filters can be combined with a closed
 condition's acyclic references and admission limits. `evaluate` reads the
 supplied model; the caller establishes whether that model is an answer set.
 It uses one contribution-key and priority-ordering contract for all templates.
+Resolved contribution tuples contain borrowed term references. A distinct key
+retains that tuple buffer directly; a duplicate discards it. Neither operation
+copies the referenced logical payload.
 
 Admission consumes the owned template descriptions. `ObjectiveTemplateRef`
 borrows weight and tuple terms, positive patterns and filters from the shared

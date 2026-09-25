@@ -53,34 +53,40 @@ impl Model {
     pub fn from_ordered_catalog_with<E>(
         catalog: AtomCatalog,
         max_selection_bytes: usize,
-        mut before: impl FnMut() -> Result<(), E>,
+        before: impl FnMut() -> Result<(), E>,
     ) -> Result<Self, ModelFailure<E>> {
-        let mut checked = || before().map_err(ModelFailure::Stopped);
-        let count = catalog.atoms().len();
-        selection_allowance(count, max_selection_bytes).map_err(ModelFailure::Model)?;
-        checked()?;
+        Self::publish_ordered_catalog_with(catalog, max_selection_bytes, before)
+            .map_err(|failure| failure.into_parts().0)
+    }
+
+    /// Publish an already ordered unique catalog, retaining an actual selection
+    /// allocation receipt when the attempt is refused. The checks, allowance
+    /// and callback order are those of [`Self::from_ordered_catalog_with`].
+    ///
+    /// The successful attempt's peak is exactly [`Self::selection_bytes`]: one
+    /// position buffer is moved into the final selection without copying. On
+    /// refusal, the receipt counts only the buffer capacity actually allocated;
+    /// the final selection header has not been allocated. Rejected reservation
+    /// proposals are not observations. The retained catalog, caller frames, Arc
+    /// counters and allocator bookkeeping are excluded; this is not process RSS.
+    ///
+    /// Vector reservation is fallible. The final Arc envelope allocation uses
+    /// stable Rust's infallible boundary and follows the last callback permit.
+    ///
+    /// # Errors
+    /// Returns the original typed refusal and the actual named allocation peak.
+    /// No partial interpretation is returned; earlier catalog clones stay valid.
+    ///
+    /// # Panics
+    /// Panics if the immutable catalog iterator violates its exact length.
+    /// A callback panic returns no receipt; earlier catalog clones stay valid.
+    pub fn publish_ordered_catalog_with<E>(
+        catalog: AtomCatalog,
+        max_selection_bytes: usize,
+        before: impl FnMut() -> Result<(), E>,
+    ) -> Result<Self, ModelPublicationFailure<E>> {
         let mut positions = Vec::new();
-        positions
-            .try_reserve_exact(count)
-            .map_err(|_| ModelFailure::Model(ModelError::Allocation))?;
-        selection_allowance(positions.capacity(), max_selection_bytes)
-            .map_err(ModelFailure::Model)?;
-        let mut previous: Option<AtomRef<'_>> = None;
-        let mut atoms = catalog.atoms().iter();
-        for index in 0..count {
-            checked()?;
-            let atom = atoms
-                .next()
-                .expect("immutable catalog iterator has exact length");
-            if let Some(left) = previous
-                && !left.compare_ref_with(atom, &mut checked)?.is_lt()
-            {
-                return Err(ModelFailure::Model(ModelError::Order { position: index }));
-            }
-            previous = Some(atom);
-            positions.push(index);
-        }
-        checked()?;
+        prepare_ordered_selection(&catalog, &mut positions, max_selection_bytes, before)?;
         Ok(Self(Arc::new(Selected { catalog, positions })))
     }
 
@@ -519,6 +525,51 @@ impl std::error::Error for ModelError {
     }
 }
 
+/// Prepare a fresh, unallocated position buffer through the final publication
+/// permit. The caller retains it on every return and moves it into Selected only
+/// on success. One reservation is the only capacity change, so its retained
+/// capacity is also the refused attempt's peak; no Selected envelope exists yet.
+fn prepare_ordered_selection<E>(
+    catalog: &AtomCatalog,
+    positions: &mut Vec<usize>,
+    max_selection_bytes: usize,
+    mut before: impl FnMut() -> Result<(), E>,
+) -> Result<(), ModelPublicationFailure<E>> {
+    let result = (|| {
+        let mut checked = || before().map_err(ModelFailure::Stopped);
+        let count = catalog.atoms().len();
+        selection_allowance(count, max_selection_bytes).map_err(ModelFailure::Model)?;
+        checked()?;
+        positions
+            .try_reserve_exact(count)
+            .map_err(|_| ModelFailure::Model(ModelError::Allocation))?;
+        selection_allowance(positions.capacity(), max_selection_bytes)
+            .map_err(ModelFailure::Model)?;
+        let mut previous: Option<AtomRef<'_>> = None;
+        let mut atoms = catalog.atoms().iter();
+        for index in 0..count {
+            checked()?;
+            let atom = atoms
+                .next()
+                .expect("immutable catalog iterator has exact length");
+            if let Some(left) = previous
+                && !left.compare_ref_with(atom, &mut checked)?.is_lt()
+            {
+                return Err(ModelFailure::Model(ModelError::Order { position: index }));
+            }
+            previous = Some(atom);
+            positions.push(index);
+        }
+        checked()
+    })();
+    // Observe the same still-live buffer after every normal refusal, including
+    // reservation or actual-capacity refusal. Requested bytes are not a receipt.
+    result.map_err(|failure| ModelPublicationFailure {
+        failure,
+        peak_bytes: positions.capacity() as u128 * size_of::<usize>() as u128,
+    })
+}
+
 fn selection_allowance(capacity: usize, limit: usize) -> Result<(), ModelError> {
     let required = size_of::<Selected>() as u128 + capacity as u128 * size_of::<usize>() as u128;
     if required > limit as u128 {
@@ -552,3 +603,49 @@ impl<E: std::error::Error + 'static> std::error::Error for ModelFailure<E> {
         })
     }
 }
+
+/// A selected-model publication refused after observing its actual allocations.
+/// The consumed catalog handle is not returned; other catalog clones stay valid.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ModelPublicationFailure<E> {
+    failure: ModelFailure<E>,
+    peak_bytes: u128,
+}
+
+impl<E> ModelPublicationFailure<E> {
+    /// Original ordering, selection-storage, allocation or caller refusal.
+    #[must_use]
+    pub const fn failure(&self) -> &ModelFailure<E> {
+        &self.failure
+    }
+
+    /// Actual allocated position-buffer capacity during the refused attempt.
+    /// The unallocated final selection header, retained catalog, caller frames,
+    /// Arc counters, allocator bookkeeping and rejected proposals are excluded.
+    #[must_use]
+    pub const fn peak_bytes(&self) -> u128 {
+        self.peak_bytes
+    }
+
+    /// Recover the original typed refusal together with its attempt receipt.
+    #[must_use]
+    pub fn into_parts(self) -> (ModelFailure<E>, u128) {
+        (self.failure, self.peak_bytes)
+    }
+}
+
+impl<E: fmt::Display> fmt::Display for ModelPublicationFailure<E> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.failure.fmt(f)
+    }
+}
+
+impl<E: std::error::Error + 'static> std::error::Error for ModelPublicationFailure<E> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.failure)
+    }
+}
+
+#[cfg(test)]
+#[path = "model/publication_tests.rs"]
+mod publication_tests;

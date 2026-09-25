@@ -81,14 +81,25 @@ impl<'a, E> Work<'a, E> {
         key: impl Hash,
         children: &[TermId],
     ) -> Result<u64, Failure<E>> {
+        self.key_hash_by(key, children.len(), |index| children[index])
+    }
+
+    /// Hash borrowed canonical coordinates without allocating an argument copy.
+    /// The permit precedes each argument read as well as its hash operation.
+    pub(super) fn key_hash_by(
+        &mut self,
+        key: impl Hash,
+        count: usize,
+        mut argument: impl FnMut(usize) -> TermId,
+    ) -> Result<u64, Failure<E>> {
         let mut state = DefaultHasher::new();
         self.step()?;
         key.hash(&mut state);
         self.step()?;
-        children.len().hash(&mut state);
-        for child in children {
+        count.hash(&mut state);
+        for index in 0..count {
             self.step()?;
-            child.hash(&mut state);
+            argument(index).hash(&mut state);
         }
         self.step()?;
         Ok(state.finish())

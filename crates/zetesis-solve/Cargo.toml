@@ -81,3 +81,8 @@ test = true
 name = "book-hybrid"
 path = "../../docs/book/examples/hybrid.rs"
 test = true
+
+[[example]]
+name = "book-terminal"
+path = "../../docs/book/examples/terminal.rs"
+test = true

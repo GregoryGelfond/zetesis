@@ -8,7 +8,7 @@ pub(crate) use zetesis_solve::SolveMeasurements as Recorder;
 pub(crate) fn write(sink: &mut impl Write, timings: &PhaseTimings) -> io::Result<()> {
     writeln!(
         sink,
-        "Phase timings: clock=host-monotonic; scope=driver; failed_attempts=included; schema=3"
+        "Phase timings: clock=host-monotonic; scope=driver; failed_attempts=included; schema=4"
     )?;
     writeln!(
         sink,

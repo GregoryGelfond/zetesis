@@ -95,7 +95,7 @@ fn elenctic_comments_do_not_change_answer_sets() {
         let options = options(&["--oracle", oracle]);
         let (plain, expected) = solve(source, &options);
         let (annotated, actual) = solve(&annotated, &options);
-        for report in [plain.unwrap(), annotated.unwrap()] {
+        for report in [plain.as_ref().unwrap(), annotated.as_ref().unwrap()] {
             assert_eq!(report.completion, Completion::Exhausted);
             assert_eq!(report.models, 2);
             assert_eq!(
@@ -464,7 +464,7 @@ fn search_statistics_count_stable_models() {
 fn formula_phases_exclude_closure_measurements() {
     let (report, value) = formula_statistics();
     assert!(report.phase_timings.is_some());
-    assert_eq!(value["statistics"]["phase_timings"]["schema"], 3);
+    assert_eq!(value["statistics"]["phase_timings"]["schema"], 4);
     assert!(value["statistics"]["phase_timings"]["measurements"]["closure_membership"].is_null());
 }
 

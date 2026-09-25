@@ -23,6 +23,7 @@ use crate::formula_execution::Execution;
 use crate::formula_session::FormulaSession;
 use crate::hybrid_session::HybridSession;
 use crate::phase_timing::Recorder;
+use crate::terminal_session::TerminalSession;
 use crate::{
     AnswerSelection, ExecutionResources, Grounder, Interruption, Oracle, PhaseTimings,
     SemanticOutcome, SolveConfig, SolveError, SolveFailure, WorldView, WorldViewFailure,
@@ -38,6 +39,8 @@ pub enum PreparedProfile {
     Formula,
     /// Complete producer theory with admitted constraints checked from source.
     Hybrid,
+    /// A checked base theory plus terminal definitions of the original source.
+    TerminalDefinitions,
     /// A complete ground graph retaining its original relational program identity.
     Ground,
 }
@@ -47,6 +50,7 @@ enum Prepared<'a> {
     Relational(&'a Program),
     Formula(crate::countermodel::Input<'a>),
     Hybrid(&'a zetesis_themelios::HybridFormula),
+    TerminalDefinitions(&'a zetesis_themelios::TerminalFormula),
     Ground(&'a Arc<GroundProgram>),
 }
 
@@ -60,6 +64,21 @@ pub struct PreparedInput<'a> {
     projection: Option<&'a zetesis_themelios::PreparedProjection>,
 }
 impl<'a> PreparedInput<'a> {
+    /// Borrow the original source plan with its checked base and terminal
+    /// definitions. Each verified base answer is reconstructed before a full
+    /// answer can be published. This initial profile requires automatic
+    /// grounding; explicit eager and lazy requests keep their existing meanings.
+    /// Explicit projection, objectives and injected membership executors are
+    /// outside this profile. No admission or execution occurs in this borrow.
+    #[must_use]
+    pub fn terminal(owner: &'a zetesis_themelios::TerminalFormula) -> Self {
+        Self {
+            input: Prepared::TerminalDefinitions(owner),
+            metadata: Some(owner.metadata()),
+            projection: None,
+        }
+    }
+
     /// Borrow a coherent producer theory and its admitted streamed constraints.
     /// No grounding or solving occurs here. CPU/automatic execution supports
     /// lazy/automatic grounding; objectives and device checking are not part of
@@ -161,6 +180,7 @@ impl<'a> PreparedInput<'a> {
             Prepared::Relational(_) => PreparedProfile::Relational,
             Prepared::Formula(_) => PreparedProfile::Formula,
             Prepared::Hybrid(_) => PreparedProfile::Hybrid,
+            Prepared::TerminalDefinitions(_) => PreparedProfile::TerminalDefinitions,
             Prepared::Ground(_) => PreparedProfile::Ground,
         }
     }
@@ -181,6 +201,7 @@ impl<'a> PreparedInput<'a> {
             Prepared::Relational(program) => Subject::Program(program.clone()),
             Prepared::Formula(input) => Subject::Theory(input.theory.clone()),
             Prepared::Hybrid(owner) => Subject::Hybrid(owner.clone()),
+            Prepared::TerminalDefinitions(owner) => Subject::TerminalDefinitions(owner.clone()),
             Prepared::Ground(ground) => Subject::Program(ground.program().clone()),
         }
     }
@@ -204,6 +225,9 @@ impl<'a> PreparedInput<'a> {
             Prepared::Relational(_) => config.oracle != Oracle::Countermodel,
             Prepared::Formula(_) => {
                 config.oracle != Oracle::Closure && config.grounder != Grounder::Lazy
+            }
+            Prepared::TerminalDefinitions(_) => {
+                config.oracle != Oracle::Closure && config.grounder == Grounder::Auto
             }
             Prepared::Hybrid(_) => unreachable!("hybrid policy validated above"),
             Prepared::Ground(_) => {
@@ -236,6 +260,9 @@ pub enum Subject {
     Theory(Theory),
     /// Original producer core together with its admitted source constraints.
     Hybrid(zetesis_themelios::HybridFormula),
+    /// Original source with a checked base/terminal-definition correspondence.
+    /// The contained base theory alone is not this semantic subject.
+    TerminalDefinitions(zetesis_themelios::TerminalFormula),
 }
 impl Subject {
     /// Whether both handles retain the same original immutable semantic instance.
@@ -246,6 +273,9 @@ impl Subject {
             (Self::Program(left), Self::Program(right)) => left.same_instance(right),
             (Self::Theory(left), Self::Theory(right)) => left.same_instance(right),
             (Self::Hybrid(left), Self::Hybrid(right)) => left.same_instance(right),
+            (Self::TerminalDefinitions(left), Self::TerminalDefinitions(right)) => {
+                left.same_instance(right)
+            }
             _ => false,
         }
     }
@@ -305,6 +335,7 @@ enum State<'a> {
     Closure(Box<ClosureSession<'a>>),
     Formula(Box<FormulaSession<'a, Execution>>),
     Hybrid(Box<HybridSession<'a>>),
+    TerminalDefinitions(Box<TerminalSession<'a>>),
     Stopped(Box<SemanticOutcome>),
 }
 
@@ -692,6 +723,9 @@ impl<'a> Session<'a> {
             }
         }
         let config = input.configure(config)?;
+        if input.profile() == PreparedProfile::TerminalDefinitions {
+            phases.terminal_grounding();
+        }
         let _solving = phases.stage(crate::SolveStage::Solving);
         if let Err(stop) = cancellation.poll() {
             let interruption = Interruption::Preparation(stop);
@@ -716,6 +750,7 @@ impl<'a> Session<'a> {
                     closure_execution: None,
                     query_execution: None,
                     hybrid_execution: None,
+                    terminal_execution: None,
                 })),
                 config,
             ));
@@ -759,6 +794,16 @@ impl<'a> Session<'a> {
                 phases,
                 selection,
             )?)),
+            Prepared::TerminalDefinitions(owner) => {
+                State::TerminalDefinitions(Box::new(TerminalSession::new(
+                    owner,
+                    &config,
+                    resources,
+                    observations,
+                    cancellation,
+                    phases,
+                )?))
+            }
         };
         Ok((state, config))
     }
@@ -777,6 +822,9 @@ impl<'a> Session<'a> {
             State::Hybrid(state) => state
                 .finished()
                 .then(|| state.outcome(self.phases.recorder())),
+            State::TerminalDefinitions(state) => state
+                .finished()
+                .then(|| state.outcome(self.phases.recorder())),
             State::Stopped(outcome) => Some((**outcome).clone()),
         };
         if let Some(outcome) = &mut outcome {
@@ -790,7 +838,10 @@ impl<'a> Session<'a> {
     /// End an unfinished session and retain its current evidence. Coverage stays
     /// unavailable unless the retained engine already established a terminal state.
     #[must_use]
-    pub fn stop(self) -> SemanticOutcome {
+    pub fn stop(mut self) -> SemanticOutcome {
+        if let State::TerminalDefinitions(state) = &mut self.state {
+            state.stop(self.phases.recorder());
+        }
         self.progress()
     }
     /// Attempted host phases from this session's measurement owner; absence means
@@ -810,6 +861,7 @@ impl<'a> Session<'a> {
             State::Closure(state) => state.outcome(),
             State::Formula(state) => state.outcome(self.phases.recorder()),
             State::Hybrid(state) => state.outcome(self.phases.recorder()),
+            State::TerminalDefinitions(state) => state.outcome(self.phases.recorder()),
             State::Stopped(outcome) => (**outcome).clone(),
         };
         outcome.projection = self
@@ -913,6 +965,12 @@ impl<'a> Session<'a> {
                 self.phases.recorder(),
             ),
             State::Hybrid(state) => state.next(
+                &self.config,
+                observations,
+                &self.cancellation,
+                self.phases.recorder(),
+            ),
+            State::TerminalDefinitions(state) => state.next(
                 &self.config,
                 observations,
                 &self.cancellation,

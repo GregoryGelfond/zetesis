@@ -38,10 +38,13 @@ pub enum SolvePhase {
     ObjectiveFeedback,
     /// Observation/rendering/output and final result summaries, including failures.
     ObservationOutput,
+    /// Extend a verified base answer with every terminal consequence, including
+    /// refused host attempts. This precedes original answer publication.
+    AnswerReconstruction,
 }
 impl SolvePhase {
     /// Finite phase catalog in report order.
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 15] = [
         Self::AdmissionMaterialization,
         Self::ExecutionSetup,
         Self::CandidateSetup,
@@ -56,6 +59,7 @@ impl SolvePhase {
         Self::ObjectiveScoringRetention,
         Self::ObjectiveFeedback,
         Self::ObservationOutput,
+        Self::AnswerReconstruction,
     ];
 
     /// Stable identifier in the appended phase-statistics section.
@@ -76,6 +80,7 @@ impl SolvePhase {
             Self::ObjectiveScoringRetention => "objective_scoring_retention",
             Self::ObjectiveFeedback => "objective_feedback",
             Self::ObservationOutput => "observation_output",
+            Self::AnswerReconstruction => "answer_reconstruction",
         }
     }
 }
@@ -187,6 +192,10 @@ impl Recorder {
 
     pub(crate) fn lazy_grounding(&self) {
         self.stages.mark_lazy_grounding();
+    }
+
+    pub(crate) fn terminal_grounding(&self) {
+        self.stages.mark_terminal_definitions();
     }
 
     pub(crate) fn grounding_observer(&self) -> Option<crate::stage_timing::Observer<'_>> {
