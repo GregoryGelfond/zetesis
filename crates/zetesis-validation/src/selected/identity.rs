@@ -9,6 +9,8 @@ use sha2::{Digest, Sha256};
 use super::Error;
 
 /// A primary input's requested path, resolved file identity and exact byte seal.
+/// The bounded read must agree with the opened file's length before and after
+/// reading. This consistency check does not establish an immutable snapshot.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct FileSeal {
     requested: PathBuf,
@@ -113,32 +115,9 @@ pub(crate) fn seal(path: &Path, limit: usize) -> Result<FileSeal, Error> {
             limit,
         });
     }
-    let mut digest = Sha256::new();
-    let mut bytes = 0usize;
-    let mut buffer = [0_u8; 8192];
-    loop {
-        let room = limit
-            .saturating_sub(bytes)
-            .saturating_add(1)
-            .min(buffer.len());
-        let count = file
-            .read(&mut buffer[..room])
-            .map_err(|source| io(&canonical, source))?;
-        if count == 0 {
-            break;
-        }
-        bytes = bytes.checked_add(count).ok_or_else(|| Error::Bytes {
-            path: canonical.clone(),
-            limit,
-        })?;
-        if bytes > limit {
-            return Err(Error::Bytes {
-                path: canonical,
-                limit,
-            });
-        }
-        digest.update(&buffer[..count]);
-    }
+    let (bytes, sha256) = content_seal(&mut file, &canonical, limit, metadata.len(), |file| {
+        file.metadata().map(|metadata| metadata.len())
+    })?;
     #[cfg(unix)]
     let (device, inode) = {
         use std::os::unix::fs::MetadataExt;
@@ -149,15 +128,71 @@ pub(crate) fn seal(path: &Path, limit: usize) -> Result<FileSeal, Error> {
     Ok(FileSeal {
         requested,
         canonical,
-        bytes: u64::try_from(bytes).map_err(|_| Error::Bytes {
-            path: path.to_owned(),
-            limit,
-        })?,
-        sha256: format!("{:x}", digest.finalize()),
+        bytes,
+        sha256,
         device,
         inode,
         limit,
     })
+}
+
+/// Hash a bounded stream, then require its length to agree with both metadata
+/// observations. Production obtains both lengths from the same open file.
+fn content_seal<R: Read>(
+    reader: &mut R,
+    path: &Path,
+    limit: usize,
+    before: u64,
+    after_length: impl FnOnce(&R) -> std::io::Result<u64>,
+) -> Result<(u64, String), Error> {
+    let mut digest = Sha256::new();
+    let mut bytes = 0usize;
+    let mut buffer = [0_u8; 8192];
+    loop {
+        let room = limit
+            .saturating_sub(bytes)
+            .saturating_add(1)
+            .min(buffer.len());
+        let count = reader
+            .read(&mut buffer[..room])
+            .map_err(|source| io(path, source))?;
+        if count == 0 {
+            break;
+        }
+        bytes = bytes.checked_add(count).ok_or_else(|| Error::Bytes {
+            path: path.to_owned(),
+            limit,
+        })?;
+        if bytes > limit {
+            return Err(Error::Bytes {
+                path: path.to_owned(),
+                limit,
+            });
+        }
+        digest.update(&buffer[..count]);
+    }
+    let bytes = u64::try_from(bytes).map_err(|_| Error::Bytes {
+        path: path.to_owned(),
+        limit,
+    })?;
+    let after = after_length(reader).map_err(|source| io(path, source))?;
+    if bytes != before || bytes != after {
+        let kind = if bytes < before {
+            std::io::ErrorKind::UnexpectedEof
+        } else {
+            std::io::ErrorKind::InvalidData
+        };
+        return Err(io(
+            path,
+            std::io::Error::new(
+                kind,
+                format!(
+                    "sealed input length disagrees: before {before} bytes, read {bytes} bytes, after {after} bytes"
+                ),
+            ),
+        ));
+    }
+    Ok((bytes, format!("{:x}", digest.finalize())))
 }
 
 pub(crate) fn recheck(before: &FileSeal) -> Change {
