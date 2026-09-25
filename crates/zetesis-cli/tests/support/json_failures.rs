@@ -8,6 +8,40 @@ use clap::Parser;
 use std::io::{self, Write};
 
 #[test]
+fn displayed_diagnostics_preserve_json_escaping() {
+    let error = RunError::Input(io::Error::other("bad \"name\"\n\\tail\té"));
+    let mut output = Buffer::new(256);
+    output.display_string(&error).unwrap();
+    let decoded: String = serde_json::from_slice(&output.bytes).unwrap();
+    assert_eq!(decoded, error.to_string());
+}
+
+#[test]
+fn diagnostic_formatting_stops_at_the_json_ceiling() {
+    struct Diagnostic(std::cell::Cell<usize>);
+    impl std::fmt::Display for Diagnostic {
+        fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            for _ in 0..4096 {
+                self.0.set(self.0.get() + 1);
+                formatter.write_str("\"")?;
+            }
+            Ok(())
+        }
+    }
+    let diagnostic = Diagnostic(std::cell::Cell::new(0));
+    let mut output = Buffer::new(16);
+    assert!(matches!(
+        output.display_string(&diagnostic),
+        Err(RunError::JsonRecord(
+            zetesis_themelios::observation::ViewError::Bytes
+        ))
+    ));
+    assert!(output.bytes.len() <= 16);
+    // A temporary unbounded to_string() would visit all 4096 fragments first.
+    assert!(diagnostic.0.get() < 4096);
+}
+
+#[test]
 fn legacy_metadata_cannot_establish_optimality() {
     let options = Options::parse_from([
         "zetesis",

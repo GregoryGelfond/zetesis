@@ -137,7 +137,7 @@ matrix() {
     comparison_suite=$3
     if /usr/bin/env -i HOME="$HOME" PATH=/usr/bin:/bin:/usr/sbin:/sbin \
         LC_ALL=C TMPDIR=/private/tmp \
-        "$perf_command" examples/kr-domains \
+        "$perf_command" examples/correctness \
         --zetesis "$comparison_solver" --clingo "$clingo_command" \
         --report "$results_dir/$comparison_label.json" \
         --suite "$comparison_suite" \

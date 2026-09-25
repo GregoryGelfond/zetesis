@@ -1,4 +1,4 @@
-//! Clean, pinned kr-domains examples and contracts on solver-reported displays.
+//! Clean, pinned correctness examples and contracts on solver-reported displays.
 //!
 //! Normal loading needs only the examples directory. An explicit provenance
 //! audit checks the retained originals and removes exactly the recorded comment
@@ -9,7 +9,7 @@
 
 mod contract;
 mod document;
-mod files;
+pub(crate) mod files;
 mod originals;
 
 use std::fmt;

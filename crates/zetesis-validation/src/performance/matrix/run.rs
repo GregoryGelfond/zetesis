@@ -60,17 +60,7 @@ pub(super) fn campaign(
         .iter()
         .flat_map(|case| case.input.corpus_source_paths())
         .collect();
-    let mut before = super::super::run::seals(
-        &corpus,
-        &sources,
-        request.corpus,
-        request.native,
-        request.reference,
-        request.limits,
-    )?;
-    if let Some(helper) = request.helper.filter(|_| request.plan.memory_runs() > 0) {
-        before.push(identity::seal(helper, request.limits.max_executable_bytes)?);
-    }
+    let before = seal_inputs(&corpus, &sources, request, workloads)?;
     let destination = publication::prepare(request.report, corpus.root(), &before)?;
     let directory = tempfile::tempdir()
         .map_err(|e| super::super::io(Path::new("private matrix sources"), e))?;
@@ -82,6 +72,7 @@ pub(super) fn campaign(
             "instrumented_explicit_profile_matrix_v1"
         },
         manifest_sha256: examples::MANIFEST_SHA256,
+        manifest_scope: "correctness_catalog_context; authored_and_generated_workloads_retain_independent_source_and_contract_identities",
         plan: request.plan.clone(),
         limits: request.limits,
         native_normalization_limits: normalization_limits(request),
@@ -139,33 +130,62 @@ pub(super) fn campaign(
     Ok(report)
 }
 
+/// Preserve the native/reference/catalog prefix used by retained-report readers,
+/// then seal optional helpers and independent authored sources in the same campaign.
+fn seal_inputs(
+    corpus: &examples::Corpus,
+    sources: &BTreeSet<&str>,
+    request: &Request<'_>,
+    workloads: Option<&[Workload]>,
+) -> Result<Vec<crate::selected::FileSeal>, Error> {
+    let mut sealed = super::super::run::seals(
+        corpus,
+        sources,
+        request.corpus,
+        request.native,
+        request.reference,
+        request.limits,
+    )?;
+    if let Some(helper) = request.helper.filter(|_| request.plan.memory_runs() > 0) {
+        sealed.push(identity::seal(helper, request.limits.max_executable_bytes)?);
+    }
+    if let Some(workloads) = workloads {
+        sealed.extend(
+            workloads
+                .iter()
+                .filter_map(Workload::authored_seal)
+                .cloned(),
+        );
+    }
+    Ok(sealed)
+}
+
 struct Prepared<'a> {
     input: Input<'a>,
     directory: PathBuf,
 }
 
 /// Where a cell's program comes from: a sealed corpus entry, unchanged or
-/// through a workload that amends it, or a generated program with no corpus
-/// source at all.
+/// through a workload that amends it, or an independently sealed authored/generated program.
 enum Input<'a> {
     Corpus {
         case: &'a examples::Case,
         workload: Option<&'a Workload>,
     },
-    Generated(&'a Workload),
+    Independent(&'a Workload),
 }
 impl<'a> Input<'a> {
     fn path(&self) -> &str {
         match self {
             Self::Corpus { case, .. } => case.path(),
-            Self::Generated(workload) => workload.entry(),
+            Self::Independent(workload) => workload.entry(),
         }
     }
     /// Corpus files this input reads; a generated program reads none.
     fn corpus_source_paths(&self) -> impl Iterator<Item = &str> {
         match self {
             Self::Corpus { case, .. } => case.transitive_source_paths().iter(),
-            Self::Generated(_) => [].iter(),
+            Self::Independent(_) => [].iter(),
         }
         .map(String::as_str)
     }
@@ -173,7 +193,7 @@ impl<'a> Input<'a> {
     fn workload(&self) -> Option<&'a Workload> {
         match self {
             Self::Corpus { workload, .. } => *workload,
-            Self::Generated(workload) => Some(workload),
+            Self::Independent(workload) => Some(workload),
         }
     }
     /// The contract the campaign checks: the corpus contract of an
@@ -188,7 +208,7 @@ impl<'a> Input<'a> {
                 workload: Some(workload),
                 ..
             }
-            | Self::Generated(workload) => workload.contract(),
+            | Self::Independent(workload) => workload.contract(),
         }
     }
 }
@@ -198,6 +218,11 @@ fn prepare<'a>(
     request: &Request<'_>,
     workloads: Option<&'a [Workload]>,
 ) -> Result<Vec<Prepared<'a>>, Error> {
+    if request.plan.suite() == Suite::Scalability && workloads.is_none() {
+        return Err(Error::Configuration(
+            "scalability suite requires explicit authored workloads",
+        ));
+    }
     let allowed = cases(corpus, &request.plan)?;
     let Some(workloads) = workloads else {
         return Ok(allowed
@@ -249,8 +274,8 @@ fn prepare<'a>(
         .try_reserve_exact(workloads.len())
         .map_err(|_| Error::Configuration("workload population allocation failed"))?;
     for (position, workload) in workloads.iter().enumerate() {
-        let input = if workload.is_generated() {
-            Input::Generated(workload)
+        let input = if workload.is_generated() || workload.is_authored() {
+            Input::Independent(workload)
         } else {
             Input::Corpus {
                 case: allowed
@@ -302,7 +327,7 @@ fn materialize(
 fn cases<'a>(corpus: &'a examples::Corpus, plan: &Plan) -> Result<Vec<&'a examples::Case>, Error> {
     let cases: &[super::super::Case] = match plan.suite {
         Suite::Corpus => return Ok(corpus.cases().iter().collect()),
-        Suite::Baseline => super::super::Suite::Baseline.cases(),
+        Suite::Baseline | Suite::Scalability => super::super::Suite::Baseline.cases(),
         Suite::Queens => super::super::Suite::Queens.cases(),
         Suite::Series => &super::super::series::CORPUS_CASES,
     };

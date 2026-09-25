@@ -100,7 +100,6 @@ fn borrowed_passes_match_materialized_passes() {
                 .unwrap();
             assert_eq!(actual, expected);
             assert_eq!(region, expected_region);
-            assert_eq!(region.decisions(), expected_region.decisions());
             if actual != Pass::Changed {
                 break;
             }
@@ -136,7 +135,6 @@ fn borrowed_passes_preserve_work_refusals() {
         let actual = borrowed.narrow_region(&candidates.root_must, &candidates.root, &mut region);
         assert_eq!(actual, expected, "work ceiling {max_work}");
         assert_eq!(region, expected_region, "work ceiling {max_work}");
-        assert_eq!(region.decisions(), expected_region.decisions());
     }
     assert!(
         completed,
@@ -209,7 +207,6 @@ fn a_stopped_upper_closure_commits_no_decisions() {
         Err(Stop::DerivedAtomLimit)
     );
     assert_eq!(region, before);
-    assert_eq!(region.decisions(), before.decisions());
 }
 
 #[test]
@@ -231,7 +228,6 @@ fn a_later_stop_keeps_the_completed_region() {
         Ok(Narrowing::Fixed { changed: false })
     );
     assert_eq!(region, completed);
-    assert_eq!(region.decisions(), completed.decisions());
     assert_eq!(candidates.statistics.narrowing_stop, Some(Stop::WorkLimit));
 }
 
@@ -251,7 +247,6 @@ fn cancellation_keeps_the_completed_region() {
     candidates.cancellation.cancel();
     assert_eq!(candidates.narrow_region(&mut region), Err(Stop::Cancelled));
     assert_eq!(region, completed);
-    assert_eq!(region.decisions(), completed.decisions());
 }
 
 #[test]

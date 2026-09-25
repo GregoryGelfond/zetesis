@@ -189,7 +189,7 @@ fn default_campaign_reports_clean_source_provenance() {
         zetesis_validation::examples::MANIFEST_SHA256
     );
     let expected = zetesis_validation::examples::load(
-        &repository().join("examples/kr-domains"),
+        &repository().join("examples/correctness"),
         zetesis_validation::examples::Limits::default(),
     )
     .unwrap();
@@ -237,7 +237,7 @@ fn corpus_override_retains_original_provenance() {
 fn example_verification_does_not_claim_solver_execution() {
     let output = corpus_command()
         .arg("verify-examples")
-        .arg(repository().join("examples/kr-domains"))
+        .arg(repository().join("examples/correctness"))
         .output()
         .unwrap();
     assert!(output.status.success());
@@ -257,7 +257,7 @@ fn example_verification_does_not_claim_solver_execution() {
 fn original_audit_is_explicit_in_the_integrity_report() {
     let output = corpus_command()
         .arg("verify-examples")
-        .arg(repository().join("examples/kr-domains"))
+        .arg(repository().join("examples/correctness"))
         .arg("--originals")
         .arg(repository().join("validation/corpus/kr-domains"))
         .output()
@@ -273,7 +273,7 @@ fn failed_original_audit_emits_no_verified_report() {
     let directory = tempfile::tempdir().unwrap();
     let output = corpus_command()
         .arg("verify-examples")
-        .arg(repository().join("examples/kr-domains"))
+        .arg(repository().join("examples/correctness"))
         .arg("--originals")
         .arg(directory.path())
         .output()

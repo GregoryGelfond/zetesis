@@ -19,6 +19,7 @@ pub mod families;
 pub mod matrix;
 pub mod command;
 pub mod series;
+pub mod scalability;
 mod record;
 mod run;
 mod timing;

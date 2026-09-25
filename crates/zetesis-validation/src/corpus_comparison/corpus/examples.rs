@@ -9,7 +9,7 @@ use super::{Case, FileEntry, Loaded, Manifest, SourceView};
 
 pub(super) fn load(repo: &Path) -> Result<Loaded, String> {
     let corpus = examples::load(
-        &repo.join("examples/kr-domains"),
+        &repo.join("examples/correctness"),
         examples::Limits::default(),
     )
     .map_err(|error| error.to_string())?;

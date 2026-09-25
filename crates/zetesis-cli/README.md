@@ -106,7 +106,12 @@ stdout can discard output without a write error. The command cannot recover the
 parent's intent from those descriptors. Library callers own source loading and
 supply explicit writers; observed I/O errors retain their original causes.
 
-`--json` streams one schema-2 document without ANSI styling. The document
+`--json` streams one schema-2 document without ANSI styling. Failed outcomes
+retain a stable `error.kind`, the typed cause's human-readable `error.detail`,
+and secondary-output-failure status. Detail is admitted under the same bounded
+footer capacity as the rest of the outcome. Consumers should use the kind for
+classification and retain the detail for diagnosis; historical schema-2 records
+can omit this additive detail field. The document
 spells each atom once: a model record's `atoms` are the typed atoms the
 document has not spelled before, in the order it spells them, and the
 document's atom table is every record's `atoms` in document order. A record's

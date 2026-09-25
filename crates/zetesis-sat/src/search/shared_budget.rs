@@ -12,10 +12,15 @@ use std::time::Duration;
 
 use crate::{Cancellation, Incomplete, SearchLimits, SearchStatistics};
 
-/// A scheduling policy, not a measured crossover: incremental query grants
-/// hold at most 64 permits. Accounted kernels reserve their complete bounded
-/// allowance separately. No grant changes the charged operation sequence.
-const WORK_QUANTUM: u64 = 64;
+/// A scheduling policy, not a measured crossover: an incremental grant holds
+/// at most this many permits, enough that a region's narrowing draws a single
+/// grant and returns it once instead of refilling several times mid-region, so
+/// the shared budget lock is contended far less as workers scale. Accounted
+/// kernels reserve their complete bounded allowance separately. No grant changes
+/// the charged operation sequence, so the work limit still bounds the identical
+/// total; a larger grant only coarsens how the shared allowance is parcelled out
+/// among workers and how often a lease rechecks cooperative control.
+const WORK_QUANTUM: u64 = 16384;
 /// A waiting query rechecks cooperative control at least once per timed wait.
 /// Lock acquisition and OS scheduling do not provide a hard response deadline.
 const CONTROL_WAIT: Duration = Duration::from_millis(1);

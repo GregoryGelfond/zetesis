@@ -1,17 +1,18 @@
 //! Regions walked by several workers at once, sharing immutable preparation,
-//! a cumulative allowance and a pool of regions still to visit.
+//! a cumulative allowance and a work-stealing frontier of regions still to visit.
 //!
-//! Each worker owns a stack of regions with their knowledge, a budget
-//! leased for each region from the enumeration's shared allowance, and its own
-//! evaluation workspace. Candidate and reduct traversals share the authenticated
-//! original-theory index but never their mutable knowledge. A worker pops a region,
-//! narrows it from the knowledge it carries, drops it when refuted, splits
-//! it otherwise and keeps both children, offering one to the pool when the
-//! pool runs short, and at a leaf decides membership as the scalar
-//! proposer does, by the class certificate when one applies and else by
-//! the proper-subset query as a region tree; a stable model is sent to the
-//! enumeration. The regions partition the candidate space exactly
-//! (`Cube.split_partition`, `Cube.split_disjoint` of `Search.lean`), so no leaf is visited by
+//! Each worker owns a work-stealing deque of regions with their knowledge, a
+//! budget leased for each region from the enumeration's shared allowance, and
+//! its own evaluation workspace. Candidate and reduct traversals share the
+//! authenticated original-theory index but never their mutable knowledge. A
+//! worker pops a region from its own deque, narrows it from the knowledge it
+//! carries, drops it when refuted, splits it otherwise and pushes both children
+//! back onto its deque; a worker whose deque is empty steals a region from a
+//! peer. At a leaf it decides membership as the scalar proposer does, by the
+//! class certificate when one applies and else by the proper-subset query as a
+//! region tree; a stable model is sent to the enumeration. The regions
+//! partition the candidate space exactly (`Cube.split_partition`,
+//! `Cube.split_disjoint` of `Search.lean`), so no leaf is visited by
 //! two workers and every leaf by one, whatever the interleaving; the order
 //! in which models arrive is the schedule's and is not a property of the
 //! result, and no two runs promise the same order.
@@ -24,7 +25,9 @@
 //! their next region, and the enumeration is incomplete. The models the
 //! workers verified before they stopped are delivered first and the stop
 //! after them, so a leaf admitted under the candidate ceiling is never
-//! lost to a worker the ceiling refused. The region counts and reading
+//! lost to a worker the ceiling refused. A cancellation observed by the
+//! coordinator can end its pull immediately; explicit stop or drop joins any
+//! remaining workers. The region counts and reading
 //! work, the candidates, the countermodel counts and the phase timings are
 //! the workers' live counters, current while they run; the certificate and
 //! reduct receipts are merged when the workers have finished, so a snapshot
@@ -32,15 +35,27 @@
 //! own narrowing and leaf decisions summed over the workers, so they may
 //! exceed the wall time of the walk.
 //!
-//! Local stack pops do not acquire the pool lock. One atomic closed flag
-//! controls both local and shared takes; every transition to closed holds
-//! the pool lock, which also protects idle registration and exhaustion.
-//! A worker with local, active or transferring regions is never idle.
+//! Each deque has its own mutex: local removal and split publication lock only
+//! that deque, and a thief skips a busy peer. Narrowing, payload cloning, reduct
+//! checks and model sends hold no queue lock. Slot growth is fallible and occurs
+//! before either child is published. An atomic counter of unresolved regions
+//! carries termination — a split raises it before pushing the children, a
+//! resolved region lowers it once, and an unsuccessful thief stops only once
+//! that counter has reached zero. An atomic closed flag, set on the first stop
+//! or when the enumeration stops listening, halts the others at their next region.
+//!
+//! A local depth-first walk keeps at most one older sibling per ancestor and
+//! the two newest children. Each split decides another atom, and a worker steals
+//! only with an empty deque, so each deque holds at most `atom_count + 1` entries.
+//! Storage grows with the observed depth rather than reserving that bound for
+//! every worker. Capacity and payloads are released after joining. Fallible slot
+//! growth does not make region or knowledge cloning fallible.
 
+use std::collections::VecDeque;
 use std::num::NonZeroUsize;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
-use std::sync::{Arc, Condvar, Mutex, PoisonError, RwLock};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError, RwLock, TryLockError};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
@@ -55,18 +70,15 @@ use crate::search::{Budget, SharedBudget, WorkLease};
 use crate::{Cancellation, Incomplete, Limits, SearchPhaseTimings, SearchStatistics, Statistics};
 
 /// A waiting worker rechecks cooperative control at least once per timed wait.
-const POOL_WAIT: Duration = Duration::from_millis(1);
+const IDLE_WAIT: Duration = Duration::from_millis(1);
 /// Models a worker may have sent and the enumeration not yet taken, per worker.
 const CHANNEL_SLACK: usize = 16;
+/// Idle steal rounds a worker spins (yielding) before it parks on a timed wait:
+/// the busy-wait/park backoff crossover, distinct from `CHANNEL_SLACK`.
+const SPIN_ROUNDS_BEFORE_PARK: u32 = 16;
 
-/// The regions still to visit, and how many workers wait for one.
-struct Pool {
-    pending: Vec<(Region, Vec<Knowledge>)>,
-    idle: usize,
-    /// The first stop a worker raised; read by the enumeration once the
-    /// workers have finished, after their models.
-    stopped: Option<Incomplete>,
-}
+/// A region with its per-narrower knowledge, the unit workers steal.
+type Entry = (Region, Vec<Knowledge>);
 
 struct Shared {
     producers: Option<Producers>,
@@ -74,11 +86,21 @@ struct Shared {
     certificate: Option<Arc<Certification>>,
     filter: Option<crate::region_filter::Filter>,
     restrictions: RwLock<Vec<Arc<(Theory, Narrower)>>>,
-    pool: Mutex<Pool>,
-    /// Every worker was idle with nothing pending, or a stop was raised.
-    /// Set only while holding the pool lock; local takes can read it alone.
+    /// Owner pops newest, thieves take oldest. Only one deque is locked at a
+    /// time; all entry preparation and evaluation happens outside these locks.
+    queues: Vec<Mutex<VecDeque<Entry>>>,
+    /// Created-but-unresolved regions across every worker's deque and hand: a
+    /// split adds one (before pushing its children), a refuted or decided
+    /// region subtracts one. It starts at one for the root and reaches zero
+    /// exactly when the whole frontier is resolved; a read of zero is a true
+    /// zero, so a worker that finds every deque empty and reads zero is done.
+    outstanding: AtomicUsize,
+    /// A stop was raised (error or cancellation); workers check it before each
+    /// region and while idle, and exit. Normal termination is `outstanding`.
     closed: AtomicBool,
-    pool_changed: Condvar,
+    /// The first stop a worker raised; written only on the cold error path,
+    /// read by the enumeration once the workers have finished, after their models.
+    stopped: Mutex<Option<Incomplete>>,
     budget: SharedBudget,
     limits: Limits,
     cancellation: Cancellation,
@@ -203,22 +225,54 @@ fn phases(timings: &SearchPhaseTimings) -> impl Iterator<Item = &PhaseMeasuremen
 }
 
 impl Shared {
-    fn lock(&self) -> std::sync::MutexGuard<'_, Pool> {
-        self.pool.lock().unwrap_or_else(PoisonError::into_inner)
+    fn queue(&self, index: usize) -> MutexGuard<'_, VecDeque<Entry>> {
+        self.queues[index]
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
     }
 
+    fn take_local(&self, index: usize) -> Option<Entry> {
+        self.queue(index).pop_back()
+    }
+
+    /// Prepare space for both children before the count or either queue entry
+    /// changes. The injected reservation is the sole fallible storage effect;
+    /// success must reserve `additional` slots, as `reserve_regions` does.
+    fn publish_split(
+        &self,
+        index: usize,
+        held: Entry,
+        cut: Entry,
+        reserve: impl FnOnce(&mut VecDeque<Entry>, usize) -> Result<(), Incomplete>,
+    ) -> Result<(), Incomplete> {
+        let mut queue = self.queue(index);
+        reserve(&mut queue, 2)?;
+        // The parent is still outstanding. Count its net gain before making
+        // either child visible; the reserved pushes cannot allocate.
+        self.outstanding.fetch_add(1, Ordering::AcqRel);
+        queue.push_back(held);
+        queue.push_back(cut);
+        Ok(())
+    }
+
+    /// Close for a normal end of work (no error): workers exit when they next
+    /// check, without recording a stop.
     fn close(&self) {
-        let _pool = self.lock();
         self.closed.store(true, Ordering::Release);
-        self.pool_changed.notify_all();
     }
 
-    /// Raise a stop: the pool closes, and the first stop is the one reported.
+    /// Raise a stop: work closes, and the first stop is the one reported.
     fn stop(&self, error: Incomplete) {
-        let mut pool = self.lock();
-        pool.stopped.get_or_insert(error);
+        self.stopped
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get_or_insert(error);
         self.closed.store(true, Ordering::Release);
-        self.pool_changed.notify_all();
+    }
+
+    /// The first stop raised, if any.
+    fn stopped(&self) -> Option<Incomplete> {
+        *self.stopped.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
 
@@ -268,12 +322,18 @@ impl ParallelRegions {
             statistics,
         } = super::regions::open(theory, budget)?;
         let (sender, receiver) = sync_channel(workers.get() * CHANNEL_SLACK);
-        let mut pending = Vec::new();
-        pending.try_reserve(1).map_err(|_| Incomplete::Allocation)?;
-        pending.push((
+        let root = (
             Region::all_open(theory.atom_count()),
             vec![index.narrower().knowledge()],
-        ));
+        );
+        let mut queues = crate::search::storage(workers.get())?;
+        let mut first = VecDeque::new();
+        reserve_regions(&mut first, 1)?;
+        first.push_back(root);
+        queues.push(Mutex::new(first));
+        for _ in 1..workers.get() {
+            queues.push(Mutex::new(VecDeque::new()));
+        }
         Ok(Self {
             shared: Arc::new(Shared {
                 producers,
@@ -281,13 +341,11 @@ impl ParallelRegions {
                 certificate: None,
                 filter: None,
                 restrictions: RwLock::new(Vec::new()),
-                pool: Mutex::new(Pool {
-                    pending,
-                    idle: 0,
-                    stopped: None,
-                }),
+                queues,
+                // The root is the one outstanding region until it is split.
+                outstanding: AtomicUsize::new(1),
                 closed: AtomicBool::new(false),
-                pool_changed: Condvar::new(),
+                stopped: Mutex::new(None),
                 budget: SharedBudget::new(limits.search, budget.statistics),
                 limits,
                 cancellation,
@@ -336,7 +394,7 @@ impl ParallelRegions {
         drop(self.receiver.take());
         drop(self.sender.take());
         let joined = self.join();
-        self.shared.lock().stopped.map_or(joined, Err)
+        self.shared.stopped().map_or(joined, Err)
     }
 
     pub(crate) fn index(&self) -> &Arc<IndexedTheory> {
@@ -427,7 +485,10 @@ impl ParallelRegions {
         }
         if !self.started {
             self.synchronize_budget(budget.statistics)?;
-            self.start(certificate, timed)?;
+            if let Err(error) = self.start(certificate, timed) {
+                self.account(budget);
+                return Err(error);
+            }
         }
         loop {
             budget.cancellation.poll()?;
@@ -435,7 +496,7 @@ impl ParallelRegions {
                 .receiver
                 .as_ref()
                 .ok_or(Incomplete::ClosedEnumerator)?
-                .recv_timeout(POOL_WAIT)
+                .recv_timeout(IDLE_WAIT)
             {
                 Ok(model) => {
                     self.account(budget);
@@ -448,10 +509,20 @@ impl ParallelRegions {
                     // model the workers verified.
                     let joined = self.join();
                     self.account(budget);
-                    if let Some(error) = self.shared.lock().stopped {
+                    if let Some(error) = self.shared.stopped() {
                         return Err(error);
                     }
                     joined?;
+                    // Clean completion with no stop: every region created was
+                    // resolved, so the frontier counter is exactly zero. This
+                    // guards the accounting-regression class (a missing or
+                    // doubled decrement, or a total premature exit that abandons
+                    // regions) that the exact-family check cannot see.
+                    debug_assert_eq!(
+                        self.shared.outstanding.load(Ordering::Acquire),
+                        0,
+                        "clean completion left regions outstanding"
+                    );
                     self.exhausted = true;
                     return Ok(None);
                 }
@@ -473,26 +544,55 @@ impl ParallelRegions {
         certificate: Option<&Arc<Certification>>,
         timed: bool,
     ) -> Result<(), Incomplete> {
+        self.start_with(certificate, timed, |shared, index, sender| {
+            std::thread::Builder::new()
+                .name("zetesis-region".into())
+                .spawn(move || contain_worker(&shared, || worker(&shared, index, &sender)))
+        })
+    }
+
+    /// Thread creation is an execution boundary: a refused launch closes and
+    /// joins the already launched subset before the incomplete result escapes.
+    fn start_with(
+        &mut self,
+        certificate: Option<&Arc<Certification>>,
+        timed: bool,
+        spawn: impl FnMut(
+            Arc<Shared>,
+            usize,
+            SyncSender<Interpretation>,
+        ) -> std::io::Result<JoinHandle<Option<WorkerReport>>>,
+    ) -> Result<(), Incomplete> {
         // The certificate is shared read-only; the Arc is cloned into the
         // shared structure before any worker starts.
         let shared = Arc::get_mut(&mut self.shared).ok_or(Incomplete::InvalidWitness)?;
         shared.certificate = certificate.map(Arc::clone);
         shared.timed = timed;
-        let sender = self.sender.take().ok_or(Incomplete::ClosedEnumerator)?;
+        if let Err(error) = self.launch(spawn) {
+            self.shared.stop(error);
+            return self.stop().and(Err(error));
+        }
+        self.started = true;
+        Ok(())
+    }
+
+    fn launch(
+        &mut self,
+        mut spawn: impl FnMut(
+            Arc<Shared>,
+            usize,
+            SyncSender<Interpretation>,
+        ) -> std::io::Result<JoinHandle<Option<WorkerReport>>>,
+    ) -> Result<(), Incomplete> {
         self.handles
             .try_reserve(self.shared.workers)
             .map_err(|_| Incomplete::Allocation)?;
-        for _ in 0..self.shared.workers {
-            let shared = Arc::clone(&self.shared);
-            let sender = sender.clone();
-            let handle = std::thread::Builder::new()
-                .name("zetesis-region".into())
-                .spawn(move || contain_worker(&shared, || worker(&shared, &sender)))
+        let sender = self.sender.take().ok_or(Incomplete::ClosedEnumerator)?;
+        for index in 0..self.shared.workers {
+            let handle = spawn(Arc::clone(&self.shared), index, sender.clone())
                 .map_err(|_| Incomplete::Allocation)?;
             self.handles.push(handle);
         }
-        drop(sender);
-        self.started = true;
         Ok(())
     }
 
@@ -514,6 +614,12 @@ impl ParallelRegions {
                 failure.get_or_insert(error);
             }
         }
+        // No worker can still own or publish work. Release abandoned payloads
+        // and high-water slot capacity even if the caller keeps the enumerator.
+        for index in 0..self.shared.workers {
+            let pending = std::mem::take(&mut *self.shared.queue(index));
+            drop(pending);
+        }
         failure.map_or(Ok(()), Err)
     }
 
@@ -527,8 +633,15 @@ impl ParallelRegions {
     }
 }
 
+/// Slot reservation preserves the prior queue and returns a typed refusal.
+fn reserve_regions(queue: &mut VecDeque<Entry>, additional: usize) -> Result<(), Incomplete> {
+    queue
+        .try_reserve(additional)
+        .map_err(|_| Incomplete::Allocation)
+}
+
 /// An unwinding worker cannot account for the frontier it held. Close the
-/// pool immediately, waking idle peers, and preserve an incomplete outcome.
+/// run immediately, waking idle peers, and preserve an incomplete outcome.
 fn contain_worker(shared: &Shared, run: impl FnOnce() -> WorkerReport) -> Option<WorkerReport> {
     if let Ok(report) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(run)) {
         Some(report)
@@ -574,9 +687,9 @@ fn merge_membership(into: &mut Statistics, from: &Statistics) -> Result<(), Inco
     into.reduct.regions.add(from.reduct.regions)
 }
 
-/// One worker's walk, until the pool closes, a stop is raised, or the
+/// One worker's walk, until the run closes, a stop is raised, or the
 /// enumeration stops listening.
-fn worker(shared: &Shared, sender: &SyncSender<Interpretation>) -> WorkerReport {
+fn worker(shared: &Shared, index: usize, sender: &SyncSender<Interpretation>) -> WorkerReport {
     let mut report = WorkerReport {
         regions: RegionCounts::default(),
         statistics: Statistics {
@@ -593,8 +706,18 @@ fn worker(shared: &Shared, sender: &SyncSender<Interpretation>) -> WorkerReport 
     let mut reported = SearchPhaseTimings::default();
     let mut search = SearchStatistics::default();
     let mut membership = crate::prepared_reduct::State::with_index(Arc::clone(&shared.index));
-    let mut local: Vec<(Region, Vec<Knowledge>)> = Vec::new();
-    while let Some((region, knowledge)) = take(shared, &mut local) {
+    loop {
+        // Honour a stop before taking any region, so a worker with a deep deque
+        // does not run its whole subtree on after a stop was raised.
+        if shared.closed.load(Ordering::Acquire) {
+            break;
+        }
+        let Some(entry) = shared
+            .take_local(index)
+            .or_else(|| find_work(shared, index))
+        else {
+            break;
+        };
         // A region owns its grant. Settle it before waiting for another
         // region or sending a model, so other workers can use unused permits.
         let stepped = {
@@ -606,8 +729,8 @@ fn worker(shared: &Shared, sender: &SyncSender<Interpretation>) -> WorkerReport 
             };
             let result = step(
                 shared,
-                (region, knowledge),
-                &mut local,
+                entry,
+                index,
                 &mut budget,
                 &mut membership,
                 &mut report,
@@ -621,12 +744,20 @@ fn worker(shared: &Shared, sender: &SyncSender<Interpretation>) -> WorkerReport 
             reported = measured;
         }
         match stepped {
-            Ok(Some(model)) => {
-                if sender.send(model).is_err() {
+            // A split's children are on this worker's deque; `outstanding` was
+            // already incremented before they were pushed.
+            Ok(Stepped::Split) => {}
+            // A resolved region leaves the frontier: decrement once, here, so
+            // the count has exactly one structural decrement point.
+            Ok(Stepped::Resolved(model)) => {
+                shared.outstanding.fetch_sub(1, Ordering::AcqRel);
+                if let Some(model) = model
+                    && sender.send(model).is_err()
+                {
+                    shared.close();
                     break;
                 }
             }
-            Ok(None) => {}
             Err(error) => {
                 shared.stop(error);
                 break;
@@ -636,71 +767,66 @@ fn worker(shared: &Shared, sender: &SyncSender<Interpretation>) -> WorkerReport 
     report
 }
 
-/// A region from the worker's own stack, else from the pool, waiting while
-/// another worker may still offer one; `None` once the pool is closed.
-fn take(
-    shared: &Shared,
-    local: &mut Vec<(Region, Vec<Knowledge>)>,
-) -> Option<(Region, Vec<Knowledge>)> {
-    // This read admits the local take. A concurrent close may follow it,
-    // just as it could follow the former pool-lock release. Subsequent
-    // charges still poll control and the shared allowance; completed
-    // admitted leaves keep the same publication boundary.
-    if shared.closed.load(Ordering::Acquire) {
-        return None;
-    }
-    if let Some(entry) = local.pop() {
-        return Some(entry);
-    }
-    // Only an empty local stack can register as idle. Active work and
-    // child transfers stay owned by a non-idle worker, so the last idle
-    // worker can close only when the entire unfinished frontier is empty.
-    let mut pool = shared.lock();
+/// Steal a region from another worker, waiting while any remains. `None` when
+/// the whole frontier is resolved (`outstanding == 0`) or a stop closed the run.
+fn find_work(shared: &Shared, index: usize) -> Option<Entry> {
+    let mut idle_rounds = 0u32;
     loop {
         if shared.closed.load(Ordering::Acquire) {
             return None;
         }
-        if let Some(entry) = pool.pending.pop() {
-            return Some(entry);
+        // Try peers in round-robin order, skipping a busy queue so one owner's
+        // growth cannot block stealing from other workers. No two locks overlap.
+        for offset in 1..shared.workers {
+            let mut queue = match shared.queues[(index + offset) % shared.workers].try_lock() {
+                Ok(queue) => queue,
+                Err(TryLockError::Poisoned(error)) => error.into_inner(),
+                Err(TryLockError::WouldBlock) => continue,
+            };
+            if let Some(entry) = queue.pop_front() {
+                return Some(entry);
+            }
         }
-        pool.idle += 1;
-        if pool.idle == shared.workers {
-            // This worker leaves without entering the wait. Every actual
-            // waiter removes its own registration after reacquiring the lock.
-            pool.idle -= 1;
-            shared.closed.store(true, Ordering::Release);
-            shared.pool_changed.notify_all();
+        // No steal succeeded. Even with busy queues, zero means every created
+        // region was resolved; a split counts its children before publishing.
+        if shared.outstanding.load(Ordering::Acquire) == 0 {
             return None;
         }
-        let (guard, _) = shared
-            .pool_changed
-            .wait_timeout(pool, POOL_WAIT)
-            .unwrap_or_else(PoisonError::into_inner);
-        pool = guard;
-        pool.idle -= 1;
-        if let Err(error) = shared.cancellation.poll() {
-            // The coordinator may already be waiting for a model after its
-            // own control poll. Preserve this stop before the last sender
-            // disconnects, so an unfinished frontier cannot look exhausted.
-            pool.stopped.get_or_insert(error.into());
-            shared.closed.store(true, Ordering::Release);
-            shared.pool_changed.notify_all();
-            return None;
+        // Busy queues and empty queues share the backoff, so lock contention
+        // cannot postpone cooperative control checks indefinitely.
+        idle_rounds += 1;
+        if idle_rounds < SPIN_ROUNDS_BEFORE_PARK {
+            std::thread::yield_now();
+        } else {
+            std::thread::park_timeout(IDLE_WAIT);
+            if let Err(error) = shared.cancellation.poll() {
+                shared.stop(error.into());
+                return None;
+            }
+            idle_rounds = 0;
         }
     }
 }
 
+/// What one `step` did to its region: split it into two children (now on the
+/// worker's deque), or resolved it — refuted, or a leaf with an optional
+/// verified model. The caller decrements `outstanding` once, on `Resolved`.
+enum Stepped {
+    Split,
+    Resolved(Option<Interpretation>),
+}
+
 /// Narrow one region and act on it: refuted, split, or a leaf decided by
-/// the reduct. Returns a verified stable model when the leaf is one.
+/// the reduct. A split publishes both children onto this worker's deque.
 fn step<'a>(
     shared: &'a Shared,
-    (mut region, mut knowledge): (Region, Vec<Knowledge>),
-    local: &mut Vec<(Region, Vec<Knowledge>)>,
+    (mut region, mut knowledge): Entry,
+    index: usize,
     budget: &mut Budget<'a, WorkLease<'a>>,
     membership: &mut crate::prepared_reduct::State,
     report: &mut WorkerReport,
     filter: &mut Option<crate::region_filter::Worker<'a>>,
-) -> Result<Option<Interpretation>, Incomplete> {
+) -> Result<Stepped, Incomplete> {
     // The restrictions current when the region is taken, held for its
     // narrowing without the lock.
     let restrictions: Vec<Arc<(Theory, Narrower)>> = shared
@@ -753,38 +879,20 @@ fn step<'a>(
     if narrowing == Narrowing::Refuted {
         report.regions.refuted += 1;
         Live::add(&shared.live.refuted, 1);
-        return Ok(None);
+        return Ok(Stepped::Resolved(None));
     }
     let Some(atom) = region.split_atom() else {
         report.regions.leaves += 1;
         Live::add(&shared.live.leaves, 1);
-        return leaf(shared, &region, budget, membership, report);
+        return leaf(shared, &region, budget, membership, report).map(Stepped::Resolved);
     };
     budget.decide()?;
+    // Each child carries its own copy of the knowledge, linear in the theory:
+    // what the parent learned holds in both.
     let (cut, held) = region.split(atom);
-    // Keep the cut branch for this worker and offer the held one to the
-    // pool when the pool is short, else keep both. Each child takes its
-    // own copy of the knowledge, linear in the theory: what the parent
-    // learned holds in both. Prepare the owned child before locking, so
-    // the theory-linear clone cannot hold up other workers' pool access.
-    // Destination growth can still refuse after this preparation.
     let held = (held, knowledge.clone());
-    let mut pool = shared.lock();
-    if pool.pending.len() < shared.workers {
-        pool.pending
-            .try_reserve(1)
-            .map_err(|_| Incomplete::Allocation)?;
-        pool.pending.push(held);
-        shared.pool_changed.notify_one();
-        drop(pool);
-    } else {
-        drop(pool);
-        local.try_reserve(1).map_err(|_| Incomplete::Allocation)?;
-        local.push(held);
-    }
-    local.try_reserve(1).map_err(|_| Incomplete::Allocation)?;
-    local.push((cut, knowledge));
-    Ok(None)
+    shared.publish_split(index, held, (cut, knowledge), reserve_regions)?;
+    Ok(Stepped::Split)
 }
 
 /// Decide a leaf as the scalar proposer does.

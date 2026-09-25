@@ -380,6 +380,49 @@ fn exit(code: i32) -> process::Exit {
 fn failed(kind: &str) -> Value {
     json!({"schema":2,"format":"zetesis","models":[],"statistics":null,"outcome":{"status":"failed","completion":null,"coverage":"unavailable","published_models":0,"verified_models":null,"checked":null,"interruption":null,"optimization":null,"error":{"kind":kind,"secondary_output_failure":false}}})
 }
+
+#[test]
+fn legacy_refusal_envelopes_keep_their_existing_diagnostic() {
+    let (decision, detail) =
+        outcome::check(&failed("bundle_admission"), Some(exit(2))).unwrap_err();
+    assert_eq!(decision, Decision::Refused);
+    assert_eq!(
+        detail,
+        "native reported failure kind=bundle_admission; full envelope retained"
+    );
+}
+
+#[test]
+fn typed_failure_detail_is_preserved_without_changing_classification() {
+    for (kind, expected) in [
+        ("bundle_admission", Decision::Refused),
+        ("gpu", Decision::InvocationFailure),
+    ] {
+        let mut value = failed(kind);
+        value["outcome"]["error"]["detail"] =
+            json!("formula expansion work ceiling exceeded: limit 0");
+        let (decision, detail) = outcome::check(&value, Some(exit(2))).unwrap_err();
+        assert_eq!(decision, expected);
+        assert_eq!(
+            detail,
+            format!(
+                "native reported failure kind={kind}: formula expansion work ceiling exceeded: limit 0; full envelope retained"
+            )
+        );
+    }
+}
+
+#[test]
+fn supplied_nonstring_failure_detail_invalidates_the_envelope() {
+    for detail in [Value::Null, json!(17), json!(false), json!([]), json!({})] {
+        let mut value = failed("bundle_admission");
+        value["outcome"]["error"]["detail"] = detail;
+        assert_eq!(
+            outcome::check(&value, Some(exit(2))).unwrap_err().0,
+            Decision::InvalidReport
+        );
+    }
+}
 fn interrupted() -> Value {
     json!({"schema":2,"format":"zetesis","models":[],"statistics":null,"outcome":{"status":"incomplete","completion":"interrupted","coverage":"partial","published_models":0,"verified_models":0,"checked":1,"interruption":{"kind":"oracle","code":"work_limit","detail":"WorkLimit"},"optimization":null,"error":null}})
 }

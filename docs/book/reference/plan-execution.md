@@ -213,7 +213,7 @@ chosen executable, `CLINGO` the reference and `REPORT` a new output path, the
 matched CPU-eager leg is:
 
 ```sh
-zetesis-perf examples/kr-domains --suite baseline --profile cpu-eager \
+zetesis-perf examples/correctness --suite baseline --profile cpu-eager \
   --workers 4 --completion-workers 4 --clingo-workers 1 --batch-size 64 \
   --warmups 1 --repetitions 3 --memory-runs 1 \
   --timeout-seconds 10 --campaign-seconds 90 \

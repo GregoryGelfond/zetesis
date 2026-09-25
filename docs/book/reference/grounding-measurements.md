@@ -16,6 +16,11 @@ For a short introduction or a new measurement, start with
 Reducing stored data or operation counts does not by itself establish a faster
 solve. The tables below keep those measurements separate.
 
+Retained provenance records preserve the paths used at measurement time. Their
+`examples/kr-domains` paths refer to the corpus now stored in
+[`examples/correctness`](../../../examples/correctness/README.md); moving the
+fixtures does not rewrite the original evidence or its hashes.
+
 ## Prepared-grounding CPU comparison
 
 Three compiled sources were measured on arm64 macOS on 14 September 2026.
@@ -585,10 +590,10 @@ oracle selection, with one requested closure worker and one completion worker.
 | Corpus manifest | `b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958` |
 
 All six queens encodings use N=8 unless stated otherwise. SEND uses the
-[standalone encoding](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/standalone/send-money/send-money.lp),
-task allocation uses [variant04/scenario05](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/scenarios/task-allocation/variant-04/05-larger-mix.lp),
-and shortest path uses [variant01/scenario06](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/scenarios/shortest-path/variant-01/06-layered-dag.lp).
-Their [manifest](https://github.com/GregoryGelfond/zetesis/blob/main/examples/kr-domains/manifest.json) records companion
+[standalone encoding](https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/standalone/send-money/send-money.lp),
+task allocation uses [variant04/scenario05](https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/task-allocation/variant-04/05-larger-mix.lp),
+and shortest path uses [variant01/scenario06](https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-01/06-layered-dag.lp).
+Their [manifest](https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/manifest.json) records companion
 sources and their hashes. Unoptimized programs enumerate all answers; optimized
 programs publish every optimum tie. This is neither time to the first answer
 nor a comparison of unpublished nonoptimal interpretations.
@@ -1109,7 +1114,7 @@ ordinary() {
     comparison_label=$1
     comparison_solver=$2
     comparison_joins=$3
-    set -- "$perf_command" examples/kr-domains \
+    set -- "$perf_command" examples/correctness \
         --zetesis "$comparison_solver" --clingo "$clingo_command" \
         --report "$results_dir/$comparison_label.json"
     if [ "$comparison_joins" != default ]; then
@@ -1174,7 +1179,7 @@ metal_matrix() {
     comparison_suite=$2
     comparison_solver=$3
     comparison_joins=$4
-    set -- "$perf_command" examples/kr-domains \
+    set -- "$perf_command" examples/correctness \
         --suite "$comparison_suite" \
         --zetesis "$comparison_solver" --clingo "$clingo_command" \
         --report "$results_dir/$comparison_label.json" \
@@ -1224,7 +1229,7 @@ For the detailed N=8 profile, run each original source separately:
 
 ```sh
 "$bench_command" grounding \
-  examples/kr-domains/standalone/n-queens/variant-01.lp \
+  examples/correctness/standalone/n-queens/variant-01.lp \
   --joins table --repetitions 1 > "$results_dir/grounding-q01.json"
 ```
 

@@ -282,7 +282,10 @@ fn limit_diagnostics_report_required_counts() {
         },
     )
     .unwrap_err();
-    assert_eq!(error.to_string(), "formula Atoms limit 1; required 2");
+    assert_eq!(
+        error.to_string(),
+        "formula Atoms limit 1 exceeded (needed at least 2); raise the applicable resource limit or simplify the program"
+    );
 }
 
 #[test]

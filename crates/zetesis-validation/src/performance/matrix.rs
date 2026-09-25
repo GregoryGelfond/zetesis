@@ -11,6 +11,9 @@
 //! First-observed refusals and failures disable only their cell's later launches;
 //! every fixed schedule position remains recorded. No failed sample is replaced.
 //! Callers arrange a qualified executable and quiet physical-device window.
+//! The top-level manifest is the pinned catalog context for corpus selections.
+//! Generated and authored workloads authenticate their own inputs in per-workload
+//! provenance; the catalog does not claim to contain or qualify those sources.
 
 mod config;
 mod invocation;
@@ -31,7 +34,7 @@ pub use record::{
     Procedure, RegionChecks, Sample,
 };
 pub(crate) use workload::workload_label;
-pub use workload::{ConstantAmendment, Workload, WorkloadLimits};
+pub use workload::{AuthoredProgram, ConstantAmendment, Workload, WorkloadLimits};
 
 use super::{Capture, Error, Fault};
 use crate::selected::{Change, FileSeal, publication};
@@ -43,6 +46,7 @@ pub struct Report {
     schema: u32,
     protocol: &'static str,
     manifest_sha256: &'static str,
+    manifest_scope: &'static str,
     plan: Plan,
     limits: super::Limits,
     native_normalization_limits: serde_json::Value,

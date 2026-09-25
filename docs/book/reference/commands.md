@@ -19,7 +19,7 @@ Bare `zetesis` displays concise help. Each task has its own options:
 | Command | Purpose |
 | --- | --- |
 | `solve` | Find answer sets or optimize a program. |
-| `test` | Check a corpus or an execution backend. |
+| `test` | Check a corpus, scalability workloads or an execution backend. |
 | `bench` | Measure corpus or primitive performance, or compare saved reports. |
 | `devices` | List available execution devices and their capabilities. |
 | `help` | Explain a command, including nested tasks. |
@@ -172,19 +172,22 @@ These statuses are distinct from clingo's exit codes.
 
 `test` checks a declared contract. Its elapsed times are diagnostic observations,
 not a benchmark. Human tables are the default; `--json` emits one structured
-report on stdout, and optional `--report NEW.json` retains that report in a new
-file. Existing report files are refused. Diagnostics go to stderr.
+report on stdout. Corpus and backend checks optionally retain that report with
+`--report NEW.json`; scalability checks require this destination for their full
+sealed evidence and present a compact view on stdout. Existing report files are
+refused. Diagnostics go to stderr.
 
 ```sh
 zetesis test corpus --repo . --clingo clingo
 zetesis test corpus --repo . --json --report corpus-check.json
 zetesis test backend --device cpu --json
 zetesis test backend --device metal --stats --report metal-check.json
+zetesis test scalability --threads 1,2,4,8,14 --report scalability-check.json
 ```
 
 `test corpus` checks all 94 entries in the repository's pinned clean corpus
 against external clingo. `--repo` defaults to the current directory; it must
-contain `examples/kr-domains` and the maintained manifest. Inputs are verified
+contain `examples/correctness` and the maintained manifest. Inputs are verified
 locally and are never downloaded. The comparison preserves selected displays,
 model multiplicities, optimum ties and costs. It does not recover hidden clingo
 interpretations from a projected display. Clingo remains an external reference,
@@ -198,11 +201,33 @@ and work evidence is mandatory; a requested device name alone cannot pass a
 check. This small installed check is distinct from the repository's maintained
 59-test physical qualification suite.
 
-Both commands currently accept `--device cpu` (the default) or `--device metal`.
+Corpus and backend checks accept `--device cpu` (the default) or `--device metal`.
 Metal corpus checks request the eager general formula route. This is the scope
 of these check decoders, not a restriction of `solve`, whose explicit wgpu
 backend choices are listed in solve help. An unavailable device remains a
 nonpass; it does not trigger CPU fallback.
+
+`test scalability` uses the same nine workloads as `bench corpus --suite
+scalability`: authored queens at n=8/9/10, authored pigeonhole at h=5/6/7,
+unchanged queens variant 02, SEND+MORE=MONEY and task allocation. It checks one
+complete clingo family and one native family per requested thread count, with
+no warmup, timed or RSS rounds. Native profiles request CPU eager grounding,
+indexed formula joins, region search and one exact completion worker. Thread
+counts default to `1,2,4,8,14`; one through eight profiles, each at most 256
+threads, are admitted. The positional corpus root defaults to
+`examples/correctness`, and `--examples` defaults to `examples`. Both must come
+from the maintained checkout. `--include-einstein` adds the unchanged Einstein
+riddle; `--max-expansion-work` supplies an explicit native grounding ceiling.
+All workload contracts, original/derived source digests, executable identities,
+observations and failed or unlaunched positions remain in `--report NEW.json`.
+Amended inputs use the complete reference family rather than the original
+default-size model count. A refusal or timeout remains a nonpass.
+
+The scalability workflow requires Linux or macOS for bounded child capture.
+Its overall scheduling deadline defaults to 1,800 seconds, adjustable with
+`--campaign-seconds`; cumulative captures and serialized evidence are separately
+bounded by `--total-capture-bytes` and `--report-bytes`. It never raises a native
+work ceiling or replaces an incomplete case to finish the population.
 
 `test backend` currently requires Linux or macOS for bounded child-process
 capture. On other platforms it reports the unavailable capture capability as a
@@ -224,9 +249,9 @@ cooperative cleanup path. Primitive benchmarks do not currently consume this
 campaign cancellation flag.
 
 `--stats` follows the test kind, for example `test backend --stats`.
-It adds optional elapsed-time details and is off by default. Backend checks
-always capture the internal statistics required to verify actual execution;
-Metal corpus checks also require route telemetry. Turning off the optional
+It adds optional elapsed-time details and is off by default. Backend and
+scalability checks always capture the internal statistics required to verify
+actual execution; Metal corpus checks also require route telemetry. Turning off the optional
 view never removes evidence needed to pass a check.
 
 ## Measure a corpus
@@ -239,19 +264,22 @@ and fresh-child RSS receipts. It refuses an unsupported platform explicitly;
 saved-report comparison does not launch children and has no such requirement.
 
 ```sh
-zetesis bench corpus examples/kr-domains --report cpu-run.json
-zetesis bench corpus examples/kr-domains --suite baseline \
+zetesis bench corpus examples/correctness --report cpu-run.json
+zetesis bench corpus examples/correctness --suite baseline \
   --device metal --grounder eager --report metal-run.json
-zetesis bench corpus examples/kr-domains --threads 2 --json \
+zetesis bench corpus examples/correctness --threads 2 --json \
   --report two-thread-run.json > two-thread-summary.json
 ```
 
-The positional directory defaults to `examples/kr-domains` relative to the
+The positional directory defaults to `examples/correctness` relative to the
 current directory. Supply the directory from a repository checkout when running
 elsewhere; the installed command does not fetch or bundle these inputs.
 `--suite corpus` selects all 94 cases. `baseline` selects SEND, queens variant 02
 and task allocation; `queens` selects the six unchanged encodings; `series`
 selects the maintained 22 generated, constant-amended and original workloads.
+`scalability` selects the nine authored/corpus workloads described above, with
+indexed formula joins and region search. Only this suite accepts `--examples`
+and `--include-einstein`; its authored root defaults to `examples`.
 
 | Setting | Default |
 | --- | --- |
@@ -299,12 +327,23 @@ conflicts with an explicit `--grounder`. Clingo supplies one complete
 qualification census per case; only the two native profiles have warmup,
 timing and RSS rounds. These reports therefore contain no clingo timing or
 memory comparison. Without this option, the existing single-profile campaign
-continues to measure clingo in every phase.
+continues to measure clingo in every phase unless a thread comparison is selected.
+
+`--compare-threads 1,2,4,8,14` compares native profiles differing only in their
+candidate/closure thread count. It conflicts with explicit `--threads` and with
+`--compare-grounders`. It accepts one through eight profiles with each count at
+most 256. Clingo supplies only the qualification census; native profiles retain
+the requested warmup, timing and RSS rounds. `--max-expansion-work` applies the
+same explicit grounding ceiling to every native profile and records it in the
+evidence. This is independent of the process deadline.
 
 ```sh
-zetesis bench corpus examples/kr-domains --suite queens --device cpu \
+zetesis bench corpus examples/correctness --suite queens --device cpu \
   --threads 1 --compare-grounders --repetitions 4 --memory-runs 2 \
   --report grounding-comparison.json
+zetesis bench corpus examples/correctness --suite scalability --examples examples \
+  --grounder eager --compare-threads 1,2,4,8,14 --repetitions 4 --memory-runs 2 \
+  --timeout-seconds 30 --campaign-seconds 1800 --report thread-comparison.json
 ```
 
 All native populations must agree on complete full-model identities as well as
@@ -423,9 +462,17 @@ replacing a file. `--report-bytes` bounds each input document; it defaults to
 | --- | --- |
 | `solve` | One versioned answer/outcome document |
 | `test corpus`, `test backend` | One structured conformance report |
+| `test scalability` | Compact `zetesis_scalability_conformance`, schema 1; full sealed evidence is at required `--report` |
 | `bench corpus` | One compact summary: `zetesis_benchmark_summary`, schema 1; full evidence is at `--report` |
 | `bench compare` | One structured derived comparison |
 | `bench primitives …` | The selected profile's versioned JSON-lines events |
+
+The compact scalability view includes workload/profile identities, source and
+executable seals, each check's decision and explanation, its blocker when any,
+model count/cost, required route observations and process stop/exit/failure
+diagnostics. Full bounded raw captures remain in the required report file.
+`--stats` adds elapsed observations to the view; it does not change retained
+evidence or schedule measurement rounds.
 
 Argument parsing errors precede a typed command: they leave stdout empty and
 write a diagnostic to stderr, including when `--json` was requested. Process

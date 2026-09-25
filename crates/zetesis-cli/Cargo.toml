@@ -21,6 +21,7 @@ zetesis-sat.workspace = true
 zetesis-objective.workspace = true
 zetesis-wgpu = { workspace = true, optional = true }
 clap.workspace = true
+serde = "1"
 serde_json = "=1.0.151"
 
 [target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]

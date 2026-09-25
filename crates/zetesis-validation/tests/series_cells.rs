@@ -11,7 +11,7 @@ use zetesis_validation::{
 
 fn corpus() -> examples::Corpus {
     examples::load(
-        &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/kr-domains"),
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/correctness"),
         examples::Limits::default(),
     )
     .unwrap()

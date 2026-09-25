@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "description": "Parametric scalability examples authored for the zetesis corpus.",
+  "reference_toolchain": "clingo version 5.8.2",
+  "cases": [
+    {
+      "path": "n-queens.lp",
+      "scaling_constant": "n",
+      "default_value": 8,
+      "contract": {
+        "family": "all",
+        "satisfiability": "sat",
+        "model_count": 92,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Answer-set count grows steeply with n: n=12 -> 14200, n=13 -> 73712.",
+          "Exercises region enumeration and grounding as n rises."
+        ]
+      },
+      "source_sha256": "3cf188305c40c443e5aa1c3e7795b30d45849f3d4a7e7cb2cfe88783e0a1947e"
+    },
+    {
+      "path": "pigeonhole.lp",
+      "scaling_constant": "h",
+      "default_value": 7,
+      "contract": {
+        "family": "all",
+        "satisfiability": "unsat",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "h holes, h+1 pigeons: unsatisfiable by construction.",
+          "Measures the work of proving unsatisfiability, not enumeration."
+        ]
+      },
+      "source_sha256": "1953db34682cc2c7e53c809f99a4914d02bee9ca0dba65bf1c84af9cb21b7f66"
+    }
+  ]
+}

@@ -1,7 +1,10 @@
 use super::{Error, ViewOptions};
 use std::io;
 use zetesis_presentation::{Alignment, Column, Layout, Row, Table};
-use zetesis_validation::{backend_check, corpus_comparison};
+use zetesis_validation::{
+    backend_check, corpus_comparison,
+    performance::{Capture, matrix},
+};
 
 pub(super) fn json(value: &serde_json::Value, output: &mut impl io::Write) -> Result<(), Error> {
     serde_json::to_writer_pretty(&mut *output, value).map_err(Error::Json)?;
@@ -158,6 +161,111 @@ pub(super) fn backend_json(
 ) -> Result<(), Error> {
     serde_json::to_writer_pretty(&mut *output, &report.json()).map_err(Error::Json)?;
     writeln!(output).map_err(Error::Io)
+}
+
+pub(super) fn scalability(
+    report: &matrix::Report,
+    options: &ViewOptions,
+    layout: Layout,
+    output: &mut impl io::Write,
+) -> Result<(), Error> {
+    if options.json {
+        let checks = report
+            .samples()
+            .iter()
+            .map(|sample| scalability_check(sample, options.stats))
+            .collect::<Vec<_>>();
+        return json(
+            &serde_json::json!({
+                "schema": 1,
+                "format": "zetesis_scalability_conformance",
+                "passed": report.passed(),
+                "accounted": report.accounted(),
+                "workloads": report.workloads(),
+                "profiles": report.plan().profiles(),
+                "before": report.before(),
+                "after": report.after(),
+                "faults": report.faults(),
+                "unresolved_children": report.unresolved_children(),
+                "checks": checks,
+                "report": options.report,
+            }),
+            output,
+        );
+    }
+    let mut columns = vec!["Workload", "Producer", "Outcome", "Detail"];
+    if options.stats {
+        columns.push("Captured ms");
+    }
+    let rows = report
+        .samples()
+        .iter()
+        .map(|sample| {
+            let slot = sample.slot();
+            let label = report.workloads().map_or_else(
+                || report.cases()[slot.case].clone(),
+                |workloads| workloads[slot.case].label(),
+            );
+            let producer = match slot.producer {
+                matrix::Producer::Reference => "clingo".into(),
+                matrix::Producer::Native { profile } => format!(
+                    "zetesis / {} threads",
+                    report.plan().profiles()[profile].workers
+                ),
+            };
+            let mut cells = vec![
+                label,
+                producer,
+                format!("{:?}", sample.decision()),
+                sample.detail().unwrap_or("").to_owned(),
+            ];
+            if options.stats {
+                cells.push(elapsed(
+                    sample
+                        .capture()
+                        .and_then(Capture::elapsed_ns)
+                        .map(|ns| ns / 1_000_000),
+                ));
+            }
+            Row::new(cells)
+        })
+        .collect();
+    table(
+        "Scalability conformance — complete families",
+        &columns,
+        rows,
+    )?
+    .write(output, layout)
+    .map_err(Error::Io)?;
+    table(
+        "Qualification outcome — no measurement rounds",
+        &["All passed", "Accounted"],
+        vec![Row::new([report.passed().to_string(), report.accounted().to_string()]).conclusion()],
+    )?
+    .write(output, layout)
+    .map_err(Error::Io)
+}
+
+fn scalability_check(sample: &matrix::Sample, stats: bool) -> serde_json::Value {
+    let mut check = serde_json::json!({
+        "slot": sample.slot(),
+        "decision": sample.decision(),
+        "detail": sample.detail(),
+        "blocked_by": sample.blocked_by(),
+        "selected_models": sample.selected_models(),
+        "cost": sample.cost(),
+        "observation": sample.observation(),
+        "capture": sample.capture().map(|capture| serde_json::json!({
+            "stop": capture.stop(),
+            "exit": capture.exit(),
+            "failure": capture.failure(),
+            "cleanup_failure": capture.cleanup_failure(),
+        })),
+    });
+    if stats {
+        check["elapsed_ns"] = serde_json::json!(sample.capture().and_then(Capture::elapsed_ns));
+    }
+    check
 }
 
 fn elapsed(value: Option<u128>) -> String {

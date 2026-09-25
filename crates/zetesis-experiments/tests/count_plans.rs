@@ -258,12 +258,12 @@ fn source_count_plans_preserve_cartesian_selections() {
 }
 
 const QUEENS: [&str; 6] = [
-    include_str!("../../../examples/kr-domains/standalone/n-queens/variant-01.lp"),
-    include_str!("../../../examples/kr-domains/standalone/n-queens/variant-02.lp"),
-    include_str!("../../../examples/kr-domains/standalone/n-queens/variant-03.lp"),
-    include_str!("../../../examples/kr-domains/standalone/n-queens/variant-04.lp"),
-    include_str!("../../../examples/kr-domains/standalone/n-queens/variant-05.lp"),
-    include_str!("../../../examples/kr-domains/standalone/n-queens/variant-06.lp"),
+    include_str!("../../../examples/correctness/standalone/n-queens/variant-01.lp"),
+    include_str!("../../../examples/correctness/standalone/n-queens/variant-02.lp"),
+    include_str!("../../../examples/correctness/standalone/n-queens/variant-03.lp"),
+    include_str!("../../../examples/correctness/standalone/n-queens/variant-04.lp"),
+    include_str!("../../../examples/correctness/standalone/n-queens/variant-05.lp"),
+    include_str!("../../../examples/correctness/standalone/n-queens/variant-06.lp"),
 ];
 
 #[test]

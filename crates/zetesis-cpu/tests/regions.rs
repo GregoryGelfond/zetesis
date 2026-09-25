@@ -27,16 +27,23 @@ fn held(region: &Region) -> Vec<usize> {
 }
 
 #[test]
-fn region_storage_includes_decision_capacity() {
-    let mut region = Region::all_open(12);
+fn region_retained_bytes_count_both_masks() {
     let empty = Region::all_open(0).retained_bytes();
-    assert!(region.retained_bytes() >= empty + 12 * size_of::<Option<bool>>() as u128);
+    let region = Region::all_open(65); // two words per mask
+    // Two masks (held and cut), two words each, eight bytes a word.
+    assert_eq!(
+        region.retained_bytes(),
+        empty + 2 * 2 * size_of::<u64>() as u128
+    );
+}
+
+#[test]
+fn decisions_preserve_region_retained_bytes() {
+    let mut region = Region::all_open(65);
     let before = region.retained_bytes();
     assert!(region.hold(11));
-    assert!(region.retained_bytes() >= before + size_of::<usize>() as u128);
-    let decided = region.retained_bytes();
-    assert!(region.hold(11));
-    assert_eq!(region.retained_bytes(), decided);
+    assert!(region.cut(64));
+    assert_eq!(region.retained_bytes(), before);
 }
 
 #[test]
@@ -57,15 +64,24 @@ fn a_region_holds_cuts_or_leaves_each_atom_open() {
 }
 
 #[test]
-fn a_region_logs_its_decisions_in_order() {
+fn a_region_reports_its_decisions_with_values_ascending() {
     let mut region = Region::all_open(3);
     assert!(region.hold(2));
     assert!(region.cut(0));
     assert!(region.hold(2), "an idle hold is not a decision");
-    assert_eq!(region.decisions(), [2, 0]);
+    assert_eq!(
+        region.decided().collect::<Vec<_>>(),
+        vec![(0, false), (2, true)]
+    );
     let (cut, held) = region.split(1);
-    assert_eq!(cut.decisions(), [2, 0, 1]);
-    assert_eq!(held.decisions(), [2, 0, 1]);
+    assert_eq!(
+        cut.decided().collect::<Vec<_>>(),
+        vec![(0, false), (1, false), (2, true)]
+    );
+    assert_eq!(
+        held.decided().collect::<Vec<_>>(),
+        vec![(0, false), (1, true), (2, true)]
+    );
 }
 
 #[test]
@@ -77,7 +93,6 @@ fn regions_are_equal_by_their_decisions_whatever_their_order() {
     assert!(other.cut(0));
     assert!(other.hold(2));
     assert_eq!(other, region);
-    assert_ne!(other.decisions(), region.decisions());
 }
 
 #[test]
@@ -86,6 +101,155 @@ fn a_split_partitions_a_region_on_one_atom_cut_first() {
     let (cut, held) = region.split(1);
     assert!(cut.is_cut(1) && cut.is_open(0));
     assert!(held.is_held(1) && held.is_open(0));
+}
+
+#[test]
+#[should_panic(expected = "one of its open atoms")]
+fn splitting_an_already_decided_atom_fails_fast() {
+    // Deciding an already-decided atom would leave a reader's seen-mask out of
+    // step with the region, so it fails fast rather than desynchronising silently.
+    let mut region = Region::all_open(4);
+    assert!(region.hold(2));
+    let _ = region.split(2);
+}
+
+#[test]
+#[should_panic(expected = "one of its open atoms")]
+fn splitting_an_out_of_range_atom_fails_fast() {
+    // Atom 100 is beyond the 65-atom universe but inside the top word; it must
+    // fail fast rather than set a phantom tail bit.
+    let region = Region::all_open(65);
+    let _ = region.split(100);
+}
+
+#[test]
+fn tail_bits_beyond_the_atom_count_are_never_open() {
+    // 65 atoms need two 64-bit words; the high bits of the second word are not
+    // atoms and must never surface as open.
+    let mut region = Region::all_open(65);
+    for atom in 0..65 {
+        assert!(region.hold(atom));
+    }
+    assert_eq!(region.highest_open(), None);
+    assert_eq!(region.split_atom(), None);
+    assert_eq!(region.open().count(), 0);
+    assert_eq!(region.len(), 65);
+}
+
+#[test]
+fn iteration_reports_only_real_atoms_in_a_partial_word() {
+    let mut region = Region::all_open(63); // a single partial word
+    assert!(region.hold(62));
+    assert_eq!(region.held().collect::<Vec<_>>(), vec![62]);
+    assert_eq!(region.open().count(), 62);
+    assert!(region.open().all(|atom| atom < 63));
+    assert_eq!(region.highest_open(), Some(61));
+}
+
+#[test]
+fn decided_since_reports_new_decisions_with_values_ascending() {
+    let mut region = Region::all_open(70); // two words
+    region.hold(3);
+    region.cut(65);
+    let mut seen = vec![0u64; 2];
+    assert_eq!(
+        region.decided_since(&seen).collect::<Vec<_>>(),
+        vec![(3, true), (65, false)]
+    );
+    region.snapshot_decided(&mut seen);
+    // Nothing is new after the snapshot.
+    assert_eq!(region.decided_since(&seen).count(), 0);
+    // A further decision is the only new one.
+    region.hold(10);
+    assert_eq!(
+        region.decided_since(&seen).collect::<Vec<_>>(),
+        vec![(10, true)]
+    );
+}
+
+#[test]
+fn decided_since_with_empty_seen_reports_every_decision() {
+    let mut region = Region::all_open(65);
+    region.cut(64);
+    assert_eq!(
+        region.decided_since(&[]).collect::<Vec<_>>(),
+        vec![(64, false)]
+    );
+}
+
+#[test]
+fn a_short_snapshot_records_only_its_available_words() {
+    let mut region = Region::all_open(130);
+    assert!(region.hold(0));
+    assert!(region.cut(63));
+    assert!(region.hold(64));
+    assert!(region.cut(129));
+    let mut seen = [u64::MAX; 2];
+    region.snapshot_decided(&mut seen);
+    assert_eq!(seen, [1 | (1 << 63), 1]);
+    assert_eq!(
+        region.decided_since(&seen).collect::<Vec<_>>(),
+        vec![(129, false)]
+    );
+}
+
+#[test]
+fn a_snapshot_leaves_excess_destination_words_unchanged() {
+    let mut region = Region::all_open(65);
+    assert!(region.hold(64));
+    let mut seen = [u64::MAX; 3];
+    region.snapshot_decided(&mut seen);
+    assert_eq!(seen, [0, 1, u64::MAX]);
+}
+
+#[test]
+fn an_empty_snapshot_destination_leaves_every_decision_unseen() {
+    let mut region = Region::all_open(65);
+    assert!(region.cut(64));
+    let mut seen = [];
+    region.snapshot_decided(&mut seen);
+    assert_eq!(
+        region.decided_since(&seen).collect::<Vec<_>>(),
+        vec![(64, false)]
+    );
+}
+
+#[test]
+fn decided_since_ignores_nonatom_seen_bits() {
+    let mut region = Region::all_open(65);
+    assert!(region.hold(0));
+    assert!(region.cut(64));
+    // The partial word's tail and a whole excess word cannot hide either atom.
+    let seen = [0, !1, u64::MAX];
+    assert_eq!(
+        region.decided_since(&seen).collect::<Vec<_>>(),
+        vec![(0, true), (64, false)]
+    );
+}
+
+#[test]
+fn a_fully_decided_region_has_no_open_atom_to_split() {
+    let mut region = Region::all_open(3);
+    assert_eq!(region.highest_open(), Some(2));
+    assert!(region.hold(2));
+    assert_eq!(region.highest_open(), Some(1));
+    assert!(region.hold(1));
+    assert!(region.cut(0));
+    assert_eq!(region.highest_open(), None);
+    assert_eq!(region.split_atom(), None);
+}
+
+#[test]
+fn a_split_decides_the_atom_both_ways_and_drops_the_preference() {
+    let mut region = Region::all_open(4);
+    region.prefer(1);
+    assert_eq!(region.split_atom(), Some(1));
+    let (cut, held) = region.split(3);
+    assert!(cut.is_cut(3) && held.is_held(3));
+    // Neither child inherits the parent's preference; each falls back to its
+    // highest open atom.
+    assert_eq!(cut.split_atom(), Some(2));
+    assert_eq!(held.split_atom(), Some(2));
 }
 
 #[test]
@@ -240,15 +404,15 @@ fn a_traversal_from_a_narrowed_root_does_not_narrow_it_again() {
     let mut narrowed = Vec::new();
     while let Some(visit) = traversal
         .next(|region, ()| {
-            narrowed.push(region.decisions().to_vec());
+            narrowed.push(region.decided().collect::<Vec<_>>());
             Ok::<_, Stop>(Narrowing::Fixed { changed: false })
         })
         .unwrap()
     {
         assert!(matches!(visit, Visit::Counted(..)));
     }
-    // The root's two children, each narrowed once and counted.
-    assert_eq!(narrowed, vec![vec![1], vec![1]]);
+    // The root's two children, cut then held, each narrowed once and counted.
+    assert_eq!(narrowed, vec![vec![(1, false)], vec![(1, true)]]);
     assert_eq!(traversal.statistics().regions, 3);
     assert_eq!(traversal.statistics().counted, 2);
 }

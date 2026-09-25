@@ -84,19 +84,18 @@ fn a_panicked_worker_keeps_coverage_incomplete() {
         &mut budget,
     )
     .unwrap();
-    // The failing worker owns the missing frontier; another worker waits
-    // for it to offer work. The panic must wake that waiter immediately.
-    search.shared.lock().pending.clear();
+    // Another worker waits for stealable work that never comes (the root is
+    // held here, outside the queues). The panic closes the run, and the
+    // waiter exits rather than hanging.
     search.started = true;
+    let _root = search.shared.take_local(0).unwrap();
     let idle_shared = Arc::clone(&search.shared);
+    // The waiter owns the only remaining sender, so the channel disconnects
+    // when it exits, letting the coordinator join and report the panic.
     let sender = search.sender.take().unwrap();
     search.handles.push(std::thread::spawn(move || {
-        contain_worker(&idle_shared, || worker(&idle_shared, &sender))
+        contain_worker(&idle_shared, || worker(&idle_shared, 0, &sender))
     }));
-    while search.shared.lock().idle == 0 {
-        cancellation.poll().unwrap();
-        std::thread::yield_now();
-    }
     let failed_shared = Arc::clone(&search.shared);
     search.handles.push(std::thread::spawn(move || {
         contain_worker(&failed_shared, || {

@@ -420,9 +420,10 @@ fn interruption_retains_an_unproved_incumbent() {
 #[test]
 fn admission_failures_publish_error_documents() {
     let (result, value) = solve("p(.", &options(&[]));
-    assert!(result.is_err());
+    let cause = result.unwrap_err();
     assert_eq!(value["outcome"]["status"], "failed");
     assert_eq!(value["outcome"]["error"]["kind"], "expansion");
+    assert_eq!(value["outcome"]["error"]["detail"], cause.to_string());
     assert!(value["outcome"]["completion"].is_null());
     assert_eq!(value["models"], json!([]));
 }

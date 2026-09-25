@@ -11,7 +11,7 @@ pub(super) fn io(path: &Path, source: std::io::Error) -> Error {
         source,
     }
 }
-pub(super) fn canonical(path: &Path) -> Result<PathBuf, Error> {
+pub(crate) fn canonical(path: &Path) -> Result<PathBuf, Error> {
     path.canonicalize().map_err(|source| io(path, source))
 }
 pub(super) fn relative(text: &str) -> Result<&Path, Error> {
@@ -30,14 +30,14 @@ pub(super) fn relative(text: &str) -> Result<&Path, Error> {
     }
     Ok(path)
 }
-pub(super) fn confined(root: &Path, text: &str) -> Result<PathBuf, Error> {
+pub(crate) fn confined(root: &Path, text: &str) -> Result<PathBuf, Error> {
     let actual = canonical(&root.join(relative(text)?))?;
     if !actual.starts_with(root) {
         return Err(Error::Path(text.to_owned()));
     }
     Ok(actual)
 }
-pub(super) fn read(path: &Path, maximum: usize, resource: Resource) -> Result<Vec<u8>, Error> {
+pub(crate) fn read(path: &Path, maximum: usize, resource: Resource) -> Result<Vec<u8>, Error> {
     let file = std::fs::File::open(path).map_err(|source| io(path, source))?;
     let metadata = file.metadata().map_err(|source| io(path, source))?;
     if !metadata.is_file() {
@@ -55,7 +55,7 @@ pub(super) fn read(path: &Path, maximum: usize, resource: Resource) -> Result<Ve
 pub(super) fn hash(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
-pub(super) fn digest(path: &str, bytes: &[u8], expected: &str) -> Result<(), Error> {
+pub(crate) fn digest(path: &str, bytes: &[u8], expected: &str) -> Result<(), Error> {
     let actual = hash(bytes);
     if actual != expected {
         return Err(Error::Digest {

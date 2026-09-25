@@ -22,7 +22,7 @@ pub(super) fn edits(
     )
 }
 
-fn source_edits<'a>(
+pub(super) fn source_edits<'a>(
     source: &str,
     path: &str,
     mut includes: impl Iterator<Item = &'a str>,

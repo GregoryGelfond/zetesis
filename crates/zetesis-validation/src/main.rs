@@ -34,10 +34,10 @@ enum NativeBackend {
 #[command(
     name = "zetesis-validate",
     version,
-    about = "Validate the complete pinned non-clingcon kr-domains target"
+    about = "Validate the complete pinned non-clingcon correctness target"
 )]
 struct Options {
-    /// Repository containing the self-contained examples/kr-domains collection.
+    /// Repository containing the self-contained examples/correctness collection.
     #[arg(long, default_value = ".")]
     repo: PathBuf,
     /// Select an original-source corpus directory using historical manifest mode.

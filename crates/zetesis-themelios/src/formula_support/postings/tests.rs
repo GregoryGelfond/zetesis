@@ -372,7 +372,7 @@ fn report_json(
 #[test]
 #[ignore = "explicit bounded corpus diagnostic; these observations are not timings"]
 fn corpus_postings_preserve_full_row_equalities() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/kr-domains");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/correctness");
     let paths = [
         "standalone/n-queens/variant-01.lp",
         "standalone/n-queens/variant-02.lp",

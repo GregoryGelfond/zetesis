@@ -55,6 +55,14 @@ pub(super) fn check(document: &Value, exit: Option<Exit>) -> Result<(), Failure>
                     "failed native status lacks secondary-output accounting",
                 ));
             }
+            let detail = error
+                .get("detail")
+                .map(|value| {
+                    value
+                        .as_str()
+                        .ok_or_else(|| invalid("malformed native error detail"))
+                })
+                .transpose()?;
             exited(exit, 2)?;
             let decision = match kind {
                 "backend_unavailable" => Decision::BackendUnavailable,
@@ -67,10 +75,15 @@ pub(super) fn check(document: &Value, exit: Option<Exit>) -> Result<(), Failure>
                 | "expansion" => Decision::Refused,
                 _ => Decision::InvocationFailure,
             };
-            Err((
-                decision,
-                format!("native reported failure kind={kind}; full envelope retained"),
-            ))
+            // The caller already admitted the native JSON under its report-byte
+            // ceiling. Preserve this typed field without interpreting its prose.
+            let detail = match detail {
+                Some(detail) => {
+                    format!("native reported failure kind={kind}: {detail}; full envelope retained")
+                }
+                None => format!("native reported failure kind={kind}; full envelope retained"),
+            };
+            Err((decision, detail))
         }
         _ => Err(invalid("unknown native outcome status")),
     }

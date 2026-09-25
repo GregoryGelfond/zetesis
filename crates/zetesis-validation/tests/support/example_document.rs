@@ -4,7 +4,7 @@ use super::*;
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/kr-domains")
+        .join("../../examples/correctness")
         .canonicalize()
         .unwrap()
 }

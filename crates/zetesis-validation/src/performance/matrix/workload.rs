@@ -2,6 +2,8 @@
 //! generated programs whose bytes are a pure function of a family and a size.
 
 mod constants;
+mod authored;
+pub use authored::AuthoredProgram;
 
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -55,17 +57,18 @@ impl Default for WorkloadLimits {
 }
 
 /// Validated constant-only derivation of one complete admitted source closure,
-/// or one generated program.
+/// an authored singleton, or one generated program.
 ///
 /// No source payload is retained. Materialization repeats the checked derivation
-/// or generation and seals the bytes actually launched. The unchanged corpus
+/// or generation and seals the bytes actually launched. Authored sources retain
+/// their own file seal, independent of the correctness catalog. The unchanged corpus
 /// contract remains provenance for amended workloads; a generated workload's
 /// contract is its family's closed-form count.
 #[derive(Clone, Debug, Serialize)]
 pub struct Workload {
     entry: String,
     identity: String,
-    /// Corpus identity of a derived workload; absent for a generated one.
+    /// Corpus identity of a corpus workload; absent for independent inputs.
     #[serde(skip_serializing_if = "Option::is_none")]
     manifest_sha256: Option<&'static str>,
     sources: Vec<Source>,
@@ -73,6 +76,10 @@ pub struct Workload {
     amended: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     generated: Option<Generated>,
+    /// An authored singleton source is sealed independently of the campaign's
+    /// correctness catalog. It has no upstream-cleaning or generated-family claim.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    authored: Option<authored::Authored>,
     pub(super) metadata_bytes: usize,
     pub(super) source_bytes: usize,
 }
@@ -148,6 +155,7 @@ impl Workload {
     /// Each named declaration must occur once in its specified source; repeated
     /// requests for a declaration are refused. Replacements cannot alter includes.
     /// Parser input and all derived content are bounded before retention.
+    /// No-op edits retain their provenance but keep the unchanged contract.
     ///
     /// # Errors
     /// Refuses unknown paths/names, duplicate requests, unsupported declarations,
@@ -236,24 +244,19 @@ impl Workload {
                 edits,
             });
         }
-        let mut hash = Sha256::new();
-        hash.update(b"zetesis-workload-v1\0");
-        field(&mut hash, entry.as_bytes());
-        field(&mut hash, corpus.manifest_sha256().as_bytes());
-        for source in &sources {
-            field(&mut hash, source.path.as_bytes());
-            field(&mut hash, source.base_sha256.as_bytes());
-            field(&mut hash, source.derived_sha256.as_bytes());
-        }
-        let identity = budget.text(&format!("{:x}", hash.finalize()))?;
+        let identity = budget.text(&corpus_identity(&entry, corpus.manifest_sha256(), &sources))?;
+        let amended = sources
+            .iter()
+            .any(|source| source.base_sha256 != source.derived_sha256);
         Ok(Self {
             entry,
             identity,
             manifest_sha256: Some(corpus.manifest_sha256()),
-            amended: !amendments.is_empty(),
+            amended,
             sources,
             default_contract,
             generated: None,
+            authored: None,
             metadata_bytes: budget.metadata,
             source_bytes: budget.sources,
         })
@@ -303,6 +306,7 @@ impl Workload {
                 sha256,
                 bytes: source.len(),
             }),
+            authored: None,
             metadata_bytes: budget.metadata,
             source_bytes: budget.sources,
         })
@@ -339,7 +343,7 @@ impl Workload {
         &self.identity
     }
 
-    /// Whether explicit amendments were requested.
+    /// Whether the derived source bytes differ from the admitted originals.
     #[must_use]
     pub const fn is_amended(&self) -> bool {
         self.amended
@@ -351,7 +355,14 @@ impl Workload {
         self.generated.is_some()
     }
 
-    /// The contract the campaign checks: the corpus contract of an unchanged
+    /// Whether this workload has its own authored source seal, independent of
+    /// the pinned correctness catalog and generated-family contracts.
+    #[must_use]
+    pub const fn is_authored(&self) -> bool {
+        self.authored.is_some()
+    }
+
+    /// The contract the campaign checks: the authored/corpus contract of an unchanged
     /// entry, the closed-form contract of a generated program, and none for
     /// an amended entry, whose family is established by the reference alone.
     #[must_use]
@@ -364,6 +375,9 @@ impl Workload {
         corpus: &examples::Corpus,
         limits: super::super::Limits,
     ) -> Result<(), Error> {
+        if self.is_authored() {
+            return self.validate_authored(limits);
+        }
         if let Some(generated) = &self.generated {
             generated.regenerate()?;
             if self.entry != generated.entry()
@@ -416,6 +430,9 @@ impl Workload {
         directory: &Path,
         limit: usize,
     ) -> Result<Vec<crate::selected::FileSeal>, Error> {
+        if self.is_authored() {
+            return self.materialize_authored(directory, limit);
+        }
         if let Some(generated) = &self.generated {
             let source = generated.regenerate()?;
             let path = directory.join(&self.entry);
@@ -482,6 +499,19 @@ pub(crate) fn workload_label<'a>(
         label.push_str(after);
     }
     label
+}
+
+fn corpus_identity(entry: &str, manifest_sha256: &str, sources: &[Source]) -> String {
+    let mut hash = Sha256::new();
+    hash.update(b"zetesis-workload-v1\0");
+    field(&mut hash, entry.as_bytes());
+    field(&mut hash, manifest_sha256.as_bytes());
+    for source in sources {
+        field(&mut hash, source.path.as_bytes());
+        field(&mut hash, source.base_sha256.as_bytes());
+        field(&mut hash, source.derived_sha256.as_bytes());
+    }
+    format!("{:x}", hash.finalize())
 }
 
 fn field(hash: &mut Sha256, value: &[u8]) {

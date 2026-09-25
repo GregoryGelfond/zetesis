@@ -296,7 +296,8 @@ fn cancelled_corpus_publishes_unattempted_positions() {
     let reference = directory.path().join("reference-must-not-launch");
     std::fs::write(&reference, b"distinct reference identity; never executable").unwrap();
     let report = directory.path().join("cancelled.json");
-    let corpus = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/kr-domains");
+    let corpus =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/correctness");
     let command = command(&[
         "corpus",
         corpus.to_str().unwrap(),

@@ -37,7 +37,7 @@ these operations fit into the solver. Public interfaces start in
 | `lazy` | Matched relational source rounds and closures | `lazy_measurement` |
 | `relation` | Equality masks over one retained typed column view | `relation_measurement` |
 | `table` | Complete surviving rows and projected domains on CPU | `table_measurement::measure` |
-| `grounding` | Fresh original-source formula admission | `grounding::profile`, `write_report` |
+| `grounding` | Fresh original-source formula admission | `grounding::measure_file`, `write_report` |
 | `feedback` | Finite conditional-witness replay and native restriction restarts | `feedback_measurement::measure` |
 
 Device profiles accept physical Metal or Vulkan. CPU mode explicitly omits the
@@ -61,7 +61,7 @@ zetesis-bench relation --backend metal --family independent --payload tuple \
   --rows 4096 --queries 32 --workers 4 --warmups 2 --repetitions 6
 zetesis-bench table --case aliased --rows 1024 --queries 32 \
   --workers 4 --warmups 1 --repetitions 3
-zetesis-bench grounding examples/kr-domains/standalone/send-money/send-money.lp \
+zetesis-bench grounding examples/correctness/standalone/send-money/send-money.lp \
   --repetitions 3
 zetesis-bench feedback --check
 zetesis-bench feedback --warmups 1 --repetitions 3

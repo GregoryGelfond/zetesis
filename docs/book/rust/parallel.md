@@ -117,8 +117,24 @@ candidate search does not become parallel simply because residual membership
 queries use Rayon.
 
 The formula CPU route with several region workers performs candidate generation
-and membership checking in each worker. Workers consume their own region stacks
-without the shared pool lock and acquire it to exchange work or register as idle.
+and membership checking in each worker. Each worker removes the newest region
+from its own deque; an idle worker tries to steal the oldest region from a peer.
+Each deque has its own mutex. A thief skips a busy deque, and narrowing, payload
+cloning, reduct checks and model sends hold no deque lock. Slot growth uses
+fallible reservation before either split child is published; refusal leaves
+enumeration incomplete. Region and knowledge payload cloning remains infallible,
+so this boundary is not an end-to-end guarantee against allocation failure.
+
+The unresolved-region counter gains one when two children replace a parent and
+loses one when a region is resolved. Idle workers finish only at zero or an
+explicit stop. Queued models are delivered before a worker's stop is reported.
+Cancellation observed by the coordinator can end a pull immediately; explicit
+`stop` or dropping the enumerator joins any remaining workers.
+Local depth-first order bounds each deque's live entries by the atom count plus
+one; capacity grows with the observed frontier instead of reserving that worst
+case for every worker. Joining releases abandoned entries and queue capacity,
+including after a partially successful worker start.
+
 The device route uses a different execution boundary: an owned Rayon pool
 produces a bounded candidate batch, joins, and then submits that batch for device
 membership checking. CPU residual completion has its own worker setting.

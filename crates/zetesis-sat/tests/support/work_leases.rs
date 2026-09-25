@@ -153,34 +153,55 @@ fn failed_bulk_consumption_commits_its_admitted_prefix() {
 
 #[test]
 fn joined_work_is_exact_at_every_small_inclusive_ceiling() {
-    for ceiling in 0..=2 * WORK_QUANTUM + 1 {
-        let shared = budget(ceiling);
-        let cancellation = Cancellation::default();
-        thread::scope(|scope| {
-            let mut jobs = Vec::new();
-            for _ in 0..4 {
-                let shared = &shared;
-                let cancellation = &cancellation;
-                jobs.push(scope.spawn(move || {
-                    let lease = shared.lease(cancellation);
-                    let mut consumed = 0;
-                    while lease.tick().is_ok() {
-                        consumed += 1;
-                    }
-                    consumed
-                }));
-            }
-            assert_eq!(
-                jobs.into_iter().map(|job| job.join().unwrap()).sum::<u64>(),
-                ceiling
-            );
-        });
-        let mut recorded = SearchStatistics::default();
-        shared.record(&mut recorded);
-        assert_eq!(recorded.work, ceiling);
-        assert_eq!(recorded.decisions, 0);
-        state(&shared, (ceiling, 0, 0));
+    // Keep the exhaustive population independent of the production grant size.
+    // Grant-size boundaries have their own cases below.
+    const SMALL_CEILING: u64 = 129;
+    for ceiling in 0..=SMALL_CEILING {
+        assert_joined_work(ceiling);
     }
+}
+
+#[test]
+fn joined_work_is_exact_at_grant_boundaries() {
+    for ceiling in [
+        WORK_QUANTUM - 1,
+        WORK_QUANTUM,
+        WORK_QUANTUM + 1,
+        2 * WORK_QUANTUM - 1,
+        2 * WORK_QUANTUM,
+        2 * WORK_QUANTUM + 1,
+    ] {
+        assert_joined_work(ceiling);
+    }
+}
+
+fn assert_joined_work(ceiling: u64) {
+    let shared = budget(ceiling);
+    let cancellation = Cancellation::default();
+    thread::scope(|scope| {
+        let mut jobs = Vec::new();
+        for _ in 0..4 {
+            let shared = &shared;
+            let cancellation = &cancellation;
+            jobs.push(scope.spawn(move || {
+                let lease = shared.lease(cancellation);
+                let mut consumed = 0;
+                while lease.tick().is_ok() {
+                    consumed += 1;
+                }
+                consumed
+            }));
+        }
+        assert_eq!(
+            jobs.into_iter().map(|job| job.join().unwrap()).sum::<u64>(),
+            ceiling
+        );
+    });
+    let mut recorded = SearchStatistics::default();
+    shared.record(&mut recorded);
+    assert_eq!(recorded.work, ceiling);
+    assert_eq!(recorded.decisions, 0);
+    state(&shared, (ceiling, 0, 0));
 }
 
 #[test]

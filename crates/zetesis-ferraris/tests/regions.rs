@@ -11,6 +11,9 @@ use zetesis_ferraris::{
     Producers, Region, RegionLimits, Theory, check, producers,
 };
 
+#[path = "support/packed_knowledge.rs"]
+mod packed_knowledge;
+
 /// One narrowing of a region with a fresh index of the theory and knowledge
 /// of nothing: the root's narrowing, for one region.
 fn narrow_fresh(

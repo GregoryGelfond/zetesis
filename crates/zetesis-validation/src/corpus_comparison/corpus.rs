@@ -247,7 +247,7 @@ mod tests {
         let options = repository_options();
         let loaded = load(&options).unwrap();
         let expected = crate::examples::load(
-            &options.repo.join("examples/kr-domains"),
+            &options.repo.join("examples/correctness"),
             crate::examples::Limits::default(),
         )
         .unwrap();
@@ -275,7 +275,7 @@ mod tests {
         let options = repository_options();
         let loaded = load(&options).unwrap();
         let expected = crate::examples::load(
-            &options.repo.join("examples/kr-domains"),
+            &options.repo.join("examples/correctness"),
             crate::examples::Limits::default(),
         )
         .unwrap();
@@ -325,7 +325,7 @@ mod tests {
     #[test]
     fn clean_manifest_is_not_a_historical_manifest() {
         let mut options = repository_options();
-        options.manifest = Some(options.repo.join("examples/kr-domains/manifest.json"));
+        options.manifest = Some(options.repo.join("examples/correctness/manifest.json"));
         assert!(matches!(load(&options), Err(error) if error.contains("manifest identity")));
     }
 
@@ -356,6 +356,6 @@ mod tests {
         options.corpus = Some(original_root);
         assert_original(&load(&options).unwrap());
         options.corpus = None;
-        assert!(matches!(load(&options), Err(error) if error.contains("examples/kr-domains")));
+        assert!(matches!(load(&options), Err(error) if error.contains("examples/correctness")));
     }
 }
