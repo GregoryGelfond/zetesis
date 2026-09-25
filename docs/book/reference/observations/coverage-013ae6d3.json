@@ -1,0 +1,78 @@
+{
+  "compiled_source": "013ae6d3fc0290533fe98d723647d59451c39df6",
+  "validated_at": "2026-09-25T01:36:38.854Z",
+  "tools": {
+    "rust": "1.97.1",
+    "cargo_llvm_cov": "0.8.7",
+    "llvm": "22.1.6",
+    "clingo": "5.8.2",
+    "mdbook": "0.5.4"
+  },
+  "host": {
+    "os": "macOS 26.6.2",
+    "adapter": "Apple M4 Pro",
+    "backend": "Metal"
+  },
+  "local_gates": {
+    "portable": "passed",
+    "oracle": "passed",
+    "proofs": "passed",
+    "book": "passed",
+    "coverage": "passed"
+  },
+  "gate_sources": {
+    "portable": "1489d676c17bc58fb0e3a8a50dce13e94685c515",
+    "oracle": "ce8dc47ba08d204534380e9eb6d644c8cdd89ab3",
+    "proofs": "ce8dc47ba08d204534380e9eb6d644c8cdd89ab3",
+    "book": "013ae6d3fc0290533fe98d723647d59451c39df6",
+    "coverage": "013ae6d3fc0290533fe98d723647d59451c39df6",
+    "note": "After oracle/proofs: file-seal validation fix and documentation only. After portable: documentation only. Exact final source qualified for physical tests and coverage; final publication updates documentation only."
+  },
+  "hosted_ci": "not run",
+  "totals": {
+    "workspace": {
+      "lines": {
+        "count": 91287,
+        "covered": 86061,
+        "percent": 94.27519800190608
+      },
+      "sha256": "b7de56ec5bd528bf3a4f78e895093b582c6b9f35a32fb602371e5d50522fe8ff"
+    },
+    "workspace-portable": {
+      "lines": {
+        "count": 91287,
+        "covered": 83487,
+        "percent": 91.45551940582997
+      },
+      "sha256": "b606bf3f3d97766eddc63513ed5a1afac41be1bc2e5a1dc71ce088ced59b61fc"
+    },
+    "cli-cpu": {
+      "lines": {
+        "count": 9849,
+        "covered": 9047,
+        "percent": 91.85704132399228
+      },
+      "sha256": "44f44a9133f7371393c88d75ee443183f3357f810d6cea2bf8efa69f04a86f8c"
+    }
+  },
+  "workspace_profiles": 2432,
+  "portable_profiles": 2416,
+  "physical_profiles": 16,
+  "physical_tests": 59,
+  "physical_groups": 16,
+  "excluded_listing_profiles": 16,
+  "ordinary_cli_backend_cases": 3,
+  "ordinary_cli_backend_instrumented": false,
+  "cpu_profiles": 339,
+  "prior_physical_preflight": {
+    "exit": 130,
+    "tests_run": 0,
+    "profiles": 0,
+    "retained": true
+  },
+  "physical_evidence_sha256": "859a6af717a9d2d7701fd76c4da87ef6e00a98132274477520cc991f61b95520",
+  "independent_return_review_sha256": "2c53942d1fdcd3509bedf722d1b329ae056e9e4d057c0c9ce8df36b9768fe4f3",
+  "floors_sha256": "2b1a8809c412156d61081dc5141279fca9a8e2c24ff4af0c3ec49cff1afdd378",
+  "report_log_sha256": "7e359c7aa7d65f42afd8f8ac2face8acfa79a2cc1e8838d1b1fd15a53c051559",
+  "status": "gate-passed"
+}
