@@ -49,6 +49,12 @@ constraints and four-thread execution expose costs. The
 retain the earlier storage/search tradeoff. These small-workload CPU experiments
 do not replace the full-corpus or Metal measurements.
 
+The [nine-workload CPU scheduler comparison](scheduler-scaling.md) measures
+1, 2, 4, 8 and 14 workers in two opposite-order blocks. Larger queens and
+task-allocation cases improve at high worker counts; several smaller cases
+regress at four workers. The page retains both outcomes, individual timing/RSS
+observations and the shared-host conditions of the measurement.
+
 ## Run a benchmark
 
 From a repository checkout, with zetesis and clingo installed:

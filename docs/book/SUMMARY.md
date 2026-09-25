@@ -49,6 +49,7 @@
   - [Eager and hybrid formula grounding](reference/hybrid-grounding.md)
   - [Lending completed grounding rows](reference/grounding-row-lending.md)
   - [Worker scaling: CPU and Metal](reference/worker-scaling.md)
+  - [CPU candidate-region scheduling](reference/scheduler-scaling.md)
   - [Shared-plan execution: CPU and Metal](reference/plan-execution.md)
   - [CPU and Metal execution series](reference/execution-series.md)
   - [Reduct execution: CPU and Metal](reference/reduct-execution.md)
