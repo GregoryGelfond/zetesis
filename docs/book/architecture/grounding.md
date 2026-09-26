@@ -964,12 +964,12 @@ Its default is 128 MiB; zero is a zero-byte allowance. `peak_closure_bytes` is t
 maximum observed named envelope of a completed check. Relation capacities are
 summed as each relation is created, grows or is cleared, so reading the envelope
 does not visit every relation; debug builds recompute the sum on each read.
-Earlier results retained
-by the caller, allocator bookkeeping and Arc counters remain outside this
-per-check ledger. A successful allocation can exceed its proposed reservation
-before the actual-capacity check refuses it. A stopped scalar check returns no
-partial `Check` or statistics. Collective worker admission and result retention
-have separate owners; this is not a total process-memory bound.
+Earlier results retained by the caller, allocator bookkeeping and Arc counters
+remain outside this per-check ledger. A successful allocation can exceed its
+proposed reservation before the actual-capacity check refuses it. A stopped
+scalar check returns no partial `Check` or statistics. Collective worker
+admission and result retention have separate owners; this is not a total
+process-memory bound.
 
 `FormulaLimits::max_support_bytes` bounds one evolving canonical support authority
 and its current prefix, relation/equality metadata, postings, borrowed snapshot

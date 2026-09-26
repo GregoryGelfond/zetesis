@@ -113,21 +113,33 @@ fn sparse_lookup_honors_each_caller_refusal() {
 #[test]
 fn carrier_atom_views_agree_with_their_logical_atoms() {
     // A carrier atom answers its arity from its coordinates; traversal, hashing
-    // and both orders must still denote the logical atom it locates.
+    // and both orders must still denote the logical atom it locates. Arities
+    // zero, one and two keep a miscounted coordinate list from passing.
     fn hash(value: &impl Hash) -> u64 {
         let mut hasher = DefaultHasher::new();
         value.hash(&mut hasher);
         hasher.finish()
     }
     let nullary = Predicate::new("q", 0).unwrap();
+    let binary = Predicate::new("r", 2).unwrap();
+    let pair = || ["first", "second"].map(|value| Value::Symbol(value.into()));
     let program = Program::new(
-        vec![Template::new(
-            Some(AtomPattern::new(nullary.clone(), vec![]).unwrap()),
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-        )]
+        vec![
+            Template::new(
+                Some(AtomPattern::new(nullary.clone(), vec![]).unwrap()),
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+            ),
+            Template::new(
+                Some(AtomPattern::new(binary.clone(), pair().map(Term::Constant).into()).unwrap()),
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+            ),
+        ]
         .into_iter()
         .chain(["first", "second"].map(|value| {
             Template::new(
@@ -152,6 +164,7 @@ fn carrier_atom_views_agree_with_their_logical_atoms() {
         Atom::new(nullary, vec![]).unwrap(),
         atom("first"),
         atom("second"),
+        Atom::new(binary, pair().into()).unwrap(),
     ];
     let carriers: Vec<_> = atoms
         .iter()
