@@ -332,10 +332,20 @@ mod physical {
 
     fn qualify_table_joins(backend: Backend) {
         let source = "edge(1,1). edge(1,2). edge(2,1). edge(2,2). 1{choose(1);choose(2)}1. witness(X,Y):-choose(X),edge(X,Y). diagonal(X):-edge(X,X). #show witness/2.";
+        // Automatic grounding can defer these definitions until publication.
+        // This fixture must exercise completed-support table joins instead.
         let mut expected = Vec::new();
         let cpu = run_with_diagnostics(
             source.into(),
-            &options(&["--backend", "cpu", "--json", "--formula-joins", "indexed"]),
+            &options(&[
+                "--backend",
+                "cpu",
+                "--grounder",
+                "eager",
+                "--json",
+                "--formula-joins",
+                "indexed",
+            ]),
             &mut expected,
             &mut Vec::new(),
             &Cancellation::default(),
@@ -349,6 +359,8 @@ mod physical {
             &options(&[
                 "--backend",
                 backend.argument(),
+                "--grounder",
+                "eager",
                 "--oracle",
                 "countermodel",
                 "--formula-joins",
