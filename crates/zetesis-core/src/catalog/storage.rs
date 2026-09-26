@@ -56,6 +56,11 @@ impl TermId {
     }
 }
 identifier!(PredicateId);
+impl PredicateId {
+    pub(crate) fn position(self) -> usize {
+        self.0 as usize
+    }
+}
 identifier!(AtomId);
 
 /// A typed refusal; previously published snapshots remain valid.

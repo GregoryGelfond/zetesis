@@ -14,7 +14,8 @@ mod projection;
 pub use projection::{PreparedProjection, ProjectSelection};
 
 pub use selection::{
-    AtomSelection, AtomSelectionError, AtomSelectionLimits, OutputSelection, Signatures,
+    AtomSelection, AtomSelectionError, AtomSelectionLimits, OutputSelection, PreparedSelection,
+    Signatures,
 };
 
 pub use compile::{MetadataError, MetadataFeature, MetadataLimits, MetadataResource};

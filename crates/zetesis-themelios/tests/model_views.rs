@@ -93,6 +93,88 @@ fn evaluated_view_rendering_refuses_partial_lines() {
     );
 }
 
+fn prepared_fixture() -> ObservationFixture {
+    ObservationFixture::with_directives(
+        Model::new([
+            atom("p", vec![Value::Number(1)]),
+            atom("q", vec![Value::Number(2)]),
+            atom("p", vec![Value::Number(3)]),
+        ])
+        .unwrap(),
+        "p(1). p(3). q(2). #show p/1. #show f(X):p(X).",
+    )
+}
+
+#[test]
+fn prepared_views_show_the_same_answer() {
+    // Decisions prepared once replace the per-atom search without changing a
+    // shown atom, a rendered line or a record byte.
+    let fixture = prepared_fixture();
+    let prepared = fixture
+        .selection
+        .prepare_with(fixture.model.catalog().read(), |_| Ok::<(), ()>(()))
+        .unwrap();
+    assert!(prepared.is_prepared());
+    let view = fixture
+        .program
+        .view_prepared(
+            &fixture.model,
+            &prepared,
+            None,
+            Limits::default(),
+            &fixture.cancellation,
+        )
+        .unwrap();
+    let plain = fixture.view();
+    assert!(view.shown_atoms().eq(plain.shown_atoms()));
+    let render = |view: &ModelView<'_>| {
+        view.render(Limits::default(), &fixture.cancellation)
+            .unwrap()
+            .text()
+            .to_owned()
+    };
+    assert_eq!(render(&view), render(&plain));
+    let record = |view: &ModelView<'_>| {
+        view.record(
+            &mut AtomTable::new(usize::MAX),
+            ViewLimits::default(),
+            &fixture.cancellation,
+        )
+        .unwrap()
+    };
+    assert_eq!(record(&view), record(&plain));
+}
+
+#[test]
+fn prepared_views_charge_one_unit_per_atom_decision() {
+    // The search over one signature charges one unit plus both one-byte names
+    // per atom; a prepared decision charges one unit.
+    let fixture = prepared_fixture();
+    let prepared = fixture
+        .selection
+        .prepare_with(fixture.model.catalog().read(), |_| Ok::<(), ()>(()))
+        .unwrap();
+    let work = |view: ModelView<'_>| {
+        view.render(Limits::default(), &fixture.cancellation)
+            .unwrap()
+            .statistics()
+            .work
+    };
+    let prepared_work = work(
+        fixture
+            .program
+            .view_prepared(
+                &fixture.model,
+                &prepared,
+                None,
+                Limits::default(),
+                &fixture.cancellation,
+            )
+            .unwrap(),
+    );
+    assert_eq!(work(fixture.view()) - prepared_work, 2 * 3);
+}
+
 struct ObservationFixture {
     model: Model,
     program: ObservationProgram,

@@ -7,7 +7,7 @@ use super::{
 };
 use zetesis_core::{
     Predicate as OwnedPredicate,
-    catalog::{AtomRef, PredicateRef},
+    catalog::{AtomRef, CatalogRead, PredicateMask, PredicateMaskFailure, PredicateRef},
 };
 
 /// Borrowed, semantically ordered predicate signatures. Coordinates remain
@@ -277,7 +277,47 @@ impl OutputSelection {
         if !self.explicit {
             return Ok(true);
         }
-        let predicate = atom.into().predicate();
+        self.search(atom.into().predicate(), &mut charge)
+    }
+
+    /// Decide every predicate of `read` once, for repeated answers over its
+    /// vocabulary. Each decision is charged exactly as [`Self::try_includes`]
+    /// charges an atom of that predicate. Implicit and explicit-empty
+    /// selections decide nothing. If the decisions cannot be retained, every
+    /// atom keeps the search.
+    ///
+    /// # Cost
+    /// One search per admitted predicate of `read`; the prepared selection
+    /// retains one word per 64 predicates.
+    ///
+    /// # Errors
+    /// Returns the first caller refusal, without a prepared selection.
+    pub fn prepare_with<E>(
+        &self,
+        read: CatalogRead<'_>,
+        mut charge: impl FnMut(u128) -> Result<(), E>,
+    ) -> Result<PreparedSelection<'_>, E> {
+        if !self.explicit || self.signatures().is_empty() {
+            return Ok(PreparedSelection::from(self));
+        }
+        let predicates =
+            match read.predicate_mask_with(|predicate| self.search(predicate, &mut charge)) {
+                Ok(mask) => Some(mask),
+                Err(PredicateMaskFailure::Stopped(error)) => return Err(error),
+                Err(PredicateMaskFailure::Storage(_)) => None,
+            };
+        Ok(PreparedSelection {
+            selection: self,
+            predicates,
+        })
+    }
+
+    /// Binary search over the signatures, charging before each comparison.
+    fn search<E>(
+        &self,
+        predicate: PredicateRef<'_>,
+        charge: &mut impl FnMut(u128) -> Result<(), E>,
+    ) -> Result<bool, E> {
         let signatures = self.signatures();
         let (mut start, mut end) = (0, signatures.len());
         while start < end {
@@ -291,5 +331,74 @@ impl OutputSelection {
             }
         }
         Ok(false)
+    }
+}
+
+/// An output selection with each predicate of one vocabulary prefix decided
+/// once, for repeated answers over that vocabulary. Other atoms keep the
+/// selection's search and its charges.
+#[derive(Debug)]
+pub struct PreparedSelection<'a> {
+    selection: &'a OutputSelection,
+    predicates: Option<PredicateMask>,
+}
+impl<'a> From<&'a OutputSelection> for PreparedSelection<'a> {
+    /// The selection without retained decisions: every atom is searched.
+    fn from(selection: &'a OutputSelection) -> Self {
+        Self {
+            selection,
+            predicates: None,
+        }
+    }
+}
+impl PreparedSelection<'_> {
+    /// The selection these decisions implement.
+    #[must_use]
+    pub fn selection(&self) -> &OutputSelection {
+        self.selection
+    }
+    /// Whether per-predicate decisions are retained.
+    #[must_use]
+    pub fn is_prepared(&self) -> bool {
+        self.predicates.is_some()
+    }
+    /// Whether an atom is displayed; this never prunes logical candidates.
+    #[must_use]
+    pub fn includes<'a>(&self, atom: impl Into<AtomRef<'a>>) -> bool {
+        match self.try_includes(atom, |_| Ok::<_, std::convert::Infallible>(())) {
+            Ok(value) => value,
+            Err(impossible) => match impossible {},
+        }
+    }
+    /// Charge one unit before answering from a prepared decision. Any other
+    /// atom is decided by the selection's search with its charges; implicit
+    /// and explicit-empty selections charge nothing.
+    ///
+    /// # Errors
+    /// Returns the first caller refusal, without a selection result.
+    pub fn try_includes<'a, E>(
+        &self,
+        atom: impl Into<AtomRef<'a>>,
+        mut charge: impl FnMut(u128) -> Result<(), E>,
+    ) -> Result<bool, E> {
+        let atom = atom.into();
+        if let Some(decision) = self
+            .predicates
+            .as_ref()
+            .and_then(|predicates| predicates.decision(atom.predicate()))
+        {
+            charge(1)?;
+            return Ok(decision);
+        }
+        self.selection.try_includes(atom, charge)
+    }
+    /// This header and its retained decision words; the borrowed selection
+    /// and the shared vocabulary are excluded.
+    #[must_use]
+    pub fn retained_bytes(&self) -> usize {
+        size_of::<Self>()
+            + self.predicates.as_ref().map_or(0, |predicates| {
+                predicates.retained_bytes() - size_of::<PredicateMask>()
+            })
     }
 }

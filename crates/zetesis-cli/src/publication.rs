@@ -26,15 +26,15 @@ pub(crate) fn solve(
     let selection = OutputSelection::default();
     let observations = ObservationProgram::default();
     let metadata = input.metadata();
-    let mut display = crate::display::Display {
-        selection: metadata.map_or(&selection, zetesis_themelios::SourceMetadata::output),
-        observations: metadata.map_or(
+    let mut display = crate::display::Display::new(
+        metadata.map_or(&selection, zetesis_themelios::SourceMetadata::output),
+        metadata.map_or(
             &observations,
             zetesis_themelios::SourceMetadata::observations,
         ),
-        limits: config.observations,
+        config.observations,
         cancellation,
-    };
+    );
     let mut request =
         Session::builder(input, config.solve, cancellation.clone()).measurements(phases);
     if input

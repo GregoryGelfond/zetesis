@@ -250,6 +250,48 @@ fn cancellation_between_optimal_ties_preserves_exhaustion_and_framing() {
 }
 
 #[test]
+fn publication_stop_before_a_signature_show_record_is_an_observation_stop() {
+    // Preparing a signature selection must not move a stop that the first
+    // record's observation evaluation would report.
+    let owner = admit_formula(
+        "{a;b}. #show a/0. #show x:a.".into(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .unwrap();
+    let options = options(true);
+    let cancellation = Cancellation::default();
+    let input = crate::PreparedInput::formula(&owner);
+    let mut session = Session::builder(input, (&options).into(), cancellation.clone())
+        .selection(AnswerSelection::All)
+        .start()
+        .unwrap();
+    let answer = session.next().unwrap().unwrap();
+    cancellation.cancel();
+    let metadata = input.metadata().unwrap();
+    let mut display = crate::display::Display::new(
+        metadata.output(),
+        metadata.observations(),
+        crate::PublicationConfig::from(&options).observations,
+        &cancellation,
+    );
+    let mut output = Vec::new();
+    let mut renderer = crate::view::builtin::Builtin::new(&mut output, &options);
+    let ControlFlow::Break(stop) = display
+        .write(&mut renderer, 1, answer.interpretation(), answer.score())
+        .unwrap()
+    else {
+        panic!("stopped display")
+    };
+    assert_eq!(stop.phase(), PublicationPhase::Observation);
+    assert!(matches!(
+        stop.observation().unwrap().kind(),
+        ErrorKind::Stopped(Stop::Cancelled)
+    ));
+}
+
+#[test]
 fn publication_stop_before_first_record_keeps_unclassified_search() {
     for json in [false, true] {
         let owner = admit_formula(
@@ -272,12 +314,12 @@ fn publication_stop_before_first_record_keeps_unclassified_search() {
         assert_eq!(progress.semantic().unwrap().completion(), None);
         cancellation.cancel();
         let metadata = input.metadata().unwrap();
-        let mut display = crate::display::Display {
-            selection: metadata.output(),
-            observations: metadata.observations(),
-            limits: crate::PublicationConfig::from(&options).observations,
-            cancellation: &cancellation,
-        };
+        let mut display = crate::display::Display::new(
+            metadata.output(),
+            metadata.observations(),
+            crate::PublicationConfig::from(&options).observations,
+            &cancellation,
+        );
         let mut output = Vec::new();
         let mut renderer = crate::view::builtin::Builtin::new(&mut output, &options);
         let ControlFlow::Break(stop) = display

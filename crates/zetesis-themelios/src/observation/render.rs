@@ -3,6 +3,7 @@
 use themelios_program::symbol::{Name, Sign};
 
 use super::evaluate::{Work, terms};
+use super::view::AtomChannel;
 use super::{
     Cancellation, ConstructionLimits, Error, ErrorKind, Limits, Model, ObservationProgram,
     Rendered, Resource, Statistics, Symbol,
@@ -206,13 +207,13 @@ pub(super) fn render(
         location: None,
     };
     let symbols = terms(program, model, &mut work)?;
-    render_evaluated(model, selection, &symbols, work)
+    render_evaluated(model, AtomChannel::Policy(selection), &symbols, work)
 }
 
 /// Spell a previously evaluated term channel without evaluating it again.
 pub(super) fn render_evaluated(
     model: &Model,
-    selection: &crate::OutputSelection,
+    selection: AtomChannel<'_>,
     symbols: &[Symbol],
     mut work: Work<'_>,
 ) -> Result<Rendered, Error> {

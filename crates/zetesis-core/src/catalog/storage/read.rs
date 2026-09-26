@@ -108,6 +108,12 @@ impl<'a> Read<'a> {
     pub(crate) fn contains_predicate(self, id: PredicateId) -> bool {
         (id.0 as usize) < self.counts().predicates
     }
+    /// Every predicate identity of this prefix, in identity order.
+    pub(crate) fn predicate_ids(self) -> impl ExactSizeIterator<Item = PredicateId> {
+        (0..self.counts().predicates).map(|position| {
+            PredicateId(u32::try_from(position).expect("admitted predicate identities fit u32"))
+        })
+    }
     pub(crate) fn contains_term(self, id: TermId) -> bool {
         (id.0 as usize) < self.counts().terms
     }

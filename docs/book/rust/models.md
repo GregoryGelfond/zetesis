@@ -233,6 +233,11 @@ validates the selected slots against a live reader and returns a borrowed
 `BindingView` without copying values. This validation visits every selected
 slot. `TermSet` separately records explicitly selected roots; interning a child
 does not make it a domain member, and ID order is not semantic term order.
+`read.predicate_mask_with(decide)` decides every predicate of the read prefix
+once, in identity order, and packs the decisions into a `PredicateMask`, one bit
+per predicate. `mask.decision(predicate)` answers a canonical predicate of that
+vocabulary admitted before preparation; owned ingress, another vocabulary or a
+later predicate has no decision, so the caller keeps its general procedure.
 The [`scoped metadata API`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/catalog/terms.rs)
 documents each frame's storage allowance and stopped-operation behavior.
 

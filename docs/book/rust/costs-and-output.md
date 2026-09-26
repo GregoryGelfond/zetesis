@@ -119,6 +119,21 @@ predicate-name byte lengths. For `S > 0` signatures, a lookup performs at most
 need none. Human and JSON encoders apply their own budgets through this callback.
 Interrupted lookup returns no selection decision and leaves the policy intact.
 This bounds lookup work without a separate index or duplicated signature store.
+
+Repeated answers over one vocabulary need not repeat that lookup per atom.
+`OutputSelection::prepare_with(read, charge)` decides every predicate of the
+catalog read once, charging each decision exactly as `try_includes` charges an
+atom of that predicate, and returns a `PreparedSelection`. It retains one bit
+per predicate; implicit and explicit-empty selections decide nothing. A prepared
+decision charges one unit per atom; any atom outside the prepared vocabulary
+prefix is searched with the usual charges, so the prepared selection answers
+exactly as the policy does. `ObservationProgram::view_prepared` builds views
+over it, and `observation::prepare_selection` prepares within one observation's
+`max_work`, keeping every atom's search when that ceiling would be exceeded.
+The command line prepares at the first answer of a run and reuses the result
+for the rest, so its human and JSON output work falls by the saved comparisons.
+A stopped preparation leaves the selection unprepared; the stop is then reported
+in the same publication phase as without preparation.
 Source collection appends signature occurrences to a private builder, then sorts
 and deduplicates once before publishing `SourceMetadata`. Constructed directives
 affect the same selection without inventing source locations. For `S` signature
