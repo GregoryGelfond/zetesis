@@ -206,16 +206,22 @@ impl<'a> HybridSession<'a> {
         };
         let stopped = self.core.stop(phases);
         let source_failure = self.regions.as_ref().and_then(|r| r.take_failure());
-        error = error.or_else(|| source_failure.map(SolveError::Constraint));
-        let source_marker = stopped == Err(zetesis_sat::Incomplete::RegionFilter)
-            || matches!(
-                state,
-                Some(SearchState::Interrupted(Interruption::Countermodel(
-                    zetesis_sat::Incomplete::RegionFilter
-                )))
-            );
-        if source_marker && error.is_none() {
-            error = Some(SolveError::ConstraintFailureMissing);
+        let source_state = matches!(
+            state,
+            Some(SearchState::Interrupted(Interruption::Countermodel(
+                zetesis_sat::Incomplete::RegionFilter
+            )))
+        );
+        // A source marker still needs its precise recorded cause. Any other
+        // finalized interruption precedes faults discovered while joining;
+        // taking the slot above still settles the source's retained receipt.
+        if !matches!(state, Some(SearchState::Interrupted(_))) || source_state {
+            error = error.or_else(|| source_failure.map(SolveError::Constraint));
+            if (stopped == Err(zetesis_sat::Incomplete::RegionFilter) || source_state)
+                && error.is_none()
+            {
+                error = Some(SolveError::ConstraintFailureMissing);
+            }
         }
         let (state, result) = match error {
             Some(SolveError::Constraint(error)) if error.stop().is_some() => (
@@ -225,13 +231,7 @@ impl<'a> HybridSession<'a> {
                 None,
             ),
             Some(error) => (None, Some(Err(error))),
-            None => (
-                stopped.map_or_else(
-                    |error| Some(SearchState::Interrupted(Interruption::Countermodel(error))),
-                    |()| state,
-                ),
-                None,
-            ),
+            None => (crate::completion::after_cleanup(state, stopped), None),
         };
         let mut outcome = self.snapshot(phases);
         outcome.search_state = state;

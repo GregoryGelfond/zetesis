@@ -186,3 +186,83 @@ fn a_recorded_worker_failure_supersedes_requested_models() {
         Some(receipt)
     );
 }
+
+#[test]
+fn a_construction_stop_precedes_a_later_source_worker_failure() {
+    let mut fixture = Fixture::new();
+    fixture.config.max_model_work = 0;
+    let resources = ExecutionResources::default();
+    let mut session = HybridSession::new(
+        &fixture.owner,
+        &fixture.config,
+        crate::session::Executors {
+            resources: &resources,
+            executor: None,
+        },
+        &mut Ignore,
+        &fixture.cancellation,
+        &fixture.phases,
+        AnswerSelection::All,
+    )
+    .unwrap();
+    let primary = Some(SearchState::Interrupted(Interruption::ModelConstruction(
+        crate::ModelConstructionStop::Work {
+            observed: 1,
+            limit: 0,
+        },
+    )));
+    assert_eq!(
+        session.core.outcome(&fixture.phases).search_state(),
+        primary
+    );
+    let construction = *session
+        .core
+        .outcome(&fixture.phases)
+        .model_construction()
+        .unwrap();
+    let source = session.regions.as_ref().unwrap().clone();
+    let mut worker = source
+        .worker(fixture.owner.core_theory(), &fixture.cancellation)
+        .unwrap();
+    assert_eq!(
+        worker.check(
+            fixture.owner.core_theory(),
+            &Region::all_open(fixture.owner.atom_catalog().atoms().len() + 1),
+            &fixture.cancellation,
+        ),
+        Err(Incomplete::RegionFilter),
+    );
+    drop(worker);
+    assert!(
+        session
+            .next(
+                &fixture.config,
+                &mut Ignore,
+                &fixture.cancellation,
+                &fixture.phases
+            )
+            .is_none()
+    );
+    let outcome = session.outcome(&fixture.phases);
+    assert_eq!(outcome.search_state(), primary);
+    assert_eq!(outcome.model_construction(), Some(&construction));
+    let receipt = *outcome.hybrid_execution().unwrap();
+    assert_eq!(receipt.accepted, 0);
+    assert_eq!(receipt.pending, 0);
+    assert!(source.take_failure().is_none());
+    assert!(fixture.cancellation.poll().is_ok());
+    assert!(
+        session
+            .next(
+                &fixture.config,
+                &mut Ignore,
+                &fixture.cancellation,
+                &fixture.phases
+            )
+            .is_none()
+    );
+    assert_eq!(
+        session.outcome(&fixture.phases).hybrid_execution(),
+        Some(&receipt)
+    );
+}

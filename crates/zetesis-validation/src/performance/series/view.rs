@@ -168,6 +168,8 @@ pub enum Native {
     NotPassed {
         /// Decision name to number of positions.
         decisions: BTreeMap<String, usize>,
+        /// Retained causes, including the attempted phase and original blocker.
+        reasons: BTreeMap<String, usize>,
     },
 }
 
@@ -292,6 +294,9 @@ pub struct Cell {
     /// The reference solver's timing and its own split by report label,
     /// where it passed.
     pub reference: BTreeMap<String, Reference>,
+    /// Non-pass samples across all scheduled phases, grouped by report and
+    /// producer, phase and retained reason. Native profile indices are zero-based.
+    pub failure_reasons: BTreeMap<String, BTreeMap<String, usize>>,
 }
 
 /// What a report is: its native seal and its own verdicts.
@@ -393,9 +398,14 @@ pub fn compare(reports: &[Labelled<'_>]) -> Result<Comparison, ViewError> {
     for (index, entry) in entries.iter().enumerate() {
         let label = label(entry, workloads.and_then(|workloads| workloads.get(index)));
         let mut reference = BTreeMap::new();
+        let mut failure_reasons = BTreeMap::new();
         for labelled in reports {
             if let Some(record) = self::reference(labelled, index)? {
                 reference.insert(labelled.label.to_owned(), record);
+            }
+            let reasons = self::failure_reasons(labelled, index)?;
+            if !reasons.is_empty() {
+                failure_reasons.insert(labelled.label.to_owned(), reasons);
             }
         }
         let mut rows = Vec::with_capacity(requested.len());
@@ -418,6 +428,7 @@ pub fn compare(reports: &[Labelled<'_>]) -> Result<Comparison, ViewError> {
             label,
             profiles: rows,
             reference,
+            failure_reasons,
         });
     }
     let scoreboards = scoreboards(&labels, &methods, &cells);
@@ -629,8 +640,8 @@ impl fmt::Display for Markdown<'_> {
                             .driver_median_ns
                             .map_or_else(|| "n/a".to_owned(), milliseconds)
                     )?,
-                    Some(Native::NotPassed { decisions }) => {
-                        writeln!(f, " {} | | | |", decisions_text(decisions))?;
+                    Some(Native::NotPassed { decisions, reasons }) => {
+                        writeln!(f, " {} | | | |", non_pass_text(decisions, reasons))?;
                     }
                     None => writeln!(f, " n/a | | | |")?,
                 }
@@ -639,8 +650,40 @@ impl fmt::Display for Markdown<'_> {
         for scoreboard in &comparison.scoreboards {
             scoreboard_tables(f, comparison, scoreboard)?;
         }
+        failure_table(f, comparison)?;
         Ok(())
     }
+}
+
+/// Every retained non-pass phase, independently of the timed population.
+fn failure_table(f: &mut fmt::Formatter<'_>, comparison: &Comparison) -> fmt::Result {
+    if comparison
+        .cells
+        .iter()
+        .all(|cell| cell.failure_reasons.is_empty())
+    {
+        return Ok(());
+    }
+    writeln!(
+        f,
+        "\nRecorded failure reasons across all scheduled phases.\n\n| Report | Cell | Producer, phase and reason | Positions |\n|---|---|---|---:|"
+    )?;
+    for cell in &comparison.cells {
+        for label in &comparison.labels {
+            if let Some(reasons) = cell.failure_reasons.get(label) {
+                for (reason, count) in reasons {
+                    writeln!(
+                        f,
+                        "| {} | {} | {} | {count} |",
+                        markdown_text(label),
+                        markdown_text(&cell.label),
+                        markdown_text(reason),
+                    )?;
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 /// One scoreboard: its sentence, its wins, its losses and its peak memory.
@@ -789,7 +832,7 @@ fn label(entry: &str, workload: Option<&Value>) -> String {
 fn native_cell(record: Option<&Native>) -> String {
     match record {
         Some(Native::Passed(passed)) => timing_cell(&passed.timing),
-        Some(Native::NotPassed { decisions }) => decisions_text(decisions),
+        Some(Native::NotPassed { decisions, reasons }) => non_pass_text(decisions, reasons),
         None => "n/a".to_owned(),
     }
 }
@@ -800,6 +843,33 @@ fn decisions_text(decisions: &BTreeMap<String, usize>) -> String {
         .map(|(decision, count)| format!("{decision} ×{count}"))
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+fn non_pass_text(decisions: &BTreeMap<String, usize>, reasons: &BTreeMap<String, usize>) -> String {
+    markdown_text(&format!(
+        "{}; {}",
+        decisions_text(decisions),
+        decisions_text(reasons)
+    ))
+}
+
+/// A retained diagnostic is text, never Markdown or a new table row.
+fn markdown_text(text: &str) -> String {
+    let mut escaped = String::new();
+    for character in text.chars() {
+        match character {
+            '&' => escaped.push_str("&amp;"),
+            '<' => escaped.push_str("&lt;"),
+            '>' => escaped.push_str("&gt;"),
+            '\\' | '|' | '`' | '*' | '_' | '[' | ']' => {
+                escaped.push('\\');
+                escaped.push(character);
+            }
+            character if character.is_control() => escaped.extend(character.escape_default()),
+            character => escaped.push(character),
+        }
+    }
+    escaped
 }
 
 fn timing_cell(timing: &Timing) -> String {
@@ -1068,6 +1138,7 @@ fn native(labelled: &Labelled<'_>, case: usize, profile: usize) -> Result<Native
     })?;
     let all = samples(labelled)?;
     let mut decisions = BTreeMap::new();
+    let mut reasons = BTreeMap::new();
     for record in &records {
         let decision = record["decision"].as_str().unwrap_or("unknown");
         if decision == "pass" {
@@ -1085,6 +1156,7 @@ fn native(labelled: &Labelled<'_>, case: usize, profile: usize) -> Result<Native
             _ => decision.to_owned(),
         };
         *decisions.entry(name).or_insert(0) += 1;
+        *reasons.entry(sample_reason(record, all)).or_insert(0) += 1;
     }
     if records.is_empty() {
         return Err(ViewError::Malformed {
@@ -1093,7 +1165,7 @@ fn native(labelled: &Labelled<'_>, case: usize, profile: usize) -> Result<Native
         });
     }
     if !decisions.is_empty() {
-        return Ok(Native::NotPassed { decisions });
+        return Ok(Native::NotPassed { decisions, reasons });
     }
     let timing = timing(labelled, &records)?;
     let first = records[0];
@@ -1149,6 +1221,65 @@ fn native(labelled: &Labelled<'_>, case: usize, profile: usize) -> Result<Native
         }),
         phases,
     }))
+}
+
+fn failure_reasons(
+    labelled: &Labelled<'_>,
+    case: usize,
+) -> Result<BTreeMap<String, usize>, ViewError> {
+    let all = samples(labelled)?;
+    let mut reasons = BTreeMap::new();
+    for record in all.iter().filter(|record| {
+        record["slot"]["case"].as_u64() == Some(case as u64) && record["decision"] != "pass"
+    }) {
+        let producer = &record["slot"]["producer"];
+        let producer = match producer["solver"].as_str() {
+            Some("native") => producer["profile"].as_u64().map_or_else(
+                || "native profile unavailable".to_owned(),
+                |profile| format!("native profile index {profile}"),
+            ),
+            Some(solver) => solver.to_owned(),
+            None => "producer unavailable".to_owned(),
+        };
+        let reason = format!("{producer}: {}", sample_reason(record, all));
+        *reasons.entry(reason).or_insert(0) += 1;
+    }
+    Ok(reasons)
+}
+
+fn sample_reason(record: &Value, samples: &[Value]) -> String {
+    let phase = record["slot"]["phase"]
+        .as_str()
+        .unwrap_or("phase unavailable");
+    let decision = record["decision"].as_str().unwrap_or("unknown");
+    let detail = record["detail"]
+        .as_str()
+        .unwrap_or("reason unavailable in retained sample");
+    let mut reason = format!("{phase}: {decision}: {detail}");
+    if let Some(index) = record["blocked_by"].as_u64() {
+        use std::fmt::Write;
+        if let Some(blocker) = usize::try_from(index)
+            .ok()
+            .and_then(|index| samples.get(index))
+        {
+            write!(
+                reason,
+                "; blocked by sample {index} ({}, {}): {}",
+                blocker["slot"]["phase"]
+                    .as_str()
+                    .unwrap_or("phase unavailable"),
+                blocker["decision"].as_str().unwrap_or("unknown"),
+                blocker["detail"]
+                    .as_str()
+                    .unwrap_or("reason unavailable in retained sample"),
+            )
+            .expect("writing to a String cannot fail");
+        } else {
+            write!(reason, "; blocking sample {index} unavailable")
+                .expect("writing to a String cannot fail");
+        }
+    }
+    reason
 }
 
 // The human statistics line `results: displayed models=…; candidates examined=…`.

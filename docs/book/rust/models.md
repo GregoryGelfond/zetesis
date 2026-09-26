@@ -46,6 +46,27 @@ One retained model representation serves execution and result consumers. Source
 syntax and explicit output exports have their own ownership boundaries. Scoped
 term workspaces can refer to this catalog without becoming model selections.
 
+## Reusing semantic order
+
+`ModelOrder::prepare_with` borrows one fixed catalog and prepares integer ranks
+for its occurrences. Equal logical atoms have equal ranks. Increasing ranks
+follow typed storage order, not discovery order or ASP arithmetic comparison.
+`select_with` validates positions, orders them through the ranks and coalesces
+duplicates, retaining a supplied occurrence from each selected equivalence class.
+It returns an ordinary `Model` sharing the original catalog; the model can outlive
+the prepared order. No atom payload is copied or compared again during selection.
+
+For a catalog of size *n* and a selection of size *m*, preparation takes
+O(n log n) semantic comparisons and two integer buffers, retaining one.
+Selection takes O(m log m) integer comparisons and O(m) temporary space.
+Both operations accept work/cancellation callbacks and metadata byte ceilings.
+`ModelPublication` and `ModelPublicationFailure` retain actual peak metadata;
+rejected reservation proposals are not counted as allocations. Catalog payload
+and earlier models belong to their separate owners. See
+[`ModelOrder`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/model/order.rs)
+for the exact callback, capacity and final allocation boundaries, and the
+[rank correspondence](../lean/correspondence.md) for the semantic assumptions.
+
 ## Building a catalog during grounding
 
 `zetesis_core::atom_interner::AtomInterner` combines one canonical store with

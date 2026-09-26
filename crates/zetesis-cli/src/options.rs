@@ -188,6 +188,13 @@ pub struct Options {
     /// tied optima; interrupted runs may display incumbents without proving an optimum.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.models, display_order = 0)]
     pub models: usize,
+    /// Cumulative work preparing atom order and constructing verified formula models.
+    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_model_work, hide_short_help = true)]
+    pub max_model_work: u64,
+    /// Maximum reserved capacity for prepared atom ranks and active model-construction metadata.
+    /// Omitted, it is the library default scaled by `--memory`.
+    #[arg(long, hide_short_help = true)]
+    pub max_model_bytes: Option<usize>,
     /// Cumulative objective evaluation work across all verified stable models.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_objective_work, hide_short_help = true)]
     pub max_objective_work: u64,
@@ -447,6 +454,8 @@ impl From<&Options> for crate::SolveConfig {
                 max_scalar_bytes: options.max_expansion_bytes,
             },
             models: options.models,
+            max_model_work: options.max_model_work,
+            max_model_bytes: options.max_model_bytes.unwrap_or(allowed.max_model_bytes),
             max_search_work: options.max_search_work,
             max_search_decisions: options.max_search_decisions,
             max_projection_entries: options.max_projection_entries,

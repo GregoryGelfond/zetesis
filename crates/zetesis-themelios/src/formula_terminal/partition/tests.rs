@@ -12,6 +12,9 @@ use crate::formula_ir::{HeadIr, HeadLiteral, HeadOperand, LiteralIr, Preparation
 use crate::formula_support::{Counters, GroundingWork, SupportCatalog, components};
 use crate::{AdmissionOptions, ExpansionLimits, FormulaLimits, FormulaResource};
 
+#[path = "tests/policy.rs"]
+mod policy;
+
 fn prepare(text: &str) -> crate::formula::Preparation {
     let source = Source::new(SourceId::new(241), text.into()).unwrap();
     let parsed =
@@ -353,16 +356,18 @@ fn support_storage_refusal_is_not_optional_fallback() {
 }
 
 #[test]
-fn typed_closed_compounds_are_terminal_definitions() {
+fn typed_closed_compounds_remain_in_the_base() {
     let prepared = prepare("d(f(7,(a,\"a\",-g))). d(f(#inf,(#sup,g(1,2)))).");
+    let original = prepared.program.analyzed.clone();
     let Partition {
-        terminal: Some(Definitions { deferred, .. }),
-        ..
+        base,
+        terminal: None,
     } = partition(prepared).unwrap()
     else {
-        panic!("already closed typed constants are eligible")
+        panic!("closed producers avoid no binding enumeration")
     };
-    assert_eq!(deferred.len(), 2);
+    assert_eq!(base.program.rules.len(), 2);
+    assert_eq!(base.program.analyzed, original);
 }
 
 #[test]
@@ -375,13 +380,51 @@ fn nested_constant_type_mismatches_prevent_partition() {
         "d(f(7,(g,9))). d(f(7,(-g,9))).",
         "d(f(7,(g(1,2),9))). d(f(7,((1,2),9))).",
     ] {
-        let mut prepared = prepare(text);
-        assert_eq!(prepared.program.rules.len(), 2);
-        assert_eq!(prepared.program.analyzed.statements().count(), 2);
-        let HeadIr::Normal(Some(replacement)) = prepared.program.rules[1].head else {
-            panic!("closed fact fixture")
-        };
-        prepared.program.rules[0].head = HeadIr::Normal(Some(replacement));
+        let text = format!("{text} p(1). d(X):-p(X).");
+        // A variable-bearing producer keeps the entire d/1 signature selected;
+        // the mismatched closed fact must fail correspondence, not the policy.
+        assert!(matches!(
+            partition(prepare(&text)).unwrap(),
+            Partition {
+                terminal: Some(_),
+                ..
+            }
+        ));
+        let mut prepared = prepare(&text);
+        assert_eq!(prepared.program.rules.len(), 4);
+        assert_eq!(prepared.program.analyzed.statements().count(), 4);
+        let mut counters = Counters::default();
+        let components = prepared
+            .catalog
+            .component_view(&prepared.limits, &mut counters, prepared.location)
+            .unwrap()
+            .unwrap();
+        let facts: Vec<_> = prepared
+            .program
+            .rules
+            .iter()
+            .enumerate()
+            .filter_map(|(position, rule)| {
+                let HeadIr::Normal(Some(head)) = rule.head else {
+                    return None;
+                };
+                (rule.variables == 0
+                    && head
+                        .get(
+                            components,
+                            &prepared.limits,
+                            &mut counters,
+                            prepared.location,
+                        )
+                        .unwrap()
+                        .predicate()
+                        .name()
+                        == "d")
+                    .then_some((position, head))
+            })
+            .collect();
+        assert_eq!(facts.len(), 2);
+        prepared.program.rules[facts[0].0].head = HeadIr::Normal(Some(facts[1].1));
         assert!(
             matches!(
                 partition(prepared).unwrap(),

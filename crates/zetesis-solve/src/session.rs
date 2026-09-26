@@ -751,6 +751,7 @@ impl<'a> Session<'a> {
                     query_execution: None,
                     hybrid_execution: None,
                     terminal_execution: None,
+                    model_construction: None,
                 })),
                 config,
             ));

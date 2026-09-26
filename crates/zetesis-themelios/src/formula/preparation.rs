@@ -188,10 +188,14 @@ impl PreparedFormula {
         self.ground_with_observer(None)
     }
 
-    /// Materialize a certified base and defer terminal positive definitions
-    /// when their complete source/IR correspondence is established. Otherwise
-    /// materialize the original theory. Both routes retain preparation charges.
-    /// No answer sets are computed by this operation.
+    /// Materialize a certified base and defer complete terminal positive
+    /// definition groups when their source/IR correspondence is established and
+    /// at least one producer has a variable. A group shares a predicate name,
+    /// arity and sign; its ground producers defer with its variable producers.
+    /// Ground-only groups remain in the base, including rules with nonempty
+    /// bodies. If no group is selected, materialize the original theory. This
+    /// physical policy does not narrow the mathematical terminal classification.
+    /// Both routes retain preparation charges and compute no answer sets.
     ///
     /// # Errors
     /// Returns source, allocation or resource refusals; an applicable terminal

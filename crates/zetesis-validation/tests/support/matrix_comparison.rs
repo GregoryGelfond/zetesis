@@ -430,6 +430,34 @@ fn interrupted() -> Value {
 }
 
 #[test]
+fn incomplete_census_keeps_the_validated_typed_reason() {
+    for (kind, code, detail) in [
+        ("oracle", "work_limit", "oracle work limit reached"),
+        (
+            "countermodel",
+            "projection_bytes",
+            "projection history Bytes requires 129; limit is 128",
+        ),
+        (
+            "model_construction",
+            "bytes_limit",
+            "model construction requires 257 bytes, allowance is 256",
+        ),
+    ] {
+        let mut value = interrupted();
+        value["outcome"]["interruption"] = json!({"kind":kind,"code":code,"detail":detail});
+        let (decision, actual) = outcome::check(&value, Some(exit(3))).unwrap_err();
+        assert_eq!(decision, Decision::Incomplete);
+        assert_eq!(
+            actual,
+            format!(
+                "native reported incomplete kind={kind} code={code}: {detail}; full evidence retained"
+            )
+        );
+    }
+}
+
+#[test]
 fn successful_status_cannot_classify_an_embedded_refusal() {
     let mut value: Value =
         serde_json::from_slice(sample().capture.as_ref().unwrap().stdout()).unwrap();

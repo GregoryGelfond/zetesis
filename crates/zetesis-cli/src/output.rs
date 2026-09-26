@@ -203,7 +203,7 @@ fn phases(out: &mut Buffer, timings: Option<&PhaseTimings>) -> Result<(), RunErr
         return out.text("null");
     };
     out.text(&format!(
-        "{{\"schema\":4,\"clock\":\"host_monotonic\",\"driver_elapsed_ns\":{},\"measurements\":{{",
+        "{{\"schema\":5,\"clock\":\"host_monotonic\",\"driver_elapsed_ns\":{},\"measurements\":{{",
         timings.driver_elapsed.as_nanos()
     ))?;
     for (index, phase) in SolvePhase::ALL.into_iter().enumerate() {
@@ -316,6 +316,7 @@ fn error_kind(error: &RunError) -> &'static str {
         RunError::LazyGpu(_) => "lazy_gpu",
         RunError::LazyStatisticsOverflow => "lazy_statistics_overflow",
         RunError::ClosureStatisticsOverflow => "closure_statistics_overflow",
+        RunError::ModelStatisticsOverflow => "model_statistics_overflow",
     }
 }
 
@@ -338,6 +339,11 @@ fn reconstruction_kind(error: &zetesis_themelios::ReconstructionError) -> &'stat
 
 fn reason_code(reason: Interruption) -> &'static str {
     match reason {
+        Interruption::ModelConstruction(reason) => match reason {
+            zetesis_solve::ModelConstructionStop::Control(stop) => stop_code(stop),
+            zetesis_solve::ModelConstructionStop::Work { .. } => "work_limit",
+            zetesis_solve::ModelConstructionStop::Bytes { .. } => "bytes_limit",
+        },
         Interruption::Preparation(reason)
         | Interruption::Oracle(reason)
         | Interruption::Constraint(reason)
@@ -520,6 +526,7 @@ fn write_interruption(
             Interruption::Countermodel(_) => "countermodel",
             Interruption::Constraint(_) => "constraint",
             Interruption::Reconstruction(_) => "answer_reconstruction",
+            Interruption::ModelConstruction(_) => "model_construction",
             Interruption::Objective(_) => "objective",
             Interruption::Incumbent(_) => "incumbent",
         };
@@ -529,6 +536,21 @@ fn write_interruption(
         out.string(reason_code(reason))?;
         out.text(",\"detail\":")?;
         out.display_string(&reason)?;
+        if let Interruption::ModelConstruction(stop) = reason {
+            match stop {
+                zetesis_solve::ModelConstructionStop::Work { observed, limit } => {
+                    out.text(",\"resource\":\"work\"")?;
+                    out.number_field("required", observed)?;
+                    out.number_field("limit", limit)?;
+                }
+                zetesis_solve::ModelConstructionStop::Bytes { required, limit } => {
+                    out.text(",\"resource\":\"bytes\"")?;
+                    out.number_field("required", required)?;
+                    out.number_field("limit", limit)?;
+                }
+                zetesis_solve::ModelConstructionStop::Control(_) => {}
+            }
+        }
         out.text("}")?;
     } else {
         out.text("null")?;
@@ -556,6 +578,8 @@ fn statistics(out: &mut Buffer, view: &SummaryView<'_>) -> Result<(), RunError> 
         hybrid_statistics(out, view.hybrid_execution)?;
         out.text(",\"terminal_execution\":")?;
         terminal_statistics(out, view.terminal_execution)?;
+        out.text(",\"model_construction\":")?;
+        model_construction_statistics(out, view.model_construction)?;
         out.text(",\"candidate_restrictions\":")?;
         candidate_statistics(out, view.candidates)?;
         out.text(",\"execution\":")?;
@@ -581,6 +605,21 @@ fn statistics(out: &mut Buffer, view: &SummaryView<'_>) -> Result<(), RunError> 
         out.text("null")?;
     }
     Ok(())
+}
+
+fn model_construction_statistics(
+    out: &mut Buffer,
+    statistics: Option<&zetesis_solve::ModelConstructionStatistics>,
+) -> Result<(), RunError> {
+    let Some(statistics) = statistics else {
+        return out.text("null");
+    };
+    out.text("{\"work\":")?;
+    out.text(&statistics.work.to_string())?;
+    out.number_field("prepared_bytes", statistics.prepared_bytes)?;
+    out.number_field("peak_bytes", statistics.peak_bytes)?;
+    out.number_field("constructed", statistics.constructed)?;
+    out.text("}")
 }
 
 fn grounding(out: &mut Buffer, timings: Option<&crate::GroundingTimings>) -> Result<(), RunError> {
@@ -689,6 +728,7 @@ struct SummaryView<'a> {
     execution: Option<&'a crate::FormulaExecutionStatistics>,
     hybrid_execution: Option<&'a zetesis_solve::HybridExecutionStatistics>,
     terminal_execution: Option<&'a zetesis_solve::TerminalExecutionStatistics>,
+    model_construction: Option<&'a zetesis_solve::ModelConstructionStatistics>,
     lazy_execution: Option<&'a crate::LazyExecutionStatistics>,
     shared_execution: Option<&'a crate::SharedExecutionStatistics>,
     closure_execution: Option<&'a crate::ClosureExecutionStatistics>,
@@ -716,6 +756,8 @@ impl<'a> SummaryView<'a> {
                     hybrid_execution: semantic.and_then(crate::SemanticOutcome::hybrid_execution),
                     terminal_execution: semantic
                         .and_then(crate::SemanticOutcome::terminal_execution),
+                    model_construction: semantic
+                        .and_then(crate::SemanticOutcome::model_construction),
                     lazy_execution: semantic.and_then(crate::SemanticOutcome::lazy_execution),
                     shared_execution: semantic.and_then(crate::SemanticOutcome::shared_execution),
                     closure_execution: semantic.and_then(crate::SemanticOutcome::closure_execution),
@@ -744,6 +786,7 @@ impl<'a> SummaryView<'a> {
                     execution: partial.and_then(|p| p.formula_execution.as_ref()),
                     hybrid_execution: partial.and_then(|p| p.hybrid_execution.as_ref()),
                     terminal_execution: partial.and_then(|p| p.terminal_execution.as_ref()),
+                    model_construction: partial.and_then(|p| p.model_construction.as_ref()),
                     lazy_execution: partial.and_then(|p| p.lazy_execution.as_ref()),
                     shared_execution: partial.and_then(|p| p.shared_execution.as_ref()),
                     closure_execution: partial.and_then(|p| p.closure_execution.as_ref()),

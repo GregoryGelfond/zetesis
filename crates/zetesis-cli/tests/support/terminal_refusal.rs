@@ -38,7 +38,7 @@ fn capture(work: Option<u64>) -> (Result<Report, RunFailure>, Vec<u8>) {
     .unwrap();
     let mut output = Vec::new();
     let result = run_detailed_with_diagnostics(
-        "a | b. c :- a. c :- b.".into(),
+        "a(1) | b(1). c(X):-a(X). c(X):-b(X).".into(),
         &options,
         &mut output,
         &mut Vec::new(),
@@ -63,7 +63,7 @@ fn work_refusal_retains_only_the_original_checked_prefix() {
         model.sort();
     }
     family.sort();
-    assert_eq!(family, [vec!["a", "c"], vec!["b", "c"]]);
+    assert_eq!(family, [vec!["a(1)", "c(1)"], vec!["b(1)", "c(1)"]]);
     let complete_document: Value = serde_json::from_slice(&output).unwrap();
 
     let ceiling = receipt.reconstruction.work.checked_sub(1).unwrap();

@@ -179,7 +179,8 @@ impl<'a> TerminalSession<'a> {
         phases: &Recorder,
     ) -> Option<Result<(Model, Option<Score>), SolveError>> {
         // Settle workers before taking the final base receipt. The original
-        // reconstruction/execution failure takes precedence over cleanup.
+        // reconstruction/execution failure or finalized interruption takes
+        // precedence over cleanup.
         let stopped = self.base.stop(phases);
         let (state, result) = match error {
             Some(SolveError::Reconstruction(error)) => match error.stop() {
@@ -190,13 +191,7 @@ impl<'a> TerminalSession<'a> {
                 None => (None, Some(Err(SolveError::Reconstruction(error)))),
             },
             Some(error) => (None, Some(Err(error))),
-            None => (
-                stopped.map_or_else(
-                    |error| Some(SearchState::Interrupted(Interruption::Countermodel(error))),
-                    |()| state,
-                ),
-                None,
-            ),
+            None => (crate::completion::after_cleanup(state, stopped), None),
         };
         let mut outcome = self.snapshot(phases);
         outcome.search_state = state;

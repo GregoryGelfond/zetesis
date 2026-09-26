@@ -34,6 +34,14 @@ pub struct SolveConfig {
     pub max_search_work: u64,
     /// Cumulative formula branch decisions.
     pub max_search_decisions: u64,
+    /// Cumulative prepared-order and selected-model construction work per formula
+    /// session, including failed attempts. Independent of membership and scoring.
+    pub max_model_work: u64,
+    /// Peak live model-construction metadata: the prepared order and private
+    /// selection/publication buffers, including actual growth overlap. Excludes
+    /// immutable catalog payload, previously published models and allocator/Arc
+    /// bookkeeping. This is a named capacity allowance, not process RSS.
+    pub max_model_bytes: usize,
     /// Distinct candidate projections retained to exclude previously visited keys.
     pub max_projection_entries: u64,
     /// Logical nodes in the retained candidate-projection trie.
@@ -163,6 +171,8 @@ impl SolveConfig {
         models: 1,
         max_search_work: 10_000_000_000,
         max_search_decisions: 10_000_000,
+        max_model_work: 1_000_000_000,
+        max_model_bytes: 67_108_864,
         max_projection_entries: zetesis_sat::ProjectionLimits::DEFAULT.max_entries,
         max_projection_nodes: zetesis_sat::ProjectionLimits::DEFAULT.max_nodes,
         max_projection_bytes: zetesis_sat::ProjectionLimits::DEFAULT.max_bytes,
@@ -222,12 +232,12 @@ impl SolveConfig {
     pub const REFERENCE_MEMORY: u64 = 2 * 1024 * 1024 * 1024;
 
     /// The defaults for a session allowed `memory` bytes over `workers`:
-    /// [`Self::DEFAULT`] with the nine byte ceilings that bound retained
+    /// [`Self::DEFAULT`] with the ten byte ceilings that bound retained
     /// storage scaled by `memory` over [`Self::REFERENCE_MEMORY`], each
     /// saturating at its type's maximum, and the per-closure allowance each
     /// worker's share of the scaled collective closure ceiling, so that the
     /// product checked by CPU closure setup holds. The projection, objective
-    /// key, incumbent, reduct, completion scratch, candidate, collective
+    /// key, incumbent, model construction, reduct, completion scratch, candidate, collective
     /// closure and batch ceilings scale; work, count and structural
     /// ceilings, and the ceilings of source admission, do not. Constant
     /// time.
@@ -248,6 +258,7 @@ impl SolveConfig {
             max_projection_bytes: scale_usize(Self::DEFAULT.max_projection_bytes),
             max_objective_key_bytes: scale_usize(Self::DEFAULT.max_objective_key_bytes),
             max_optimal_bytes: scale_usize(Self::DEFAULT.max_optimal_bytes),
+            max_model_bytes: scale_usize(Self::DEFAULT.max_model_bytes),
             max_reduct_bytes: scale_u64(Self::DEFAULT.max_reduct_bytes),
             max_completion_scratch_bytes: scale_u64(Self::DEFAULT.max_completion_scratch_bytes),
             max_candidate_bytes: scale_usize(Self::DEFAULT.max_candidate_bytes),

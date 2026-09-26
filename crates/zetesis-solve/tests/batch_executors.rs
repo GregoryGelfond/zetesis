@@ -232,6 +232,9 @@ fn external_reference_preserves_complete_families() {
             assert_eq!(family(&mut session), expected, "{source}");
             let outcome = session.outcome().unwrap();
             assert_eq!(outcome.completion(), Some(Completion::Exhausted));
+            let construction = outcome.model_construction().unwrap();
+            assert!(construction.prepared_bytes > 0);
+            assert_eq!(construction.constructed, outcome.verified_models());
             assert!(outcome.formula_execution().is_none());
             let receipt = outcome.batch_execution().unwrap();
             assert_eq!(receipt.operation, MembershipOperation::General);
@@ -580,7 +583,7 @@ fn relational_inputs_are_not_silently_materialized() {
 #[test]
 fn terminal_inputs_do_not_inject_an_original_membership_executor_into_the_base() {
     let materialized = zetesis_themelios::prepare_formula(
-        "{seed}. receipt:-seed.".into(),
+        "{seed(1)}. receipt(X):-seed(X).".into(),
         AdmissionOptions::default(),
         ExpansionLimits::default(),
         FormulaLimits::default(),

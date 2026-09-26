@@ -38,6 +38,7 @@ pub mod retention;
 mod identity;
 mod ordered_index;
 mod atom_lookup;
+mod checked_sort;
 pub use catalog::interner as atom_interner;
 mod carrier;
 mod ground;
@@ -54,7 +55,7 @@ pub use carrier::{AtomIter, CarrierAtom, CarrierError, CarrierFailure};
 pub use ground::{AtomId, GroundProgram, GroundRule, StaticError, StaticLimits, WordError};
 pub use model::{
     AtomCatalog, Interpretation, Model, ModelAtoms, ModelError, ModelFailure, ModelIter,
-    ModelPublicationFailure,
+    ModelOrder, ModelPublication, ModelPublicationFailure,
 };
 pub use program::{
     AdmissionError, AdmissionLimits, AdmissionResource, Domain, FilterRef, Filters, PatternRef,

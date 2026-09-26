@@ -1,6 +1,9 @@
 //! Timing evidence is optional and never substitutes for answer-set qualification.
 
-use super::{CERTIFICATE_HEADER, CERTIFICATE_LABELS, FOOTER, HEADER, LABELS, REDUCT_HEADER, parse};
+use super::{
+    CERTIFICATE_HEADER, CERTIFICATE_LABELS, FOOTER, HEADER, LABELS, RECONSTRUCTION_HEADER,
+    REDUCT_HEADER, parse,
+};
 
 fn section() -> String {
     section_for(HEADER, &LABELS)
@@ -142,7 +145,7 @@ fn reduct_preparation_requires_its_own_phase_schema() {
 
 #[test]
 fn reconstruction_phase_requires_schema_four_and_retains_failed_attempts() {
-    let current = section().replace(
+    let current = section_for(RECONSTRUCTION_HEADER, &LABELS[..15]).replace(
         "phase answer_reconstruction: unmeasured",
         "phase answer_reconstruction: calls=3; elapsed_ns=12; complete=false",
     );
@@ -152,12 +155,34 @@ fn reconstruction_phase_requires_schema_four_and_retains_failed_attempts() {
     let value = parsed.phases["answer_reconstruction"].as_ref().unwrap();
     assert_eq!((value.calls, value.elapsed_ns), (3, 12));
     for header in [REDUCT_HEADER, CERTIFICATE_HEADER] {
-        assert!(parse(&current.replace(HEADER, header)).is_err());
+        assert!(parse(&current.replace(RECONSTRUCTION_HEADER, header)).is_err());
     }
     assert!(
         parse(&current.replace(
             "  phase answer_reconstruction: calls=3; elapsed_ns=12; complete=false\n",
             "",
+        ))
+        .is_err()
+    );
+}
+
+#[test]
+fn model_construction_requires_schema_five() {
+    let current = section().replace(
+        "phase model_construction: unmeasured",
+        "phase model_construction: calls=4; elapsed_ns=18; complete=true",
+    );
+    let parsed = parse(&current).unwrap().unwrap();
+    assert_eq!((parsed.schema_version, parsed.phases.len()), (5, 16));
+    let value = parsed.phases["model_construction"].as_ref().unwrap();
+    assert_eq!((value.calls, value.elapsed_ns), (4, 18));
+    for header in [RECONSTRUCTION_HEADER, REDUCT_HEADER, CERTIFICATE_HEADER] {
+        assert!(parse(&current.replace(HEADER, header)).is_err());
+    }
+    assert!(
+        parse(&current.replace(
+            "  phase model_construction: calls=4; elapsed_ns=18; complete=true\n",
+            ""
         ))
         .is_err()
     );

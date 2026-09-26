@@ -90,6 +90,7 @@ mod query_observation;
 pub use query_observation::QueryExecutionObservation;
 mod closure_session;
 mod formula_session;
+mod model_construction;
 mod hybrid_regions;
 mod hybrid_session;
 mod terminal_session;
@@ -121,6 +122,7 @@ pub use hybrid_session::HybridExecutionStatistics;
 pub use lazy_execution::{
     LazyBufferUsage, LazyExecutionStatistics, LazyTransportReplacements, LazyTransportUsage,
 };
+pub use model_construction::{ModelConstructionStatistics, ModelConstructionStop};
 pub use optimization::{Optimization, OptimizationStop};
 pub use phase_timing::{PhaseTimings, SolvePhase};
 pub use policy::{Backend, Grounder, Oracle, SourceBatching};

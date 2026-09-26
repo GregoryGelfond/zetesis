@@ -163,6 +163,49 @@ fn with_memory(report: &mut Value, producer: &Value, peaks: &[u64]) {
 }
 
 #[test]
+fn failure_appendix_preserves_causes_outside_timed_samples() {
+    let mut only = report(&["case.lp"], &[&[1_000_000]], &[2_000_000], None);
+    only["passed"] = json!(false);
+    let samples = only["report"]["samples"].as_array_mut().unwrap();
+    let detail = "native reported incomplete kind=model_construction code=bytes_limit: model construction requires 129 bytes, allowance is 128";
+    for round in 0..2 {
+        samples.push(json!({
+            "slot": {"case": 0, "phase": "memory", "round": round,
+                     "producer": {"solver": "native", "profile": 0}},
+            "decision": "incomplete", "detail": detail
+        }));
+    }
+    samples.push(json!({
+        "slot": {"case": 0, "phase": "diagnostics", "round": 0,
+                 "producer": {"solver": "reference"}},
+        "decision": "timeout"
+    }));
+    let comparison = compare(&[Labelled {
+        label: "only",
+        report: &only,
+    }])
+    .unwrap();
+    let encoded = serde_json::to_value(&comparison).unwrap();
+    let cell = &encoded["cells"][0];
+    assert_eq!(
+        cell["profiles"][0]["reports"]["only"]["median_ns"],
+        1_000_000
+    );
+    assert_eq!(cell["reference"]["only"]["median_ns"], 2_000_000);
+    assert_eq!(cell["profiles"][0]["reference_ratios"]["only"], 0.5);
+    let native = format!("native profile index 0: memory: incomplete: {detail}");
+    let reference = "reference: diagnostics: timeout: reason unavailable in retained sample";
+    assert_eq!(
+        cell["failure_reasons"]["only"],
+        json!({(native): 2, (reference): 1})
+    );
+    let markdown = comparison.markdown();
+    assert!(markdown.contains("Recorded failure reasons across all scheduled phases."));
+    assert!(markdown.contains("memory: incomplete: native reported incomplete kind=model\\_construction code=storage\\_limit: model storage bytes limit 128; needed 129"));
+    assert!(markdown.contains(&format!("| only | case | {reference} | 1 |")));
+}
+
+#[test]
 fn scoreboards_count_the_cells_the_native_solver_decided_faster() {
     let only = report(
         &[
@@ -378,12 +421,18 @@ fn closure_route_work_is_read_from_its_summed_receipt() {
 
 #[test]
 fn non_pass_cells_are_reported_by_decision_not_averaged() {
-    let refused = report(
+    let mut refused = report(
         &["generated/producer-chain-700.lp"],
         &[&[5_000, 6_000]],
         &[1],
         Some(0),
     );
+    for sample in refused["report"]["samples"].as_array_mut().unwrap() {
+        if sample["decision"] == "refused" {
+            let needed = 129 + sample["slot"]["round"].as_u64().unwrap();
+            sample["detail"] = json!(format!("formula support bytes limit 128; needed {needed}"));
+        }
+    }
     let comparison = compare(&[Labelled {
         label: "main",
         report: &refused,
@@ -393,10 +442,19 @@ fn non_pass_cells_are_reported_by_decision_not_averaged() {
     let cell = &encoded["cells"][0]["profiles"][0]["reports"]["main"];
     assert!(cell.get("median_ns").is_none());
     assert_eq!(cell["decisions"], json!({"refused": 2}));
+    assert_eq!(
+        cell["reasons"],
+        json!({
+            "timed: refused: formula support bytes limit 128; needed 129": 1,
+            "timed: refused: formula support bytes limit 128; needed 130": 1,
+        })
+    );
     assert!(encoded["cells"][0]["profiles"][0]["reference_ratios"]["main"].is_null());
     let markdown = comparison.markdown();
     assert!(markdown.contains("producer-chain-700"));
     assert!(markdown.contains("refused"));
+    assert!(markdown.contains("support bytes limit 128; needed 129"));
+    assert!(markdown.contains("support bytes limit 128; needed 130"));
 }
 
 #[test]
@@ -761,6 +819,7 @@ fn blocked_positions_name_their_blocking_decision() {
         .position(|s| s["slot"]["phase"] == "qualification")
         .unwrap();
     samples[blocker]["decision"] = json!("timeout");
+    samples[blocker]["detail"] = json!("process deadline | 5 seconds\n<b>stopped</b>");
     for sample in samples.iter_mut() {
         if sample["slot"]["phase"] == "timed" && sample["slot"]["producer"]["solver"] == "native" {
             sample["decision"] = json!("not_attempted");
@@ -778,6 +837,18 @@ fn blocked_positions_name_their_blocking_decision() {
         encoded["cells"][0]["profiles"][0]["reports"]["a"]["decisions"],
         json!({"blocked by timeout": 2})
     );
+    let reason = format!(
+        "timed: not_attempted: reason unavailable in retained sample; blocked by sample {blocker} (qualification, timeout): process deadline | 5 seconds\n<b>stopped</b>"
+    );
+    assert_eq!(
+        encoded["cells"][0]["profiles"][0]["reports"]["a"]["reasons"],
+        json!({(reason): 2})
+    );
+    let markdown = comparison.markdown();
+    assert!(markdown.contains(
+        "(qualification, timeout): process deadline \\| 5 seconds\\n&lt;b&gt;stopped&lt;/b&gt;"
+    ));
+    assert!(!markdown.contains("5 seconds\n<b>"));
 }
 
 #[test]

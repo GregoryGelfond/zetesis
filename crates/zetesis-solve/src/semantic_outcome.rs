@@ -41,6 +41,7 @@ pub struct SemanticOutcome {
     pub(crate) query_execution: Option<crate::QueryExecutionObservation>,
     pub(crate) hybrid_execution: Option<crate::HybridExecutionStatistics>,
     pub(crate) terminal_execution: Option<crate::TerminalExecutionStatistics>,
+    pub(crate) model_construction: Option<crate::ModelConstructionStatistics>,
 }
 
 impl SemanticOutcome {
@@ -71,6 +72,7 @@ impl SemanticOutcome {
             query_execution: None,
             hybrid_execution: None,
             terminal_execution: None,
+            model_construction: None,
         }
     }
 
@@ -139,6 +141,16 @@ impl SemanticOutcome {
     #[must_use]
     pub const fn terminal_execution(&self) -> Option<&crate::TerminalExecutionStatistics> {
         self.terminal_execution.as_ref()
+    }
+
+    /// Prepared semantic order and model construction over the formula catalog.
+    /// Hybrid and terminal sessions retain the base receipt here. Reconstruction
+    /// and source qualification are separate; constructed models are not a count
+    /// of published original answers. Absent before a construction attempt or
+    /// for closure execution.
+    #[must_use]
+    pub const fn model_construction(&self) -> Option<&crate::ModelConstructionStatistics> {
+        self.model_construction.as_ref()
     }
 
     /// Host batch receipts for an explicitly supplied executor. Absent for

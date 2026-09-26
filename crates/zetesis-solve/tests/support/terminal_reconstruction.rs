@@ -12,7 +12,7 @@ use zetesis_themelios::{
 #[test]
 fn consumed_base_answer_cannot_escape_a_cancelled_reconstruction() {
     let FormulaMaterialization::Terminal(owner) = prepare_formula(
-        "seed. receipt:-seed.".into(),
+        "seed(1). receipt(X):-seed(X).".into(),
         AdmissionOptions::default(),
         ExpansionLimits::default(),
         FormulaLimits::default(),

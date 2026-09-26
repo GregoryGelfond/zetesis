@@ -81,7 +81,7 @@ fn positive_publication_retains_its_actual_matrix_procedure() {
             Procedure::PositiveConsequences
         );
         assert!(matches!(observation.execution.device, DeviceWork::Cpu));
-        assert_eq!(observation.timing.phase_schema, 4);
+        assert_eq!(observation.timing.phase_schema, 5);
         assert!(observation.timing.phases["reduct_preparation"].is_none());
     }
 }
@@ -102,7 +102,7 @@ fn residual_publication_retains_cold_preparation_measurement() {
         };
         let observation = Observation::from_statistics(&document, &text, request).unwrap();
         assert_eq!(observation.execution.procedure, Procedure::Countermodel);
-        assert_eq!(observation.timing.phase_schema, 4);
+        assert_eq!(observation.timing.phase_schema, 5);
         let observed = observation.timing.phases["reduct_preparation"]
             .as_ref()
             .unwrap();

@@ -50,6 +50,59 @@ fn hidden_choices(oracle: &str) -> (Report, Json) {
 }
 
 #[test]
+fn model_construction_refusal_retains_its_reason() {
+    for (flag, resource, code) in [
+        ("--max-model-work", "work", "work_limit"),
+        ("--max-model-bytes", "bytes", "bytes_limit"),
+    ] {
+        let (report, document) = solve(
+            "a | b.",
+            &options(&["--oracle", "countermodel", "--stats", flag, "0"]),
+        );
+        assert_eq!(report.unwrap().completion, Completion::Interrupted);
+        let outcome = &document["outcome"];
+        assert_eq!(outcome["status"], "incomplete");
+        assert_eq!(outcome["coverage"], "partial");
+        assert_eq!(outcome["published_models"], 0);
+        let interruption = &outcome["interruption"];
+        assert_eq!(interruption["kind"], "model_construction");
+        assert_eq!(interruption["code"], code);
+        assert_eq!(interruption["resource"], resource);
+        assert_eq!(interruption["limit"], 0);
+        assert!(interruption["required"].as_u64().unwrap() > 0);
+        assert!(!interruption["detail"].as_str().unwrap().is_empty());
+        assert!(document["statistics"]["model_construction"].is_object());
+        assert!(
+            document["statistics"]["phase_timings"]["measurements"]["model_construction"]
+                .is_object()
+        );
+    }
+}
+
+#[test]
+fn completed_models_retain_construction_receipts() {
+    let (report, document) = solve("a | b.", &options(&["--oracle", "countermodel", "--stats"]));
+    let report = report.unwrap();
+    assert_eq!(report.completion, Completion::Exhausted);
+    assert_eq!(report.models, 2);
+    let receipt = report.model_construction.unwrap();
+    assert_eq!(receipt.constructed, 2);
+    assert!(receipt.work > 0);
+    assert!(receipt.peak_bytes >= receipt.prepared_bytes);
+    let published = &document["statistics"]["model_construction"];
+    assert_eq!(published["constructed"], receipt.constructed);
+    assert_eq!(published["work"], receipt.work);
+    assert_eq!(
+        u128::from(published["prepared_bytes"].as_u64().unwrap()),
+        receipt.prepared_bytes
+    );
+    assert_eq!(
+        u128::from(published["peak_bytes"].as_u64().unwrap()),
+        receipt.peak_bytes
+    );
+}
+
+#[test]
 fn source_projection_selects_full_representatives() {
     let (report, value) = solve("{p;q}. #project p/0. #show.", &options(&[]));
     assert_eq!(report.unwrap().models, 2);
@@ -464,7 +517,7 @@ fn search_statistics_count_stable_models() {
 fn formula_phases_exclude_closure_measurements() {
     let (report, value) = formula_statistics();
     assert!(report.phase_timings.is_some());
-    assert_eq!(value["statistics"]["phase_timings"]["schema"], 4);
+    assert_eq!(value["statistics"]["phase_timings"]["schema"], 5);
     assert!(value["statistics"]["phase_timings"]["measurements"]["closure_membership"].is_null());
 }
 

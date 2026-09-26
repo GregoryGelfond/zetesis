@@ -3497,18 +3497,38 @@
     },
     {
       "file": "Zetesis/ModelSelections.lean",
-      "line": 29,
+      "line": 34,
       "name": "Zetesis.ModelSelections.canonicalization_exact"
     },
     {
       "file": "Zetesis/ModelSelections.lean",
-      "line": 39,
+      "line": 44,
       "name": "Zetesis.ModelSelections.unselected_entries_irrelevant"
     },
     {
       "file": "Zetesis/ModelSelections.lean",
-      "line": 54,
+      "line": 59,
       "name": "Zetesis.ModelSelections.renumbering_preserves_interpretation"
+    },
+    {
+      "file": "Zetesis/ModelSelections.lean",
+      "line": 79,
+      "name": "Zetesis.ModelSelections.rank_coverage_preserves_interpretation"
+    },
+    {
+      "file": "Zetesis/ModelSelections.lean",
+      "line": 110,
+      "name": "Zetesis.ModelSelections.rank_coalescing_preserves_interpretation"
+    },
+    {
+      "file": "Zetesis/ModelSelections.lean",
+      "line": 134,
+      "name": "Zetesis.ModelSelections.rank_order_iff"
+    },
+    {
+      "file": "Zetesis/ModelSelections.lean",
+      "line": 151,
+      "name": "Zetesis.ModelSelections.increasing_ranks_decode_unique"
     },
     {
       "file": "Zetesis/NegativeEligibility.lean",
@@ -6871,7 +6891,7 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "c56147da06afd62c08a74f252986f5fc598ec5f5acc51e0df36f88ab3b279f97",
+    "Audit.lean": "05c14da863c8245068ffff95cde1c9bd5c6d1f2a6fde5a77b70498cc3f870c22",
     "Zetesis.lean": "01e08a810f1643de408c92136bf9b6daa567d5debe4f60a30262192ebf19c5e3",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
     "Zetesis/AggregateBounds.lean": "c1a49f93ac5140bcd22876b42c52c23c4f447352c9cf61f2f01741fbbdc98452",
@@ -6950,7 +6970,7 @@
     "Zetesis/LazyRounds.lean": "c356b730916c3add85d422183146eab7150281d375b5b54eff775a6157a76e86",
     "Zetesis/Lifted.lean": "beae8b170cd0dc605155cf996395bb3105b544dd622753954de443727915dbbb",
     "Zetesis/LiftedBridge.lean": "97de4a489c8a4e1fadf43d759320532064a70d90be463da25ed1da78b601ca09",
-    "Zetesis/ModelSelections.lean": "59a905cd9cabe1b003e8365fe6c3e67a03c9fb22be167ae316a9cca35b1b21a4",
+    "Zetesis/ModelSelections.lean": "06a4f5cfe9d5f1d0ce22de637fa64a4f08d9b07dae3947a33358df8c196547b8",
     "Zetesis/NegativeEligibility.lean": "19642232da0d78920f9a2a9ca2e120c2356692e0e176a08ba97f6dd334fec403",
     "Zetesis/NegativeHeads.lean": "8167d8b182fe903c5d477df2418beb37b9eed1411068f4c400e044d5c8d2b10b",
     "Zetesis/NormalFerraris.lean": "8d66055e9bf2fdee4472bc15f8f661e287234b5629de22f479c7005d8707ad9a",

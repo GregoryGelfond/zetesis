@@ -4,6 +4,7 @@
 //! checked allocation or resource failure is an error, never optional fallback.
 
 mod matching;
+mod policy;
 mod reads;
 mod selection;
 mod source;
@@ -152,15 +153,26 @@ fn prepare(
         counters,
         location,
     };
-    let Some(selected) = selection::select(program, analysis.definitions(), &mut context)? else {
+    let Some(mut selected) = selection::select(program, analysis.definitions(), &mut context)?
+    else {
         return Ok(None);
     };
+    let definitions = policy::select(
+        program,
+        analysis.definitions(),
+        &mut selected.values,
+        &mut context,
+    )?;
+    if definitions.values.is_empty() {
+        return Ok(None);
+    }
     let (source, source_analysis) = source::base(
         &program.analyzed,
-        analysis.definitions(),
+        &definitions.values,
         &mut preparation.budget,
         &mut context,
     )?;
+    drop(definitions);
     let mut base = Scratch::new(&context)?;
     let mut deferred = Scratch::new(&context)?;
     let mut count = 0;

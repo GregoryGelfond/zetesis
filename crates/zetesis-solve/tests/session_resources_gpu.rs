@@ -1120,6 +1120,9 @@ fn terminal_families(device: Device) {
     require_device(&capture, device, Profile::Formula);
     require_complete(&capture, &reference.records);
     let terminal = capture.outcome.terminal_execution().unwrap();
+    let construction = capture.outcome.model_construction().unwrap();
+    assert!(construction.prepared_bytes > 0);
+    assert_eq!(construction.constructed, terminal.base_answers);
     assert_eq!(
         (
             terminal.base_answers,

@@ -17,50 +17,7 @@ pub(super) fn comparison(
         serde_json::to_writer_pretty(&mut *output, comparison).map_err(Error::Json)?;
         return writeln!(output).map_err(Error::Io);
     }
-    let rows = comparison
-        .cells
-        .iter()
-        .flat_map(|cell| {
-            cell.profiles
-                .iter()
-                .enumerate()
-                .flat_map(move |(profile_index, profile)| {
-                    comparison.labels.iter().map(move |label| {
-                        let (native, memory, outcome) = match profile.reports.get(label) {
-                            Some(Native::Passed(record)) => (
-                                milliseconds(record.timing.median_ns),
-                                bytes(record.peak_rss_bytes),
-                                "pass".to_owned(),
-                            ),
-                            Some(Native::NotPassed { decisions }) => (
-                                "—".into(),
-                                "—".into(),
-                                decisions
-                                    .iter()
-                                    .map(|(decision, count)| format!("{decision}: {count}"))
-                                    .collect::<Vec<_>>()
-                                    .join(", "),
-                            ),
-                            None => ("—".into(), "—".into(), "unavailable".into()),
-                        };
-                        let reference = cell.reference.get(label);
-                        Row::new([
-                            label.clone(),
-                            cell.label.clone(),
-                            format!("{}: {}", profile_index + 1, profile_name(&profile.profile)),
-                            native,
-                            reference.map_or_else(
-                                || "—".into(),
-                                |record| milliseconds(record.timing.median_ns),
-                            ),
-                            memory,
-                            bytes(reference.and_then(|record| record.peak_rss_bytes)),
-                            outcome,
-                        ])
-                    })
-                })
-        })
-        .collect();
+    let rows = comparison_rows(comparison);
     table(
         "Corpus benchmark — timed medians",
         &[
@@ -72,11 +29,13 @@ pub(super) fn comparison(
             "zetesis MiB",
             "clingo MiB",
             "Outcome",
+            "Detail",
         ],
         rows,
     )?
     .write(output, layout)
     .map_err(Error::Io)?;
+    comparison_failures(comparison, layout, output)?;
     let rows = comparison
         .labels
         .iter()
@@ -100,6 +59,97 @@ pub(super) fn comparison(
             "Accounted",
             "zetesis SHA-256",
             "clingo SHA-256",
+        ],
+        rows,
+    )?
+    .write(output, layout)
+    .map_err(Error::Io)
+}
+
+fn comparison_rows(comparison: &Comparison) -> Vec<Row> {
+    comparison
+        .cells
+        .iter()
+        .flat_map(|cell| {
+            cell.profiles
+                .iter()
+                .enumerate()
+                .flat_map(move |(profile_index, profile)| {
+                    comparison.labels.iter().map(move |label| {
+                        let (native, memory, outcome, detail) = match profile.reports.get(label) {
+                            Some(Native::Passed(record)) => (
+                                milliseconds(record.timing.median_ns),
+                                bytes(record.peak_rss_bytes),
+                                "pass".to_owned(),
+                                String::new(),
+                            ),
+                            Some(Native::NotPassed { decisions, reasons }) => (
+                                "—".into(),
+                                "—".into(),
+                                decisions
+                                    .iter()
+                                    .map(|(decision, count)| format!("{decision}: {count}"))
+                                    .collect::<Vec<_>>()
+                                    .join(", "),
+                                reasons
+                                    .iter()
+                                    .map(|(reason, count)| format!("{reason} ×{count}"))
+                                    .collect::<Vec<_>>()
+                                    .join("; "),
+                            ),
+                            None => ("—".into(), "—".into(), "unavailable".into(), String::new()),
+                        };
+                        let reference = cell.reference.get(label);
+                        Row::new([
+                            label.clone(),
+                            cell.label.clone(),
+                            format!("{}: {}", profile_index + 1, profile_name(&profile.profile)),
+                            native,
+                            reference.map_or_else(
+                                || "—".into(),
+                                |record| milliseconds(record.timing.median_ns),
+                            ),
+                            memory,
+                            bytes(reference.and_then(|record| record.peak_rss_bytes)),
+                            outcome,
+                            detail,
+                        ])
+                    })
+                })
+        })
+        .collect()
+}
+
+fn comparison_failures(
+    comparison: &Comparison,
+    layout: Layout,
+    output: &mut impl io::Write,
+) -> Result<(), Error> {
+    let mut rows = Vec::new();
+    for cell in &comparison.cells {
+        for label in &comparison.labels {
+            if let Some(reasons) = cell.failure_reasons.get(label) {
+                for (reason, count) in reasons {
+                    rows.push(Row::new([
+                        label.clone(),
+                        cell.label.clone(),
+                        reason.clone(),
+                        count.to_string(),
+                    ]));
+                }
+            }
+        }
+    }
+    if rows.is_empty() {
+        return Ok(());
+    }
+    table(
+        "Recorded failure reasons — all scheduled phases",
+        &[
+            "Report",
+            "Workload",
+            "Producer, phase and reason",
+            "Positions",
         ],
         rows,
     )?
@@ -160,7 +210,6 @@ pub(super) fn corpus(
     layout: Layout,
     output: &mut impl io::Write,
 ) -> Result<(), Error> {
-    use zetesis_validation::performance::matrix::Producer;
     if json {
         serde_json::to_writer_pretty(&mut *output, summary).map_err(Error::Json)?;
         return writeln!(output).map_err(Error::Io);
@@ -196,7 +245,34 @@ pub(super) fn corpus(
     )?
     .write(output, layout)
     .map_err(Error::Io)?;
-    let rows = summary
+    let rows = corpus_rows(summary);
+    table(
+        "Corpus benchmark — successful timed populations",
+        &[
+            "Workload",
+            "Producer",
+            "Median ms",
+            "Range ms",
+            "RSS MiB",
+            "All positions",
+            "Detail",
+        ],
+        rows,
+    )?
+    .write(output, layout)
+    .map_err(Error::Io)?;
+    table(
+        "Campaign outcome",
+        &["All passed", "Accounted"],
+        vec![Row::new([summary.passed.to_string(), summary.accounted.to_string()]).conclusion()],
+    )?
+    .write(output, layout)
+    .map_err(Error::Io)
+}
+
+fn corpus_rows(summary: &zetesis_validation::performance::matrix::Summary<'_>) -> Vec<Row> {
+    use zetesis_validation::performance::matrix::Producer;
+    summary
         .cells
         .iter()
         .map(|cell| {
@@ -235,28 +311,12 @@ pub(super) fn corpus(
                 ),
                 bytes(cell.peak_rss_bytes),
                 decisions,
+                cell.reasons
+                    .iter()
+                    .map(|(reason, count)| format!("{reason} ×{count}"))
+                    .collect::<Vec<_>>()
+                    .join("; "),
             ])
         })
-        .collect();
-    table(
-        "Corpus benchmark — successful timed populations",
-        &[
-            "Workload",
-            "Producer",
-            "Median ms",
-            "Range ms",
-            "RSS MiB",
-            "All positions",
-        ],
-        rows,
-    )?
-    .write(output, layout)
-    .map_err(Error::Io)?;
-    table(
-        "Campaign outcome",
-        &["All passed", "Accounted"],
-        vec![Row::new([summary.passed.to_string(), summary.accounted.to_string()]).conclusion()],
-    )?
-    .write(output, layout)
-    .map_err(Error::Io)
+        .collect()
 }

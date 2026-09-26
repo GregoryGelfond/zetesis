@@ -726,6 +726,20 @@ fn summary_keeps_refusal_out_of_timed_populations() {
         .find(|cell| cell.producer == (Producer::Native { profile: 0 }))
         .unwrap();
     assert!(native.timing.is_none());
+    let (index, refused) = report
+        .samples()
+        .iter()
+        .enumerate()
+        .find(|(_, sample)| sample.decision() == Decision::Refused)
+        .unwrap();
+    let reason = refused.detail().unwrap();
+    assert_eq!(
+        native.reasons[&format!("Qualification: Refused: {reason}")],
+        1
+    );
+    assert!(native.reasons.keys().any(|detail| detail.contains(&format!(
+        "blocked by sample {index} (Qualification, Refused): {reason}"
+    ))));
     assert!(
         native
             .decisions

@@ -81,6 +81,8 @@ pub enum SolveError {
     Words(zetesis_core::WordError),
     /// An accepted interpretation could not retain its checked atom selection.
     Model(zetesis_core::ModelError),
+    /// Cumulative completed model constructions cannot represent another model.
+    ModelStatisticsOverflow,
     /// Membership execution ended without exhausted candidate coverage.
     CandidateStreamNotExhausted,
     /// An injected checker violated the ordered result-count contract.
@@ -135,6 +137,7 @@ impl fmt::Display for SolveError {
             Self::SharedCpu(error) => error.fmt(formatter),
             Self::Words(error) => error.fmt(formatter),
             Self::Model(error) => error.fmt(formatter),
+            Self::ModelStatisticsOverflow => formatter.write_str("model construction statistics overflow"),
             Self::CandidateStreamNotExhausted => formatter.write_str("membership execution ended before candidate exhaustion"),
             Self::FormulaBatchShape { expected, actual } => write!(formatter,
                 "formula checker returned {actual} results for {expected} candidates"),
@@ -174,6 +177,7 @@ impl std::error::Error for SolveError {
             | Self::ClosureStatisticsOverflow
             | Self::FormulaBatchShape { .. }
             | Self::CandidateStreamNotExhausted => None,
+            Self::ModelStatisticsOverflow => None,
         }
     }
 }

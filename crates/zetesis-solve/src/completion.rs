@@ -57,6 +57,22 @@ impl SearchState {
     }
 }
 
+/// Settle a wrapper without replacing an already established interruption.
+/// A cleanup failure still prevents exhaustion or a requested-count outcome.
+pub(crate) fn after_cleanup(
+    state: Option<SearchState>,
+    cleanup: Result<(), zetesis_sat::Incomplete>,
+) -> Option<SearchState> {
+    if matches!(state, Some(SearchState::Interrupted(_))) {
+        state
+    } else {
+        cleanup.map_or_else(
+            |error| Some(SearchState::Interrupted(Interruption::Countermodel(error))),
+            |()| state,
+        )
+    }
+}
+
 /// A typed reason why model enumeration could not establish complete coverage.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Interruption {
@@ -70,6 +86,8 @@ pub enum Interruption {
     Constraint(Stop),
     /// Full-answer reconstruction stopped after verified base membership.
     Reconstruction(Stop),
+    /// Preparing semantic atom order or constructing a selected model stopped.
+    ModelConstruction(crate::ModelConstructionStop),
     /// An objective could not be completely evaluated for a verified model.
     Objective(zetesis_objective::Error),
     /// Retaining complete incumbent models exceeded an explicit bound.
@@ -85,6 +103,7 @@ impl fmt::Display for Interruption {
             Self::Countermodel(error) => error.fmt(f),
             Self::Objective(error) => error.fmt(f),
             Self::Incumbent(error) => error.fmt(f),
+            Self::ModelConstruction(error) => error.fmt(f),
         }
     }
 }
@@ -114,5 +133,33 @@ mod tests {
             assert_eq!(state.completion(), completion);
             assert_eq!(state.interruption(), interruption);
         }
+    }
+
+    #[test]
+    fn cleanup_preserves_an_established_stop_but_invalidates_completion() {
+        let primary = SearchState::Interrupted(Interruption::ModelConstruction(
+            crate::ModelConstructionStop::Work {
+                observed: 8,
+                limit: 7,
+            },
+        ));
+        let cleanup = Err(zetesis_sat::Incomplete::RegionFilter);
+        assert_eq!(super::after_cleanup(Some(primary), cleanup), Some(primary));
+        let secondary = Some(SearchState::Interrupted(Interruption::Countermodel(
+            zetesis_sat::Incomplete::RegionFilter,
+        )));
+        assert_eq!(
+            super::after_cleanup(Some(SearchState::RequestedModels), cleanup),
+            secondary
+        );
+        assert_eq!(
+            super::after_cleanup(Some(SearchState::Exhausted), cleanup),
+            secondary
+        );
+        assert_eq!(super::after_cleanup(None, cleanup), secondary);
+        assert_eq!(
+            super::after_cleanup(Some(SearchState::Exhausted), Ok(())),
+            Some(SearchState::Exhausted)
+        );
     }
 }

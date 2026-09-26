@@ -702,6 +702,10 @@ import Zetesis
 #print axioms Zetesis.ModelSelections.canonicalization_exact
 #print axioms Zetesis.ModelSelections.unselected_entries_irrelevant
 #print axioms Zetesis.ModelSelections.renumbering_preserves_interpretation
+#print axioms Zetesis.ModelSelections.rank_coverage_preserves_interpretation
+#print axioms Zetesis.ModelSelections.rank_coalescing_preserves_interpretation
+#print axioms Zetesis.ModelSelections.rank_order_iff
+#print axioms Zetesis.ModelSelections.increasing_ranks_decode_unique
 #print axioms Zetesis.NegativeEligibility.negative_activity_frozen
 #print axioms Zetesis.NegativeEligibility.double_negative_activity_frozen
 #print axioms Zetesis.NegativeEligibility.double_negative_gate_is_not_positive

@@ -677,8 +677,19 @@ typed constants and one consistent variable mapping. A dependency projection
 cannot supply this certificate. Objectives and explicit projection currently
 exclude this schedule; ordinary eager materialization remains available.
 
+After correspondence is established, a physical policy defers a complete group
+of producers sharing predicate name, arity and sign only if at least one lowered
+producer has a variable. Body-only and anonymous variables count. All producers
+of that signed signature then defer together, including ground facts and rules.
+Ground-only groups remain in the base, even when their rules have nonempty
+positive bodies. The domain classification remains mathematically general; this
+policy chooses a subset for reconstruction. The remaining source is analyzed as
+the actual base. If no group is selected, ordinary materialization retains the
+original preparation and its cumulative charges.
+
 ```text
-prepare original source and establish complete terminal partition
+prepare original source and certify terminal producer groups
+select complete groups with at least one variable-bearing producer
 ground the base using the original remaining allowance
 close its canonical storage without retaining possible-support indexes
 for each answer verified against the base reduct:

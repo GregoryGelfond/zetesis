@@ -71,6 +71,12 @@ The `reduct` statistics retain construction work and named capacity, original
 evaluation work, parameter work and the largest observed worker workspace.
 The collective completion receipt counts the shared prepared owner once.
 
+`ModelConstruction` measures preparation of semantic atom ranks and selection
+of verified formula interpretations into full models. It precedes scoring and
+output and includes refused attempts. The separate model-construction receipt
+records accepted operations and actual metadata peaks without requiring clocks;
+constructed model counts establish neither publication nor complete enumeration.
+
 The grounding profile also exposes `support_producer_visits` and
 `support_snapshot_preparations`. These count entered operations, including those
 followed by failure. They distinguish affected-producer scheduling from a full

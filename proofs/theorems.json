@@ -3497,17 +3497,37 @@
   {
     "name": "Zetesis.ModelSelections.canonicalization_exact",
     "file": "Zetesis/ModelSelections.lean",
-    "line": 29
+    "line": 34
   },
   {
     "name": "Zetesis.ModelSelections.unselected_entries_irrelevant",
     "file": "Zetesis/ModelSelections.lean",
-    "line": 39
+    "line": 44
   },
   {
     "name": "Zetesis.ModelSelections.renumbering_preserves_interpretation",
     "file": "Zetesis/ModelSelections.lean",
-    "line": 54
+    "line": 59
+  },
+  {
+    "name": "Zetesis.ModelSelections.rank_coverage_preserves_interpretation",
+    "file": "Zetesis/ModelSelections.lean",
+    "line": 79
+  },
+  {
+    "name": "Zetesis.ModelSelections.rank_coalescing_preserves_interpretation",
+    "file": "Zetesis/ModelSelections.lean",
+    "line": 110
+  },
+  {
+    "name": "Zetesis.ModelSelections.rank_order_iff",
+    "file": "Zetesis/ModelSelections.lean",
+    "line": 134
+  },
+  {
+    "name": "Zetesis.ModelSelections.increasing_ranks_decode_unique",
+    "file": "Zetesis/ModelSelections.lean",
+    "line": 151
   },
   {
     "name": "Zetesis.NegativeEligibility.negative_activity_frozen",

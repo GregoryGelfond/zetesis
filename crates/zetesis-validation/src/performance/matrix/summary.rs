@@ -4,6 +4,7 @@ use crate::performance::{
     series::{Timing, median},
 };
 use serde::Serialize;
+use std::collections::BTreeMap;
 
 /// Count of one actual disposition, including qualifications and skipped slots.
 #[derive(Clone, Copy, Debug, Serialize)]
@@ -23,6 +24,9 @@ pub struct CellSummary {
     pub producer: Producer,
     /// Counts over every requested phase, including unlaunched positions.
     pub decisions: Vec<DecisionCount>,
+    /// Non-pass explanations grouped by schedule phase and original blocker.
+    /// Details come from retained samples; missing legacy reasons stay explicit.
+    pub reasons: BTreeMap<String, usize>,
     /// Available only when every timed position passed and its duration fits u64.
     pub timing: Option<Timing>,
     /// Median of successfully validated separate memory rounds, or unavailable.
@@ -30,8 +34,8 @@ pub struct CellSummary {
 }
 
 /// Compact typed campaign view; input identities and profiles remain borrowed.
-/// Computing it scans retained positions and copies durations/counts only. It
-/// never serializes or decodes the raw captured answer streams.
+/// Computing it scans retained positions and copies durations, counts and
+/// failure details. It never serializes or decodes raw captured answer streams.
 #[derive(Debug, Serialize)]
 pub struct Summary<'a> {
     /// Version of this compact view, distinct from full campaign report schemas.
@@ -63,6 +67,7 @@ pub(super) fn summarize(report: &Report) -> Summary<'_> {
             .chain((0..report.plan.profiles.len()).map(|profile| Producer::Native { profile }))
         {
             let mut decisions: Vec<DecisionCount> = Vec::new();
+            let mut reasons = BTreeMap::new();
             let mut intervals = Some(Vec::new());
             let mut memory = Vec::new();
             for sample in report
@@ -80,6 +85,9 @@ pub(super) fn summarize(report: &Report) -> Summary<'_> {
                         decision: sample.decision,
                         positions: 1,
                     });
+                }
+                if sample.decision != Decision::Pass {
+                    *reasons.entry(reason(sample, &report.samples)).or_insert(0) += 1;
                 }
                 if sample.slot.phase == Phase::Timed {
                     let duration = (sample.decision == Decision::Pass)
@@ -107,6 +115,7 @@ pub(super) fn summarize(report: &Report) -> Summary<'_> {
                 case,
                 producer,
                 decisions,
+                reasons,
                 timing,
                 peak_rss_bytes: median(&mut memory),
             });
@@ -124,4 +133,32 @@ pub(super) fn summarize(report: &Report) -> Summary<'_> {
         before: &report.before,
         cells,
     }
+}
+
+fn reason(sample: &super::Sample, samples: &[super::Sample]) -> String {
+    let detail = sample
+        .detail
+        .as_deref()
+        .unwrap_or("reason unavailable in retained sample");
+    let mut reason = format!("{:?}: {:?}: {detail}", sample.slot.phase, sample.decision);
+    if let Some(index) = sample.blocked_by {
+        use std::fmt::Write;
+        if let Some(blocker) = samples.get(index) {
+            write!(
+                reason,
+                "; blocked by sample {index} ({:?}, {:?}): {}",
+                blocker.slot.phase,
+                blocker.decision,
+                blocker
+                    .detail
+                    .as_deref()
+                    .unwrap_or("reason unavailable in retained sample"),
+            )
+            .expect("writing to a String cannot fail");
+        } else {
+            write!(reason, "; blocking sample {index} unavailable")
+                .expect("writing to a String cannot fail");
+        }
+    }
+    reason
 }

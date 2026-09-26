@@ -40,10 +40,7 @@ pub(super) fn check(document: &Value, exit: Option<Exit>) -> Result<(), Failure>
                 ));
             }
             exited(exit, 3)?;
-            Err((
-                Decision::Incomplete,
-                "native reported incomplete search or publication; full evidence retained".into(),
-            ))
+            Err((Decision::Incomplete, incomplete_detail(outcome)))
         }
         Some("failed") => {
             let kind = error["kind"]
@@ -88,6 +85,39 @@ pub(super) fn check(document: &Value, exit: Option<Exit>) -> Result<(), Failure>
         }
         _ => Err(invalid("unknown native outcome status")),
     }
+}
+
+/// These fields have passed the interruption/publication consistency checks.
+/// Keep their explanation verbatim; diagnostic prose never decides the outcome.
+fn incomplete_detail(outcome: &Value) -> String {
+    let mut detail = String::from("native reported incomplete");
+    let interruption = &outcome["interruption"];
+    if !interruption.is_null() {
+        use std::fmt::Write;
+        write!(
+            detail,
+            " kind={} code={}: {}",
+            interruption["kind"].as_str().unwrap(),
+            interruption["code"].as_str().unwrap(),
+            interruption["detail"].as_str().unwrap(),
+        )
+        .expect("writing to a String cannot fail");
+    }
+    if let Some(stop) = outcome
+        .get("publication_stop")
+        .filter(|stop| !stop.is_null())
+    {
+        use std::fmt::Write;
+        write!(
+            detail,
+            "; publication stopped phase={} code={}",
+            stop["phase"].as_str().unwrap(),
+            stop["code"].as_str().unwrap(),
+        )
+        .expect("writing to a String cannot fail");
+    }
+    detail.push_str("; full evidence retained");
+    detail
 }
 
 fn exited(exit: Option<Exit>, expected: i32) -> Result<(), Failure> {
@@ -156,6 +186,7 @@ fn interruption(
                     | "countermodel"
                     | "constraint"
                     | "answer_reconstruction"
+                    | "model_construction"
                     | "objective"
                     | "incumbent"
             )

@@ -356,6 +356,18 @@ and a renumbering preserves meaning when the selected atoms agree. Rust
 Static and formula answers share their program catalogs; completed batched lazy
 closures share a catalog frozen after the final complete round. Checked positions,
 logical comparison, ownership and allocation remain executable obligations.
+
+`rank_coalescing_preserves_interpretation` refines this boundary for cached
+semantic ranks over valid positions in one fixed catalog. Equal ranks must mean
+equal decoded atoms in both directions; permuting positions and coalescing their
+ranks then preserves selected truth. `rank_order_iff` transports strict rank
+order to an explicitly supplied atom order, and `increasing_ranks_decode_unique`
+excludes duplicate decoded atoms from that selection. These premises do not
+follow from increasing occurrence IDs, a shared vocabulary or equal catalog
+lengths. Rust must construct and bind the ranks to the exact catalog, retain
+selected representatives, and check work, capacity, cancellation and publication.
+The laws do not verify that implementation or its sorting algorithm.
+
 The common `ModelRetention` ledger charges each distinct occurrence catalog's
 portable encoding once, including repeated and unselected entries, then
 selected-position records per entry and the consumer's score records.

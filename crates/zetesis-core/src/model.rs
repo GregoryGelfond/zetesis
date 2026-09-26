@@ -9,6 +9,9 @@ use crate::{
 
 pub use crate::catalog::AtomCatalog;
 
+mod order;
+pub use order::ModelOrder;
+
 const LENGTH_BYTES: usize = std::mem::size_of::<u64>();
 
 /// A canonical true-atom set, also named [`Interpretation`]. Construction
@@ -473,11 +476,13 @@ pub enum ModelError {
         /// The second position of the first non-increasing pair.
         position: usize,
     },
-    /// Named selection header and index capacity exceed the allowance.
+    /// Named model-construction metadata exceed the operation's allowance.
+    /// Ordered-catalog publication counts selection metadata; prepared-order
+    /// operations additionally count their retained order and live scratch.
     Bytes {
         /// Requested or actual named capacity.
         required: u128,
-        /// Inclusive selection-storage allowance.
+        /// Inclusive metadata allowance for the called operation.
         limit: usize,
     },
     /// Canonical payload admission or representation failed.
@@ -489,7 +494,7 @@ pub enum ModelError {
         /// Number of atoms in this catalog.
         atoms: usize,
     },
-    /// Input or selection-vector reservation failed.
+    /// Input, selection or prepared-order metadata reservation failed.
     Allocation,
 }
 impl fmt::Display for ModelError {
@@ -501,7 +506,7 @@ impl fmt::Display for ModelError {
             ),
             Self::Bytes { required, limit } => write!(
                 f,
-                "model selection requires {required} bytes, allowance is {limit}"
+                "model construction requires {required} bytes, allowance is {limit}"
             ),
             Self::Catalog(error) => error.fmt(f),
             Self::Position { position, atoms } => {
@@ -582,7 +587,7 @@ fn selection_allowance(capacity: usize, limit: usize) -> Result<(), ModelError> 
 /// A model construction stopped without publishing an interpretation.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ModelFailure<E> {
-    /// Typed ordering, shape or selection-storage refusal.
+    /// Typed ordering, shape or model-construction storage refusal.
     Model(ModelError),
     /// The caller refused the next operation.
     Stopped(E),
@@ -604,8 +609,44 @@ impl<E: std::error::Error + 'static> std::error::Error for ModelFailure<E> {
     }
 }
 
-/// A selected-model publication refused after observing its actual allocations.
-/// The consumed catalog handle is not returned; other catalog clones stay valid.
+/// A selected-model publication with its actual named construction peak.
+/// The creating operation documents whether that peak includes a prepared order
+/// and temporary metadata. Receipt fields and allocator bookkeeping are excluded.
+#[derive(Debug)]
+pub struct ModelPublication {
+    model: Model,
+    peak_bytes: u128,
+}
+
+impl ModelPublication {
+    /// Borrow the complete canonical interpretation.
+    #[must_use]
+    pub const fn model(&self) -> &Model {
+        &self.model
+    }
+
+    /// Transfer the interpretation without copying its selection or payload.
+    #[must_use]
+    pub fn into_model(self) -> Model {
+        self.model
+    }
+
+    /// Actual named metadata peak under the creating operation's scope.
+    #[must_use]
+    pub const fn peak_bytes(&self) -> u128 {
+        self.peak_bytes
+    }
+
+    /// Recover the interpretation and its independent allocation receipt.
+    #[must_use]
+    pub fn into_parts(self) -> (Model, u128) {
+        (self.model, self.peak_bytes)
+    }
+}
+
+/// Model construction refused after observing its named metadata allocations.
+/// The called operation defines its receipt scope. Existing catalog clones and
+/// previously published models remain valid; no partial interpretation escapes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ModelPublicationFailure<E> {
     failure: ModelFailure<E>,
@@ -613,15 +654,17 @@ pub struct ModelPublicationFailure<E> {
 }
 
 impl<E> ModelPublicationFailure<E> {
-    /// Original ordering, selection-storage, allocation or caller refusal.
+    /// Original ordering, construction-storage, allocation or caller refusal.
     #[must_use]
     pub const fn failure(&self) -> &ModelFailure<E> {
         &self.failure
     }
 
-    /// Actual allocated position-buffer capacity during the refused attempt.
-    /// The unallocated final selection header, retained catalog, caller frames,
-    /// Arc counters, allocator bookkeeping and rejected proposals are excluded.
+    /// Actual named metadata peak under the called operation's scope.
+    /// `publish_ordered_catalog_with` counts its allocated position capacity;
+    /// `ModelOrder` also counts its prepared order and temporary vector headers.
+    /// Unallocated final headers, catalog payload, unnamed caller frames, Arc
+    /// counters, allocator bookkeeping and rejected proposals are excluded.
     #[must_use]
     pub const fn peak_bytes(&self) -> u128 {
         self.peak_bytes

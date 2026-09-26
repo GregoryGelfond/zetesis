@@ -4,7 +4,7 @@ use crate::ExecutionObservation as Event;
 use crate::execution_observation::ExecutionSink;
 use std::cell::Cell;
 
-use zetesis_core::Model;
+use zetesis_core::{Model, ModelOrder};
 use zetesis_cpu::Cancellation;
 use zetesis_objective::Score;
 use zetesis_sat::StableModels;
@@ -21,6 +21,8 @@ pub(crate) struct FormulaSession<'a, E> {
     selection: AnswerSelection,
     execution: Option<E>,
     models: Option<StableModels>,
+    model_order: Option<ModelOrder<'a>>,
+    construction: Option<crate::model_construction::Account>,
     bounds: Option<Bounds>,
     incumbents: Incumbents,
     ready: std::vec::IntoIter<Model>,
@@ -96,6 +98,8 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             },
             execution: None,
             models: None,
+            model_order: None,
+            construction: None,
             bounds: None,
             incumbents: Incumbents::default(),
             ready: Vec::new().into_iter(),
@@ -122,6 +126,23 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         })?;
         if let zetesis_themelios::KeyAnalysis::Stopped(stop) = self.input.key_analysis {
             observations.record(Event::KeyAnalysisStopped(stop))?;
+        }
+        let account = self
+            .construction
+            .insert(crate::model_construction::Account::default());
+        let prepared = phases.measure(SolvePhase::ModelConstruction, || {
+            account.prepare(self.input.atoms, config, cancellation)
+        });
+        match prepared {
+            Ok(order) => self.model_order = Some(order),
+            Err(crate::model_construction::Failure::Interrupted(stop)) => {
+                self.complete(
+                    SearchState::Interrupted(Interruption::ModelConstruction(stop)),
+                    phases,
+                );
+                return Ok(());
+            }
+            Err(crate::model_construction::Failure::Run(error)) => return Err(error),
         }
         let models = phases.measure(SolvePhase::CandidateSetup, || {
             // CPU workers decide their own leaves. Device producers return
@@ -267,13 +288,11 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
                 }
                 None => return self.finish_candidate_stream(phases),
             };
-            let model = match Model::from_positions(self.input.atoms, interpretation.atoms()) {
-                Ok(model) => model,
-                Err(error) => {
-                    self.fail(SolveError::Model(error), phases);
-                    return self.pending_error.take().map(Err);
-                }
-            };
+            let model =
+                match self.construct_model(interpretation.atoms(), config, cancellation, phases) {
+                    Ok(model) => model,
+                    Err(failure) => return self.finish_construction_failure(failure, phases),
+                };
             if !self.input.objectives.is_present() {
                 self.yielded += 1;
                 return Some(Ok((model, None)));
@@ -325,6 +344,49 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
                     self.complete(SearchState::Interrupted(reason), phases);
                     return self.next_retained().map(Ok);
                 }
+            }
+        }
+    }
+
+    fn construct_model(
+        &mut self,
+        positions: impl IntoIterator<Item = usize>,
+        config: &SolveConfig,
+        cancellation: &Cancellation,
+        phases: &Recorder,
+    ) -> Result<Model, crate::model_construction::Failure> {
+        phases.measure(SolvePhase::ModelConstruction, || {
+            self.construction
+                .as_mut()
+                .expect("initialized construction account")
+                .select(
+                    self.model_order.as_ref().expect("prepared model order"),
+                    positions,
+                    config,
+                    cancellation,
+                )
+        })
+    }
+
+    fn finish_construction_failure(
+        &mut self,
+        failure: crate::model_construction::Failure,
+        phases: &Recorder,
+    ) -> Option<Result<(Model, Option<Score>), SolveError>> {
+        // Settle workers before snapshotting their checked prefix, preserving
+        // the construction failure over any secondary cleanup failure.
+        let _ = self.models.as_mut().expect("owned candidate stream").stop();
+        match failure {
+            crate::model_construction::Failure::Interrupted(stop) => {
+                self.complete(
+                    SearchState::Interrupted(Interruption::ModelConstruction(stop)),
+                    phases,
+                );
+                self.next_retained().map(Ok)
+            }
+            crate::model_construction::Failure::Run(error) => {
+                self.fail(error, phases);
+                self.pending_error.take().map(Err)
             }
         }
     }
@@ -404,6 +466,10 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             query_execution: None,
             hybrid_execution: None,
             terminal_execution: None,
+            model_construction: self
+                .construction
+                .as_ref()
+                .map(crate::model_construction::Account::statistics),
             formula_execution: self
                 .models
                 .as_ref()
@@ -425,6 +491,10 @@ mod timing_tests;
 #[cfg(test)]
 #[path = "../tests/support/formula_exhaustion_contracts.rs"]
 mod exhaustion_tests;
+
+#[cfg(test)]
+#[path = "../tests/support/model_construction.rs"]
+mod construction_tests;
 
 impl<'a> FormulaSession<'a, crate::formula_execution::Execution> {
     /// Own semantic preparation before choosing its executor. A stopped

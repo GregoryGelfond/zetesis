@@ -78,84 +78,7 @@ pub(super) fn table(
     // stream is copied; retained view text is independent of enumeration size.
     let mut rows = Vec::new();
     if let Some(semantic) = semantic {
-        rows.push(count(
-            "Verified memberships",
-            semantic.verified_models(),
-            if semantic.terminal_execution().is_some() {
-                "original answers after complete reconstruction"
-            } else if semantic.hybrid_execution().is_some() {
-                "original answers after completed constraint checks"
-            } else {
-                "includes queued results"
-            },
-        ));
-        if let Some(execution) = semantic.hybrid_execution() {
-            hybrid(&mut rows, execution);
-        }
-        if let Some(execution) = semantic.terminal_execution() {
-            terminal(&mut rows, execution);
-        }
-        if let Some(statistics) = semantic.countermodel_statistics() {
-            formula(&mut rows, statistics);
-        }
-        if let Some(statistics) = semantic.candidate_statistics() {
-            rows.push(count(
-                "Candidate restriction work",
-                statistics.restriction_work,
-                "construction and traversal; includes stopped work",
-            ));
-        }
-        if let Some(execution) = semantic.closure_execution() {
-            closure(&mut rows, execution);
-        }
-        if let Some(execution) = semantic.shared_execution() {
-            rows.push(count(
-                "Shared source work",
-                execution.source_work,
-                "host source operations; includes attempted batches",
-            ));
-            rows.push(count(
-                "Shared world work",
-                execution.world_work,
-                "per-world record visits and tests",
-            ));
-        }
-        if let Some(execution) = semantic.lazy_execution() {
-            rows.push(count(
-                "Lazy source work",
-                execution.source_work,
-                "charged host operations",
-            ));
-            rows.push(count(
-                "Lazy device dispatches",
-                execution.dispatches,
-                "submitted nonempty chunks; not decoded results",
-            ));
-        }
-        if let Some(execution) = semantic.formula_execution() {
-            device(&mut rows, execution);
-            completion(&mut rows, &execution.completion);
-        }
-        if let Some(execution) = semantic.batch_execution() {
-            rows.push(count(
-                "Custom checker calls",
-                execution.batches.checker_calls,
-                "includes failed calls; no hardware work implied",
-            ));
-            rows.push(count(
-                "Committed batch candidates",
-                execution.batches.committed,
-                "membership completed and committed",
-            ));
-            completion(&mut rows, &execution.completion);
-        }
-        if let Some(objective) = semantic.incumbent() {
-            rows.push(count(
-                "Objective evaluation work",
-                objective.work,
-                "cumulative score operations",
-            ));
-        }
+        semantic_rows(&mut rows, semantic);
     } else {
         rows.push(Row::new([
             "Execution work",
@@ -174,6 +97,116 @@ pub(super) fn table(
         rows,
     )
     .map_err(io::Error::other)
+}
+
+fn semantic_rows(rows: &mut Vec<Row>, semantic: &SemanticOutcome) {
+    rows.push(count(
+        "Verified memberships",
+        semantic.verified_models(),
+        if semantic.terminal_execution().is_some() {
+            "original answers after complete reconstruction"
+        } else if semantic.hybrid_execution().is_some() {
+            "original answers after completed constraint checks"
+        } else {
+            "includes queued results"
+        },
+    ));
+    if let Some(execution) = semantic.hybrid_execution() {
+        hybrid(rows, execution);
+    }
+    if let Some(execution) = semantic.terminal_execution() {
+        terminal(rows, execution);
+    }
+    if let Some(statistics) = semantic.model_construction() {
+        model_construction(rows, statistics);
+    }
+    if let Some(statistics) = semantic.countermodel_statistics() {
+        formula(rows, statistics);
+    }
+    if let Some(statistics) = semantic.candidate_statistics() {
+        rows.push(count(
+            "Candidate restriction work",
+            statistics.restriction_work,
+            "construction and traversal; includes stopped work",
+        ));
+    }
+    if let Some(execution) = semantic.closure_execution() {
+        closure(rows, execution);
+    }
+    if let Some(execution) = semantic.shared_execution() {
+        rows.push(count(
+            "Shared source work",
+            execution.source_work,
+            "host source operations; includes attempted batches",
+        ));
+        rows.push(count(
+            "Shared world work",
+            execution.world_work,
+            "per-world record visits and tests",
+        ));
+    }
+    if let Some(execution) = semantic.lazy_execution() {
+        rows.push(count(
+            "Lazy source work",
+            execution.source_work,
+            "charged host operations",
+        ));
+        rows.push(count(
+            "Lazy device dispatches",
+            execution.dispatches,
+            "submitted nonempty chunks; not decoded results",
+        ));
+    }
+    if let Some(execution) = semantic.formula_execution() {
+        device(rows, execution);
+        completion(rows, &execution.completion);
+    }
+    if let Some(execution) = semantic.batch_execution() {
+        rows.push(count(
+            "Custom checker calls",
+            execution.batches.checker_calls,
+            "includes failed calls; no hardware work implied",
+        ));
+        rows.push(count(
+            "Committed batch candidates",
+            execution.batches.committed,
+            "membership completed and committed",
+        ));
+        completion(rows, &execution.completion);
+    }
+    if let Some(objective) = semantic.incumbent() {
+        rows.push(count(
+            "Objective evaluation work",
+            objective.work,
+            "cumulative score operations",
+        ));
+    }
+}
+
+fn model_construction(
+    rows: &mut Vec<Row>,
+    statistics: &zetesis_solve::ModelConstructionStatistics,
+) {
+    rows.push(count(
+        "Model construction work",
+        statistics.work,
+        "prepared semantic ranks and selected positions",
+    ));
+    rows.push(count(
+        "Prepared model order bytes",
+        statistics.prepared_bytes,
+        "retained rank capacity; excludes catalog payload",
+    ));
+    rows.push(count(
+        "Model construction peak bytes",
+        statistics.peak_bytes,
+        "order and active construction metadata; excludes earlier models",
+    ));
+    rows.push(count(
+        "Constructed models",
+        statistics.constructed,
+        "complete selections before scoring or publication",
+    ));
 }
 
 fn terminal(rows: &mut Vec<Row>, execution: &zetesis_solve::TerminalExecutionStatistics) {

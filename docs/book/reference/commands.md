@@ -124,6 +124,13 @@ specified session storage ceilings, not every allocation. Fixed admission/output
 limits and work/count limits retain their own defaults. This allowance is not
 a process RSS cap. Advanced help identifies which bytes each ceiling counts.
 
+Formula model construction has separate controls: `--max-model-work` bounds
+cumulative preparation of atom order and construction of selected models;
+`--max-model-bytes` bounds prepared ranks and active construction metadata.
+Catalog storage and retained answer families remain under their own owners.
+Work defaults to one billion operations. The byte default is 64 MiB before
+scaling by the memory allowance; an explicit byte override is not scaled.
+
 ```sh
 zetesis help solve --advanced
 ```
@@ -347,6 +354,12 @@ Neither is replaced by another sample. The human and JSON summaries compute
 wall-time distributions only when the cell's entire timed population passed;
 failures are not assigned a synthetic timeout duration. Validated memory rounds
 have their own median and may be unavailable.
+
+Non-pass summaries include the recorded reason and schedule phase. If a failed
+qualification prevented later samples, those slots identify the original blocker.
+Known resource limits and required amounts remain in the reason; missing historical
+details are labelled unavailable. A refusal, timeout or process failure never
+counts as an UNSAT result or a successful timing sample.
 
 Omitting `--zetesis` measures this installed executable through its explicit
 `solve` command. An explicit `--zetesis PATH` defaults to the legacy flat

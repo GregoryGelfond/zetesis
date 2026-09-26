@@ -224,47 +224,21 @@ fn sort<E>(
     order: SortOrder,
     before: &mut impl FnMut() -> Result<(), E>,
 ) -> Result<(), E> {
-    let count = values.len();
-    let mut width = 1;
-    while width < count {
-        let mut start = 0;
-        while start < count {
-            let middle = start.saturating_add(width).min(count);
-            let end = middle.saturating_add(width).min(count);
-            let (mut left, mut right) = (start, middle);
-            for output in &mut scratch[start..end] {
-                let take_left = if right == end {
-                    true
-                } else if left == middle {
-                    false
-                } else {
-                    let left = atoms.at(values[left]);
-                    let right = atoms.at(values[right]);
-                    !match order {
-                        SortOrder::Identity => left.compare_ref_with(right, &mut *before)?,
-                        SortOrder::Predicate => left
-                            .predicate()
-                            .compare_ref_with(right.predicate(), &mut *before)?,
-                    }
-                    .is_gt()
-                };
-                before()?;
-                *output = if take_left {
-                    let value = values[left];
-                    left += 1;
-                    value
-                } else {
-                    let value = values[right];
-                    right += 1;
-                    value
-                };
+    crate::checked_sort::sort(
+        values,
+        scratch,
+        |values, left, right, before| {
+            let left = atoms.at(values[left]);
+            let right = atoms.at(values[right]);
+            match order {
+                SortOrder::Identity => left.compare_ref_with(right, &mut *before),
+                SortOrder::Predicate => left
+                    .predicate()
+                    .compare_ref_with(right.predicate(), &mut *before),
             }
-            start = end;
-        }
-        std::mem::swap(values, scratch);
-        width = width.saturating_mul(2);
-    }
-    Ok(())
+        },
+        before,
+    )
 }
 
 /// Allocation-free lookup over a model selection or a checked catalog index.

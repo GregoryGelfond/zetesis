@@ -1,6 +1,6 @@
 //! Human views retain the distinctions in typed workload identities.
 use crate::test_writer::BoundedWriter;
-use std::{io, num::NonZeroUsize};
+use std::{collections::BTreeMap, io, num::NonZeroUsize};
 use zetesis_presentation::{ColorMode, Layout};
 use zetesis_validation::{
     examples,
@@ -43,6 +43,7 @@ fn summary<'a>(cases: &'a [String], profiles: &'a [NativeExecution]) -> matrix::
                     decision: matrix::Decision::Pass,
                     positions: 5,
                 }],
+                reasons: BTreeMap::new(),
                 timing: Some(series::Timing {
                     samples: 3,
                     minimum_ns: 4_999_999,
@@ -58,6 +59,7 @@ fn summary<'a>(cases: &'a [String], profiles: &'a [NativeExecution]) -> matrix::
                     decision: matrix::Decision::Pass,
                     positions: 5,
                 }],
+                reasons: BTreeMap::new(),
                 timing: Some(series::Timing {
                     samples: 3,
                     minimum_ns: 0,
@@ -83,6 +85,10 @@ fn summary<'a>(cases: &'a [String], profiles: &'a [NativeExecution]) -> matrix::
                         positions: 3,
                     },
                 ],
+                reasons: BTreeMap::from([
+                    ("Timed: Timeout: process deadline".into(), 1),
+                    ("Timed: NotAttempted: cell disabled; blocked by sample 1 (Timed, Timeout): process deadline".into(), 3),
+                ]),
                 timing: None,
                 peak_rss_bytes: None,
             },
@@ -122,7 +128,7 @@ fn summary_distinguishes_missing_and_zero_measurements() {
     assert_row(&text, "2 Cpu Auto Auto 4 1 64");
     assert_row(
         &text,
-        "Workload Producer Median ms Range ms RSS MiB All positions",
+        "Workload Producer Median ms Range ms RSS MiB All positions Detail",
     );
     assert_row(
         &text,
@@ -134,7 +140,7 @@ fn summary_distinguishes_missing_and_zero_measurements() {
     );
     assert_row(
         &text,
-        "1: generated/choice-2.lp zetesis profile 2 — — — Pass: 1, Timeout: 1, NotAttempted: 3",
+        "1: generated/choice-2.lp zetesis profile 2 — — — Pass: 1, Timeout: 1, NotAttempted: 3 Timed: NotAttempted: cell disabled; blocked by sample 1 (Timed, Timeout): process deadline ×3; Timed: Timeout: process deadline ×1",
     );
     assert_row(&text, "All passed Accounted");
     assert_row(&text, "false true");
@@ -158,7 +164,27 @@ fn summary_json_preserves_raw_units_without_styling() {
     assert_eq!(value["cells"][0]["peak_rss_bytes"], 3_670_016);
     assert_eq!(value["cells"][1]["peak_rss_bytes"], 0);
     assert!(value["cells"][2]["timing"].is_null());
+    assert_eq!(
+        value["cells"][2]["reasons"]["Timed: Timeout: process deadline"],
+        1
+    );
     assert!(!output.contains(&0x1b));
+}
+
+#[test]
+fn refusal_details_escape_terminal_controls_without_losing_limits() {
+    let cases = [reports::CASES[0].to_owned()];
+    let profiles = reports::profiles();
+    let mut summary = summary(&cases, &profiles);
+    summary.cells[2].reasons = std::collections::BTreeMap::from([(
+        "Qualification: Refused: support bytes limit 128; needed 129\n\u{1b}[31m".into(),
+        1,
+    )]);
+    let mut output = Vec::new();
+    super::corpus(&summary, false, layout(ColorMode::Never), &mut output).unwrap();
+    let text = String::from_utf8(output).unwrap();
+    assert!(text.contains("support bytes limit 128; needed 129\\n\\u{1b}[31m"));
+    assert!(!text.contains('\u{1b}'));
 }
 
 #[test]
@@ -194,7 +220,7 @@ fn comparison_keeps_each_report_and_profile_separate() {
     let text = String::from_utf8(output).unwrap();
     assert_row(
         &text,
-        "Report Workload Profile zetesis ms clingo ms zetesis MiB clingo MiB Outcome",
+        "Report Workload Profile zetesis ms clingo ms zetesis MiB clingo MiB Outcome Detail",
     );
     assert_row(
         &text,
@@ -240,7 +266,7 @@ fn comparison_does_not_time_failed_positions() {
     let text = String::from_utf8(output).unwrap();
     assert_row(
         &text,
-        "before generated/cycle-2 1: cpu/auto (1 threads) — 15.000 — — blocked by timeout: 2, timeout: 1",
+        "before generated/cycle-2 1: cpu/auto (1 threads) — 15.000 — — blocked by timeout: 2, timeout: 1 timed: not_attempted: reason unavailable in retained sample; blocked by sample 10 (timed, timeout): reason unavailable in retained sample ×2; timed: timeout: reason unavailable in retained sample ×1",
     );
     assert_row(
         &text,
@@ -250,6 +276,29 @@ fn comparison_does_not_time_failed_positions() {
         !text.contains("9999.999"),
         "a timeout is not a measured completion"
     );
+}
+
+#[test]
+fn comparison_renders_failures_from_every_phase() {
+    let mut comparison = comparison();
+    let reason = "native profile index 0: memory: incomplete: storage bytes limit 128; needed 129\n\u{1b}[31m";
+    comparison.cells[0].failure_reasons.insert(
+        "after".into(),
+        std::collections::BTreeMap::from([(reason.into(), 2)]),
+    );
+    let mut output = Vec::new();
+    super::comparison(&comparison, false, layout(ColorMode::Never), &mut output).unwrap();
+    let text = String::from_utf8(output).unwrap();
+    assert!(text.contains("Recorded failure reasons — all scheduled phases"));
+    assert_row(
+        &text,
+        "after generated/choice-2 native profile index 0: memory: incomplete: storage bytes limit 128; needed 129\\n\\u{1b}[31m 2",
+    );
+    assert_row(
+        &text,
+        "after generated/choice-2 1: cpu/auto (1 threads) 20.000 8.000 — — pass",
+    );
+    assert!(!text.contains('\u{1b}'));
 }
 
 #[test]
@@ -359,6 +408,10 @@ fn amended_workloads_have_distinct_human_labels() {
                     decision: matrix::Decision::NotAttempted,
                     positions: 1,
                 }],
+                reasons: std::collections::BTreeMap::from([(
+                    "Qualification: NotAttempted: campaign setup prevented execution".into(),
+                    1,
+                )]),
                 timing: None,
                 peak_rss_bytes: None,
             })

@@ -2,12 +2,12 @@
 
 use std::{collections::BTreeSet, convert::Infallible, num::NonZeroUsize};
 
-use zetesis_core::{Atom, Model, Predicate, Value};
+use zetesis_core::{Atom, Model, Predicate, Sign, Value, ValueLimits, ValueNode};
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_solve::{
     Backend, Completion, ExecutionObservation, ExecutionObserver, Grounder, GroundingMode,
     Interruption, Oracle, PreparedInput, PreparedProfile, Session, SolveConfig, SolveError,
-    SolveMeasurements, SolvePhase, SolveStage, Subject, WorldViewError, WorldViewLimits,
+    SolveMeasurements, SolvePhase, SolveStage, Subject, WorldView, WorldViewError, WorldViewLimits,
 };
 use zetesis_themelios::{
     AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaMaterialization,
@@ -65,6 +65,124 @@ fn expected() -> BTreeSet<Model> {
             Model::new(atoms).unwrap()
         })
         .collect()
+}
+
+fn collect(input: PreparedInput<'_>) -> WorldView {
+    let view = Session::builder(input, config(), Cancellation::default())
+        .collect(WorldViewLimits::default())
+        .unwrap();
+    assert_eq!(view.outcome().completion(), Some(Completion::Exhausted));
+    view
+}
+
+fn family(view: &WorldView) -> BTreeSet<Model> {
+    view.answer_sets()
+        .iter()
+        .map(|answer| answer.interpretation().clone())
+        .collect()
+}
+
+fn hidden_compound() -> Atom {
+    let value = Value::from_nodes(
+        vec![
+            ValueNode::Function {
+                name: "f".into(),
+                sign: Sign::Positive,
+                arity: 2,
+            },
+            ValueNode::Function {
+                name: "g".into(),
+                sign: Sign::Positive,
+                arity: 1,
+            },
+            ValueNode::Number(1),
+            ValueNode::String("1".into()),
+        ],
+        ValueLimits::default(),
+    )
+    .unwrap();
+    Atom::new(Predicate::new("hidden", 1).unwrap(), vec![value]).unwrap()
+}
+
+#[test]
+fn ground_only_definitions_preserve_complete_families() {
+    let hidden = hidden_compound();
+    for (source, expected) in [
+        (
+            "hidden(f(g(1),\"1\")). receipt(1). #show receipt/1.",
+            BTreeSet::from([Model::new([hidden.clone(), atom("receipt", 1)]).unwrap()]),
+        ),
+        (
+            "hidden(f(g(1),\"1\")). {seed(1)}. receipt(1):-seed(1). #show receipt/1.",
+            BTreeSet::from([
+                Model::new([hidden.clone()]).unwrap(),
+                Model::new([hidden.clone(), atom("seed", 1), atom("receipt", 1)]).unwrap(),
+            ]),
+        ),
+    ] {
+        let FormulaMaterialization::Complete(owner) = prepare_formula(
+            source.into(),
+            AdmissionOptions::default(),
+            ExpansionLimits::default(),
+            FormulaLimits::default(),
+        )
+        .unwrap()
+        .ground_adaptive()
+        .unwrap() else {
+            panic!("ground-only definitions require complete materialization");
+        };
+        let original = admit_formula(
+            source.into(),
+            AdmissionOptions::default(),
+            ExpansionLimits::default(),
+            FormulaLimits::default(),
+        )
+        .unwrap();
+        for input in [
+            PreparedInput::formula(&owner),
+            PreparedInput::formula(&original),
+        ] {
+            let view = collect(input);
+            assert_eq!(family(&view), expected);
+            assert!(view.outcome().terminal_execution().is_none());
+        }
+    }
+}
+
+#[test]
+fn retained_ground_facts_preserve_terminal_families() {
+    let source = "closed(7). {seed(1)}. receipt(X):-seed(X). #show receipt/1.";
+    let owner = terminal(source);
+    assert_eq!(owner.deferred_templates(), 1);
+    let possible_base = Model::from_positions(
+        owner.base_atom_catalog(),
+        0..owner.base_atom_catalog().atoms().len(),
+    )
+    .unwrap();
+    assert_eq!(
+        possible_base,
+        Model::new([atom("closed", 7), atom("seed", 1)]).unwrap()
+    );
+    let original = admit_formula(
+        source.into(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .unwrap();
+    let expected = BTreeSet::from([
+        Model::new([atom("closed", 7)]).unwrap(),
+        Model::new([atom("closed", 7), atom("seed", 1), atom("receipt", 1)]).unwrap(),
+    ]);
+    let eager = collect(PreparedInput::formula(&original));
+    assert_eq!(family(&eager), expected);
+    let adaptive = collect(PreparedInput::terminal(&owner));
+    assert_eq!(family(&adaptive), expected);
+    let receipt = adaptive.outcome().terminal_execution().unwrap();
+    assert_eq!(
+        (receipt.base_answers, receipt.reconstructed, receipt.pending),
+        (2, 2, 0)
+    );
 }
 
 #[test]
@@ -138,7 +256,7 @@ fn facts_and_multiple_producers_preserve_the_full_family() {
     for source in [
         "seed(1). receipt(X):-seed(X). receipt(2).",
         "{left(1);right(1)}. receipt(X):-left(X). receipt(X):-right(X).",
-        "seed. :-seed. receipt:-seed.",
+        "seed(1). :-seed(1). receipt(X):-seed(X).",
     ] {
         let owner = terminal(source);
         let original = admit_formula(

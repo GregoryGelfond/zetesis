@@ -47,6 +47,8 @@ pub struct Report {
     pub hybrid_execution: Option<zetesis_solve::HybridExecutionStatistics>,
     /// Base answers and completed original-answer reconstruction.
     pub terminal_execution: Option<zetesis_solve::TerminalExecutionStatistics>,
+    /// Prepared formula-model ordering and completed selections, including stopped work.
+    pub model_construction: Option<zetesis_solve::ModelConstructionStatistics>,
     /// Actual lazy device execution, including shared source work and failed
     /// batch progress. Absent when no lazy device executor was initialized.
     pub lazy_execution: Option<crate::LazyExecutionStatistics>,
@@ -185,6 +187,8 @@ pub enum RunError {
     LazyStatisticsOverflow,
     /// Cumulative independent closure counters could not represent another check.
     ClosureStatisticsOverflow,
+    /// Model-construction counters could not represent another completed model.
+    ModelStatisticsOverflow,
     /// Concrete shared CPU evaluation violated its round protocol.
     SharedCpu(zetesis_cpu::lazy::shared::Cause),
     /// Static closure decoding refused its words or selected-position storage.
@@ -285,6 +289,7 @@ impl fmt::Display for RunError {
             Self::ClosureStatisticsOverflow => {
                 f.write_str("closure execution statistics overflow")
             }
+            Self::ModelStatisticsOverflow => f.write_str("model construction statistics overflow"),
             Self::CompletionUnavailable => f.write_str("driver report requires established search completion"),
             Self::Words(error) => error.fmt(f),
             Self::Model(error) => error.fmt(f),
@@ -366,6 +371,7 @@ impl std::error::Error for RunError {
             | Self::ClosureReservation { .. }
             | Self::LazyStatisticsOverflow
             | Self::ClosureStatisticsOverflow
+            | Self::ModelStatisticsOverflow
             | Self::CompletionUnavailable
             | Self::FormulaBatchShape { .. }
             | Self::CandidateStreamNotExhausted => None,
@@ -787,6 +793,7 @@ impl From<zetesis_solve::SolveError> for RunError {
             SolveError::Static(error) => Self::Static(error),
             SolveError::LazyStatisticsOverflow => Self::LazyStatisticsOverflow,
             SolveError::ClosureStatisticsOverflow => Self::ClosureStatisticsOverflow,
+            SolveError::ModelStatisticsOverflow => Self::ModelStatisticsOverflow,
             SolveError::SharedCpu(error) => Self::SharedCpu(error),
             SolveError::Words(error) => Self::Words(error),
             SolveError::Model(error) => Self::Model(error),

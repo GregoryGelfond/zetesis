@@ -41,10 +41,13 @@ pub enum SolvePhase {
     /// Extend a verified base answer with every terminal consequence, including
     /// refused host attempts. This precedes original answer publication.
     AnswerReconstruction,
+    /// Prepare semantic atom ranks and construct full models from verified selections.
+    /// Includes stopped and refused attempts, before objective scoring or output.
+    ModelConstruction,
 }
 impl SolvePhase {
     /// Finite phase catalog in report order.
-    pub const ALL: [Self; 15] = [
+    pub const ALL: [Self; 16] = [
         Self::AdmissionMaterialization,
         Self::ExecutionSetup,
         Self::CandidateSetup,
@@ -60,6 +63,7 @@ impl SolvePhase {
         Self::ObjectiveFeedback,
         Self::ObservationOutput,
         Self::AnswerReconstruction,
+        Self::ModelConstruction,
     ];
 
     /// Stable identifier in the appended phase-statistics section.
@@ -81,6 +85,7 @@ impl SolvePhase {
             Self::ObjectiveFeedback => "objective_feedback",
             Self::ObservationOutput => "observation_output",
             Self::AnswerReconstruction => "answer_reconstruction",
+            Self::ModelConstruction => "model_construction",
         }
     }
 }

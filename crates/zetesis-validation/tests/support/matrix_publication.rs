@@ -39,6 +39,30 @@ fn exhausted_search_with_stopped_delivery_never_becomes_complete_parity() {
 }
 
 #[test]
+fn incomplete_census_keeps_both_pending_search_and_publication_causes() {
+    let mut document = stopped();
+    document["outcome"]["completion"] = Value::Null;
+    document["outcome"]["coverage"] = json!("unavailable");
+    document["outcome"]["optimization"]["optimal"] = json!(false);
+    document["outcome"]["interruption"] = json!({
+        "kind":"oracle", "code":"work_limit", "detail":"checked prefix awaits drain"
+    });
+    let (decision, detail) = outcome::check(&document, Some(exit(3))).unwrap_err();
+    assert_eq!(decision, Decision::Incomplete);
+    assert_eq!(
+        detail,
+        "native reported incomplete kind=oracle code=work_limit: checked prefix awaits drain; publication stopped phase=encoding code=cancelled; full evidence retained"
+    );
+
+    let (decision, detail) = outcome::check(&stopped(), Some(exit(3))).unwrap_err();
+    assert_eq!(decision, Decision::Incomplete);
+    assert_eq!(
+        detail,
+        "native reported incomplete; publication stopped phase=encoding code=cancelled; full evidence retained"
+    );
+}
+
+#[test]
 fn publication_before_final_search_classification_keeps_pending_evidence() {
     for interruption in [
         Value::Null,

@@ -29,6 +29,7 @@ fn a_doubled_allowance_doubles_the_byte_ceilings_and_no_other_ceiling() {
         2 * default.max_objective_key_bytes
     );
     assert_eq!(doubled.max_optimal_bytes, 2 * default.max_optimal_bytes);
+    assert_eq!(doubled.max_model_bytes, 2 * default.max_model_bytes);
     assert_eq!(doubled.max_reduct_bytes, 2 * default.max_reduct_bytes);
     assert_eq!(
         doubled.max_completion_scratch_bytes,
@@ -45,6 +46,7 @@ fn a_doubled_allowance_doubles_the_byte_ceilings_and_no_other_ceiling() {
         max_projection_bytes: default.max_projection_bytes,
         max_objective_key_bytes: default.max_objective_key_bytes,
         max_optimal_bytes: default.max_optimal_bytes,
+        max_model_bytes: default.max_model_bytes,
         max_reduct_bytes: default.max_reduct_bytes,
         max_completion_scratch_bytes: default.max_completion_scratch_bytes,
         max_candidate_bytes: default.max_candidate_bytes,

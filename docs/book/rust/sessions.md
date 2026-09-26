@@ -410,9 +410,32 @@ grounding interval covers the base, not the complete original theory. The
 `terminal_execution()` separately records consumed base answers, completed
 original answers and an unfinished attempt. Its accepted work includes source
 admission and remains distinct from base search work. These counters are
-available without timing instrumentation. CLI phase schema 4 adds
-`answer_reconstruction`; maintained readers still accept schemas 1–3 without
-inventing that measurement for older records.
+available without timing instrumentation. CLI phase schema 4 introduced
+`answer_reconstruction`; schema 5 adds `model_construction`. Maintained readers
+accept schemas 1–4 without inventing measurements absent from older records.
+
+Formula sessions prepare one semantic ordering of their fixed atom catalog.
+Each verified interpretation selects positions through this ordering before
+scoring or output. The catalog remains the authority for atom contents; ranks
+are an execution view, not a second atom store or a cross-catalog identity.
+CPU and device membership paths use the same model construction.
+
+`SemanticOutcome::model_construction()` retains accepted work, prepared rank
+capacity, peak construction metadata and completed model count, even without
+timing instrumentation. `SolveConfig::max_model_work` bounds cumulative ordering
+and selection work; `max_model_bytes` bounds prepared ranks plus active
+construction metadata. This byte scope excludes the borrowed catalog and earlier
+models, whose owners account for their storage separately. The limits default
+to one billion operations and 64 MiB; `for_allowance` scales only the byte limit.
+Cancellation or either bound interrupts enumeration with a typed reason. It does
+not turn a verified but unconstructed answer into a published model, establish
+UNSAT, or prove an incumbent optimal.
+
+Bounded construction stops still allow previously retained incumbents to drain.
+An allocation or representation fault follows the session's ordinary failure
+path: its retained evidence includes earlier incumbent counts, but that path
+does not deliver the remaining models. Neither behavior discards the original
+failure reason in favor of a later cleanup stop.
 
 `PreparedInput::program` borrows a native `zetesis_core::Program` without source
 metadata. It reaches the same relational session as a source-admitted program,

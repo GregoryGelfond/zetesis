@@ -102,6 +102,7 @@ pub(crate) fn write_progress(
             formula_execution: semantic.formula_execution(),
             hybrid_execution: semantic.hybrid_execution(),
             terminal_execution: semantic.terminal_execution(),
+            model_construction: semantic.model_construction(),
             lazy_execution: semantic.lazy_execution(),
             shared_execution: semantic.shared_execution(),
             closure_execution: semantic.closure_execution(),
@@ -235,6 +236,15 @@ fn limits(sink: &mut impl Write, o: &Options, c: &crate::SolveConfig) -> io::Res
         o.max_expansion_bytes,
         o.max_support_bytes
     )?;
+    answer_limits(sink, o, c)
+}
+
+fn answer_limits(sink: &mut impl Write, o: &Options, c: &crate::SolveConfig) -> io::Result<()> {
+    writeln!(
+        sink,
+        "  model construction limits: work={}; bytes={}",
+        c.max_model_work, c.max_model_bytes
+    )?;
     writeln!(
         sink,
         "  objective limits: work={}; bound work={}; bindings/model={}; keys/model={}; key bytes/model={}",
@@ -288,6 +298,7 @@ struct Details<'a> {
     formula_execution: Option<&'a crate::FormulaExecutionStatistics>,
     hybrid_execution: Option<&'a zetesis_solve::HybridExecutionStatistics>,
     terminal_execution: Option<&'a zetesis_solve::TerminalExecutionStatistics>,
+    model_construction: Option<&'a zetesis_solve::ModelConstructionStatistics>,
     lazy_execution: Option<&'a crate::LazyExecutionStatistics>,
     shared_execution: Option<&'a crate::SharedExecutionStatistics>,
     closure_execution: Option<&'a crate::ClosureExecutionStatistics>,
@@ -309,6 +320,7 @@ impl<'a> From<&'a Report> for Details<'a> {
             formula_execution: report.formula_execution.as_ref(),
             hybrid_execution: report.hybrid_execution.as_ref(),
             terminal_execution: report.terminal_execution.as_ref(),
+            model_construction: report.model_construction.as_ref(),
             lazy_execution: report.lazy_execution.as_ref(),
             shared_execution: report.shared_execution.as_ref(),
             closure_execution: report.closure_execution.as_ref(),
@@ -332,6 +344,7 @@ impl<'a> From<&'a crate::PartialReport> for Details<'a> {
             formula_execution: report.formula_execution.as_ref(),
             hybrid_execution: report.hybrid_execution.as_ref(),
             terminal_execution: report.terminal_execution.as_ref(),
+            model_construction: report.model_construction.as_ref(),
             lazy_execution: report.lazy_execution.as_ref(),
             shared_execution: report.shared_execution.as_ref(),
             closure_execution: report.closure_execution.as_ref(),
@@ -381,6 +394,13 @@ fn details(
     }
     if let Some(stats) = report.terminal_execution {
         terminal(sink, stats)?;
+    }
+    if let Some(stats) = report.model_construction {
+        writeln!(
+            sink,
+            "  model construction: work={}; prepared bytes={}; peak bytes={}; constructed={}",
+            stats.work, stats.prepared_bytes, stats.peak_bytes, stats.constructed
+        )?;
     }
     let examined = if report.shared_execution.is_some() {
         "closure result/control records examined"

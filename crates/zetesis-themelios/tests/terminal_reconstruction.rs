@@ -118,7 +118,7 @@ fn duplicate_witnesses_publish_one_head() {
 
 #[test]
 fn cancellation_does_not_publish_an_empty_answer() {
-    let owner = terminal("receipt.");
+    let owner = terminal("{seed(1)}. receipt(X):-seed(X).");
     let model = selection(&owner, &[]);
     let mut cursor = owner.reconstruction().unwrap();
     let control = Cancellation::default();
