@@ -233,16 +233,19 @@ impl<'a> Term<'a> {
     }
 }
 
+// The name is vocabulary text, resolved only by an operation that reads it;
+// arity and sign come from the signature alone.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Predicate<'a> {
-    pub(super) name: &'a str,
+    pub(super) read: Read<'a>,
+    pub(super) name: TextId,
     pub(super) arity: usize,
     pub(super) sign: Sign,
 }
 
 impl<'a> Predicate<'a> {
     pub(crate) fn name(self) -> &'a str {
-        self.name
+        self.read.text(self.name)
     }
     pub(crate) fn sign(self) -> Sign {
         self.sign

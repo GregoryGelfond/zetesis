@@ -206,7 +206,8 @@ impl<'a> Read<'a> {
         let segment = self.vocabulary_segment(id.0 as usize, |counts| counts.predicates)?;
         let signature = segment.predicates[id.0 as usize - segment.start.predicates];
         Some(Predicate {
-            name: self.text(signature.name),
+            read: self,
+            name: signature.name,
             arity: signature.arity,
             sign: signature.sign,
         })

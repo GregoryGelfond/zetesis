@@ -642,8 +642,9 @@ enum PredicateSource<'a> {
         sign: Sign,
     },
 }
-// Canonical resolution happens once before reading the signature fields.
-// This projection borrows the same admitted prefix as its PredicateRef.
+// Canonical resolution reads the signature once; the name's text is resolved
+// only by an operation that reads the name. This projection borrows the same
+// admitted prefix as its PredicateRef.
 #[derive(Clone, Copy)]
 enum PredicateRead<'a> {
     Canonical(storage::Predicate<'a>),
@@ -660,6 +661,22 @@ impl<'a> PredicateRead<'a> {
             Self::Canonical(predicate) => (predicate.name(), predicate.arity(), predicate.sign()),
             Self::Ingress(predicate) => (predicate.name(), predicate.arity(), predicate.sign()),
             Self::Signed { name, arity, sign } => (name, arity, sign),
+        }
+    }
+
+    fn arity(self) -> usize {
+        match self {
+            Self::Canonical(predicate) => predicate.arity(),
+            Self::Ingress(predicate) => predicate.arity(),
+            Self::Signed { arity, .. } => arity,
+        }
+    }
+
+    fn sign(self) -> Sign {
+        match self {
+            Self::Canonical(predicate) => predicate.sign(),
+            Self::Ingress(predicate) => predicate.sign(),
+            Self::Signed { sign, .. } => sign,
         }
     }
 }
@@ -719,15 +736,16 @@ impl<'a> PredicateRef<'a> {
     pub fn name(self) -> &'a str {
         self.read().signature().0
     }
-    /// Number of arguments, without visiting them.
+    /// Number of arguments, without visiting them or reading the name.
     #[must_use]
     pub fn arity(self) -> usize {
-        self.read().signature().1
+        self.read().arity()
     }
-    /// Classical predicate sign, independent of default negation.
+    /// Classical predicate sign, independent of default negation. The name is
+    /// not read.
     #[must_use]
     pub fn sign(self) -> Sign {
-        self.read().signature().2
+        self.read().sign()
     }
     /// Compare with an owned signature using exact name bytes, arity and sign.
     #[must_use]
@@ -1692,6 +1710,41 @@ mod tests {
                     assert_eq!(arguments.at(column).unwrap(), *value);
                 }
                 assert!(arguments.at(atom.values().len()).is_none());
+            }
+        }
+    }
+
+    #[test]
+    fn predicate_fields_agree_across_segments() {
+        // `p/2` and `-p/1` reuse the name text interned with `p/1` in an earlier
+        // segment; every field must still read the admitted signature.
+        let atoms = [
+            Atom::new(Predicate::new("p", 1).unwrap(), vec![Value::Number(1)]).unwrap(),
+            Atom::new(
+                Predicate::new("p", 2).unwrap(),
+                vec![Value::Number(1), Value::Number(2)],
+            )
+            .unwrap(),
+            Atom::new(
+                Predicate::with_sign("p", 1, Sign::Negative).unwrap(),
+                vec![Value::Number(3)],
+            )
+            .unwrap(),
+        ];
+        let (store, snapshots, ids) = segmented(&atoms);
+        let latest = snapshots.last().unwrap();
+        for (index, (atom, &id)) in atoms.iter().zip(&ids).enumerate() {
+            for view in [
+                AtomRef::new(&snapshots[index], id).unwrap(),
+                AtomRef::new(latest, id).unwrap(),
+                AtomRef::new(&store, id).unwrap(),
+            ] {
+                let predicate = view.predicate();
+                assert_eq!(predicate.name(), atom.predicate().name());
+                assert_eq!(predicate.arity(), atom.predicate().arity());
+                assert_eq!(predicate.sign(), atom.predicate().sign());
+                assert_eq!(predicate, *atom.predicate());
+                assert_eq!(hash_writes(&predicate), hash_writes(atom.predicate()));
             }
         }
     }
