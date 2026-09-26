@@ -98,6 +98,10 @@ impl<'a> Read<'a> {
             Self::Frozen(base) => base.data.counts,
         }
     }
+    // Segments are contiguous from zero and the counts end with the last one
+    // (a writer answers its unpublished tail directly), so an identity below
+    // a count is exactly one that resolves. Views rely on this to check
+    // membership without resolving.
     pub(crate) fn contains_atom(self, id: AtomId) -> bool {
         (id.0 as usize) < self.counts().atoms
     }

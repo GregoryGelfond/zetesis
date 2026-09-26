@@ -234,6 +234,79 @@ fn old_snapshot_rejects_later_term_id() {
 }
 
 #[test]
+fn canonical_views_exist_exactly_below_their_prefix() {
+    // Every identity below a reader's counts resolves through its segment
+    // directory and none above them does, for old and current snapshots, a
+    // writer with an unpublished tail and a frozen vocabulary without atoms.
+    use crate::catalog::{AtomRef, PredicateRef, TermRef};
+    let nested = Value::from_nodes(
+        vec![
+            ValueNode::Function {
+                name: "f".into(),
+                sign: Sign::Negative,
+                arity: 1,
+            },
+            ValueNode::String("s".into()),
+        ],
+        value_limits(),
+    )
+    .unwrap();
+    let mut base = store();
+    base.import_value(&Value::Symbol("b".into()), limits())
+        .unwrap();
+    base.import_predicate_with(
+        PredicateRef::from(&crate::Predicate::new("p", 1).unwrap()),
+        || Ok::<_, std::convert::Infallible>(()),
+    )
+    .unwrap();
+    let frozen = base
+        .freeze_vocabulary_with(0, || Ok::<_, std::convert::Infallible>(()))
+        .unwrap();
+    let mut store = store();
+    store
+        .import_atom(&atom("p", vec![Value::Number(1)]), limits())
+        .unwrap();
+    let old = store.snapshot(0).unwrap();
+    store
+        .import_atom(
+            &atom("q", vec![Value::Symbol("a".into()), nested]),
+            limits(),
+        )
+        .unwrap();
+    let new = store.snapshot(0).unwrap();
+    store
+        .import_atom(&atom("r", vec![Value::String("t".into())]), limits())
+        .unwrap();
+    // (reader, admitted atoms, admitted predicates)
+    let readers = [
+        (Read::from(&old), 1, 1),
+        (Read::from(&new), 2, 2),
+        (Read::from(&store), 3, 3),
+        (Read::from(&frozen), 0, 1),
+    ];
+    for (read, atoms, predicates) in readers {
+        assert!(!read.contains_term(TermId(16)) && !read.contains_predicate(PredicateId(16)));
+        for id in 0..16 {
+            let atom = AtomRef::new(read, AtomId(id));
+            assert_eq!(atom.is_some(), id < atoms);
+            if let Some(atom) = atom {
+                assert_eq!(atom.values().iter().count(), atom.predicate().arity());
+            }
+            let predicate = PredicateRef::new(read, PredicateId(id));
+            assert_eq!(predicate.is_some(), id < predicates);
+            if let Some(predicate) = predicate {
+                assert!(!predicate.name().is_empty());
+            }
+            let term = TermRef::new(read, TermId(id));
+            assert_eq!(term.is_some(), read.contains_term(TermId(id)));
+            if let Some(term) = term {
+                assert!(term.expanded_nodes() >= 1);
+            }
+        }
+    }
+}
+
+#[test]
 fn old_snapshot_does_not_retain_future_segments() {
     let mut store = store();
     store.import_value(&Value::Number(1), limits()).unwrap();

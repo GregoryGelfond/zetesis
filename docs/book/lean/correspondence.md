@@ -420,6 +420,9 @@ reads every field from that resolution while the immutable prefix is
 borrowed; this is one evaluation of the decoder, not a retained copy. Atom
 hashing writes the same fields as the ingress atom with equal contents, which
 the canonical/ingress hash tests check across segments and readers.
+Constructing a canonical view checks only that its identity lies below the
+reader's counts: segments are contiguous from zero and end with those counts,
+so every counted identity resolves when an operation reads it.
 
 `CanonicalCatalog.find_discovery` separates canonical query resolution from a
 unique discovery map. `discovery_lookup_exact` equates that composition with the

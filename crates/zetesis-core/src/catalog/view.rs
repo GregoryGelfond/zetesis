@@ -134,10 +134,13 @@ impl<'a> TermRef<'a> {
         }
     }
 
+    // Prefix membership suffices: the segment directory covers exactly the
+    // counted identities, and an operation resolves the term when it reads it.
     pub(crate) fn new(snapshot: impl Into<Read<'a>>, id: TermId) -> Option<Self> {
         let snapshot = snapshot.into();
-        snapshot.term(id)?;
-        Some(Self(TermSource::Canonical { snapshot, id }))
+        snapshot
+            .contains_term(id)
+            .then_some(Self(TermSource::Canonical { snapshot, id }))
     }
 
     pub(super) fn scoped(self) -> Option<(super::TermRead<'a>, TermId)> {
@@ -666,10 +669,12 @@ impl<'a> From<&'a Predicate> for PredicateRef<'a> {
     }
 }
 impl<'a> PredicateRef<'a> {
+    // Prefix membership suffices, as for terms: no signature or name is read.
     pub(crate) fn new(snapshot: impl Into<Read<'a>>, id: PredicateId) -> Option<Self> {
         let snapshot = snapshot.into();
-        snapshot.predicate(id)?;
-        Some(Self(PredicateSource::Canonical { snapshot, id }))
+        snapshot
+            .contains_predicate(id)
+            .then_some(Self(PredicateSource::Canonical { snapshot, id }))
     }
 
     pub(super) fn canonical(self) -> Option<(Read<'a>, PredicateId)> {
@@ -947,10 +952,13 @@ impl<'a> AtomRef<'a> {
         }
     }
 
+    // Prefix membership suffices, as for terms: the row is resolved once by
+    // each operation that reads it.
     pub(super) fn new(snapshot: impl Into<Read<'a>>, id: AtomId) -> Option<Self> {
         let snapshot = snapshot.into();
-        snapshot.atom(id)?;
-        Some(Self(AtomSource::Canonical { snapshot, id }))
+        snapshot
+            .contains_atom(id)
+            .then_some(Self(AtomSource::Canonical { snapshot, id }))
     }
     pub(super) fn read(self) -> AtomRead<'a> {
         match self.0 {
