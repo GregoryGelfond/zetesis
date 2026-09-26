@@ -262,6 +262,11 @@ impl Atom<'_> {
     pub(crate) fn predicate(self) -> PredicateId {
         self.locator.predicate
     }
+    // Publication checks each row against its signature's arity, and a block
+    // holds one column per argument, so no signature read is needed.
+    pub(crate) fn arity(self) -> usize {
+        self.columns.arguments.len()
+    }
     pub(crate) fn argument(self, index: usize) -> Option<TermId> {
         self.columns
             .arguments

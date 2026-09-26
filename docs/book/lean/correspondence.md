@@ -415,7 +415,11 @@ atom. `owner_transfer_preserves_interpretation` requires agreement of decoded
 atoms, and `raw_ids_do_not_determine_interpretation` shows why raw equality is
 insufficient. The laws reuse `ModelSelections`; they do not establish DAG
 interning uniqueness, Rust comparison/hash consistency, lifetimes or storage
-accounting.
+accounting. In Rust, one atom operation resolves each canonical row once and
+reads every field from that resolution while the immutable prefix is
+borrowed; this is one evaluation of the decoder, not a retained copy. Atom
+hashing writes the same fields as the ingress atom with equal contents, which
+the canonical/ingress hash tests check across segments and readers.
 
 `CanonicalCatalog.find_discovery` separates canonical query resolution from a
 unique discovery map. `discovery_lookup_exact` equates that composition with the

@@ -386,9 +386,10 @@ pub(super) fn atom(left: AtomRef<'_>, right: AtomRef<'_>) -> Ordering {
     if left.same_identity(right) {
         Ordering::Equal
     } else {
+        let (left, right) = (left.read(), right.read());
         left.predicate()
             .cmp(&right.predicate())
-            .then_with(|| left.values().iter().cmp(right.values()))
+            .then_with(|| left.arguments().cmp(right.arguments()))
     }
 }
 
@@ -414,20 +415,24 @@ pub(super) fn atom_contents_with<E>(
     before: &mut impl FnMut() -> Result<(), E>,
 ) -> Result<Ordering, E> {
     before()?;
+    let left = left.read();
     let left_predicate = left.predicate();
     before()?;
+    let right = right.read();
     let right_predicate = right.predicate();
     let predicate = left_predicate.compare_ref_with(right_predicate, &mut *before)?;
     if !predicate.is_eq() {
         return Ok(predicate);
     }
+    // Each permit precedes the logical read it admits; column reads use the
+    // two rows resolved above.
     before()?;
-    let arity = left_predicate.arity();
+    let arity = left.arity();
     for column in 0..arity {
         before()?;
-        let left = left.values().at(column).expect("admitted argument");
+        let left = left.at_valid_column(column);
         before()?;
-        let right = right.values().at(column).expect("admitted argument");
+        let right = right.at_valid_column(column);
         let comparison = term_with(left, right, before)?;
         if !comparison.is_eq() {
             return Ok(comparison);
@@ -437,9 +442,9 @@ pub(super) fn atom_contents_with<E>(
 }
 
 pub(super) fn atom_value(left: AtomRef<'_>, right: &Atom) -> Ordering {
+    let left = left.read();
     left.predicate().compare(right.predicate()).then_with(|| {
-        left.values()
-            .iter()
+        left.arguments()
             .zip(right.values())
             .map(|(left, right)| term_value(left, right))
             .find(|order| !order.is_eq())

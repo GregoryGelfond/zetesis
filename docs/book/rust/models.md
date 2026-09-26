@@ -284,6 +284,7 @@ For `N` catalog atoms and `M` supplied selected positions:
 | Selection | Checks indices, performs `O(M log M)` typed atom comparisons and retains `O(M)` position cells. Equal logical atoms coalesce. |
 | Model clone | Constant time; shares the selected owner and catalog without allocation. |
 | Complete iteration | `O(M)` borrowed atom visits after duplicate removal; resolving a canonical row also searches its immutable segment directory. |
+| Atom traversal | Hashing, ordering, checked comparison and argument iteration resolve a canonical row once per operation; `Arguments::at` and `len` resolve it once per call. |
 | Membership | `O(log M)` typed atom comparisons. |
 | Model equality/order | Lexicographic comparison of selected atom values; identical selected owners compare immediately. |
 

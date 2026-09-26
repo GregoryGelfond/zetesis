@@ -1,6 +1,7 @@
 //! Sparse coordinates share vocabulary without conflating independent atom rows.
 
 use std::convert::Infallible;
+use std::hash::{DefaultHasher, Hash, Hasher};
 
 use zetesis_core::catalog::interner::{AtomInterner, Failure, Limits};
 use zetesis_core::catalog::{AtomRef, Error};
@@ -106,6 +107,69 @@ fn sparse_lookup_honors_each_caller_refusal() {
         });
         assert_eq!(result, Err(CarrierFailure::Stopped(stop)));
         assert_eq!(calls, stop + 1);
+    }
+}
+
+#[test]
+fn carrier_atom_views_agree_with_their_logical_atoms() {
+    // A carrier atom answers its arity from its coordinates; traversal, hashing
+    // and both orders must still denote the logical atom it locates.
+    fn hash(value: &impl Hash) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        value.hash(&mut hasher);
+        hasher.finish()
+    }
+    let nullary = Predicate::new("q", 0).unwrap();
+    let program = Program::new(
+        vec![Template::new(
+            Some(AtomPattern::new(nullary.clone(), vec![]).unwrap()),
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        )]
+        .into_iter()
+        .chain(["first", "second"].map(|value| {
+            Template::new(
+                Some(
+                    AtomPattern::new(
+                        Predicate::new("p", 1).unwrap(),
+                        vec![Term::Constant(Value::Symbol(value.into()))],
+                    )
+                    .unwrap(),
+                ),
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+            )
+        }))
+        .collect(),
+        AdmissionLimits::default(),
+    )
+    .unwrap();
+    let atoms = [
+        Atom::new(nullary, vec![]).unwrap(),
+        atom("first"),
+        atom("second"),
+    ];
+    let carriers: Vec<_> = atoms
+        .iter()
+        .map(|atom| program.locate_atom(atom, false).unwrap().unwrap())
+        .collect();
+    for (carrier, atom) in carriers.iter().zip(&atoms) {
+        let view = carrier.atom();
+        assert_eq!(view.values().len(), atom.values().len());
+        assert!(view.values().iter().eq(atom.values().iter().cloned()));
+        assert_eq!(hash(&view), hash(&AtomRef::from(atom)));
+        for (other, other_atom) in carriers.iter().zip(&atoms) {
+            let expected = AtomRef::from(atom).cmp(&AtomRef::from(other_atom));
+            assert_eq!(view.cmp(&other.atom()), expected);
+            assert_eq!(
+                view.compare_ref_with(other.atom(), || Ok::<_, Infallible>(())),
+                Ok(expected)
+            );
+        }
     }
 }
 
