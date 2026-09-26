@@ -1,10 +1,22 @@
 # Recorded release observations
 
-The current [0.1.4 coverage receipt](coverage-df99d4bb.json) identifies the
+The recorded [0.1.4 coverage receipt](coverage-013ae6d3.json) identifies the
 qualified source, independent CPU and workspace populations, and 59 physical
 Metal tests. Three separate ordinary CLI backend checks also passed; they do
 not contribute instrumented coverage. See the [validation reference](../validation.md#coverage)
 for the scope. The performance records below retain their original identities.
+
+The [canonical-storage comparison](../canonical-storage.md) measures source
+`8c847132` against `013ae6d3`, with all 94 corpus cases, 22 execution-series
+cases and ten scalability cases. These selections overlap. The
+[provenance](canonical-storage-8c847132-provenance.json) identifies sources,
+executables, workloads, bounds, acquisition order and original-report hashes.
+The chapter includes all timing and RSS tables, the unchanged-limit Einstein
+admission improvement, every refusal, and the observed regressions. Separate
+current worker measurements cover 1, 2, 4, 8 and 14 workers. They use clingo for
+qualification only; the four-worker comparison supplies the measured clingo
+bracket. These are CPU measurements, not updated Metal timings or qualification
+of a later executable.
 
 The [original-region comparison](../hybrid-grounding.md#original-region-checks)
 compares `9bb73da9` with `3108acfe` on 21 September 2026. Its

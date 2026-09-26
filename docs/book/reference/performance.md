@@ -7,8 +7,17 @@ solve faster.
 
 ## What the results show
 
-The published corpus comparison runs zetesis and clingo on the same programs on
-an Apple M4 Pro. Four CPU threads gave zetesis its lowest total time. Most small
+The [0.1.5 CPU comparison](canonical-storage.md) includes every case in the
+94-program corpus, the 22-case execution series and the ten-case scalability
+selection, with separate measurements at 1, 2, 4, 8 and 14 workers. These
+selections overlap. The current executable admits Einstein's Riddle within its
+default limits and takes about 20.4 ms against clingo's 35.4–36.1 ms. It also
+regresses on many other cases: the corpus retains four timing wins over clingo,
+while the series falls from nine to four. Full timing, memory, refusal and
+reproduction details accompany the results; this is not an overall speedup.
+
+The earlier 94-case CPU and Metal comparison runs both solvers on the same
+programs on an Apple M4 Pro. Four CPU threads gave zetesis its lowest total time. Most small
 cases favored clingo; queens variant 2 and several task-allocation cases favored
 zetesis. Metal did not give an overall advantage on these workloads.
 
@@ -141,6 +150,7 @@ their original programs and executables; they are not a cumulative speedup chart
 
 | Question | Report |
 | --- | --- |
+| What changed with canonical storage and answer construction? | [0.1.5 CPU comparison and worker scaling](canonical-storage.md) |
 | What changes when source constraints are checked during solving? | [Eager and hybrid grounding](hybrid-grounding.md) |
 | What does lending completed eager join rows change? | [Grounding row lending](grounding-row-lending.md) |
 | How do thread count, CPU and Metal compare with clingo? | [Worker scaling](worker-scaling.md) |
