@@ -961,7 +961,10 @@ discovery IDs/marks, query assignment/cursor/undo capacities, and operation scra
 with conservative growth overlap. The authority counts canonical payload once;
 final catalog and model-selection metadata are admitted while being assembled.
 Its default is 128 MiB; zero is a zero-byte allowance. `peak_closure_bytes` is the
-maximum observed named envelope of a completed check. Earlier results retained
+maximum observed named envelope of a completed check. Relation capacities are
+summed as each relation is created, grows or is cleared, so reading the envelope
+does not visit every relation; debug builds recompute the sum on each read.
+Earlier results retained
 by the caller, allocator bookkeeping and Arc counters remain outside this
 per-check ledger. A successful allocation can exceed its proposed reservation
 before the actual-capacity check refuses it. A stopped scalar check returns no
