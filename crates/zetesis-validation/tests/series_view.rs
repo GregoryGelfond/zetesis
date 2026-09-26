@@ -201,7 +201,7 @@ fn failure_appendix_preserves_causes_outside_timed_samples() {
     );
     let markdown = comparison.markdown();
     assert!(markdown.contains("Recorded failure reasons across all scheduled phases."));
-    assert!(markdown.contains("memory: incomplete: native reported incomplete kind=model\\_construction code=storage\\_limit: model storage bytes limit 128; needed 129"));
+    assert!(markdown.contains("memory: incomplete: native reported incomplete kind=model\\_construction code=bytes\\_limit: model construction requires 129 bytes, allowance is 128"));
     assert!(markdown.contains(&format!("| only | case | {reference} | 1 |")));
 }
 

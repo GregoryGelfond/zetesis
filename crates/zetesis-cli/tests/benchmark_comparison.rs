@@ -80,7 +80,7 @@ fn default_comparison_preserves_nonpassing_campaigns() {
             "after generated/choice-2 2: cpu/auto (4 threads) 21.000 8.000 — — pass",
         ]
     );
-    assert!(rows.iter().any(|row| row == "before generated/cycle-2 1: cpu/auto (1 threads) — 15.000 — — blocked by timeout: 2, timeout: 1"));
+    assert!(rows.iter().any(|row| row == "before generated/cycle-2 1: cpu/auto (1 threads) — 15.000 — — blocked by timeout: 2, timeout: 1 timed: not_attempted: reason unavailable in retained sample; blocked by sample 10 (timed, timeout): reason unavailable in retained sample ×2; timed: timeout: reason unavailable in retained sample ×1"));
     assert!(rows.contains(&format!(
         "before false true {} {}",
         "11".repeat(32),

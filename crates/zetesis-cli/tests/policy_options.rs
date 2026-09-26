@@ -163,6 +163,7 @@ fn byte_ceilings_are_the_library_defaults_scaled_by_the_memory_allowance() {
         &Options::try_parse_from(["zetesis", "--workers", "4", "--memory", "4294967296"]).unwrap(),
     );
     let library = SolveConfig::DEFAULT;
+    assert_eq!(doubled.max_model_bytes, 2 * library.max_model_bytes);
     assert_eq!(
         doubled.max_projection_bytes,
         2 * library.max_projection_bytes
@@ -185,6 +186,7 @@ fn byte_ceilings_are_the_library_defaults_scaled_by_the_memory_allowance() {
     assert_eq!(doubled.max_closure_bytes, 2 * library.max_closure_bytes);
     assert_eq!(doubled.max_batch_bytes, 2 * library.max_batch_bytes);
     let unscaled = SolveConfig {
+        max_model_bytes: library.max_model_bytes,
         max_projection_bytes: library.max_projection_bytes,
         max_objective_key_bytes: library.max_objective_key_bytes,
         max_optimal_bytes: library.max_optimal_bytes,
