@@ -173,9 +173,14 @@ nor `SummaryDelivery::Accepted` implies durability. Callers own flushing.
 
 The human renderer preflights one complete record under its byte ceiling. The
 JSON renderer additionally retains a bounded document atom table; each invocation
-starts fresh indices. Custom renderers own their encoding limits and any copies
-they retain. The controller retains no complete family for presentation, although
-objective selection still uses the solver's separately bounded incumbent store.
+starts fresh indices. Structural equality decides each atom's index, so equal
+atoms of independent owners share one; once a canonical atom has been found, the
+table answers its later occurrences from the same owner by owner-scoped identity
+instead of hashing the atom's structure. A refused record withdraws the atoms it
+entered together with their identities. Custom renderers own their encoding
+limits and any copies they retain. The controller retains no complete family
+for presentation, although objective selection still uses the solver's
+separately bounded incumbent store.
 
 `SummaryStage::SearchFinished` preserves the human summary before statistics are
 written. That view cannot claim later reporting succeeded, and the callback is

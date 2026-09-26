@@ -37,6 +37,7 @@ and does not parse source or choose another admission profile after a refusal.
 | Build typed vocabulary without a program or atom population | `catalog::{VocabularyBuilder, Vocabulary}` | [Scoped term workspaces](models.md#scoped-term-workspaces) |
 | Retain scoped bindings and selected roots | `catalog::{CatalogRead, TermRead, TermKey, TermAssignment, AssignmentSlice, TermSet}` | [Scoped term workspaces](models.md#scoped-term-workspaces) |
 | Decide each predicate of one vocabulary once | `catalog::{CatalogRead::predicate_mask_with, PredicateMask}` | [Scoped term workspaces](models.md#scoped-term-workspaces) |
+| Key values by canonical atom identity per owner | `catalog::AtomIdentityMap` | [Scoped term workspaces](models.md#scoped-term-workspaces) |
 | Construct derived terms over immutable input owners | `catalog::{DerivedTerms, DeclaredConstructor}` | [Scoped term workspaces](models.md#scoped-term-workspaces) |
 | Locate sparse carrier coordinates | `Program::locate_atom_with`, `CarrierAtom` | [Canonical ownership](../architecture/ownership.md) |
 | Borrow candidate membership | `SeedSelection`, `SeedView`, `Candidates::next_selection` | [Parallel and lazy checking](parallel.md) |

@@ -9,6 +9,7 @@ pub(crate) mod storage;
 mod view;
 mod membership;
 mod constructor;
+mod atom_identities;
 mod predicate_mask;
 mod terms;
 mod term_read;
@@ -22,6 +23,7 @@ use std::{cmp::Ordering, fmt, iter::FusedIterator, marker::PhantomData, slice, s
 
 use crate::Atom;
 
+pub use atom_identities::AtomIdentityMap;
 pub(crate) use constructor::ConstructorData;
 pub use constructor::DeclaredConstructor;
 pub use membership::{CatalogRead, DeclaredPredicate, ReadError};

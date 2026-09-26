@@ -16,6 +16,7 @@ use std::hash::Hasher;
 /// Mixes the words of a key by multiplication with an odd constant
 /// after rotating the running value, the scheme of the Rust compiler's own
 /// interner hash; the low bits of each word reach every bit of the result.
+/// zetesis-core's atom identity map places identities by the same mix.
 #[derive(Default)]
 pub(crate) struct WordHasher(u64);
 

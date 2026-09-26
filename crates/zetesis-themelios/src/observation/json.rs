@@ -12,7 +12,10 @@
 use hashbrown::HashMap;
 use std::fmt;
 
-use zetesis_core::{Model, catalog::AtomRef};
+use zetesis_core::{
+    Model,
+    catalog::{AtomIdentityMap, AtomRef},
+};
 
 pub use super::view::{ViewError as Error, ViewLimits as Limits};
 
@@ -25,7 +28,9 @@ pub const RECORD_SCHEMA_VERSION: u32 = 2;
 /// its atoms by index, so a document spells each atom once. The table is
 /// bounded by a ceiling on distinct atoms; every entry refers to its atom in
 /// the model that spelled it, sharing that model's catalog rather than
-/// copying the atom.
+/// copying the atom. Structural equality decides an atom's index; a
+/// canonical atom found once is afterwards answered by its owner-scoped
+/// identity, at most once per distinct atom and owner.
 #[derive(Debug)]
 pub struct AtomTable {
     /// Placed by the crate's fixed word hash. The program's author spells
@@ -36,6 +41,10 @@ pub struct AtomTable {
     /// 1.16 of the cell time on the series' large-model cells, hashing
     /// every atom of every model on the way out (the observations record).
     indices: HashMap<Entry, usize, std::hash::BuildHasherDefault<crate::word_hash::WordHasher>>,
+    /// Indices of canonical atoms already found or entered, by owner-scoped
+    /// identity, so a repeated atom costs an identity hash rather than a
+    /// structural one. An atom of an owner not yet seen is found structurally.
+    identities: AtomIdentityMap<usize>,
     /// The first record's model, whose atoms hold the indices `0..len` in
     /// model order and are indexed only when a second record asks.
     deferred: Option<Model>,
@@ -80,6 +89,7 @@ impl AtomTable {
     pub fn new(max_atoms: usize) -> Self {
         Self {
             indices: HashMap::default(),
+            identities: AtomIdentityMap::default(),
             deferred: None,
             max_atoms,
         }
@@ -100,13 +110,22 @@ impl AtomTable {
     }
     /// The atom's index when the document has spelled it. The first
     /// record's atoms are indexed on the first lookup after it, so a document
-    /// of one record never indexes at all.
+    /// of one record never indexes at all. A canonical atom found once is
+    /// answered by its identity afterwards.
     ///
     /// # Errors
     /// Returns [`Error::Allocation`] when the deferred record cannot be indexed.
     pub fn index<'a>(&mut self, atom: impl Into<AtomRef<'a>>) -> Result<Option<usize>, Error> {
         self.flush()?;
-        Ok(self.indices.get(&atom.into()).copied())
+        let atom = atom.into();
+        if let Some(index) = self.identities.get(atom) {
+            return Ok(Some(index));
+        }
+        let index = self.indices.get(&atom).copied();
+        if let Some(index) = index {
+            let _ = self.identities.insert(atom, index);
+        }
+        Ok(index)
     }
     /// Take the whole first record as the table: its atoms hold the indices
     /// `0..len` in model order, without indexing them.
@@ -157,6 +176,11 @@ impl AtomTable {
             },
             index,
         );
+        let atom = model
+            .atoms()
+            .at(position)
+            .expect("an entered position belongs to its model");
+        let _ = self.identities.insert(atom, index);
         Ok(index)
     }
     /// Withdraw what a refused record gave the table, so it is as it was
@@ -165,12 +189,18 @@ impl AtomTable {
     /// first lookup gave nothing, and the first record's deferral stands.
     pub(super) fn retract(&mut self, atoms: &[AtomRef<'_>], deferred: bool) {
         if deferred {
+            // Only the first record defers, and no lookup precedes it, so no
+            // identity was recorded.
+            debug_assert!(self.identities.is_empty());
             self.deferred = None;
             return;
         }
         for atom in atoms {
             self.indices.remove(atom);
         }
+        // The withdrawn atoms held the last indices; no identity keeps one.
+        let len = self.indices.len();
+        self.identities.retain(|index| index < len);
     }
 }
 

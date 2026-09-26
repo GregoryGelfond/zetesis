@@ -238,6 +238,11 @@ once, in identity order, and packs the decisions into a `PredicateMask`, one bit
 per predicate. `mask.decision(predicate)` answers a canonical predicate of that
 vocabulary admitted before preparation; owned ingress, another vocabulary or a
 later predicate has no decision, so the caller keeps its general procedure.
+`AtomIdentityMap` records values by the owner-scoped identity of canonical atoms,
+for any number of atom owners, so a repeated lookup hashes one identity word
+rather than the atom's structure. Equal atoms of different owners are different
+keys, and owned ingress or carrier atoms are never recorded; callers that need
+structural identity keep a structural index as the authority.
 The [`scoped metadata API`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/catalog/terms.rs)
 documents each frame's storage allowance and stopped-operation behavior.
 

@@ -1,6 +1,7 @@
 //! Typed view consumers need no CLI, solver, output writer or ASP-text parser.
 
 use serde_json::{Value as Json, json};
+use zetesis_core::catalog::AtomCatalog;
 use zetesis_core::{Atom, Model, Predicate, Sign, Value, ValueLimits, ValueNode};
 use zetesis_cpu::Cancellation;
 use zetesis_themelios::observation::json::{self, AtomTable};
@@ -173,6 +174,132 @@ fn prepared_views_charge_one_unit_per_atom_decision() {
             .unwrap(),
     );
     assert_eq!(work(fixture.view()) - prepared_work, 2 * 3);
+}
+
+fn record_json(fixture: &ObservationFixture, table: &mut AtomTable, limits: ViewLimits) -> Json {
+    serde_json::from_str(
+        &fixture
+            .view()
+            .record(table, limits, &fixture.cancellation)
+            .unwrap(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn equal_atoms_of_independent_owners_share_their_document_indices() {
+    // Equal atoms hold different identities in independent owners; records
+    // of either owner refer to the indices the document first gave them.
+    let first =
+        ObservationFixture::plain(Model::new([atom("a", vec![]), atom("b", vec![])]).unwrap());
+    let other = ObservationFixture::plain(
+        Model::new([atom("A", vec![]), atom("a", vec![]), atom("b", vec![])]).unwrap(),
+    );
+    let mut table = AtomTable::new(16);
+    record_json(&first, &mut table, ViewLimits::default());
+    for _ in 0..2 {
+        assert_eq!(
+            record_json(&other, &mut table, ViewLimits::default())["full_model"],
+            json!([2, 0, 1])
+        );
+    }
+    let again = record_json(&first, &mut table, ViewLimits::default());
+    assert_eq!(again["atoms"], json!([]));
+    assert_eq!(again["full_model"], json!([0, 1]));
+}
+
+#[test]
+fn repeated_records_decode_to_their_models() {
+    // Overlapping records of one owner decode, through the atoms the
+    // document spelled, to each model's atoms in model order.
+    let catalog =
+        AtomCatalog::new(["a", "b", "c", "d"].map(|name| atom(name, vec![])).to_vec()).unwrap();
+    let mut table = AtomTable::new(16);
+    let mut spelled = Vec::new();
+    for positions in [&[0, 1][..], &[1, 2], &[0, 2, 3], &[1, 2], &[0, 1]] {
+        let fixture = ObservationFixture::plain(
+            Model::from_positions(&catalog, positions.iter().copied()).unwrap(),
+        );
+        let record = record_json(&fixture, &mut table, ViewLimits::default());
+        spelled.extend(record["atoms"].as_array().unwrap().iter().cloned());
+        let decoded: Vec<Json> = record["full_model"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|index| spelled[usize::try_from(index.as_u64().unwrap()).unwrap()].clone())
+            .collect();
+        let alone = record_json(&fixture, &mut AtomTable::new(16), ViewLimits::default());
+        assert_eq!(Json::Array(decoded), alone["atoms"]);
+    }
+}
+
+#[test]
+fn a_refused_record_withdraws_the_atoms_it_entered() {
+    // A record refused at its last byte has entered a new atom; withdrawing
+    // it makes a later record spell that atom again at the same index.
+    let catalog =
+        AtomCatalog::new(["a", "b", "c"].map(|name| atom(name, vec![])).to_vec()).unwrap();
+    let first = ObservationFixture::plain(Model::from_positions(&catalog, [0, 1]).unwrap());
+    let later = ObservationFixture::plain(Model::from_positions(&catalog, [0, 2]).unwrap());
+    let mut probe = AtomTable::new(16);
+    record_json(&first, &mut probe, ViewLimits::default());
+    let length = later
+        .view()
+        .record(&mut probe, ViewLimits::default(), &later.cancellation)
+        .unwrap()
+        .len();
+    let mut table = AtomTable::new(16);
+    record_json(&first, &mut table, ViewLimits::default());
+    let refused = later.view().record(
+        &mut table,
+        ViewLimits {
+            max_bytes: length - 1,
+            ..ViewLimits::default()
+        },
+        &later.cancellation,
+    );
+    assert!(matches!(refused, Err(ViewError::Bytes)));
+    let third = record_json(&later, &mut table, ViewLimits::default());
+    assert_eq!(third["atoms"].as_array().unwrap().len(), 1);
+    assert_eq!(third["full_model"], json!([0, 2]));
+}
+
+#[test]
+fn a_record_over_the_atom_ceiling_withdraws_the_atoms_it_entered() {
+    // The second record finds `a`, enters `c` and is refused at `d` by the
+    // three-atom ceiling; the third record spells `c` again at its index.
+    let catalog =
+        AtomCatalog::new(["a", "b", "c", "d"].map(|name| atom(name, vec![])).to_vec()).unwrap();
+    let first = ObservationFixture::plain(Model::from_positions(&catalog, [0, 1]).unwrap());
+    let over = ObservationFixture::plain(Model::from_positions(&catalog, [0, 2, 3]).unwrap());
+    let later = ObservationFixture::plain(Model::from_positions(&catalog, [0, 2]).unwrap());
+    let mut table = AtomTable::new(3);
+    record_json(&first, &mut table, ViewLimits::default());
+    let refused = over
+        .view()
+        .record(&mut table, ViewLimits::default(), &over.cancellation);
+    assert!(matches!(refused, Err(ViewError::Table)));
+    assert_eq!(table.len(), 2);
+    let third = record_json(&later, &mut table, ViewLimits::default());
+    assert_eq!(third["atoms"].as_array().unwrap().len(), 1);
+    assert_eq!(third["full_model"], json!([0, 2]));
+}
+
+#[test]
+fn an_empty_record_leaves_the_document_indices() {
+    // A record of no atoms spells and refers to none; a later record still
+    // refers to the atoms the first spelled.
+    let catalog = AtomCatalog::new(["a", "b"].map(|name| atom(name, vec![])).to_vec()).unwrap();
+    let first = ObservationFixture::plain(Model::from_positions(&catalog, [0, 1]).unwrap());
+    let empty =
+        ObservationFixture::plain(Model::from_positions(&catalog, std::iter::empty()).unwrap());
+    let mut table = AtomTable::new(16);
+    record_json(&first, &mut table, ViewLimits::default());
+    let blank = record_json(&empty, &mut table, ViewLimits::default());
+    assert_eq!(blank["full_model"], json!([]));
+    let again = record_json(&first, &mut table, ViewLimits::default());
+    assert_eq!(again["atoms"], json!([]));
+    assert_eq!(again["full_model"], json!([0, 1]));
 }
 
 struct ObservationFixture {
