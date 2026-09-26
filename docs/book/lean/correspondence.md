@@ -617,8 +617,17 @@ cancellation; the Lean laws do not prove condition-variable progress. A joined
 batch records spent operations only after all leases settle; a lease is not
 evidence of candidate execution or membership.
 
-The parallel region walk scopes each lease to one region and settles it before
-waiting for another region or sending a model. Its shared allowance includes
+The parallel region walk keeps one lease per worker across its consecutive
+regions and settles it before stealing or waiting for another region and
+before sending a model; a reservation settles it first, and exit or unwinding
+drops it. The ledger is therefore locked about twice per grant rather than
+twice per region, while no unused permit is held where the worker could
+block. Holding a grant across regions shifts timing, not outcomes: exhaustion
+is still reported only when no permit is available or outstanding, so the
+total work bound is unchanged, but near a small allowance a peer can wait
+until a busy worker's local run ends before permits return, and mid-run
+statistics trail committed work by up to one grant per worker. Its shared
+allowance includes
 coordinator certificate preparation; each worker reserves a finite checking
 bound before running its certificate and settles its actual returned work.
 The bounds follow the checkers' charged visits: nodes, roots, producers and atoms

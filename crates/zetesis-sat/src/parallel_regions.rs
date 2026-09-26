@@ -2,20 +2,20 @@
 //! a cumulative allowance and a work-stealing frontier of regions still to visit.
 //!
 //! Each worker owns a work-stealing deque of regions with their knowledge, a
-//! budget leased for each region from the enumeration's shared allowance, and
-//! its own evaluation workspace. Candidate and reduct traversals share the
-//! authenticated original-theory index but never their mutable knowledge. A
-//! worker pops a region from its own deque, narrows it from the knowledge it
-//! carries, drops it when refuted, splits it otherwise and pushes both children
-//! back onto its deque; a worker whose deque is empty steals a region from a
-//! peer. At a leaf it decides membership as the scalar proposer does, by the
-//! class certificate when one applies and else by the proper-subset query as a
-//! region tree; a stable model is sent to the enumeration. The regions
-//! partition the candidate space exactly (`Cube.split_partition`,
-//! `Cube.split_disjoint` of `Search.lean`), so no leaf is visited by
-//! two workers and every leaf by one, whatever the interleaving; the order
-//! in which models arrive is the schedule's and is not a property of the
-//! result, and no two runs promise the same order.
+//! lease on the enumeration's shared allowance that serves its consecutive
+//! regions, and its own evaluation workspace. Candidate and reduct traversals
+//! share the authenticated original-theory index but never their mutable
+//! knowledge. A worker pops a region from its own deque, narrows it from the
+//! knowledge it carries, drops it when refuted, splits it otherwise and pushes
+//! both children back onto its deque; a worker whose deque is empty steals a
+//! region from a peer. At a leaf it decides membership as the scalar proposer
+//! does, by the class certificate when one applies and else by the
+//! proper-subset query as a region tree; a stable model is sent to the
+//! enumeration. The regions partition the candidate space exactly
+//! (`Cube.split_partition`, `Cube.split_disjoint` of `Search.lean`), so no leaf
+//! is visited by two workers and every leaf by one, whatever the interleaving;
+//! the order in which models arrive is the schedule's and is not a property of
+//! the result, and no two runs promise the same order.
 //!
 //! A restriction added while the workers run narrows the regions not yet
 //! visited: each worker reads the restrictions before a narrowing, and a
@@ -706,23 +706,28 @@ fn worker(shared: &Shared, index: usize, sender: &SyncSender<Interpretation>) ->
     let mut reported = SearchPhaseTimings::default();
     let mut search = SearchStatistics::default();
     let mut membership = crate::prepared_reduct::State::with_index(Arc::clone(&shared.index));
+    // One lease serves this worker's consecutive regions, so the shared ledger
+    // is locked about twice per grant rather than twice per region. It settles
+    // before this worker steals or waits for another region and before it sends
+    // a model; a reservation settles it first, and exit or unwinding drops it.
+    // No unused permit is held where this worker could block.
+    let mut quota = shared.budget.lease(&shared.cancellation);
     loop {
         // Honour a stop before taking any region, so a worker with a deep deque
         // does not run its whole subtree on after a stop was raised.
         if shared.closed.load(Ordering::Acquire) {
             break;
         }
-        let Some(entry) = shared
-            .take_local(index)
-            .or_else(|| find_work(shared, index))
-        else {
+        let local = shared.take_local(index);
+        if local.is_none() {
+            quota.settle();
+        }
+        let Some(entry) = local.or_else(|| find_work(shared, index)) else {
             break;
         };
-        // A region owns its grant. Settle it before waiting for another
-        // region or sending a model, so other workers can use unused permits.
         let stepped = {
             let mut budget = Budget {
-                quota: shared.budget.lease(&shared.cancellation),
+                quota,
                 limits: shared.limits.search,
                 cancellation: &shared.cancellation,
                 statistics: search,
@@ -737,6 +742,7 @@ fn worker(shared: &Shared, index: usize, sender: &SyncSender<Interpretation>) ->
                 &mut filter,
             );
             search = budget.statistics;
+            quota = budget.quota;
             result
         };
         if let Some(measured) = report.statistics.phase_timings {
@@ -751,11 +757,12 @@ fn worker(shared: &Shared, index: usize, sender: &SyncSender<Interpretation>) ->
             // the count has exactly one structural decrement point.
             Ok(Stepped::Resolved(model)) => {
                 shared.outstanding.fetch_sub(1, Ordering::AcqRel);
-                if let Some(model) = model
-                    && sender.send(model).is_err()
-                {
-                    shared.close();
-                    break;
+                if let Some(model) = model {
+                    quota.settle();
+                    if sender.send(model).is_err() {
+                        shared.close();
+                        break;
+                    }
                 }
             }
             Err(error) => {

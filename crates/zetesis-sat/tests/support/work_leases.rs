@@ -129,6 +129,23 @@ fn final_consumed_grant_wakes_exhaustion_waiters() {
 }
 
 #[test]
+fn a_settled_lease_refills_on_its_next_use() {
+    // A region walker keeps one lease across its regions and settles it before
+    // waiting: settling commits the consumed part and returns the rest, and the
+    // same lease takes a fresh grant when it is next used.
+    let shared = budget(2 * WORK_QUANTUM);
+    let cancellation = Cancellation::default();
+    let lease = shared.lease(&cancellation);
+    lease.take(5).unwrap();
+    lease.settle();
+    state(&shared, (5, 2 * WORK_QUANTUM - 5, 0));
+    lease.tick().unwrap();
+    state(&shared, (5, WORK_QUANTUM - 5, WORK_QUANTUM));
+    drop(lease);
+    state(&shared, (6, 2 * WORK_QUANTUM - 6, 0));
+}
+
+#[test]
 fn bulk_consumption_preserves_its_unused_remainder() {
     let shared = budget(WORK_QUANTUM + 7);
     let cancellation = Cancellation::default();

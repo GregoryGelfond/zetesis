@@ -2,8 +2,10 @@
 //!
 //! Committed work + available permits + outstanding grants equals the initial
 //! allowance. A lease consumes its grant locally, then commits used permits and
-//! returns unused ones on every exit. Outstanding grants are not reported as
-//! spent work. Decision reservations remain individually shared and nonblocking.
+//! returns unused ones when it settles: before its holder waits, delivers or
+//! reserves, and on every exit. A settled lease refills on its next use.
+//! Outstanding grants are not reported as spent work. Decision reservations
+//! remain individually shared and nonblocking.
 
 use std::cell::Cell;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -13,13 +15,14 @@ use std::time::Duration;
 use crate::{Cancellation, Incomplete, SearchLimits, SearchStatistics};
 
 /// A scheduling policy, not a measured crossover: an incremental grant holds
-/// at most this many permits, enough that a region's narrowing draws a single
-/// grant and returns it once instead of refilling several times mid-region, so
-/// the shared budget lock is contended far less as workers scale. Accounted
-/// kernels reserve their complete bounded allowance separately. No grant changes
-/// the charged operation sequence, so the work limit still bounds the identical
-/// total; a larger grant only coarsens how the shared allowance is parcelled out
-/// among workers and how often a lease rechecks cooperative control.
+/// at most this many permits. A region walker keeps its lease across its
+/// consecutive regions, which commonly use a few hundred permits each, so one
+/// grant serves many regions and the shared ledger lock is taken about twice
+/// per grant rather than twice per region. Accounted kernels reserve their
+/// complete bounded allowance separately. No grant changes the charged
+/// operation sequence, so the work limit still bounds the identical total; a
+/// larger grant only coarsens how the shared allowance is parcelled out among
+/// workers and how often a lease rechecks cooperative control.
 const WORK_QUANTUM: u64 = 16384;
 /// A waiting query rechecks cooperative control at least once per timed wait.
 /// Lock acquisition and OS scheduling do not provide a hard response deadline.
@@ -241,7 +244,11 @@ impl WorkLease<'_> {
         }
     }
 
-    fn settle(&self) {
+    /// Commit the consumed part of the current grant and return its unused
+    /// part; the lease stays usable and refills on its next use. A holder calls
+    /// this before any wait, delivery or reservation, so a peer never waits for
+    /// permits that this lease is not using.
+    pub(crate) fn settle(&self) {
         let granted = self.granted.replace(0);
         if granted == 0 {
             return;
