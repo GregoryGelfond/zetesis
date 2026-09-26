@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 ![Rust 1.97+](https://img.shields.io/badge/rust-1.97%2B-orange?style=flat-square)
-[![Line coverage: 94.28% (CPU + Metal)](https://img.shields.io/badge/coverage-94.28%25%20%28CPU%20%2B%20Metal%29-brightgreen?style=flat-square)](docs/book/reference/validation.md#coverage)
+[![Line coverage: 91.69% (portable)](https://img.shields.io/badge/coverage-91.69%25%20%28portable%29-brightgreen?style=flat-square)](docs/book/reference/validation.md#coverage)
 
 zetesis is an experimental answer-set solver written in Rust. It finds solutions
 to logic programs and checks them against the program's reduct. It supports

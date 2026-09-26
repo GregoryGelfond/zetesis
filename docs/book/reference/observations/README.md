@@ -1,10 +1,11 @@
 # Recorded release observations
 
-The recorded [0.1.4 coverage receipt](coverage-013ae6d3.json) identifies the
-qualified source, independent CPU and workspace populations, and 59 physical
-Metal tests. Three separate ordinary CLI backend checks also passed; they do
-not contribute instrumented coverage. See the [validation reference](../validation.md#coverage)
-for the scope. The performance records below retain their original identities.
+The recorded [0.1.5 verification receipt](coverage-318c8238.json) identifies the
+independent portable workspace and CPU coverage populations. Sixty physical
+Metal tests and three ordinary CLI backend checks passed separately, without
+contributing instrumented coverage. See the [validation reference](../validation.md#coverage)
+for source identities and scope. The performance records below retain their
+original identities.
 
 The [canonical-storage comparison](../canonical-storage.md) measures source
 `8c847132` against `013ae6d3`, with all 94 corpus cases, 22 execution-series
