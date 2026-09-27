@@ -13,10 +13,8 @@
 
 use std::hash::Hasher;
 
-/// Mixes the words of a key by multiplication with an odd constant
-/// after rotating the running value, the scheme of the Rust compiler's own
-/// interner hash; the low bits of each word reach every bit of the result.
-/// zetesis-core's atom identity map places identities by the same mix.
+/// Folds the words of a key through [`zetesis_core::mix_word`], the mix
+/// zetesis-core's atom identity map also uses.
 #[derive(Default)]
 pub(crate) struct WordHasher(u64);
 
@@ -36,6 +34,6 @@ impl Hasher for WordHasher {
         self.write_u64(word as u64);
     }
     fn write_u64(&mut self, word: u64) {
-        self.0 = (self.0.rotate_left(5) ^ word).wrapping_mul(0x517c_c1b7_2722_0a95);
+        self.0 = zetesis_core::mix_word(self.0, word);
     }
 }

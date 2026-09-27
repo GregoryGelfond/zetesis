@@ -451,6 +451,8 @@ impl Dense {
         {
             return Ok(());
         }
+        // The byte guard above counts exactly these reservations; an
+        // over-allocating reservation would let the final record refuse.
         let mut found = Vec::new();
         let mut merged = Vec::new();
         if found.try_reserve_exact(repeats).is_err()

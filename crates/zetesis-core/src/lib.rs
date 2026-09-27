@@ -39,6 +39,7 @@ mod identity;
 mod ordered_index;
 mod atom_lookup;
 mod checked_sort;
+mod word_mix;
 pub use catalog::interner as atom_interner;
 mod carrier;
 mod ground;
@@ -67,6 +68,7 @@ pub use template::{
     TemplateRow, Term,
 };
 pub use value::{Atom, ConstructionError, Predicate, Sign, Value};
+pub use word_mix::mix_word;
 
 pub use structured::{
     StructuralValue, ValueError, ValueLimits, ValueNode, ValueNodeRef, ValueResource,

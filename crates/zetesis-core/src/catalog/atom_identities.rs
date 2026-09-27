@@ -28,8 +28,7 @@ struct Scoped<T> {
 }
 
 /// Identities are assigned by their owner, not by input, so one
-/// multiplicative mix of the identity word places them. The mix is the one
-/// zetesis-themelios's word hash uses; keep the two in step.
+/// [`mix_word`](crate::mix_word) of the identity word places them.
 #[derive(Default)]
 struct IdentityHasher(u64);
 
@@ -46,7 +45,7 @@ impl Hasher for IdentityHasher {
         self.write_u64(u64::from(word));
     }
     fn write_u64(&mut self, word: u64) {
-        self.0 = (self.0.rotate_left(5) ^ word).wrapping_mul(0x517c_c1b7_2722_0a95);
+        self.0 = crate::mix_word(self.0, word);
     }
 }
 
