@@ -98,6 +98,62 @@ proptest! {
     }
 }
 
+fn distinct(count: i16) -> AtomCatalog {
+    AtomCatalog::new((0..count).map(|number| atom(0, number, false)).collect()).unwrap()
+}
+
+fn selection_permits(order: &ModelOrder<'_>, positions: impl IntoIterator<Item = usize>) -> usize {
+    let mut permits = 0;
+    order
+        .select_with(positions, usize::MAX, || {
+            permits += 1;
+            Ok::<_, Infallible>(())
+        })
+        .unwrap();
+    permits
+}
+
+#[test]
+fn a_dense_selection_costs_permits_linear_in_its_catalog() {
+    // Selecting every occurrence in reverse walks the prepared order once
+    // rather than sorting 256 positions (about 2,048 comparisons).
+    let catalog = distinct(256);
+    let order = prepare(&catalog);
+    let permits = selection_permits(&order, (0..256).rev());
+    assert!(permits <= 6 * (256 + 256), "{permits} permits");
+}
+
+#[test]
+fn a_sparse_selection_costs_fewer_permits_than_its_catalog() {
+    // Two positions of 1,024 are sorted; walking the order to the last
+    // occurrence would cost at least one permit per occurrence.
+    let catalog = distinct(1024);
+    let order = prepare(&catalog);
+    let permits = selection_permits(&order, [1023, 3]);
+    assert!(permits < 1024, "{permits} permits");
+}
+
+#[test]
+fn a_prepared_order_retains_its_semantic_positions() {
+    // Ranks and the positions in semantic order: two integer cells per occurrence.
+    let catalog = distinct(64);
+    let order = prepare(&catalog);
+    assert!(order.retained_bytes() >= 2 * 64 * size_of::<usize>() as u128);
+}
+
+#[test]
+fn a_dense_selection_keeps_the_least_selected_equivalent() {
+    // Five of six positions are dense enough to walk the semantic order.
+    // Occurrences 0 and 3 are equal: without 0 the walk keeps 3, with it 0.
+    let catalog = catalog();
+    let order = prepare(&catalog);
+    assert!(select(&order, [5, 3, 2, 4, 1]).positions().contains(&3));
+    let with_zero = select(&order, [5, 3, 2, 4, 1, 0]);
+    assert!(with_zero.positions().contains(&0));
+    assert!(!with_zero.positions().contains(&3));
+    assert_eq!(with_zero.positions().len(), 5);
+}
+
 #[test]
 fn equivalent_occurrences_keep_a_selected_representative() {
     let catalog = catalog();
@@ -270,10 +326,55 @@ fn every_selection_permit_can_refuse_and_then_retry() {
         observed.insert(error.peak_bytes());
         assert_eq!(select(&order, positions), expected);
     }
-    assert!(observed.len() >= 3, "receipts include growth and scratch");
+    assert!(
+        observed.len() >= 3,
+        "receipts include the mask and the selection"
+    );
     let (model, peak) = publication.into_parts();
     assert_eq!(observed.last().copied(), Some(peak));
     assert!(peak >= order.retained_bytes() + model.selection_bytes());
+}
+
+#[test]
+fn every_sparse_selection_permit_can_refuse_and_then_retry() {
+    // Three positions (one repeated) of 1,024 take the sorting route.
+    let catalog = distinct(1024);
+    let order = prepare(&catalog);
+    let positions = [1023, 3, 1023, 512];
+    let mut permits = 0;
+    let publication = order
+        .select_with(positions, usize::MAX, || {
+            permits += 1;
+            Ok::<_, usize>(())
+        })
+        .unwrap();
+    assert!(permits < 1024, "{permits} permits");
+    let expected = publication.model().clone();
+    assert_eq!(expected.positions(), [3, 512, 1023]);
+    let mut observed = BTreeSet::new();
+    for stop_at in 0..permits {
+        let mut calls = 0;
+        let error = order
+            .select_with(positions, usize::MAX, || {
+                let current = calls;
+                calls += 1;
+                if current == stop_at {
+                    Err(current)
+                } else {
+                    Ok(())
+                }
+            })
+            .unwrap_err();
+        assert_eq!(calls, stop_at + 1);
+        assert_eq!(error.failure(), &ModelFailure::Stopped(stop_at));
+        observed.insert(error.peak_bytes());
+        assert_eq!(select(&order, positions), expected);
+    }
+    assert!(
+        observed.len() >= 4,
+        "receipts include the mask, selection and scratch"
+    );
+    assert_eq!(observed.last().copied(), Some(publication.peak_bytes()));
 }
 
 struct CannotConvert;
@@ -297,7 +398,7 @@ fn initial_cancellation_precedes_iterator_conversion() {
     assert_eq!(failure.failure(), &ModelFailure::Stopped("cancelled"));
     assert_eq!(
         failure.peak_bytes(),
-        order.retained_bytes() + 2 * size_of::<Vec<usize>>() as u128
+        order.retained_bytes() + 3 * size_of::<Vec<usize>>() as u128
     );
 }
 

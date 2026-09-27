@@ -52,13 +52,20 @@ term workspaces can refer to this catalog without becoming model selections.
 for its occurrences. Equal logical atoms have equal ranks. Increasing ranks
 follow typed storage order, not discovery order or ASP arithmetic comparison.
 `select_with` validates positions, orders them through the ranks and coalesces
-duplicates, retaining a supplied occurrence from each selected equivalence class.
-It returns an ordinary `Model` sharing the original catalog; the model can outlive
-the prepared order. No atom payload is copied or compared again during selection.
+duplicates, retaining the least supplied occurrence of each selected equivalence
+class. It returns an ordinary `Model` sharing the original catalog; the model can
+outlive the prepared order. No atom payload is copied or compared again during
+selection.
 
 For a catalog of size *n* and a selection of size *m*, preparation takes
-O(n log n) semantic comparisons and two integer buffers, retaining one.
-Selection takes O(m log m) integer comparisons and O(m) temporary space.
+O(n log n) semantic comparisons and retains two integer buffers: the ranks and
+the occurrences in semantic order. Selection marks the supplied positions in an
+*n*-bit mask and then chooses, from *m* and *n* alone and before either runs, one
+of two strategies with identical results. A dense selection
+(m·⌈log₂(m + 1)⌉ ≥ n) walks the semantic order once in O(n) integer steps,
+keeping each rank's first marked occurrence. A sparse one sorts its marked
+positions in O(m log m) integer comparisons. Temporary space is the mask plus
+O(m) cells.
 Both operations accept work/cancellation callbacks and metadata byte ceilings.
 `ModelPublication` and `ModelPublicationFailure` retain actual peak metadata;
 rejected reservation proposals are not counted as allocations. Catalog payload

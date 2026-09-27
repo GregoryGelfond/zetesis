@@ -371,7 +371,8 @@ excludes duplicate decoded atoms from that selection. These premises do not
 follow from increasing occurrence IDs, a shared vocabulary or equal catalog
 lengths. Rust must construct and bind the ranks to the exact catalog, retain
 selected representatives, and check work, capacity, cancellation and publication.
-The laws do not verify that implementation or its sorting algorithm.
+The laws do not verify that implementation, its semantic-order walk or its
+sorting algorithm.
 
 The common `ModelRetention` ledger charges each distinct occurrence catalog's
 portable encoding once, including repeated and unselected entries, then
