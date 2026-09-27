@@ -162,84 +162,132 @@ impl KeyWork {
     }
 }
 
-/// The values at `position` of the facts of `signature`, when facts are its
-/// only producers: `None` when a rule with a body, a choice, a disjunction,
-/// an aggregate or theory head, or an external declaration produces it, or
-/// a fact holds something other than a scalar at that position. What the
-/// facts admit is then exactly what the relation admits; a consumer that
-/// needs a bound on a keyed relation's condition reads it here rather than
-/// from an analysis of derived values. One step per statement read.
+/// The facts of a program's predicates, read in one pass so that repeated
+/// questions about them do not read the program again.
 ///
-/// # Errors
-/// Returns the work stop; the steps before it stay spent.
-pub fn facts<'p>(
-    program: &'p Program,
-    signature: &Signature,
-    position: usize,
-    work: &mut KeyWork,
-) -> Result<Option<Vec<&'p Symbol>>, Stop> {
-    let mut values = Vec::new();
-    for carrier in program.statements() {
-        work.step()?;
-        match carrier.get() {
-            Statement::Rule(rule) => match rule.head().get() {
-                Head::Literal(literal) => {
-                    let LiteralInner::Atom(atom) = &literal.inner else {
-                        continue;
-                    };
-                    let atom = atom.get();
-                    for terms in atom.alternatives() {
-                        if atom_signature(atom, terms.len()).as_ref() != Some(signature) {
+/// A predicate's facts are what it admits exactly when facts are its only
+/// producers: a rule with a body or a negated head, a choice or disjunction
+/// naming it, or an external declaration of it leaves it without facts to
+/// read, and an aggregate or theory head anywhere leaves every predicate
+/// without them. The index borrows the program's argument tuples and copies
+/// no term.
+#[derive(Debug)]
+pub struct FactIndex<'p> {
+    /// An aggregate or theory head produces atoms this reading cannot name.
+    opaque: bool,
+    /// The argument tuples of each signature's facts, or `None` when anything
+    /// but facts produces the signature.
+    signatures: BTreeMap<Signature, Option<Vec<&'p [Term]>>>,
+}
+
+impl<'p> FactIndex<'p> {
+    /// Read the facts of every predicate of `program`, one step per
+    /// statement.
+    ///
+    /// # Errors
+    /// Returns the work stop; the steps before it stay spent and no partial
+    /// index is returned.
+    pub fn read(program: &'p Program, work: &mut KeyWork) -> Result<Self, Stop> {
+        let mut index = Self {
+            opaque: false,
+            signatures: BTreeMap::new(),
+        };
+        for carrier in program.statements() {
+            work.step()?;
+            match carrier.get() {
+                Statement::Rule(rule) => match rule.head().get() {
+                    Head::Literal(literal) => {
+                        let LiteralInner::Atom(atom) = &literal.inner else {
                             continue;
-                        }
-                        if literal.negation != DefaultNegation::None
-                            || rule.body().get().elements().next().is_some()
-                        {
-                            return Ok(None);
-                        }
-                        match terms.get(position) {
-                            Some(Term::Symbolic(symbol)) => values.push(symbol),
-                            _ => return Ok(None),
+                        };
+                        let atom = atom.get();
+                        let fact = literal.negation == DefaultNegation::None
+                            && rule.body().get().elements().next().is_none();
+                        for terms in atom.alternatives() {
+                            let Some(signature) = atom_signature(atom, terms.len()) else {
+                                continue;
+                            };
+                            let rows = index
+                                .signatures
+                                .entry(signature)
+                                .or_insert_with(|| Some(Vec::new()));
+                            match rows {
+                                Some(rows) if fact => rows.push(terms),
+                                _ => *rows = None,
+                            }
                         }
                     }
-                }
-                Head::Choice(choice)
-                    if choice
-                        .elements()
-                        .any(|element| names(element.get().literal(), signature)) =>
-                {
-                    return Ok(None);
-                }
-                Head::Disjunction(disjunction)
-                    if disjunction
-                        .elements()
-                        .any(|element| names(element.get().literal(), signature)) =>
-                {
-                    return Ok(None);
-                }
-                Head::Choice(_) | Head::Disjunction(_) | Head::Falsum | Head::Verum => {}
-                Head::Aggregate(_) | Head::TheoryAtom(_) => return Ok(None),
-            },
-            Statement::External(external) if atom_names(external.atom().get(), signature) => {
-                return Ok(None);
+                    Head::Choice(choice) => {
+                        for element in choice.elements() {
+                            index.produced(element.get().literal());
+                        }
+                    }
+                    Head::Disjunction(disjunction) => {
+                        for element in disjunction.elements() {
+                            index.produced(element.get().literal());
+                        }
+                    }
+                    Head::Falsum | Head::Verum => {}
+                    Head::Aggregate(_) | Head::TheoryAtom(_) => index.opaque = true,
+                },
+                Statement::External(external) => index.atom_produced(external.atom().get()),
+                _ => {}
             }
-            _ => {}
+        }
+        Ok(index)
+    }
+
+    /// The values at `position` of the facts of `signature`, in program order,
+    /// when facts are its only producers: `None` when anything else produces
+    /// it or a fact holds something other than a scalar at that position.
+    /// What the facts admit is then exactly what the relation admits; a
+    /// consumer that needs a bound on a keyed relation's condition reads it
+    /// here rather than from an analysis of derived values. One step for the
+    /// question and one per fact read.
+    ///
+    /// # Errors
+    /// Returns the work stop; the steps before it stay spent.
+    pub fn values(
+        &self,
+        signature: &Signature,
+        position: usize,
+        work: &mut KeyWork,
+    ) -> Result<Option<Vec<&'p Symbol>>, Stop> {
+        work.step()?;
+        if self.opaque {
+            return Ok(None);
+        }
+        let Some(rows) = self.signatures.get(signature) else {
+            return Ok(Some(Vec::new()));
+        };
+        let Some(rows) = rows else {
+            return Ok(None);
+        };
+        let mut values = Vec::with_capacity(rows.len());
+        for terms in rows {
+            work.step()?;
+            match terms.get(position) {
+                Some(Term::Symbolic(symbol)) => values.push(symbol),
+                _ => return Ok(None),
+            }
+        }
+        Ok(Some(values))
+    }
+
+    /// Record that something other than facts produces the literal's atom.
+    fn produced(&mut self, literal: &Literal) {
+        if let LiteralInner::Atom(atom) = &literal.inner {
+            self.atom_produced(atom.get());
         }
     }
-    Ok(Some(values))
-}
 
-/// Whether the literal's atom has `signature` under any of its alternatives.
-fn names(literal: &Literal, signature: &Signature) -> bool {
-    match &literal.inner {
-        LiteralInner::Atom(atom) => atom_names(atom.get(), signature),
-        _ => false,
+    fn atom_produced(&mut self, atom: &Atom) {
+        for terms in atom.alternatives() {
+            if let Some(signature) = atom_signature(atom, terms.len()) {
+                self.signatures.insert(signature, None);
+            }
+        }
     }
-}
-
-fn atom_names(atom: &Atom, signature: &Signature) -> bool {
-    atom.alternatives()
-        .any(|terms| atom_signature(atom, terms.len()).as_ref() == Some(signature))
 }
 
 fn produced(

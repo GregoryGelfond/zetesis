@@ -5,7 +5,7 @@ use themelios_program::program::{Arguments, Atom, Program};
 use themelios_program::raise::raise;
 use themelios_program::symbol::{Name, Sign, Signature, Symbol, VarName};
 use themelios_syntax::{dialect::Dialect, parse::parse};
-use zetesis_domain::{KeyWork, Limits, atom_signature, facts, keys};
+use zetesis_domain::{FactIndex, KeyWork, Limits, atom_signature, keys};
 
 fn source(text: &str) -> Program {
     let source = Source::new(SourceId::new(17), text.to_owned()).unwrap();
@@ -175,41 +175,92 @@ fn numbers(values: &[&Symbol]) -> Vec<i32> {
         .collect()
 }
 
+fn digits(text: &str) -> Option<Vec<i32>> {
+    let program = source(text);
+    let mut work = KeyWork::new(1_000);
+    FactIndex::read(&program, &mut work)
+        .unwrap()
+        .values(&signature("digit", 1), 0, &mut work)
+        .unwrap()
+        .map(|values| numbers(&values))
+}
+
 #[test]
 fn the_facts_of_a_predicate_are_read_when_facts_are_all_that_produces_it() {
     let program = source("digit(0;1;2). letter(a). 1 { assign(L,D) : digit(D) } 1 :- letter(L).");
     let mut work = KeyWork::new(1_000);
-    let values = facts(&program, &signature("digit", 1), 0, &mut work)
+    let index = FactIndex::read(&program, &mut work).unwrap();
+    // One step per statement read, then one per query and per fact row.
+    assert_eq!(work.steps(), 3);
+    let values = index
+        .values(&signature("digit", 1), 0, &mut work)
         .unwrap()
         .unwrap();
     assert_eq!(numbers(&values), [0, 1, 2]);
-    assert_eq!(work.steps(), 3);
+    assert_eq!(work.steps(), 7);
+}
+
+#[test]
+fn repeated_queries_read_the_program_once() {
+    let noise = (0..50)
+        .map(|i| format!("noise({i})."))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let program = source(&format!("{noise} digit(0;1;2)."));
+    let mut work = KeyWork::new(10_000);
+    let index = FactIndex::read(&program, &mut work).unwrap();
+    let read = work.steps();
+    for _ in 0..10 {
+        index
+            .values(&signature("digit", 1), 0, &mut work)
+            .unwrap()
+            .unwrap();
+    }
+    assert_eq!(read, 51);
+    assert_eq!(work.steps(), read + 10 * 4);
 }
 
 #[test]
 fn a_predicate_with_a_rule_producer_has_no_facts_to_read() {
-    let program = source("span(0;1). digit(D) :- span(D). digit(2).");
-    let mut work = KeyWork::new(1_000);
-    assert_eq!(
-        facts(&program, &signature("digit", 1), 0, &mut work).unwrap(),
-        None
-    );
+    assert_eq!(digits("span(0;1). digit(D) :- span(D). digit(2)."), None);
+}
+
+#[test]
+fn a_rule_producer_after_the_facts_still_leaves_no_facts_to_read() {
+    assert_eq!(digits("digit(2). span(0;1). digit(D) :- span(D)."), None);
 }
 
 #[test]
 fn a_predicate_produced_by_a_choice_has_no_facts_to_read() {
-    let program = source("{ digit(1) }. digit(2).");
-    let mut work = KeyWork::new(1_000);
-    assert_eq!(
-        facts(&program, &signature("digit", 1), 0, &mut work).unwrap(),
-        None
-    );
+    assert_eq!(digits("{ digit(1) }. digit(2)."), None);
+}
+
+#[test]
+fn an_external_predicate_has_no_facts_to_read() {
+    assert_eq!(digits("#external digit(3). digit(2)."), None);
+}
+
+#[test]
+fn a_fact_without_a_scalar_at_the_position_leaves_no_facts_to_read() {
+    assert_eq!(digits("digit(2). digit(0..1)."), None);
+}
+
+#[test]
+fn a_predicate_without_facts_reads_as_empty() {
+    assert_eq!(digits("letter(a)."), Some(Vec::new()));
 }
 
 #[test]
 fn reading_facts_stops_within_the_key_work() {
     let program = source("digit(0). digit(1). digit(2).");
     let mut work = KeyWork::new(2);
-    let stop = facts(&program, &signature("digit", 1), 0, &mut work).unwrap_err();
+    let stop = FactIndex::read(&program, &mut work).err().unwrap();
     assert_eq!((stop.limit, work.steps()), (2, 2));
+}
+
+#[test]
+fn an_aggregate_head_leaves_every_predicate_without_facts() {
+    // An aggregate head produces atoms this reading cannot name, so no
+    // predicate's facts are known to be all that produces it.
+    assert_eq!(digits("digit(2). q(1). 1 = #count { X : q(X) }."), None);
 }
