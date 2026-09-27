@@ -339,7 +339,12 @@ appender admits newly discovered identities. Pending discovery IDs and dense
 coordinate marks remain separate from truth until the complete scan finishes.
 Final result publication selects the completed truth over an immutable prefix;
 reset clears memberships, frontiers and pending marks while retaining identity
-and reusable capacity for the next candidate.
+and reusable capacity for the next candidate. A dense relation also keeps, for
+rows derived again, the discovery position its coordinate's identity already
+has in that authority, so a later candidate resolves such a row without
+rebuilding its atom. This is identity, not truth: the authority's discovery
+positions never change, the pairs die with the workspace that owns the
+authority, and which rows are true is still decided afresh by each closure.
 `RelationExtension` states preservation of old row reconstruction and equality
 selection when row references and dictionary meanings survive extension. It does
 not establish the new Rust owner/prefix checks, publication protocol or reset
@@ -555,8 +560,9 @@ that owner does not reuse a reduct or an interpretation. Each candidate starts
 with empty relations; assignments borrow only its current immutable round.
 Final assembly publishes a selected immutable prefix and resets truth-bearing
 relation memberships, frontiers and pending marks. The canonical authority and
-its discovered identities remain available; their presence supplies no truth to
-the next candidate. Previous results retain their original immutable prefix.
+its discovered identities remain available, with the recorded discovery
+positions of dense rows derived again; their presence supplies no truth to the
+next candidate. Previous results retain their original immutable prefix.
 The required refinement is equality with a fresh full-round closure, including
 constraints and frozen-seed agreement. The scalar and batch reuse controls
 compare those results, retained buffer addresses and failure recovery. They do

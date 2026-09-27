@@ -637,6 +637,18 @@ impl Catalogs {
         self.atoms
     }
 
+    #[cfg(test)]
+    pub(super) fn discovered(&self) -> usize {
+        self.relations
+            .as_slice()
+            .iter()
+            .map(|relation| match relation {
+                Relation::Dense(dense) => dense.discovered().len(),
+                Relation::Tree { .. } => 0,
+            })
+            .sum()
+    }
+
     fn metadata_bytes(&self) -> u128 {
         size_of::<Self>() as u128
             + self.declarations.capacity() as u128 * size_of::<DeclaredPredicate>() as u128
@@ -966,50 +978,98 @@ impl Catalogs {
                         positions.push(id);
                     }
                 }
-                Relation::Dense(dense) => {
-                    let layout = dense.layout();
-                    let mut coordinates = Vec::new();
-                    storage::reserve(
-                        &mut coordinates,
-                        layout.predicate().arity(),
-                        total + size_of::<Vec<usize>>() as u128,
-                        work,
-                    )?;
-                    let coordinate_bytes = size_of::<Vec<usize>>() as u128
-                        + coordinates.capacity() as u128 * size_of::<usize>() as u128;
-                    let base =
-                        self.metadata_bytes() + self.overhead + selection_bytes + coordinate_bytes;
-                    let mut range = 0..layout.positions();
-                    while let Some(position) = dense.next_row(RowSet::Current, &mut range, work)? {
-                        coordinates.clear();
-                        charge(work, layout.predicate().arity())?;
-                        coordinates.extend(
-                            (0..layout.predicate().arity())
-                                .map(|argument| layout.coordinate(argument, position)),
-                        );
-                        let authority = self.authority.as_mut().ok_or(Stop::InvalidProgram)?;
-                        let available = available(work, base + authority.storage_bytes())?;
-                        let atom = layout
-                            .program()
-                            .carrier_atom_with(layout.signature(), &coordinates, available, || {
-                                charge(work, 1)
-                            })
-                            .map_err(|error| carrier_failure(&error))?;
-                        let other = base + atom.coordinate_bytes();
-                        let allowance = storage::atom_limits(work, other)?;
-                        authority.restart_storage_peak();
-                        let result = authority
-                            .entry_atom_with(atom.atom(), allowance, || charge(work, 1))
-                            .and_then(|entry| entry.insert_with(allowance, || charge(work, 1)));
-                        storage::record(work, other + authority.storage_peak_bytes())?;
-                        let id = result.map_err(storage::atom_failure)?;
-                        charge(work, 1)?;
-                        positions.push(id);
-                    }
+                Relation::Dense(_) => {
+                    self.dense_positions(index, &mut positions, selection_bytes, total, work)?;
                 }
             }
         }
         Ok(positions)
+    }
+
+    /// Resolve the current rows of the dense relation at `index` to discovery
+    /// positions, appending them to `positions`. A row with a recorded
+    /// discovery position is answered from the record; any other row is
+    /// admitted through the authority, and rows whose identity already existed
+    /// are then recorded, so later candidates resolve them without building
+    /// their atoms again.
+    fn dense_positions(
+        &mut self,
+        index: usize,
+        positions: &mut Vec<usize>,
+        selection_bytes: u128,
+        total: u128,
+        work: &mut Work<'_>,
+    ) -> Result<(), Stop> {
+        let Relation::Dense(dense) = &self.relations.as_slice()[index] else {
+            return Err(Stop::InvalidProgram);
+        };
+        let layout = dense.layout();
+        let mut coordinates = Vec::new();
+        storage::reserve(
+            &mut coordinates,
+            layout.predicate().arity(),
+            total + size_of::<Vec<usize>>() as u128,
+            work,
+        )?;
+        let coordinate_bytes = size_of::<Vec<usize>>() as u128
+            + coordinates.capacity() as u128 * size_of::<usize>() as u128;
+        let base = self.metadata_bytes() + self.overhead + selection_bytes + coordinate_bytes;
+        // Rows ascend, as do the discovered positions, so one forward
+        // cursor finds each row's record if it has one. Each record it passes
+        // costs one unit, charged with the row's own first operation.
+        let discovered = dense.discovered();
+        let admitted = self.authority.as_ref().ok_or(Stop::InvalidProgram)?.len();
+        let (start, mut next, mut repeats) = (positions.len(), 0, 0);
+        let mut range = 0..layout.positions();
+        while let Some(position) = dense.next_row(RowSet::Current, &mut range, work)? {
+            let first = next;
+            while discovered.get(next).is_some_and(|&(row, _)| row < position) {
+                next += 1;
+            }
+            let passed = next - first;
+            if let Some(&(row, id)) = discovered.get(next)
+                && row == position
+            {
+                charge(work, passed + 1)?;
+                positions.push(id);
+                continue;
+            }
+            coordinates.clear();
+            charge(work, passed + layout.predicate().arity())?;
+            coordinates.extend(
+                (0..layout.predicate().arity())
+                    .map(|argument| layout.coordinate(argument, position)),
+            );
+            let authority = self.authority.as_mut().ok_or(Stop::InvalidProgram)?;
+            let available = available(work, base + authority.storage_bytes())?;
+            let atom = layout
+                .program()
+                .carrier_atom_with(layout.signature(), &coordinates, available, || {
+                    charge(work, 1)
+                })
+                .map_err(|error| carrier_failure(&error))?;
+            let other = base + atom.coordinate_bytes();
+            let allowance = storage::atom_limits(work, other)?;
+            authority.restart_storage_peak();
+            let result = authority
+                .entry_atom_with(atom.atom(), allowance, || charge(work, 1))
+                .and_then(|entry| entry.insert_with(allowance, || charge(work, 1)));
+            storage::record(work, other + authority.storage_peak_bytes())?;
+            let id = result.map_err(storage::atom_failure)?;
+            repeats += usize::from(id < admitted);
+            charge(work, 1)?;
+            positions.push(id);
+        }
+        if repeats > 0 {
+            let live = self.total_bytes()
+                + size_of::<Vec<usize>>() as u128
+                + positions.capacity() as u128 * size_of::<usize>() as u128;
+            let mut relation = self.relations.get_mut(index).ok_or(Stop::InvalidProgram)?;
+            if let Relation::Dense(dense) = &mut *relation {
+                dense.remember(&positions[start..], admitted, live, work)?;
+            }
+        }
+        Ok(())
     }
 
     /// Select the final prepared truth in semantic order and publish one shared

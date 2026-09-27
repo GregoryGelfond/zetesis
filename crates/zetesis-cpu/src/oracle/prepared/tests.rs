@@ -69,15 +69,19 @@ fn repeated_candidates_reuse_empty_query_capacity() {
         )
         .unwrap();
     // Canonical identity persists independently of truth. Warm both finite
-    // candidates before asserting that repeated checks reuse their capacities.
-    prepared
-        .check_view(
-            Seed::new(&program, [atom("s", 2)]).unwrap().view(),
-            &mut workspace,
-            Limits::default(),
-            &cancellation,
-        )
-        .unwrap();
+    // candidates before asserting that repeated checks reuse their capacities;
+    // a candidate's second check records the dense positions its first
+    // admitted, so each seed is checked twice.
+    for value in [1, 2, 2] {
+        prepared
+            .check_view(
+                Seed::new(&program, [atom("s", value)]).unwrap().view(),
+                &mut workspace,
+                Limits::default(),
+                &cancellation,
+            )
+            .unwrap();
+    }
     let cursor = workspace.buffers.cursors.as_ptr();
     let undo = workspace.buffers.undo[0].as_ptr();
     let retained = workspace.retained_bytes().unwrap();
@@ -396,4 +400,153 @@ fn prepared_empty_checks_admit_their_retained_owners() {
     assert!(exact.accepted());
     assert_eq!(exact.statistics().rounds, 0);
     assert_eq!(exact.statistics().peak_closure_bytes, named);
+}
+
+fn check_value(
+    prepared: &PreparedQueries,
+    program: &Program,
+    workspace: &mut ClosureWorkspace,
+    value: i32,
+    limits: Limits,
+) -> Result<Check, Stop> {
+    prepared.check_view(
+        Seed::new(program, [atom("s", value)]).unwrap().view(),
+        workspace,
+        limits,
+        &Cancellation::default(),
+    )
+}
+
+fn prepared_program() -> (Program, PreparedQueries) {
+    let program = program();
+    let prepared = PreparedQueries::new(
+        &program,
+        PreparationLimits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
+    (program, prepared)
+}
+
+#[test]
+fn a_single_check_records_no_discovered_positions() {
+    // Every dense row of a first closure is a new identity; nothing repeats.
+    let (program, prepared) = prepared_program();
+    let mut workspace = ClosureWorkspace::default();
+    check_value(&prepared, &program, &mut workspace, 1, Limits::default()).unwrap();
+    assert_eq!(workspace.catalogs.discovered(), 0);
+}
+
+#[test]
+fn a_repeated_check_records_its_dense_positions() {
+    let (program, prepared) = prepared_program();
+    let mut workspace = ClosureWorkspace::default();
+    check_value(&prepared, &program, &mut workspace, 1, Limits::default()).unwrap();
+    let repeated = check_value(&prepared, &program, &mut workspace, 1, Limits::default()).unwrap();
+    assert_eq!(
+        workspace.catalogs.discovered(),
+        repeated.closure().atoms().len()
+    );
+}
+
+#[test]
+fn recorded_positions_answer_later_checks() {
+    // The third check resolves its dense rows from recorded positions, so it
+    // does less work than the check that recorded them, for the same closure.
+    let (program, prepared) = prepared_program();
+    let mut workspace = ClosureWorkspace::default();
+    check_value(&prepared, &program, &mut workspace, 1, Limits::default()).unwrap();
+    let recording = check_value(&prepared, &program, &mut workspace, 1, Limits::default()).unwrap();
+    let answered = check_value(&prepared, &program, &mut workspace, 1, Limits::default()).unwrap();
+    assert_eq!(answered.closure(), &expected(1));
+    assert!(answered.statistics().work < recording.statistics().work);
+}
+
+#[test]
+fn positions_first_seen_in_a_later_check_are_admitted() {
+    // After `s(1)` repeats, a check deriving `s(2)` and `q(2)` admits them as
+    // new identities; only the shared `d` rows are answered from records.
+    let (program, prepared) = prepared_program();
+    let mut workspace = ClosureWorkspace::default();
+    for _ in 0..2 {
+        check_value(&prepared, &program, &mut workspace, 1, Limits::default()).unwrap();
+    }
+    let recorded = workspace.catalogs.discovered();
+    let later = check_value(&prepared, &program, &mut workspace, 2, Limits::default()).unwrap();
+    assert_eq!(later.closure(), &expected(2));
+    assert_eq!(workspace.catalogs.discovered(), recorded);
+}
+
+#[test]
+fn passing_over_a_recorded_position_is_charged() {
+    // Both workspaces admitted the same identities in the same order, but
+    // only the first recorded `s(1)` and `q(1)`, whose rows precede those of
+    // `s(2)` and `q(2)`; its check of `s(2)` passes over both records.
+    let (program, prepared) = prepared_program();
+    let mut passing = ClosureWorkspace::default();
+    for value in [1, 1, 2, 2] {
+        check_value(&prepared, &program, &mut passing, value, Limits::default()).unwrap();
+    }
+    let mut direct = ClosureWorkspace::default();
+    for value in [1, 2, 2] {
+        check_value(&prepared, &program, &mut direct, value, Limits::default()).unwrap();
+    }
+    assert_eq!(
+        passing.catalogs.discovered(),
+        direct.catalogs.discovered() + 2
+    );
+    let passed = check_value(&prepared, &program, &mut passing, 2, Limits::default()).unwrap();
+    let answered = check_value(&prepared, &program, &mut direct, 2, Limits::default()).unwrap();
+    assert_eq!(passed.closure(), answered.closure());
+    assert_eq!(passed.statistics().work, answered.statistics().work + 2);
+}
+
+#[test]
+fn a_failed_check_discards_recorded_positions() {
+    let (program, prepared) = prepared_program();
+    let mut workspace = ClosureWorkspace::default();
+    for _ in 0..2 {
+        check_value(&prepared, &program, &mut workspace, 1, Limits::default()).unwrap();
+    }
+    assert!(workspace.catalogs.discovered() > 0);
+    let failed = check_value(
+        &prepared,
+        &program,
+        &mut workspace,
+        1,
+        Limits {
+            max_work: 0,
+            ..Limits::default()
+        },
+    );
+    assert_eq!(failed.err(), Some(Stop::WorkLimit));
+    assert_eq!(workspace.catalogs.discovered(), 0);
+}
+
+#[test]
+fn recorded_positions_stay_within_the_closure_ceiling() {
+    // Whatever ceiling admits a repeated check, the workspace it leaves,
+    // recorded positions included, fits that ceiling.
+    let (program, prepared) = prepared_program();
+    let mut warm = ClosureWorkspace::default();
+    check_value(&prepared, &program, &mut warm, 1, Limits::default()).unwrap();
+    let base = usize::try_from(warm.retained_bytes().unwrap()).unwrap()
+        + prepared.statistics().retained_bytes;
+    let mut recorded = false;
+    for limit in base.saturating_sub(256)..base + 1024 {
+        let mut workspace = ClosureWorkspace::default();
+        check_value(&prepared, &program, &mut workspace, 1, Limits::default()).unwrap();
+        let limits = Limits {
+            max_closure_bytes: limit,
+            ..Limits::default()
+        };
+        if let Ok(check) = check_value(&prepared, &program, &mut workspace, 1, limits) {
+            assert_eq!(check.closure(), &expected(1));
+            let retained = usize::try_from(workspace.retained_bytes().unwrap()).unwrap()
+                + prepared.statistics().retained_bytes;
+            assert!(retained <= limit);
+            recorded |= workspace.catalogs.discovered() > 0;
+        }
+    }
+    assert!(recorded);
 }
