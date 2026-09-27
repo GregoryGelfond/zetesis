@@ -3,6 +3,7 @@
 //! Optional inapplicability retains every accepted work/expansion charge. A
 //! checked allocation or resource failure is an error, never optional fallback.
 
+mod index;
 mod matching;
 mod policy;
 mod reads;

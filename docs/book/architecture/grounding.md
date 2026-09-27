@@ -673,9 +673,16 @@ bodies hold in that answer. The
 classifies the source. Adaptive formula admission then checks complete
 source-to-IR correspondence before removing any producer from the base.
 Every producer must match a complete flat positive source rule, including its
-typed constants and one consistent variable mapping. A dependency projection
-cannot supply this certificate. Objectives and explicit projection currently
-exclude this schedule; ordinary eager materialization remains available.
+typed constants and one consistent variable mapping, and every definition must
+be matched by some producer. A producer's parsed origin nominates the
+definition at the same place among that origin's definitions, and only a
+miss falls back to trying every definition; a definition left unmatched is
+tried against every producer. The certificate is the same as checking every
+pair, at a cost linear in producers and definitions when compilation keeps
+their order, and a shared origin alone never establishes a match. A
+dependency projection cannot supply this certificate. Objectives and explicit
+projection currently exclude this schedule; ordinary eager materialization
+remains available.
 
 After correspondence is established, a physical policy defers a complete group
 of producers sharing predicate name, arity and sign only if at least one lowered

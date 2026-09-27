@@ -23,6 +23,12 @@ impl<'a> Context<'a, '_> {
         self.counters.work(self.limits, self.location)
     }
 
+    /// Charge `amount` steps of one bulk operation before performing it.
+    pub fn charge(&mut self, amount: u128) -> Result<(), FormulaFailure> {
+        self.counters
+            .charge_work(amount, self.limits, self.location)
+    }
+
     pub fn pattern(&mut self, pattern: Pattern) -> Result<PatternRef<'a>, FormulaFailure> {
         pattern.get(self.components, self.limits, self.counters, self.location)
     }
@@ -122,7 +128,10 @@ impl<T> Scratch<T> {
     }
 
     pub fn push(&mut self, value: T, context: &mut Context<'_, '_>) -> Result<(), FormulaFailure> {
-        context.reserve(&mut self.values, 1, &mut self.lease, size_of::<Self>())?;
+        // Spare capacity is already leased; only growth needs a reservation.
+        if self.values.len() == self.values.capacity() {
+            context.reserve(&mut self.values, 1, &mut self.lease, size_of::<Self>())?;
+        }
         context.work()?;
         self.values.push(value);
         Ok(())
