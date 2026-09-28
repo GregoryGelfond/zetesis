@@ -96,10 +96,11 @@ pub struct CorpusOptions {
     #[arg(long)]
     pub include_einstein: bool,
     /// Native executable; omitted uses the installed `zetesis` (the one beside
-    /// this tool, else the first on PATH) and its `solve` command.
+    /// this tool, else the first on PATH).
     #[arg(long)]
     pub zetesis: Option<PathBuf>,
-    /// Explicit executable defaults to legacy; the installed executable uses solve.
+    /// Native command interface: `solve`, the default, or `legacy` for an older
+    /// binary's flat arguments.
     #[arg(
         long,
         value_enum,
@@ -263,21 +264,13 @@ impl CorpusOptions {
         )
     }
 
-    /// Actual interface selection. Omission always exercises the explicit solve
-    /// command of the installed `zetesis`; an explicit executable defaults to
-    /// the legacy interface unless `--native-interface` names one.
+    /// Actual interface selection: the explicit `solve` command of whichever
+    /// executable is measured, unless `--native-interface legacy` requests an
+    /// older binary's flat arguments.
     #[must_use]
     pub fn invocation(&self) -> matrix::NativeInvocation {
-        self.native_interface.map_or_else(
-            || {
-                if self.zetesis.is_some() {
-                    matrix::NativeInvocation::Legacy
-                } else {
-                    matrix::NativeInvocation::Solve
-                }
-            },
-            Into::into,
-        )
+        self.native_interface
+            .map_or(matrix::NativeInvocation::Solve, Into::into)
     }
 }
 

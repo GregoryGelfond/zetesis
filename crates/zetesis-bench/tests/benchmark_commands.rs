@@ -37,6 +37,42 @@ fn installed_corpus_defaults_to_canonical_solve() {
 }
 
 #[test]
+fn an_explicit_executable_is_measured_through_solve() {
+    let BenchCommand::Corpus(options) = command(&[
+        "corpus",
+        "--zetesis",
+        "/opt/zetesis/bin/zetesis",
+        "--report",
+        "new.json",
+    ]) else {
+        panic!("expected corpus")
+    };
+    assert_eq!(
+        options.invocation(),
+        zetesis_validation::performance::matrix::NativeInvocation::Solve
+    );
+}
+
+#[test]
+fn the_legacy_interface_is_measured_only_on_request() {
+    let BenchCommand::Corpus(options) = command(&[
+        "corpus",
+        "--zetesis",
+        "/opt/zetesis/bin/zetesis",
+        "--native-interface",
+        "legacy",
+        "--report",
+        "new.json",
+    ]) else {
+        panic!("expected corpus")
+    };
+    assert_eq!(
+        options.invocation(),
+        zetesis_validation::performance::matrix::NativeInvocation::Legacy
+    );
+}
+
+#[test]
 fn ordinary_corpus_keeps_reference_measurements() {
     use zetesis_validation::performance::{Phase, matrix};
     let BenchCommand::Corpus(options) = command(&["corpus", "--report", "new.json"]) else {

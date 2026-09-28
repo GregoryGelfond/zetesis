@@ -95,10 +95,10 @@ details are labelled unavailable. A refusal, timeout or process failure never
 counts as an UNSAT result or a successful timing sample.
 
 Omitting `--zetesis` measures the installed `zetesis`, the one beside
-`zetesis-bench` or else the first on `PATH`, through its explicit `solve`
-command. An explicit `--zetesis PATH` defaults to the legacy flat
-interface for retained binaries; add `--native-interface solve` for another
-modern executable. The report retains the actual argument sequences.
+`zetesis-bench` or else the first on `PATH`. Every measured executable runs
+through its explicit `solve` command; `--native-interface legacy` measures an
+older binary through its historical flat arguments instead. The report retains
+the actual argument sequences.
 
 `--compare-grounders` requests eager and lazy profiles of the same native
 executable, with identical device, worker, batch and completion settings. It
