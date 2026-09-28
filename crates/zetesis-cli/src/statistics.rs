@@ -1033,8 +1033,7 @@ fn closure(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io
         },
         |closure| closure.route.label(),
     );
-    let cpu = report.shared_execution.is_some()
-        || matches!(options.backend, Backend::Auto | Backend::Cpu);
+    let cpu = report.shared_execution.is_some() || options.backend == Backend::Cpu;
     if cpu {
         writeln!(
             sink,

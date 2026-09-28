@@ -77,12 +77,12 @@ shows a table; the report retains settings, results and measurements. The runner
 checks answers before comparing timings and records incomplete or failed runs.
 It refuses to overwrite an existing report.
 
-Omit `--suite baseline` to run the full corpus. Select CPU threads or a device
+Omit `--suite baseline` to run the full corpus. Select CPU threads or a backend
 explicitly when comparing configurations:
 
 ```sh
 zetesis bench corpus examples/correctness --threads 2 --report two-threads.json
-zetesis bench corpus examples/correctness --device metal --grounder eager \
+zetesis bench corpus examples/correctness --backend metal --grounder eager \
   --report metal.json
 zetesis bench corpus examples/correctness --json --report run.json > summary.json
 ```

@@ -227,7 +227,7 @@ impl fmt::Display for RunError {
             Self::ConstraintFailureMissing => f.write_str("source region check stopped without its failure receipt"),
             Self::HybridStatisticsOverflow => f.write_str("hybrid answer accounting overflow"),
             Self::HybridBackend { backend } => write!(f,
-                "streamed formula constraints support cpu or auto execution; requested {}", backend.label()),
+                "streamed formula constraints run only on the cpu backend; requested {}", backend.label()),
             Self::Executor(error) => error.fmt(f),
             Self::Projection(error) => error.fmt(f),
             Self::Input(error) => write!(f, "standard input ('-'): {error}"),
@@ -244,7 +244,7 @@ impl fmt::Display for RunError {
             Self::BundleAdmission(error) => error.fmt(f),
             Self::Expansion(error) => error.fmt(f),
             Self::BackendUnavailable => f.write_str(
-                "GPU support was not compiled; install the default build or enable --features gpu",
+                "this zetesis was built without GPU support; install the default build for GPU execution (see INSTALL.md)",
             ),
             Self::UnsupportedCombination { backend, grounder } => write!(
                 f,
@@ -260,7 +260,7 @@ impl fmt::Display for RunError {
             ),
             Self::PreparedInput { profile, oracle, grounder } => write!(f,
                 "prepared {profile:?} cannot honor oracle {} with grounder {}", oracle.label(), grounder.label()),
-            Self::UnsupportedSourceBatching => f.write_str("shared source batching requires the relational closure route with lazy/auto grounding and cpu/auto backend"),
+            Self::UnsupportedSourceBatching => f.write_str("shared source batching requires the relational closure route with lazy or auto grounding on the cpu backend"),
             Self::ClosureReservation {
                 workers,
                 max_closure_bytes,

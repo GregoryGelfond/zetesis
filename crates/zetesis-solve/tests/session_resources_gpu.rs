@@ -10,31 +10,30 @@ use zetesis_core::{
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_solve::{
     AnswerSelection, AnswerSet, Backend, Completion, ExecutionObservation, ExecutionObserver,
-    ExecutionResources, Grounder, Interruption, Oracle, PreparedInput, SemanticOutcome, Session,
-    SolveConfig, SolveError, Subject,
+    ExecutionResources, GpuApi, Grounder, Interruption, Oracle, PreparedInput, SemanticOutcome,
+    Session, SolveConfig, SolveError, Subject,
 };
 use zetesis_themelios::{
     AdmissionOptions, Admitted, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_extended,
     admit_formula,
 };
 use zetesis_wgpu::{
-    AdapterBackend, AdapterCategory, GateProjection, GpuBackendPreference, GpuContext, GpuError,
-    GpuErrorKind, GpuFormulaProfile, GpuOptions, GpuRelationExecutor, GpuSelection,
-    RelationGpuLimits,
+    AdapterBackend, AdapterCategory, GateProjection, GpuContext, GpuError, GpuErrorKind,
+    GpuFormulaProfile, GpuOptions, GpuRelationExecutor, GpuSelection, RelationGpuLimits,
 };
 
-#[derive(Clone, Copy)]
-enum Device {
-    Metal,
-    Vulkan,
+/// The physical device a test runs on, reached through one API.
+trait Physical: Copy {
+    fn backend(self) -> Backend;
+    fn observed(self) -> AdapterBackend;
+    fn selection(self) -> GpuSelection;
+    fn other(self) -> Self;
+    fn context(self) -> GpuContext;
 }
 
-impl Device {
+impl Physical for GpuApi {
     fn backend(self) -> Backend {
-        match self {
-            Self::Metal => Backend::Metal,
-            Self::Vulkan => Backend::Vulkan,
-        }
+        Backend::Gpu(Some(self))
     }
 
     fn observed(self) -> AdapterBackend {
@@ -45,13 +44,7 @@ impl Device {
     }
 
     fn selection(self) -> GpuSelection {
-        GpuSelection {
-            backend: match self {
-                Self::Metal => GpuBackendPreference::Metal,
-                Self::Vulkan => GpuBackendPreference::Vulkan,
-            },
-            vendor_id: None,
-        }
+        GpuSelection { api: self }
     }
 
     fn other(self) -> Self {
@@ -256,7 +249,7 @@ fn solve(
     }
 }
 
-fn require_device(capture: &Capture, device: Device, profile: Profile) {
+fn require_device(capture: &Capture, device: GpuApi, profile: Profile) {
     assert_eq!(capture.routes.observed_backend, Some(device.observed()));
     assert_eq!(capture.routes.cpu_closure + capture.routes.cpu_formula, 0);
     match profile {
@@ -289,7 +282,7 @@ const FORMULA_FIRST: &str = "1 {a;b} 1. value(7). -tag(\"7\"). #minimize {1@2,a:
 const FORMULA_SECOND: &str =
     "1 {a;b} 1. value(7). -tag(\"7\"). #minimize {9@2,a:a;4@2,b:b}. #show.";
 
-fn independent_closures(resources: &ExecutionResources, device: Device) {
+fn independent_closures(resources: &ExecutionResources, device: GpuApi) {
     let first = normal(NORMAL_NUMBER);
     let second = normal(NORMAL_STRING);
     assert!(!first.program().same_instance(second.program()));
@@ -346,7 +339,7 @@ fn independent_closures(resources: &ExecutionResources, device: Device) {
     }
 }
 
-fn independent_formulas(resources: &ExecutionResources, device: Device) {
+fn independent_formulas(resources: &ExecutionResources, device: GpuApi) {
     let first = formula(FORMULA_FIRST);
     let second = formula(FORMULA_SECOND);
     assert!(!first.theory().same_instance(second.theory()));
@@ -400,7 +393,7 @@ fn independent_formulas(resources: &ExecutionResources, device: Device) {
     );
 }
 
-fn independent_sessions(device: Device) {
+fn independent_sessions(device: GpuApi) {
     let context = device.context();
     let resources = ExecutionResources::with_gpu(&context);
     let retained = resources.clone();
@@ -444,7 +437,7 @@ fn independent_sessions(device: Device) {
     assert_eq!(prepared.activity().completed_queries, 1);
 }
 
-fn resource_variants(device: Device) -> [ExecutionResources; 2] {
+fn resource_variants(device: GpuApi) -> [ExecutionResources; 2] {
     let context = device.context();
     let profile = GpuFormulaProfile::from_context(&context).unwrap();
     [
@@ -453,7 +446,7 @@ fn resource_variants(device: Device) -> [ExecutionResources; 2] {
     ]
 }
 
-fn independent_profile_sessions(device: Device) {
+fn independent_profile_sessions(device: GpuApi) {
     let context = device.context();
     for projection in GateProjection::ALL {
         let profile =
@@ -494,13 +487,13 @@ fn independent_profile_sessions(device: Device) {
     }
 }
 
-fn policy_refusal(device: Device) {
+fn policy_refusal(device: GpuApi) {
     for resources in resource_variants(device) {
         policy_refusal_with(&resources, device);
     }
 }
 
-fn policy_refusal_with(resources: &ExecutionResources, device: Device) {
+fn policy_refusal_with(resources: &ExecutionResources, device: GpuApi) {
     let owner = normal(NORMAL_NUMBER);
     let formula = formula(FORMULA_FIRST);
     for (profile, input, subject) in [
@@ -550,7 +543,7 @@ fn policy_refusal_with(resources: &ExecutionResources, device: Device) {
     }
 }
 
-fn cpu_policies(device: Device) {
+fn cpu_policies(device: GpuApi) {
     for resources in resource_variants(device) {
         cpu_policies_with(&resources);
     }
@@ -578,23 +571,21 @@ fn cpu_policies_with(resources: &ExecutionResources) {
         );
     }
     let formula = formula(FORMULA_FIRST);
-    for backend in [Backend::Cpu, Backend::Auto] {
-        let capture = solve(
-            PreparedInput::formula(&formula),
-            &Subject::Theory(formula.theory().clone()),
-            config(backend, Profile::Formula),
-            resources,
-            AnswerSelection::Optimal,
-        );
-        assert_eq!(capture.routes.cpu_formula, 1);
-        assert!(capture.routes.observed_backend.is_none());
-        assert!(capture.outcome.formula_execution().is_none());
-        assert!(capture.outcome.optimum_proved());
-        require_complete(
-            &capture,
-            &[Record::expected("a", Value::Number(7), Some(1))],
-        );
-    }
+    let capture = solve(
+        PreparedInput::formula(&formula),
+        &Subject::Theory(formula.theory().clone()),
+        config(Backend::Cpu, Profile::Formula),
+        resources,
+        AnswerSelection::Optimal,
+    );
+    assert_eq!(capture.routes.cpu_formula, 1);
+    assert!(capture.routes.observed_backend.is_none());
+    assert!(capture.outcome.formula_execution().is_none());
+    assert!(capture.outcome.optimum_proved());
+    require_complete(
+        &capture,
+        &[Record::expected("a", Value::Number(7), Some(1))],
+    );
 }
 
 struct RejectDeviceObservation {
@@ -617,13 +608,13 @@ impl ExecutionObserver for RejectDeviceObservation {
     }
 }
 
-fn observer_failure(device: Device) {
+fn observer_failure(device: GpuApi) {
     for resources in resource_variants(device) {
         observer_failure_with(&resources, device);
     }
 }
 
-fn observer_failure_with(resources: &ExecutionResources, device: Device) {
+fn observer_failure_with(resources: &ExecutionResources, device: GpuApi) {
     let context = resources.gpu_context().unwrap();
     let owner = normal(NORMAL_NUMBER);
     let formula = formula(FORMULA_FIRST);
@@ -736,61 +727,61 @@ fn session_resource_fixture_families_are_exact() {
 #[test]
 #[ignore = "requires actual Metal; independent ordinary sessions share one context"]
 fn metal_resources_preserve_independent_sessions() {
-    independent_sessions(Device::Metal);
+    independent_sessions(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires actual Vulkan GPU; independent ordinary sessions share one context"]
 fn vulkan_resources_preserve_independent_sessions() {
-    independent_sessions(Device::Vulkan);
+    independent_sessions(GpuApi::Vulkan);
 }
 
 #[test]
 #[ignore = "requires actual Metal; policy refusal cannot replace the supplied context"]
 fn metal_resource_policy_refusal_preserves_reuse() {
-    policy_refusal(Device::Metal);
+    policy_refusal(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires actual Vulkan GPU; policy refusal cannot replace the supplied context"]
 fn vulkan_resource_policy_refusal_preserves_reuse() {
-    policy_refusal(Device::Vulkan);
+    policy_refusal(GpuApi::Vulkan);
 }
 
 #[test]
 #[ignore = "requires actual Metal; a supplied context does not select the device policy"]
 fn metal_resources_preserve_cpu_policies() {
-    cpu_policies(Device::Metal);
+    cpu_policies(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires actual Vulkan GPU; a supplied context does not select the device policy"]
 fn vulkan_resources_preserve_cpu_policies() {
-    cpu_policies(Device::Vulkan);
+    cpu_policies(GpuApi::Vulkan);
 }
 
 #[test]
 #[ignore = "requires actual Metal; observation failure does not poison shared resources"]
 fn metal_observer_failure_preserves_resource_reuse() {
-    observer_failure(Device::Metal);
+    observer_failure(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires actual Vulkan GPU; observation failure does not poison shared resources"]
 fn vulkan_observer_failure_preserves_resource_reuse() {
-    observer_failure(Device::Vulkan);
+    observer_failure(GpuApi::Vulkan);
 }
 
 #[test]
 #[ignore = "requires actual Metal; independent formula sessions share one compilation"]
 fn metal_formula_profiles_preserve_independent_sessions() {
-    independent_profile_sessions(Device::Metal);
+    independent_profile_sessions(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires actual Vulkan; independent formula sessions share one compilation"]
 fn vulkan_formula_profiles_preserve_independent_sessions() {
-    independent_profile_sessions(Device::Vulkan);
+    independent_profile_sessions(GpuApi::Vulkan);
 }
 
 const UNSEEDED_CYCLE: &str = "a :- b. b :- a.";
@@ -866,7 +857,7 @@ fn seeded_cycle_preserves_positive_nontight_class() {
     ));
 }
 
-fn tight_families(device: Device) {
+fn tight_families(device: GpuApi) {
     let context = device.context();
     let resources = ExecutionResources::with_gpu(&context);
     for source in TIGHT_FAMILIES {
@@ -932,16 +923,16 @@ fn tight_families(device: Device) {
 #[test]
 #[ignore = "requires actual Metal; complete ordinary tight families and device route"]
 fn metal_tight_sessions_preserve_complete_families() {
-    tight_families(Device::Metal);
+    tight_families(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires actual Vulkan; complete ordinary tight families and device route"]
 fn vulkan_tight_sessions_preserve_complete_families() {
-    tight_families(Device::Vulkan);
+    tight_families(GpuApi::Vulkan);
 }
 
-fn general_formula_selection(device: Device) {
+fn general_formula_selection(device: GpuApi) {
     let resources = ExecutionResources::with_gpu(&device.context());
     for (source, oracle) in [
         ("{a}.", Oracle::Countermodel),
@@ -1004,16 +995,16 @@ fn general_formula_selection(device: Device) {
 #[test]
 #[ignore = "requires actual Metal; general formulas never use a CPU certificate fallback"]
 fn metal_general_formulas_keep_device_execution() {
-    general_formula_selection(Device::Metal);
+    general_formula_selection(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires actual Vulkan; general formulas never use a CPU certificate fallback"]
 fn vulkan_general_formulas_keep_device_execution() {
-    general_formula_selection(Device::Vulkan);
+    general_formula_selection(GpuApi::Vulkan);
 }
 
-fn tight_refusal(device: Device) {
+fn tight_refusal(device: GpuApi) {
     let owner = formula("{a}.");
     let resources = ExecutionResources::with_gpu(&device.context());
     let mut options = config(device.backend(), Profile::Formula);
@@ -1067,16 +1058,16 @@ fn tight_refusal(device: Device) {
 #[test]
 #[ignore = "requires actual Metal; tight work refusal cannot become CPU success"]
 fn metal_tight_refusal_preserves_pending_coverage() {
-    tight_refusal(Device::Metal);
+    tight_refusal(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires actual Vulkan; tight work refusal cannot become CPU success"]
 fn vulkan_tight_refusal_preserves_pending_coverage() {
-    tight_refusal(Device::Vulkan);
+    tight_refusal(GpuApi::Vulkan);
 }
 
-fn terminal_families(device: Device) {
+fn terminal_families(device: GpuApi) {
     const SOURCE: &str = "{seed(1);seed(2)}. receipt(X):-seed(X). #show X:receipt(X).";
     let reference_owner = formula(SOURCE);
     let reference = solve(
@@ -1158,11 +1149,11 @@ fn terminal_families(device: Device) {
 #[test]
 #[ignore = "requires actual Metal; terminal reconstruction preserves complete original families"]
 fn metal_terminal_sessions_preserve_complete_families() {
-    terminal_families(Device::Metal);
+    terminal_families(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires actual Vulkan; terminal reconstruction preserves complete original families"]
 fn vulkan_terminal_sessions_preserve_complete_families() {
-    terminal_families(Device::Vulkan);
+    terminal_families(GpuApi::Vulkan);
 }

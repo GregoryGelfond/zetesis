@@ -6,60 +6,51 @@ use std::{collections::BTreeSet, io, num::NonZeroUsize};
 use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     AnswerSelection, AnswerSet, Backend, Completion, ExecutionObservation, ExecutionObserver,
-    ExecutionResources, Grounder, Oracle, PreparedInput, Session, SolveConfig, SolveError, Subject,
-    WorldViewError, WorldViewLimits,
+    ExecutionResources, GpuApi, Grounder, Oracle, PreparedInput, Session, SolveConfig, SolveError,
+    Subject, WorldViewError, WorldViewLimits,
 };
 use zetesis_themelios::{
     AdmissionOptions, Admitted, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_extended,
     admit_formula,
 };
-use zetesis_wgpu::{
-    AdapterBackend, GpuBackendPreference, GpuContext, GpuErrorKind, GpuOptions, GpuSelection,
-};
+use zetesis_wgpu::{AdapterBackend, GpuContext, GpuErrorKind, GpuOptions, GpuSelection};
 
-/// A physical device on the requested backend, and its adapter's own kind
-/// and name, so a test names the device it ran on.
+/// A physical device on the requested API, and its adapter's own kind, so a
+/// test names the device it ran on.
 #[derive(Clone, Copy)]
 struct Device {
-    backend: Backend,
-    preference: GpuBackendPreference,
+    api: GpuApi,
     kind: AdapterBackend,
-    name: &'static str,
 }
 
 const METAL: Device = Device {
-    backend: Backend::Metal,
-    preference: GpuBackendPreference::Metal,
+    api: GpuApi::Metal,
     kind: AdapterBackend::Metal,
-    name: "Metal",
 };
 
 const VULKAN: Device = Device {
-    backend: Backend::Vulkan,
-    preference: GpuBackendPreference::Vulkan,
+    api: GpuApi::Vulkan,
     kind: AdapterBackend::Vulkan,
-    name: "Vulkan",
 };
 
 impl Device {
+    /// The backend that names this device's API.
+    const fn backend(self) -> Backend {
+        Backend::Gpu(Some(self.api))
+    }
+
     /// The other backend: a context a session on this one cannot take.
     const fn foreign(self) -> Backend {
-        match self.backend {
-            Backend::Metal => Backend::Vulkan,
-            _ => Backend::Metal,
+        match self.api {
+            GpuApi::Metal => Backend::Gpu(Some(GpuApi::Vulkan)),
+            GpuApi::Vulkan => Backend::Gpu(Some(GpuApi::Metal)),
         }
     }
 }
 
 fn resources(device: Device) -> ExecutionResources {
-    let context = GpuContext::new_selected(
-        GpuOptions::default(),
-        GpuSelection {
-            backend: device.preference,
-            vendor_id: None,
-        },
-    )
-    .unwrap();
+    let context =
+        GpuContext::new_selected(GpuOptions::default(), GpuSelection { api: device.api }).unwrap();
     assert_eq!(context.info().backend_kind(), device.kind);
     assert!(context.info().is_hardware_gpu());
     eprintln!(
@@ -101,7 +92,7 @@ fn lazy_config(backend: Backend, device: Device) -> SolveConfig {
 
 fn config(device: Device) -> SolveConfig {
     SolveConfig {
-        backend: device.backend,
+        backend: device.backend(),
         oracle: Oracle::Countermodel,
         grounder: Grounder::Eager,
         models: 0,
@@ -176,7 +167,7 @@ fn world_view_preserves_nonoptimal_answers(device: Device) {
         .formula_execution()
         .expect("actual formula device execution");
     assert!(
-        execution.adapter.contains(device.name),
+        execution.adapter.contains(device.api.name()),
         "{}",
         execution.adapter
     );
@@ -244,7 +235,7 @@ fn collection_limit_retains_checked_accounting(device: Device) {
         .formula_execution()
         .expect("actual formula device execution");
     assert!(
-        execution.adapter.contains(device.name),
+        execution.adapter.contains(device.api.name()),
         "{}",
         execution.adapter
     );
@@ -296,20 +287,18 @@ fn collection_refuses_a_foreign_context(device: Device) {
 }
 
 #[derive(Default)]
-struct AutomaticExecution {
+struct CpuExecution {
     cpu_closures: usize,
-    automatic_cpu: usize,
 }
 
-impl ExecutionObserver for AutomaticExecution {
+impl ExecutionObserver for CpuExecution {
     type Error = io::Error;
 
     fn observe(&mut self, observation: ExecutionObservation<'_>) -> Result<(), Self::Error> {
         match observation {
             ExecutionObservation::CpuClosure { .. } => self.cpu_closures += 1,
-            ExecutionObservation::AutomaticCpu => self.automatic_cpu += 1,
             ExecutionObservation::DeviceClosure { .. } => {
-                panic!("automatic execution must retain its selected CPU route");
+                panic!("a CPU session must keep its CPU route");
             }
             _ => {}
         }
@@ -318,30 +307,29 @@ impl ExecutionObserver for AutomaticExecution {
 }
 
 #[test]
-#[ignore = "requires actual Metal resources to verify automatic policy retains CPU"]
-fn metal_automatic_collection_retains_cpu_execution() {
-    automatic_collection_retains_cpu_execution(METAL);
+#[ignore = "requires actual Metal resources to verify a CPU session keeps its CPU route"]
+fn metal_resources_leave_a_cpu_collection_on_the_cpu() {
+    resources_leave_a_cpu_collection_on_the_cpu(METAL);
 }
 
 #[test]
-#[ignore = "requires actual Vulkan resources to verify automatic policy retains CPU"]
-fn vulkan_automatic_collection_retains_cpu_execution() {
-    automatic_collection_retains_cpu_execution(VULKAN);
+#[ignore = "requires actual Vulkan resources to verify a CPU session keeps its CPU route"]
+fn vulkan_resources_leave_a_cpu_collection_on_the_cpu() {
+    resources_leave_a_cpu_collection_on_the_cpu(VULKAN);
 }
 
-fn automatic_collection_retains_cpu_execution(device: Device) {
+fn resources_leave_a_cpu_collection_on_the_cpu(device: Device) {
     let owner = choices();
-    let mut observer = AutomaticExecution::default();
+    let mut observer = CpuExecution::default();
     let world_view = Session::builder(
         PreparedInput::admitted(&owner),
-        lazy_config(Backend::Auto, device),
+        lazy_config(Backend::Cpu, device),
         Cancellation::default(),
     )
     .resources(&resources(device))
     .collect_observed(WorldViewLimits::default(), &mut observer)
     .unwrap();
     assert_eq!(observer.cpu_closures, 1);
-    assert_eq!(observer.automatic_cpu, 1);
     let actual: BTreeSet<Vec<String>> = world_view
         .answer_sets()
         .iter()

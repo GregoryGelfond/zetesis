@@ -1,5 +1,6 @@
 //! Complete-theory certificate measurement has explicit evidence boundaries.
 use std::{io, num::NonZeroUsize};
+use zetesis_backend::GpuApi;
 
 use clap::Parser;
 use zetesis_experiments::{
@@ -313,13 +314,13 @@ fn invalid_dimensions_emit_no_observations() {
 }
 
 #[test]
-fn command_defaults_select_declared_physical_cases() {
+fn command_defaults_select_the_declared_cases_on_the_cpu() {
     let command = CommandOptions::try_parse_from(["zetesis-bench", "tight"]).unwrap();
     let Experiment::Tight(options) = command.command.unwrap() else {
         panic!("wrong experiment")
     };
     let configuration = options.configuration().unwrap();
-    assert_eq!(configuration.backend, Backend::Metal);
+    assert_eq!(configuration.backend, Backend::Cpu);
     assert_eq!(configuration.cases.len(), 18);
     assert_eq!(configuration.repetitions.get(), 12);
     assert_eq!(configuration.warmups, 2);
@@ -423,7 +424,7 @@ fn cancellation_before_setup_creates_no_resources() {
     let cancellation = zetesis_cpu::Cancellation::default();
     let mut observed = 0;
     let mut configuration = configuration(Family::Normal);
-    configuration.backend = Backend::Metal;
+    configuration.backend = Backend::Gpu(Some(GpuApi::Metal));
     let error = measurement::measure_with_cancellation(&configuration, &cancellation, |event| {
         observed += 1;
         assert!(matches!(event, Event::Configuration { .. }));
@@ -440,7 +441,7 @@ fn pool_callback_cancellation_prevents_device_setup() {
     let cancellation = zetesis_cpu::Cancellation::default();
     let mut observed = 0;
     let mut configuration = configuration(Family::Normal);
-    configuration.backend = Backend::Metal;
+    configuration.backend = Backend::Gpu(Some(GpuApi::Metal));
     let error = measurement::measure_with_cancellation(&configuration, &cancellation, |event| {
         observed += 1;
         match event {

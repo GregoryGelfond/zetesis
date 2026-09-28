@@ -1955,6 +1955,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "zetesis-backend"
+version = "0.1.5"
+dependencies = [
+ "clap",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "zetesis-cli"
 version = "0.1.5"
 dependencies = [
@@ -1964,6 +1973,7 @@ dependencies = [
  "serde_json",
  "signal-hook",
  "tempfile",
+ "zetesis-backend",
  "zetesis-core",
  "zetesis-cpu",
  "zetesis-experiments",
@@ -2015,6 +2025,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "themelios-base",
+ "zetesis-backend",
  "zetesis-core",
  "zetesis-cpu",
  "zetesis-ferraris",
@@ -2048,6 +2059,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "tempfile",
+ "zetesis-backend",
  "zetesis-validation",
 ]
 
@@ -2084,6 +2096,7 @@ name = "zetesis-solve"
 version = "0.1.5"
 dependencies = [
  "rayon",
+ "zetesis-backend",
  "zetesis-core",
  "zetesis-cpu",
  "zetesis-ferraris",
@@ -2136,6 +2149,7 @@ dependencies = [
  "tempfile",
  "themelios-program",
  "themelios-syntax",
+ "zetesis-backend",
  "zetesis-core",
 ]
 
@@ -2147,6 +2161,7 @@ dependencies = [
  "naga",
  "pollster",
  "wgpu",
+ "zetesis-backend",
  "zetesis-core",
  "zetesis-cpu",
  "zetesis-ferraris",

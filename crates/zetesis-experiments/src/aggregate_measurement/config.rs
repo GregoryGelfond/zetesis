@@ -122,7 +122,7 @@ impl Configuration {
     reason = "Serde serialize_with receives borrowed fields"
 )]
 fn backend<S: Serializer>(value: &Backend, serializer: S) -> Result<S::Ok, S::Error> {
-    serializer.serialize_str(value.label())
+    serializer.serialize_str(crate::backend::label(*value))
 }
 fn duration<S: Serializer>(value: &Duration, serializer: S) -> Result<S::Ok, S::Error> {
     serializer.serialize_u128(value.as_nanos())
@@ -131,8 +131,8 @@ fn duration<S: Serializer>(value: &Duration, serializer: S) -> Result<S::Ok, S::
 /// Installed command view of the complete numeric reduction experiment.
 #[derive(Clone, Debug, Args)]
 pub struct Options {
-    /// Require actual Metal/Vulkan or explicitly run the two CPU routes.
-    #[arg(long = "device", alias = "backend", value_enum, default_value_t)]
+    /// Run the two CPU routes (the default), or require an actual GPU (gpu, metal or vulkan).
+    #[arg(long, value_parser = zetesis_backend::BackendParser, default_value = "cpu")]
     pub backend: Backend,
     /// Complete tuple counts; zero exercises genuine empty extrema.
     #[arg(long, value_delimiter = ',', default_value = "0,64,4096")]

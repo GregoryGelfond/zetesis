@@ -22,7 +22,7 @@ fn actual_cpu_route_remains_distinct_from_requested_metal() {
     let cpu = observe(&document, text.as_bytes(), NativeExecution::default()).unwrap();
     assert_eq!(cpu.execution.backend, Backend::Cpu);
     let request = NativeExecution {
-        backend: Backend::Metal,
+        backend: Backend::Gpu(Some(GpuApi::Metal)),
         ..Default::default()
     };
     assert!(observe(&document, text.as_bytes(), request).is_err());
@@ -59,7 +59,7 @@ fn static_device_counter_absence_is_explicit() {
             "effective execution: backend=requested GPU policy; oracle=closure; grounder=eager; see backend diagnostics for actual adapter",
         );
     let request = NativeExecution {
-        backend: Backend::Metal,
+        backend: Backend::Gpu(Some(GpuApi::Metal)),
         ..Default::default()
     };
     let observed = observe(&document, text.as_bytes(), request).unwrap();
@@ -71,31 +71,31 @@ fn static_device_counter_absence_is_explicit() {
 #[test]
 fn lazy_device_identity_must_match_the_reported_route() {
     let value = json!({"backend":"Metal","adapter":"other","submitted_candidates":3,"completed_candidates":3,"stopped_candidates":0,"queued_results":0});
-    assert!(lazy(&value, Some("Synthetic Metal")).is_err());
+    assert!(lazy(&value, GpuApi::Metal, Some("Synthetic Metal")).is_err());
 }
 #[test]
 fn lazy_unfinished_candidates_prevent_complete_observation() {
     let value = json!({"backend":"Metal","adapter":"Synthetic Metal","submitted_candidates":3,"completed_candidates":2,"stopped_candidates":0,"queued_results":0});
-    assert!(lazy(&value, Some("Synthetic Metal")).is_err());
+    assert!(lazy(&value, GpuApi::Metal, Some("Synthetic Metal")).is_err());
 }
 #[test]
 fn zero_device_work_is_retained_without_acceleration_claim() {
     let value = json!({"backend":"Metal","adapter":"Synthetic Metal","submitted_candidates":0,"completed_candidates":0,"stopped_candidates":0,"queued_results":0,
         "dispatches":0,"world_instances":0,"uploaded_bytes":0,"downloaded_bytes":0});
     assert!(matches!(
-        lazy(&value, Some("Synthetic Metal")).unwrap(),
+        lazy(&value, GpuApi::Metal, Some("Synthetic Metal")).unwrap(),
         DeviceWork::Lazy { dispatches: 0, .. }
     ));
 }
 #[test]
 fn formula_pending_work_prevents_exhaustion_evidence() {
     let value = json!({"adapter":"Synthetic Metal, Metal; vendor=0x0000","gpu_candidates":2,"gpu_decided":1,"cpu_residuals":1,"pending_candidates":1,"queued_models":0,"completion":{"complete":true,"failed":0}});
-    assert!(formula(&value, Some("Synthetic Metal")).is_err());
+    assert!(formula(&value, GpuApi::Metal, Some("Synthetic Metal")).is_err());
 }
 #[test]
 fn formula_candidate_sum_cannot_wrap() {
     let value = json!({"adapter":"Synthetic Metal, Metal; vendor=0x0000","gpu_candidates":0,"gpu_decided":u64::MAX,"cpu_residuals":1});
-    assert!(formula(&value, Some("Synthetic Metal")).is_err());
+    assert!(formula(&value, GpuApi::Metal, Some("Synthetic Metal")).is_err());
 }
 
 #[test]
@@ -109,7 +109,7 @@ fn cpu_metadata_cannot_hide_device_counters() {
 fn positive_transfers_require_a_reported_dispatch() {
     let value = json!({"backend":"Metal","adapter":"Synthetic Metal","submitted_candidates":0,"completed_candidates":0,"stopped_candidates":0,"queued_results":0,
         "dispatches":0,"world_instances":0,"uploaded_bytes":1,"downloaded_bytes":0});
-    assert!(lazy(&value, Some("Synthetic Metal")).is_err());
+    assert!(lazy(&value, GpuApi::Metal, Some("Synthetic Metal")).is_err());
 }
 
 fn lazy_fixture() -> (Value, String) {
@@ -147,7 +147,7 @@ fn lazy_fixture() -> (Value, String) {
 fn lazy_grounding_retains_its_interleaved_measurement() {
     let (document, text) = lazy_fixture();
     let request = NativeExecution {
-        backend: Backend::Metal,
+        backend: Backend::Gpu(Some(GpuApi::Metal)),
         grounder: Grounder::Lazy,
         ..Default::default()
     };
@@ -163,6 +163,79 @@ fn lazy_grounding_retains_its_interleaved_measurement() {
     ));
 }
 
+/// The lazy fixture as a Vulkan device reports it.
+fn vulkan_lazy_fixture() -> (Value, String) {
+    let (mut document, text) = lazy_fixture();
+    let text = text.replace(
+        "Synthetic Metal, Metal; vendor=0x0000",
+        "Synthetic Vulkan, Vulkan; vendor=0x1002",
+    );
+    document["statistics"]["lazy_execution"]["backend"] = json!("Vulkan");
+    document["statistics"]["lazy_execution"]["adapter"] = json!("Synthetic Vulkan");
+    (document, text)
+}
+
+fn lazy_request(backend: Backend) -> NativeExecution {
+    NativeExecution {
+        backend,
+        grounder: Grounder::Lazy,
+        ..Default::default()
+    }
+}
+
+#[test]
+fn a_vulkan_route_is_observed_as_vulkan() {
+    let (document, text) = vulkan_lazy_fixture();
+    let request = lazy_request(Backend::Gpu(Some(GpuApi::Vulkan)));
+    let observed = observe(&document, text.as_bytes(), request).unwrap();
+    assert_eq!(
+        observed.execution.backend,
+        Backend::Gpu(Some(GpuApi::Vulkan))
+    );
+    assert_eq!(
+        observed.execution.adapter.as_deref(),
+        Some("Synthetic Vulkan")
+    );
+}
+
+#[test]
+fn a_vulkan_route_does_not_satisfy_a_metal_request() {
+    let (document, text) = vulkan_lazy_fixture();
+    let request = lazy_request(Backend::Gpu(Some(GpuApi::Metal)));
+    assert!(observe(&document, text.as_bytes(), request).is_err());
+}
+
+#[test]
+fn a_gpu_request_accepts_only_the_native_api() {
+    let native = GpuApi::native();
+    for ((document, text), api) in [
+        (lazy_fixture(), GpuApi::Metal),
+        (vulkan_lazy_fixture(), GpuApi::Vulkan),
+    ] {
+        let observed = observe(&document, text.as_bytes(), lazy_request(Backend::Gpu(None)));
+        assert_eq!(observed.is_ok(), api == native, "{api}");
+        if let Ok(observed) = observed {
+            assert_eq!(observed.execution.backend, Backend::Gpu(Some(native)));
+        }
+    }
+}
+
+#[test]
+fn lazy_device_activity_must_name_the_route_api() {
+    let (mut document, text) = vulkan_lazy_fixture();
+    document["statistics"]["lazy_execution"]["backend"] = json!("Metal");
+    let request = lazy_request(Backend::Gpu(Some(GpuApi::Vulkan)));
+    assert!(observe(&document, text.as_bytes(), request).is_err());
+}
+
+#[test]
+fn an_untargeted_device_api_is_refused() {
+    let (document, text) = lazy_fixture();
+    let text = text.replace("Synthetic Metal, Metal;", "Synthetic Metal, Dx12;");
+    let request = lazy_request(Backend::Gpu(Some(GpuApi::Metal)));
+    assert!(observe(&document, text.as_bytes(), request).is_err());
+}
+
 fn formula_fixture() -> (Value, String) {
     let (mut document, text) = fixture();
     let text = text.replace("Backend: cpu (fixture)", "Backend: hybrid GPU propagation + exact CPU residual search (Synthetic Metal, Metal; vendor=0x0000); oracle: Ferraris reduct countermodel; grounder: eager (requested eager)")
@@ -176,7 +249,7 @@ fn formula_fixture() -> (Value, String) {
 fn formula_device_work_retains_exact_cpu_residuals() {
     let (document, text) = formula_fixture();
     let request = NativeExecution {
-        backend: Backend::Metal,
+        backend: Backend::Gpu(Some(GpuApi::Metal)),
         ..Default::default()
     };
     let observed = observe(&document, text.as_bytes(), request).unwrap();
@@ -195,7 +268,7 @@ fn missing_lazy_activity_is_not_static_counter_absence() {
     let (mut document, text) = lazy_fixture();
     document["statistics"]["lazy_execution"] = Value::Null;
     let request = NativeExecution {
-        backend: Backend::Metal,
+        backend: Backend::Gpu(Some(GpuApi::Metal)),
         grounder: Grounder::Lazy,
         ..Default::default()
     };
@@ -207,7 +280,7 @@ fn missing_hybrid_activity_is_not_static_counter_absence() {
     let (mut document, text) = formula_fixture();
     document["statistics"]["execution"] = Value::Null;
     let request = NativeExecution {
-        backend: Backend::Metal,
+        backend: Backend::Gpu(Some(GpuApi::Metal)),
         ..Default::default()
     };
     assert!(observe(&document, text.as_bytes(), request).is_err());
@@ -218,7 +291,7 @@ fn simultaneous_activity_objects_do_not_describe_one_route() {
     let (mut document, text) = formula_fixture();
     document["statistics"]["lazy_execution"] = json!({});
     let request = NativeExecution {
-        backend: Backend::Metal,
+        backend: Backend::Gpu(Some(GpuApi::Metal)),
         ..Default::default()
     };
     assert!(observe(&document, text.as_bytes(), request).is_err());
@@ -232,7 +305,7 @@ fn effective_cpu_cannot_describe_a_primary_metal_route() {
         "Backend: gpu (Synthetic Metal, Metal; vendor=0x0000; static atoms=1, rules=1)",
     );
     let request = NativeExecution {
-        backend: Backend::Metal,
+        backend: Backend::Gpu(Some(GpuApi::Metal)),
         ..Default::default()
     };
     assert!(observe(&document, text.as_bytes(), request).is_err());
@@ -246,7 +319,7 @@ fn eager_effective_metadata_cannot_describe_lazy_grounding() {
         "oracle=closure; grounder=eager",
     );
     let request = NativeExecution {
-        backend: Backend::Metal,
+        backend: Backend::Gpu(Some(GpuApi::Metal)),
         grounder: Grounder::Lazy,
         ..Default::default()
     };
@@ -260,6 +333,7 @@ fn committed_formula_work_requires_completion_attempts() {
     assert!(
         formula(
             &document["statistics"]["execution"],
+            GpuApi::Metal,
             Some("Synthetic Metal")
         )
         .is_err()
@@ -273,6 +347,7 @@ fn uncommitted_completion_attempts_need_not_equal_commits() {
     assert!(
         formula(
             &document["statistics"]["execution"],
+            GpuApi::Metal,
             Some("Synthetic Metal")
         )
         .is_ok()
@@ -288,6 +363,7 @@ fn completion_attempt_sums_cannot_wrap() {
     assert!(
         formula(
             &document["statistics"]["execution"],
+            GpuApi::Metal,
             Some("Synthetic Metal")
         )
         .is_err()
@@ -302,6 +378,7 @@ fn residual_attempts_are_subsets_of_entered_attempts() {
     assert!(
         formula(
             &document["statistics"]["execution"],
+            GpuApi::Metal,
             Some("Synthetic Metal")
         )
         .is_err()
@@ -316,6 +393,7 @@ fn committed_certificates_require_nonresidual_completions() {
     assert!(
         formula(
             &document["statistics"]["execution"],
+            GpuApi::Metal,
             Some("Synthetic Metal")
         )
         .is_err()
@@ -329,6 +407,7 @@ fn submitted_formula_candidates_require_device_batches() {
     assert!(
         formula(
             &document["statistics"]["execution"],
+            GpuApi::Metal,
             Some("Synthetic Metal")
         )
         .is_err()
@@ -344,6 +423,7 @@ fn empty_formula_batches_are_not_reported_as_device_work() {
     assert!(
         formula(
             &document["statistics"]["execution"],
+            GpuApi::Metal,
             Some("Synthetic Metal")
         )
         .is_err()
@@ -513,7 +593,7 @@ fn positive_consequences_cannot_describe_a_metal_route() {
     let (document, text) = formula_fixture();
     let text = text.replace("oracle=countermodel", "oracle=positive-consequences");
     let request = NativeExecution {
-        backend: Backend::Metal,
+        backend: Backend::Gpu(Some(GpuApi::Metal)),
         ..Default::default()
     };
     assert_eq!(
@@ -564,7 +644,7 @@ fn automatic_grounding_records_the_mode_actually_taken() {
     assert_eq!(eager.timing.grounding_mode, "eager");
     let (document, text) = lazy_fixture();
     let request = NativeExecution {
-        backend: Backend::Metal,
+        backend: Backend::Gpu(Some(GpuApi::Metal)),
         ..automatic
     };
     let lazy = observe(&document, text.as_bytes(), request).unwrap();

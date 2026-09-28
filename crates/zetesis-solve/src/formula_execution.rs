@@ -186,7 +186,7 @@ impl Execution {
         tight_plan: Option<Arc<zetesis_ferraris::TightPlan>>,
         observations: &mut impl ExecutionSink,
     ) -> Result<Self, SolveError> {
-        if matches!(options.backend, Backend::Auto | Backend::Cpu) {
+        if options.backend == Backend::Cpu {
             observations.record(Event::CpuFormula {
                 oracle: options.oracle,
                 grounder: options.grounder,

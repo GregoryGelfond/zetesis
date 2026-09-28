@@ -29,13 +29,13 @@ pub mod tight_measurement;
 pub mod aggregate_measurement;
 pub mod feedback_measurement;
 
-pub use backend::Backend;
 pub use fixtures::{BenchmarkFixture, Family};
 pub use formula_fixtures::{FormulaFamily, FormulaFixture};
 pub use formula_measurement::{
     FormulaBenchmarkError, FormulaOptions, run_formula, run_formula_projection,
 };
 pub use measurement::{BenchmarkError, Options, run};
+pub use zetesis_backend::Backend;
 
 /// Standalone experiment selection, retaining the existing static command.
 #[derive(Debug, clap::Parser)]

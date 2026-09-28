@@ -1,6 +1,7 @@
 //! Portable selection/label evidence; no physical adapter is constructed.
 
 use clap::Parser;
+use zetesis_backend::GpuApi;
 use zetesis_experiments::{Backend, CommandOptions, Experiment};
 
 fn backend(options: &CommandOptions) -> Backend {
@@ -17,39 +18,51 @@ fn backend(options: &CommandOptions) -> Backend {
     }
 }
 
+const DEVICE_EXPERIMENTS: [Option<&str>; 7] = [
+    None,
+    Some("formula"),
+    Some("formula-projection"),
+    Some("lazy"),
+    Some("tight"),
+    Some("aggregate"),
+    Some("relation"),
+];
+
+fn parse(command: Option<&str>, flags: &[&'static str]) -> Result<CommandOptions, clap::Error> {
+    let mut arguments = vec!["zetesis-bench"];
+    arguments.extend(command);
+    arguments.extend(flags);
+    CommandOptions::try_parse_from(arguments)
+}
+
 #[test]
-fn vulkan_is_accepted_by_every_device_experiment() {
-    for command in [
-        None,
-        Some("formula"),
-        Some("formula-projection"),
-        Some("lazy"),
-        Some("tight"),
-        Some("aggregate"),
-        Some("relation"),
-    ] {
-        let mut arguments = vec!["zetesis-bench"];
-        arguments.extend(command);
-        arguments.extend(["--backend", "vulkan"]);
-        let parsed = CommandOptions::try_parse_from(arguments).unwrap();
-        assert_eq!(backend(&parsed), Backend::Vulkan);
+fn every_backend_value_is_accepted_by_every_device_experiment() {
+    for command in DEVICE_EXPERIMENTS {
+        for expected in Backend::ALL {
+            let parsed = parse(command, &["--backend", expected.label()]).unwrap();
+            assert_eq!(backend(&parsed), expected, "{command:?}");
+        }
     }
 }
 
 #[test]
-fn default_experiment_backend_remains_metal() {
-    for command in [
-        None,
-        Some("formula"),
-        Some("formula-projection"),
-        Some("lazy"),
-        Some("tight"),
-        Some("aggregate"),
-    ] {
-        let mut arguments = vec!["zetesis-bench"];
-        arguments.extend(command);
-        let parsed = CommandOptions::try_parse_from(arguments).unwrap();
-        assert_eq!(backend(&parsed), Backend::Metal);
+fn the_default_experiment_backend_is_the_cpu() {
+    for command in DEVICE_EXPERIMENTS {
+        assert_eq!(
+            backend(&parse(command, &[]).unwrap()),
+            Backend::Cpu,
+            "{command:?}"
+        );
+    }
+}
+
+#[test]
+fn no_experiment_accepts_a_device_flag() {
+    for command in DEVICE_EXPERIMENTS {
+        assert!(
+            parse(command, &["--device", "vulkan"]).is_err(),
+            "{command:?}"
+        );
     }
 }
 
@@ -94,4 +107,15 @@ fn configurations_retain_the_vulkan_request() {
         };
         assert_eq!(configuration["backend"], "vulkan");
     }
+}
+
+#[test]
+fn a_gpu_request_records_the_native_api_it_runs_on() {
+    let parsed =
+        CommandOptions::try_parse_from(["zetesis-bench", "lazy", "--backend", "gpu"]).unwrap();
+    let Some(Experiment::Lazy(options)) = parsed.command else {
+        panic!("expected the lazy experiment");
+    };
+    let configuration = serde_json::to_value(options.configuration().unwrap()).unwrap();
+    assert_eq!(configuration["backend"], GpuApi::native().label());
 }

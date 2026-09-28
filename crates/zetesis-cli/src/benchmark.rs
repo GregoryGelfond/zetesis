@@ -15,7 +15,7 @@ use std::{fmt, io, path::PathBuf, sync::atomic::AtomicBool};
 use zetesis_presentation::{ColorMode, Layout};
 use zetesis_validation::performance::series;
 
-pub use corpus::{CorpusOptions, Device, Grounder, NativeInterface, Suite};
+pub use corpus::{CorpusOptions, Grounder, NativeInterface, Suite};
 #[cfg(feature = "gpu")]
 pub use primitives::{Primitive, PrimitiveOptions};
 

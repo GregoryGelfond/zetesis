@@ -21,13 +21,11 @@ fn parallel() -> SolveConfig {
 
 #[test]
 fn several_workers_walk_the_regions_on_a_cpu_backend() {
-    for backend in [Backend::Auto, Backend::Cpu] {
-        let config = SolveConfig {
-            backend,
-            ..parallel()
-        };
-        assert_eq!(config.region_workers(), Some(workers(4)));
-    }
+    let config = SolveConfig {
+        backend: Backend::Cpu,
+        ..parallel()
+    };
+    assert_eq!(config.region_workers(), Some(workers(4)));
 }
 
 #[test]
@@ -51,7 +49,7 @@ fn the_clauses_method_walks_no_regions() {
 #[test]
 fn a_device_backend_keeps_the_scalar_walk() {
     let config = SolveConfig {
-        backend: Backend::Gpu,
+        backend: Backend::Gpu(None),
         ..parallel()
     };
     assert_eq!(config.region_workers(), None);

@@ -110,10 +110,7 @@ fn lazy_ignores_static_lowering_caps() {
     assert_eq!(report.completion, Completion::Exhausted);
     assert_eq!((report.models, report.checked), (64, 64));
     assert_eq!(models(&output).len(), 64);
-    #[cfg(feature = "gpu")]
-    assert!(diagnostics.contains("no measured GPU crossover"));
-    #[cfg(not(feature = "gpu"))]
-    assert!(diagnostics.contains("GPU support was not compiled"));
+    assert!(diagnostics.contains("Backend: cpu"));
     assert!(diagnostics.contains("requested=lazy, effective=lazy"));
     assert!(!diagnostics.contains("static atoms="));
 }
@@ -166,7 +163,7 @@ fn lazy_device_selection_preserves_source_diagnostics() {
         &Cancellation::default(),
     )
     .unwrap_err();
-    for name in ["gpu", "metal", "vulkan", "dx12", "gl", "nvidia"] {
+    for name in ["gpu", "metal", "vulkan"] {
         let mut output = Vec::new();
         let mut diagnostics = Vec::new();
         let selected = options(&["--backend", name, "--grounder", "lazy"]);
@@ -252,8 +249,5 @@ fn eager_automatic_execution_retains_cpu() {
     assert_eq!((report.models, report.checked), (64, 64));
     assert_eq!(models(&output).len(), 64);
     assert!(!diagnostics.contains("effective=lazy"));
-    #[cfg(feature = "gpu")]
-    assert!(diagnostics.contains("no measured GPU crossover"));
-    #[cfg(not(feature = "gpu"))]
-    assert!(diagnostics.contains("GPU support was not compiled"));
+    assert!(diagnostics.contains("Backend: cpu"));
 }

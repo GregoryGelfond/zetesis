@@ -5,7 +5,8 @@ use super::preparation::{Preparation, PreparedGraph};
 use super::transport::Resident;
 use super::{FormulaBatchStats, FormulaCheck, FormulaLimits, GateProjection, GpuFormulaProfile};
 use crate::runtime::ErrorScopes;
-use crate::{GpuBackendPreference, GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection};
+use crate::{GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection};
+use zetesis_backend::GpuApi;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Theory};
 
@@ -52,27 +53,20 @@ impl GpuFormulaOracle {
         options: GpuOptions,
         projection: GateProjection,
     ) -> Result<Self, GpuError> {
-        Self::new_selected_with_projection(
-            options,
-            GpuSelection {
-                backend: GpuBackendPreference::Metal,
-                ..GpuSelection::default()
-            },
-            projection,
-        )
+        Self::new_selected_with_projection(options, GpuSelection { api: GpuApi::Metal }, projection)
     }
     /// Select a native adapter and create this profile's separate device/pipeline.
     ///
     /// # Errors
     /// Returns typed adapter, capacity, allocation, validation or device failure.
-    /// Selection follows the existing hard API/vendor and physical-device policy.
+    /// Selection follows the hard API and physical-device policy.
     pub fn new_selected(options: GpuOptions, selection: GpuSelection) -> Result<Self, GpuError> {
         Self::new_selected_with_projection(options, selection, GateProjection::default())
     }
 
     /// Create an independently owned native device/pipeline for this projection.
     ///
-    /// Uses the same hard API/vendor and physical-device selection policy as
+    /// Uses the same hard API and physical-device selection policy as
     /// [`Self::new_selected`]. Construction does not ground, enumerate, or alter
     /// a theory. Enumerated source is borrowed; Bitwise assembles one fixed-size
     /// shader with a fallible reservation, then transfers it to shader creation.

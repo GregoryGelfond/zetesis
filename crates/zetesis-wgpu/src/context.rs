@@ -53,7 +53,7 @@ pub(crate) enum Effects {
 }
 
 impl GpuContext {
-    /// Select a real device using the existing hard backend/vendor policy.
+    /// Select a physical device of the requested API under the hard selection policy.
     ///
     /// Primitive constructors subsequently check their own profile against this
     /// device's granted limits. Construction is outside per-operation budgets.
@@ -99,8 +99,7 @@ impl GpuContext {
 
     /// Check this device's reported identity against a caller's hard policy.
     ///
-    /// Uses the same backend, exact vendor ID and physical-category predicate as
-    /// discovery. No adapter is rediscovered or substituted. This metadata-only
+    /// Uses the same API and physical-category predicate as discovery. No adapter is rediscovered or substituted. This metadata-only
     /// operation does not acquire a lease, inspect device health or establish a
     /// primitive's capability requirements; its constructor still checks those.
     /// A matching context can therefore be busy, invalidated or unsuitable for

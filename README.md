@@ -66,8 +66,8 @@ programs, automatic grounding can defer eligible definitions until their answers
 are known; other rules are grounded eagerly. Explicit lazy CPU execution can stream
 eligible constraints while retaining their producer core. See the
 [grounding profiles](docs/book/architecture/grounding.md#eager-and-lazy-execution)
-for the current limits. Use `zetesis devices` to list devices and
-`--device metal` to request Metal explicitly.
+for the current limits. Use `zetesis devices` to list GPU devices and
+`--backend gpu` to run on the GPU: Metal on macOS, Vulkan on Linux.
 
 A stopped search is incomplete; it does not prove unsatisfiability or optimality.
 The time and memory options are not hard process-time or RSS caps.

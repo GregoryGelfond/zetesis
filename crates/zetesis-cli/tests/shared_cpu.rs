@@ -58,14 +58,14 @@ fn shared_rounds_preserve_full_ordered_answer_records() {
 }
 
 #[test]
-fn explicit_shared_policy_pins_auto_to_cpu() {
+fn explicit_shared_policy_runs_on_the_cpu() {
     let (report, json, diagnostics) = solve("{a}. {b}.", &["--source-batching", "worlds"]);
     assert_eq!(report.models, 4);
     assert!(report.lazy_execution.is_none());
     assert!(report.formula_execution.is_none());
     assert_eq!(
         json["statistics"]["shared_execution"]["requested_backend"],
-        "auto"
+        "cpu"
     );
     assert_eq!(json["statistics"]["shared_execution"]["backend"], "cpu");
     assert_eq!(
@@ -73,8 +73,7 @@ fn explicit_shared_policy_pins_auto_to_cpu() {
         "worlds"
     );
     assert!(json["statistics"]["lazy_execution"].is_null());
-    assert!(diagnostics.contains("explicit shared source batching selects CPU"));
-    assert!(!diagnostics.contains("no measured GPU crossover"));
+    assert!(diagnostics.contains("Backend: cpu (shared worlds source rounds"));
     assert!(diagnostics.contains("source and world work reported separately"));
 }
 

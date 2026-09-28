@@ -21,7 +21,7 @@ Bare `zetesis` displays concise help. Each task has its own options:
 | `solve` | Find answer sets or optimize a program. |
 | `test` | Check a corpus, scalability workloads or an execution backend. |
 | `bench` | Measure corpus or primitive performance, or compare saved reports. |
-| `devices` | List available execution devices and their capabilities. |
+| `devices` | List the GPU devices found, their capabilities and the one `--backend gpu` would use. |
 | `help` | Explain a command, including nested tasks. |
 | `version` | Report the installed program version. |
 
@@ -75,7 +75,7 @@ matters. The reduct remains the criterion for accepting an answer.
 
 | Option | Default and meaning |
 | --- | --- |
-| `--device auto` | CPU execution. Explicit GPU requests are honored or refused. |
+| `--backend cpu` | CPU execution. `gpu` uses the platform's native API (Metal on macOS, Vulkan elsewhere); `metal` and `vulkan` name one. A GPU request is honored or refused. |
 | `--threads auto` | At most four available host threads; one if availability is unknown. |
 | `--grounder auto` | Prefer lazy source joins where admitted; formula admission can defer eligible terminal definitions and ground the remaining rules eagerly. |
 | `--time-limit DURATION` | No deadline when omitted; accepts whole seconds or `s`, `m`, `h`. |
@@ -90,7 +90,7 @@ Explicit `--grounder eager` still requests complete materialization.
 For a formula input, explicit `--grounder lazy` selects CPU hybrid grounding:
 the producer core is materialized, while eligible integrity constraints are
 checked from their admitted source families. This hybrid profile is separate from
-automatic terminal-definition reconstruction. It accepts `--device cpu` or `auto`, uses indexed
+automatic terminal-definition reconstruction. It runs on the CPU backend, uses indexed
 joins and refuses objective declarations and table joins. Relational lazy
 closure retains its existing CPU and device routes.
 
@@ -101,16 +101,20 @@ admission and replay do not share one remaining allowance. A stopped check is
 incomplete, never an accepted answer or an UNSAT result.
 
 ```sh
-zetesis solve program.lp --device cpu --threads 4
-zetesis solve program.lp --device metal --grounder eager --all
+zetesis solve program.lp --backend cpu --threads 4
+zetesis solve program.lp --backend metal --grounder eager --all
 zetesis solve program.lp --time-limit 30s --memory-budget 4GiB
 ```
 
 An explicit positive thread count is not capped at four. The thread setting
 selects the applicable host search or closure pool. General GPU execution also
 has host candidate production and exact CPU completion; a GPU request does not
-move all solving work to the device. Automatic device selection currently stays
-on CPU. Explicit unavailable or failed devices do not silently retry on CPU.
+move all solving work to the device. An unavailable or failed GPU does not
+silently retry on CPU. Choosing a backend per problem is not implemented, so no
+value promises that choice: the retired `auto` is refused and names `cpu`, the
+default; `dx12` and `gl` are refused because zetesis targets Metal and Vulkan;
+`nvidia` is refused and names `gpu` or `vulkan`, since choosing one GPU among
+several is not implemented yet.
 The [execution chapter](../architecture/execution.md) explains each route.
 
 The deadline starts after input loading and is cooperative. `0` requests an
@@ -219,8 +223,8 @@ refused. Diagnostics go to stderr.
 ```sh
 zetesis test corpus --repo . --clingo clingo
 zetesis test corpus --repo . --json --report corpus-check.json
-zetesis test backend --device cpu --json
-zetesis test backend --device metal --stats --report metal-check.json
+zetesis test backend --backend cpu --json
+zetesis test backend --backend metal --stats --report metal-check.json
 zetesis test scalability --threads 1,2,4,8,14 --report scalability-check.json
 ```
 
@@ -240,11 +244,10 @@ and work evidence is mandatory; a requested device name alone cannot pass a
 check. This small installed check is distinct from the repository's maintained
 60-test physical qualification suite.
 
-Corpus and backend checks accept `--device cpu` (the default) or `--device metal`.
-Metal corpus checks request the eager general formula route. This is the scope
-of these check decoders, not a restriction of `solve`, whose explicit wgpu
-backend choices are listed in solve help. An unavailable device remains a
-nonpass; it does not trigger CPU fallback.
+Corpus and backend checks accept every backend: `--backend cpu` (the default),
+`gpu`, `metal` or `vulkan`. GPU corpus checks request the eager general formula
+route. Decoding a Vulkan route awaits qualification on a Vulkan host. An
+unavailable GPU remains a nonpass; it does not trigger CPU fallback.
 
 `test scalability` uses the same nine workloads as `bench corpus --suite
 scalability`: authored queens at n=8/9/10, authored pigeonhole at h=5/6/7,
@@ -305,7 +308,7 @@ saved-report comparison does not launch children and has no such requirement.
 ```sh
 zetesis bench corpus examples/correctness --report cpu-run.json
 zetesis bench corpus examples/correctness --suite baseline \
-  --device metal --grounder eager --report metal-run.json
+  --backend metal --grounder eager --report metal-run.json
 zetesis bench corpus examples/correctness --threads 2 --json \
   --report two-thread-run.json > two-thread-summary.json
 ```
@@ -338,8 +341,9 @@ output families and costs to agree. RSS is a separate child-resource observation
 not device memory or an allocator counter. Primitive work counts are not elapsed
 time or machine instructions.
 
-The maintained corpus telemetry decoder supports `--device cpu|metal` and
-`--grounder auto|eager|lazy`. It reports unsupported combinations and actual
+The maintained corpus telemetry decoder reads `--backend cpu|gpu|metal|vulkan`
+and `--grounder auto|eager|lazy`; its Vulkan decoding awaits qualification on a
+Vulkan host. It reports unsupported combinations and actual
 execution failures rather than silently replacing the requested route. Explicit
 thread counts are accepted within the campaign's finite bounds. Capture, decoder
 and evidence byte ceilings are separate controls; `zetesis bench corpus -h`
@@ -383,7 +387,7 @@ same explicit grounding ceiling to every native profile and records it in the
 evidence. This is independent of the process deadline.
 
 ```sh
-zetesis bench corpus examples/correctness --suite queens --device cpu \
+zetesis bench corpus examples/correctness --suite queens --backend cpu \
   --threads 1 --compare-grounders --repetitions 4 --memory-runs 2 \
   --report grounding-comparison.json
 zetesis bench corpus examples/correctness --suite scalability --examples examples \
@@ -454,21 +458,22 @@ speedups. Each profile retains its own finite dimensions, reference checks,
 setup intervals and timing boundaries.
 
 ```sh
-zetesis bench primitives relation --device cpu --threads 2 \
+zetesis bench primitives relation --backend cpu --threads 2 \
   --rows 256 --queries 8 --report relation.jsonl
-zetesis bench primitives tight --device metal --atoms 4 --batches 32 \
+zetesis bench primitives tight --backend metal --atoms 4 --batches 32 \
   --json > tight.jsonl
 zetesis help bench primitives aggregate
 ```
 
-| Profile | Measured operation | Default device |
-| --- | --- | --- |
-| `relation` | Packed equality masks and typed row reconstruction | CPU |
-| `aggregate` | Exact native aggregate reductions | Metal |
-| `tight` | Tight support classification with exact residual completion | Metal |
-| `lazy` | Matched scalar, Rayon and lazy source-round operations | Metal |
+| Profile | Measured operation |
+| --- | --- |
+| `relation` | Packed equality masks and typed row reconstruction |
+| `aggregate` | Exact native aggregate reductions |
+| `tight` | Tight support classification with exact residual completion |
+| `lazy` | Matched scalar, Rayon and lazy source-round operations |
 
-All four profiles accept explicit `--device cpu|metal|vulkan`. Their retained
+All four profiles measure CPU routes by default and accept
+`--backend cpu|gpu|metal|vulkan`. Their retained
 experiment defaults use four Rayon threads; select a positive `--threads N`
 explicitly when another count is required. Physical selections never fall back
 to CPU. Profile-specific help describes dimensions, work bounds and schedules.
@@ -547,8 +552,8 @@ bound to the protocols and identities in the [performance records](performance.m
 File-first invocations remain accepted, including `zetesis program.lp --models 0`.
 Their missing-input default remains standard input, and their existing statistics
 records are preserved. Prefer explicit `solve` in new scripts. The old flags
-`--backend`, `--workers` and `--memory` remain aliases for `--device`, `--threads`
-and `--memory-budget`; `--models 0` maps to `--all`, and positive `--models N`
+`--workers` and `--memory` remain aliases for `--threads` and `--memory-budget`;
+`--models 0` maps to `--all`, and positive `--models N`
 maps to `--answers N`. Conflicting answer-selection flags are rejected.
 
 `--help-all` remains an alias for full solve help. Historical measurement recipes

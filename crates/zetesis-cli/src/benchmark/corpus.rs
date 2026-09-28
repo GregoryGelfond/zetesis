@@ -56,24 +56,6 @@ impl From<NativeInterface> for matrix::NativeInvocation {
     }
 }
 
-/// Physical requests supported by the maintained corpus telemetry decoder.
-#[derive(Clone, Copy, Debug, Default, ValueEnum)]
-pub enum Device {
-    /// CPU execution.
-    #[default]
-    Cpu,
-    /// Required physical Metal; absence is retained as a non-pass.
-    Metal,
-}
-impl From<Device> for selected::Backend {
-    fn from(value: Device) -> Self {
-        match value {
-            Device::Cpu => Self::Cpu,
-            Device::Metal => Self::Metal,
-        }
-    }
-}
-
 /// Requested materialization policy for the benchmark profile.
 #[derive(Clone, Copy, Debug, Default, ValueEnum)]
 pub enum Grounder {
@@ -127,9 +109,10 @@ pub struct CorpusOptions {
     /// New complete JSON evidence file, including failures and unlaunched positions.
     #[arg(long)]
     pub report: PathBuf,
-    /// CPU or required Metal execution (the corpus decoder does not yet qualify Vulkan).
-    #[arg(long, alias = "backend", value_enum, default_value_t)]
-    pub device: Device,
+    /// Execution backend: cpu (the default), gpu, metal or vulkan. A GPU backend
+    /// is required: its absence is retained as a non-pass.
+    #[arg(long, value_parser = zetesis_backend::BackendParser, default_value = "cpu")]
+    pub backend: selected::Backend,
     /// Requested materialization policy.
     #[arg(long, value_enum, default_value_t)]
     pub grounder: Grounder,
@@ -233,7 +216,7 @@ impl CorpusOptions {
             ));
         }
         let profile = selected::NativeExecution {
-            backend: self.device.into(),
+            backend: self.backend,
             grounder: self.grounder.into(),
             workers: self.threads,
             completion_workers: self.completion_workers,

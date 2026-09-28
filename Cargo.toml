@@ -27,6 +27,7 @@ zetesis-experiments = { path = "crates/zetesis-experiments" }
 zetesis-solve = { path = "crates/zetesis-solve", default-features = false }
 zetesis-telemetry = { path = "crates/zetesis-telemetry" }
 zetesis-core = { path = "crates/zetesis-core" }
+zetesis-backend = { path = "crates/zetesis-backend" }
 zetesis-themelios = { path = "crates/zetesis-themelios" }
 zetesis-cpu = { path = "crates/zetesis-cpu" }
 zetesis-wgpu = { path = "crates/zetesis-wgpu" }

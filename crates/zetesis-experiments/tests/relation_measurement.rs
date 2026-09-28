@@ -1,6 +1,7 @@
 //! Portable shared-fixture measurement contracts; no GPU is requested.
 
 use std::io;
+use zetesis_backend::GpuApi;
 
 use clap::Parser;
 use zetesis_cpu::{Cancellation, Stop};
@@ -221,7 +222,7 @@ fn relation_command_preserves_explicit_scope() {
     let configuration = options.configuration().unwrap();
     assert_eq!(configuration.family, Family::Skewed);
     assert_eq!(configuration.payload, Payload::Tuple);
-    assert_eq!(configuration.backend, Backend::Vulkan);
+    assert_eq!(configuration.backend, Backend::Gpu(Some(GpuApi::Vulkan)));
     assert_eq!(configuration.rows, 33);
     assert_eq!(configuration.queries, 8);
 }
@@ -232,11 +233,7 @@ fn physical_records(backend: Backend) {
         rows: 33,
         ..configuration()
     });
-    let expected = match backend {
-        Backend::Metal => "metal",
-        Backend::Vulkan => "vulkan",
-        Backend::Cpu => panic!("physical backend"),
-    };
+    let expected = backend.resolved_api().expect("physical backend").label();
     let observations: Vec<_> = records
         .iter()
         .filter(|record| record["event"] == "observation")
@@ -264,11 +261,11 @@ fn physical_records(backend: Backend) {
 #[test]
 #[ignore = "requires actual Metal; explicit physical qualification"]
 fn metal_relation_measurement_keeps_complete_masks() {
-    physical_records(Backend::Metal);
+    physical_records(Backend::Gpu(Some(GpuApi::Metal)));
 }
 
 #[test]
 #[ignore = "requires actual Vulkan GPU; explicit physical qualification"]
 fn vulkan_relation_measurement_keeps_complete_masks() {
-    physical_records(Backend::Vulkan);
+    physical_records(Backend::Gpu(Some(GpuApi::Vulkan)));
 }

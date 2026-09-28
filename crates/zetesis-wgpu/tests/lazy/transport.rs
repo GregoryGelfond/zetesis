@@ -1,13 +1,14 @@
 //! Capacity contracts are portable; execution selects a physical API explicitly.
 
 use std::num::NonZeroU32;
+use zetesis_backend::GpuApi;
 
 use zetesis_core::{
     AdmissionLimits, Atom, AtomPattern, Predicate, Program, Seed, Template, Term, Value,
 };
 use zetesis_cpu::{Cancellation, Limits, Stop, check, lazy};
 
-use crate::{GpuBackendPreference, GpuErrorKind, GpuLimits, GpuOptions, GpuSelection};
+use crate::{GpuErrorKind, GpuLimits, GpuOptions, GpuSelection};
 
 use super::{Capacity, GpuLazyOracle, LazyGpuStatistics, Plan, Selection, tests::inspect};
 
@@ -175,20 +176,10 @@ fn transport_observation_counters_refuse_overflow() {
     });
 }
 
-fn oracle(backend: GpuBackendPreference) -> GpuLazyOracle {
-    let oracle = GpuLazyOracle::new_selected(
-        GpuOptions::default(),
-        GpuSelection {
-            backend,
-            vendor_id: None,
-        },
-    )
-    .expect("requested physical API is required for this transport qualification");
-    let expected = match backend {
-        GpuBackendPreference::Metal => "Metal",
-        GpuBackendPreference::Vulkan => "Vulkan",
-        _ => panic!("transport qualification requires an explicit Metal or Vulkan API"),
-    };
+fn oracle(backend: GpuApi) -> GpuLazyOracle {
+    let oracle = GpuLazyOracle::new_selected(GpuOptions::default(), GpuSelection { api: backend })
+        .expect("requested physical API is required for this transport qualification");
+    let expected = backend.name();
     assert_eq!(oracle.info().backend(), expected);
     assert!(oracle.info().is_hardware_gpu());
     eprintln!("lazy transport adapter={:?}", oracle.info());
@@ -391,16 +382,16 @@ fn source_sequence_exercises_transport_resize_boundaries() {
 #[test]
 #[ignore = "requires a physical Metal adapter"]
 fn metal_lazy_transport_reuse_preserves_round_truth() {
-    qualify_lazy_transport_reuse_preserves_round_truth(GpuBackendPreference::Metal);
+    qualify_lazy_transport_reuse_preserves_round_truth(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires a physical Vulkan adapter"]
 fn vulkan_lazy_transport_reuse_preserves_round_truth() {
-    qualify_lazy_transport_reuse_preserves_round_truth(GpuBackendPreference::Vulkan);
+    qualify_lazy_transport_reuse_preserves_round_truth(GpuApi::Vulkan);
 }
 
-fn qualify_lazy_transport_reuse_preserves_round_truth(backend: GpuBackendPreference) {
+fn qualify_lazy_transport_reuse_preserves_round_truth(backend: GpuApi) {
     let program = growth_program();
     let seeds = growth_seeds(&program);
     let mut oracle = oracle(backend);
@@ -493,16 +484,16 @@ fn qualify_lazy_transport_reuse_preserves_round_truth(backend: GpuBackendPrefere
 #[test]
 #[ignore = "requires a physical Metal adapter"]
 fn metal_input_slack_preserves_exact_admission() {
-    qualify_input_slack_preserves_exact_admission(GpuBackendPreference::Metal);
+    qualify_input_slack_preserves_exact_admission(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires a physical Vulkan adapter"]
 fn vulkan_input_slack_preserves_exact_admission() {
-    qualify_input_slack_preserves_exact_admission(GpuBackendPreference::Vulkan);
+    qualify_input_slack_preserves_exact_admission(GpuApi::Vulkan);
 }
 
-fn qualify_input_slack_preserves_exact_admission(backend: GpuBackendPreference) {
+fn qualify_input_slack_preserves_exact_admission(backend: GpuApi) {
     let program = growth_program();
     let seeds = growth_seeds(&program);
     let mut oracle = oracle(backend);
@@ -556,16 +547,16 @@ fn qualify_input_slack_preserves_exact_admission(backend: GpuBackendPreference) 
 #[test]
 #[ignore = "requires a physical Metal adapter"]
 fn metal_lazy_transport_refusal_preserves_reuse() {
-    qualify_lazy_transport_refusal_preserves_reuse(GpuBackendPreference::Metal);
+    qualify_lazy_transport_refusal_preserves_reuse(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires a physical Vulkan adapter"]
 fn vulkan_lazy_transport_refusal_preserves_reuse() {
-    qualify_lazy_transport_refusal_preserves_reuse(GpuBackendPreference::Vulkan);
+    qualify_lazy_transport_refusal_preserves_reuse(GpuApi::Vulkan);
 }
 
-fn qualify_lazy_transport_refusal_preserves_reuse(backend: GpuBackendPreference) {
+fn qualify_lazy_transport_refusal_preserves_reuse(backend: GpuApi) {
     let mut oracle = oracle(backend);
     let mut ran = false;
     inspect(|chunk| {
@@ -635,16 +626,16 @@ fn qualify_lazy_transport_refusal_preserves_reuse(backend: GpuBackendPreference)
 #[test]
 #[ignore = "requires a physical Metal adapter"]
 fn metal_lazy_transport_cancelled_read_discards_capacity() {
-    qualify_lazy_transport_cancelled_read_discards_capacity(GpuBackendPreference::Metal);
+    qualify_lazy_transport_cancelled_read_discards_capacity(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires a physical Vulkan adapter"]
 fn vulkan_lazy_transport_cancelled_read_discards_capacity() {
-    qualify_lazy_transport_cancelled_read_discards_capacity(GpuBackendPreference::Vulkan);
+    qualify_lazy_transport_cancelled_read_discards_capacity(GpuApi::Vulkan);
 }
 
-fn qualify_lazy_transport_cancelled_read_discards_capacity(backend: GpuBackendPreference) {
+fn qualify_lazy_transport_cancelled_read_discards_capacity(backend: GpuApi) {
     let mut oracle = oracle(backend);
     let mut ran = false;
     inspect(|chunk| {
@@ -694,7 +685,7 @@ fn qualify_lazy_transport_cancelled_read_discards_capacity(backend: GpuBackendPr
     qualify_cancelled_replacement(backend);
 }
 
-fn qualify_cancelled_replacement(backend: GpuBackendPreference) {
+fn qualify_cancelled_replacement(backend: GpuApi) {
     let program = growth_program();
     let seeds = growth_seeds(&program);
     let mut oracle = oracle(backend);
@@ -769,7 +760,7 @@ fn qualify_cancelled_replacement(backend: GpuBackendPreference) {
     assert!(matches!(failure.cause, lazy::Cause::Execution(_)));
 }
 
-fn qualify_immutable_uploads(backend: GpuBackendPreference) {
+fn qualify_immutable_uploads(backend: GpuApi) {
     let mut oracle = oracle(backend);
     let fact = |name: &str| {
         Template::new(
@@ -846,11 +837,11 @@ fn qualify_immutable_uploads(backend: GpuBackendPreference) {
 #[test]
 #[ignore = "requires actual Metal; checks immutable input upload reuse"]
 fn metal_lazy_uploads_reuse_only_current_batch_inputs() {
-    qualify_immutable_uploads(GpuBackendPreference::Metal);
+    qualify_immutable_uploads(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires actual Vulkan; checks immutable input upload reuse"]
 fn vulkan_lazy_uploads_reuse_only_current_batch_inputs() {
-    qualify_immutable_uploads(GpuBackendPreference::Vulkan);
+    qualify_immutable_uploads(GpuApi::Vulkan);
 }

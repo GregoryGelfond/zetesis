@@ -4,6 +4,7 @@ use std::fmt;
 use std::io::{self, Write};
 use std::num::NonZeroUsize;
 use std::time::{Duration, Instant};
+use zetesis_backend::GpuApi;
 
 use clap::Args;
 use zetesis_cpu::Cancellation;
@@ -22,8 +23,8 @@ pub use projection::run_formula_projection;
 /// This experiment does not enumerate source answer sets or measure a full solve.
 #[derive(Clone, Debug, Args)]
 pub struct FormulaOptions {
-    /// Physical Metal/Vulkan or CPU baselines; projection requires a physical GPU.
-    #[arg(long, value_enum, default_value_t)]
+    /// CPU baselines (the default) or a physical GPU (gpu, metal or vulkan); projection requires a GPU.
+    #[arg(long, value_parser = zetesis_backend::BackendParser, default_value = "cpu")]
     pub backend: Backend,
     /// Semantic atom counts for the synthetic, unrewritten original theories.
     #[arg(long, value_delimiter = ',', default_value = "64,256")]
@@ -169,10 +170,10 @@ pub fn run_formula(
     writeln!(
         output,
         "# timing_order=cpu-native,cpu-rayon{} candidate_stream=synthetic cpu_workers={} scalar_workers=1 residual_cpu_workers=1",
-        match options.backend {
-            Backend::Cpu => "",
-            Backend::Metal => ",metal-with-cpu-residuals",
-            Backend::Vulkan => ",vulkan-with-cpu-residuals",
+        match crate::backend::api(options.backend) {
+            None => "",
+            Some(GpuApi::Metal) => ",metal-with-cpu-residuals",
+            Some(GpuApi::Vulkan) => ",vulkan-with-cpu-residuals",
         },
         options.cpu_workers
     )?;
@@ -201,9 +202,7 @@ pub fn run_formula(
         started.elapsed().as_nanos()
     )?;
     let started = Instant::now();
-    let mut gpu = options
-        .backend
-        .selection()
+    let mut gpu = crate::backend::selection(options.backend)
         .map(|selection| GpuFormulaOracle::new_selected(GpuOptions::default(), selection))
         .transpose()
         .map_err(FormulaBenchmarkError::Gpu)?;
@@ -402,5 +401,8 @@ fn hybrid_label(backend: Backend, projection: zetesis_wgpu::GateProjection) -> S
         zetesis_wgpu::GateProjection::Enumerated => "",
         zetesis_wgpu::GateProjection::Bitwise => "-bitwise",
     };
-    format!("{}{projection}-with-cpu-residuals", backend.label())
+    format!(
+        "{}{projection}-with-cpu-residuals",
+        crate::backend::label(backend)
+    )
 }

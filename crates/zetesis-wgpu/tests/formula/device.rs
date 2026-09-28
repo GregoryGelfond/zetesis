@@ -1,5 +1,6 @@
 use super::super::profile::check_limits;
 use super::*;
+use zetesis_backend::GpuApi;
 #[test]
 fn formula_profile_checks_every_advertised_compute_requirement() {
     let good = wgpu::Limits {
@@ -24,25 +25,13 @@ fn formula_profile_checks_every_advertised_compute_requirement() {
     }
 }
 
-fn busy_preserves_state(backend: GpuBackendPreference) {
+fn busy_preserves_state(backend: GpuApi) {
     use zetesis_ferraris::{AdmissionLimits, Node};
-    let mut oracle = GpuFormulaOracle::new_selected(
-        GpuOptions::default(),
-        GpuSelection {
-            backend,
-            vendor_id: None,
-        },
-    )
-    .unwrap();
+    let mut oracle =
+        GpuFormulaOracle::new_selected(GpuOptions::default(), GpuSelection { api: backend })
+            .unwrap();
     assert!(oracle.info().is_hardware_gpu());
-    assert_eq!(
-        oracle.info().backend(),
-        match backend {
-            GpuBackendPreference::Metal => "Metal",
-            GpuBackendPreference::Vulkan => "Vulkan",
-            _ => panic!("explicit device fixture"),
-        }
-    );
+    assert_eq!(oracle.info().backend(), backend.name());
     let context = oracle.context().clone();
     let theory = Theory::new(1, vec![Node::Atom(0)], vec![0], AdmissionLimits::default()).unwrap();
     let candidates = [Interpretation::new(&theory, [0]).unwrap()];
@@ -175,25 +164,18 @@ fn cold_preparation_refusals(
 #[test]
 #[ignore = "requires actual Metal; explicit physical qualification"]
 fn metal_busy_refusal_preserves_formula_state() {
-    busy_preserves_state(GpuBackendPreference::Metal);
+    busy_preserves_state(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
 fn vulkan_busy_refusal_preserves_formula_state() {
-    busy_preserves_state(GpuBackendPreference::Vulkan);
+    busy_preserves_state(GpuApi::Vulkan);
 }
 
-fn require_profile_device(profile: &GpuFormulaProfile, backend: GpuBackendPreference) {
+fn require_profile_device(profile: &GpuFormulaProfile, backend: GpuApi) {
     assert!(profile.info().is_hardware_gpu());
-    assert_eq!(
-        profile.info().backend(),
-        match backend {
-            GpuBackendPreference::Metal => "Metal",
-            GpuBackendPreference::Vulkan => "Vulkan",
-            _ => panic!("explicit physical fixture"),
-        }
-    );
+    assert_eq!(profile.info().backend(), backend.name());
     println!(
         "profile adapter={:?} projection={}",
         profile.info().metadata(),
@@ -201,15 +183,12 @@ fn require_profile_device(profile: &GpuFormulaProfile, backend: GpuBackendPrefer
     );
 }
 
-fn reused_profile(backend: GpuBackendPreference) {
+fn reused_profile(backend: GpuApi) {
     use zetesis_ferraris::{AdmissionLimits, Node};
     for projection in GateProjection::ALL {
         let profile = GpuFormulaProfile::new_selected_with_projection(
             GpuOptions::default(),
-            GpuSelection {
-                backend,
-                vendor_id: None,
-            },
+            GpuSelection { api: backend },
             projection,
         )
         .unwrap();
@@ -266,24 +245,19 @@ fn reused_profile(backend: GpuBackendPreference) {
 #[test]
 #[ignore = "requires actual Metal; explicit compiled-profile qualification"]
 fn metal_profile_starts_fresh_formula_oracles() {
-    reused_profile(GpuBackendPreference::Metal);
+    reused_profile(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires actual Vulkan; explicit compiled-profile qualification"]
 fn vulkan_profile_starts_fresh_formula_oracles() {
-    reused_profile(GpuBackendPreference::Vulkan);
+    reused_profile(GpuApi::Vulkan);
 }
 
-fn compilation_identity(backend: GpuBackendPreference) {
-    let profile = GpuFormulaProfile::new_selected(
-        GpuOptions::default(),
-        GpuSelection {
-            backend,
-            vendor_id: None,
-        },
-    )
-    .unwrap();
+fn compilation_identity(backend: GpuApi) {
+    let profile =
+        GpuFormulaProfile::new_selected(GpuOptions::default(), GpuSelection { api: backend })
+            .unwrap();
     require_profile_device(&profile, backend);
     assert!(profile.same_instance(&profile.clone()));
     let independent = GpuFormulaProfile::from_context(profile.context()).unwrap();
@@ -301,24 +275,19 @@ fn compilation_identity(backend: GpuBackendPreference) {
 #[test]
 #[ignore = "requires actual Metal; exact compilation identity"]
 fn metal_profiles_identify_exact_compilations() {
-    compilation_identity(GpuBackendPreference::Metal);
+    compilation_identity(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires actual Vulkan; exact compilation identity"]
 fn vulkan_profiles_identify_exact_compilations() {
-    compilation_identity(GpuBackendPreference::Vulkan);
+    compilation_identity(GpuApi::Vulkan);
 }
 
-fn profile_lifecycle(backend: GpuBackendPreference) {
-    let profile = GpuFormulaProfile::new_selected(
-        GpuOptions::default(),
-        GpuSelection {
-            backend,
-            vendor_id: None,
-        },
-    )
-    .unwrap();
+fn profile_lifecycle(backend: GpuApi) {
+    let profile =
+        GpuFormulaProfile::new_selected(GpuOptions::default(), GpuSelection { api: backend })
+            .unwrap();
     require_profile_device(&profile, backend);
     let context = profile.context();
     {
@@ -357,24 +326,19 @@ fn profile_lifecycle(backend: GpuBackendPreference) {
 #[test]
 #[ignore = "requires actual Metal; profile reuse retains shared failure precedence"]
 fn metal_profile_reuse_checks_context_lifecycle() {
-    profile_lifecycle(GpuBackendPreference::Metal);
+    profile_lifecycle(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires actual Vulkan; profile reuse retains shared failure precedence"]
 fn vulkan_profile_reuse_checks_context_lifecycle() {
-    profile_lifecycle(GpuBackendPreference::Vulkan);
+    profile_lifecycle(GpuApi::Vulkan);
 }
 
-fn submission_receipt(backend: GpuBackendPreference) {
-    let mut oracle = GpuFormulaOracle::new_selected(
-        GpuOptions::default(),
-        GpuSelection {
-            backend,
-            vendor_id: None,
-        },
-    )
-    .unwrap();
+fn submission_receipt(backend: GpuApi) {
+    let mut oracle =
+        GpuFormulaOracle::new_selected(GpuOptions::default(), GpuSelection { api: backend })
+            .unwrap();
     require_profile_device(oracle.compiled_profile(), backend);
     let theory = Theory::new(
         1,
@@ -480,11 +444,11 @@ fn submitted_interruption(
 #[test]
 #[ignore = "requires actual Metal; checks submission phase and device limits"]
 fn metal_formula_submission_receipt_survives_interruption() {
-    submission_receipt(GpuBackendPreference::Metal);
+    submission_receipt(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires actual Vulkan; checks submission phase and device limits"]
 fn vulkan_formula_submission_receipt_survives_interruption() {
-    submission_receipt(GpuBackendPreference::Vulkan);
+    submission_receipt(GpuApi::Vulkan);
 }

@@ -27,8 +27,7 @@ use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
 };
 use zetesis_wgpu::{
-    AdapterMetadata, GateProjection, GpuBackendPreference, GpuContext, GpuFormulaProfile,
-    GpuOptions, GpuSelection,
+    AdapterMetadata, GateProjection, GpuContext, GpuFormulaProfile, GpuOptions, GpuSelection,
 };
 
 const MAX_SOURCE_BYTES: u64 = 1_048_576;
@@ -39,8 +38,8 @@ type Family = BTreeSet<(Vec<usize>, Option<Vec<(i32, i64)>>)>;
 struct Options {
     /// One self-contained input source; admission occurs outside timing.
     source: PathBuf,
-    /// Require this physical API, or collect only CPU baselines.
-    #[arg(long, value_enum, default_value = "cpu")]
+    /// CPU baselines only (the default), or require a physical GPU (gpu, metal or vulkan).
+    #[arg(long, value_parser = zetesis_backend::BackendParser, default_value = "cpu")]
     backend: zetesis_experiments::Backend,
     /// Rayon completion workers; must be at least two to name a Rayon route.
     #[arg(long, default_value = "4")]
@@ -253,7 +252,7 @@ fn configuration(config: SolveConfig, collection: WorldViewLimits) -> Value {
     // defaults; SolveConfig overrides work/storage but exposes neither shape.
     let native = zetesis_sat::Limits::default();
     json!({
-        "backend": if config.backend == Backend::Gpu { "gpu" } else { "cpu" },
+        "backend": if config.backend.is_gpu() { "gpu" } else { "cpu" },
         "oracle": "countermodel", "grounder": "eager", "selection": "all",
         "models": config.models, "phase_timings": config.stats,
         "workers": config.workers.get(), "batch_size": config.batch_size.get(),
@@ -272,7 +271,7 @@ fn configuration(config: SolveConfig, collection: WorldViewLimits) -> Value {
             "bound_work": 0 },
         "collection": { "answer_sets": collection.max_answer_sets, "atoms": collection.max_atoms,
             "bytes": collection.max_bytes },
-        "device": (config.backend == Backend::Gpu).then(|| json!({
+        "device": config.backend.is_gpu().then(|| json!({
             "max_batch_bytes": config.max_batch_bytes, "work_per_candidate": config.gpu_formula_work,
             "rounds_per_candidate": config.gpu_formula_rounds,
             "dispatch_timeout_ns": zetesis_wgpu::FormulaLimits::default().timeout.as_nanos(),
@@ -345,18 +344,10 @@ fn write_record(
 fn profiles(
     backend: zetesis_experiments::Backend,
 ) -> Result<Vec<GpuFormulaProfile>, Box<dyn Error>> {
-    let backend = match backend {
-        zetesis_experiments::Backend::Cpu => return Ok(Vec::new()),
-        zetesis_experiments::Backend::Metal => GpuBackendPreference::Metal,
-        zetesis_experiments::Backend::Vulkan => GpuBackendPreference::Vulkan,
+    let Some(api) = backend.resolved_api() else {
+        return Ok(Vec::new());
     };
-    let context = GpuContext::new_selected(
-        GpuOptions::default(),
-        GpuSelection {
-            backend,
-            vendor_id: None,
-        },
-    )?;
+    let context = GpuContext::new_selected(GpuOptions::default(), GpuSelection { api })?;
     let profiles = [GateProjection::Enumerated, GateProjection::Bitwise]
         .into_iter()
         .map(|projection| GpuFormulaProfile::from_context_with_projection(&context, projection))
@@ -414,11 +405,7 @@ fn write_configuration(
         &mut *output,
         &json!({
             "event": "configuration", "identity": identity, "warmups": options.warmups,
-            "requested_backend": match options.backend {
-                zetesis_experiments::Backend::Cpu => "cpu",
-                zetesis_experiments::Backend::Metal => "metal",
-                zetesis_experiments::Backend::Vulkan => "vulkan",
-            },
+            "requested_backend": options.backend.label(),
             "repetitions": options.repetitions.get(), "routes_per_round": if options.backend == zetesis_experiments::Backend::Cpu { 2 } else { 6 },
             "max_source_bytes": MAX_SOURCE_BYTES, "admission": "library defaults for this executable",
             "matched_context": (options.backend != zetesis_experiments::Backend::Cpu).then_some(true), "reference_answer_sets": reference_answers,
@@ -485,7 +472,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
             let selected = if profile.is_some() {
                 SolveConfig {
-                    backend: Backend::Gpu,
+                    backend: options.backend,
                     ..selected
                 }
             } else {
@@ -666,12 +653,13 @@ mod tests {
             &admitted,
         )
         .unwrap();
-        let profiles = profiles(zetesis_experiments::Backend::Metal).unwrap();
+        let metal = Backend::Gpu(Some(zetesis_backend::GpuApi::Metal));
+        let profiles = profiles(metal).unwrap();
         for profile in &profiles {
             let run = measure(
                 &admitted,
                 SolveConfig {
-                    backend: Backend::Gpu,
+                    backend: metal,
                     ..config()
                 },
                 Some(profile),

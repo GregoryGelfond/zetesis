@@ -172,9 +172,9 @@ budgets. `--stats` distinguishes actual table preparations, reuses and row visit
 See the [finite-table contract](../../docs/book/rust/finite-tables.md).
 
 ```sh
-zetesis solve input.lp --device cpu
-zetesis solve input.lp --device metal --grounder eager
-zetesis solve input.lp --device metal --grounder lazy
+zetesis solve input.lp --backend cpu
+zetesis solve input.lp --backend metal --grounder eager
+zetesis solve input.lp --backend metal --grounder lazy
 zetesis solve input.lp --oracle countermodel --completion-workers 4 --all
 ```
 
@@ -184,9 +184,9 @@ a proper subset satisfies its frozen Ferraris reduct. The latter uses native
 Boolean search internally; semantic atoms alone define minimality and model
 blocking. See [semantic foundations](../../docs/book/architecture/semantics.md).
 
-GPU support is in the default build. Explicit `metal`, `vulkan`, `dx12` or
-`gl` requests require that API. `gpu` accepts a physical adapter through a
-compiled wgpu API; `nvidia` adds a vendor filter, without a CUDA backend.
+GPU support is in the default build. `--backend metal` or `vulkan` requires
+that API; `gpu` uses the platform's native API, Metal on macOS and Vulkan
+elsewhere.
 Software, virtual and unknown adapter categories are refused. The CLI discovers
 and initializes its device during invocation; solving needs no qualification
 script or stored pass marker. `zetesis devices` lists visible capabilities,

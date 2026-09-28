@@ -1,4 +1,5 @@
 use std::{io, time::Instant};
+use zetesis_backend::GpuApi;
 
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::TightVerdict;
@@ -57,13 +58,14 @@ impl Resources {
             fresh: None,
             resident: None,
         };
-        let physical_routes = match configuration.backend {
-            crate::Backend::Cpu => None,
-            crate::Backend::Metal => Some((Route::MetalFresh, Route::MetalResident)),
-            crate::Backend::Vulkan => Some((Route::VulkanFresh, Route::VulkanResident)),
+        let physical_routes = match crate::backend::api(configuration.backend) {
+            None => None,
+            Some(GpuApi::Metal) => Some((Route::MetalFresh, Route::MetalResident)),
+            Some(GpuApi::Vulkan) => Some((Route::VulkanFresh, Route::VulkanResident)),
         };
         if let Some((fresh_route, resident_route)) = physical_routes {
-            let selection = configuration.backend.selection().ok_or(Error::DeviceWork)?;
+            let selection =
+                crate::backend::selection(configuration.backend).ok_or(Error::DeviceWork)?;
             let fresh = device(
                 fresh_route,
                 selection,
@@ -164,10 +166,10 @@ pub fn measure_with_cancellation(
     )?;
     cancellation.poll().map_err(Error::Cpu)?;
     let mut resources = Resources::new(configuration, cancellation, &mut emit)?;
-    let routes = match configuration.backend {
-        crate::Backend::Cpu => CPU_ROUTES,
-        crate::Backend::Metal => METAL_ROUTES,
-        crate::Backend::Vulkan => VULKAN_ROUTES,
+    let routes = match crate::backend::api(configuration.backend) {
+        None => CPU_ROUTES,
+        Some(GpuApi::Metal) => METAL_ROUTES,
+        Some(GpuApi::Vulkan) => VULKAN_ROUTES,
     };
     let mut samples = 0;
     for (case_index, &case) in configuration.cases.iter().enumerate() {

@@ -4,14 +4,15 @@
 #[path = "support/physical.rs"]
 mod physical;
 
+use zetesis_backend::GpuApi;
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
     AdmissionLimits, Interpretation, Limits, Node, Theory, TightCheckLimits, TightPlan,
     TightPlanLimits, TightVerdict, Verdict, check,
 };
 use zetesis_wgpu::{
-    GpuErrorKind, GpuOptions, GpuTightOracle, TightGpuActivity, TightGpuError, TightGpuLimits,
-    TightSupport,
+    GpuErrorKind, GpuOptions, GpuSelection, GpuTightOracle, TightGpuActivity, TightGpuError,
+    TightGpuLimits, TightSupport,
 };
 
 fn certificate(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> TightPlan {
@@ -24,11 +25,14 @@ fn certificate(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> TightPlan {
     .unwrap()
 }
 
-fn oracle(backend: physical::Backend, support: TightSupport) -> GpuTightOracle {
-    let oracle =
-        GpuTightOracle::new_with_support(GpuOptions::default(), backend.selection(), support)
-            .unwrap();
-    backend.verify(oracle.info());
+fn oracle(backend: GpuApi, support: TightSupport) -> GpuTightOracle {
+    let oracle = GpuTightOracle::new_with_support(
+        GpuOptions::default(),
+        GpuSelection { api: backend },
+        support,
+    )
+    .unwrap();
+    physical::verify(backend, oracle.info());
     assert_eq!(oracle.support(), support);
     println!(
         "tight support adapter={} construction={support:?}",
@@ -259,24 +263,18 @@ fn tight_fixture_verdicts_match_exhaustive_reducts() {
 #[test]
 #[ignore = "requires actual Metal; explicit physical qualification"]
 fn metal_support_matches_exact_reduct_semantics() {
-    qualify_support_matches_exact_reduct_semantics(physical::Backend::Metal, TightSupport::Atomic);
-    qualify_support_matches_exact_reduct_semantics(physical::Backend::Metal, TightSupport::Grouped);
+    qualify_support_matches_exact_reduct_semantics(GpuApi::Metal, TightSupport::Atomic);
+    qualify_support_matches_exact_reduct_semantics(GpuApi::Metal, TightSupport::Grouped);
 }
 
 #[test]
 #[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
 fn vulkan_support_matches_exact_reduct_semantics() {
-    qualify_support_matches_exact_reduct_semantics(physical::Backend::Vulkan, TightSupport::Atomic);
-    qualify_support_matches_exact_reduct_semantics(
-        physical::Backend::Vulkan,
-        TightSupport::Grouped,
-    );
+    qualify_support_matches_exact_reduct_semantics(GpuApi::Vulkan, TightSupport::Atomic);
+    qualify_support_matches_exact_reduct_semantics(GpuApi::Vulkan, TightSupport::Grouped);
 }
 
-fn qualify_support_matches_exact_reduct_semantics(
-    backend: physical::Backend,
-    support: TightSupport,
-) {
+fn qualify_support_matches_exact_reduct_semantics(backend: GpuApi, support: TightSupport) {
     let mut oracle = oracle(backend, support);
     let compared: usize = fixtures()
         .iter()
@@ -289,18 +287,18 @@ fn qualify_support_matches_exact_reduct_semantics(
 #[test]
 #[ignore = "requires actual Metal; explicit physical qualification"]
 fn metal_support_preserves_batch_isolation() {
-    qualify_support_preserves_batch_isolation(physical::Backend::Metal, TightSupport::Atomic);
-    qualify_support_preserves_batch_isolation(physical::Backend::Metal, TightSupport::Grouped);
+    qualify_support_preserves_batch_isolation(GpuApi::Metal, TightSupport::Atomic);
+    qualify_support_preserves_batch_isolation(GpuApi::Metal, TightSupport::Grouped);
 }
 
 #[test]
 #[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
 fn vulkan_support_preserves_batch_isolation() {
-    qualify_support_preserves_batch_isolation(physical::Backend::Vulkan, TightSupport::Atomic);
-    qualify_support_preserves_batch_isolation(physical::Backend::Vulkan, TightSupport::Grouped);
+    qualify_support_preserves_batch_isolation(GpuApi::Vulkan, TightSupport::Atomic);
+    qualify_support_preserves_batch_isolation(GpuApi::Vulkan, TightSupport::Grouped);
 }
 
-fn qualify_support_preserves_batch_isolation(backend: physical::Backend, support: TightSupport) {
+fn qualify_support_preserves_batch_isolation(backend: GpuApi, support: TightSupport) {
     let mut oracle = oracle(backend, support);
     for atoms in [4, 33, 65, 129] {
         compare_conditional_support(&mut oracle, atoms);
@@ -439,33 +437,18 @@ fn compare_conditional_support(oracle: &mut GpuTightOracle, atoms: usize) {
 #[test]
 #[ignore = "requires actual Metal; explicit physical qualification"]
 fn metal_support_refusals_preserve_reusable_residency() {
-    qualify_support_refusals_preserve_reusable_residency(
-        physical::Backend::Metal,
-        TightSupport::Atomic,
-    );
-    qualify_support_refusals_preserve_reusable_residency(
-        physical::Backend::Metal,
-        TightSupport::Grouped,
-    );
+    qualify_support_refusals_preserve_reusable_residency(GpuApi::Metal, TightSupport::Atomic);
+    qualify_support_refusals_preserve_reusable_residency(GpuApi::Metal, TightSupport::Grouped);
 }
 
 #[test]
 #[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
 fn vulkan_support_refusals_preserve_reusable_residency() {
-    qualify_support_refusals_preserve_reusable_residency(
-        physical::Backend::Vulkan,
-        TightSupport::Atomic,
-    );
-    qualify_support_refusals_preserve_reusable_residency(
-        physical::Backend::Vulkan,
-        TightSupport::Grouped,
-    );
+    qualify_support_refusals_preserve_reusable_residency(GpuApi::Vulkan, TightSupport::Atomic);
+    qualify_support_refusals_preserve_reusable_residency(GpuApi::Vulkan, TightSupport::Grouped);
 }
 
-fn qualify_support_refusals_preserve_reusable_residency(
-    backend: physical::Backend,
-    support: TightSupport,
-) {
+fn qualify_support_refusals_preserve_reusable_residency(backend: GpuApi, support: TightSupport) {
     let mut oracle = oracle(backend, support);
     let certificate = certificate(1, vec![Node::Atom(0)], vec![0]);
     let candidate = Interpretation::new(certificate.theory(), [0]).unwrap();
@@ -550,33 +533,18 @@ fn qualify_support_refusals_preserve_reusable_residency(
 #[test]
 #[ignore = "requires actual Metal; explicit physical qualification"]
 fn metal_support_residency_tracks_theory_identity() {
-    qualify_support_residency_tracks_theory_identity(
-        physical::Backend::Metal,
-        TightSupport::Atomic,
-    );
-    qualify_support_residency_tracks_theory_identity(
-        physical::Backend::Metal,
-        TightSupport::Grouped,
-    );
+    qualify_support_residency_tracks_theory_identity(GpuApi::Metal, TightSupport::Atomic);
+    qualify_support_residency_tracks_theory_identity(GpuApi::Metal, TightSupport::Grouped);
 }
 
 #[test]
 #[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
 fn vulkan_support_residency_tracks_theory_identity() {
-    qualify_support_residency_tracks_theory_identity(
-        physical::Backend::Vulkan,
-        TightSupport::Atomic,
-    );
-    qualify_support_residency_tracks_theory_identity(
-        physical::Backend::Vulkan,
-        TightSupport::Grouped,
-    );
+    qualify_support_residency_tracks_theory_identity(GpuApi::Vulkan, TightSupport::Atomic);
+    qualify_support_residency_tracks_theory_identity(GpuApi::Vulkan, TightSupport::Grouped);
 }
 
-fn qualify_support_residency_tracks_theory_identity(
-    backend: physical::Backend,
-    support: TightSupport,
-) {
+fn qualify_support_residency_tracks_theory_identity(backend: GpuApi, support: TightSupport) {
     let mut oracle = oracle(backend, support);
     let certificate = certificate(1, vec![Node::Atom(0)], vec![0]);
     let input = [Interpretation::new(certificate.theory(), [0]).unwrap()];

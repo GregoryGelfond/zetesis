@@ -170,11 +170,8 @@ fn solve_argument(argument: Arg) -> Arg {
     match name {
         "models" => argument.hide(true),
         "backend" => argument
-            .visible_alias(None::<&str>)
-            .long("device")
-            .alias("backend")
-            .value_name("DEVICE")
-            .help("Choose a device; auto currently selects CPU")
+            .value_name("BACKEND")
+            .help("Choose the execution backend: cpu (the default), gpu, metal or vulkan")
             .help_heading("Execution"),
         "workers" => argument
             .visible_alias(None::<&str>)

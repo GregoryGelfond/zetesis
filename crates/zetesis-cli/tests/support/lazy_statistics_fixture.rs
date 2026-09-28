@@ -4,7 +4,7 @@ use crate::{Backend, LazyExecutionStatistics};
 
 pub(crate) fn lazy_statistics() -> LazyExecutionStatistics {
     LazyExecutionStatistics {
-        requested_backend: Backend::Metal,
+        requested_backend: Backend::Gpu(Some(zetesis_backend::GpuApi::Metal)),
         adapter: "FORMAT FIXTURE: no physical execution".into(),
         backend: "Metal".into(),
         batches: 2,

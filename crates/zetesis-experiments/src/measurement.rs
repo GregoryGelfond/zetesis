@@ -5,6 +5,7 @@ use std::hint::black_box;
 use std::io::{self, Write};
 use std::num::NonZeroUsize;
 use std::time::{Duration, Instant};
+use zetesis_backend::GpuApi;
 use zetesis_core::{GroundProgram, Seed};
 use zetesis_cpu::{BatchOracle, Cancellation, Limits, StaticCheck, check_static};
 use zetesis_wgpu::{GpuCheck, GpuLimits, GpuOptions, GpuOracle, MAX_ATOMS};
@@ -16,8 +17,8 @@ use zetesis_wgpu::{GpuCheck, GpuLimits, GpuOptions, GpuOracle, MAX_ATOMS};
     about = "Exact static-oracle parity and CPU/GPU measurements"
 )]
 pub struct Options {
-    /// Backend qualification to run.
-    #[arg(long, value_enum, default_value_t)]
+    /// Backend to qualify: cpu (the default), gpu, metal or vulkan.
+    #[arg(long, value_parser = zetesis_backend::BackendParser, default_value = "cpu")]
     pub backend: Backend,
     /// Positive consequence counts; eight frozen gate atoms are added.
     #[arg(long, value_delimiter = ',', default_value = "64,256")]
@@ -216,16 +217,14 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<(), BenchmarkEr
     writeln!(
         output,
         "# timing_order=cpu-scalar,cpu-rayon{} scope=static-oracle-host-through-readback",
-        match options.backend {
-            Backend::Cpu => "",
-            Backend::Metal => ",metal",
-            Backend::Vulkan => ",vulkan",
+        match crate::backend::api(options.backend) {
+            None => "",
+            Some(GpuApi::Metal) => ",metal",
+            Some(GpuApi::Vulkan) => ",vulkan",
         }
     )?;
     let started = Instant::now();
-    let mut gpu = options
-        .backend
-        .selection()
+    let mut gpu = crate::backend::selection(options.backend)
         .map(|selection| GpuOracle::new_selected(GpuOptions::default(), selection))
         .transpose()
         .map_err(BenchmarkError::Gpu)?;
@@ -329,7 +328,7 @@ impl Case<'_> {
             atoms: graph.atom_count(),
             rules: graph.rules().len(),
             batch,
-            backend: options.backend.label(),
+            backend: crate::backend::label(options.backend),
         };
         let gpu_limits = GpuLimits {
             max_candidates: batch,
@@ -385,7 +384,7 @@ impl Case<'_> {
                 {
                     return Err(BenchmarkError::Residency);
                 }
-                row.backend = options.backend.label();
+                row.backend = crate::backend::label(options.backend);
                 row.emit(output, "warm", repetition, elapsed)?;
                 if let Some(stats) = oracle.last_batch_stats() {
                     writeln!(output, "# residency {stats:?}")?;

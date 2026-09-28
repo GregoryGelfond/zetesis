@@ -3,6 +3,7 @@ use crate::{Error, require};
 use regex::Regex;
 use serde::Serialize;
 use std::{collections::BTreeSet, sync::LazyLock};
+use zetesis_backend::GpuApi;
 
 /// One reviewed physical target and its exact selected tests.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -18,40 +19,28 @@ pub struct Group {
     /// Independently specified count for this group.
     pub expected_tests: usize,
 }
-/// The device backend a reviewed selection qualifies.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PhysicalBackend {
-    /// The Metal selection.
-    Metal,
-    /// The Vulkan selection.
-    Vulkan,
-}
-
-/// A reviewed physical selection: the backend it qualifies and its groups.
+/// A reviewed physical selection: the GPU API it qualifies and its groups.
 #[derive(Clone, Debug)]
 pub struct Selection {
-    /// The backend whose reviewed table this is.
-    pub backend: PhysicalBackend,
+    /// The API whose reviewed table this is.
+    pub api: GpuApi,
     /// The sixteen groups with their exact tests.
     pub groups: Vec<Group>,
 }
 
 /// The reviewed selections: the Metal one and the Vulkan one, the same
-/// sixteen groups and counts, each naming the tests of its own backend.
-const SELECTIONS: [(PhysicalBackend, &str); 2] = [
+/// sixteen groups and counts, each naming the tests of its own API.
+const SELECTIONS: [(GpuApi, &str); 2] = [
+    (GpuApi::Metal, include_str!("physical-selection.txt")),
     (
-        PhysicalBackend::Metal,
-        include_str!("physical-selection.txt"),
-    ),
-    (
-        PhysicalBackend::Vulkan,
+        GpuApi::Vulkan,
         include_str!("physical-selection-vulkan.txt"),
     ),
 ];
 
 /// Parse the maintained shell table, checking its finite inventory independently.
-/// The table must be one reviewed selection whole; a backend's tests cannot
-/// stand in for the other's, and the selection says which backend's it is.
+/// The table must be one reviewed selection whole; one API's tests cannot
+/// stand in for the other's, and the selection says which API's it is.
 /// # Errors
 /// Refuses missing/extra groups, altered target/count identities or duplicate tests.
 pub fn selection(table: &str) -> Result<Selection, Error> {
@@ -73,10 +62,10 @@ pub fn selection(table: &str) -> Result<Selection, Error> {
         ("language-consumers", "language_consumers", 2),
         ("static", "hardware", 2),
     ];
-    let backend = SELECTIONS
+    let api = SELECTIONS
         .iter()
         .find(|(_, selection)| table.trim() == selection.trim())
-        .map(|(backend, _)| *backend)
+        .map(|(api, _)| *api)
         .ok_or_else(|| {
             Error::Invalid(
                 "physical qualification requires one reviewed selection of 60 exact test identities".into(),
@@ -117,7 +106,7 @@ pub fn selection(table: &str) -> Result<Selection, Error> {
             expected_tests: count,
         });
     }
-    Ok(Selection { backend, groups })
+    Ok(Selection { api, groups })
 }
 static RECORD: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^test (\S+) \.\.\.[ \t]*(.*)$").unwrap());

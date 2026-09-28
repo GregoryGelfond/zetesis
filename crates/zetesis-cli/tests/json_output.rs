@@ -1087,10 +1087,10 @@ fn setup_refusals_have_unavailable_coverage() {
     ] {
         let mut configured = options(&extra);
         if kind == "hybrid_backend" {
-            configured.backend = zetesis_cli::Backend::Metal;
+            configured.backend = zetesis_cli::Backend::Gpu(Some(zetesis_backend::GpuApi::Metal));
         }
         if kind == "expansion" {
-            configured.backend = zetesis_cli::Backend::Nvidia;
+            configured.backend = zetesis_cli::Backend::Gpu(None);
         }
         let (result, value) = solve(source, &configured);
         let failure = result.unwrap_err();

@@ -1,40 +1,29 @@
-//! Requested physical API, kept distinct from observed adapter metadata.
+//! The experiments' one application of the backend vocabulary's resolution
+//! rule, kept distinct from observed adapter metadata.
 
-use clap::ValueEnum;
-use zetesis_wgpu::{GpuBackendPreference, GpuSelection};
+use zetesis_backend::{Backend, GpuApi};
+use zetesis_wgpu::GpuSelection;
 
-/// Explicit experiment execution. Physical selection never falls back to CPU
-/// or another graphics API. The historical Metal default remains unchanged.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
-pub enum Backend {
-    /// Require a physical GPU through Metal.
-    #[default]
-    Metal,
-    /// Require a physical GPU through Vulkan.
-    Vulkan,
-    /// Measure CPU baselines only, making no GPU execution claim.
-    Cpu,
+/// The GPU API an experiment runs on: the named API, or the platform's native
+/// one for `gpu`. `None` measures CPU baselines only, making no GPU execution
+/// claim. A GPU experiment never falls back to the CPU or another API.
+pub(crate) const fn api(backend: Backend) -> Option<GpuApi> {
+    backend.resolved_api()
 }
 
-impl Backend {
-    pub(crate) const fn selection(self) -> Option<GpuSelection> {
-        let backend = match self {
-            Self::Cpu => return None,
-            Self::Metal => GpuBackendPreference::Metal,
-            Self::Vulkan => GpuBackendPreference::Vulkan,
-        };
-        Some(GpuSelection {
-            backend,
-            vendor_id: None,
-        })
+/// The adapter filter a GPU experiment opens with; `None` for CPU baselines.
+pub(crate) const fn selection(backend: Backend) -> Option<GpuSelection> {
+    match api(backend) {
+        Some(api) => Some(GpuSelection { api }),
+        None => None,
     }
+}
 
-    pub(crate) const fn label(self) -> &'static str {
-        match self {
-            Self::Cpu => "cpu",
-            Self::Metal => "metal",
-            Self::Vulkan => "vulkan",
-        }
+/// The spelling reports record: what the experiment ran on.
+pub(crate) const fn label(backend: Backend) -> &'static str {
+    match api(backend) {
+        Some(api) => api.label(),
+        None => "cpu",
     }
 }
 
@@ -43,19 +32,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn requested_apis_never_map_to_automatic_selection() {
-        for (backend, expected) in [
-            (Backend::Metal, GpuBackendPreference::Metal),
-            (Backend::Vulkan, GpuBackendPreference::Vulkan),
-        ] {
-            let selection = backend.selection().unwrap();
-            assert_eq!(selection.backend, expected);
-            assert_eq!(selection.vendor_id, None);
+    fn a_named_api_is_opened_as_requested() {
+        for api in [GpuApi::Metal, GpuApi::Vulkan] {
+            let backend = Backend::Gpu(Some(api));
+            assert_eq!(selection(backend), Some(GpuSelection { api }));
+            assert_eq!(label(backend), api.label());
         }
     }
 
     #[test]
+    fn a_gpu_request_runs_on_the_native_api() {
+        let backend = Backend::Gpu(None);
+        assert_eq!(selection(backend), Some(GpuSelection::default()));
+        assert_eq!(label(backend), GpuApi::native().label());
+    }
+
+    #[test]
     fn cpu_measurement_requests_no_device() {
-        assert!(Backend::Cpu.selection().is_none());
+        assert_eq!(selection(Backend::Cpu), None);
+        assert_eq!(label(Backend::Cpu), "cpu");
     }
 }

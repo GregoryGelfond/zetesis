@@ -340,7 +340,7 @@ fn model_retention_failures_preserve_the_typed_cause() {
 #[test]
 fn hybrid_device_policy_is_refused_before_parsing() {
     let mut options = options(&["--oracle", "countermodel", "--grounder", "lazy"]);
-    options.backend = zetesis_cli::Backend::Metal;
+    options.backend = zetesis_cli::Backend::Gpu(Some(zetesis_backend::GpuApi::Metal));
     let mut output = Vec::new();
     let mut diagnostics = Vec::new();
     let error = run_with_diagnostics(
@@ -359,9 +359,8 @@ fn hybrid_device_policy_is_refused_before_parsing() {
     }
     let message = error.to_string();
     assert!(
-        message.contains(
-            "streamed formula constraints support cpu or auto execution; requested metal"
-        ),
+        message
+            .contains("streamed formula constraints run only on the cpu backend; requested metal"),
         "{message}"
     );
     assert!(error.source().is_none());
@@ -460,9 +459,8 @@ fn cpu_only_inventory_propagates_failures_after_each_capability_record() {
 
 #[cfg(not(feature = "gpu"))]
 #[test]
-fn cpu_only_auto_eager_routing_reports_its_compiled_capability() {
-    let mut options = options(&["--oracle", "closure", "--grounder", "eager"]);
-    options.backend = zetesis_cli::Backend::Auto;
+fn cpu_only_default_eager_routing_stays_on_the_cpu() {
+    let options = options(&["--oracle", "closure", "--grounder", "eager"]);
     let mut output = Vec::new();
     let mut diagnostics = Vec::new();
     let report = run_with_diagnostics(
@@ -477,10 +475,7 @@ fn cpu_only_auto_eager_routing_reports_its_compiled_capability() {
     assert_eq!(report.models, 2);
     let diagnostics = String::from_utf8(diagnostics).unwrap();
     assert!(diagnostics.contains("effective=eager"));
-    assert!(
-        diagnostics.contains("GPU support was not compiled; using CPU without device discovery")
-    );
-    assert!(!diagnostics.contains("no measured GPU crossover"));
+    assert!(diagnostics.contains("Backend: cpu"));
 }
 
 #[test]
@@ -491,8 +486,7 @@ fn device_inventory_exposes_availability_without_claiming_execution() {
     assert!(output.starts_with("CPU: available"));
     match result {
         Ok(()) => {
-            assert!(output.contains("Auto backend:"));
-            assert!(output.contains("CUDA is not implemented"));
+            assert!(output.contains("Backends: cpu (the default)"));
             assert!(!output.contains("status=PASS"));
         }
         #[cfg(feature = "gpu")]
@@ -501,16 +495,15 @@ fn device_inventory_exposes_availability_without_claiming_execution() {
             // failures remain test failures; physical devices are never required.
             assert_eq!(error.kind(), zetesis_wgpu::GpuErrorKind::AdapterUnavailable);
             assert!(output.contains("Compiled GPU APIs:"));
-            assert!(!output.contains("Auto backend:"));
+            assert!(!output.contains("Backends:"));
         }
         Err(error) => panic!("unexpected inventory failure: {error}"),
     }
 }
 
 #[test]
-fn tiny_automatic_lazy_run_uses_cpu() {
-    let mut options = options(&["--oracle", "closure", "--grounder", "lazy"]);
-    options.backend = zetesis_cli::Backend::Auto;
+fn a_tiny_lazy_run_uses_the_cpu_by_default() {
+    let options = options(&["--oracle", "closure", "--grounder", "lazy"]);
     let mut output = Vec::new();
     let mut diagnostics = Vec::new();
     let report = run_with_diagnostics(
@@ -524,10 +517,6 @@ fn tiny_automatic_lazy_run_uses_cpu() {
     assert_eq!(report.completion, Completion::Exhausted);
     assert_eq!(report.models, 1);
     let diagnostics = String::from_utf8(diagnostics).unwrap();
-    #[cfg(feature = "gpu")]
-    assert!(diagnostics.contains("no measured GPU crossover"));
-    #[cfg(not(feature = "gpu"))]
-    assert!(diagnostics.contains("GPU support was not compiled"));
     assert!(diagnostics.contains("Backend: cpu"));
     assert!(report.lazy_execution.is_none());
     assert!(diagnostics.contains("effective=lazy"));
@@ -537,7 +526,7 @@ fn tiny_automatic_lazy_run_uses_cpu() {
 #[cfg(not(feature = "gpu"))]
 #[test]
 fn cpu_only_binary_reports_explicit_gpu_unavailability_without_fallback() {
-    for backend in ["gpu", "metal", "nvidia", "vulkan", "dx12", "gl"] {
+    for backend in ["gpu", "metal", "vulkan"] {
         let options =
             Options::try_parse_from(["zetesis", "--backend", backend, "--oracle", "closure"])
                 .unwrap();
@@ -552,13 +541,13 @@ fn cpu_only_binary_reports_explicit_gpu_unavailability_without_fallback() {
         .unwrap_err();
         assert!(matches!(error, RunError::BackendUnavailable));
         assert!(error.source().is_none());
-        assert!(error.to_string().contains("GPU support was not compiled"));
+        assert!(error.to_string().contains("built without GPU support"));
         assert!(output.is_empty());
     }
     let mut output = Vec::new();
     zetesis_cli::devices(&mut output).unwrap();
     let output = String::from_utf8(output).unwrap();
-    assert!(output.contains("GPU: support not compiled"));
+    assert!(output.contains("GPU: not compiled into this build"));
     assert!(!output.contains("Adapter:"));
-    assert!(output.contains("CUDA is not implemented"));
+    assert!(output.contains("Backends: cpu (the default)"));
 }

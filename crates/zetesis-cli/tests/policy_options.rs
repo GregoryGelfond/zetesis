@@ -227,17 +227,8 @@ fn automatic_workers_use_at_most_four_threads() {
 
 #[test]
 fn backend_spellings_select_typed_policies() {
-    for (spelling, expected) in [
-        ("auto", Backend::Auto),
-        ("cpu", Backend::Cpu),
-        ("gpu", Backend::Gpu),
-        ("metal", Backend::Metal),
-        ("vulkan", Backend::Vulkan),
-        ("dx12", Backend::Dx12),
-        ("gl", Backend::Gl),
-        ("nvidia", Backend::Nvidia),
-    ] {
-        let options = Options::try_parse_from(["zetesis", "--backend", spelling]).unwrap();
+    for expected in Backend::ALL {
+        let options = Options::try_parse_from(["zetesis", "--backend", expected.label()]).unwrap();
         assert_eq!(options.backend, expected);
     }
 }
@@ -324,10 +315,7 @@ fn policy_values_retain_case_sensitive_refusal() {
 #[test]
 fn invalid_policy_values_report_ordered_choices() {
     for (flag, choices) in [
-        (
-            "--backend",
-            "auto, cpu, gpu, metal, vulkan, dx12, gl, nvidia",
-        ),
+        ("--backend", "cpu, gpu, metal, vulkan"),
         ("--grounder", "auto, lazy, eager"),
         ("--source-batching", "independent, union, worlds"),
         ("--oracle", "auto, closure, countermodel"),
@@ -361,7 +349,7 @@ fn caller_case_policy_preserves_the_typed_value() {
         .unwrap();
     assert_eq!(
         Options::from_arg_matches(&matches).unwrap().backend,
-        Backend::Metal
+        Backend::Gpu(Some(zetesis_backend::GpuApi::Metal))
     );
 }
 

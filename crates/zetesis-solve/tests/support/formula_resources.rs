@@ -1,7 +1,7 @@
 //! Formula setup must reuse the exact context, not merely the same adapter.
 
 use super::Execution;
-use crate::{Backend, ExecutionResources, SolveConfig};
+use crate::{Backend, ExecutionResources, GpuApi, SolveConfig};
 use zetesis_wgpu::{GpuContext, GpuOptions};
 
 fn supplied_context(backend: Backend, expected_api: &str) {
@@ -57,13 +57,13 @@ fn supplied_context(backend: Backend, expected_api: &str) {
 #[test]
 #[ignore = "requires actual Metal; checks exact formula context identity"]
 fn metal_formula_retains_the_supplied_context() {
-    supplied_context(Backend::Metal, "Metal");
+    supplied_context(Backend::Gpu(Some(GpuApi::Metal)), "Metal");
 }
 
 #[test]
 #[ignore = "requires actual Vulkan; checks exact formula context identity"]
 fn vulkan_formula_retains_the_supplied_context() {
-    supplied_context(Backend::Vulkan, "Vulkan");
+    supplied_context(Backend::Gpu(Some(GpuApi::Vulkan)), "Vulkan");
 }
 
 fn supplied_profile(backend: Backend, expected_api: &str) {
@@ -148,13 +148,13 @@ fn supplied_profile(backend: Backend, expected_api: &str) {
 #[test]
 #[ignore = "requires actual Metal; ordinary formula execution reuses one compilation"]
 fn metal_formula_sessions_reuse_the_supplied_profile() {
-    supplied_profile(Backend::Metal, "Metal");
+    supplied_profile(Backend::Gpu(Some(GpuApi::Metal)), "Metal");
 }
 
 #[test]
 #[ignore = "requires actual Vulkan; ordinary formula execution reuses one compilation"]
 fn vulkan_formula_sessions_reuse_the_supplied_profile() {
-    supplied_profile(Backend::Vulkan, "Vulkan");
+    supplied_profile(Backend::Gpu(Some(GpuApi::Vulkan)), "Vulkan");
 }
 
 #[test]

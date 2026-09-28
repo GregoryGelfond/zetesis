@@ -83,6 +83,13 @@ fn conflicting_answer_requests_are_rejected() {
 }
 
 #[test]
+fn the_backend_has_no_device_spelling() {
+    let arguments = ["zetesis", "solve", "-", "--device", "cpu"];
+    let error = Invocation::try_parse_from(arguments).unwrap_err();
+    assert_eq!(error.kind(), ErrorKind::UnknownArgument);
+}
+
+#[test]
 fn legacy_model_count_remains_accepted() {
     assert_eq!(solve(&["zetesis", "solve", "-", "--models", "0"]).models, 0);
 }
@@ -93,7 +100,7 @@ fn ordinary_aliases_preserve_execution_settings() {
         "zetesis",
         "solve",
         "-",
-        "--device",
+        "--backend",
         "cpu",
         "--threads",
         "7",
@@ -178,7 +185,7 @@ fn short_solve_help_groups_everyday_controls() {
         "Output:",
         "--answers",
         "--all",
-        "--device",
+        "--backend",
         "--grounder",
         "--threads",
         "--memory-budget",
@@ -186,7 +193,7 @@ fn short_solve_help_groups_everyday_controls() {
         assert!(text.contains(expected), "missing {expected}");
     }
     assert!(!text.contains("--models"));
-    assert!(!text.contains("--backend"));
+    assert!(!text.contains("--device"));
     assert!(!text.contains("--workers"));
     assert!(!text.contains("--max-search-work"));
 }
@@ -197,14 +204,11 @@ fn old_execution_spellings_remain_solve_aliases() {
         "zetesis",
         "solve",
         "-",
-        "--backend",
-        "cpu",
         "--workers",
         "7",
         "--memory",
         "4GiB",
     ]);
-    assert_eq!(options.backend, Backend::Cpu);
     assert_eq!(options.workers.get(), 7);
     assert_eq!(options.memory, 4 << 30);
 }

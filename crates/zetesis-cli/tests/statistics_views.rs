@@ -78,18 +78,18 @@ fn recorded_route_is_independent_of_automatic_policy() {
     let (options, outcome) = solve("a|b.", &["--oracle", "countermodel"], true);
     let text = render(&SolveConfig::from(&options), Some(outcome.semantic()));
     assert!(value(&text, "Recorded execution").starts_with("CPU native formula (general reduct)"));
-    assert!(value(&text, "Requested device").starts_with("auto"));
+    assert!(value(&text, "Requested backend").starts_with("cpu"));
 }
 
 #[test]
 fn requested_device_cannot_supply_missing_execution() {
     let config = SolveConfig {
-        backend: Backend::Metal,
+        backend: Backend::Gpu(Some(zetesis_backend::GpuApi::Metal)),
         stats: true,
         ..Default::default()
     };
     let text = render(&config, None);
-    assert!(value(&text, "Requested device").starts_with("metal"));
+    assert!(value(&text, "Requested backend").starts_with("metal"));
     assert_eq!(value(&text, "Recorded execution"), "unavailable");
     assert!(value(&text, "Execution work").starts_with("unavailable"));
     assert!(!text.contains("GPU decoded work"));

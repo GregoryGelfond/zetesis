@@ -3,8 +3,8 @@
 use std::collections::BTreeSet;
 use zetesis_cpu::Cancellation;
 use zetesis_solve::{
-    AnswerSelection, Backend, Completion, ExecutionResources, PreparedInput, ProjectionLimits,
-    Session, SolveConfig, WorldViewLimits,
+    AnswerSelection, Backend, Completion, ExecutionResources, GpuApi, PreparedInput,
+    ProjectionLimits, Session, SolveConfig, WorldViewLimits,
 };
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
@@ -77,7 +77,7 @@ pub(super) fn check(
         usize::try_from(projection.duplicates).unwrap(),
         selected.len() - expected.len()
     );
-    if config.backend == Backend::Metal {
+    if config.backend == Backend::Gpu(Some(GpuApi::Metal)) {
         let execution = outcome.formula_execution().unwrap();
         assert!(execution.adapter.contains("Metal"));
         assert!(execution.gpu_candidates > 0);

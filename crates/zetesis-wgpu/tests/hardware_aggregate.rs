@@ -5,19 +5,21 @@ mod physical;
 #[path = "aggregate/fixtures.rs"]
 mod fixtures;
 
+use zetesis_backend::GpuApi;
 use zetesis_core::Value;
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::native_aggregate::{self as native, Function};
 use zetesis_wgpu::{
     AggregateGpuActivity, AggregateGpuError, AggregateGpuEvaluation, AggregateGpuLimits,
     AggregateGpuPlan, AggregateGpuPlanLimits, AggregateGpuValue, GpuAggregateOracle, GpuErrorKind,
-    GpuOptions,
+    GpuOptions, GpuSelection,
 };
 
-fn oracle(backend: physical::Backend) -> GpuAggregateOracle {
+fn oracle(backend: GpuApi) -> GpuAggregateOracle {
     let oracle =
-        GpuAggregateOracle::new_selected(GpuOptions::default(), backend.selection()).unwrap();
-    backend.verify(oracle.info());
+        GpuAggregateOracle::new_selected(GpuOptions::default(), GpuSelection { api: backend })
+            .unwrap();
+    physical::verify(backend, oracle.info());
     oracle
 }
 
@@ -75,16 +77,16 @@ fn compare(
 #[test]
 #[ignore = "requires actual Metal; explicit physical qualification"]
 fn metal_aggregate_reductions_match_native_occurrences() {
-    qualify_reductions(physical::Backend::Metal);
+    qualify_reductions(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
 fn vulkan_aggregate_reductions_match_native_occurrences() {
-    qualify_reductions(physical::Backend::Vulkan);
+    qualify_reductions(GpuApi::Vulkan);
 }
 
-fn qualify_reductions(backend: physical::Backend) {
+fn qualify_reductions(backend: GpuApi) {
     let mut oracle = oracle(backend);
     let theory = fixtures::theory();
     let worlds = fixtures::worlds(&theory);
@@ -125,16 +127,16 @@ fn qualify_reductions(backend: physical::Backend) {
 #[test]
 #[ignore = "requires actual Metal; explicit physical qualification"]
 fn metal_aggregate_guards_preserve_numeric_boundaries() {
-    qualify_guards(physical::Backend::Metal);
+    qualify_guards(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
 fn vulkan_aggregate_guards_preserve_numeric_boundaries() {
-    qualify_guards(physical::Backend::Vulkan);
+    qualify_guards(GpuApi::Vulkan);
 }
 
-fn qualify_guards(backend: physical::Backend) {
+fn qualify_guards(backend: GpuApi) {
     let mut oracle = oracle(backend);
     let theory = fixtures::theory();
     let worlds = fixtures::worlds(&theory);
@@ -185,16 +187,16 @@ fn qualify_guards(backend: physical::Backend) {
 #[test]
 #[ignore = "requires actual Metal; explicit physical qualification"]
 fn metal_aggregate_exact_admission_preserves_cache_lifecycle() {
-    qualify_admission(physical::Backend::Metal);
+    qualify_admission(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
 fn vulkan_aggregate_exact_admission_preserves_cache_lifecycle() {
-    qualify_admission(physical::Backend::Vulkan);
+    qualify_admission(GpuApi::Vulkan);
 }
 
-fn qualify_admission(backend: physical::Backend) {
+fn qualify_admission(backend: GpuApi) {
     let mut oracle = oracle(backend);
     let theory = fixtures::theory();
     let worlds = fixtures::worlds(&theory);

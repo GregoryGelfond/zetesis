@@ -9,8 +9,8 @@ use serde::Serialize;
 mod completion;
 pub(crate) use completion::CompletionRequest;
 
-use crate::corpus_comparison::NativeBackend;
 use crate::corpus_comparison::normalize::Answer;
+use zetesis_backend::Backend;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -40,7 +40,7 @@ pub(crate) struct FormulaExecution {
 #[cfg(test)]
 fn formula(
     stderr: &str,
-    backend: NativeBackend,
+    backend: Backend,
     batch_size: usize,
     answer: &Answer,
 ) -> Result<FormulaExecution, String> {
@@ -49,7 +49,7 @@ fn formula(
 
 pub(crate) fn formula_for_request(
     stderr: &str,
-    backend: NativeBackend,
+    backend: Backend,
     batch_size: usize,
     request: CompletionRequest,
     answer: &Answer,
@@ -59,7 +59,7 @@ pub(crate) fn formula_for_request(
 
 fn qualify(
     stderr: &str,
-    backend: NativeBackend,
+    backend: Backend,
     batch_size: usize,
     request: Option<CompletionRequest>,
     answer: &Answer,
@@ -194,7 +194,7 @@ struct PhysicalRoute {
     concurrency: Option<(u64, u64)>,
 }
 
-fn route(stderr: &str, backend: NativeBackend) -> Result<PhysicalRoute, String> {
+fn route(stderr: &str, backend: Backend) -> Result<PhysicalRoute, String> {
     if line(stderr, "  completion: ")? != "exhausted" {
         return Err("formula execution statistics do not establish exhaustion".into());
     }
@@ -234,9 +234,7 @@ fn route(stderr: &str, backend: NativeBackend) -> Result<PhysicalRoute, String> 
         return Err("malformed physical adapter identity".into());
     }
     let vendor_id = u32::from_str_radix(vendor, 16).map_err(|error| error.to_string())?;
-    if !matches!(api, "Metal" | "Vulkan" | "Dx12" | "Gl")
-        || !matches_backend(backend, api, vendor_id)
-    {
+    if !matches_backend(backend, api) {
         return Err("actual adapter does not match the explicit physical backend".into());
     }
     Ok(PhysicalRoute {
@@ -305,16 +303,12 @@ fn storage(text: &str, current: bool) -> Result<Storage, String> {
     }
 }
 
-fn matches_backend(backend: NativeBackend, api: &str, vendor: u32) -> bool {
-    match backend {
-        NativeBackend::Cpu | NativeBackend::Auto => false,
-        NativeBackend::Gpu => true,
-        NativeBackend::Metal => api == "Metal",
-        NativeBackend::Vulkan => api == "Vulkan",
-        NativeBackend::Dx12 => api == "Dx12",
-        NativeBackend::Gl => api == "Gl",
-        NativeBackend::Nvidia => vendor == 0x10de,
-    }
+/// Whether the adapter's reported API is the one the request resolves to: the
+/// named API, or the platform's native one for `gpu`. The CPU matches none.
+fn matches_backend(backend: Backend, api: &str) -> bool {
+    backend
+        .resolved_api()
+        .is_some_and(|resolved| resolved.name() == api)
 }
 
 fn line<'a>(text: &'a str, prefix: &str) -> Result<&'a str, String> {

@@ -1,28 +1,16 @@
 //! Actual mapped-copy interruption and subsequent same-context GPU work.
 
 use super::*;
-use crate::GpuBackendPreference;
+use zetesis_backend::GpuApi;
 use zetesis_core::{Atom, Predicate, Value, relation::Limits};
 use zetesis_cpu::Stop;
 
-fn interrupted_copy(backend: GpuBackendPreference) {
-    let mut executor = GpuRelationExecutor::new_selected(
-        GpuOptions::default(),
-        GpuSelection {
-            backend,
-            vendor_id: None,
-        },
-    )
-    .unwrap();
+fn interrupted_copy(backend: GpuApi) {
+    let mut executor =
+        GpuRelationExecutor::new_selected(GpuOptions::default(), GpuSelection { api: backend })
+            .unwrap();
     assert!(executor.info().is_hardware_gpu());
-    assert_eq!(
-        executor.info().backend(),
-        match backend {
-            GpuBackendPreference::Metal => "Metal",
-            GpuBackendPreference::Vulkan => "Vulkan",
-            _ => panic!("explicit physical API required"),
-        }
-    );
+    assert_eq!(executor.info().backend(), backend.name());
     eprintln!("settled preparation adapter={:?}", executor.info());
     let predicate = Predicate::new("row", 2).unwrap();
     let atoms = [[0, 10], [1, 11], [0, 12]]
@@ -79,11 +67,11 @@ fn interrupted_copy(backend: GpuBackendPreference) {
 #[test]
 #[ignore = "requires an actual physical Metal adapter"]
 fn metal_interrupted_preparation_preserves_context() {
-    interrupted_copy(GpuBackendPreference::Metal);
+    interrupted_copy(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires an actual physical Vulkan adapter"]
 fn vulkan_interrupted_preparation_preserves_context() {
-    interrupted_copy(GpuBackendPreference::Vulkan);
+    interrupted_copy(GpuApi::Vulkan);
 }

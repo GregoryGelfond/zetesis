@@ -108,7 +108,7 @@ impl Statistics<'_> {
             },
         );
         let rows = vec![
-            Row::new(["Requested device", self.requested.backend.label()]),
+            Row::new(["Requested backend", self.requested.backend.label()]),
             Row::new(["Requested grounder", self.requested.grounder.label()]),
             Row::new([
                 "Requested threads".to_owned(),

@@ -237,8 +237,8 @@ fn metal_selection_refuses_vulkan_substitution() {
             "vulkan_collection_refuses_a_foreign_context",
         ),
         (
-            "metal_automatic_collection_retains_cpu_execution",
-            "vulkan_automatic_collection_retains_cpu_execution",
+            "metal_resources_leave_a_cpu_collection_on_the_cpu",
+            "vulkan_resources_leave_a_cpu_collection_on_the_cpu",
         ),
         (
             "formula_execution::resource_tests::metal_formula_sessions_reuse_the_supplied_profile",
@@ -481,12 +481,12 @@ fn coverage_version_requires_a_current_observation() {
 #[test]
 fn a_selection_names_the_backend_of_its_table() {
     assert_eq!(
-        coverage::selection(TABLE).unwrap().backend,
-        coverage::PhysicalBackend::Metal
+        coverage::selection(TABLE).unwrap().api,
+        zetesis_backend::GpuApi::Metal
     );
     assert_eq!(
-        coverage::selection(VULKAN_TABLE).unwrap().backend,
-        coverage::PhysicalBackend::Vulkan
+        coverage::selection(VULKAN_TABLE).unwrap().api,
+        zetesis_backend::GpuApi::Vulkan
     );
 }
 

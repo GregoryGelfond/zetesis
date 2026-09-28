@@ -4,6 +4,7 @@
 #[path = "support/physical.rs"]
 mod physical;
 
+use zetesis_backend::GpuApi;
 use zetesis_core::{
     Atom, Predicate, Sign, Value, ValueLimits, ValueNode,
     atom_interner::{AtomInterner, Limits as AtomLimits},
@@ -11,13 +12,15 @@ use zetesis_core::{
 };
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_wgpu::{
-    GpuOptions, GpuRelationExecutor, RelationGpuActivity, RelationGpuError, RelationGpuLimits,
+    GpuOptions, GpuRelationExecutor, GpuSelection, RelationGpuActivity, RelationGpuError,
+    RelationGpuLimits,
 };
 
-fn executor(backend: physical::Backend) -> GpuRelationExecutor {
+fn executor(backend: GpuApi) -> GpuRelationExecutor {
     let executor =
-        GpuRelationExecutor::new_selected(GpuOptions::default(), backend.selection()).unwrap();
-    backend.verify(executor.info());
+        GpuRelationExecutor::new_selected(GpuOptions::default(), GpuSelection { api: backend })
+            .unwrap();
+    physical::verify(backend, executor.info());
     executor
 }
 
@@ -151,7 +154,7 @@ fn assert_completed_tiles(
     assert_eq!(activity.downloaded_bytes, 4 * queries * (5 * tiles + words));
 }
 
-fn qualify_masks(backend: physical::Backend) {
+fn qualify_masks(backend: GpuApi) {
     let mut executor = executor(backend);
     for rows in [0, 1, 31, 32, 33, 63, 64, 65, 127, 128, 129] {
         compare_rows(&mut executor, rows);
@@ -267,16 +270,16 @@ fn compare_catalog_growth(executor: &mut GpuRelationExecutor) {
 #[test]
 #[ignore = "requires actual Metal; explicit physical qualification"]
 fn metal_relation_masks_match_typed_rows() {
-    qualify_masks(physical::Backend::Metal);
+    qualify_masks(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires actual Vulkan GPU; explicit physical qualification"]
 fn vulkan_relation_masks_match_typed_rows() {
-    qualify_masks(physical::Backend::Vulkan);
+    qualify_masks(GpuApi::Vulkan);
 }
 
-fn qualify_refusals(backend: physical::Backend) {
+fn qualify_refusals(backend: GpuApi) {
     let mut executor = executor(backend);
     let predicate = Predicate::new("row", 0).unwrap();
     let atoms = [Atom::new(predicate.clone(), vec![]).unwrap()];
@@ -371,11 +374,11 @@ fn qualify_refusals(backend: physical::Backend) {
 #[test]
 #[ignore = "requires actual Metal; explicit physical qualification"]
 fn metal_relation_refusals_preserve_prepared_view() {
-    qualify_refusals(physical::Backend::Metal);
+    qualify_refusals(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires actual Vulkan GPU; explicit physical qualification"]
 fn vulkan_relation_refusals_preserve_prepared_view() {
-    qualify_refusals(physical::Backend::Vulkan);
+    qualify_refusals(GpuApi::Vulkan);
 }

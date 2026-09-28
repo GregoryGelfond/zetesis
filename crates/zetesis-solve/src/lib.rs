@@ -125,7 +125,7 @@ pub use lazy_execution::{
 pub use model_construction::{ModelConstructionStatistics, ModelConstructionStop};
 pub use optimization::{Optimization, OptimizationStop};
 pub use phase_timing::{PhaseTimings, SolvePhase};
-pub use policy::{Backend, Grounder, Oracle, SourceBatching};
+pub use policy::{Grounder, Oracle, SourceBatching};
 pub use projection::{ProjectionError, ProjectionLimits, ProjectionResource, ProjectionStatistics};
 pub use semantic_outcome::{AnswerSelection, SemanticOutcome};
 pub use session::{
@@ -137,6 +137,7 @@ pub use terminal_session::TerminalExecutionStatistics;
 pub use world_view::{
     WorldView, WorldViewError, WorldViewFailure, WorldViewFailureParts, WorldViewLimits,
 };
+pub use zetesis_backend::{Backend, GpuApi};
 pub use zetesis_sat::BatchVerdict;
 pub use zetesis_sat::SearchMethod;
 pub use zetesis_telemetry::{GroundingMode, SolveStage, StageMeasurement, StageTimings};

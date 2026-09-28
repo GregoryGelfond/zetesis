@@ -2,6 +2,7 @@
 
 use clap::Parser;
 use std::io::{self, Write};
+use zetesis_backend::GpuApi;
 use zetesis_experiments::{
     Backend, CommandOptions, Experiment, FormulaBenchmarkError, FormulaOptions,
     run_formula_projection,
@@ -41,7 +42,7 @@ fn cpu_selection_cannot_claim_projection_qualification() {
 #[test]
 fn empty_projection_dimensions_fail_before_device_selection() {
     let mut options = projection_options("metal");
-    assert_eq!(options.backend, Backend::Metal);
+    assert_eq!(options.backend, Backend::Gpu(Some(GpuApi::Metal)));
     options.atoms.clear();
     let mut output = Vec::new();
     assert!(matches!(

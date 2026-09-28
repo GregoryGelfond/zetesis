@@ -10,8 +10,14 @@ fn plan(repetitions: usize) -> Plan {
     let profiles = [
         (Backend::Cpu, Grounder::Eager),
         (Backend::Cpu, Grounder::Lazy),
-        (Backend::Metal, Grounder::Eager),
-        (Backend::Metal, Grounder::Lazy),
+        (
+            Backend::Gpu(Some(zetesis_backend::GpuApi::Metal)),
+            Grounder::Eager,
+        ),
+        (
+            Backend::Gpu(Some(zetesis_backend::GpuApi::Metal)),
+            Grounder::Lazy,
+        ),
     ]
     .map(|(backend, grounder)| NativeExecution {
         backend,

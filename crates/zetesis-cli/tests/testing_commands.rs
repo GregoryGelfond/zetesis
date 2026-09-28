@@ -32,10 +32,17 @@ fn test_statistics_are_opt_in() {
 }
 
 #[test]
-fn unsupported_backend_checks_are_explicitly_refused() {
-    assert!(
-        Invocation::try_parse_from(["zetesis", "test", "backend", "--device", "vulkan"]).is_err()
-    );
+fn backend_checks_accept_every_backend() {
+    for backend in ["cpu", "gpu", "metal", "vulkan"] {
+        let arguments = ["zetesis", "test", "backend", "--backend", backend];
+        assert!(Invocation::try_parse_from(arguments).is_ok(), "{backend}");
+    }
+}
+
+#[test]
+fn backend_checks_refuse_a_device_flag() {
+    let arguments = ["zetesis", "test", "backend", "--device", "cpu"];
+    assert!(Invocation::try_parse_from(arguments).is_err());
 }
 
 #[test]
@@ -106,7 +113,7 @@ fn cpu_backend_checks_the_complete_known_families() {
         "zetesis",
         "test",
         "backend",
-        "--device",
+        "--backend",
         "cpu",
         "--zetesis",
         env!("CARGO_BIN_EXE_zetesis"),

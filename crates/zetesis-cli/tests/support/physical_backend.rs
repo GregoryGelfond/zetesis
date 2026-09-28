@@ -1,27 +1,19 @@
 //! Explicit device-test requests, independent of discovery and reported metadata.
 
-#[derive(Clone, Copy)]
-pub enum Backend {
-    Metal,
-    Vulkan,
+use zetesis_backend::GpuApi;
+
+/// The backend request and argument that name a physical device's API.
+pub trait Physical: Copy {
+    fn requested(self) -> zetesis_cli::Backend;
+    fn argument(self) -> &'static str;
 }
 
-impl Backend {
-    pub fn requested(self) -> zetesis_cli::Backend {
-        match self {
-            Self::Metal => zetesis_cli::Backend::Metal,
-            Self::Vulkan => zetesis_cli::Backend::Vulkan,
-        }
+impl Physical for GpuApi {
+    fn requested(self) -> zetesis_cli::Backend {
+        zetesis_cli::Backend::Gpu(Some(self))
     }
 
-    pub fn argument(self) -> &'static str {
+    fn argument(self) -> &'static str {
         self.requested().label()
-    }
-
-    pub fn name(self) -> &'static str {
-        match self {
-            Self::Metal => "Metal",
-            Self::Vulkan => "Vulkan",
-        }
     }
 }

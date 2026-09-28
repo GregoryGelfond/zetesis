@@ -3,6 +3,7 @@
 use super::NativeOracle;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
+use zetesis_backend::Backend;
 
 /// Native command protocol; the default preserves historical executables.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
@@ -13,48 +14,6 @@ pub enum NativeInvocation {
     Legacy,
     /// Explicit `solve` command and checked schema-1/schema-2 JSON records.
     Solve,
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-/// Requested native hardware policy; observed execution is checked separately.
-pub enum NativeBackend {
-    #[default]
-    /// Request CPU execution.
-    Cpu,
-    /// Let the native solver choose the applicable policy.
-    Auto,
-    /// Request an available physical GPU.
-    Gpu,
-    /// Request a Metal adapter.
-    Metal,
-    /// Request a Vulkan adapter.
-    Vulkan,
-    /// Request a DirectX 12 adapter.
-    Dx12,
-    /// Request an OpenGL adapter.
-    Gl,
-    /// Request an NVIDIA adapter.
-    Nvidia,
-}
-impl NativeBackend {
-    /// Stable command/report spelling.
-    #[must_use]
-    pub const fn label(self) -> &'static str {
-        match self {
-            Self::Cpu => "cpu",
-            Self::Auto => "auto",
-            Self::Gpu => "gpu",
-            Self::Metal => "metal",
-            Self::Vulkan => "vulkan",
-            Self::Dx12 => "dx12",
-            Self::Gl => "gl",
-            Self::Nvidia => "nvidia",
-        }
-    }
-
-    pub(super) const fn physical(self) -> bool {
-        !matches!(self, Self::Cpu | Self::Auto)
-    }
 }
 
 /// A complete comparison request, without publication or progress destinations.
@@ -77,7 +36,7 @@ pub struct Request {
     /// Native reduct oracle policy, recorded in the report and invocation.
     pub native_oracle: NativeOracle,
     /// Native hardware policy; explicit GPU policies are passed through unchanged.
-    pub native_backend: NativeBackend,
+    pub native_backend: Backend,
     /// Positive native candidate batch size, recorded and passed to zetesis.
     pub native_batch_size: NonZeroUsize,
     /// Positive exact formula completion worker request, separate from closure workers.
@@ -98,7 +57,7 @@ pub struct Request {
 impl Request {
     pub(super) fn physical_formula(&self) -> bool {
         !self.reference_only
-            && self.native_backend.physical()
+            && self.native_backend.is_gpu()
             && self.native_oracle == NativeOracle::Countermodel
     }
 
@@ -116,7 +75,7 @@ impl Default for Request {
             clingo: PathBuf::from("clingo"),
             zetesis: PathBuf::from("zetesis"),
             native_oracle: NativeOracle::Auto,
-            native_backend: NativeBackend::Cpu,
+            native_backend: Backend::Cpu,
             native_batch_size: NonZeroUsize::new(64).unwrap(),
             native_completion_workers: NonZeroUsize::new(1).unwrap(),
             native_max_completion_scratch_bytes: 268_435_456,

@@ -146,7 +146,7 @@ fn statistics_report_the_support_cut_in_place_of_the_disjunctive_certificate() {
 
 #[test]
 fn requested_statistics_use_accepted_policy_spelling() {
-    for backend in ["auto", "cpu"] {
+    for backend in ["cpu"] {
         for oracle in ["auto", "closure", "countermodel"] {
             let configured = Options::try_parse_from([
                 "zetesis",

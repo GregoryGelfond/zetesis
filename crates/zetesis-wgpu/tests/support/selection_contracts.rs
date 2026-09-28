@@ -2,9 +2,14 @@
 
 use std::cmp::Ordering;
 
-use super::tests::reported_static_admission;
-use super::{GpuBackendPreference, GpuInfo, GpuSelection, HostPlatform, choose, compare_info};
+use super::reported_static_admission;
+use super::{GpuInfo, GpuSelection, backends, choose, compare_info};
 use crate::{GpuErrorKind, GpuOptions};
+use zetesis_backend::GpuApi;
+
+const VULKAN: GpuSelection = GpuSelection {
+    api: GpuApi::Vulkan,
+};
 
 fn info(backend: wgpu::Backend, category: wgpu::DeviceType) -> GpuInfo {
     let mut raw = wgpu::AdapterInfo::new(category, backend);
@@ -65,30 +70,20 @@ fn each_reported_identity_field_breaks_ties_independently_of_input_order() {
         later.push(next);
     }
     for other in later {
-        assert_eq!(
-            compare_info(&first, &other, HostPlatform::Other),
-            Ordering::Less
-        );
-        assert_eq!(
-            compare_info(&other, &first, HostPlatform::Other),
-            Ordering::Greater
-        );
+        assert_eq!(compare_info(&first, &other), Ordering::Less);
+        assert_eq!(compare_info(&other, &first), Ordering::Greater);
         for inventory in [[&first, &other], [&other, &first]] {
             let selected = choose(
                 inventory.into_iter().enumerate(),
                 GpuOptions::default(),
-                GpuSelection::default(),
-                HostPlatform::Other,
+                VULKAN,
                 reported_static_admission,
             )
             .unwrap();
             assert_eq!(inventory[selected], &first);
         }
     }
-    assert_eq!(
-        compare_info(&first, &first, HostPlatform::Other),
-        Ordering::Equal
-    );
+    assert_eq!(compare_info(&first, &first), Ordering::Equal);
 }
 
 #[test]
@@ -100,17 +95,13 @@ fn software_categories_have_stable_order_only_when_explicitly_admitted() {
     ];
     let reports = categories.map(|category| info(wgpu::Backend::Vulkan, category));
     for pair in reports.windows(2) {
-        assert_eq!(
-            compare_info(&pair[0], &pair[1], HostPlatform::Other),
-            Ordering::Less
-        );
+        assert_eq!(compare_info(&pair[0], &pair[1]), Ordering::Less);
     }
     assert_eq!(
         choose(
             reports.iter().enumerate(),
             GpuOptions::default(),
-            GpuSelection::default(),
-            HostPlatform::Other,
+            VULKAN,
             reported_static_admission,
         )
         .unwrap_err()
@@ -121,45 +112,21 @@ fn software_categories_have_stable_order_only_when_explicitly_admitted() {
         choose(
             reports.iter().enumerate(),
             GpuOptions { require_gpu: false },
-            GpuSelection::default(),
-            HostPlatform::Other,
+            VULKAN,
             reported_static_admission,
         )
         .unwrap(),
         0
     );
-    for platform in [
-        HostPlatform::Apple,
-        HostPlatform::Windows,
-        HostPlatform::Other,
-    ] {
-        assert!(
-            platform.backend_rank(wgpu::Backend::Gl)
-                < platform.backend_rank(wgpu::Backend::BrowserWebGpu)
-        );
-        assert!(
-            platform.backend_rank(wgpu::Backend::BrowserWebGpu)
-                < platform.backend_rank(wgpu::Backend::Noop)
-        );
-    }
 }
 
 #[test]
-fn compiled_api_inventory_contains_only_enabled_explicit_native_apis() {
-    let actual = super::compiled_backends();
+fn the_compiled_api_inventory_lists_each_enabled_targeted_api_once() {
+    let actual = super::compiled_apis();
     let enabled = wgpu::Instance::enabled_backend_features();
-    for backend in [
-        GpuBackendPreference::Metal,
-        GpuBackendPreference::Vulkan,
-        GpuBackendPreference::Dx12,
-        GpuBackendPreference::Gl,
-    ] {
-        assert_eq!(
-            actual.contains(&backend),
-            enabled.intersects(backend.backends())
-        );
+    for api in [GpuApi::Metal, GpuApi::Vulkan] {
+        assert_eq!(actual.contains(&api), enabled.intersects(backends(api)));
     }
-    assert!(!actual.contains(&GpuBackendPreference::Auto));
-    let unique: std::collections::BTreeSet<_> = actual.iter().map(ToString::to_string).collect();
+    let unique: std::collections::BTreeSet<_> = actual.iter().map(|api| api.label()).collect();
     assert_eq!(actual.len(), unique.len());
 }

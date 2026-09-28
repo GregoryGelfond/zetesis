@@ -12,7 +12,7 @@ fn backend(stats: bool) -> testing::TestCommand {
         "zetesis",
         "test",
         "backend",
-        "--device",
+        "--backend",
         "cpu",
         "--zetesis",
         env!("CARGO_BIN_EXE_zetesis"),

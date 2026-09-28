@@ -4,10 +4,7 @@ mod view;
 mod scalability;
 pub use scalability::ScalabilityOptions;
 
-use clap::{
-    Args, Subcommand,
-    builder::{PossibleValuesParser, TypedValueParser},
-};
+use clap::{Args, Subcommand};
 use std::{fmt, io, path::PathBuf, sync::atomic::AtomicBool, time::Duration};
 use zetesis_presentation::{ColorMode, Layout};
 use zetesis_validation::{backend_check, corpus_comparison};
@@ -64,9 +61,10 @@ pub struct CorpusOptions {
     /// Modern zetesis executable; omitted uses the current executable's solve command.
     #[arg(long)]
     pub zetesis: Option<PathBuf>,
-    /// CPU or required Metal. Metal checks use the general eager formula route.
-    #[arg(long, value_parser = device_parser(), default_value = "cpu")]
-    pub device: backend_check::Backend,
+    /// Execution backend: cpu (the default), gpu, metal or vulkan. GPU checks
+    /// use the general eager formula route.
+    #[arg(long, value_parser = zetesis_backend::BackendParser, default_value = "cpu")]
+    pub backend: backend_check::Backend,
     /// Per-invocation capture limits.
     #[command(flatten)]
     pub process: ProcessOptions,
@@ -78,9 +76,10 @@ pub struct CorpusOptions {
 /// Small installed-command checks, not the 59-test physical qualification suite.
 #[derive(Debug, Args)]
 pub struct BackendOptions {
-    /// Exact CPU or physical Metal route; no implicit fallback.
-    #[arg(long, value_parser = device_parser(), default_value = "cpu")]
-    pub device: backend_check::Backend,
+    /// Exact CPU or physical GPU route (cpu, gpu, metal or vulkan); no implicit
+    /// fallback.
+    #[arg(long, value_parser = zetesis_backend::BackendParser, default_value = "cpu")]
+    pub backend: backend_check::Backend,
     /// Modern zetesis executable; omitted uses this installed executable.
     #[arg(long)]
     pub zetesis: Option<PathBuf>,
@@ -90,16 +89,6 @@ pub struct BackendOptions {
     /// Human or structured report view.
     #[command(flatten)]
     pub view: ViewOptions,
-}
-
-fn device_parser() -> impl TypedValueParser<Value = backend_check::Backend> {
-    PossibleValuesParser::new(["cpu", "metal"]).map(|value| {
-        if value == "cpu" {
-            backend_check::Backend::Cpu
-        } else {
-            backend_check::Backend::Metal
-        }
-    })
 }
 
 /// Completed test disposition; an explicit nonpass is still a published report.
@@ -328,13 +317,11 @@ fn corpus(
         repo: options.repo.clone(),
         clingo: options.clingo.clone(),
         zetesis: executable(options.zetesis.as_ref())?,
-        native_backend: match options.device {
-            backend_check::Backend::Cpu => corpus_comparison::NativeBackend::Cpu,
-            backend_check::Backend::Metal => corpus_comparison::NativeBackend::Metal,
-        },
-        native_oracle: match options.device {
-            backend_check::Backend::Cpu => corpus_comparison::NativeOracle::Auto,
-            backend_check::Backend::Metal => corpus_comparison::NativeOracle::Countermodel,
+        native_backend: options.backend,
+        native_oracle: if options.backend.is_gpu() {
+            corpus_comparison::NativeOracle::Countermodel
+        } else {
+            corpus_comparison::NativeOracle::Auto
         },
         native_stats: options.view.stats,
         timeout_ms: options
@@ -361,7 +348,7 @@ fn backend(
     backend_check::run_with_cancellation(
         &backend_check::Request {
             executable: executable(options.zetesis.as_ref())?,
-            backend: options.device,
+            backend: options.backend,
             limits: zetesis_validation::process::Limits {
                 timeout: Duration::from_secs(options.process.timeout_seconds),
                 max_output_bytes: options.process.capture_bytes,

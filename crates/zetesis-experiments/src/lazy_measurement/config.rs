@@ -79,8 +79,8 @@ impl Configuration {
 /// Command-line view of a bounded matched-source measurement configuration.
 #[derive(Clone, Debug, Args)]
 pub struct Options {
-    /// Require Metal/Vulkan, or explicitly select CPU-only measurement.
-    #[arg(long = "device", alias = "backend", value_enum, default_value_t)]
+    /// CPU-only measurement (the default), or require a GPU (gpu, metal or vulkan).
+    #[arg(long, value_parser = zetesis_backend::BackendParser, default_value = "cpu")]
     pub backend: Backend,
     /// Values per positive predicate; the union join can contain width cubed rows.
     #[arg(long, value_delimiter = ',', default_value = "4,8")]

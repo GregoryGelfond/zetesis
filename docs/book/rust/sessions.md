@@ -194,9 +194,9 @@ Reuse preserves consumed work and pending-candidate accounting after a refusal.
 `HybridFormula` owning the original source, retained core and streamed constraint
 plans. Pass it through `PreparedInput::hybrid(&owner)`. The current profile uses
 CPU execution, indexed joins and no objectives; richer constraints remain in
-the eager core. `Backend::Cpu` or `Auto` and `Grounder::Lazy` or `Auto` are
-accepted. An explicit device request, eager schedule, closure oracle or external
-batch executor is refused for this profile.
+the eager core. `Backend::Cpu` and `Grounder::Lazy` or `Auto` are accepted.
+A GPU backend, eager schedule, closure oracle or external batch executor is
+refused for this profile.
 
 Preparation still completes possible support, arithmetic admission and the atom
 catalog. Eligible instances are visited during admission, but their full
@@ -459,12 +459,11 @@ execution observations. The solver retains no event queue; any collection or
 side effects belong to the observer. Successful observation does not establish
 membership, coverage or publication.
 
-Automatic hardware policy keeps CPU execution throughout the session. Independent
-relational checking in a GPU-enabled build records `AutomaticCpu`; shared source
-rounds record `SharedCpu`, and a CPU-only build records `DeviceNotCompiled`.
-Formula preparation records `CpuFormula`. Earlier deferred-discovery and CPU-retry
-variants are no longer part of the enum. An explicit GPU request can produce
-device observations; supplying resources alone does not select it.
+The CPU backend keeps CPU execution throughout the session: relational checking
+records `CpuClosure` and formula preparation records `CpuFormula`. Earlier
+automatic-selection, deferred-discovery and CPU-retry variants are no longer part
+of the enum. A GPU backend can produce device observations; supplying resources
+alone does not select it.
 
 An observer error stops the relevant operation and is retained separately from
 device errors. Some formula

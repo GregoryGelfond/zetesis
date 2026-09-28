@@ -3,6 +3,7 @@
 #[path = "support/physical.rs"]
 mod physical;
 
+use zetesis_backend::GpuApi;
 use zetesis_core::{
     Atom, Predicate, Value,
     relation::{Limits, Relation},
@@ -11,12 +12,13 @@ use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{AdmissionLimits, Interpretation, Node, Theory};
 use zetesis_wgpu::{
     FormulaLimits, FormulaVerdict, GpuContext, GpuFormulaOracle, GpuOptions, GpuRelationExecutor,
-    RelationGpuLimits,
+    GpuSelection, RelationGpuLimits,
 };
 
-fn compose(backend: physical::Backend) {
-    let context = GpuContext::new_selected(GpuOptions::default(), backend.selection()).unwrap();
-    backend.verify(context.info());
+fn compose(backend: GpuApi) {
+    let context =
+        GpuContext::new_selected(GpuOptions::default(), GpuSelection { api: backend }).unwrap();
+    physical::verify(backend, context.info());
     println!(
         "optional features: advertised={:?}; enabled={:?}",
         context.info().features(),
@@ -89,11 +91,11 @@ fn compose(backend: physical::Backend) {
 #[test]
 #[ignore = "requires actual Metal; explicit physical qualification"]
 fn metal_formula_executes_while_relation_columns_remain_prepared() {
-    compose(physical::Backend::Metal);
+    compose(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
 fn vulkan_formula_executes_while_relation_columns_remain_prepared() {
-    compose(physical::Backend::Vulkan);
+    compose(GpuApi::Vulkan);
 }

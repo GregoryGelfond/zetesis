@@ -392,14 +392,7 @@ fn incomplete_oracle_limits_do_not_switch_algorithms_or_claim_unsatisfiable() {
 
 #[test]
 fn hybrid_formula_refuses_unavailable_device_routes() {
-    for backend in [
-        Backend::Gpu,
-        Backend::Metal,
-        Backend::Vulkan,
-        Backend::Dx12,
-        Backend::Gl,
-        Backend::Nvidia,
-    ] {
+    for backend in Backend::ALL.into_iter().filter(|backend| backend.is_gpu()) {
         let mut configured = options(&[]);
         configured.backend = backend;
         configured.grounder = Grounder::Lazy;

@@ -1,7 +1,7 @@
 //! Actual executor identity, beyond equality of reported adapter metadata.
 
 use super::{Engine, Executor, selection};
-use crate::{Backend, ExecutionResources, Grounder, SolveConfig};
+use crate::{Backend, ExecutionResources, GpuApi, Grounder, SolveConfig};
 use zetesis_cpu::{Cancellation, CandidateLimits, Candidates};
 use zetesis_wgpu::{GpuContext, GpuOptions};
 
@@ -29,7 +29,7 @@ fn supplied_context(backend: Backend, expected_api: &str) {
         )
         .unwrap();
         require_context(&engine, &context, grounder);
-        automatic_cpu(&context, grounder);
+        cpu_keeps_its_route(&context, grounder);
     }
 }
 
@@ -48,14 +48,15 @@ fn require_context(engine: &Engine, expected: &GpuContext, grounder: Grounder) {
     assert!(expected.same_instance(actual));
 }
 
-fn automatic_cpu(context: &GpuContext, grounder: Grounder) {
+/// A supplied device leaves a CPU-backend engine on the CPU.
+fn cpu_keeps_its_route(context: &GpuContext, grounder: Grounder) {
     let owner = zetesis_themelios::admit(
         "a :- not b. b :- not a. c :- not d. d :- not c. e :- not f. f :- not e.".into(),
         zetesis_themelios::AdmissionOptions::default(),
     )
     .unwrap();
     let config = SolveConfig {
-        backend: Backend::Auto,
+        backend: Backend::Cpu,
         grounder,
         ..Default::default()
     };
@@ -100,11 +101,11 @@ fn automatic_cpu(context: &GpuContext, grounder: Grounder) {
 #[test]
 #[ignore = "requires actual Metal; checks exact executor context identity"]
 fn metal_closure_retains_the_supplied_context() {
-    supplied_context(Backend::Metal, "Metal");
+    supplied_context(Backend::Gpu(Some(GpuApi::Metal)), "Metal");
 }
 
 #[test]
 #[ignore = "requires actual Vulkan; checks exact executor context identity"]
 fn vulkan_closure_retains_the_supplied_context() {
-    supplied_context(Backend::Vulkan, "Vulkan");
+    supplied_context(Backend::Gpu(Some(GpuApi::Vulkan)), "Vulkan");
 }

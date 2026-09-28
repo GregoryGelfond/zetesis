@@ -1,76 +1,70 @@
 //! Native adapter discovery and deterministic selection by reported metadata.
 
 use std::cmp::Ordering;
-use std::fmt;
+
+use zetesis_backend::GpuApi;
 
 use crate::{
     AdapterBackend, AdapterCategory, AdapterMetadata, GpuError, GpuErrorKind, GpuOptions,
     check_adapter_limits,
 };
 
-/// NVIDIA's PCI vendor identifier. Matching uses the reported numeric ID,
-/// never a device-name substring. This selects wgpu devices, not CUDA.
-pub const NVIDIA_VENDOR_ID: u32 = 0x10de;
+/// The compute APIs zetesis targets, in the order `zetesis devices` lists them.
+const TARGETED: [GpuApi; 2] = [GpuApi::Metal, GpuApi::Vulkan];
 
-/// Native compute API preference. An explicit API is a hard selection filter.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum GpuBackendPreference {
-    /// Choose among the compiled native APIs using the documented ranking.
-    #[default]
-    Auto,
-    /// Require Metal; unavailable when not compiled for the current target.
-    Metal,
-    /// Require Vulkan; this can drive NVIDIA and other vendors' GPUs.
-    Vulkan,
-    /// Require Direct3D 12; unavailable when not compiled for the current target.
-    Dx12,
-    /// Require OpenGL/OpenGL ES with compute support and the oracle's limits.
-    Gl,
+/// The wgpu backend an API opens.
+fn backends(api: GpuApi) -> wgpu::Backends {
+    match api {
+        GpuApi::Metal => wgpu::Backends::METAL,
+        GpuApi::Vulkan => wgpu::Backends::VULKAN,
+    }
 }
 
-impl GpuBackendPreference {
-    const EXPLICIT: [Self; 4] = [Self::Metal, Self::Vulkan, Self::Dx12, Self::Gl];
+/// The adapter filter, separate from the physical-device admission policy.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GpuSelection {
+    /// The compute API to open, a hard filter. A caller holding a
+    /// [`zetesis_backend::Backend`] passes its resolved API
+    /// ([`zetesis_backend::Backend::resolved_api`]).
+    pub api: GpuApi,
+}
 
-    fn backends(self) -> wgpu::Backends {
-        match self {
-            Self::Auto => {
-                wgpu::Backends::METAL
-                    | wgpu::Backends::VULKAN
-                    | wgpu::Backends::DX12
-                    | wgpu::Backends::GL
-            }
-            Self::Metal => wgpu::Backends::METAL,
-            Self::Vulkan => wgpu::Backends::VULKAN,
-            Self::Dx12 => wgpu::Backends::DX12,
-            Self::Gl => wgpu::Backends::GL,
+impl Default for GpuSelection {
+    /// The platform's native API: Metal on Apple platforms, Vulkan elsewhere.
+    fn default() -> Self {
+        Self {
+            api: GpuApi::native(),
         }
     }
+}
 
-    fn admits(self, backend: wgpu::Backend) -> bool {
-        self.backends().contains(backend.into())
+impl GpuSelection {
+    /// The adapter this selection opens among `adapters`, as
+    /// [`discover_adapters`] reports them, for the static profile: the filter
+    /// and order device creation applies, with each adapter's capability judged
+    /// from its report. No device is created, so creating one on the adapter
+    /// returned can still fail.
+    ///
+    /// # Errors
+    /// The refusal device creation would give: no adapter at all, none admitted
+    /// by `options`, or none reporting the static profile's capabilities.
+    pub fn chosen(self, adapters: &[GpuInfo], options: GpuOptions) -> Result<&GpuInfo, GpuError> {
+        choose(
+            adapters.iter().enumerate(),
+            options,
+            self,
+            reported_static_admission,
+        )
+        .map(|index| &adapters[index])
     }
 }
 
-impl fmt::Display for GpuBackendPreference {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::Auto => "auto",
-            Self::Metal => "metal",
-            Self::Vulkan => "vulkan",
-            Self::Dx12 => "dx12",
-            Self::Gl => "gl",
-        })
-    }
-}
-
-/// Hard adapter filters, separate from the physical-device admission policy.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct GpuSelection {
-    /// Required compute API, or Auto to rank compatible compiled native APIs.
-    pub backend: GpuBackendPreference,
-    /// Required exact backend-reported vendor ID; `None` admits any vendor.
-    /// Use [`NVIDIA_VENDOR_ID`] for NVIDIA through a supported wgpu API.
-    pub vendor_id: Option<u32>,
+/// Capability judged from an adapter's report: its recorded static-profile
+/// capability issue, if any.
+fn reported_static_admission(_: usize, info: &GpuInfo) -> Result<(), GpuError> {
+    info.capability_issue().map_or(Ok(()), |reason| {
+        Err(GpuError::new(GpuErrorKind::Capacity, reason))
+    })
 }
 
 /// Actual adapter identity and advertised static-oracle capability preflight.
@@ -239,35 +233,46 @@ fn reported_text(value: &str) -> Option<&str> {
     (!value.is_empty()).then_some(value)
 }
 
-/// Native APIs compiled for this target. Auto, browser WebGPU, and the
-/// nonexecuting Noop backend are excluded. This performs no hardware discovery.
+/// The targeted compute APIs compiled for this target, in listing order. This
+/// performs no hardware discovery.
 #[must_use]
-pub fn compiled_backends() -> Vec<GpuBackendPreference> {
+pub fn compiled_apis() -> Vec<GpuApi> {
     let enabled = wgpu::Instance::enabled_backend_features();
-    GpuBackendPreference::EXPLICIT
+    TARGETED
         .into_iter()
-        .filter(|backend| enabled.intersects(backend.backends()))
+        .filter(|api| enabled.intersects(backends(*api)))
         .collect()
 }
 
-/// Enumerate native adapters with hardware category and capability diagnostics.
-/// Software/virtual adapters are included and explicitly identified. Results use
-/// the same reported-metadata order as Auto; a physical GPU may appear through
-/// multiple APIs. No compute device is created. No visible adapters yields an
-/// empty vector; discovery does not substitute a CPU solver.
+/// Enumerate the adapters of every compiled targeted API, with hardware category
+/// and capability diagnostics. Software and virtual adapters are included and
+/// explicitly identified. Results are in selection order (hardware first, then
+/// discrete, then stable reported identity). No compute device is created. No
+/// visible adapters yields an empty vector; discovery does not substitute a CPU
+/// solver.
 ///
 /// # Errors
-/// Returns [`GpuErrorKind::AdapterUnavailable`] if no native API is compiled
+/// Returns [`GpuErrorKind::AdapterUnavailable`] if no targeted API is compiled
 /// for this target, or an allocation failure while collecting inventory.
 pub fn discover_adapters() -> Result<Vec<GpuInfo>, GpuError> {
     pollster::block_on(async {
-        let candidates = enumerate(GpuBackendPreference::Auto).await?;
+        let targeted = TARGETED
+            .into_iter()
+            .fold(wgpu::Backends::empty(), |all, api| all | backends(api));
+        let compiled = targeted & wgpu::Instance::enabled_backend_features();
+        if compiled.is_empty() {
+            return Err(GpuError::new(
+                GpuErrorKind::AdapterUnavailable,
+                "this build compiles neither Metal nor Vulkan",
+            ));
+        }
+        let candidates = enumerate(compiled).await?;
         let mut infos = Vec::new();
         infos
             .try_reserve_exact(candidates.len())
             .map_err(|error| GpuError::new(GpuErrorKind::Allocation, error.to_string()))?;
         infos.extend(candidates.into_iter().map(|candidate| candidate.info));
-        infos.sort_by(|left, right| compare_info(left, right, HostPlatform::current()));
+        infos.sort_by(compare_info);
         Ok(infos)
     })
 }
@@ -282,7 +287,8 @@ pub(crate) async fn select_adapter(
     selection: GpuSelection,
     validate: fn(&wgpu::Limits) -> Result<(), GpuError>,
 ) -> Result<(wgpu::Adapter, GpuInfo), GpuError> {
-    let mut candidates = enumerate(selection.backend).await?;
+    let requested = requested_backends(selection.api, wgpu::Instance::enabled_backend_features())?;
+    let mut candidates = enumerate(requested).await?;
     let index = choose(
         candidates
             .iter()
@@ -290,7 +296,6 @@ pub(crate) async fn select_adapter(
             .map(|(index, candidate)| (index, &candidate.info)),
         options,
         selection,
-        HostPlatform::current(),
         |index, _| {
             let adapter = &candidates[index].adapter;
             check_capabilities(
@@ -321,8 +326,7 @@ fn check_capabilities(
     validate(limits)
 }
 
-async fn enumerate(preference: GpuBackendPreference) -> Result<Vec<Candidate>, GpuError> {
-    let backends = requested_backends(preference, wgpu::Instance::enabled_backend_features())?;
+async fn enumerate(backends: wgpu::Backends) -> Result<Vec<Candidate>, GpuError> {
     // Backend choice never uses environment overrides. In particular, a WGPU
     // variable cannot defeat an explicit API filter or enable the Noop backend.
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
@@ -341,16 +345,15 @@ async fn enumerate(preference: GpuBackendPreference) -> Result<Vec<Candidate>, G
     Ok(candidates)
 }
 
-fn requested_backends(
-    preference: GpuBackendPreference,
-    enabled: wgpu::Backends,
-) -> Result<wgpu::Backends, GpuError> {
-    let requested = preference.backends() & enabled;
+/// The wgpu backend `api` opens, if this build compiles it.
+fn requested_backends(api: GpuApi, enabled: wgpu::Backends) -> Result<wgpu::Backends, GpuError> {
+    let requested = backends(api) & enabled;
     if requested.is_empty() {
         return Err(GpuError::new(
             GpuErrorKind::AdapterUnavailable,
             format!(
-                "requested {preference} backend is not compiled for this target (enabled: {enabled:?})"
+                "{} is not available in this build: zetesis compiles Metal on macOS and Vulkan on other platforms",
+                api.name()
             ),
         ));
     }
@@ -361,7 +364,6 @@ fn choose<'a>(
     infos: impl IntoIterator<Item = (usize, &'a GpuInfo)>,
     options: GpuOptions,
     selection: GpuSelection,
-    platform: HostPlatform,
     mut validate: impl FnMut(usize, &GpuInfo) -> Result<(), GpuError>,
 ) -> Result<usize, GpuError> {
     let mut seen = false;
@@ -381,7 +383,7 @@ fn choose<'a>(
             issue.get_or_insert(error);
             continue;
         }
-        if best.is_none_or(|(_, current)| compare_info(info, current, platform).is_lt()) {
+        if best.is_none_or(|(_, current)| compare_info(info, current).is_lt()) {
             best = Some((index, info));
         }
     }
@@ -391,7 +393,7 @@ fn choose<'a>(
     let (kind, detail) = if !seen {
         (
             GpuErrorKind::AdapterUnavailable,
-            "no adapters were exposed by the requested native APIs".to_owned(),
+            format!("no {} adapter was found", selection.api.name()),
         )
     } else if matched {
         (
@@ -408,8 +410,8 @@ fn choose<'a>(
         (
             GpuErrorKind::AdapterRefused,
             format!(
-                "no exposed adapter matches backend={}, vendor_id={:?}, require_gpu={}",
-                selection.backend, selection.vendor_id, options.require_gpu,
+                "no exposed adapter matches api={}, require_gpu={}",
+                selection.api, options.require_gpu,
             ),
         )
     };
@@ -417,10 +419,7 @@ fn choose<'a>(
 }
 
 fn matches_selection(info: &GpuInfo, options: GpuOptions, selection: GpuSelection) -> bool {
-    selection.backend.admits(info.raw.backend)
-        && selection
-            .vendor_id
-            .is_none_or(|vendor| vendor == info.vendor_id())
+    backends(selection.api).contains(info.raw.backend.into())
         && (!options.require_gpu || info.is_hardware_gpu())
 }
 
@@ -435,58 +434,24 @@ pub(crate) fn check_selection(
         Err(GpuError::new(
             GpuErrorKind::AdapterRefused,
             format!(
-                "supplied context adapter {} ({}, vendor_id=0x{:04x}, category={}) does not match backend={}, vendor_id={:?}, require_gpu={}",
+                "supplied context adapter {} ({}, vendor_id=0x{:04x}, category={}) does not match api={}, require_gpu={}",
                 info.name(),
                 info.backend(),
                 info.vendor_id(),
                 info.device_type(),
-                selection.backend,
-                selection.vendor_id,
+                selection.api,
                 options.require_gpu,
             ),
         ))
     }
 }
 
-#[derive(Clone, Copy)]
-enum HostPlatform {
-    Apple,
-    Windows,
-    Other,
-}
-
-impl HostPlatform {
-    fn current() -> Self {
-        if cfg!(target_vendor = "apple") {
-            Self::Apple
-        } else if cfg!(target_os = "windows") {
-            Self::Windows
-        } else {
-            Self::Other
-        }
-    }
-
-    fn backend_rank(self, backend: wgpu::Backend) -> u8 {
-        match (self, backend) {
-            (Self::Apple, wgpu::Backend::Metal)
-            | (Self::Windows, wgpu::Backend::Dx12)
-            | (Self::Other, wgpu::Backend::Vulkan) => 0,
-            (Self::Apple | Self::Windows, wgpu::Backend::Vulkan)
-            | (Self::Other, wgpu::Backend::Metal) => 1,
-            (Self::Apple | Self::Other, wgpu::Backend::Dx12)
-            | (Self::Windows, wgpu::Backend::Metal) => 2,
-            (_, wgpu::Backend::Gl) => 3,
-            (_, wgpu::Backend::BrowserWebGpu) => 4,
-            (_, wgpu::Backend::Noop) => 5,
-        }
-    }
-}
-
-fn compare_info(left: &GpuInfo, right: &GpuInfo, platform: HostPlatform) -> Ordering {
+/// Selection order: hardware before software, discrete before integrated, then
+/// stable reported identity, so the choice never depends on enumeration order.
+fn compare_info(left: &GpuInfo, right: &GpuInfo) -> Ordering {
     let key = |info: &GpuInfo| {
         (
             !info.is_hardware_gpu(),
-            platform.backend_rank(info.raw.backend),
             category_rank(info.raw.device_type),
             info.vendor_id(),
             info.device_id(),
@@ -512,17 +477,9 @@ fn category_rank(category: wgpu::DeviceType) -> u8 {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        GpuBackendPreference, GpuInfo, GpuSelection, HostPlatform, NVIDIA_VENDOR_ID, choose,
-        requested_backends,
-    };
-    use crate::{GpuError, GpuErrorKind, GpuOptions};
-
-    pub(super) fn reported_static_admission(_: usize, info: &GpuInfo) -> Result<(), GpuError> {
-        info.capability_issue().map_or(Ok(()), |reason| {
-            Err(GpuError::new(GpuErrorKind::Capacity, reason))
-        })
-    }
+    use super::{GpuInfo, GpuSelection, choose, reported_static_admission, requested_backends};
+    use crate::{GpuErrorKind, GpuOptions};
+    use zetesis_backend::GpuApi;
 
     fn report(name: &str, backend: wgpu::Backend, kind: wgpu::DeviceType, vendor: u32) -> GpuInfo {
         let mut raw = wgpu::AdapterInfo::new(kind, backend);
@@ -531,54 +488,80 @@ mod tests {
         GpuInfo::from_report(raw, wgpu::Features::empty(), &wgpu::Limits::default(), true)
     }
 
-    fn pick(infos: &[GpuInfo], selection: GpuSelection, platform: HostPlatform) -> usize {
+    fn select(api: GpuApi) -> GpuSelection {
+        GpuSelection { api }
+    }
+
+    fn pick(infos: &[GpuInfo], selection: GpuSelection) -> usize {
         choose(
             infos.iter().enumerate(),
             GpuOptions::default(),
             selection,
-            platform,
             reported_static_admission,
         )
         .expect("compatible physical adapter")
     }
 
     #[test]
-    fn explicit_api_filters_never_enable_an_alternative_or_nonexecuting_backend() {
-        for (preference, mask) in [
-            (GpuBackendPreference::Metal, wgpu::Backends::METAL),
-            (GpuBackendPreference::Vulkan, wgpu::Backends::VULKAN),
-            (GpuBackendPreference::Dx12, wgpu::Backends::DX12),
-            (GpuBackendPreference::Gl, wgpu::Backends::GL),
-        ] {
-            assert_eq!(
-                requested_backends(preference, wgpu::Backends::all()).unwrap(),
-                mask
-            );
-            assert_eq!(
-                requested_backends(preference, wgpu::Backends::all() - mask)
-                    .unwrap_err()
-                    .kind(),
-                GpuErrorKind::AdapterUnavailable,
-            );
-        }
-        let native = requested_backends(GpuBackendPreference::Auto, wgpu::Backends::all()).unwrap();
-        assert!(!native.intersects(wgpu::Backends::NOOP | wgpu::Backends::BROWSER_WEBGPU));
-        assert_eq!(
-            requested_backends(GpuBackendPreference::Auto, wgpu::Backends::NOOP)
-                .unwrap_err()
-                .kind(),
-            GpuErrorKind::AdapterUnavailable,
-        );
+    fn the_chosen_adapter_is_the_one_device_creation_would_open() {
+        let infos = [
+            report("software", wgpu::Backend::Vulkan, wgpu::DeviceType::Cpu, 0),
+            report(
+                "integrated",
+                wgpu::Backend::Vulkan,
+                wgpu::DeviceType::IntegratedGpu,
+                1,
+            ),
+            report(
+                "discrete",
+                wgpu::Backend::Vulkan,
+                wgpu::DeviceType::DiscreteGpu,
+                2,
+            ),
+        ];
+        let selection = select(GpuApi::Vulkan);
+        let chosen = selection.chosen(&infos, GpuOptions::default()).unwrap();
+        assert_eq!(chosen, &infos[pick(&infos, selection)]);
+        assert_eq!(chosen.name(), "discrete");
     }
 
     #[test]
-    fn auto_prefers_the_native_platform_api_among_compatible_physical_adapters() {
+    fn no_chosen_adapter_carries_the_refusal() {
+        let refusal = select(GpuApi::Metal)
+            .chosen(&[], GpuOptions::default())
+            .unwrap_err();
+        assert_eq!(refusal.kind(), GpuErrorKind::AdapterUnavailable);
+    }
+
+    #[test]
+    fn an_api_filter_never_enables_another_or_a_nonexecuting_backend() {
+        for (api, mask) in [
+            (GpuApi::Metal, wgpu::Backends::METAL),
+            (GpuApi::Vulkan, wgpu::Backends::VULKAN),
+        ] {
+            assert_eq!(
+                requested_backends(api, wgpu::Backends::all()).unwrap(),
+                mask
+            );
+            let missing = requested_backends(api, wgpu::Backends::all() - mask).unwrap_err();
+            assert_eq!(missing.kind(), GpuErrorKind::AdapterUnavailable);
+            assert!(missing.to_string().contains(api.name()));
+        }
+    }
+
+    #[test]
+    fn the_default_selection_is_the_native_api() {
+        assert_eq!(GpuSelection::default().api, GpuApi::native());
+    }
+
+    #[test]
+    fn a_selection_considers_only_adapters_of_its_api() {
         let inventory = [
             report(
                 "vulkan",
                 wgpu::Backend::Vulkan,
                 wgpu::DeviceType::DiscreteGpu,
-                NVIDIA_VENDOR_ID,
+                0x10de,
             ),
             report(
                 "metal",
@@ -586,34 +569,18 @@ mod tests {
                 wgpu::DeviceType::IntegratedGpu,
                 0x106b,
             ),
-            report(
-                "dx12",
-                wgpu::Backend::Dx12,
-                wgpu::DeviceType::DiscreteGpu,
-                NVIDIA_VENDOR_ID,
-            ),
         ];
-        assert_eq!(
-            pick(&inventory, GpuSelection::default(), HostPlatform::Apple),
-            1
-        );
-        assert_eq!(
-            pick(&inventory, GpuSelection::default(), HostPlatform::Windows),
-            2
-        );
-        assert_eq!(
-            pick(&inventory, GpuSelection::default(), HostPlatform::Other),
-            0
-        );
+        assert_eq!(pick(&inventory, select(GpuApi::Metal)), 1);
+        assert_eq!(pick(&inventory, select(GpuApi::Vulkan)), 0);
     }
 
     #[test]
-    fn auto_skips_incapable_native_devices_and_never_uses_software_under_default_policy() {
+    fn incapable_and_software_adapters_are_skipped_under_the_default_policy() {
         let mut incapable = report(
             "limited Metal",
             wgpu::Backend::Metal,
-            wgpu::DeviceType::IntegratedGpu,
-            0x106b,
+            wgpu::DeviceType::DiscreteGpu,
+            0x1002,
         );
         incapable.capability_issue = Some("workgroup storage is too small".to_owned());
         let inventory = [
@@ -625,41 +592,28 @@ mod tests {
             ),
             incapable,
             report(
-                "Vulkan GPU",
-                wgpu::Backend::Vulkan,
-                wgpu::DeviceType::DiscreteGpu,
-                0x1002,
+                "capable Metal",
+                wgpu::Backend::Metal,
+                wgpu::DeviceType::IntegratedGpu,
+                0x106b,
             ),
         ];
-        assert_eq!(
-            pick(&inventory, GpuSelection::default(), HostPlatform::Apple),
-            2
-        );
+        assert_eq!(pick(&inventory, select(GpuApi::Metal)), 2);
     }
 
     #[test]
-    fn hardware_filter_refuses_cpu_virtual_and_unknown_categories_even_for_nvidia() {
+    fn the_hardware_filter_refuses_cpu_virtual_and_unknown_categories() {
         for kind in [
             wgpu::DeviceType::Cpu,
             wgpu::DeviceType::VirtualGpu,
             wgpu::DeviceType::Other,
         ] {
-            let inventory = [report(
-                "NVIDIA",
-                wgpu::Backend::Vulkan,
-                kind,
-                NVIDIA_VENDOR_ID,
-            )];
-            let selection = GpuSelection {
-                vendor_id: Some(NVIDIA_VENDOR_ID),
-                ..GpuSelection::default()
-            };
+            let inventory = [report("adapter", wgpu::Backend::Vulkan, kind, 0x10de)];
             assert_eq!(
                 choose(
                     inventory.iter().enumerate(),
                     GpuOptions::default(),
-                    selection,
-                    HostPlatform::Other,
+                    select(GpuApi::Vulkan),
                     reported_static_admission,
                 )
                 .unwrap_err()
@@ -670,8 +624,7 @@ mod tests {
                 choose(
                     inventory.iter().enumerate(),
                     GpuOptions { require_gpu: false },
-                    selection,
-                    HostPlatform::Other,
+                    select(GpuApi::Vulkan),
                     reported_static_admission,
                 )
                 .unwrap(),
@@ -691,7 +644,7 @@ mod tests {
             ),
             report(
                 "real GPU",
-                wgpu::Backend::Gl,
+                wgpu::Backend::Metal,
                 wgpu::DeviceType::IntegratedGpu,
                 0,
             ),
@@ -700,8 +653,7 @@ mod tests {
             choose(
                 inventory.iter().enumerate(),
                 GpuOptions { require_gpu: false },
-                GpuSelection::default(),
-                HostPlatform::Apple,
+                select(GpuApi::Metal),
                 reported_static_admission,
             )
             .unwrap(),
@@ -710,70 +662,51 @@ mod tests {
     }
 
     #[test]
-    fn vendor_filter_uses_exact_ids_and_combines_with_the_backend_filter() {
+    fn a_discrete_gpu_is_preferred_to_an_integrated_one() {
         let inventory = [
             report(
-                "NVIDIA-looking name",
-                wgpu::Backend::Metal,
-                wgpu::DeviceType::DiscreteGpu,
-                0x1002,
+                "integrated",
+                wgpu::Backend::Vulkan,
+                wgpu::DeviceType::IntegratedGpu,
+                0x8086,
             ),
             report(
-                "numeric vendor",
+                "discrete",
                 wgpu::Backend::Vulkan,
                 wgpu::DeviceType::DiscreteGpu,
-                NVIDIA_VENDOR_ID,
+                0x10de,
             ),
         ];
-        let nvidia = GpuSelection {
-            vendor_id: Some(NVIDIA_VENDOR_ID),
-            ..GpuSelection::default()
-        };
-        assert_eq!(pick(&inventory, nvidia, HostPlatform::Apple), 1);
-        let contradictory = GpuSelection {
-            backend: GpuBackendPreference::Metal,
-            ..nvidia
-        };
-        assert_eq!(
-            choose(
-                inventory.iter().enumerate(),
-                GpuOptions::default(),
-                contradictory,
-                HostPlatform::Apple,
-                reported_static_admission,
-            )
-            .unwrap_err()
-            .kind(),
-            GpuErrorKind::AdapterRefused
-        );
-        let metal = GpuSelection {
-            backend: GpuBackendPreference::Metal,
-            vendor_id: None,
-        };
-        assert_eq!(pick(&inventory, metal, HostPlatform::Other), 0);
+        assert_eq!(pick(&inventory, select(GpuApi::Vulkan)), 1);
     }
 
     #[test]
-    fn native_discovery_policy_excludes_noop_and_browser_even_when_hardware_is_reported() {
-        for backend in [wgpu::Backend::Noop, wgpu::Backend::BrowserWebGpu] {
+    fn nonnative_backends_are_never_selected_even_when_hardware_is_reported() {
+        for backend in [
+            wgpu::Backend::Noop,
+            wgpu::Backend::BrowserWebGpu,
+            wgpu::Backend::Dx12,
+            wgpu::Backend::Gl,
+        ] {
             let inventory = [report(
                 "non-native",
                 backend,
                 wgpu::DeviceType::DiscreteGpu,
                 0,
             )];
-            assert_eq!(
-                choose(
-                    inventory.iter().enumerate(),
-                    GpuOptions { require_gpu: false },
-                    GpuSelection::default(),
-                    HostPlatform::Other,
-                    reported_static_admission,
-                )
-                .unwrap_err()
-                .kind(),
-                GpuErrorKind::AdapterRefused
-            );
+            for api in [GpuApi::Metal, GpuApi::Vulkan] {
+                assert_eq!(
+                    choose(
+                        inventory.iter().enumerate(),
+                        GpuOptions { require_gpu: false },
+                        select(api),
+                        reported_static_admission,
+                    )
+                    .unwrap_err()
+                    .kind(),
+                    GpuErrorKind::AdapterRefused
+                );
+            }
         }
     }
 
@@ -783,15 +716,14 @@ mod tests {
             choose(
                 [].iter().enumerate(),
                 GpuOptions::default(),
-                GpuSelection::default(),
-                HostPlatform::Other,
+                select(GpuApi::Metal),
                 reported_static_admission,
             )
             .unwrap_err()
             .kind(),
             GpuErrorKind::AdapterUnavailable
         );
-        let raw = wgpu::AdapterInfo::new(wgpu::DeviceType::IntegratedGpu, wgpu::Backend::Gl);
+        let raw = wgpu::AdapterInfo::new(wgpu::DeviceType::IntegratedGpu, wgpu::Backend::Metal);
         let no_compute = GpuInfo::from_report(
             raw.clone(),
             wgpu::Features::empty(),
@@ -811,8 +743,7 @@ mod tests {
                 choose(
                     [(0, &info)],
                     GpuOptions::default(),
-                    GpuSelection::default(),
-                    HostPlatform::Other,
+                    select(GpuApi::Metal),
                     reported_static_admission,
                 )
                 .unwrap_err()
@@ -828,7 +759,7 @@ mod tests {
             "identical",
             wgpu::Backend::Vulkan,
             wgpu::DeviceType::DiscreteGpu,
-            NVIDIA_VENDOR_ID,
+            0x10de,
         );
         first.raw.device_pci_bus_id = "0000:01:00.0".to_owned();
         let mut second = first.clone();
@@ -840,10 +771,10 @@ mod tests {
             0,
         );
         let mut inventory = vec![second, integrated, first.clone()];
-        let index = pick(&inventory, GpuSelection::default(), HostPlatform::Other);
+        let index = pick(&inventory, select(GpuApi::Vulkan));
         assert_eq!(inventory[index], first);
         inventory.reverse();
-        let reversed = pick(&inventory, GpuSelection::default(), HostPlatform::Other);
+        let reversed = pick(&inventory, select(GpuApi::Vulkan));
         assert_eq!(inventory[reversed], first);
     }
 }

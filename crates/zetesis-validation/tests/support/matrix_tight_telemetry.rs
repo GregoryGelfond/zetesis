@@ -27,7 +27,7 @@ fn tight_fixture() -> (Value, String) {
 
 fn metal() -> NativeExecution {
     NativeExecution {
-        backend: Backend::Metal,
+        backend: Backend::Gpu(Some(GpuApi::Metal)),
         ..Default::default()
     }
 }
@@ -36,7 +36,10 @@ fn metal() -> NativeExecution {
 fn tight_device_work_is_not_propagation() {
     let (document, text) = tight_fixture();
     let observed = observe(&document, text.as_bytes(), metal()).unwrap();
-    assert_eq!(observed.execution.backend, Backend::Metal);
+    assert_eq!(
+        observed.execution.backend,
+        Backend::Gpu(Some(GpuApi::Metal))
+    );
     assert_eq!(observed.execution.procedure, Procedure::TightSupport);
     assert_eq!(
         serde_json::to_value(observed.execution.procedure).unwrap(),

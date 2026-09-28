@@ -7,7 +7,7 @@ fn modern_invocation_uses_canonical_solve_arguments() {
     let arguments = NativeInvocation::Solve.arguments(&NativeExecution::default());
     let expected: Vec<OsString> = [
         "solve",
-        "--device",
+        "--backend",
         "cpu",
         "--oracle",
         "auto",

@@ -5,7 +5,8 @@ use std::{collections::BTreeSet, io};
 use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, ExecutionObservation, ExecutionObserver,
-    ExecutionResources, Grounder, Oracle, PreparedInput, Session, SolveConfig, SolveError, Subject,
+    ExecutionResources, GpuApi, Grounder, Oracle, PreparedInput, Session, SolveConfig, SolveError,
+    Subject,
 };
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit, admit_formula,
@@ -109,7 +110,7 @@ fn start_polls_control_before_device_setup() {
     let builder = Session::builder(
         PreparedInput::admitted(&owner),
         SolveConfig {
-            backend: Backend::Metal,
+            backend: Backend::Gpu(Some(GpuApi::Metal)),
             grounder: Grounder::Eager,
             ..config()
         },

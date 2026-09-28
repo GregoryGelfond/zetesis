@@ -30,7 +30,7 @@ fn solve(source: &[u8], json: bool, limited: bool, stdout: Stdio) -> Output {
     let mut args = vec![
         "solve",
         "-",
-        "--device",
+        "--backend",
         "cpu",
         "--threads",
         "1",
@@ -215,7 +215,7 @@ fn completed_device_inventory_exits_successfully() {
     assert_eq!(output.status.code(), Some(0));
     let text = String::from_utf8(output.stdout).unwrap();
     assert!(text.contains("CPU: available"));
-    assert!(text.contains("GPU: support not compiled"));
+    assert!(text.contains("GPU: not compiled into this build"));
 }
 
 #[cfg(all(unix, not(feature = "gpu")))]

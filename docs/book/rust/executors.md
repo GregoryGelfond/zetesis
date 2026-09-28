@@ -9,7 +9,7 @@ The executor neither emits `AnswerSet` values nor establishes search exhaustion.
 This interface accepts `PreparedInput::formula` and `formula_bundle`.
 Relational and prepared-ground inputs return a typed refusal; the library does
 not replay source or materialize a different profile. The explicit executor
-requires `Backend::Auto`. A simultaneous explicit builtin backend request is a
+requires the CPU backend, the default. A builtin GPU backend request is a
 conflict, and `ExecutionResources` remains an input to builtin execution only.
 The executor can own shared infrastructure handles inside its own configuration.
 

@@ -69,7 +69,7 @@ fn incompatible_observation_routes_are_refused_without_fallback() {
     for arguments in [
         vec!["--oracle", "closure"],
         vec!["--backend", "metal", "--grounder", "lazy"],
-        vec!["--backend", "nvidia", "--grounder", "lazy"],
+        vec!["--backend", "gpu", "--grounder", "lazy"],
     ] {
         let (result, output, _) = solve(source, &arguments);
         assert!(result.is_err(), "{arguments:?}");

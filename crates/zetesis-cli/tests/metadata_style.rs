@@ -20,7 +20,7 @@ fn options(mode: ColorMode) -> Options {
     let mut options = Options::try_parse_from([
         "zetesis",
         "--backend",
-        "auto",
+        "cpu",
         "--grounder",
         "lazy",
         "--workers",
@@ -66,17 +66,11 @@ fn diagnostics(mode: ColorMode, json: bool) -> (Vec<u8>, String) {
 
 #[test]
 fn plain_metadata_describes_the_execution_policy() {
-    let automatic = if cfg!(feature = "gpu") {
-        "CPU selected; no measured GPU crossover for this execution profile."
-    } else {
-        "GPU support was not compiled; using CPU without device discovery."
-    };
     let expected = format!(
         "Source: 1 original file ({} bytes)\n\
          Oracle: reduct closure\n\
          Grounding: requested=lazy, effective=lazy (source joins; no complete ground-rule store)\n\
-         Backend: cpu (lazy source joins, 1 workers)\n\
-         Auto: {automatic}\n",
+         Backend: cpu (lazy source joins, 1 workers)\n",
         bundle().total_bytes()
     );
     assert_eq!(diagnostics(ColorMode::Never, false).1, expected);
@@ -86,7 +80,7 @@ fn plain_metadata_describes_the_execution_policy() {
 fn styled_metadata_retains_its_exact_plain_text() {
     let (_, plain) = diagnostics(ColorMode::Never, false);
     let (_, styled) = diagnostics(ColorMode::Always, false);
-    for label in ["Source", "Oracle", "Grounding", "Backend", "Auto"] {
+    for label in ["Source", "Oracle", "Grounding", "Backend"] {
         assert!(styled.contains(&format!("\u{1b}[34m{label}:\u{1b}[3;90m ")));
     }
     let decoded = styled
@@ -185,7 +179,7 @@ fn later_diagnostic_failure_retains_exhaustion() {
 fn redirected_process_diagnostics_remain_plain() {
     for (no_color, term) in [("", "xterm-256color"), ("1", "xterm"), ("", "dumb")] {
         let result = Command::new(env!("CARGO_BIN_EXE_zetesis"))
-            .args(["--backend", "auto", "--grounder", "lazy", "--models", "0"])
+            .args(["--backend", "cpu", "--grounder", "lazy", "--models", "0"])
             .arg(concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/../../examples/network-repair.lp"

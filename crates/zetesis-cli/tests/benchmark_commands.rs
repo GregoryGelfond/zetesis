@@ -147,7 +147,7 @@ fn primitive_json_is_an_unstyled_event_stream() {
     let command = command(&[
         "primitives",
         "relation",
-        "--device",
+        "--backend",
         "cpu",
         "--threads",
         "1",
@@ -185,7 +185,7 @@ fn primitive_human_view_uses_completed_typed_samples() {
     let command = command(&[
         "primitives",
         "relation",
-        "--device",
+        "--backend",
         "cpu",
         "--threads",
         "1",
@@ -211,7 +211,7 @@ fn primitive_human_view_uses_completed_typed_samples() {
 #[cfg(not(feature = "gpu"))]
 #[test]
 fn cpu_build_refuses_unavailable_primitive_profiles() {
-    let command = command(&["primitives", "relation", "--device", "cpu"]);
+    let command = command(&["primitives", "relation", "--backend", "cpu"]);
     let mut output = Vec::new();
     assert!(matches!(
         benchmark::execute(&command, Layout::default(), &mut output, &mut Vec::new()),
@@ -237,7 +237,7 @@ fn failed_primitive_keeps_its_primary_failure() {
     let command = command(&[
         "primitives",
         "relation",
-        "--device",
+        "--backend",
         "cpu",
         "--threads",
         "1",
@@ -387,7 +387,7 @@ fn attempted_json_never_gets_a_second_document() {
     let command = command(&[
         "primitives",
         "relation",
-        "--device",
+        "--backend",
         "cpu",
         "--rows",
         "1",

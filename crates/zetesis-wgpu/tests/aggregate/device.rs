@@ -1,7 +1,8 @@
 use super::*;
 use crate::AggregateGpuPlanLimits;
 use crate::aggregate::tests::fixtures;
-use crate::{GpuBackendPreference, GpuErrorKind, GpuSelection};
+use crate::{GpuErrorKind, GpuSelection};
+use zetesis_backend::GpuApi;
 use zetesis_ferraris::native_aggregate::Function;
 
 #[test]
@@ -71,30 +72,19 @@ fn corrupt_identity(selection: GpuSelection) -> GpuAggregateOracle {
 #[test]
 #[ignore = "requires actual Metal; explicit physical qualification"]
 fn metal_aggregate_readback_failure_retains_submitted_work() {
-    qualify_failure(GpuBackendPreference::Metal);
+    qualify_failure(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
 fn vulkan_aggregate_readback_failure_retains_submitted_work() {
-    qualify_failure(GpuBackendPreference::Vulkan);
+    qualify_failure(GpuApi::Vulkan);
 }
 
-fn qualify_failure(backend: GpuBackendPreference) {
-    let mut oracle = corrupt_identity(GpuSelection {
-        backend,
-        vendor_id: None,
-    });
+fn qualify_failure(backend: GpuApi) {
+    let mut oracle = corrupt_identity(GpuSelection { api: backend });
     assert!(oracle.info().is_hardware_gpu());
-    assert_eq!(
-        oracle.info().backend(),
-        match backend {
-            GpuBackendPreference::Metal => "Metal",
-            GpuBackendPreference::Vulkan => "Vulkan",
-            GpuBackendPreference::Auto | GpuBackendPreference::Dx12 | GpuBackendPreference::Gl =>
-                panic!("explicit physical fixture"),
-        }
-    );
+    assert_eq!(oracle.info().backend(), backend.name());
     let theory = fixtures::theory();
     let group = fixtures::group(&theory, Function::Sum, 65);
     let worlds = fixtures::worlds(&theory);
@@ -133,11 +123,8 @@ fn qualify_failure(backend: GpuBackendPreference) {
     );
 }
 
-fn invalidates_shared_primitive(backend: GpuBackendPreference) {
-    let mut aggregate = corrupt_identity(GpuSelection {
-        backend,
-        vendor_id: None,
-    });
+fn invalidates_shared_primitive(backend: GpuApi) {
+    let mut aggregate = corrupt_identity(GpuSelection { api: backend });
     assert!(aggregate.info().is_hardware_gpu());
     let context = aggregate.context().clone();
     let mut formula = crate::GpuFormulaOracle::from_context(&context).unwrap();
@@ -222,11 +209,11 @@ fn invalidates_shared_primitive(backend: GpuBackendPreference) {
 #[test]
 #[ignore = "requires actual Metal; explicit physical qualification"]
 fn metal_readback_failure_invalidates_context_peers() {
-    invalidates_shared_primitive(GpuBackendPreference::Metal);
+    invalidates_shared_primitive(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
 fn vulkan_readback_failure_invalidates_context_peers() {
-    invalidates_shared_primitive(GpuBackendPreference::Vulkan);
+    invalidates_shared_primitive(GpuApi::Vulkan);
 }

@@ -108,7 +108,7 @@ pub fn metadata(request: Metadata<'_>) -> Result<Value, Error> {
         Some(table) => {
             let selection = selection(table)?;
             require(
-                selection.backend == super::PhysicalBackend::Metal,
+                selection.api == zetesis_backend::GpuApi::Metal,
                 "coverage metadata records the Metal qualification only",
             )?;
             selection.groups

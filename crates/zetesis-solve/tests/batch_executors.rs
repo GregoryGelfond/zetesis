@@ -176,7 +176,7 @@ fn input(source: &str) -> AdmittedFormula {
 
 fn config() -> SolveConfig {
     SolveConfig {
-        backend: Backend::Auto,
+        backend: Backend::Cpu,
         grounder: Grounder::Eager,
         models: 0,
         workers: NonZeroUsize::new(3).unwrap(),
@@ -534,12 +534,12 @@ fn cancellation_before_setup_never_calls_the_executor() {
 }
 
 #[test]
-fn builtin_backend_requests_conflict_with_injection() {
+fn builtin_gpu_requests_conflict_with_injection() {
     let owner = input("{a}.");
     let failure = Session::builder(
         PreparedInput::formula(&owner),
         SolveConfig {
-            backend: Backend::Cpu,
+            backend: Backend::Gpu(None),
             ..config()
         },
         Cancellation::default(),
@@ -550,10 +550,10 @@ fn builtin_backend_requests_conflict_with_injection() {
     ))
     .start()
     .err()
-    .expect("explicit builtin selection must be honored");
+    .expect("a builtin GPU request must be honored or refused");
     assert!(matches!(
         *failure.cause,
-        SolveError::Executor(ExecutorError::Backend(Backend::Cpu))
+        SolveError::Executor(ExecutorError::Backend(Backend::Gpu(None)))
     ));
 }
 

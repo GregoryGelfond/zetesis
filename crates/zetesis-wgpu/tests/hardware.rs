@@ -13,11 +13,12 @@ mod seed_views;
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
+use zetesis_backend::GpuApi;
 use zetesis_core::{
     AdmissionLimits, AtomPattern, GroundProgram, Predicate, Program, Seed, SeedSelection,
     StaticLimits, Template,
 };
-use zetesis_wgpu::{GpuCheck, GpuLimits, GpuOptions, GpuOracle};
+use zetesis_wgpu::{GpuCheck, GpuLimits, GpuOptions, GpuOracle, GpuSelection};
 
 // Complete powersets stay bounded at 256 candidate occurrences per fixture.
 const MAX_FIXTURE_GATES: usize = 8;
@@ -241,19 +242,19 @@ fn compare(oracle: &mut GpuOracle, graph: &GroundProgram) -> usize {
 #[test]
 #[ignore = "requires an actual Metal GPU; run this hardware qualification explicitly"]
 fn metal_constructor_executes_resident_batches_without_fallback() {
-    qualify_constructor_executes_resident_batches_without_fallback(physical::Backend::Metal);
+    qualify_constructor_executes_resident_batches_without_fallback(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
 fn vulkan_constructor_executes_resident_batches_without_fallback() {
-    qualify_constructor_executes_resident_batches_without_fallback(physical::Backend::Vulkan);
+    qualify_constructor_executes_resident_batches_without_fallback(GpuApi::Vulkan);
 }
 
-fn qualify_constructor_executes_resident_batches_without_fallback(backend: physical::Backend) {
-    let mut oracle = GpuOracle::new_selected(GpuOptions::default(), backend.selection())
+fn qualify_constructor_executes_resident_batches_without_fallback(backend: GpuApi) {
+    let mut oracle = GpuOracle::new_selected(GpuOptions::default(), GpuSelection { api: backend })
         .expect("requested physical GPU must be available");
-    backend.verify(oracle.info());
+    physical::verify(backend, oracle.info());
     let graph = compile(vec![
         rule(Some("a"), &[], &["a"], &[]),
         rule(Some("b"), &["a"], &[], &[]),
@@ -274,20 +275,20 @@ fn exact_static_oracle_matches_independent_cpu_closures() {
 #[test]
 #[ignore = "requires an actual Metal GPU; explicit physical qualification"]
 fn metal_static_oracle_matches_independent_closures() {
-    let backend = physical::Backend::Metal;
-    let oracle = GpuOracle::new_selected(GpuOptions::default(), backend.selection())
+    let backend = GpuApi::Metal;
+    let oracle = GpuOracle::new_selected(GpuOptions::default(), GpuSelection { api: backend })
         .expect("requested physical Metal adapter must be available");
-    backend.verify(oracle.info());
+    physical::verify(backend, oracle.info());
     qualify_static(oracle);
 }
 
 #[test]
 #[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
 fn vulkan_static_oracle_matches_independent_closures() {
-    let backend = physical::Backend::Vulkan;
-    let oracle = GpuOracle::new_selected(GpuOptions::default(), backend.selection())
+    let backend = GpuApi::Vulkan;
+    let oracle = GpuOracle::new_selected(GpuOptions::default(), GpuSelection { api: backend })
         .expect("requested physical Vulkan adapter must be available");
-    backend.verify(oracle.info());
+    physical::verify(backend, oracle.info());
     qualify_static(oracle);
 }
 

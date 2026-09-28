@@ -11,24 +11,33 @@ fn options(arguments: &[&str]) -> Options {
 }
 
 #[test]
-fn normal_invocation_defaults_to_auto_and_preserves_explicit_backends() {
+fn normal_invocation_defaults_to_the_cpu_and_preserves_explicit_backends() {
     let configured = options(&["input.lp"]);
-    assert_eq!(configured.backend, Backend::Auto);
+    assert_eq!(configured.backend, Backend::Cpu);
     assert_eq!(configured.input.to_str(), Some("input.lp"));
     assert_eq!(configured.command, None);
-    for (argument, backend) in [
-        ("auto", Backend::Auto),
-        ("cpu", Backend::Cpu),
-        ("gpu", Backend::Gpu),
-        ("metal", Backend::Metal),
-        ("vulkan", Backend::Vulkan),
-        ("dx12", Backend::Dx12),
-        ("gl", Backend::Gl),
-        ("nvidia", Backend::Nvidia),
-    ] {
-        assert_eq!(options(&["--backend", argument]).backend, backend);
+    for backend in Backend::ALL {
+        assert_eq!(options(&["--backend", backend.label()]).backend, backend);
     }
     assert_eq!(options(&["devices"]).command, Some(Command::Devices));
+}
+
+#[test]
+fn retired_backend_values_are_explained() {
+    for retired in ["auto", "dx12", "gl", "nvidia"] {
+        let error = Options::try_parse_from(["zetesis", "--backend", retired]).unwrap_err();
+        assert_eq!(
+            error.kind(),
+            clap::error::ErrorKind::InvalidValue,
+            "{retired}"
+        );
+        assert!(
+            error
+                .to_string()
+                .contains(&format!("`{retired}` is no longer a backend")),
+            "{error}"
+        );
+    }
 }
 
 /// A tiny automatic run, one node and one choice, with its models and its
@@ -66,13 +75,8 @@ fn a_tiny_auto_run_finds_its_first_answer_after_one_check() {
 fn diagnostics_are_written_apart_from_the_models() {
     let (_, models, diagnostics) = tiny_auto_run();
     assert!(!models.contains("Backend:"));
-    assert!(!models.contains("Auto:"));
     assert!(diagnostics.contains("Backend: cpu"));
     assert!(!diagnostics.contains("Answer:"));
-    #[cfg(feature = "gpu")]
-    assert!(diagnostics.contains("no measured GPU crossover"));
-    #[cfg(not(feature = "gpu"))]
-    assert!(diagnostics.contains("without device discovery"));
 }
 
 #[test]
@@ -184,9 +188,9 @@ fn cpu_only_devices_and_explicit_gpu_refusal_are_truthful() {
         .unwrap();
     assert!(result.status.success());
     let output = String::from_utf8(result.stdout).unwrap();
-    assert!(output.contains("GPU: support not compiled"));
+    assert!(output.contains("GPU: not compiled into this build"));
     assert!(!output.contains("Answer:"));
-    for backend in ["gpu", "metal", "vulkan", "dx12", "gl", "nvidia"] {
+    for backend in ["gpu", "metal", "vulkan"] {
         let mut output = Vec::new();
         let error = run_with_diagnostics(
             "a.".into(),
@@ -203,10 +207,10 @@ fn cpu_only_devices_and_explicit_gpu_refusal_are_truthful() {
 
 #[cfg(feature = "gpu")]
 #[test]
-fn automatic_execution_ignores_device_transport_limits() {
+fn default_execution_ignores_device_transport_limits() {
     let mut models = Vec::new();
     let mut diagnostics = Vec::new();
-    // Device transport has no producer on this automatic CPU route. A zero
+    // Device transport has no producer on the default CPU route. A zero
     // transport ceiling cannot truncate the family or trigger discovery.
     let report = run_with_diagnostics(
         "{a}. {b}. {c}. {d}. {e}. {f}.".into(),
@@ -246,7 +250,6 @@ fn automatic_execution_ignores_device_transport_limits() {
         .collect();
     assert_eq!(answers, expected);
     let diagnostics = String::from_utf8(diagnostics).unwrap();
-    assert!(diagnostics.contains("no measured GPU crossover"));
     assert!(diagnostics.contains("Backend: cpu"));
     assert!(!diagnostics.contains("Backend: gpu"));
 }

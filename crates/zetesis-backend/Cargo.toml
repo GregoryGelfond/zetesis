@@ -1,0 +1,22 @@
+[package]
+name = "zetesis-backend"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "The backend vocabulary every zetesis tool shares: CPU, or a GPU through Metal or Vulkan."
+
+[dependencies]
+clap = { workspace = true, optional = true }
+serde = { version = "1", optional = true }
+
+[dev-dependencies]
+serde_json = "1"
+
+[features]
+clap = ["dep:clap"]
+serde = ["dep:serde"]
+
+[lints]
+workspace = true

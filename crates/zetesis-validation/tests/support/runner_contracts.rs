@@ -9,7 +9,8 @@ use std::time::Duration;
 use serde_json::{Value, json};
 
 use crate::corpus_comparison::corpus::{Case, Contract, Loaded, Manifest};
-use crate::corpus_comparison::{NativeBackend, NativeOracle, Request as Options};
+use crate::corpus_comparison::{NativeOracle, Request as Options};
+use zetesis_backend::{Backend, GpuApi};
 
 const NATIVE: &str = "Answer: 1\na\nSATISFIABLE\nCoverage: exhausted\nModels: 1\n";
 const PHASE_TIMINGS: &str = include_str!("phase_statistics.txt");
@@ -480,14 +481,10 @@ fn native_backend_batch_and_stats_are_passed_without_a_solver_wrapper() {
     let loaded = loaded(directory.path(), 1);
     let mut options = options(directory.path());
     for (backend, label) in [
-        (NativeBackend::Cpu, "cpu"),
-        (NativeBackend::Auto, "auto"),
-        (NativeBackend::Gpu, "gpu"),
-        (NativeBackend::Metal, "metal"),
-        (NativeBackend::Vulkan, "vulkan"),
-        (NativeBackend::Dx12, "dx12"),
-        (NativeBackend::Gl, "gl"),
-        (NativeBackend::Nvidia, "nvidia"),
+        (Backend::Cpu, "cpu"),
+        (Backend::Gpu(None), "gpu"),
+        (Backend::Gpu(Some(GpuApi::Metal)), "metal"),
+        (Backend::Gpu(Some(GpuApi::Vulkan)), "vulkan"),
     ] {
         options.native_backend = backend;
         options.native_batch_size = 7.try_into().unwrap();
@@ -527,7 +524,7 @@ fn physical_formula_parity_requires_real_route_telemetry_even_when_answers_match
     let directory = tempfile::tempdir().unwrap();
     let loaded = loaded(directory.path(), 1);
     let mut options = options(directory.path());
-    options.native_backend = NativeBackend::Metal;
+    options.native_backend = Backend::Gpu(Some(GpuApi::Metal));
     options.native_oracle = NativeOracle::Countermodel;
     let rejected = check(&options, &loaded, "native_execution_unqualified");
     assert_eq!(rejected["native_answer_parity_passed"], true);
@@ -560,7 +557,7 @@ fn physical_formula_parity_requires_real_route_telemetry_even_when_answers_match
 fn full_campaign_separates_answer_parity_device_route_and_exercised_membership() {
     let directory = tempfile::tempdir().unwrap();
     let mut options = options(directory.path());
-    options.native_backend = NativeBackend::Metal;
+    options.native_backend = Backend::Gpu(Some(GpuApi::Metal));
     options.native_oracle = NativeOracle::Countermodel;
     options.zetesis = emitting(
         directory.path(),
@@ -802,7 +799,7 @@ fn completion_requests_are_forwarded_captured_and_checked_without_losing_answer_
     let directory = tempfile::tempdir().unwrap();
     let loaded = loaded(directory.path(), 1);
     let mut options = options(directory.path());
-    options.native_backend = NativeBackend::Metal;
+    options.native_backend = Backend::Gpu(Some(GpuApi::Metal));
     options.native_oracle = NativeOracle::Countermodel;
     for workers in [1, 2, 4] {
         options.native_completion_workers = workers.try_into().unwrap();
@@ -831,7 +828,7 @@ fn completion_requests_are_forwarded_captured_and_checked_without_losing_answer_
         let result = check(&options, &loaded, "native_execution_unqualified");
         assert_eq!(result["native_answer_parity_passed"], true);
     }
-    options.native_backend = NativeBackend::Cpu;
+    options.native_backend = Backend::Cpu;
     options.native_max_completion_scratch_bytes = 0;
     options.zetesis = emitting(
         directory.path(),

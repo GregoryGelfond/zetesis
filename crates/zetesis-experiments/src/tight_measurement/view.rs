@@ -433,7 +433,7 @@ fn duration<S: Serializer>(value: &std::time::Duration, serializer: S) -> Result
 impl Serialize for Configuration {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         ConfigurationView {
-            cases: &self.cases, backend: self.backend.label(),
+            cases: &self.cases, backend: crate::backend::label(self.backend),
             support: self.support,
             warmups: self.warmups, repetitions: self.repetitions.get(), workers: self.workers.get(),
             residual_policy: "serial occurrence-ordered native general reduct queries on every route",

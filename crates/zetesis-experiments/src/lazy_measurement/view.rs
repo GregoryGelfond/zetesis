@@ -361,7 +361,7 @@ impl Serialize for Configuration {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         ConfigurationView {
             cases: &self.cases,
-            backend: self.backend.label(),
+            backend: crate::backend::label(self.backend),
             warmups: self.warmups,
             repetitions: self.repetitions,
             workers: self.workers,

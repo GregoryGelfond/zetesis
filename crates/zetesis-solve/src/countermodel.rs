@@ -53,9 +53,7 @@ pub(crate) fn prepare_certificate(
         return Ok(None);
     }
     let eligibility = phases.measure(SolvePhase::CertificateSetup, || {
-        if matches!(mode, crate::batch_executor::Mode::External(_))
-            || !matches!(options.backend, crate::Backend::Auto | crate::Backend::Cpu)
-        {
+        if matches!(mode, crate::batch_executor::Mode::External(_)) || options.backend.is_gpu() {
             // Device execution currently implements tight support. Preparation
             // authenticates the complete theory and charges the same owner, but
             // does not install CPU membership checks behind a device request.

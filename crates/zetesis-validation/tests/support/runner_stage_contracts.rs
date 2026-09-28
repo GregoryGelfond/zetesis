@@ -3,7 +3,8 @@
 use serde_json::json;
 
 use super::{NATIVE, PHASE_TIMINGS, check, emitting, loaded, options};
-use crate::corpus_comparison::{NativeBackend, NativeOracle};
+use crate::corpus_comparison::NativeOracle;
+use zetesis_backend::{Backend, GpuApi};
 
 const STAGES: &str = include_str!("stage_statistics.txt");
 
@@ -120,7 +121,7 @@ fn complete_stage_timing_never_qualifies_a_physical_device_route() {
     let directory = tempfile::tempdir().unwrap();
     let loaded = loaded(directory.path(), 1);
     let mut options = options(directory.path());
-    options.native_backend = NativeBackend::Metal;
+    options.native_backend = Backend::Gpu(Some(GpuApi::Metal));
     options.native_oracle = NativeOracle::Countermodel;
     options.zetesis = emitting(directory.path(), "native", NATIVE, STAGES, 0);
     let result = check(&options, &loaded, "native_execution_unqualified");

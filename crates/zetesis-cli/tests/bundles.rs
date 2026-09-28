@@ -382,7 +382,7 @@ fn lazy_formula_bundle_is_refused_before_device_discovery() {
         matches!(
             error,
             RunError::HybridBackend {
-                backend: zetesis_cli::Backend::Metal
+                backend: zetesis_cli::Backend::Gpu(Some(zetesis_backend::GpuApi::Metal))
             }
         ),
         "{error}"

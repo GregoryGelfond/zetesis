@@ -420,7 +420,7 @@ semantic distinctions on the solver side.
 ### Application benchmark adapters
 
 `performance::command::run` accepts the existing typed matrix request and an
-explicit `matrix::NativeInvocation`. `Solve` uses `solve --device … --threads …
+explicit `matrix::NativeInvocation`. `Solve` uses `solve --backend … --threads …
 --all`; `Legacy` retains the flat interface for sealed older executables. Both
 request machine answers and statistics and share all fixed scheduling,
 qualification, timeout, no-clobber publication and failure accounting. The

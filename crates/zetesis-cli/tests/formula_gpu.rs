@@ -246,7 +246,7 @@ fn formula_device_route_refuses_explicit_lazy_grounding() {
     assert!(matches!(
         error,
         RunError::HybridBackend {
-            backend: zetesis_cli::Backend::Metal
+            backend: zetesis_cli::Backend::Gpu(Some(zetesis_backend::GpuApi::Metal))
         }
     ));
     assert!(output.is_empty());
@@ -303,34 +303,35 @@ mod language_value_sources;
 #[cfg(feature = "gpu")]
 mod physical {
     use super::formula_records::{displayed_records, full_records};
-    use super::physical_backend::Backend;
+    use super::physical_backend::Physical;
     use super::{Cancellation, Completion, options, run_with_diagnostics};
+    use zetesis_backend::GpuApi;
 
     #[test]
     #[ignore = "requires actual Metal; executes the ordinary solver and never substitutes CPU"]
     fn ordinary_metal_formula_batches_match_complete_cpu_models_costs_and_displays() {
-        qualify_formula_results(Backend::Metal);
+        qualify_formula_results(GpuApi::Metal);
     }
 
     #[test]
     #[ignore = "requires actual Vulkan through the ordinary solver"]
     fn ordinary_vulkan_formula_results_match_cpu() {
-        qualify_formula_results(Backend::Vulkan);
+        qualify_formula_results(GpuApi::Vulkan);
     }
 
     #[test]
     #[ignore = "requires actual Metal after source table-join grounding"]
     fn ordinary_metal_table_joins_preserve_complete_answers() {
-        qualify_table_joins(Backend::Metal);
+        qualify_table_joins(GpuApi::Metal);
     }
 
     #[test]
     #[ignore = "requires actual Vulkan after source table-join grounding"]
     fn ordinary_vulkan_table_joins_preserve_complete_answers() {
-        qualify_table_joins(Backend::Vulkan);
+        qualify_table_joins(GpuApi::Vulkan);
     }
 
-    fn qualify_table_joins(backend: Backend) {
+    fn qualify_table_joins(backend: GpuApi) {
         let source = "edge(1,1). edge(1,2). edge(2,1). edge(2,2). 1{choose(1);choose(2)}1. witness(X,Y):-choose(X),edge(X,Y). diagonal(X):-edge(X,X). #show witness/2.";
         // Automatic grounding can defer these definitions until publication.
         // This fixture must exercise completed-support table joins instead.
@@ -398,7 +399,7 @@ mod physical {
         assert!(work.table_rows.unwrap() > 0);
     }
 
-    fn qualify_formula_results(backend: Backend) {
+    fn qualify_formula_results(backend: GpuApi) {
         for source in [
             "a | b.",
             "{a;b;c;d}. x:-x. :-a,b. #show.",
@@ -431,7 +432,7 @@ mod physical {
         }
     }
 
-    fn qualify_formula_output(source: &str, backend: Backend, json: bool) {
+    fn qualify_formula_output(source: &str, backend: GpuApi, json: bool) {
         let mut expected = Vec::new();
         let mut configuration = options(&["--backend", "cpu"]);
         configuration.json = json;
@@ -501,16 +502,16 @@ mod physical {
     #[test]
     #[ignore = "requires actual Metal; checks resource and diagnostic failures in ordinary solving"]
     fn ordinary_metal_formula_limits_preserve_partial_coverage_and_writer_errors() {
-        qualify_formula_limits(Backend::Metal);
+        qualify_formula_limits(GpuApi::Metal);
     }
 
     #[test]
     #[ignore = "requires actual Vulkan through the ordinary solver"]
     fn ordinary_vulkan_formula_retains_bounded_outcomes() {
-        qualify_formula_limits(Backend::Vulkan);
+        qualify_formula_limits(GpuApi::Vulkan);
     }
 
-    fn qualify_formula_limits(backend: Backend) {
+    fn qualify_formula_limits(backend: GpuApi) {
         qualify_optimization_stop(backend);
         let source = "{a;b;c;d}.";
         let mut output = Vec::new();
@@ -568,7 +569,7 @@ mod physical {
         assert!(broken.bytes().is_empty());
     }
 
-    fn qualify_optimization_stop(backend: Backend) {
+    fn qualify_optimization_stop(backend: GpuApi) {
         for pruning in [false, true] {
             let mut configuration = options(&[
                 "--backend",

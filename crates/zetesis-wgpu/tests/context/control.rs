@@ -1,9 +1,10 @@
 //! Public controlled doors preserve empty/stop precedence and complete results.
 
 use crate::{
-    FormulaLimits, FormulaVerdict, GpuBackendPreference, GpuContext, GpuErrorKind,
-    GpuFormulaOracle, GpuLimits, GpuOptions, GpuOracle, GpuSelection,
+    FormulaLimits, FormulaVerdict, GpuContext, GpuErrorKind, GpuFormulaOracle, GpuLimits,
+    GpuOptions, GpuOracle, GpuSelection,
 };
+use zetesis_backend::GpuApi;
 use zetesis_core::{AdmissionLimits, GroundProgram, Program, Seed, StaticLimits};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Node, Theory};
@@ -14,24 +15,11 @@ fn cancelled() -> Cancellation {
     cancellation
 }
 
-fn controlled_calls(backend: GpuBackendPreference) {
-    let context = GpuContext::new_selected(
-        GpuOptions::default(),
-        GpuSelection {
-            backend,
-            vendor_id: None,
-        },
-    )
-    .unwrap();
+fn controlled_calls(backend: GpuApi) {
+    let context =
+        GpuContext::new_selected(GpuOptions::default(), GpuSelection { api: backend }).unwrap();
     assert!(context.info().is_hardware_gpu());
-    assert_eq!(
-        context.info().backend(),
-        match backend {
-            GpuBackendPreference::Metal => "Metal",
-            GpuBackendPreference::Vulkan => "Vulkan",
-            _ => panic!("explicit physical API required"),
-        }
-    );
+    assert_eq!(context.info().backend(), backend.name());
     eprintln!("controlled calls adapter={:?}", context.info());
     let mut ordinary = GpuOracle::from_context(&context).unwrap();
     let mut formula = GpuFormulaOracle::from_context(&context).unwrap();
@@ -262,11 +250,11 @@ fn entry_precedence(
 #[test]
 #[ignore = "requires an actual physical Metal adapter"]
 fn metal_controlled_calls_preserve_stop_identity() {
-    controlled_calls(GpuBackendPreference::Metal);
+    controlled_calls(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires an actual physical Vulkan adapter"]
 fn vulkan_controlled_calls_preserve_stop_identity() {
-    controlled_calls(GpuBackendPreference::Vulkan);
+    controlled_calls(GpuApi::Vulkan);
 }

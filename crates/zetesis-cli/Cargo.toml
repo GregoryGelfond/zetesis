@@ -8,6 +8,7 @@ publish = false
 
 [dependencies]
 zetesis-presentation = { workspace = true, features = ["clap"] }
+zetesis-backend = { workspace = true, features = ["clap"] }
 zetesis-validation.workspace = true
 zetesis-experiments = { workspace = true, optional = true }
 zetesis-solve.workspace = true

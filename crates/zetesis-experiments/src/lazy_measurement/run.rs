@@ -1,10 +1,10 @@
 use std::{io, num::NonZeroUsize, time::Instant};
+use zetesis_backend::GpuApi;
 
 use zetesis_cpu::{BatchOracle, Cancellation, Check, lazy};
 use zetesis_wgpu::{GpuLazyOracle, GpuOptions};
 
 use super::{Configuration, Error, Event, Phase, Route, Sample, fixture, view};
-use crate::Backend;
 
 const CPU_ROUTES: [Route; 4] = [
     Route::Scalar,
@@ -65,10 +65,10 @@ pub fn measure(
         .max()
         .ok_or(Error::Configuration("no candidate batch"))?;
     let mut execution = Execution::new(configuration, maximum, &mut observe)?;
-    let routes = match configuration.backend {
-        Backend::Cpu => &CPU_ROUTES[..],
-        Backend::Metal => &METAL_ROUTES[..],
-        Backend::Vulkan => &VULKAN_ROUTES[..],
+    let routes = match crate::backend::api(configuration.backend) {
+        None => &CPU_ROUTES[..],
+        Some(GpuApi::Metal) => &METAL_ROUTES[..],
+        Some(GpuApi::Vulkan) => &VULKAN_ROUTES[..],
     };
     let mut emitted = 0;
     for (case_index, case) in configuration.cases.iter().copied().enumerate() {
@@ -194,9 +194,7 @@ impl Execution {
         let pool = BatchOracle::new(configuration.workers, maximum).map_err(Error::Pool)?;
         let pool_init_ns = started.elapsed().as_nanos();
         let started = Instant::now();
-        let gpu = configuration
-            .backend
-            .selection()
+        let gpu = crate::backend::selection(configuration.backend)
             .map(|selection| GpuLazyOracle::new_selected(GpuOptions::default(), selection))
             .transpose()
             .map_err(Error::Device)?;

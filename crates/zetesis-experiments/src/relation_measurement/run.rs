@@ -1,4 +1,5 @@
 use std::{hint::black_box, io, mem::size_of, time::Instant};
+use zetesis_backend::GpuApi;
 
 use rayon::prelude::*;
 use zetesis_core::relation::{Limits, Mask, Query, Relation, Selection};
@@ -11,10 +12,7 @@ use super::{
     Configuration, Error, Event, Observation, Phase, Preparation, Route, Subject,
     view::{self, DeviceWork},
 };
-use crate::{
-    Backend,
-    relation_fixtures::{Fixture, Limits as FixtureLimits},
-};
+use crate::relation_fixtures::{Fixture, Limits as FixtureLimits};
 
 /// Measure one retained relation with a common packed-output contract.
 ///
@@ -148,7 +146,7 @@ fn device(
     configuration: Configuration,
     preparation: &mut Preparation,
 ) -> Result<Option<GpuRelationExecutor>, Error> {
-    let executor = if let Some(selection) = configuration.backend.selection() {
+    let executor = if let Some(selection) = crate::backend::selection(configuration.backend) {
         let started = Instant::now();
         let executor = GpuRelationExecutor::new_selected(GpuOptions::default(), selection)
             .map_err(Error::Gpu)?;
@@ -156,7 +154,7 @@ fn device(
             || !executor
                 .info()
                 .backend()
-                .eq_ignore_ascii_case(configuration.backend.label())
+                .eq_ignore_ascii_case(crate::backend::label(configuration.backend))
         {
             return Err(Error::DeviceWork);
         }
@@ -206,10 +204,10 @@ fn schedule<'owner, 'source>(
                 let started = Instant::now();
                 let batch = gpu_batch(frame, prepared, cancellation)?;
                 let elapsed = started.elapsed().as_nanos();
-                let route = match frame.configuration.backend {
-                    Backend::Metal => Route::Metal,
-                    Backend::Vulkan => Route::Vulkan,
-                    Backend::Cpu => return Err(Error::DeviceWork),
+                let route = match crate::backend::api(frame.configuration.backend) {
+                    Some(GpuApi::Metal) => Route::Metal,
+                    Some(GpuApi::Vulkan) => Route::Vulkan,
+                    None => return Err(Error::DeviceWork),
                 };
                 publish(
                     frame,

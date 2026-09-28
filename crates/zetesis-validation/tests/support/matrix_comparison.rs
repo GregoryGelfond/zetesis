@@ -269,7 +269,8 @@ fn complete_answers_require_the_actual_requested_route() {
     assert!(!answer.display.satisfiable());
     assert!(sample.observation.is_some());
     let mut request = request();
-    request.plan.profiles[0].backend = crate::selected::Backend::Metal;
+    request.plan.profiles[0].backend =
+        crate::selected::Backend::Gpu(Some(zetesis_backend::GpuApi::Metal));
     assert_eq!(
         qualify(&mut sample, Some(&contract()), Some(&reference()), &request)
             .unwrap_err()

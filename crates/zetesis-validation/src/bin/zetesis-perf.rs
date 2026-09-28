@@ -283,6 +283,7 @@ impl From<JoinArgument> for zetesis_validation::selected::FormulaJoins {
 
 fn execution_profiles(options: &Options) -> Vec<zetesis_validation::selected::NativeExecution> {
     use zetesis_validation::selected::{Backend, Grounder, NativeExecution, Oracle};
+    const METAL: Backend = Backend::Gpu(Some(zetesis_backend::GpuApi::Metal));
     let defaults = [
         ProfileArgument::CpuEager,
         ProfileArgument::CpuLazy,
@@ -301,8 +302,8 @@ fn execution_profiles(options: &Options) -> Vec<zetesis_validation::selected::Na
                 ProfileArgument::CpuAuto => (Backend::Cpu, Grounder::Auto),
                 ProfileArgument::CpuEager => (Backend::Cpu, Grounder::Eager),
                 ProfileArgument::CpuLazy => (Backend::Cpu, Grounder::Lazy),
-                ProfileArgument::MetalEager => (Backend::Metal, Grounder::Eager),
-                ProfileArgument::MetalLazy => (Backend::Metal, Grounder::Lazy),
+                ProfileArgument::MetalEager => (METAL, Grounder::Eager),
+                ProfileArgument::MetalLazy => (METAL, Grounder::Lazy),
             };
             NativeExecution {
                 backend,

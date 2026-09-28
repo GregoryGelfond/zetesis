@@ -144,8 +144,8 @@ impl Configuration {
 /// Installed command view of matched certificate execution.
 #[derive(Clone, Debug, Args)]
 pub struct Options {
-    /// Require Metal/Vulkan or explicitly select scalar/Rayon checking only.
-    #[arg(long = "device", alias = "backend", value_enum, default_value_t)]
+    /// Scalar/Rayon checking only (the default), or require a GPU (gpu, metal or vulkan).
+    #[arg(long, value_parser = zetesis_backend::BackendParser, default_value = "cpu")]
     pub backend: Backend,
     /// Physical support construction; applies only to this primitive experiment.
     #[arg(long, value_enum, default_value_t)]

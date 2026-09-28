@@ -94,8 +94,7 @@ fn every_completed_cpu_statistics_prefix_is_fallible_without_losing_bytes() {
         let text = every_prefix(&options, &outcome);
         assert!(text.contains("completion: exhausted"));
     }
-    let mut options = options(&["--grounder", "eager"]);
-    options.backend = Backend::Auto;
+    let options = options(&["--grounder", "eager"]);
     let outcome = actual("p.", &options, &Cancellation::default());
     let report = outcome.as_ref().unwrap();
     assert_eq!((report.checked, report.models), (1, 1));
@@ -161,7 +160,7 @@ fn lazy_gpu_statistics_name_the_observed_grounder() {
     // This tests the view of an explicit device report, not physical execution.
     let mut options = options(&["--grounder", "lazy"]);
     let mut report = actual("p.", &options, &Cancellation::default()).unwrap();
-    options.backend = Backend::Metal;
+    options.backend = Backend::Gpu(Some(zetesis_backend::GpuApi::Metal));
     report.lazy_execution = Some(crate::output::fixtures::lazy_statistics());
     let text = every_prefix(&options, &Ok(report));
     assert!(text.contains(
@@ -175,7 +174,7 @@ fn static_gpu_statistics_retain_eager_grounding() {
     // No physical device is invoked by this formatting control.
     let mut options = options(&["--grounder", "eager"]);
     let report = actual("p.", &options, &Cancellation::default()).unwrap();
-    options.backend = Backend::Metal;
+    options.backend = Backend::Gpu(Some(zetesis_backend::GpuApi::Metal));
     let text = every_prefix(&options, &Ok(report));
     assert!(text.contains(
         "effective execution: oracle=closure; backend=requested GPU policy; grounder=eager; see backend diagnostics for actual adapter"

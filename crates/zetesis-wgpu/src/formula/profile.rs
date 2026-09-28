@@ -28,7 +28,7 @@ impl GpuFormulaProfile {
     ///
     /// # Errors
     /// Returns typed adapter, capacity, allocation, validation or device failure.
-    /// Selection retains the hard API/vendor and physical-device policy.
+    /// Selection retains the hard API and physical-device policy.
     pub fn new_selected(options: GpuOptions, selection: GpuSelection) -> Result<Self, GpuError> {
         Self::new_selected_with_projection(options, selection, GateProjection::default())
     }

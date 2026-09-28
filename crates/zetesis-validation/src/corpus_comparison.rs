@@ -45,7 +45,7 @@ mod capture;
 mod portable_capture_tests;
 
 pub use crate::selected::Oracle as NativeOracle;
-pub use config::{NativeBackend, NativeInvocation, Request};
+pub use config::{NativeInvocation, Request};
 pub use decision::{CaptureFailure, Decision, Producer};
 pub use record::{CaseResult, PhysicalStatus, Report};
 

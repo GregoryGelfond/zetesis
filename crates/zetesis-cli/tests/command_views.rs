@@ -5,7 +5,7 @@ use std::process::{Command, Output, Stdio};
 
 fn solve(source: &str, arguments: &[&str]) -> Output {
     let mut child = Command::new(env!("CARGO_BIN_EXE_zetesis"))
-        .args(["solve", "-", "--device", "cpu", "--threads", "1", "--all"])
+        .args(["solve", "-", "--backend", "cpu", "--threads", "1", "--all"])
         .args(arguments)
         .env("NO_COLOR", "1")
         .stdin(Stdio::piped())
@@ -157,7 +157,7 @@ fn solve_does_not_accept_benchmark_options() {
 fn json_argument_errors_leave_stdout_empty() {
     for arguments in [
         vec!["solve", "--json"],
-        vec!["test", "backend", "--device", "unknown", "--json"],
+        vec!["test", "backend", "--backend", "unknown", "--json"],
         vec!["bench", "corpus", "--json"],
     ] {
         let result = Command::new(env!("CARGO_BIN_EXE_zetesis"))
@@ -176,7 +176,7 @@ fn solve_statistics_use_the_requested_terminal_width() {
     let input = tempfile::NamedTempFile::new().unwrap();
     std::fs::write(input.path(), "a.").unwrap();
     let result = Command::new(env!("CARGO_BIN_EXE_zetesis"))
-        .args(["solve", "--device", "cpu", "--threads", "1", "--stats"])
+        .args(["solve", "--backend", "cpu", "--threads", "1", "--stats"])
         .arg(input.path())
         .env("COLUMNS", "32")
         .env("NO_COLOR", "1")

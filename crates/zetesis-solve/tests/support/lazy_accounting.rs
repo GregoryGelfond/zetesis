@@ -1,10 +1,10 @@
 //! Accounting and rendering fixtures are not physical device evidence.
 
-use crate::{Backend, LazyExecutionStatistics};
+use crate::{Backend, GpuApi, LazyExecutionStatistics};
 
 fn fixture() -> LazyExecutionStatistics {
     LazyExecutionStatistics {
-        requested_backend: Backend::Metal,
+        requested_backend: Backend::Gpu(Some(GpuApi::Metal)),
         adapter: "FORMAT FIXTURE: no physical execution".into(),
         backend: "Metal".into(),
         batches: 2,
@@ -461,7 +461,7 @@ mod classification {
     #[test]
     fn adapter_observation_does_not_claim_execution() {
         let stats = crate::LazyExecutionStatistics::new(
-            crate::Backend::Nvidia,
+            crate::Backend::Gpu(None),
             zetesis_wgpu::AdapterMetadata {
                 name: "METADATA FIXTURE: no physical execution",
                 backend: zetesis_wgpu::AdapterBackend::Vulkan,
@@ -473,7 +473,7 @@ mod classification {
                 driver_info: None,
             },
         );
-        assert_eq!(stats.requested_backend, crate::Backend::Nvidia);
+        assert_eq!(stats.requested_backend, crate::Backend::Gpu(None));
         assert_eq!(stats.backend, "Vulkan");
         assert_eq!(stats.adapter, "METADATA FIXTURE: no physical execution");
         assert_eq!(stats.batches, 0);

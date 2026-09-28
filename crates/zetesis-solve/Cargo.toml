@@ -8,6 +8,7 @@ publish = false
 
 [dependencies]
 zetesis-telemetry.workspace = true
+zetesis-backend.workspace = true
 zetesis-core.workspace = true
 zetesis-themelios.workspace = true
 zetesis-cpu.workspace = true

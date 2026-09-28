@@ -1,6 +1,7 @@
 use std::num::NonZeroUsize;
 
 use super::*;
+use crate::Backend;
 use crate::lazy_measurement::{Case, Family};
 
 #[test]

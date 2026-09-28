@@ -4,12 +4,13 @@ mod physical;
 #[path = "support/seed_views.rs"]
 mod seed_views;
 
+use zetesis_backend::GpuApi;
 use zetesis_core::{
     AdmissionLimits, Atom, AtomPattern, GroundProgram, Predicate, Program, Seed, SeedSelection,
     StaticLimits, Template, Term, Value,
 };
 use zetesis_cpu::{Cancellation, Limits, check, lazy};
-use zetesis_wgpu::{GpuLazyOracle, GpuLimits, GpuOptions};
+use zetesis_wgpu::{GpuLazyOracle, GpuLimits, GpuOptions, GpuSelection};
 
 fn predicate(name: &str, arity: usize) -> Predicate {
     Predicate::new(name, arity).unwrap()
@@ -17,10 +18,10 @@ fn predicate(name: &str, arity: usize) -> Predicate {
 fn pattern(name: &str, terms: Vec<Term>) -> AtomPattern {
     AtomPattern::new(predicate(name, terms.len()), terms).unwrap()
 }
-fn oracle(backend: physical::Backend) -> GpuLazyOracle {
-    let oracle = GpuLazyOracle::new_selected(GpuOptions::default(), backend.selection())
+fn oracle(backend: GpuApi) -> GpuLazyOracle {
+    let oracle = GpuLazyOracle::new_selected(GpuOptions::default(), GpuSelection { api: backend })
         .expect("requested physical adapter must be available for this qualification");
-    backend.verify(oracle.info());
+    physical::verify(backend, oracle.info());
     oracle
 }
 
@@ -79,16 +80,16 @@ fn compare(oracle: &mut GpuLazyOracle, program: &Program, seeds: &[Seed], limits
 #[test]
 #[ignore = "requires a physical Metal adapter"]
 fn metal_lazy_worlds_match_exact_frozen_cpu_closures() {
-    qualify_lazy_worlds_match_exact_frozen_cpu_closures(physical::Backend::Metal);
+    qualify_lazy_worlds_match_exact_frozen_cpu_closures(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
 fn vulkan_lazy_worlds_match_exact_frozen_cpu_closures() {
-    qualify_lazy_worlds_match_exact_frozen_cpu_closures(physical::Backend::Vulkan);
+    qualify_lazy_worlds_match_exact_frozen_cpu_closures(GpuApi::Vulkan);
 }
 
-fn qualify_lazy_worlds_match_exact_frozen_cpu_closures(backend: physical::Backend) {
+fn qualify_lazy_worlds_match_exact_frozen_cpu_closures(backend: GpuApi) {
     let nullary = |name| pattern(name, vec![]);
     let program = Program::new(
         vec![
@@ -164,16 +165,16 @@ fn qualify_lazy_worlds_match_exact_frozen_cpu_closures(backend: physical::Backen
 #[test]
 #[ignore = "requires a physical Metal adapter"]
 fn metal_lazy_growth_preserves_previous_round_truth() {
-    qualify_lazy_growth_preserves_previous_round_truth(physical::Backend::Metal);
+    qualify_lazy_growth_preserves_previous_round_truth(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
 fn vulkan_lazy_growth_preserves_previous_round_truth() {
-    qualify_lazy_growth_preserves_previous_round_truth(physical::Backend::Vulkan);
+    qualify_lazy_growth_preserves_previous_round_truth(GpuApi::Vulkan);
 }
 
-fn qualify_lazy_growth_preserves_previous_round_truth(backend: physical::Backend) {
+fn qualify_lazy_growth_preserves_previous_round_truth(backend: GpuApi) {
     let mut oracle = oracle(backend);
     for count in [31, 32, 33, 63, 64, 65] {
         let program = Program::new(
@@ -203,16 +204,16 @@ fn qualify_lazy_growth_preserves_previous_round_truth(backend: physical::Backend
 #[test]
 #[ignore = "requires a physical Metal adapter"]
 fn metal_lazy_catalog_fits_when_static_carrier_refuses() {
-    qualify_lazy_catalog_fits_when_static_carrier_refuses(physical::Backend::Metal);
+    qualify_lazy_catalog_fits_when_static_carrier_refuses(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
 fn vulkan_lazy_catalog_fits_when_static_carrier_refuses() {
-    qualify_lazy_catalog_fits_when_static_carrier_refuses(physical::Backend::Vulkan);
+    qualify_lazy_catalog_fits_when_static_carrier_refuses(GpuApi::Vulkan);
 }
 
-fn qualify_lazy_catalog_fits_when_static_carrier_refuses(backend: physical::Backend) {
+fn qualify_lazy_catalog_fits_when_static_carrier_refuses(backend: GpuApi) {
     let mut templates = (0..21)
         .map(|n| {
             Template::new(
@@ -266,16 +267,16 @@ fn qualify_lazy_catalog_fits_when_static_carrier_refuses(backend: physical::Back
 #[test]
 #[ignore = "requires a physical Metal adapter"]
 fn metal_source_selections_preserve_each_frozen_closure() {
-    qualify_source_selections_preserve_each_frozen_closure(physical::Backend::Metal);
+    qualify_source_selections_preserve_each_frozen_closure(GpuApi::Metal);
 }
 
 #[test]
 #[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
 fn vulkan_source_selections_preserve_each_frozen_closure() {
-    qualify_source_selections_preserve_each_frozen_closure(physical::Backend::Vulkan);
+    qualify_source_selections_preserve_each_frozen_closure(GpuApi::Vulkan);
 }
 
-fn qualify_source_selections_preserve_each_frozen_closure(backend: physical::Backend) {
+fn qualify_source_selections_preserve_each_frozen_closure(backend: GpuApi) {
     let constant = |name, value| pattern(name, vec![Term::Constant(Value::Number(value))]);
     let mut templates = Vec::new();
     for value in 0..2 {

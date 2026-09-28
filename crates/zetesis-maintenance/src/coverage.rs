@@ -6,7 +6,7 @@
 //! remain the orchestration layer's responsibility.
 mod physical;
 mod toolchain;
-pub use physical::{Group, PhysicalBackend, Selection, physical_result, selection};
+pub use physical::{Group, Selection, physical_result, selection};
 pub use toolchain::{Metadata, Observation, Tool, executable_identity, metadata};
 
 use crate::{Error, json, require};

@@ -1,45 +1,6 @@
 //! Ordinary execution policies, independent of argument parsing and presentation.
-
-/// Execution policy. Explicit GPU requests require a real selected device.
-/// General formulas use GPU propagation with exact native CPU residual search.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Backend {
-    /// Retain CPU execution until a measured device crossover is established.
-    /// Explicit GPU requests remain independent of this scheduling policy.
-    #[default]
-    Auto,
-    /// Source joins or static closure scans on an owned Rayon pool.
-    Cpu,
-    /// Exact integer GPU batches, including explicit lazy relational execution.
-    Gpu,
-    /// Require a physical GPU using Metal.
-    Metal,
-    /// Require a physical GPU using Vulkan.
-    Vulkan,
-    /// Require a physical GPU using DirectX 12.
-    Dx12,
-    /// Require a physical GPU using OpenGL or OpenGL ES.
-    Gl,
-    /// Require an NVIDIA GPU through a compiled graphics API; this is not CUDA.
-    Nvidia,
-}
-
-impl Backend {
-    /// Stable spelling for configuration and machine-readable execution reports.
-    #[must_use]
-    pub const fn label(self) -> &'static str {
-        match self {
-            Self::Auto => "auto",
-            Self::Cpu => "cpu",
-            Self::Gpu => "gpu",
-            Self::Metal => "metal",
-            Self::Vulkan => "vulkan",
-            Self::Dx12 => "dx12",
-            Self::Gl => "gl",
-            Self::Nvidia => "nvidia",
-        }
-    }
-}
+//!
+//! The execution backend is the shared vocabulary [`crate::Backend`].
 
 /// Materialization policy, independent of execution hardware.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -48,7 +9,8 @@ pub enum Grounder {
     #[default]
     Auto,
     /// Require source joins without materializing a complete ground rule store.
-    /// Explicit GPU requests use immutable relational rounds; Auto retains CPU.
+    /// A GPU backend checks the joined sources in immutable relational rounds;
+    /// the CPU backend checks them on the host.
     Lazy,
     /// Materialize a bounded static program before checking on CPU or GPU.
     Eager,

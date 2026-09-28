@@ -1,7 +1,10 @@
 //! Select against the requested profile, then rank; static discovery is metadata.
 
-use super::{GpuInfo, GpuSelection, HostPlatform, check_capabilities, choose};
+use super::{GpuInfo, GpuSelection, check_capabilities, choose};
 use crate::{GpuError, GpuErrorKind, GpuOptions};
+use zetesis_backend::GpuApi;
+
+const METAL: GpuSelection = GpuSelection { api: GpuApi::Metal };
 
 fn report(name: &str, limits: &wgpu::Limits, compute: bool) -> GpuInfo {
     let mut raw = wgpu::AdapterInfo::new(wgpu::DeviceType::IntegratedGpu, wgpu::Backend::Metal);
@@ -36,13 +39,9 @@ fn weaker_profile_admission_does_not_change_static_discovery() {
     let info = report("four bindings", &limits, true);
     assert!(!info.supports_static_oracle());
     assert_eq!(
-        choose(
-            [(0, &info)],
-            GpuOptions::default(),
-            GpuSelection::default(),
-            HostPlatform::Apple,
-            |_, _| check_capabilities(true, &limits, four_buffers),
-        )
+        choose([(0, &info)], GpuOptions::default(), METAL, |_, _| {
+            check_capabilities(true, &limits, four_buffers)
+        },)
         .unwrap(),
         0
     );
@@ -77,8 +76,7 @@ fn stronger_profile_skips_the_first_ranked_incapable_adapter() {
                 .enumerate()
                 .map(|(i, (info, _))| (i, *info)),
             GpuOptions::default(),
-            GpuSelection::default(),
-            HostPlatform::Apple,
+            METAL,
             |index, _| check_capabilities(true, inventory[index].1, seven_buffers),
         )
         .unwrap();
@@ -96,13 +94,9 @@ fn profile_free_context_selection_still_requires_compute() {
     let info = report("generic context", &limits, true);
     assert!(!info.supports_static_oracle());
     for compute in [false, true] {
-        let selected = choose(
-            [(0, &info)],
-            GpuOptions::default(),
-            GpuSelection::default(),
-            HostPlatform::Apple,
-            |_, _| check_capabilities(compute, &limits, |_| Ok(())),
-        );
+        let selected = choose([(0, &info)], GpuOptions::default(), METAL, |_, _| {
+            check_capabilities(compute, &limits, |_| Ok(()))
+        });
         if compute {
             assert_eq!(selected.unwrap(), 0);
         } else {
@@ -113,15 +107,13 @@ fn profile_free_context_selection_still_requires_compute() {
 
 #[test]
 fn hard_policy_refusal_precedes_primitive_validation() {
-    let info = report("foreign vendor", &wgpu::Limits::default(), true);
+    let info = report("another API", &wgpu::Limits::default(), true);
     let error = choose(
         [(0, &info)],
         GpuOptions::default(),
         GpuSelection {
-            vendor_id: Some(0x10de),
-            ..GpuSelection::default()
+            api: GpuApi::Vulkan,
         },
-        HostPlatform::Apple,
         |_, _| panic!("hard-refused adapters do not enter primitive admission"),
     )
     .unwrap_err();
@@ -131,13 +123,9 @@ fn hard_policy_refusal_precedes_primitive_validation() {
 #[test]
 fn unexpected_validation_failure_is_not_a_capability_fallback() {
     let info = report("reported", &wgpu::Limits::default(), true);
-    let error = choose(
-        [(0, &info)],
-        GpuOptions::default(),
-        GpuSelection::default(),
-        HostPlatform::Apple,
-        |_, _| Err(GpuError::new(GpuErrorKind::Device, "original failure")),
-    )
+    let error = choose([(0, &info)], GpuOptions::default(), METAL, |_, _| {
+        Err(GpuError::new(GpuErrorKind::Device, "original failure"))
+    })
     .unwrap_err();
     assert_eq!(error.kind(), GpuErrorKind::Device);
     assert_eq!(error.detail(), "original failure");

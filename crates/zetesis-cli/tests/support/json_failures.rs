@@ -213,7 +213,7 @@ fn failure_envelopes_never_invent_search_coverage() {
         (RunError::BackendUnavailable, "backend_unavailable"),
         (
             RunError::UnsupportedCombination {
-                backend: crate::Backend::Metal,
+                backend: crate::Backend::Gpu(Some(zetesis_backend::GpuApi::Metal)),
                 grounder: crate::Grounder::Lazy,
             },
             "unsupported_combination",

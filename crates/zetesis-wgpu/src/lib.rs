@@ -65,10 +65,7 @@ pub use tight::{
     TightGpuLimits, TightSupport,
 };
 
-pub use selection::{
-    GpuBackendPreference, GpuInfo, GpuSelection, NVIDIA_VENDOR_ID, compiled_backends,
-    discover_adapters,
-};
+pub use selection::{GpuInfo, GpuSelection, compiled_apis, discover_adapters};
 
 /// Maximum dense atoms in this shader's workgroup closure bitset.
 pub const MAX_ATOMS: usize = 4096;
@@ -282,15 +279,13 @@ impl GpuOracle {
         Self::new_selected(
             options,
             GpuSelection {
-                backend: GpuBackendPreference::Metal,
-                ..GpuSelection::default()
+                api: zetesis_backend::GpuApi::Metal,
             },
         )
     }
 
-    /// Select an adapter using explicit backend/vendor filters and validate its
-    /// compute device. Auto selects among compatible native wgpu backends;
-    /// an explicit backend or vendor is never silently replaced.
+    /// Select an adapter of the requested API and validate its compute device.
+    /// The requested API is never silently replaced by another.
     ///
     /// # Errors
     /// Returns typed adapter absence, policy refusal, capability, device,

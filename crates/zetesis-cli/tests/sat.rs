@@ -140,7 +140,7 @@ fn cancellation_precedes_eager_materialization() {
 fn hybrid_device_requests_are_refused_before_source() {
     for arguments in [
         vec!["--backend", "metal", "--grounder", "lazy"],
-        vec!["--backend", "nvidia", "--grounder", "lazy"],
+        vec!["--backend", "gpu", "--grounder", "lazy"],
     ] {
         let options = Options::try_parse_from(
             ["zetesis", "--oracle", "countermodel"]

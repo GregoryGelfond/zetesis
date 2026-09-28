@@ -3,6 +3,7 @@ use super::{
     Sample, checking, fixture, view::Preparation,
 };
 use std::{io, time::Instant};
+use zetesis_backend::GpuApi;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::native_aggregate as native;
 use zetesis_wgpu::{AggregateGpuPlan, AggregateGpuPlanLimits, GpuAggregateOracle, GpuOptions};
@@ -51,7 +52,7 @@ impl Resources {
             fresh: None,
             resident: None,
         };
-        if let Some(selection) = configuration.backend.selection() {
+        if let Some(selection) = crate::backend::selection(configuration.backend) {
             for (route, slot) in [
                 (Route::DeviceFresh, &mut resources.fresh),
                 (Route::DeviceResident, &mut resources.resident),
@@ -60,10 +61,10 @@ impl Resources {
                 let start = Instant::now();
                 let oracle = GpuAggregateOracle::new_selected(GpuOptions::default(), selection)
                     .map_err(Error::Device)?;
-                let expected = match configuration.backend {
-                    crate::Backend::Metal => "Metal",
-                    crate::Backend::Vulkan => "Vulkan",
-                    crate::Backend::Cpu => return Err(Error::Accounting),
+                let expected = match crate::backend::api(configuration.backend) {
+                    Some(GpuApi::Metal) => "Metal",
+                    Some(GpuApi::Vulkan) => "Vulkan",
+                    None => return Err(Error::Accounting),
                 };
                 if oracle.info().backend() != expected || !oracle.info().is_hardware_gpu() {
                     return Err(Error::Accounting);

@@ -400,7 +400,7 @@ fn optimum(config: SolveConfig, resources: &ExecutionResources) {
 fn device_evidence(outcome: &zetesis_solve::SemanticOutcome, backend: Backend, case: &Case) {
     // These sources have several complete candidates. Requiring actual device
     // work makes their composed semantic contracts part of device qualification.
-    if matches!(backend, Backend::Metal | Backend::Vulkan)
+    if let Backend::Gpu(Some(api)) = backend
         && matches!(
             case.file,
             "shared-tuple.lp"
@@ -414,12 +414,11 @@ fn device_evidence(outcome: &zetesis_solve::SemanticOutcome, backend: Backend, c
         let execution = outcome
             .formula_execution()
             .expect("formula device execution");
-        let name = if backend == Backend::Metal {
-            "Metal"
-        } else {
-            "Vulkan"
-        };
-        assert!(execution.adapter.contains(name), "{}", execution.adapter);
+        assert!(
+            execution.adapter.contains(api.name()),
+            "{}",
+            execution.adapter
+        );
         assert!(execution.gpu_batches > 0);
         assert!(execution.gpu_work > 0);
         assert!(execution.gpu_candidates > 0);
@@ -488,19 +487,12 @@ fn observation_failure_preserves_the_complete_family() {
 #[cfg(feature = "gpu")]
 mod physical {
     use super::*;
-    use zetesis_wgpu::{
-        AdapterBackend, GpuBackendPreference, GpuContext, GpuOptions, GpuSelection,
-    };
+    use zetesis_solve::GpuApi;
+    use zetesis_wgpu::{AdapterBackend, GpuContext, GpuOptions, GpuSelection};
 
-    fn resources(preference: GpuBackendPreference, kind: AdapterBackend) -> ExecutionResources {
-        let context = GpuContext::new_selected(
-            GpuOptions::default(),
-            GpuSelection {
-                backend: preference,
-                vendor_id: None,
-            },
-        )
-        .unwrap();
+    fn resources(api: GpuApi, kind: AdapterBackend) -> ExecutionResources {
+        let context =
+            GpuContext::new_selected(GpuOptions::default(), GpuSelection { api }).unwrap();
         assert_eq!(context.info().backend_kind(), kind);
         assert!(context.info().is_hardware_gpu());
         eprintln!("language consumers adapter={:?}", context.info().metadata());
@@ -512,10 +504,10 @@ mod physical {
     fn metal_families_retain_scored_observations() {
         families(
             SolveConfig {
-                backend: Backend::Metal,
+                backend: Backend::Gpu(Some(GpuApi::Metal)),
                 ..config(4, 3)
             },
-            &resources(GpuBackendPreference::Metal, AdapterBackend::Metal),
+            &resources(GpuApi::Metal, AdapterBackend::Metal),
         );
     }
 
@@ -524,10 +516,10 @@ mod physical {
     fn vulkan_families_retain_scored_observations() {
         families(
             SolveConfig {
-                backend: Backend::Vulkan,
+                backend: Backend::Gpu(Some(GpuApi::Vulkan)),
                 ..config(4, 3)
             },
-            &resources(GpuBackendPreference::Vulkan, AdapterBackend::Vulkan),
+            &resources(GpuApi::Vulkan, AdapterBackend::Vulkan),
         );
     }
 
@@ -536,10 +528,10 @@ mod physical {
     fn metal_optimum_ties_retain_full_answers() {
         optimum(
             SolveConfig {
-                backend: Backend::Metal,
+                backend: Backend::Gpu(Some(GpuApi::Metal)),
                 ..config(4, 3)
             },
-            &resources(GpuBackendPreference::Metal, AdapterBackend::Metal),
+            &resources(GpuApi::Metal, AdapterBackend::Metal),
         );
     }
 
@@ -548,10 +540,10 @@ mod physical {
     fn vulkan_optimum_ties_retain_full_answers() {
         optimum(
             SolveConfig {
-                backend: Backend::Vulkan,
+                backend: Backend::Gpu(Some(GpuApi::Vulkan)),
                 ..config(4, 3)
             },
-            &resources(GpuBackendPreference::Vulkan, AdapterBackend::Vulkan),
+            &resources(GpuApi::Vulkan, AdapterBackend::Vulkan),
         );
     }
 }

@@ -73,8 +73,8 @@ pub struct Options {
     /// Ordered query occurrences (0..=256).
     #[arg(long, default_value_t = 8)]
     pub queries: usize,
-    /// CPU-only, or a required physical Metal/Vulkan GPU with no fallback.
-    #[arg(long = "device", alias = "backend", value_enum, default_value = "cpu")]
+    /// CPU-only (the default), or a required physical GPU (gpu, metal or vulkan) with no fallback.
+    #[arg(long, value_parser = zetesis_backend::BackendParser, default_value = "cpu")]
     pub backend: Backend,
     /// Owned Rayon pool size (1..=64).
     #[arg(long = "threads", alias = "workers", default_value_t = 4)]
@@ -129,7 +129,7 @@ impl Serialize for Configuration {
         state.serialize_field("payload", payload_name(self.payload))?;
         state.serialize_field("rows", &self.rows)?;
         state.serialize_field("queries", &self.queries)?;
-        state.serialize_field("backend", self.backend.label())?;
+        state.serialize_field("backend", crate::backend::label(self.backend))?;
         state.serialize_field("workers", &self.workers)?;
         state.serialize_field("warmups", &self.warmups)?;
         state.serialize_field("repetitions", &self.repetitions)?;

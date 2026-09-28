@@ -11,7 +11,6 @@ pub(crate) enum Label {
     Oracle,
     Grounding,
     Backend,
-    Auto,
 }
 impl Label {
     const fn text(self) -> &'static str {
@@ -20,7 +19,6 @@ impl Label {
             Self::Oracle => "Oracle",
             Self::Grounding => "Grounding",
             Self::Backend => "Backend",
-            Self::Auto => "Auto",
         }
     }
 }
@@ -127,11 +125,6 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
                 "Parallel candidate production: {workers} workers; joined before batch membership checking"),
             Event::ExactCompletion { workers, max_scratch_bytes } => writeln!(self,
                 "Exact completion: requested workers={workers}; bounded logical scratch bytes={max_scratch_bytes}"),
-            Event::AutomaticCpu => self.metadata(Label::Auto,
-                format_args!("CPU selected; no measured GPU crossover for this execution profile.")),
-            Event::SharedCpu => self.metadata(Label::Auto, format_args!("explicit shared source batching selects CPU without device discovery.")),
-            Event::DeviceNotCompiled => self.metadata(Label::Auto,
-                format_args!("GPU support was not compiled; using CPU without device discovery.")),
             #[cfg(feature = "gpu")]
             Event::LazyDeviceGrounding { requested } => self.metadata(Label::Grounding,
                 format_args!("requested={}, effective=lazy (host source joins; per-world device consequences; no complete ground-rule store)", requested.label())),

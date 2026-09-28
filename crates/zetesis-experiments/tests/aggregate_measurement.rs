@@ -1,6 +1,7 @@
 //! Matched aggregate measurements preserve exact values and failed prefixes.
 use clap::Parser;
 use std::{io, num::NonZeroUsize, time::Duration};
+use zetesis_backend::GpuApi;
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_experiments::{
     Backend, CommandOptions, Experiment,
@@ -241,7 +242,7 @@ fn every_refused_event_stops_the_publication_prefix() {
 #[test]
 fn cancelled_pool_callback_prevents_physical_setup() {
     let mut configuration = configuration();
-    configuration.backend = Backend::Metal;
+    configuration.backend = Backend::Gpu(Some(GpuApi::Metal));
     let cancellation = Cancellation::default();
     let mut observed = 0;
     let error = measurement::measure_with_cancellation(&configuration, &cancellation, |event| {
@@ -317,19 +318,19 @@ fn invalid_schedules_emit_no_observations() {
 }
 
 #[test]
-fn command_defaults_declare_the_complete_physical_matrix() {
+fn command_defaults_declare_the_complete_case_matrix_on_the_cpu() {
     let command = CommandOptions::try_parse_from(["zetesis-bench", "aggregate"]).unwrap();
     let Experiment::Aggregate(options) = command.command.unwrap() else {
         panic!("wrong command")
     };
     let configuration = options.configuration().unwrap();
-    assert_eq!(configuration.backend, Backend::Metal);
+    assert_eq!(configuration.backend, Backend::Cpu);
     assert_eq!(configuration.cases.len(), 45);
     assert_eq!(configuration.repetitions.get(), 12);
     let value = serde_json::to_value(&configuration).unwrap();
     assert_eq!(value["gpu_timeout_ns"], 30_000_000_000_u64);
     assert_eq!(value["max_acquisition_work"], 100_000_000);
-    assert_eq!(value["backend"], "metal");
+    assert_eq!(value["backend"], "cpu");
 }
 
 #[test]
@@ -370,13 +371,13 @@ fn declared_physical_cases_qualify_on_cpu() {
 #[test]
 #[ignore = "requires actual Metal; explicit aggregate experiment qualification"]
 fn metal_aggregate_measurements_require_actual_submissions() {
-    qualify_device(Backend::Metal);
+    qualify_device(Backend::Gpu(Some(GpuApi::Metal)));
 }
 
 #[test]
 #[ignore = "requires an actual Vulkan GPU; explicit aggregate experiment qualification"]
 fn vulkan_aggregate_measurements_require_actual_submissions() {
-    qualify_device(Backend::Vulkan);
+    qualify_device(Backend::Gpu(Some(GpuApi::Vulkan)));
 }
 
 fn qualify_device(backend: Backend) {

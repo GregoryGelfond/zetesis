@@ -80,9 +80,9 @@ impl<'a> PreparedInput<'a> {
     }
 
     /// Borrow a coherent producer theory and its admitted streamed constraints.
-    /// No grounding or solving occurs here. CPU/automatic execution supports
-    /// lazy/automatic grounding; objectives and device checking are not part of
-    /// this initial hybrid profile.
+    /// No grounding or solving occurs here. The CPU backend supports lazy and
+    /// automatic grounding; objectives and device checking are not part of this
+    /// initial hybrid profile.
     #[must_use]
     pub fn hybrid(owner: &'a zetesis_themelios::HybridFormula) -> Self {
         Self {
@@ -359,8 +359,8 @@ pub struct SessionBuilder<'a> {
 impl<'a> SessionBuilder<'a> {
     /// Supply the membership executor for an admitted formula input.
     ///
-    /// This explicit choice requires `Backend::Auto`; a conflicting builtin
-    /// hardware request or relational/ground profile is refused at start. The
+    /// This explicit choice requires the CPU backend, the default; a builtin GPU
+    /// request or a relational/ground profile is refused at start. The
     /// original semantic plan, candidate frontier, exact residual completion,
     /// objectives and publication keep their existing owners. `Oracle::Auto`
     /// can offer the shared tight certificate; `Oracle::Countermodel` requires
@@ -404,9 +404,9 @@ impl<'a> SessionBuilder<'a> {
     /// Share the caller's execution resource handles with this request.
     ///
     /// Cloning the handles does not copy device allocations or logical state.
-    /// CPU paths ignore them. Automatic execution retains its existing policy;
-    /// supplying a device does not force its use. A forced device request must
-    /// match the supplied context's adapter instead of discovering another one.
+    /// The CPU backend ignores them: supplying a device does not force its use.
+    /// A GPU backend must match the supplied context's adapter instead of
+    /// discovering another one.
     #[must_use]
     pub fn resources(mut self, resources: &ExecutionResources) -> Self {
         self.resources = resources.clone();
@@ -716,7 +716,7 @@ impl<'a> Session<'a> {
                     input.profile(),
                 )));
             }
-            if config.backend != crate::Backend::Auto {
+            if config.backend.is_gpu() {
                 return Err(SolveError::Executor(crate::ExecutorError::Backend(
                     config.backend,
                 )));

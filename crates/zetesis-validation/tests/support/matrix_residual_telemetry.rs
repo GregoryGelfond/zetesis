@@ -4,7 +4,7 @@ use super::*;
 
 fn metal() -> NativeExecution {
     NativeExecution {
-        backend: Backend::Metal,
+        backend: Backend::Gpu(Some(GpuApi::Metal)),
         ..Default::default()
     }
 }

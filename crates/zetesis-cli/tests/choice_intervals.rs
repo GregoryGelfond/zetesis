@@ -118,11 +118,11 @@ fn explicit_lazy_device_choices_are_refused_before_discovery() {
     for (arguments, expected) in [
         (
             vec!["--backend", "metal", "--grounder", "lazy"],
-            Backend::Metal,
+            Backend::Gpu(Some(zetesis_backend::GpuApi::Metal)),
         ),
         (
-            vec!["--backend", "nvidia", "--grounder", "lazy"],
-            Backend::Nvidia,
+            vec!["--backend", "gpu", "--grounder", "lazy"],
+            Backend::Gpu(None),
         ),
     ] {
         // Hybrid formula checking is CPU-only, independently of the existing

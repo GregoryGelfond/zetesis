@@ -27,7 +27,7 @@ pub struct GpuAggregateOracle {
     activity: AggregateGpuActivity,
 }
 impl GpuAggregateOracle {
-    /// Create an independently owned device/pipeline with hard API/vendor filters.
+    /// Create an independently owned device/pipeline under the hard API filter.
     /// Initialization is outside batch resource/time bounds; no CPU fallback occurs.
     ///
     /// # Errors

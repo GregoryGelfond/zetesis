@@ -35,9 +35,7 @@ pub fn run_formula_projection(
     output: &mut impl Write,
 ) -> Result<(), FormulaBenchmarkError> {
     validate(options)?;
-    let selection = options
-        .backend
-        .selection()
+    let selection = crate::backend::selection(options.backend)
         .ok_or(FormulaBenchmarkError::ProjectionRequiresGpu)?;
     header(options, output)?;
     let max_candidates = options
