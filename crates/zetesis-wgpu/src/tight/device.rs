@@ -313,5 +313,4 @@ fn check_limits(limits: &wgpu::Limits) -> Result<(), GpuError> {
 }
 
 #[cfg(test)]
-#[path = "../../tests/tight/device.rs"]
 mod tests;

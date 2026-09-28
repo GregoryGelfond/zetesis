@@ -413,9 +413,4 @@ pub(super) fn decode(
 }
 
 #[cfg(test)]
-#[path = "../../tests/tight/packing.rs"]
 mod tests;
-
-#[cfg(test)]
-#[path = "../../tests/tight/grouping.rs"]
-mod grouping_tests;

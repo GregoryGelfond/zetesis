@@ -115,14 +115,14 @@ fn integration_selections_admit_other_packages_empty_binaries() {
 #[test]
 fn physical_selection_is_a_fixed_contract() {
     for table in [
-        TABLE.replacen("lazy|hardware_lazy|4|", "altered|hardware_lazy|4|", 1),
+        TABLE.replacen("lazy|integration|4|", "altered|integration|4|", 1),
         TABLE.replacen("solve-context|lib|3|", "cli-context|lib|3|", 1),
         TABLE.replacen(
             "language-consumers|integration|2|",
             "language-consumers|formula_gpu|2|",
             1,
         ),
-        TABLE.replacen("static|hardware|2|", "static|hardware_formula|2|", 1),
+        TABLE.replacen("static|integration|2|", "static|hardware_formula|2|", 1),
         TABLE.replace(
             "metal_static_oracle_matches_independent_closures",
             "exact_static_oracle_matches_independent_cpu_closures",
@@ -379,21 +379,21 @@ fn physical_metadata_retains_the_reviewed_schedule() {
         identities,
         serde_json::json!([
             ["wgpu-lib", "lib", "workspace libraries", 14],
-            ["tight", "test", "hardware_tight", 4],
-            ["formula", "test", "hardware_formula", 2],
-            ["aggregate", "test", "hardware_aggregate", 3],
-            ["lazy", "test", "hardware_lazy", 4],
+            ["tight", "test", "integration", 4],
+            ["formula", "test", "integration", 2],
+            ["aggregate", "test", "integration", 3],
+            ["lazy", "test", "integration", 4],
             ["cli-lazy", "test", "lazy_gpu", 5],
             ["cli-formula", "test", "formula_gpu", 3],
             ["world-views", "test", "integration", 4],
             ["aggregate-measurement", "test", "aggregate_measurement", 1],
-            ["relation", "test", "hardware_relation", 2],
+            ["relation", "test", "integration", 2],
             ["relation-measurement", "test", "relation_measurement", 1],
-            ["context", "test", "hardware_context", 1],
+            ["context", "test", "integration", 1],
             ["solve-context", "lib", "workspace libraries", 3],
             ["session-resources", "test", "integration", 9],
             ["language-consumers", "test", "integration", 2],
-            ["static", "test", "hardware", 2]
+            ["static", "test", "integration", 2]
         ])
         .as_array()
         .unwrap()
@@ -425,8 +425,8 @@ fn physical_metadata_retains_the_reviewed_schedule() {
     ]);
     assert_eq!(groups[13]["tests"], session_tests);
     let static_tests = serde_json::json!([
-        "metal_constructor_executes_resident_batches_without_fallback",
-        "metal_static_oracle_matches_independent_closures"
+        "hardware::metal_constructor_executes_resident_batches_without_fallback",
+        "hardware::metal_static_oracle_matches_independent_closures"
     ]);
     assert_eq!(groups[15]["tests"], static_tests);
     let grouped_tests: Vec<_> = groups

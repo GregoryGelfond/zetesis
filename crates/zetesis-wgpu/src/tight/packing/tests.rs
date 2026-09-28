@@ -716,3 +716,5 @@ fn result_addressing_has_an_independent_ceiling() {
     assert_eq!(error.kind(), GpuErrorKind::Capacity);
     assert_eq!(error.detail(), "tight world offset exceeds u32");
 }
+
+mod grouping_tests;

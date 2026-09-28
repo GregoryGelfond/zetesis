@@ -4,7 +4,7 @@
 //! integration with host buffers and dispatch.
 
 fn module() -> naga::Module {
-    let module = naga::front::wgsl::parse_str(include_str!("../src/formula.wgsl"))
+    let module = naga::front::wgsl::parse_str(include_str!("../../src/formula.wgsl"))
         .expect("production WGSL parses");
     naga::valid::Validator::new(
         naga::valid::ValidationFlags::all(),

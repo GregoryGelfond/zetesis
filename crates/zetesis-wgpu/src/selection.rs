@@ -780,17 +780,13 @@ mod tests {
 }
 
 #[cfg(test)]
-#[path = "../tests/support/selection_contracts.rs"]
 mod contract_tests;
 
 #[cfg(test)]
-#[path = "../tests/support/adapter_metadata.rs"]
 mod metadata_tests;
 
 #[cfg(test)]
-#[path = "../tests/support/context_selection.rs"]
 mod context_policy_tests;
 
 #[cfg(test)]
-#[path = "../tests/support/primitive_selection.rs"]
 mod primitive_tests;

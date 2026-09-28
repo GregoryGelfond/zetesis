@@ -367,5 +367,4 @@ fn identities(theory: &Theory, candidates: &[Interpretation]) -> Result<(), GpuE
 }
 
 #[cfg(test)]
-#[path = "../../tests/formula/device.rs"]
 mod tests;

@@ -3,14 +3,12 @@
 use zetesis_ferraris::{AdmissionLimits, Node, Theory};
 use zetesis_wgpu::{FormulaLimits, FormulaVerdict, GateProjection, ResidualReason};
 
-#[path = "formula/gate_transfer.rs"]
 mod gate_transfer;
-#[path = "formula/projection.rs"]
 mod projection;
 
 #[test]
 fn cooperative_formula_shader_validates_without_optional_capabilities() {
-    let module = naga::front::wgsl::parse_str(include_str!("../src/formula.wgsl")).unwrap();
+    let module = naga::front::wgsl::parse_str(include_str!("../../src/formula.wgsl")).unwrap();
     naga::valid::Validator::new(
         naga::valid::ValidationFlags::all(),
         naga::valid::Capabilities::empty(),

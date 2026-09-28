@@ -1,8 +1,7 @@
 //! Explicit physical qualification of complete-theory ranked support checking.
 //! These tests select Metal or Vulkan; adapter absence never silently skips qualification.
 
-#[path = "support/physical.rs"]
-mod physical;
+use crate::support::physical;
 
 use zetesis_backend::GpuApi;
 use zetesis_cpu::{Cancellation, Stop};

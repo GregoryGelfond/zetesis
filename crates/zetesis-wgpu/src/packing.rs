@@ -668,13 +668,10 @@ mod tests {
 }
 
 #[cfg(test)]
-#[path = "../tests/packing/budgets.rs"]
 mod budget_contract_tests;
 
 #[cfg(test)]
-#[path = "../tests/packing/readback.rs"]
 mod readback_contract_tests;
 
 #[cfg(test)]
-#[path = "../tests/packing/seeds.rs"]
 mod seed_contract_tests;

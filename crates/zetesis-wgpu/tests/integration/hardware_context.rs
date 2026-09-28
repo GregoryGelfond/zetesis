@@ -1,7 +1,6 @@
 //! Shared device composition without changing either primitive's semantic subject.
 
-#[path = "support/physical.rs"]
-mod physical;
+use crate::support::physical;
 
 use zetesis_backend::GpuApi;
 use zetesis_core::{

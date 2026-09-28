@@ -1,8 +1,7 @@
 //! Explicit physical qualification of relation equality filtering.
 //! These checks establish ordered equality masks, not full ASP pattern matching.
 
-#[path = "support/physical.rs"]
-mod physical;
+use crate::support::physical;
 
 use zetesis_backend::GpuApi;
 use zetesis_core::{

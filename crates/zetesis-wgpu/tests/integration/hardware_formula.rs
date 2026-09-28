@@ -1,8 +1,7 @@
 //! Explicit physical API qualification of the partial frozen-query primitive.
 //! No adapter absence or residual query is replaced by a CPU GPU-result claim.
 
-#[path = "support/physical.rs"]
-mod physical;
+use crate::support::physical;
 
 use zetesis_backend::GpuApi;
 use zetesis_cpu::Cancellation;

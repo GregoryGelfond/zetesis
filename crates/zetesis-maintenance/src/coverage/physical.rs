@@ -46,21 +46,21 @@ const SELECTIONS: [(GpuApi, &str); 2] = [
 pub fn selection(table: &str) -> Result<Selection, Error> {
     const EXPECTED: [(&str, &str, usize); 16] = [
         ("wgpu-lib", "lib", 14),
-        ("tight", "hardware_tight", 4),
-        ("formula", "hardware_formula", 2),
-        ("aggregate", "hardware_aggregate", 3),
-        ("lazy", "hardware_lazy", 4),
+        ("tight", "integration", 4),
+        ("formula", "integration", 2),
+        ("aggregate", "integration", 3),
+        ("lazy", "integration", 4),
         ("cli-lazy", "lazy_gpu", 5),
         ("cli-formula", "formula_gpu", 3),
         ("world-views", "integration", 4),
         ("aggregate-measurement", "aggregate_measurement", 1),
-        ("relation", "hardware_relation", 2),
+        ("relation", "integration", 2),
         ("relation-measurement", "relation_measurement", 1),
-        ("context", "hardware_context", 1),
+        ("context", "integration", 1),
         ("solve-context", "lib", 3),
         ("session-resources", "integration", 9),
         ("language-consumers", "integration", 2),
-        ("static", "hardware", 2),
+        ("static", "integration", 2),
     ];
     let api = SELECTIONS
         .iter()

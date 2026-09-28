@@ -1,8 +1,6 @@
 //! Explicit physical API qualification for lazy source-owned round snapshots.
-#[path = "support/physical.rs"]
-mod physical;
-#[path = "support/seed_views.rs"]
-mod seed_views;
+use crate::support::physical;
+use crate::support::seed_views;
 
 use zetesis_backend::GpuApi;
 use zetesis_core::{

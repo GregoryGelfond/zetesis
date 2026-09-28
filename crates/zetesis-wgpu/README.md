@@ -236,10 +236,10 @@ Portable checks exercise planning and host failure boundaries. Physical Metal
 qualification is selected explicitly:
 
 ```sh
-cargo test --locked -p zetesis-wgpu --all-features --test hardware_formula metal -- --ignored --nocapture
-cargo test --locked -p zetesis-wgpu --all-features --test hardware_aggregate metal -- --ignored --nocapture
+cargo test --locked -p zetesis-wgpu --all-features --test integration hardware_formula::metal -- --ignored --nocapture
+cargo test --locked -p zetesis-wgpu --all-features --test integration hardware_aggregate::metal -- --ignored --nocapture
 cargo test --locked -p zetesis-wgpu --all-features --lib metal_aggregate -- --ignored --nocapture
-cargo test --locked -p zetesis-wgpu --all-features --test hardware_relation -- --ignored --nocapture --test-threads=1 --exact metal_relation_masks_match_typed_rows metal_relation_refusals_preserve_prepared_view
+cargo test --locked -p zetesis-wgpu --all-features --test integration -- --ignored --nocapture --test-threads=1 --exact hardware_relation::metal_relation_masks_match_typed_rows hardware_relation::metal_relation_refusals_preserve_prepared_view
 ```
 
 The [test sources](tests) contain the separate static, lazy, tight, formula,

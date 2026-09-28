@@ -520,7 +520,7 @@ Portable tests exercise reference agreement, order, resources and publication
 failure. Physical tests deliberately remain opt-in:
 
 ```sh
-cargo test --locked -p zetesis-wgpu --test hardware_aggregate metal -- --ignored --nocapture
+cargo test --locked -p zetesis-wgpu --test integration hardware_aggregate::metal -- --ignored --nocapture
 cargo test --locked -p zetesis-experiments --test aggregate_measurement metal -- --ignored --nocapture
 cargo test --locked -p zetesis-experiments --test relation_measurement metal -- --ignored --nocapture
 ```

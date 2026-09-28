@@ -402,5 +402,4 @@ impl ErrorScopes {
 }
 
 #[cfg(test)]
-#[path = "../tests/context/wait.rs"]
-mod wait_tests;
+mod tests;

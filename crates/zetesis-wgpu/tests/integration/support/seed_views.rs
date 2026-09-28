@@ -1,7 +1,7 @@
 //! Explicit shared fixtures for testing the borrowed GPU candidate doors.
 use zetesis_core::{Seed, SeedSelection};
 
-pub(super) fn selections(seeds: &[Seed]) -> Vec<SeedSelection> {
+pub(crate) fn selections(seeds: &[Seed]) -> Vec<SeedSelection> {
     seeds
         .iter()
         .map(|seed| {

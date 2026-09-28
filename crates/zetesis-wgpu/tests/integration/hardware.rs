@@ -1,14 +1,12 @@
 //! Explicit hardware qualification, separate from portable unit tests.
 //! Select the intended API, for example with
-//! `cargo test -p zetesis-wgpu --test hardware vulkan -- --ignored --nocapture`.
+//! `cargo test -p zetesis-wgpu --test integration hardware::vulkan -- --ignored --nocapture`.
 //! Adapter absence/refusal fails this requested qualification rather than
 //! silently replacing it with a CPU simulation.
 #![forbid(unsafe_code)]
 
-#[path = "support/physical.rs"]
-mod physical;
-#[path = "support/seed_views.rs"]
-mod seed_views;
+use crate::support::physical;
+use crate::support::seed_views;
 
 use std::collections::BTreeSet;
 use std::sync::Arc;

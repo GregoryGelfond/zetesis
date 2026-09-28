@@ -1,8 +1,6 @@
 //! Explicit physical numeric aggregate qualification; absence is a hard failure.
 
-#[path = "support/physical.rs"]
-mod physical;
-#[path = "aggregate/fixtures.rs"]
+use crate::support::physical;
 mod fixtures;
 
 use zetesis_backend::GpuApi;

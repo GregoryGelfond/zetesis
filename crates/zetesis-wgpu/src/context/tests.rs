@@ -317,3 +317,5 @@ fn independent_lifecycles_do_not_share_invalidation() {
         42
     );
 }
+
+mod control_tests;

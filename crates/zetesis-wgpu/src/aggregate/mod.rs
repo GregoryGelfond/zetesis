@@ -257,5 +257,4 @@ fn capacity(detail: &str) -> GpuError {
 }
 
 #[cfg(test)]
-#[path = "../../tests/aggregate/mod.rs"]
 mod tests;

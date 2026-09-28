@@ -421,5 +421,4 @@ fn readback(detail: &str) -> GpuError {
 }
 
 #[cfg(test)]
-#[path = "../../tests/relation/layout.rs"]
 mod tests;

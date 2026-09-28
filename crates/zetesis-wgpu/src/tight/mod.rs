@@ -175,5 +175,4 @@ fn poll(cancellation: &Cancellation) -> Result<(), GpuError> {
 }
 
 #[cfg(test)]
-#[path = "../../tests/tight/module.rs"]
 mod tests;
