@@ -656,16 +656,22 @@ slots fallibly, then raises the unresolved-region count by one before publishing
 either child under the same queue guard. A resolved region decrements the count
 once. Taking or stealing only transfers ownership. Thus pending and active
 regions remain one frontier until refuted, split or checked, and an idle worker
-can establish termination only when the count reaches zero.
+can establish termination only when the count reaches zero. Idle workers wait at
+a gate: the resolution that reaches zero, a stop and a close each wake them after
+changing the count or the closed flag, and an idle worker re-checks both under the
+gate before waiting, so none waits past the end of the walk. The wait stays
+bounded, which is how an idle worker sees a cancellation or a newly published
+region; completeness never depends on a wake.
 
 `Pending.Step.perm` and `Pending.Walk.exhausted` describe the abstract preservation
-and exhaustion laws; the atomic count, mutex protocol and absence of lost
-ownership remain Rust refinement obligations. Depth-first local order retains
-at most one older sibling per ancestor plus the newest children. Each split
-decides another atom, and stealing starts only with an empty local deque, giving
-at most `atom_count + 1` live entries per deque. Slot capacity grows fallibly as
-needed and is released after joining, including a partially launched worker set.
-This slot reservation does not make region/knowledge payload cloning fallible.
+and exhaustion laws; the atomic count, the queue and gate protocols and absence
+of lost ownership remain Rust refinement obligations. Depth-first local order
+retains at most one older sibling per ancestor plus the newest children. Each
+split decides another atom, and stealing starts only with an empty local deque,
+giving at most `atom_count + 1` live entries per deque. Slot capacity grows
+fallibly as needed and is released after joining, including a partially launched
+worker set. This slot reservation does not make region/knowledge payload cloning
+fallible.
 An idle worker that observes cancellation or a deadline
 records the typed stop before publishing closure. The coordinator may already
 be waiting after its own control poll; channel disconnection must retain that

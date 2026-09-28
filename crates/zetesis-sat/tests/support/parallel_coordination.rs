@@ -53,6 +53,11 @@ fn search_atoms(workers: usize, atoms: usize) -> ParallelRegions {
     .unwrap()
 }
 
+/// Created-but-unresolved regions, as the workers read them.
+fn outstanding(shared: &Shared) -> usize {
+    shared.termination.outstanding.load(Ordering::Acquire)
+}
+
 fn budget(shared: &Shared) -> Budget<'_, WorkLease<'_>> {
     Budget {
         quota: shared.budget.lease(&shared.cancellation),
@@ -78,7 +83,7 @@ fn a_split_preserves_both_children_and_counts_the_net_gain() {
     let mut report = report();
     let mut budget = budget(&search.shared);
     // The root is the one outstanding region before it splits.
-    assert_eq!(search.shared.outstanding.load(Ordering::Acquire), 1);
+    assert_eq!(outstanding(&search.shared), 1);
     let stepped = step(
         &search.shared,
         root,
@@ -92,7 +97,7 @@ fn a_split_preserves_both_children_and_counts_the_net_gain() {
     assert!(matches!(stepped, Stepped::Split));
     // Two children replace the one parent: outstanding 1 -> 2, counted before
     // the pushes so no peer can observe a transient zero.
-    assert_eq!(search.shared.outstanding.load(Ordering::Acquire), 2);
+    assert_eq!(outstanding(&search.shared), 2);
     // Cut is pushed last (on top of the LIFO deque), held beneath it.
     let (cut, cut_knowledge) = search.shared.take_local(0).unwrap();
     let (held, held_knowledge) = search.shared.take_local(0).unwrap();
@@ -106,22 +111,23 @@ fn a_split_preserves_both_children_and_counts_the_net_gain() {
 fn find_work_steals_a_peer_region_then_reports_done_at_quiescence() {
     let search = search(2);
     // The root starts on worker 0's deque; worker 1 steals it.
-    let stolen = find_work(&search.shared, 1);
+    let stolen = find_work(&search.shared, 1, IDLE_WAIT);
     assert!(stolen.is_some(), "an idle worker steals a peer's region");
     assert!(
         search.shared.take_local(0).is_none(),
         "the stolen region left the peer's deque"
     );
-    // Every deque empty and nothing outstanding: the frontier is resolved.
-    search.shared.outstanding.store(0, Ordering::Release);
-    assert!(find_work(&search.shared, 1).is_none());
+    // Resolving the stolen region leaves every deque empty and nothing
+    // outstanding: the frontier is resolved.
+    search.shared.termination.resolve();
+    assert!(find_work(&search.shared, 1, IDLE_WAIT).is_none());
 }
 
 #[test]
 fn find_work_returns_none_once_closed() {
     let search = search(2);
     search.shared.close();
-    assert!(find_work(&search.shared, 1).is_none());
+    assert!(find_work(&search.shared, 1, IDLE_WAIT).is_none());
 }
 
 #[test]
@@ -130,7 +136,7 @@ fn the_first_stop_is_the_one_reported() {
     search.shared.stop(Incomplete::WorkLimit);
     search.shared.stop(Incomplete::DecisionLimit);
     assert_eq!(search.shared.stopped(), Some(Incomplete::WorkLimit));
-    assert!(search.shared.closed.load(Ordering::Acquire));
+    assert!(search.shared.termination.is_closed());
 }
 
 #[test]
@@ -139,12 +145,55 @@ fn an_idle_worker_stops_on_cancellation_and_records_it() {
     let _root = search.shared.take_local(0).unwrap();
     // Work is outstanding (the root held here) but no deque holds it,
     // so the idle worker waits — and observes the cancellation.
-    assert!(search.shared.outstanding.load(Ordering::Acquire) > 0);
+    assert!(outstanding(&search.shared) > 0);
     search.shared.cancellation.cancel();
-    let result = find_work(&search.shared, 0);
+    let result = find_work(&search.shared, 0, IDLE_WAIT);
     assert!(result.is_none());
-    assert!(search.shared.closed.load(Ordering::Acquire));
+    assert!(search.shared.termination.is_closed());
     assert_eq!(search.shared.stopped(), Some(Incomplete::Cancelled));
+}
+
+/// Long enough that a test which ends the walk fails at `WAIT`, rather than
+/// passing late, when the idle worker it releases is not woken.
+const IDLE: Duration = Duration::from_mins(1);
+
+/// Hold the root in hand, so one region is outstanding and no deque holds
+/// work, let a thief wait for the walk to end, then end it with `end`. The
+/// thief must be back within `WAIT`, not after its `IDLE` wait.
+fn idle_thief_after(end: impl FnOnce(&Shared)) -> Option<Entry> {
+    let search = search(2);
+    let _root = search.shared.take_local(0).unwrap();
+    let shared = Arc::clone(&search.shared);
+    let (done, result) = mpsc::sync_channel(1);
+    // Detached: a thief that is never woken sleeps out `IDLE`, and the test
+    // must fail at `WAIT` rather than wait for it. Its send can find the
+    // receiver gone only after that failure, so the result is not needed.
+    std::thread::spawn(move || {
+        let _ = done.send(find_work(&shared, 1, IDLE));
+    });
+    // Time for the thief to spin out its rounds and start waiting, so the
+    // walk ends while it waits; a thief that has not yet waited finds the
+    // walk already ended.
+    std::thread::sleep(Duration::from_millis(50));
+    end(&search.shared);
+    result
+        .recv_timeout(WAIT)
+        .expect("the idle worker was not woken")
+}
+
+#[test]
+fn an_idle_worker_leaves_when_the_last_region_resolves() {
+    assert!(idle_thief_after(|shared| shared.termination.resolve()).is_none());
+}
+
+#[test]
+fn an_idle_worker_leaves_when_the_walk_closes() {
+    assert!(idle_thief_after(Shared::close).is_none());
+}
+
+#[test]
+fn an_idle_worker_leaves_when_a_peer_stops_the_walk() {
+    assert!(idle_thief_after(|shared| shared.stop(Incomplete::WorkLimit)).is_none());
 }
 
 fn split_next(shared: &Shared, index: usize) {
@@ -175,13 +224,13 @@ fn an_owner_and_thief_acquire_distinct_split_children() {
             search.shared.take_local(0).unwrap()
         });
         start.wait();
-        let stolen = find_work(&search.shared, 1).unwrap();
+        let stolen = find_work(&search.shared, 1, IDLE_WAIT).unwrap();
         (local.join().unwrap(), stolen)
     });
     assert!(local.0.is_cut(0));
     assert!(stolen.0.is_held(0));
     assert!(search.shared.take_local(0).is_none());
-    assert_eq!(search.shared.outstanding.load(Ordering::Acquire), 2);
+    assert_eq!(outstanding(&search.shared), 2);
 }
 
 #[test]
@@ -204,7 +253,7 @@ fn a_refused_split_leaves_the_frontier_unpublished() {
         },
     );
     assert_eq!(result, Err(Incomplete::Allocation));
-    assert_eq!(search.shared.outstanding.load(Ordering::Acquire), 2);
+    assert_eq!(outstanding(&search.shared), 2);
     assert_eq!(search.shared.queue(0).len(), 1);
     assert_eq!(search.shared.take_local(0).unwrap().0, prior);
     assert!(!search.exhausted);
@@ -233,15 +282,15 @@ fn children_become_stealable_after_the_split_commit() {
             )
         });
         preparation.recv_timeout(WAIT).unwrap();
-        assert_eq!(search.shared.outstanding.load(Ordering::Acquire), 1);
+        assert_eq!(outstanding(&search.shared), 1);
         assert!(matches!(
             search.shared.queues[0].try_lock(),
             Err(TryLockError::WouldBlock)
         ));
         release.send(()).unwrap();
-        let stolen = find_work(&search.shared, 1).unwrap();
+        let stolen = find_work(&search.shared, 1, IDLE_WAIT).unwrap();
         assert!(stolen.0.is_held(0));
-        assert_eq!(search.shared.outstanding.load(Ordering::Acquire), 2);
+        assert_eq!(outstanding(&search.shared), 2);
         publisher.join().unwrap().unwrap();
     });
     assert!(search.shared.take_local(0).unwrap().0.is_cut(0));
@@ -257,7 +306,7 @@ fn a_busy_peer_does_not_block_an_available_steal() {
     let busy = search.shared.queue(0);
     let (done, result) = mpsc::sync_channel(1);
     std::thread::scope(|scope| {
-        scope.spawn(|| done.send(find_work(&search.shared, 2)).unwrap());
+        scope.spawn(|| done.send(find_work(&search.shared, 2, IDLE_WAIT)).unwrap());
         let stolen = result.recv_timeout(WAIT);
         // Release before asserting so a blocking-lock mutation can exit too.
         drop(busy);
@@ -273,13 +322,13 @@ fn busy_peers_do_not_postpone_cancellation() {
     search.shared.cancellation.cancel();
     let (done, result) = mpsc::sync_channel(1);
     std::thread::scope(|scope| {
-        scope.spawn(|| done.send(find_work(&search.shared, 1)).unwrap());
+        scope.spawn(|| done.send(find_work(&search.shared, 1, IDLE_WAIT)).unwrap());
         let stopped = result.recv_timeout(WAIT);
         drop(busy);
         assert!(stopped.unwrap().is_none());
     });
     assert_eq!(search.shared.stopped(), Some(Incomplete::Cancelled));
-    assert!(search.shared.closed.load(Ordering::Acquire));
+    assert!(search.shared.termination.is_closed());
 }
 
 #[test]
@@ -291,7 +340,7 @@ fn a_deep_local_walk_retains_one_sibling_per_level() {
         assert_eq!(search.shared.queue(0).len(), depth + 2);
         assert!(search.shared.queue(0).len() <= ATOMS + 1);
     }
-    assert_eq!(search.shared.outstanding.load(Ordering::Acquire), ATOMS + 1);
+    assert_eq!(outstanding(&search.shared), ATOMS + 1);
 }
 
 #[test]
@@ -312,7 +361,7 @@ fn a_refused_worker_launch_joins_the_started_subset() {
                 let lease = shared.budget.lease(&shared.cancellation);
                 lease.tick().unwrap();
                 ready.send(()).unwrap();
-                while !shared.closed.load(Ordering::Acquire) {
+                while !shared.termination.is_closed() {
                     shared.cancellation.poll().unwrap();
                     std::thread::yield_now();
                 }
@@ -408,9 +457,9 @@ fn an_allocation_stop_closes_and_settles_the_frontier() {
         search.propose(None, false, &mut budget),
         Err(Incomplete::Allocation)
     ));
-    assert_eq!(search.shared.outstanding.load(Ordering::Acquire), 2);
+    assert_eq!(outstanding(&search.shared), 2);
     assert_eq!(search.shared.stopped(), Some(Incomplete::Allocation));
-    assert!(search.shared.closed.load(Ordering::Acquire));
+    assert!(search.shared.termination.is_closed());
     assert!(!search.exhausted);
     assert_eq!(search.statistics().counts.leaves, 0);
     assert!(search.handles.is_empty());
