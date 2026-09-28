@@ -182,5 +182,4 @@ mod tests {
 }
 
 #[cfg(test)]
-#[path = "../tests/support/root_ordering_contracts.rs"]
 mod root_contracts;

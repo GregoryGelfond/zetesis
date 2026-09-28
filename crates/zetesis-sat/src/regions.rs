@@ -560,5 +560,5 @@ fn narrow_frozen<Q: Quota>(
 }
 
 #[cfg(test)]
-#[path = "../tests/support/shared_narrowing.rs"]
-mod shared_narrowing_tests;
+#[path = "regions/tests.rs"]
+mod tests;

@@ -155,10 +155,20 @@ fn physical(arguments: &[String]) -> Result<(), String> {
 fn cargo(arguments: &[String]) -> Result<(), String> {
     if env::var_os("CHECK_TEST_TRACE").is_some() {
         let failed = variable("CHECK_TEST_ORACLE_FAILURE", "");
-        if arguments.first().is_some_and(|argument| argument == "test")
-            && arguments
+        // A campaign names its tests as a target (`--test name`) or as a module
+        // of a crate's one integration binary (the filter `name::`).
+        let selects = |name: &str| {
+            arguments
                 .windows(2)
-                .any(|pair| pair[0] == "--test" && failed.split(',').any(|name| name == pair[1]))
+                .any(|pair| pair[0] == "--test" && pair[1] == name)
+                || arguments
+                    .iter()
+                    .any(|argument| argument.strip_suffix("::") == Some(name))
+        };
+        if arguments.first().is_some_and(|argument| argument == "test")
+            && failed
+                .split(',')
+                .any(|name| !name.is_empty() && selects(name))
         {
             return fail("simulated oracle campaign failure");
         }

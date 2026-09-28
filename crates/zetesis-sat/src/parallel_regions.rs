@@ -1073,13 +1073,5 @@ fn leaf<'a>(
 }
 
 #[cfg(test)]
-#[path = "../tests/support/region_worker_failure.rs"]
+#[path = "parallel_regions/tests.rs"]
 mod tests;
-
-#[cfg(test)]
-#[path = "../tests/support/parallel_timing.rs"]
-mod timing_tests;
-
-#[cfg(test)]
-#[path = "../tests/support/parallel_coordination.rs"]
-mod coordination_tests;

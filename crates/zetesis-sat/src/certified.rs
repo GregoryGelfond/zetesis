@@ -458,5 +458,5 @@ fn check_tight(
 }
 
 #[cfg(test)]
-#[path = "../tests/support/positive_restriction.rs"]
-mod positive_restriction_tests;
+#[path = "certified/tests.rs"]
+mod tests;

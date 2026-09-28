@@ -307,5 +307,4 @@ impl Drop for WorkReservation<'_> {
 }
 
 #[cfg(test)]
-#[path = "../../tests/support/work_leases.rs"]
 mod tests;

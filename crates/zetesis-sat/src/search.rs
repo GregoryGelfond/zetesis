@@ -7,8 +7,7 @@ mod shared_budget;
 mod watch_node;
 
 #[cfg(test)]
-#[path = "../tests/support/search_workspace.rs"]
-mod workspace_tests;
+mod tests;
 
 use watch_node::WatchNode;
 
@@ -16,28 +15,7 @@ pub(crate) use quota::{BoundedQuota, LocalQuota, Quota};
 pub(crate) use shared_budget::{SharedBudget, WorkLease};
 
 #[cfg(test)]
-#[path = "../tests/support/finish_contracts.rs"]
-mod finish_tests;
-
-#[cfg(test)]
-#[path = "../tests/support/watch_contracts.rs"]
-mod watch_tests;
-
-#[cfg(test)]
-#[path = "../tests/support/watch_traces.rs"]
-mod watch_traces;
-
-#[cfg(test)]
-#[path = "../tests/support/propagation_profile.rs"]
 mod propagation_profile;
-
-#[cfg(test)]
-#[path = "../tests/support/binary_watch_contracts.rs"]
-mod binary_watch_tests;
-
-#[cfg(test)]
-#[path = "../tests/support/ternary_watch_contracts.rs"]
-mod ternary_watch_tests;
 
 pub(crate) use cursor::Cursor;
 

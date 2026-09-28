@@ -117,17 +117,4 @@ pub(crate) fn search_limits(options: &SolveConfig) -> zetesis_sat::Limits {
 }
 
 #[cfg(test)]
-#[path = "../tests/support/formula_harness.rs"]
-mod test_harness;
-
-#[cfg(test)]
-#[path = "../tests/support/certificate_order.rs"]
-mod certificate_order_tests;
-
-#[cfg(test)]
-#[path = "../tests/support/batch_orchestration.rs"]
-mod batch_orchestration_tests;
-
-#[cfg(test)]
-#[path = "../tests/support/partial_batch.rs"]
-mod partial_batch_tests;
+mod tests;

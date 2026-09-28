@@ -79,5 +79,4 @@ impl Quota for WorkLease<'_> {
 }
 
 #[cfg(test)]
-#[path = "../../tests/support/quota_contracts.rs"]
 mod tests;

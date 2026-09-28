@@ -583,8 +583,8 @@ fn merge_timing(progress: &mut CompletionStatistics, worker: Option<SearchPhaseT
 }
 
 #[cfg(test)]
-#[path = "../tests/support/completion_reservation.rs"]
-mod reservation_tests;
+#[path = "completion/tests.rs"]
+mod tests;
 
 impl PreparedReduct {
     /// Exact shared owner capacity plus requested disjoint query/result slots.

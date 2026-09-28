@@ -96,12 +96,29 @@ fn every_physical_target_requires_complete_individual_results() {
     }
 }
 #[test]
+fn integration_selections_admit_other_packages_empty_binaries() {
+    // `--test integration` across the workspace runs every package's
+    // integration binary; only the owning package's reports matches.
+    let groups = coverage::selection(TABLE).unwrap().groups;
+    let group = groups
+        .iter()
+        .find(|group| group.target == "integration")
+        .unwrap();
+    coverage::physical_result(&output(&group.tests, true), group).unwrap();
+    let twice = format!(
+        "{}{}",
+        output(&group.tests, true),
+        output(&group.tests, false)
+    );
+    assert!(coverage::physical_result(&twice, group).is_err());
+}
+#[test]
 fn physical_selection_is_a_fixed_contract() {
     for table in [
         TABLE.replacen("lazy|hardware_lazy|4|", "altered|hardware_lazy|4|", 1),
         TABLE.replacen("solve-context|lib|3|", "cli-context|lib|3|", 1),
         TABLE.replacen(
-            "language-consumers|language_consumers|2|",
+            "language-consumers|integration|2|",
             "language-consumers|formula_gpu|2|",
             1,
         ),
@@ -118,10 +135,13 @@ fn physical_selection_is_a_fixed_contract() {
             ),
         TABLE
             .replace(
-                "session-resources|session_resources_gpu|9|",
-                "session-resources|session_resources_gpu|8|",
+                "session-resources|integration|9|",
+                "session-resources|integration|8|",
             )
-            .replace(" metal_terminal_sessions_preserve_complete_families", ""),
+            .replace(
+                " session_resources_gpu::metal_terminal_sessions_preserve_complete_families",
+                "",
+            ),
         TABLE.lines().take(15).collect::<Vec<_>>().join("\n"),
         TABLE.replace("metal_support_matches_exact_reduct_semantics", "unknown"),
         TABLE.lines().skip(1).collect::<Vec<_>>().join("\n"),
@@ -201,8 +221,8 @@ fn metal_selection_refuses_vulkan_substitution() {
             "engine::resource_tests::vulkan_closure_retains_the_supplied_context",
         ),
         (
-            "formula_execution::resource_tests::metal_formula_retains_the_supplied_context",
-            "formula_execution::resource_tests::vulkan_formula_retains_the_supplied_context",
+            "formula_execution::tests::resource_tests::metal_formula_retains_the_supplied_context",
+            "formula_execution::tests::resource_tests::vulkan_formula_retains_the_supplied_context",
         ),
         (
             "metal_resources_preserve_independent_sessions",
@@ -241,8 +261,8 @@ fn metal_selection_refuses_vulkan_substitution() {
             "vulkan_resources_leave_a_cpu_collection_on_the_cpu",
         ),
         (
-            "formula_execution::resource_tests::metal_formula_sessions_reuse_the_supplied_profile",
-            "formula_execution::resource_tests::vulkan_formula_sessions_reuse_the_supplied_profile",
+            "formula_execution::tests::resource_tests::metal_formula_sessions_reuse_the_supplied_profile",
+            "formula_execution::tests::resource_tests::vulkan_formula_sessions_reuse_the_supplied_profile",
         ),
         (
             "metal_formula_profiles_preserve_independent_sessions",
@@ -365,14 +385,14 @@ fn physical_metadata_retains_the_reviewed_schedule() {
             ["lazy", "test", "hardware_lazy", 4],
             ["cli-lazy", "test", "lazy_gpu", 5],
             ["cli-formula", "test", "formula_gpu", 3],
-            ["world-views", "test", "world_views_gpu", 4],
+            ["world-views", "test", "integration", 4],
             ["aggregate-measurement", "test", "aggregate_measurement", 1],
             ["relation", "test", "hardware_relation", 2],
             ["relation-measurement", "test", "relation_measurement", 1],
             ["context", "test", "hardware_context", 1],
             ["solve-context", "lib", "workspace libraries", 3],
-            ["session-resources", "test", "session_resources_gpu", 9],
-            ["language-consumers", "test", "language_consumers", 2],
+            ["session-resources", "test", "integration", 9],
+            ["language-consumers", "test", "integration", 2],
             ["static", "test", "hardware", 2]
         ])
         .as_array()
@@ -380,8 +400,8 @@ fn physical_metadata_retains_the_reviewed_schedule() {
         .as_slice()
     );
     let language_tests = serde_json::json!([
-        "physical::metal_families_retain_scored_observations",
-        "physical::metal_optimum_ties_retain_full_answers"
+        "language_consumers::physical::metal_families_retain_scored_observations",
+        "language_consumers::physical::metal_optimum_ties_retain_full_answers"
     ]);
     assert_eq!(groups[14]["tests"], language_tests);
     let tests = record["physical_tests"].as_array().unwrap();
@@ -393,15 +413,15 @@ fn physical_metadata_retains_the_reviewed_schedule() {
     ]);
     assert_eq!(groups[6]["tests"], formula_tests);
     let session_tests = serde_json::json!([
-        "metal_resources_preserve_independent_sessions",
-        "metal_resource_policy_refusal_preserves_reuse",
-        "metal_resources_preserve_cpu_policies",
-        "metal_observer_failure_preserves_resource_reuse",
-        "metal_formula_profiles_preserve_independent_sessions",
-        "metal_tight_sessions_preserve_complete_families",
-        "metal_general_formulas_keep_device_execution",
-        "metal_tight_refusal_preserves_pending_coverage",
-        "metal_terminal_sessions_preserve_complete_families"
+        "session_resources_gpu::metal_resources_preserve_independent_sessions",
+        "session_resources_gpu::metal_resource_policy_refusal_preserves_reuse",
+        "session_resources_gpu::metal_resources_preserve_cpu_policies",
+        "session_resources_gpu::metal_observer_failure_preserves_resource_reuse",
+        "session_resources_gpu::metal_formula_profiles_preserve_independent_sessions",
+        "session_resources_gpu::metal_tight_sessions_preserve_complete_families",
+        "session_resources_gpu::metal_general_formulas_keep_device_execution",
+        "session_resources_gpu::metal_tight_refusal_preserves_pending_coverage",
+        "session_resources_gpu::metal_terminal_sessions_preserve_complete_families"
     ]);
     assert_eq!(groups[13]["tests"], session_tests);
     let static_tests = serde_json::json!([

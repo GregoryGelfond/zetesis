@@ -290,5 +290,4 @@ impl Drop for Span<'_> {
 }
 
 #[cfg(test)]
-#[path = "../tests/support/phase_timing_contracts.rs"]
-mod contracts;
+mod tests;

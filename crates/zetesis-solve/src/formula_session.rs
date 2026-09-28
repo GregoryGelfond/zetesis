@@ -473,16 +473,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
 }
 
 #[cfg(test)]
-#[path = "../tests/support/formula_timing_contracts.rs"]
-mod timing_tests;
-
-#[cfg(test)]
-#[path = "../tests/support/formula_exhaustion_contracts.rs"]
-mod exhaustion_tests;
-
-#[cfg(test)]
-#[path = "../tests/support/model_construction.rs"]
-mod construction_tests;
+mod tests;
 
 impl<'a> FormulaSession<'a, crate::formula_execution::Execution> {
     /// Own semantic preparation before choosing its execution route. A stopped

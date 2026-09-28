@@ -134,5 +134,4 @@ impl Recorder {
 }
 
 #[cfg(test)]
-#[path = "../tests/support/grounding_timing_contracts.rs"]
 mod tests;

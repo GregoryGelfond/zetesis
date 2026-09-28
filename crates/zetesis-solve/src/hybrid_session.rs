@@ -38,8 +38,7 @@ pub struct HybridExecutionStatistics {
 }
 
 #[cfg(test)]
-#[path = "../tests/support/hybrid_terminal.rs"]
-mod terminal_tests;
+mod tests;
 
 pub(crate) struct HybridSession<'a> {
     owner: &'a HybridFormula,

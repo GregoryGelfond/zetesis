@@ -469,9 +469,4 @@ impl<E: MembershipExecution + ?Sized> MembershipExecution for &mut E {
 }
 
 #[cfg(all(test, feature = "gpu"))]
-#[path = "../tests/support/formula_resources.rs"]
-mod resource_tests;
-
-#[cfg(all(test, feature = "gpu"))]
-#[path = "../tests/support/formula_residuals.rs"]
-mod residual_tests;
+mod tests;

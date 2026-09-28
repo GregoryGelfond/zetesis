@@ -991,5 +991,4 @@ fn advance(
 }
 
 #[cfg(test)]
-#[path = "../tests/support/prepared_owner.rs"]
-mod prepared_owner_tests;
+mod tests;

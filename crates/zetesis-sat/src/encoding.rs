@@ -328,5 +328,4 @@ pub(crate) fn interpretation(
 use std::collections::HashMap;
 
 #[cfg(test)]
-#[path = "../tests/support/encoding_workspace.rs"]
-mod workspace_tests;
+mod tests;

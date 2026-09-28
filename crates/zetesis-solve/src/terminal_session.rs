@@ -16,7 +16,6 @@ use crate::phase_timing::{Recorder, SolvePhase};
 use crate::{AnswerSelection, Interruption, SearchState, SemanticOutcome, SolveConfig, SolveError};
 
 #[cfg(test)]
-#[path = "../tests/support/terminal_reconstruction.rs"]
 mod tests;
 
 /// Verified base answers consumed by full-answer reconstruction.

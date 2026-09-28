@@ -52,14 +52,14 @@ pub fn selection(table: &str) -> Result<Selection, Error> {
         ("lazy", "hardware_lazy", 4),
         ("cli-lazy", "lazy_gpu", 5),
         ("cli-formula", "formula_gpu", 3),
-        ("world-views", "world_views_gpu", 4),
+        ("world-views", "integration", 4),
         ("aggregate-measurement", "aggregate_measurement", 1),
         ("relation", "hardware_relation", 2),
         ("relation-measurement", "relation_measurement", 1),
         ("context", "hardware_context", 1),
         ("solve-context", "lib", 3),
-        ("session-resources", "session_resources_gpu", 9),
-        ("language-consumers", "language_consumers", 2),
+        ("session-resources", "integration", 9),
+        ("language-consumers", "integration", 2),
         ("static", "hardware", 2),
     ];
     let api = SELECTIONS
@@ -182,8 +182,12 @@ pub fn physical_result(output: &str, group: &Group) -> Result<(), Error> {
         "physical qualification requires exactly the named passing tests",
     )?;
     let positive: Vec<_> = counts.iter().copied().filter(|count| *count > 0).collect();
+    // A `lib` or `integration` selection runs every workspace package's binary
+    // of that name, and the others report zero matches; the one positive
+    // summary, of the expected count, is the named tests' own binary.
+    let every_package = group.target_kind == "lib" || group.target == "integration";
     require(
-        positive == [group.expected_tests] && (group.target_kind == "lib" || counts.len() == 1),
+        positive == [group.expected_tests] && (every_package || counts.len() == 1),
         "physical qualification requires complete libtest summaries",
     )
 }

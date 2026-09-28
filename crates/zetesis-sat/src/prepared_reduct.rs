@@ -465,5 +465,4 @@ pub(crate) const fn retained_header_bytes() -> u128 {
 }
 
 #[cfg(test)]
-#[path = "../tests/support/prepared_units.rs"]
-mod unit_tests;
+mod tests;

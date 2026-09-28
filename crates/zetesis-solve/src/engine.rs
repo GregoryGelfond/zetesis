@@ -609,11 +609,9 @@ pub(crate) fn selection(backend: Backend) -> zetesis_wgpu::GpuSelection {
 }
 
 #[cfg(test)]
-#[path = "../tests/support/engine_control_contracts.rs"]
 mod control_contract_tests;
 
 #[cfg(all(test, feature = "gpu"))]
-#[path = "../tests/support/engine_resources.rs"]
 mod resource_tests;
 
 #[cfg(test)]
