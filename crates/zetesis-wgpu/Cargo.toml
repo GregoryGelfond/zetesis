@@ -15,6 +15,14 @@ wgpu.workspace = true
 bytemuck.workspace = true
 pollster.workspace = true
 
+# zetesis targets Metal on Apple platforms and Vulkan on every other platform;
+# no other graphics API is compiled.
+[target.'cfg(target_vendor = "apple")'.dependencies]
+wgpu = { workspace = true, features = ["metal"] }
+
+[target.'cfg(not(target_vendor = "apple"))'.dependencies]
+wgpu = { workspace = true, features = ["vulkan"] }
+
 [dev-dependencies]
 # The shader validator paired with this wgpu release. Hardware-independent
 # validation checks the authored WGSL even when no adapter is available.
