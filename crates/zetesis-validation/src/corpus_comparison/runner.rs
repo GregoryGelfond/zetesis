@@ -347,5 +347,4 @@ fn decide(evidence: CaseEvidence, decision: Decision) -> CaseResult {
 }
 
 #[cfg(all(test, unix))]
-#[path = "../../tests/support/runner_contracts.rs"]
 mod tests;

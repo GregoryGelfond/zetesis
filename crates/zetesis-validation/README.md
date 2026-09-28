@@ -78,7 +78,7 @@ changing inputs or interfering with execution. `Report::passed`,
 parsing JSON. `Report::to_json` supplies the fallible schema-1 presentation view;
 publication belongs to the caller. A rendering failure does not alter the
 retained comparison decision. See [the corpus API](src/corpus_comparison.rs) and
-its [direct-consumer tests](tests/corpus_comparison.rs).
+its [direct-consumer tests](tests/integration/corpus_comparison.rs).
 
 `CaseResult::native_exit` and `reference_exit` retain both the exit code and, on
 Unix, the terminating signal. The JSON view preserves `exit_code` and adds
@@ -120,7 +120,7 @@ zetesis-corpus compare validation/upstream/clingo-5.8.2/curated \
 
 That stronger claim belongs to those selected sources, not every corpus program.
 See [reported answers](src/answers.rs),
-[native decoding](tests/native_json_answers.rs) and
+[native decoding](tests/integration/native_json_answers.rs) and
 [selected comparisons](src/selected.rs).
 
 ## Require actual GPU execution
@@ -149,8 +149,8 @@ The logical scratch allowance is separate from RSS and the default scalar CPU
 cursor. A zero allowance can produce a recorded incomplete native run; the
 validator does not raise it or silently substitute another route.
 Current completion telemetry must reconcile those requested settings.
-See [execution contracts](tests/support/execution_contracts.rs) and
-[CLI controls](tests/cli_contracts.rs).
+See [execution contracts](src/corpus_comparison/execution/tests.rs) and
+[CLI controls](tests/integration/cli_contracts.rs).
 
 ## Measure ordinary solves and execution matrices
 
@@ -228,8 +228,8 @@ explicit selections; `Schedule::with_memory` appends the separate population.
 `run_with_runner` seals the supplied executable and uses it as a fresh helper
 only for resource samples. They own bounded acquisition and separate
 report publication. See [performance](src/performance.rs),
-[matrix scheduling](tests/matrix_schedule.rs) and
-[matrix accounting](tests/matrix_campaign.rs). The [comparison guide](../../scripts/README-comparison.md)
+[matrix scheduling](tests/integration/matrix_schedule.rs) and
+[matrix accounting](../zetesis-bench/tests/matrix_campaign.rs). The [comparison guide](../../scripts/README-comparison.md)
 documents reproducible commands, limits and protocol boundaries.
 
 ### Derive explicit parameter workloads
@@ -263,8 +263,8 @@ before retention. Combined workloads must also fit the request's existing
 source/metadata ceilings. Each launched private source closure is sealed before
 and after execution. Derived-workload reports use matrix schema 2; unchanged
 suite reports retain schema 1. No first-answer phase is added by this entry
-point; memory rounds follow the plan when requested. See [workload admission](tests/workload_admission.rs) and
-[matrix acquisition](tests/matrix_campaign.rs) for checked library usage.
+point; memory rounds follow the plan when requested. See [workload admission](tests/integration/workload_admission.rs) and
+[matrix acquisition](../zetesis-bench/tests/matrix_campaign.rs) for checked library usage.
 The [manual's runnable client](../../docs/book/reference/measurement-protocols.md#compare-a-parameterized-workload)
 shows a complete N=4 comparison using this API, with explicit executable paths
 and a new report destination.
@@ -307,7 +307,7 @@ limits)` provides the same bounded admission independently of the maintained
 selection. It parses through themelios, rejects unsupported source closure and
 checks constant edits before retaining original/derived identities. The shared
 fixture population and its limits belong to the library, not a standalone
-experiment runner. See [authored workload admission](tests/authored_workloads.rs)
+experiment runner. See [authored workload admission](tests/integration/authored_workloads.rs)
 and [CLI checks](../zetesis-cli/tests/scalability_commands.rs).
 
 ### Measure a fixed series of cells
@@ -359,8 +359,8 @@ setup and checks, closure and exact reduct membership, reduct preparation,
 original validation and the device's host oracle; grounding is the
 grounding stage, absent under lazy grounding, which grounds within
 membership. `--json` writes the derived comparison for retention beside the
-manual's observations; the raw reports stay with their builds. See [series cells](tests/series_cells.rs), [family
-generation](tests/performance_families.rs) and [the view](tests/series_view.rs).
+manual's observations; the raw reports stay with their builds. See [series cells](tests/integration/series_cells.rs), [family
+generation](tests/integration/performance_families.rs) and [the view](tests/integration/series_view.rs).
 
 ## Compose capture, contracts and publication
 
@@ -413,12 +413,12 @@ allocator and operating-system overhead; deadlines are not hard real-time
 guarantees. Publication requires the documented parent-directory ownership
 assumptions and is not a durable-storage guarantee.
 
-Maintained tests include [capture](tests/process_capture.rs),
-[curated integrity](tests/curated_corpus.rs),
-[clean examples](tests/example_corpus.rs),
-[reported answers](tests/reported_answers.rs),
-[selected runs](tests/selected_campaign.rs) and
-[ordinary timing](tests/performance_campaign.rs).
+Maintained tests include [capture](tests/integration/process_capture.rs),
+[curated integrity](tests/integration/curated_corpus.rs),
+[clean examples](tests/integration/example_corpus.rs),
+[reported answers](tests/integration/reported_answers.rs),
+[selected runs](tests/integration/selected_campaign.rs) and
+[ordinary timing](../zetesis-bench/tests/performance_campaign.rs).
 The [outcome guide](../../docs/book/rust/outcomes.md) explains the corresponding
 semantic distinctions on the solver side.
 

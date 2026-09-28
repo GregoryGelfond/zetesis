@@ -471,7 +471,6 @@ fn consistent_timings(
 }
 
 #[cfg(test)]
-#[path = "../../../tests/support/matrix_telemetry.rs"]
 mod tests;
 
 fn cpu(statistics: &Value) -> Result<DeviceWork, String> {

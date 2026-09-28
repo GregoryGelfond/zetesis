@@ -476,5 +476,4 @@ pub(super) fn validate_contract(contract: &Contract) -> Result<(), Error> {
 }
 
 #[cfg(test)]
-#[path = "../../tests/support/example_document.rs"]
 mod tests;

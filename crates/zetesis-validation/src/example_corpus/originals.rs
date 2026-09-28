@@ -291,5 +291,4 @@ pub(super) fn translate(annotations: &[Annotation]) -> Result<Contract, Error> {
 }
 
 #[cfg(test)]
-#[path = "../../tests/support/example_originals.rs"]
 mod tests;

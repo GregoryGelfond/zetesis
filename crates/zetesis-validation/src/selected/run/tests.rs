@@ -2,7 +2,6 @@
 
 use super::*;
 
-#[path = "selected_sealing.rs"]
 mod sealing;
 
 fn complete(exit: i32) -> InvocationRecord {

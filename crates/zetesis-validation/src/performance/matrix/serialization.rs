@@ -86,5 +86,4 @@ pub(super) fn optional_capture<S: Serializer>(
 }
 
 #[cfg(test)]
-#[path = "../../../tests/support/matrix_serialization.rs"]
 mod tests;

@@ -167,5 +167,4 @@ fn cleanup(temporary: tempfile::NamedTempFile, primary: Error) -> Result<(), Err
 }
 
 #[cfg(test)]
-#[path = "../../tests/support/selected_publication.rs"]
 mod tests;

@@ -382,5 +382,4 @@ fn batch_limits(text: &str) -> Result<(u64, u64, u64, u64), String> {
 }
 
 #[cfg(test)]
-#[path = "../../tests/support/execution_contracts.rs"]
 mod tests;

@@ -4,13 +4,8 @@ use serde_json::json;
 use std::num::NonZeroUsize;
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-#[path = "matrix_effects.rs"]
 mod effects;
-
-#[path = "matrix_publication.rs"]
 mod publication;
-
-#[path = "matrix_native_family.rs"]
 mod native_family;
 
 fn request() -> Request<'static> {

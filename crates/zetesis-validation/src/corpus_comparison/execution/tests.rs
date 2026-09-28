@@ -5,7 +5,7 @@ use std::fmt::Write as _;
 use crate::corpus_comparison::normalize::{self, Answer};
 use zetesis_backend::{Backend, GpuApi};
 
-const GOOD: &str = include_str!("formula_statistics.txt");
+const GOOD: &str = include_str!("../../../tests/support/formula_statistics.txt");
 
 fn answer() -> Answer {
     normalize::native(
@@ -379,7 +379,7 @@ fn truncated_or_nonnumeric_resource_records_never_supply_missing_allowances() {
     assert!(super::formula(GOOD, Backend::Gpu(Some(GpuApi::Metal)), 64, &answer()).is_ok());
 }
 
-const CURRENT: &str = include_str!("formula_statistics_completion.txt");
+const CURRENT: &str = include_str!("../../../tests/support/formula_statistics_completion.txt");
 
 fn request(workers: usize, max_scratch_bytes: u64) -> super::CompletionRequest {
     super::CompletionRequest {

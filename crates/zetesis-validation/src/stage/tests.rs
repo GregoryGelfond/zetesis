@@ -2,12 +2,12 @@
 
 use super::{FOOTER, HEADER, parse};
 
-const SECTION: &str = include_str!("stage_statistics.txt");
+const SECTION: &str = include_str!("../../tests/support/stage_statistics.txt");
 const GROUNDING: &str = "grounding: calls=1; elapsed_ns=200; complete=true";
 
 #[test]
 fn stage_absence_preserves_supported_phase_schemas() {
-    let legacy = include_str!("phase_statistics.txt");
+    let legacy = include_str!("../../tests/support/phase_statistics.txt");
     assert!(parse(legacy).unwrap().is_none());
     let current = legacy
         .replace("failed_attempts=included", "failed_attempts=included; schema=2")

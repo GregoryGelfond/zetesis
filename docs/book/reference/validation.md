@@ -91,9 +91,11 @@ fresh `target/oracle-checks/run.*` directory. A test failure does not skip later
 campaigns; setup or receipt-write failures stop the run. The gate returns the
 first failed campaign's status. Capture stdout and stderr with the command log.
 
-The script lists campaign targets explicitly. The portable `oracle_selection`
-regression checks that every ignored test whose reason names clingo is in a
-listed target, and that every listed target contains such a test.
+The script lists each campaign's selection explicitly: its test targets and,
+within a crate's `integration` target, test-name filters naming the modules it
+runs. The portable `oracle_selection` regression checks that every ignored test
+whose reason names clingo is selected by a campaign, and that every campaign's
+selection contains such a test.
 
 ### Check tool selection
 

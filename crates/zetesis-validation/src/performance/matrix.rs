@@ -205,7 +205,6 @@ pub fn run_workloads(request: &Request<'_>, workloads: &[Workload]) -> Result<Re
 }
 
 #[cfg(test)]
-#[path = "../../tests/support/matrix_reports.rs"]
 mod fixtures;
 
 /// Run the fixed matrix using an explicit native command interface.

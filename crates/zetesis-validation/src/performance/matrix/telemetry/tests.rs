@@ -4,16 +4,9 @@ use serde_json::json;
 
 use crate::performance::matrix::fixtures::fixture;
 
-#[path = "matrix_tight_telemetry.rs"]
 mod tight_tests;
-
-#[path = "matrix_residual_telemetry.rs"]
 mod residual_tests;
-
-#[path = "matrix_hybrid_telemetry.rs"]
 mod hybrid_tests;
-
-#[path = "matrix_terminal_telemetry.rs"]
 mod terminal_tests;
 
 #[test]

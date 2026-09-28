@@ -15,7 +15,7 @@ const MAX_DIRECTORY_DEPTH: usize = 64;
 /// maintained standalone packages are explicit. Each package contributes only
 /// src, tests, benches, examples and its optional build.rs. Shared manual examples
 /// are maintained source too, even though they live outside package directories.
-pub(super) fn inventory(root: &Path) -> io::Result<Vec<PathBuf>> {
+pub(crate) fn inventory(root: &Path) -> io::Result<Vec<PathBuf>> {
     let mut walk = Inventory::default();
     let mut packages = Vec::new();
     for entry in walk.entries(&root.join("crates"))? {
@@ -60,7 +60,7 @@ pub(super) fn inventory(root: &Path) -> io::Result<Vec<PathBuf>> {
 }
 
 /// Read one byte beyond the ceiling to detect growth without unbounded capture.
-pub(super) fn read(path: &Path) -> io::Result<String> {
+pub(crate) fn read(path: &Path) -> io::Result<String> {
     let mut bytes = Vec::new();
     File::open(path)?
         .take(MAX_SOURCE_BYTES + 1)

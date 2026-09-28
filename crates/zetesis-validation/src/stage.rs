@@ -157,5 +157,4 @@ fn integer(value: &str) -> Result<u64, &'static str> {
 }
 
 #[cfg(test)]
-#[path = "../tests/support/stage_contracts.rs"]
 mod tests;

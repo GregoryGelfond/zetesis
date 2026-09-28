@@ -1,11 +1,11 @@
 //! The comparisons against clingo among the maintained sources: ignored
 //! tests whose reason names the oracle, each placed in the integration test
 //! target that compiles it, found by following the module declarations from
-//! each target's root file. An `ignore` written inside `cfg_attr`, and a
-//! module declared inside an inline module, are outside this reading and
-//! are refused rather than guessed.
+//! each target's root file, and named as that target's harness names it. An
+//! `ignore` written inside `cfg_attr`, and a module declared inside an inline
+//! module, are outside this reading and are refused rather than guessed.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fmt;
 use std::io;
 use std::path::{Component, Path, PathBuf};
@@ -19,7 +19,9 @@ pub(super) struct Comparison {
     pub package: String,
     /// The integration test target compiling the test, when one does.
     pub target: Option<String>,
-    /// The test function's name.
+    /// The test's name as its target's harness lists it: the module path
+    /// from the target's root, then the function. Outside a test target,
+    /// the path from the test's own file.
     pub name: String,
     /// The source file, relative to the repository.
     pub path: PathBuf,
@@ -60,6 +62,7 @@ struct Scan {
 
 /// An ignored test whose reason names clingo.
 struct Hit {
+    /// The inline modules holding the function, then the function.
     name: String,
     line: usize,
 }
@@ -77,9 +80,9 @@ struct Declaration {
 ///
 /// # Errors
 /// Returns the first unreadable or unparsable source, a declared module
-/// with no source or two among `sources`, a module declared inside an
-/// inline module, an ignored comparison that is not a test, or a source in
-/// no package.
+/// with no source or two among `sources`, circular module declarations, a
+/// module declared inside an inline module, an ignored comparison that is
+/// not a test, or a source in no package.
 pub(super) fn comparisons(root: &Path, sources: &[PathBuf]) -> io::Result<Vec<Comparison>> {
     let root = normalize(root);
     let root = root.as_path();
@@ -90,16 +93,18 @@ pub(super) fn comparisons(root: &Path, sources: &[PathBuf]) -> io::Result<Vec<Co
             .map_err(|error| invalid(source, &format!("{}: {error}", error.span().start().line)))?;
         scans.insert(normalize(source), scan);
     }
-    let mut targets: BTreeMap<&Path, Vec<String>> = BTreeMap::new();
+    // Each file's places in the test targets: the target, and the module path
+    // from its root at which the file is compiled.
+    let mut targets: BTreeMap<&Path, Vec<(String, String)>> = BTreeMap::new();
     for path in scans.keys() {
-        if !is_test_root(path) {
+        let Some(target) = test_target(path) else {
             continue;
-        }
-        let stem = stem(path)?;
-        let mut included = BTreeSet::new();
-        include(path, &scans, &mut included)?;
-        for file in included {
-            targets.entry(file).or_default().push(stem.clone());
+        };
+        let mut included = BTreeMap::new();
+        include(path, "", &scans, &mut Vec::new(), &mut included)?;
+        for (file, modules) in included {
+            let places = targets.entry(file).or_default();
+            places.extend(modules.into_iter().map(|module| (target.clone(), module)));
         }
     }
     let mut packages = BTreeMap::new();
@@ -110,33 +115,56 @@ pub(super) fn comparisons(root: &Path, sources: &[PathBuf]) -> io::Result<Vec<Co
         }
         let package = package_name(root, path, &mut packages)?;
         let relative = path.strip_prefix(root).unwrap_or(path).to_path_buf();
-        let roots = targets.get(path.as_path()).map_or(&[][..], Vec::as_slice);
+        let places = targets.get(path.as_path()).map_or(&[][..], Vec::as_slice);
         for hit in &scan.hits {
-            let comparison = |target| Comparison {
+            let comparison = |target, name| Comparison {
                 package: package.clone(),
                 target,
-                name: hit.name.clone(),
+                name,
                 path: relative.clone(),
                 line: hit.line,
             };
-            if roots.is_empty() {
-                found.push(comparison(None));
+            if places.is_empty() {
+                found.push(comparison(None, hit.name.clone()));
             } else {
-                found.extend(roots.iter().map(|root| comparison(Some(root.clone()))));
+                found.extend(places.iter().map(|(target, module)| {
+                    comparison(Some(target.clone()), qualified(module, &hit.name))
+                }));
             }
         }
     }
     Ok(found)
 }
 
-/// A file directly under a package's `tests` directory: a test target's root.
-fn is_test_root(path: &Path) -> bool {
-    path.parent().is_some_and(|directory| {
-        directory.file_name().is_some_and(|name| name == "tests")
-            && directory
-                .parent()
-                .is_some_and(|package| package.join("Cargo.toml").is_file())
-    })
+/// The test target whose root `path` is, if it is one: Cargo's
+/// `tests/NAME.rs` and `tests/NAME/main.rs` of a package, named `NAME`.
+fn test_target(path: &Path) -> Option<String> {
+    let directory = path.parent()?;
+    let name = if is_tests_directory(directory) {
+        path.file_stem()?
+    } else if path.file_name()? == "main.rs" && is_tests_directory(directory.parent()?) {
+        directory.file_name()?
+    } else {
+        return None;
+    };
+    name.to_str().map(str::to_owned)
+}
+
+/// A package's `tests` directory.
+fn is_tests_directory(directory: &Path) -> bool {
+    directory.file_name().is_some_and(|name| name == "tests")
+        && directory
+            .parent()
+            .is_some_and(|package| package.join("Cargo.toml").is_file())
+}
+
+/// `name` in the module at path `module`; the root module's path is empty.
+fn qualified(module: &str, name: &str) -> String {
+    if module.is_empty() {
+        name.to_owned()
+    } else {
+        format!("{module}::{name}")
+    }
 }
 
 fn stem(path: &Path) -> io::Result<String> {
@@ -146,22 +174,30 @@ fn stem(path: &Path) -> io::Result<String> {
         .ok_or_else(|| invalid(path, "a source file needs a name"))
 }
 
-/// Add `file` and every file its declarations reach to `included`. A
-/// declaration with a `path` names a file relative to the declaring file's
-/// directory; one without names `name.rs` or `name/mod.rs` beside a root or
-/// a `mod.rs`, and under the declaring file's own directory otherwise.
+/// Record in `included` that `file` is compiled as the module at path
+/// `module`, and every file its declarations reach as that module's
+/// descendants; a file reached twice is recorded at both paths. `chain` holds
+/// the files from the root to `file`. A declaration with a `path` names a
+/// file relative to the declaring file's directory; one without names
+/// `name.rs` or `name/mod.rs` beside a root or a `mod.rs`, and under the
+/// declaring file's own directory otherwise.
 fn include<'a>(
     file: &'a Path,
+    module: &str,
     scans: &'a BTreeMap<PathBuf, Scan>,
-    included: &mut BTreeSet<&'a Path>,
+    chain: &mut Vec<&'a Path>,
+    included: &mut BTreeMap<&'a Path, Vec<String>>,
 ) -> io::Result<()> {
-    if !included.insert(file) {
-        return Ok(());
+    if chain.contains(&file) {
+        return Err(invalid(file, "circular module declarations"));
     }
+    included.entry(file).or_default().push(module.to_owned());
     let directory = file
         .parent()
         .ok_or_else(|| invalid(file, "a source file needs a directory"))?;
-    let beside = is_test_root(file) || file.file_name().is_some_and(|name| name == "mod.rs");
+    let beside =
+        test_target(file).is_some() || file.file_name().is_some_and(|name| name == "mod.rs");
+    chain.push(file);
     for declaration in &scans[file].declarations {
         let candidates = if let Some(path) = &declaration.path {
             vec![normalize(&directory.join(path))]
@@ -198,8 +234,10 @@ fn include<'a>(
                 ),
             ));
         }
-        include(next, scans, included)?;
+        let child = qualified(module, &declaration.name);
+        include(next, &child, scans, chain, included)?;
     }
+    chain.pop();
     Ok(())
 }
 
@@ -271,19 +309,21 @@ fn invalid(path: &Path, message: &str) -> io::Error {
 fn scan(text: &str) -> syn::Result<Scan> {
     let file = syn::parse_file(text)?;
     let mut scan = Scan::default();
-    visit(&file.items, false, &mut scan)?;
+    visit(&file.items, "", &mut scan)?;
     Ok(scan)
 }
 
 /// Record the comparisons and module declarations among `items`; `inline`
-/// says they sit inside an inline module.
-fn visit(items: &[Item], inline: bool, scan: &mut Scan) -> syn::Result<()> {
+/// is the path of the inline modules they sit in, empty at the file's top.
+fn visit(items: &[Item], inline: &str, scan: &mut Scan) -> syn::Result<()> {
     for item in items {
         match item {
-            Item::Fn(function) => scan.hits.extend(hit(function)?),
+            Item::Fn(function) => scan.hits.extend(hit(function, inline)?),
             Item::Mod(module) => match &module.content {
-                Some((_, nested)) => visit(nested, true, scan)?,
-                None if inline => {
+                Some((_, nested)) => {
+                    visit(nested, &qualified(inline, &module.ident.to_string()), scan)?;
+                }
+                None if !inline.is_empty() => {
                     return Err(syn::Error::new(
                         module.ident.span(),
                         "a module declared inside an inline module is outside this reading",
@@ -301,8 +341,9 @@ fn visit(items: &[Item], inline: bool, scan: &mut Scan) -> syn::Result<()> {
     Ok(())
 }
 
-/// The function as a comparison, when an `ignore` reason names clingo.
-fn hit(function: &ItemFn) -> syn::Result<Option<Hit>> {
+/// The function, in the inline modules at path `inline`, as a comparison,
+/// when an `ignore` reason names clingo.
+fn hit(function: &ItemFn, inline: &str) -> syn::Result<Option<Hit>> {
     let mut test = false;
     let mut reason = None;
     for attribute in &function.attrs {
@@ -338,7 +379,7 @@ fn hit(function: &ItemFn) -> syn::Result<Option<Hit>> {
         ));
     }
     Ok(Some(Hit {
-        name: function.sig.ident.to_string(),
+        name: qualified(inline, &function.sig.ident.to_string()),
         line: function.sig.ident.span().start().line,
     }))
 }

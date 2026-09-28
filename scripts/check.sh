@@ -125,7 +125,7 @@ if [ "$mode" = oracle ] || [ "$mode" = full ]; then
     oracle_test --locked --no-fail-fast -p zetesis-themelios --test arithmetic_validation --test support_delta --test extremal_terms --test observation_bindings --test objective_rich_cycles --test objective_pools --test conditional_heads --test keyed_constraints --test strong_negation -- --ignored --nocapture
     oracle_test --locked --no-fail-fast -p zetesis-solve --no-default-features --test integration language_consumers::original_sources_retain_declared_reference_results -- --ignored --nocapture
     oracle_test --locked --no-fail-fast -p zetesis-solve --no-default-features --test integration -- --ignored --nocapture projected_reference::
-    oracle_test --locked --no-fail-fast -p zetesis-validation --test example_parity --test authored_examples -- --ignored --nocapture
+    oracle_test --locked --no-fail-fast -p zetesis-validation --test integration -- --ignored --nocapture example_parity:: authored_examples::
     oracle_test --locked --no-fail-fast -p zetesis-themelios --test objective_boundaries --test objective_dependency_contracts -- --ignored --nocapture
     oracle_test --locked --no-fail-fast -p zetesis-themelios --test objective_scopes --test objective_carrier_composition --test objective_language_boundaries -- --ignored --nocapture
     oracle_test --locked --no-fail-fast -p zetesis-themelios --test head_contributions --test objective_source_completion --test objective_field_expressions --test objective_priority_reporting --test objective_cyclic_producers --test objective_rich_producers --test observation_expressions --test observation_scopes --test observation_families -- --ignored --nocapture

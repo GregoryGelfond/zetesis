@@ -112,7 +112,7 @@ fn repeated_empty_displays_preserve_optimal_multiplicity() {
 #[test]
 fn frozen_production_reports_preserve_display_identity() {
     let document: Value =
-        serde_json::from_str(include_str!("fixtures/objective-free-protocol.json")).unwrap();
+        serde_json::from_str(include_str!("../fixtures/objective-free-protocol.json")).unwrap();
     let models: Vec<Vec<String>> = serde_json::from_value(document["models"].clone()).unwrap();
     for run in document["runs"].as_array().unwrap() {
         let source = run["stdout"].as_str().unwrap().as_bytes();
@@ -129,7 +129,7 @@ fn frozen_production_reports_preserve_display_identity() {
 #[test]
 fn frozen_optimal_reports_preserve_complete_cost_vectors() {
     let document: Value =
-        serde_json::from_str(include_str!("fixtures/optimal-protocol.json")).unwrap();
+        serde_json::from_str(include_str!("../fixtures/optimal-protocol.json")).unwrap();
     for case in document["cases"].as_array().unwrap() {
         let costs: Vec<i64> = serde_json::from_value(case["expected_cost"].clone()).unwrap();
         let reports: Vec<_> = case["runs"]

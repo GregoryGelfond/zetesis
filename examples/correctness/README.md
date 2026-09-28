@@ -89,7 +89,7 @@ zetesis-validate --repo . --report target/correctness-parity.json
 The validator loads these examples by default. The Rust regression suite is:
 
 ```sh
-cargo test --locked -p zetesis-validation --test example_corpus
+cargo test --locked -p zetesis-validation --test integration example_corpus::
 ```
 
 For an independent original-versus-clean clingo comparison, set `CLINGO` to the
@@ -97,12 +97,12 @@ absolute path of a clingo 5.8.x executable:
 
 ```sh
 CLINGO=/absolute/path/to/clingo cargo test --locked -p zetesis-validation \
-  --test example_parity -- --ignored --nocapture
+  --test integration example_parity:: -- --ignored --nocapture
 ```
 
 The opt-in test runs all 94 cases from both trees with bounded capture,
 `--models=0 --opt-mode=optN`, checks successful completion and compares selected
 display multiplicities, costs and all typed contracts. It is a source-cleaning
 qualification, not a benchmark or a complete native-language compatibility claim.
-The maintained [parity test](../../crates/zetesis-validation/tests/example_parity.rs)
+The maintained [parity test](../../crates/zetesis-validation/tests/integration/example_parity.rs)
 implements this check.

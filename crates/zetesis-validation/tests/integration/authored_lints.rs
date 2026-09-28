@@ -2,9 +2,7 @@
 //! Compiler-generated attributes and procedural macro expansions are outside
 //! this token audit. Rust's deny gate still applies to the compiled code.
 
-#[path = "support/authored_sources.rs"]
-mod authored_sources;
-#[path = "support/lint_attributes.rs"]
+use crate::support::authored_sources;
 mod lint_attributes;
 
 use std::fs;

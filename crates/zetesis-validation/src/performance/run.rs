@@ -16,7 +16,6 @@ use crate::selected::{FileSeal, identity, publication};
 use crate::{answers, examples, process};
 
 #[cfg(test)]
-#[path = "../../tests/support/performance_sources.rs"]
 mod tests;
 
 pub(super) fn campaign(request: &Request<'_>, helper: Option<&Path>) -> Result<Report, Error> {

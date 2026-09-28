@@ -817,5 +817,4 @@ fn normalization_limits(request: &Request<'_>) -> Value {
 }
 
 #[cfg(test)]
-#[path = "../../../tests/support/matrix_comparison.rs"]
 mod tests;
