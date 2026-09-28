@@ -16,7 +16,7 @@ fn command(arguments: &[&str]) -> TestCommand {
     else {
         panic!("expected a test command");
     };
-    command
+    *command
 }
 
 #[test]

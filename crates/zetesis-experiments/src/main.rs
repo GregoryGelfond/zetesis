@@ -9,7 +9,7 @@ fn main() -> std::process::ExitCode {
         Ok(Completion::Passed) => std::process::ExitCode::SUCCESS,
         Ok(Completion::Refused) => std::process::ExitCode::FAILURE,
         Err(error) => {
-            eprintln!("zetesis-bench: {error}");
+            eprintln!("zetesis-experiments: {error}");
             std::process::ExitCode::from(2)
         }
     }

@@ -1,5 +1,7 @@
 # Eager and hybrid formula grounding
 
+<!-- A dated record: its commands keep the spellings of the binaries it records. -->
+
 Hybrid formula execution retains an eager core and checks eligible source
 constraints while searching and before publishing each answer set. Complete
 support and arithmetic admission still precede solving. The measurements below
@@ -188,7 +190,7 @@ executable in old/new/new/old order, and repeat with `--workers 1` and
 runner was built from `5b50286a`, while the two measured native executables
 have the revisions above. Their full source and binary identities, generated
 workload hashes and queens constant edits are in the evidence file. See
-[corpus measurements](commands.md#measure-a-corpus) for the library/example door.
+[corpus measurements](benchmarking.md#measure-a-corpus) for the library/example door.
 
 ## Historical full-candidate comparison
 
@@ -257,7 +259,7 @@ checks. This is bounded experimental evidence, not a proof of implementation
 correctness or a claim about larger instances.
 
 Reproduce the workload and protocol through the maintained
-[grounding comparison example](commands.md#measure-a-corpus), once with
+[grounding comparison example](benchmarking.md#measure-a-corpus), once with
 `--workers 1` and once with `--workers 4`. It uses unchanged corpus files with
 recorded constant substitutions and the library's generated workloads.
 

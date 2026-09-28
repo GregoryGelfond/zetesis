@@ -1,25 +1,19 @@
-use crate::presentation::{Diagnostics, Streams};
+use crate::presentation::Diagnostics;
 use crate::{ColorMode, Completion, Invocation, Options, PublicationOutcome, RunError, RunFailure};
-use clap::Parser;
 use std::io::{self, BufWriter, IsTerminal, Read, Write};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
+use zetesis_presentation::{Streams, color_disabled, terminal_width};
 use zetesis_themelios::{BundleLimits, SourceBundle};
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-mod signals;
-
-/// Process adapter. Exit 0 means a completed request; test/bench use 1 for a
-/// completed check or campaign with non-passing evidence. Exit 2 is an input/backend/output
+/// Process adapter. Exit 0 means a completed request; test uses 1 for a
+/// completed check with non-passing evidence. Exit 2 is an input/backend/output
 /// error, and 3 interrupted search or publication. Satisfiability and coverage are printed
 /// independently; this is not clingo's numeric exit-code protocol.
 /// Standard output is explicitly flushed before returning. A flush failure is
 /// an output error, independently of any established semantic outcome.
 #[must_use]
 pub fn entry() -> ExitCode {
-    if std::env::args_os().nth(1).as_deref() == Some(std::ffi::OsStr::new("__measure-child")) {
-        return measure_child();
-    }
     let mut invocation = match Invocation::try_parse_from(std::env::args_os()) {
         Ok(invocation) => invocation,
         Err(error) => {
@@ -45,7 +39,6 @@ pub fn entry() -> ExitCode {
         Invocation::Solve(options) => (options.color, options.json),
         Invocation::Devices => (ColorMode::Auto, false),
         Invocation::Test(command) => (command.color(), command.json()),
-        Invocation::Bench(command) => (command.color(), command.json()),
     };
     let colors = Streams::resolve(
         mode.human(json),
@@ -53,18 +46,24 @@ pub fn entry() -> ExitCode {
         diagnostics.is_terminal(),
         disabled,
     );
-    let width = terminal_width();
+    let columns = std::env::var("COLUMNS").ok();
+    let width = terminal_width(columns.as_deref());
     let layout = zetesis_presentation::Layout::new(width, colors.output);
     let mut output = buffered_output(output, output_terminal);
     let mut diagnostics = Diagnostics::new(diagnostics, colors.diagnostics).with_width(width);
     let cancelled = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    // Only conformance checks own child solvers that an interrupt must settle.
     #[cfg(any(target_os = "linux", target_os = "macos"))]
-    let _signals = match signals::Signals::install(&invocation, &cancelled) {
-        Ok(signals) => signals,
-        Err(error) => {
-            let _ = diagnostics.diagnostic(&error);
-            return ExitCode::from(2);
+    let _interrupts = if matches!(invocation, Invocation::Test(_)) {
+        match zetesis_validation::process::interrupts::Interrupts::install(&cancelled) {
+            Ok(interrupts) => Some(interrupts),
+            Err(error) => {
+                let _ = diagnostics.diagnostic(&error);
+                return ExitCode::from(2);
+            }
         }
+    } else {
+        None
     };
     let result = match &mut invocation {
         Invocation::Solve(options) => {
@@ -88,19 +87,6 @@ pub fn entry() -> ExitCode {
                 &mut diagnostics,
             ))
         }
-        Invocation::Bench(command) => {
-            let result = crate::benchmark::execute_with_cancellation(
-                command,
-                layout,
-                &mut output,
-                &mut diagnostics,
-                cancelled.as_ref(),
-            );
-            Ok(command_status(
-                result.map(|passed| passed == crate::benchmark::Completion::Passed),
-                &mut diagnostics,
-            ))
-        }
     };
     finish_output(output, result, &mut diagnostics)
 }
@@ -117,53 +103,6 @@ fn command_status<E: std::fmt::Display>(
             ExitCode::from(2)
         }
     }
-}
-
-// A terminal-provided width is presentation evidence only; cap it so a hostile
-// environment cannot request arbitrarily wide padding. Generic views use 80.
-fn terminal_width() -> std::num::NonZeroUsize {
-    std::env::var("COLUMNS")
-        .ok()
-        .and_then(|value| value.parse::<usize>().ok())
-        .filter(|width| *width <= 512)
-        .and_then(std::num::NonZeroUsize::new)
-        .unwrap_or(std::num::NonZeroUsize::new(80).unwrap())
-}
-
-#[derive(Parser)]
-struct ChildOptions {
-    record: std::path::PathBuf,
-    #[arg(required = true, trailing_var_arg = true, allow_hyphen_values = true)]
-    command: Vec<std::ffi::OsString>,
-}
-
-fn measure_child() -> ExitCode {
-    let options = match ChildOptions::try_parse_from(std::env::args_os().skip(1)) {
-        Ok(options) => options,
-        Err(error) => {
-            let _ = error.print();
-            return ExitCode::from(2);
-        }
-    };
-    let result = (|| -> Result<(), Box<dyn std::error::Error>> {
-        let (executable, arguments) = options
-            .command
-            .split_first()
-            .ok_or("missing measured executable")?;
-        zetesis_validation::process::memory::measure_to_file(
-            zetesis_validation::process::Invocation {
-                executable: std::path::Path::new(executable),
-                arguments,
-                directory: &std::env::current_dir()?,
-            },
-            &options.record,
-        )?;
-        Ok(())
-    })();
-    command_status(
-        result.map(|()| true),
-        &mut Diagnostics::new(io::stderr().lock(), ColorMode::Never),
-    )
 }
 
 fn publication_status(outcome: &PublicationOutcome) -> ExitCode {
@@ -267,10 +206,6 @@ enum Input {
     Bundle(SourceBundle),
 }
 
-fn color_disabled(no_color: Option<&std::ffi::OsStr>, term: Option<&std::ffi::OsStr>) -> bool {
-    no_color.is_some_and(|value| !value.is_empty()) || term.is_some_and(|value| value == "dumb")
-}
-
 fn load_input(options: &Options) -> Result<Input, RunError> {
     if !options.additional_inputs.is_empty()
         && std::iter::once(&options.input)
@@ -321,29 +256,6 @@ fn read_text(reader: impl Read, limit: usize) -> io::Result<String> {
             "standard input is not valid UTF-8",
         )
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::color_disabled;
-    use std::ffi::OsStr;
-
-    #[test]
-    fn terminal_conventions_disable_only_automatic_color() {
-        for (no_color, term, expected) in [
-            (None, None, false),
-            (Some(""), Some("xterm"), false),
-            (Some("0"), Some("xterm"), true),
-            (Some("1"), None, true),
-            (None, Some("dumb"), true),
-            (None, Some("xterm-256color"), false),
-        ] {
-            assert_eq!(
-                color_disabled(no_color.map(OsStr::new), term.map(OsStr::new)),
-                expected
-            );
-        }
-    }
 }
 
 #[cfg(test)]

@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use crate::{Backend, Grounder, Oracle, SearchMethod, SourceBatching};
 
-pub(crate) mod values;
+mod values;
 
 /// Commands that do not read an answer-set program.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Subcommand)]
@@ -249,7 +249,7 @@ pub struct Options {
     /// than one worker, models arrive in the schedule's order, which differs
     /// between runs; the family of answer sets is the same. Formula
     /// completion under `--search clauses` has a separate worker setting.
-    #[arg(long, visible_alias = "threads", value_name = "auto|N", value_parser = values::workers, default_value = "auto", hide_short_help = true)]
+    #[arg(long, visible_alias = "threads", value_name = "auto|N", value_parser = zetesis_backend::parse_threads, default_value = "auto", hide_short_help = true)]
     pub workers: NonZeroUsize,
     /// Workers for unresolved formula queries: under `--search clauses`, and
     /// under regions with one CPU walker or general device propagation.
@@ -348,13 +348,6 @@ pub struct Options {
     /// Omitted, it is the library default scaled by `--memory`.
     #[arg(long, hide_short_help = true)]
     pub max_batch_bytes: Option<u64>,
-}
-
-/// A conservative automatic pool, falling back to one when the host is unknown.
-fn host_workers() -> NonZeroUsize {
-    std::thread::available_parallelism()
-        .unwrap_or(NonZeroUsize::MIN)
-        .min(NonZeroUsize::new(4).expect("four is nonzero"))
 }
 
 /// The host's physical memory in bytes, read once per process the first

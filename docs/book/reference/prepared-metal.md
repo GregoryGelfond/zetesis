@@ -1,5 +1,7 @@
 # Prepared grounding: CPU and Metal
 
+<!-- A dated record: its commands keep the spellings of the binaries it records. -->
+
 The prepared-grounding changes reduce repeated work in independent CPU closure.
 The measurements here show no general Metal speedup or reduction in GPU
 transport storage. Eager timings include some regressions and substantial block

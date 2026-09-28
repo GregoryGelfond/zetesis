@@ -224,7 +224,7 @@ pub fn execute_with_cancellation(
     diagnostics: &mut impl io::Write,
     cancelled: &AtomicBool,
 ) -> Result<Completion, Error> {
-    let mut tracked = crate::presentation::TrackedWriter::new(output);
+    let mut tracked = zetesis_presentation::TrackedWriter::new(output);
     let result = execute_inner(command, layout, &mut tracked, diagnostics, cancelled);
     let error = match result {
         Ok(completion) => return Ok(completion),

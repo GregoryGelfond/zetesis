@@ -12,10 +12,40 @@
 //! never with "unknown value". Spellings are stable — they appear in arguments,
 //! configuration and retained records — and a spelling zetesis no longer accepts
 //! is answered with what to use instead ([`ParseBackendError::retired`]).
+//!
+//! The CPU backend's default parallelism is here too ([`default_threads`]), so
+//! every tool that runs or measures zetesis means the same count by `auto`.
 #![forbid(unsafe_code)]
 
 use std::fmt;
+use std::num::NonZeroUsize;
 use std::str::FromStr;
+
+/// The CPU backend's default thread count, which `--threads auto` means: the
+/// host's available parallelism, at most four, or one when the host reports
+/// none. It reads the host each time it is called.
+#[must_use]
+pub fn default_threads() -> NonZeroUsize {
+    const CAP: NonZeroUsize = NonZeroUsize::new(4).expect("four is nonzero");
+    std::thread::available_parallelism()
+        .unwrap_or(NonZeroUsize::MIN)
+        .min(CAP)
+}
+
+/// Read a thread count as a command line spells it: `auto` for
+/// [`default_threads`], or a positive count.
+///
+/// # Errors
+/// Refuses any other spelling, naming the accepted forms.
+pub fn parse_threads(value: &str) -> Result<NonZeroUsize, String> {
+    if value == "auto" {
+        Ok(default_threads())
+    } else {
+        value
+            .parse()
+            .map_err(|_| "expected auto or a positive thread count".to_owned())
+    }
+}
 
 /// How a program runs: its execution backend.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]

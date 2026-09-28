@@ -94,7 +94,7 @@ fn memory_qualification_uses_the_solver_exit_policy() {
             .unwrap()
             .with_memory(1)
             .unwrap();
-        let helper = Path::new(env!("CARGO_BIN_EXE_zetesis-perf"));
+        let helper = Path::new(env!("CARGO_BIN_EXE_zetesis-bench"));
         let report = performance::run_with_runner(&request, helper).unwrap();
         let samples = report.samples();
         let expected = [

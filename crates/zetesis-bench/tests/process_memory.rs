@@ -41,7 +41,7 @@ fn run_supervised_helper(
     arguments.extend_from_slice(child);
     let outcome = process::invoke_supervised(
         Invocation {
-            executable: Path::new(env!("CARGO_BIN_EXE_zetesis-perf")),
+            executable: Path::new(env!("CARGO_BIN_EXE_zetesis-bench")),
             arguments: &arguments,
             directory,
         },
@@ -67,7 +67,7 @@ fn run_finished_helper(directory: &Path, record: &Path, child: &[OsString]) -> p
     arguments.extend_from_slice(child);
     let outcome = process::invoke(
         Invocation {
-            executable: Path::new(env!("CARGO_BIN_EXE_zetesis-perf")),
+            executable: Path::new(env!("CARGO_BIN_EXE_zetesis-bench")),
             arguments: &arguments,
             directory,
         },
@@ -97,7 +97,7 @@ fn absent_child_cannot_publish_a_resource_record() {
     assert!(
         capture
             .stderr()
-            .starts_with(b"zetesis-perf child RSS: child RSS operation: ")
+            .starts_with(b"measurement helper: child RSS operation: ")
     );
     assert!(!record.exists());
 }
@@ -111,7 +111,7 @@ fn relative_child_is_not_resolved_by_the_resource_helper() {
     assert_eq!(capture.exit().unwrap().code, Some(2));
     assert_eq!(
         capture.stderr(),
-        b"zetesis-perf child RSS: child RSS executable and directory must be absolute\n"
+        b"measurement helper: child RSS executable and directory must be absolute\n"
     );
     assert!(!record.exists());
 }
@@ -133,7 +133,7 @@ fn resource_publication_preserves_an_existing_record() {
     assert_eq!(capture.stop(), Stop::Completed, "{capture:?}");
     assert_eq!(capture.exit().unwrap().code, Some(2));
     assert_eq!(capture.stdout(), b"completed-child");
-    assert!(capture.stderr().starts_with(b"zetesis-perf child RSS: "));
+    assert!(capture.stderr().starts_with(b"measurement helper: "));
     assert_eq!(
         std::fs::read(record).unwrap(),
         b"previous resource evidence"

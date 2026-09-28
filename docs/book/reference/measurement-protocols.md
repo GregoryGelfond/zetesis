@@ -1,5 +1,7 @@
 # Measurement protocols and early results
 
+<!-- A dated record: its commands keep the spellings of the binaries it records. -->
+
 For everyday benchmarking and current results, start with
 [Benchmarks and comparisons](performance.md). This reference is for maintainers
 reproducing a particular experiment or deriving a workload through the library.
@@ -17,9 +19,11 @@ sources, dates, settings and measurement limits.
 
 ## Measure the relevant work
 
-Use `zetesis bench corpus` for the installed explicit-profile matrix interface.
-The `zetesis-perf` compatibility executable retains the additional protocols and
-argument spellings used by the recipes and measured records below. See the
+Use `zetesis-bench corpus` for the installed explicit-profile matrix interface.
+`zetesis-bench perf`, formerly the separate `zetesis-perf` executable, retains
+the additional protocols and argument spellings used by the recipes and measured
+records below, which keep the `zetesis-perf` name of the binaries they record.
+See the
 [comparison guide](https://github.com/GregoryGelfond/zetesis/blob/main/scripts/README-comparison.md) for its schedules,
 capture bounds and report formats. Direct wall time includes process startup,
 source loading, grounding, solving and captured output. The CPU baseline keeps
@@ -116,12 +120,12 @@ size each, byte-exact, with closed-form complete families as their
 contracts), three amended queens boards and two unchanged entries. The
 generated programs reach routes the corpus does not: the closure route, deep
 derivation, cyclic and stratified negation, refused admissions, a Latin
-square in the shape of Sudoku and a line walked under frame rules. `zetesis-perf --suite series` runs
-them through the instrumented matrix; `--profile cpu-auto` requests the shipped
+square in the shape of Sudoku and a line walked under frame rules.
+`zetesis-bench perf --suite series` runs them through the instrumented matrix; `--profile cpu-auto` requests the shipped
 defaults and the observation retains the grounding mode each cell took;
 `--time-limit` adds a cooperative deadline to every native profile.
 
-`zetesis-series` derives one comparison from published reports of the same
+`zetesis-bench series` derives one comparison from published reports of the same
 cells: exact medians, later-over-earlier ratios, each report's native median
 over the reference solver's median on the same cell, the retained counters and
 each report's native seal, with cells that did not pass listed by decision,

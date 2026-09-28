@@ -13,7 +13,7 @@ use zetesis_wgpu::{GpuCheck, GpuLimits, GpuOptions, GpuOracle, MAX_ATOMS};
 /// Explicitly bounded experiment dimensions. All timings use a monotonic clock.
 #[derive(Clone, Debug, Parser)]
 #[command(
-    name = "zetesis-bench",
+    name = "zetesis-experiments",
     about = "Exact static-oracle parity and CPU/GPU measurements"
 )]
 pub struct Options {

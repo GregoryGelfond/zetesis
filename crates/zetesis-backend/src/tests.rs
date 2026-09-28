@@ -90,6 +90,29 @@ fn the_cpu_resolves_to_no_api() {
     assert!(!Backend::Cpu.is_gpu());
 }
 
+#[test]
+fn default_threads_are_the_host_parallelism_at_most_four() {
+    let host = std::thread::available_parallelism().map_or(1, NonZeroUsize::get);
+    assert_eq!(default_threads().get(), host.min(4));
+}
+
+#[test]
+fn auto_threads_mean_the_default() {
+    assert_eq!(parse_threads("auto"), Ok(default_threads()));
+}
+
+#[test]
+fn a_positive_thread_count_is_read_as_given() {
+    assert_eq!(parse_threads("7").map(NonZeroUsize::get), Ok(7));
+}
+
+#[test]
+fn other_thread_spellings_are_refused() {
+    for value in ["0", "-1", "four", ""] {
+        assert!(parse_threads(value).is_err(), "{value}");
+    }
+}
+
 #[cfg(feature = "clap")]
 mod command_line {
     use super::*;

@@ -159,6 +159,35 @@ fn help_and_version_are_directly_runnable_without_input() {
 }
 
 #[test]
+fn bench_names_the_separate_benchmarking_tool() {
+    // `bench` stays reserved, so it is never read as a file-first source; the
+    // refusal names the tool and the spelling that solves a file named bench.
+    for arguments in [
+        &["bench"][..],
+        &["bench", "corpus", "--json"],
+        &["help", "bench"],
+    ] {
+        let result = ProcessCommand::new(env!("CARGO_BIN_EXE_zetesis"))
+            .args(arguments)
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        assert_eq!(result.status.code(), Some(2), "{arguments:?}");
+        assert!(result.stdout.is_empty(), "{arguments:?}");
+        let message = String::from_utf8(result.stderr).unwrap();
+        assert!(
+            message.contains("`bench` is not a zetesis command"),
+            "{message}"
+        );
+        assert!(
+            message.contains("the separate `zetesis-bench` tool (see INSTALL.md)"),
+            "{message}"
+        );
+        assert!(message.contains("`zetesis solve bench`"), "{message}");
+    }
+}
+
+#[test]
 fn process_keeps_backend_reporting_on_stderr() {
     let source = concat!(
         env!("CARGO_MANIFEST_DIR"),

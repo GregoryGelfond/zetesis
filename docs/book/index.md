@@ -13,7 +13,7 @@ the command, embedding the libraries and understanding the solver.
 | Use zetesis from Rust | [Getting started with the library](rust/getting-started.md), then [solving sessions](rust/sessions.md) |
 | Understand how the solver works | [A guided tour](architecture/tour.md), then [programs, answer sets and the reduct](architecture/semantics.md) |
 | Read or use the proofs | [Lean definitions and imports](lean/foundations.md) |
-| Compare performance or run benchmarks | [Performance results](reference/performance.md), then the [benchmark commands](reference/commands.md#measure-a-corpus) |
+| Compare performance or run benchmarks | [Performance results](reference/performance.md), then the [benchmarking tool](reference/benchmarking.md) |
 
 ## Three parts
 

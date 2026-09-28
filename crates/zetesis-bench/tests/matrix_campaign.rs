@@ -74,7 +74,7 @@ impl Fixture {
 #[test]
 fn memory_rounds_record_the_reference_peak_resident_set() {
     let fixture = Fixture::new();
-    let helper = Path::new(env!("CARGO_BIN_EXE_zetesis-perf"));
+    let helper = Path::new(env!("CARGO_BIN_EXE_zetesis-bench"));
     let mut request = fixture.request(Suite::Queens);
     request.plan = request.plan.with_memory(2).unwrap();
     request.helper = Some(helper);
@@ -502,7 +502,8 @@ fn serialized_byte_ceiling_prevents_partial_publication() {
 #[test]
 fn cli_profiles_preserve_their_execution_arguments() {
     let fixture = Fixture::new();
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_zetesis-perf"))
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_zetesis-bench"))
+        .arg("perf")
         .arg(&fixture.corpus)
         .arg("--zetesis")
         .arg(&fixture.native)
@@ -596,7 +597,8 @@ fn cli_profiles_preserve_their_execution_arguments() {
 #[test]
 fn legacy_mode_refuses_silently_ignored_matrix_controls() {
     let fixture = Fixture::new();
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_zetesis-perf"))
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_zetesis-bench"))
+        .arg("perf")
         .arg(&fixture.corpus)
         .arg("--zetesis")
         .arg(&fixture.native)
@@ -619,7 +621,8 @@ fn legacy_mode_refuses_silently_ignored_matrix_controls() {
 #[test]
 fn corpus_cli_defaults_to_the_four_explicit_profiles() {
     let fixture = Fixture::new();
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_zetesis-perf"))
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_zetesis-bench"))
+        .arg("perf")
         .arg(&fixture.corpus)
         .arg("--zetesis")
         .arg(&fixture.native)
@@ -643,7 +646,8 @@ fn corpus_cli_defaults_to_the_four_explicit_profiles() {
 #[test]
 fn matrix_cli_records_its_explicit_decoder_ceiling() {
     let fixture = Fixture::new();
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_zetesis-perf"))
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_zetesis-bench"))
+        .arg("perf")
         .arg(&fixture.corpus)
         .arg("--zetesis")
         .arg(&fixture.native)
@@ -673,7 +677,8 @@ fn matrix_cli_records_its_explicit_decoder_ceiling() {
 #[test]
 fn legacy_cli_refuses_a_matrix_decoder_ceiling() {
     let fixture = Fixture::new();
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_zetesis-perf"))
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_zetesis-bench"))
+        .arg("perf")
         .arg(&fixture.corpus)
         .arg("--zetesis")
         .arg(&fixture.native)
@@ -691,7 +696,8 @@ fn legacy_cli_refuses_a_matrix_decoder_ceiling() {
 #[test]
 fn matrix_startup_identifies_the_evidence_destination() {
     let fixture = Fixture::new();
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_zetesis-perf"))
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_zetesis-bench"))
+        .arg("perf")
         .arg(&fixture.corpus)
         .arg("--zetesis")
         .arg(&fixture.native)

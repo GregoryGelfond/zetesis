@@ -31,10 +31,6 @@ zetesis-solve = { workspace = true, features = ["gpu"] }
 [lints]
 workspace = true
 
-[[bin]]
-name = "zetesis-bench"
-path = "src/main.rs"
-
 [[bench]]
 name = "oracles"
 harness = false

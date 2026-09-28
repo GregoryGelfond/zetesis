@@ -24,6 +24,8 @@ The installer builds release executables and places them in `~/.local/bin`.
 Pass a directory to `scripts/install.sh` to choose another location. The initial
 build needs GitHub read access for the pinned themelios dependency; no sibling
 checkout is required. Installed commands do not need Rust or Cargo at runtime.
+[INSTALL.md](INSTALL.md) describes the installed tools, the CPU-only build,
+installing with Cargo and checking a build.
 
 ## First program
 

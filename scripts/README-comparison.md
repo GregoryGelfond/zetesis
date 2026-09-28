@@ -1,14 +1,14 @@
 # Solver comparisons
 
-Use the installed Rust `zetesis-perf` command in a quiet measurement window after
+Use the installed `zetesis-bench perf` command in a quiet measurement window after
 qualification. Sources, solver executables and report destinations are explicit:
 
 ```sh
-zetesis-perf examples/correctness --suite baseline \
+zetesis-bench perf examples/correctness --suite baseline \
   --zetesis /path/to/zetesis --clingo /path/to/clingo \
   --report /new/path/baseline.json
 
-zetesis-perf examples/correctness \
+zetesis-bench perf examples/correctness \
   --case scenarios/shortest-path/variant-01/01-basic.lp \
   --case standalone/send-money/send-money.lp \
   --memory-runs 5 --warmups 3 --repetitions 21 \
@@ -64,12 +64,12 @@ record); raw reports are large and stay with their builds. Then derive the
 retained comparison:
 
 ```sh
-zetesis-perf examples/correctness --suite series --profile cpu-auto \
+zetesis-bench perf examples/correctness --suite series --profile cpu-auto \
   --warmups 1 --repetitions 3 --timeout-seconds 30 --campaign-seconds 3600 \
   --zetesis /path/to/zetesis --clingo /path/to/clingo \
   --report /new/path/series-after.json
 
-zetesis-series --report main=/path/series-main.json \
+zetesis-bench series --report main=/path/series-main.json \
   --report before=/path/series-before.json --report after=/path/series-after.json \
   --json /new/path/series-comparison.json
 ```

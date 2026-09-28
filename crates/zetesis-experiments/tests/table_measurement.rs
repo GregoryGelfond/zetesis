@@ -3,7 +3,7 @@
 use std::process::{Command, Output};
 
 fn command(arguments: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_zetesis-bench"))
+    Command::new(env!("CARGO_BIN_EXE_zetesis-experiments"))
         .args([
             "table",
             "--rows",

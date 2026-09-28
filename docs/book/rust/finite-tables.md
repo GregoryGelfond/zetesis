@@ -100,10 +100,10 @@ zetesis --grounder eager --oracle countermodel --formula-joins table --stats inp
 
 The requested strategy alone is not route evidence. Inspect `table_preparations`,
 `table_probes` and `table_rows` in the grounding work report; inapplicable patterns
-still use indexed probes. `zetesis-bench grounding --joins table` profiles this
-materialization against an indexed reference. `zetesis-perf` accepts the optional
-`--formula-joins indexed|table` setting for compatible native binaries; omission
-preserves their default. See the
+still use indexed probes. `zetesis-experiments grounding --joins table` profiles
+this materialization against an indexed reference. `zetesis-bench perf` accepts
+the optional `--formula-joins indexed|table` setting for compatible native
+binaries; omission preserves their default. See the
 [grounding experiment](https://github.com/GregoryGelfond/zetesis/tree/main/crates/zetesis-experiments#original-source-grounding)
 and [validation commands](https://github.com/GregoryGelfond/zetesis/tree/main/crates/zetesis-validation)
 for their complete capture and comparison contracts.
@@ -161,7 +161,7 @@ The maintained experiment compares a prepared row scan, scalar support bitsets
 and independent projections sharing one table through Rayon:
 
 ```sh
-zetesis-bench table --case independent --rows 1024 --queries 32 \
+zetesis-experiments table --case independent --rows 1024 --queries 32 \
   --workers 4 --warmups 1 --repetitions 3 > table.jsonl
 ```
 

@@ -9,9 +9,12 @@
 
 mod files;
 mod json;
+mod workspace;
 pub mod book;
 pub mod coverage;
+pub mod install;
 pub mod inventory;
+pub mod invocations;
 pub mod proofs;
 
 use std::{fmt, io, path::PathBuf};

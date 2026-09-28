@@ -15,7 +15,6 @@
 mod options;
 mod command;
 pub mod testing;
-pub mod benchmark;
 pub mod statistics_view;
 pub use command::Invocation;
 pub use statistics_view::StatisticsView;

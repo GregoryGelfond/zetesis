@@ -1,5 +1,7 @@
 # Grounding and representation measurements
 
+<!-- A dated record: its commands keep the spellings of the binaries it records. -->
+
 These reports measure particular changes to grounding, atom storage and release
 optimization. They retain the original programs, settings and compiled sources.
 For a short introduction or a new measurement, start with

@@ -1794,6 +1794,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "zetesis-bench"
+version = "0.1.5"
+dependencies = [
+ "clap",
+ "serde_json",
+ "tempfile",
+ "zetesis-backend",
+ "zetesis-presentation",
+ "zetesis-validation",
+]
+
+[[package]]
 name = "zetesis-cli"
 version = "0.1.5"
 dependencies = [
@@ -1801,12 +1813,11 @@ dependencies = [
  "rayon",
  "serde",
  "serde_json",
- "signal-hook",
  "tempfile",
  "zetesis-backend",
+ "zetesis-bench",
  "zetesis-core",
  "zetesis-cpu",
- "zetesis-experiments",
  "zetesis-ferraris",
  "zetesis-objective",
  "zetesis-presentation",
@@ -1975,6 +1986,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "signal-hook",
  "syn 2.0.119",
  "tempfile",
  "themelios-program",

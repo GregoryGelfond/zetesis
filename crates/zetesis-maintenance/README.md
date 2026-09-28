@@ -167,3 +167,18 @@ Other source checkouts and instrumented coverage populations keep separate targe
 The caller must leave artifacts immutable during the check. The serialized input
 and path-count limits bound representation size, not artifact payload size or RSS;
 hard-link publication does not read or duplicate those payloads.
+
+## Installed tools and documented executables
+
+`install::check` holds the installed tool set to one source, the lists in
+`scripts/install.sh`: INSTALL.md's tool table must describe exactly those tools,
+its Cargo commands must name exactly the installer's packages, and those
+packages' binary targets, as `cargo metadata` reports them, must be exactly the
+tools. `invocations::check` holds live documentation to what the workspace
+builds: a command in a shell code block, or a tool table's first cell, that
+begins with a zetesis executable must name a binary or package of the workspace,
+and `zetesis bench` is not a command. A page beginning with `invocations::RECORD`
+records a dated measurement and keeps the spellings of the binaries it records;
+prose is not checked. Both take text their caller has read and build nothing.
+The portable gate runs them over the repository in the `executable_agreement`
+tests.

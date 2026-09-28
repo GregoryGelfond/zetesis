@@ -28,6 +28,8 @@ use serde::Serialize;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod posix;
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub mod interrupts;
 pub mod memory;
 
 mod executable;

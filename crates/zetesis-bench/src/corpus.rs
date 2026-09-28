@@ -1,4 +1,7 @@
-use super::{Completion, Error, ViewOptions};
+//! The `corpus` command: complete answer families, timings and memory of the
+//! measured `zetesis` beside clingo's.
+
+use crate::{Completion, Error, ViewOptions};
 use clap::{Args, ValueEnum};
 use std::{
     io,
@@ -92,7 +95,8 @@ pub struct CorpusOptions {
     /// Include the unchanged Einstein riddle in --suite scalability.
     #[arg(long)]
     pub include_einstein: bool,
-    /// Native executable; omitted uses this installed executable and `solve`.
+    /// Native executable; omitted uses the installed `zetesis` (the one beside
+    /// this tool, else the first on PATH) and its `solve` command.
     #[arg(long)]
     pub zetesis: Option<PathBuf>,
     /// Explicit executable defaults to legacy; the installed executable uses solve.
@@ -123,7 +127,7 @@ pub struct CorpusOptions {
     #[arg(long, value_delimiter = ',', num_args = 1.., conflicts_with_all = ["threads", "compare_grounders"])]
     pub compare_threads: Vec<NonZeroUsize>,
     /// Native candidate/closure workers; auto uses at most four available threads.
-    #[arg(long, alias = "workers", value_name = "auto|N", value_parser = crate::options::values::workers, default_value = "auto")]
+    #[arg(long, alias = "workers", value_name = "auto|N", value_parser = zetesis_backend::parse_threads, default_value = "auto")]
     pub threads: NonZeroUsize,
     /// Native exact residual completion workers.
     #[arg(
@@ -260,7 +264,8 @@ impl CorpusOptions {
     }
 
     /// Actual interface selection. Omission always exercises the explicit solve
-    /// command of this installed executable; an explicit legacy binary is opt-in.
+    /// command of the installed `zetesis`; an explicit executable defaults to
+    /// the legacy interface unless `--native-interface` names one.
     #[must_use]
     pub fn invocation(&self) -> matrix::NativeInvocation {
         self.native_interface.map_or_else(
@@ -276,7 +281,11 @@ impl CorpusOptions {
     }
 }
 
-pub(super) fn execute(
+/// Run the campaign, publish its evidence and write its view to `output`.
+///
+/// Memory rounds re-execute this process's executable as their measurement
+/// helper, so it must answer the helper protocol, as `zetesis-bench` does.
+pub(crate) fn execute(
     options: &CorpusOptions,
     layout: Layout,
     output: &mut impl io::Write,
@@ -284,7 +293,10 @@ pub(super) fn execute(
     cancelled: &std::sync::atomic::AtomicBool,
 ) -> Result<Completion, Error> {
     let current = std::env::current_exe().map_err(Error::Io)?;
-    let native = executable(options.zetesis.as_deref().unwrap_or(&current))?;
+    let native = match &options.zetesis {
+        Some(path) => executable(path)?,
+        None => installed_zetesis(&current)?,
+    };
     let reference = executable(&options.clingo)?;
     let mut limits = performance::Limits::default();
     limits.process.timeout = Duration::from_secs(options.timeout_seconds);
@@ -327,12 +339,23 @@ pub(super) fn execute(
     }
     .map_err(Error::Campaign)?;
     report.publish().map_err(Error::Campaign)?;
-    super::view::corpus(&report.summary(), options.view.json, layout, output)?;
+    crate::view::corpus(&report.summary(), options.view.json, layout, output)?;
     Ok(if report.passed() {
         Completion::Passed
     } else {
         Completion::NonPass
     })
+}
+
+/// The installed `zetesis`: the one in the directory of `this` executable,
+/// else the first on `PATH`.
+fn installed_zetesis(this: &Path) -> Result<PathBuf, Error> {
+    let beside = this.with_file_name(format!("zetesis{}", std::env::consts::EXE_SUFFIX));
+    if beside.is_file() {
+        Ok(beside)
+    } else {
+        executable(Path::new("zetesis"))
+    }
 }
 
 fn executable(path: &Path) -> Result<PathBuf, Error> {

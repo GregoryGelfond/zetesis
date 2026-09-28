@@ -40,7 +40,7 @@ pub use zetesis_backend::Backend;
 /// Standalone experiment selection, retaining the existing static command.
 #[derive(Debug, clap::Parser)]
 #[command(
-    name = "zetesis-bench",
+    name = "zetesis-experiments",
     about = "Reproducible reduct, grounding and execution-primitive measurements",
     args_conflicts_with_subcommands = true
 )]

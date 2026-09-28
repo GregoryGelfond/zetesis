@@ -113,7 +113,7 @@ fn memory_samples_retain_independent_solver_evidence() {
     let mut request = selected(&fixture);
     request.schedule = request.schedule.with_memory(1).unwrap();
     let report =
-        performance::run_with_runner(&request, Path::new(env!("CARGO_BIN_EXE_zetesis-perf")))
+        performance::run_with_runner(&request, Path::new(env!("CARGO_BIN_EXE_zetesis-bench")))
             .unwrap();
     assert!(report.passed(), "{:?}", report.samples());
     let memory: Vec<_> = report
@@ -134,7 +134,7 @@ fn memory_samples_retain_independent_solver_evidence() {
             .iter()
             .filter(|sample| sample.slot().phase == Phase::Timed)
             .all(|sample| sample.memory().is_none()
-                && sample.capture().executable() != Path::new(env!("CARGO_BIN_EXE_zetesis-perf")))
+                && sample.capture().executable() != Path::new(env!("CARGO_BIN_EXE_zetesis-bench")))
     );
 }
 
@@ -269,7 +269,7 @@ fn resource_summaries_keep_distinct_populations() {
     let mut request = selected(&fixture);
     request.schedule = request.schedule.with_memory(2).unwrap();
     let report =
-        performance::run_with_runner(&request, Path::new(env!("CARGO_BIN_EXE_zetesis-perf")))
+        performance::run_with_runner(&request, Path::new(env!("CARGO_BIN_EXE_zetesis-bench")))
             .unwrap();
     let summaries = report.summaries().unwrap();
     assert_eq!(summaries.len(), 4);
@@ -368,7 +368,7 @@ fn cli_selected_memory_campaign_seals_its_runner() {
             .as_array()
             .unwrap()
             .iter()
-            .any(|seal| seal["requested"] == env!("CARGO_BIN_EXE_zetesis-perf"))
+            .any(|seal| seal["requested"] == env!("CARGO_BIN_EXE_zetesis-bench"))
     );
 }
 

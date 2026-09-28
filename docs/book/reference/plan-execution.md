@@ -1,5 +1,7 @@
 # Shared plans and CPU/Metal execution
 
+<!-- A dated record: its commands keep the spellings of the binaries it records. -->
+
 On Apple M4 Pro, the execution changes in `2e80d065` reduce Metal wall medians
 by about 35% for queens variant 2 and 65% for task allocation, while SEND takes
 9–14% longer. Accounted device storage falls, but process RSS rises on all three

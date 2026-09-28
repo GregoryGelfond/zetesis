@@ -1,12 +1,14 @@
-//! Thin installed views of bounded baseline and instrumented profile comparisons.
-use clap::{Parser, ValueEnum};
-use std::io::{self, Write};
+//! The `perf` command: bounded baseline campaigns and the instrumented
+//! profile matrix.
+
+use crate::{Completion, Error};
+use clap::{Args, ValueEnum};
+use std::io::Write;
 use std::path::PathBuf;
-use std::process::ExitCode;
 use std::time::Duration;
 use zetesis_validation::performance::{self, Limits, Request, Schedule, Suite};
 
-#[derive(Clone, Copy, ValueEnum)]
+#[derive(Clone, Copy, Debug, ValueEnum)]
 enum SuiteArgument {
     Baseline,
     Queens,
@@ -14,12 +16,10 @@ enum SuiteArgument {
     Series,
 }
 
-#[derive(Parser)]
-#[command(
-    version,
-    about = "Compare clean ASP cases with retained parity, timing and execution evidence"
-)]
-struct Options {
+/// A clean corpus campaign: the ordinary CPU comparison, or the instrumented
+/// profile matrix with its retained parity, timing and execution evidence.
+#[derive(Debug, Args)]
+pub struct PerfOptions {
     /// Select a manifest-relative clean corpus case; repeat for an ordinary CPU campaign.
     #[arg(long = "case", conflicts_with_all = ["profile", "workers", "completion_workers", "clingo_workers", "batch_size", "native_report_bytes"])]
     cases: Vec<String>,
@@ -95,14 +95,22 @@ struct Options {
     #[arg(long, default_value_t = 180)]
     campaign_seconds: u64,
 }
-fn execute(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
+/// Run the campaign and write its one-line outcome to `output`.
+///
+/// Memory rounds re-execute this process's executable as their measurement
+/// helper, so it must answer the helper protocol, as `zetesis-bench` does.
+pub(crate) fn execute(
+    options: &PerfOptions,
+    output: &mut impl Write,
+    diagnostics: &mut impl Write,
+) -> Result<Completion, Error> {
     if matches!(options.suite, SuiteArgument::Corpus | SuiteArgument::Series)
         || !options.profile.is_empty()
     {
         if !options.cases.is_empty() {
-            return Err("--case requires the ordinary CPU campaign".into());
+            return Err(Error::Usage("--case requires the ordinary CPU campaign"));
         }
-        return matrix(options);
+        return matrix(options, output, diagnostics);
     }
     if options.workers.is_some()
         || options.completion_workers.is_some()
@@ -112,10 +120,12 @@ fn execute(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
         || options.time_limit.is_some()
         || options.oracle.is_some()
     {
-        return Err("matrix controls require --profile, --suite corpus or --suite series".into());
+        return Err(Error::Usage(
+            "matrix controls require --profile, --suite corpus or --suite series",
+        ));
     }
-    let native = std::path::absolute(options.zetesis)?;
-    let reference = std::path::absolute(options.clingo)?;
+    let native = std::path::absolute(&options.zetesis).map_err(Error::Io)?;
+    let reference = std::path::absolute(&options.clingo).map_err(Error::Io)?;
     let mut limits = Limits::default();
     limits.process.timeout = Duration::from_secs(options.timeout_seconds);
     limits.campaign_timeout = Duration::from_secs(options.campaign_seconds);
@@ -130,23 +140,28 @@ fn execute(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
                 SuiteArgument::Baseline => Suite::Baseline,
                 SuiteArgument::Queens => Suite::Queens,
                 SuiteArgument::Corpus | SuiteArgument::Series => {
-                    return Err("corpus and series suites require matrix dispatch".into());
+                    return Err(Error::Usage(
+                        "corpus and series suites require matrix dispatch",
+                    ));
                 }
             },
             options.warmups,
             options.repetitions.unwrap_or(21),
-        )?
+        )
     } else {
         if !matches!(options.suite, SuiteArgument::Baseline) {
-            return Err("explicit --case cannot be combined with a named nondefault suite".into());
+            return Err(Error::Usage(
+                "explicit --case cannot be combined with a named nondefault suite",
+            ));
         }
         Schedule::for_cases(
-            options.cases,
+            options.cases.clone(),
             options.warmups,
             options.repetitions.unwrap_or(21),
-        )?
+        )
     }
-    .with_memory(options.memory_runs)?;
+    .and_then(|schedule| schedule.with_memory(options.memory_runs))
+    .map_err(Error::Campaign)?;
     let request = Request {
         corpus: &options.root,
         native: &native,
@@ -158,73 +173,29 @@ fn execute(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
         limits,
     };
     let report = if options.memory_runs > 0 || request.schedule.suite().is_none() {
-        performance::run_with_runner(&request, &std::env::current_exe()?)?
+        let helper = std::env::current_exe().map_err(Error::Io)?;
+        performance::run_with_runner(&request, &helper)
     } else {
-        performance::run(&request)?
-    };
-    report.publish()?;
+        performance::run(&request)
+    }
+    .map_err(Error::Campaign)?;
+    report.publish().map_err(Error::Campaign)?;
     writeln!(
-        io::stdout().lock(),
+        output,
         "{}: {} retained observations; evidence {}",
         if report.passed() { "pass" } else { "fail" },
         report.samples().len(),
         options.report.display()
-    )?;
+    )
+    .map_err(Error::Io)?;
     Ok(if report.passed() {
-        ExitCode::SUCCESS
+        Completion::Passed
     } else {
-        ExitCode::FAILURE
+        Completion::NonPass
     })
 }
-fn main() -> ExitCode {
-    if std::env::args_os().nth(1).as_deref() == Some(std::ffi::OsStr::new("__measure-child")) {
-        return measure_child();
-    }
-    match execute(Options::parse()) {
-        Ok(code) => code,
-        Err(error) => {
-            let _ = writeln!(io::stderr().lock(), "zetesis-perf: {error}");
-            ExitCode::from(2)
-        }
-    }
-}
 
-#[derive(Parser)]
-struct ChildOptions {
-    /// Private new resource-record path.
-    record: PathBuf,
-    /// Absolute solver executable followed by its unmodified arguments.
-    #[arg(required = true, trailing_var_arg = true, allow_hyphen_values = true)]
-    command: Vec<std::ffi::OsString>,
-}
-
-fn measure_child() -> ExitCode {
-    let options = ChildOptions::parse_from(std::env::args_os().skip(1));
-    match child_record(&options) {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(error) => {
-            let _ = writeln!(io::stderr().lock(), "zetesis-perf child RSS: {error}");
-            ExitCode::from(2)
-        }
-    }
-}
-
-fn child_record(options: &ChildOptions) -> Result<(), Box<dyn std::error::Error>> {
-    let (executable, arguments) = options.command.split_first().ok_or("missing solver")?;
-    // This entry point starts no other children: resource usage belongs solely
-    // to this one waited-for solver invocation, excluding the helper itself.
-    zetesis_validation::process::memory::measure_to_file(
-        zetesis_validation::process::Invocation {
-            executable: std::path::Path::new(executable),
-            arguments,
-            directory: &std::env::current_dir()?,
-        },
-        &options.record,
-    )?;
-    Ok(())
-}
-
-#[derive(Clone, Copy, ValueEnum)]
+#[derive(Clone, Copy, Debug, ValueEnum)]
 enum ProfileArgument {
     /// The shipped defaults: automatic grounding and oracle on the CPU.
     CpuAuto,
@@ -234,13 +205,13 @@ enum ProfileArgument {
     MetalLazy,
 }
 
-#[derive(Clone, Copy, ValueEnum)]
+#[derive(Clone, Copy, Debug, ValueEnum)]
 enum JoinArgument {
     Indexed,
     Table,
 }
 
-#[derive(Clone, Copy, ValueEnum)]
+#[derive(Clone, Copy, Debug, ValueEnum)]
 enum OracleArgument {
     Auto,
     Closure,
@@ -257,7 +228,7 @@ impl From<OracleArgument> for zetesis_validation::selected::Oracle {
     }
 }
 
-#[derive(Clone, Copy, ValueEnum)]
+#[derive(Clone, Copy, Debug, ValueEnum)]
 enum SearchArgument {
     Regions,
     Clauses,
@@ -281,7 +252,7 @@ impl From<JoinArgument> for zetesis_validation::selected::FormulaJoins {
     }
 }
 
-fn execution_profiles(options: &Options) -> Vec<zetesis_validation::selected::NativeExecution> {
+fn execution_profiles(options: &PerfOptions) -> Vec<zetesis_validation::selected::NativeExecution> {
     use zetesis_validation::selected::{Backend, Grounder, NativeExecution, Oracle};
     const METAL: Backend = Backend::Gpu(Some(zetesis_backend::GpuApi::Metal));
     let defaults = [
@@ -327,17 +298,21 @@ fn execution_profiles(options: &Options) -> Vec<zetesis_validation::selected::Na
         .collect()
 }
 
-fn matrix(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
+fn matrix(
+    options: &PerfOptions,
+    output: &mut impl Write,
+    diagnostics: &mut impl Write,
+) -> Result<Completion, Error> {
     use zetesis_validation::performance::matrix;
-    let profiles = execution_profiles(&options);
+    let profiles = execution_profiles(options);
     let suite = match options.suite {
         SuiteArgument::Baseline => matrix::Suite::Baseline,
         SuiteArgument::Queens => matrix::Suite::Queens,
         SuiteArgument::Corpus => matrix::Suite::Corpus,
         SuiteArgument::Series => matrix::Suite::Series,
     };
-    let native = std::path::absolute(options.zetesis)?;
-    let reference = std::path::absolute(options.clingo)?;
+    let native = std::path::absolute(&options.zetesis).map_err(Error::Io)?;
+    let reference = std::path::absolute(&options.clingo).map_err(Error::Io)?;
     let mut limits = Limits::default();
     limits.process.timeout = Duration::from_secs(options.timeout_seconds);
     limits.campaign_timeout = Duration::from_secs(options.campaign_seconds);
@@ -363,17 +338,20 @@ fn matrix(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
             .unwrap_or(std::num::NonZeroUsize::new(1).expect("one is nonzero")),
         options.warmups,
         options.repetitions.unwrap_or(20),
-    )?
-    .with_memory(options.memory_runs)?;
+    )
+    .and_then(|plan| plan.with_memory(options.memory_runs))
+    .map_err(Error::Campaign)?;
     writeln!(
-        io::stderr().lock(),
+        diagnostics,
         "Recording instrumented solver matrix; evidence will be written to {}",
         options.report.display()
-    )?;
+    )
+    .map_err(Error::Io)?;
     // The memory rounds run each solver as this executable's child.
     let helper = (options.memory_runs > 0)
         .then(std::env::current_exe)
-        .transpose()?;
+        .transpose()
+        .map_err(Error::Io)?;
     let request = matrix::Request {
         corpus: &options.root,
         native: &native,
@@ -386,10 +364,11 @@ fn matrix(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
         helper: helper.as_deref(),
     };
     let report =
-        zetesis_validation::performance::command::run(&request, matrix::NativeInvocation::Legacy)?;
-    report.publish()?;
+        zetesis_validation::performance::command::run(&request, matrix::NativeInvocation::Legacy)
+            .map_err(Error::Campaign)?;
+    report.publish().map_err(Error::Campaign)?;
     writeln!(
-        io::stdout().lock(),
+        output,
         "{}: {} matrix positions retained; accounted={}; evidence {}",
         if report.passed() {
             "pass"
@@ -399,10 +378,11 @@ fn matrix(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
         report.samples().len(),
         report.accounted(),
         options.report.display()
-    )?;
+    )
+    .map_err(Error::Io)?;
     Ok(if report.passed() {
-        ExitCode::SUCCESS
+        Completion::Passed
     } else {
-        ExitCode::FAILURE
+        Completion::NonPass
     })
 }

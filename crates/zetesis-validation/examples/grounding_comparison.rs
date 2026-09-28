@@ -93,7 +93,8 @@ struct Options {
     /// Absolute stock clingo executable used for qualification only.
     #[arg(long)]
     clingo: PathBuf,
-    /// Absolute current zetesis executable providing the bounded RSS helper.
+    /// Absolute `zetesis-bench` executable, whose measurement helper runs the
+    /// bounded RSS rounds.
     #[arg(long)]
     helper: PathBuf,
     /// New complete evidence file; existing files are never replaced.

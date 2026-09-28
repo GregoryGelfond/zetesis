@@ -12,7 +12,7 @@ pub(super) fn invoke(
     report: &mut Report,
 ) -> Option<Capture> {
     let mut arguments = vec![
-        "__measure-child".into(),
+        process::memory::HELPER_COMMAND.into(),
         record.as_os_str().to_owned(),
         solver.executable.as_os_str().to_owned(),
     ];

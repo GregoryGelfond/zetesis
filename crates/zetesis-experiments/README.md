@@ -1,25 +1,21 @@
 # zetesis-experiments
 
-The main application exposes the typed relation, aggregate, tight and lazy
-profiles through `zetesis bench primitives`. `primitives::Request` selects a
-library configuration and `primitives::measure` publishes borrowed typed events;
-human tables consume these events directly. `--json` and an optional `--report`
-retain the profile's versioned JSON-lines stream. Physical requests never fall
-back to CPU. The current primitive command requires the application's `gpu`
-build feature even when selecting a CPU profile, because this experiment crate
-still includes its device implementations.
-
-The compatibility `zetesis-bench` executable delegates to `command::execute`.
-It retains static, formula, grounding, finite-table and feedback profiles and
-its existing views. A complete table applicability refusal remains distinct
-from both a passing campaign and an operation failure.
-
 Bounded development experiments with reusable Rust interfaces and a
-`zetesis-bench` command adapter. Each profile names the operation it measures,
-its reference comparison and its limits. Primitive measurements do not establish
-ordinary solver acceleration.
+`zetesis-experiments` command adapter. Each profile names the operation it
+measures, its reference comparison and its limits. Primitive measurements do not
+establish ordinary solver acceleration.
 
-Use [Install and run](../../README.md#install-and-run) to install a release build.
+The `zetesis-experiments` executable delegates to `command::execute`; each
+profile writes its own view. `primitives::Request` selects a relation,
+aggregate, tight or lazy configuration, and `primitives::measure` publishes
+borrowed typed events. Physical requests never fall back to CPU. A complete
+table applicability refusal remains distinct from both a passing campaign and an
+operation failure.
+
+This is a developer tool and is not installed. Build it from the checkout with
+`cargo build --locked --release -p zetesis-experiments` and run
+`target/release/zetesis-experiments`.
+
 The [execution chapter](../../docs/book/architecture/execution.md) describes how
 these operations fit into the solver. Public interfaces start in
 [src/lib.rs](src/lib.rs); generate their reference with
@@ -47,24 +43,24 @@ software adapter. Device metadata records selection, not platform-wide
 qualification. The default static command requires Metal.
 
 ```sh
-zetesis-bench --backend cpu --atoms 64,256 --batches 1,64,256
-zetesis-bench formula --backend metal --cpu-workers 4 \
+zetesis-experiments --backend cpu --atoms 64,256 --batches 1,64,256
+zetesis-experiments formula --backend metal --cpu-workers 4 \
   --atoms 64,256 --batches 1,64,256
-zetesis-bench aggregate --backend metal --tuples 0,64,4096 \
+zetesis-experiments aggregate --backend metal --tuples 0,64,4096 \
   --batches 1,32,128 --functions count,sum,sum-plus,min,max \
   --workers 4 --warmups 2 --repetitions 12
-zetesis-bench tight --backend metal --atoms 4,64,256 \
+zetesis-experiments tight --backend metal --atoms 4,64,256 \
   --batches 1,32,128 --families normal,choices --workers 4
-zetesis-bench lazy --backend metal --widths 4,8 \
+zetesis-experiments lazy --backend metal --widths 4,8 \
   --batches 1,32,128 --families sparse,dense --workers 4
-zetesis-bench relation --backend metal --family independent --payload tuple \
+zetesis-experiments relation --backend metal --family independent --payload tuple \
   --rows 4096 --queries 32 --workers 4 --warmups 2 --repetitions 6
-zetesis-bench table --case aliased --rows 1024 --queries 32 \
+zetesis-experiments table --case aliased --rows 1024 --queries 32 \
   --workers 4 --warmups 1 --repetitions 3
-zetesis-bench grounding examples/correctness/standalone/send-money/send-money.lp \
+zetesis-experiments grounding examples/correctness/standalone/send-money/send-money.lp \
   --repetitions 3
-zetesis-bench feedback --check
-zetesis-bench feedback --warmups 1 --repetitions 3
+zetesis-experiments feedback --check
+zetesis-experiments feedback --warmups 1 --repetitions 3
 ```
 
 Use each profile's `--help` for its independent dimensions and resource limits.

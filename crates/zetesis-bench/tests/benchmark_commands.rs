@@ -1,20 +1,16 @@
 //! Bench commands map to bounded library plans and independent views.
-use zetesis_cli::{
-    Invocation,
-    benchmark::{self, BenchCommand},
-};
+use clap::Parser as _;
+use zetesis_bench::{self as benchmark, Cli, Command as BenchCommand};
 use zetesis_presentation::Layout;
 
 fn command(arguments: &[&str]) -> BenchCommand {
-    let Invocation::Bench(command) = Invocation::try_parse_from(
-        ["zetesis", "bench"]
+    Cli::try_parse_from(
+        ["zetesis-bench"]
             .into_iter()
             .chain(arguments.iter().copied()),
     )
-    .unwrap() else {
-        panic!("expected benchmark command")
-    };
-    command
+    .unwrap()
+    .command
 }
 
 #[test]
@@ -126,9 +122,8 @@ fn grounder_comparison_qualifies_reference_once() {
 #[test]
 fn grounder_comparison_refuses_an_explicit_grounder() {
     for grounder in ["auto", "eager", "lazy"] {
-        let error = Invocation::try_parse_from([
-            "zetesis",
-            "bench",
+        let error = Cli::try_parse_from([
+            "zetesis-bench",
             "corpus",
             "--report",
             "new.json",
@@ -139,136 +134,6 @@ fn grounder_comparison_refuses_an_explicit_grounder() {
         .unwrap_err();
         assert_eq!(error.kind(), clap::error::ErrorKind::ArgumentConflict);
     }
-}
-
-#[cfg(feature = "gpu")]
-#[test]
-fn primitive_json_is_an_unstyled_event_stream() {
-    let command = command(&[
-        "primitives",
-        "relation",
-        "--backend",
-        "cpu",
-        "--threads",
-        "1",
-        "--rows",
-        "1",
-        "--queries",
-        "1",
-        "--warmups",
-        "0",
-        "--repetitions",
-        "1",
-        "--json",
-        "--color",
-        "always",
-    ]);
-    let mut output = Vec::new();
-    assert_eq!(
-        benchmark::execute(&command, Layout::default(), &mut output, &mut Vec::new()).unwrap(),
-        benchmark::Completion::Passed
-    );
-    let text = String::from_utf8(output).unwrap();
-    assert!(!text.contains('\u{1b}'));
-    let events: Vec<serde_json::Value> = text
-        .lines()
-        .map(|line| serde_json::from_str(line).unwrap())
-        .collect();
-    assert_eq!(events.first().unwrap()["event"], "start");
-    assert_eq!(events.last().unwrap()["event"], "complete");
-    assert_eq!(events.last().unwrap()["observations"], 4);
-}
-
-#[cfg(feature = "gpu")]
-#[test]
-fn primitive_human_view_uses_completed_typed_samples() {
-    let command = command(&[
-        "primitives",
-        "relation",
-        "--backend",
-        "cpu",
-        "--threads",
-        "1",
-        "--rows",
-        "1",
-        "--queries",
-        "1",
-        "--warmups",
-        "0",
-        "--repetitions",
-        "1",
-    ]);
-    let mut output = Vec::new();
-    benchmark::execute(&command, Layout::default(), &mut output, &mut Vec::new()).unwrap();
-    let text = String::from_utf8(output).unwrap();
-    assert!(text.contains("Primitive measurements — complete matched samples"));
-    assert!(text.contains("Elapsed ms"));
-    assert!(text.contains("Scalar"));
-    assert!(text.contains("Rayon"));
-    assert!(!text.contains("\"event\""));
-}
-
-#[cfg(not(feature = "gpu"))]
-#[test]
-fn cpu_build_refuses_unavailable_primitive_profiles() {
-    let command = command(&["primitives", "relation", "--backend", "cpu"]);
-    let mut output = Vec::new();
-    assert!(matches!(
-        benchmark::execute(&command, Layout::default(), &mut output, &mut Vec::new()),
-        Err(benchmark::Error::Unavailable(_))
-    ));
-    assert!(output.is_empty());
-}
-
-#[cfg(feature = "gpu")]
-#[test]
-fn failed_primitive_keeps_its_primary_failure() {
-    struct Refuse;
-    impl std::io::Write for Refuse {
-        fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
-            Err(std::io::Error::other("injected view refusal"))
-        }
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
-    let directory = tempfile::tempdir().unwrap();
-    let path = directory.path().join("partial.jsonl");
-    let command = command(&[
-        "primitives",
-        "relation",
-        "--backend",
-        "cpu",
-        "--threads",
-        "1",
-        "--rows",
-        "1",
-        "--queries",
-        "1",
-        "--warmups",
-        "0",
-        "--repetitions",
-        "1",
-        "--report-bytes",
-        "0",
-        "--report",
-        path.to_str().unwrap(),
-    ]);
-    let Err(benchmark::Error::Reporting { primary, secondary }) =
-        benchmark::execute(&command, Layout::default(), &mut Refuse, &mut Vec::new())
-    else {
-        panic!("both failures must be retained")
-    };
-    assert!(matches!(
-        *primary,
-        benchmark::Error::Primitive(zetesis_experiments::command::Error::Relation(
-            zetesis_experiments::relation_measurement::Error::Output(_)
-        ))
-    ));
-    assert!(
-        matches!(*secondary, benchmark::Error::Io(ref error) if error.to_string() == "injected view refusal")
-    );
-    assert!(std::fs::read(path).unwrap().is_empty());
 }
 
 #[test]
@@ -365,44 +230,4 @@ fn failed_failure_publication_retains_preparation() {
     };
     assert!(matches!(*primary, benchmark::Error::ReportArgument(_)));
     assert!(matches!(*secondary, benchmark::Error::Json(_)));
-}
-
-#[cfg(feature = "gpu")]
-#[test]
-fn attempted_json_never_gets_a_second_document() {
-    struct PartialFailure {
-        attempts: usize,
-        prefix: Vec<u8>,
-    }
-    impl std::io::Write for PartialFailure {
-        fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
-            self.attempts += 1;
-            self.prefix.push(b'{');
-            Err(std::io::Error::other("failure after changing sink"))
-        }
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
-    let command = command(&[
-        "primitives",
-        "relation",
-        "--backend",
-        "cpu",
-        "--rows",
-        "1",
-        "--queries",
-        "1",
-        "--json",
-    ]);
-    let mut output = PartialFailure {
-        attempts: 0,
-        prefix: Vec::new(),
-    };
-    assert!(matches!(
-        benchmark::execute(&command, Layout::default(), &mut output, &mut Vec::new()),
-        Err(benchmark::Error::Primitive(_))
-    ));
-    assert_eq!(output.attempts, 1);
-    assert_eq!(output.prefix, b"{");
 }

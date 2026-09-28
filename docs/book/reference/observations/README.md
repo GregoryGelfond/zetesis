@@ -1,5 +1,7 @@
 # Recorded release observations
 
+<!-- A dated record: its commands keep the spellings of the binaries it records. -->
+
 The recorded [0.1.5 verification receipt](coverage-318c8238.json) identifies the
 independent portable workspace and CPU coverage populations. Sixty physical
 Metal tests and three ordinary CLI backend checks passed separately, without

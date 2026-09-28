@@ -37,8 +37,8 @@ the Rust implementation or shaders.
 
 The shell checks target macOS and Linux. Install Git and
 [Rust's native prerequisites](https://doc.rust-lang.org/book/ch01-01-installation.html),
-including a linker. The [installation guide](https://github.com/GregoryGelfond/zetesis/blob/main/README.md#install-and-run)
-covers source access and the installed zetesis commands.
+including a linker. The [installation guide](https://github.com/GregoryGelfond/zetesis/blob/main/INSTALL.md)
+covers source access and the installed tools.
 
 ### Rust, coverage and documentation
 
@@ -128,7 +128,10 @@ The native test therefore checks the typed refusal and provenance; oracle tests
 compare admitted include graphs. A version number alone does not establish a
 portable diagnostic contract.
 
-The maintained source collections provide broader regressions:
+The maintained source collections provide broader regressions. `zetesis-corpus`
+is a developer tool and is not installed; build it with
+`cargo build --locked --release -p zetesis-validation` and run it from
+`target/release`:
 
 ```sh
 zetesis-corpus verify-examples examples/correctness

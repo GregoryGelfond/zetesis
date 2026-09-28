@@ -696,7 +696,7 @@ fn launch(
         .helper
         .expect("memory rounds admitted with a helper");
     let mut supervised: Vec<OsString> = vec![
-        "__measure-child".into(),
+        crate::process::memory::HELPER_COMMAND.into(),
         record.as_os_str().to_owned(),
         executable.as_os_str().to_owned(),
     ];

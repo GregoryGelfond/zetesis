@@ -1,0 +1,9 @@
+Stage timings: clock=host-monotonic; scope=driver; schema=1
+  stage driver: elapsed_ns=1000
+  stage grounding_mode: eager
+  stage source_preparation: calls=1; elapsed_ns=100; complete=true
+  stage grounding: calls=1; elapsed_ns=200; complete=true
+  stage solving: calls=3; elapsed_ns=500; complete=true
+  stage observation_output: calls=2; elapsed_ns=40; complete=true
+  stage unattributed: elapsed_ns=160
+  stage scope: solving=setup_search_waits_scoring; source_loading=excluded; statistics_output=excluded; timer_overhead=not_separated; lazy_grounding=interleaved; kernel_time=unmeasured

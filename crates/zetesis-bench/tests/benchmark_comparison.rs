@@ -1,10 +1,8 @@
 //! Retained campaign comparisons use the public controller without launching solvers.
 
+use clap::Parser as _;
 use std::{io, num::NonZeroUsize, path::Path};
-use zetesis_cli::{
-    Invocation,
-    benchmark::{self, BenchCommand, Completion, Error},
-};
+use zetesis_bench::{self as benchmark, Cli, Command as BenchCommand, Completion, Error};
 use zetesis_presentation::{ColorMode, Layout};
 use zetesis_validation::performance::series::{ReadError, ViewError};
 
@@ -14,7 +12,7 @@ mod reports;
 mod bounded_writer;
 
 fn command(directory: &Path, records: &[serde_json::Value; 2], retain: bool) -> BenchCommand {
-    let mut arguments = vec!["zetesis".to_owned(), "bench".into(), "compare".into()];
+    let mut arguments = vec!["zetesis-bench".to_owned(), "compare".into()];
     for (label, record) in ["before", "after"].into_iter().zip(records) {
         let path = directory.join(format!("{label}.json"));
         std::fs::write(&path, serde_json::to_vec(record).unwrap()).unwrap();
@@ -30,10 +28,7 @@ fn command(directory: &Path, records: &[serde_json::Value; 2], retain: bool) -> 
                 .to_owned(),
         ]);
     }
-    let Invocation::Bench(command) = Invocation::try_parse_from(arguments).unwrap() else {
-        panic!("expected comparison")
-    };
-    command
+    Cli::try_parse_from(arguments).unwrap().command
 }
 
 fn layout() -> Layout {

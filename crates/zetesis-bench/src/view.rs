@@ -4,7 +4,7 @@ use zetesis_presentation::{Alignment, Column, Layout, Row, Table};
 use zetesis_validation::performance::series::{Comparison, Native};
 
 #[cfg(test)]
-#[path = "../../tests/support/benchmark_views.rs"]
+#[path = "../tests/support/benchmark_views.rs"]
 mod tests;
 
 pub(super) fn comparison(

@@ -6,7 +6,9 @@
 //! not fit. Callers bound the number and size of rows before constructing a view.
 #![forbid(unsafe_code)]
 
+mod streams;
 mod table;
+pub use streams::{Streams, TrackedWriter, color_disabled, terminal_width};
 pub use table::{Alignment, Column, Layout, Row, Table, TableError};
 
 use std::fmt;

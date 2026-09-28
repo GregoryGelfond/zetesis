@@ -2,6 +2,7 @@
 
 [About this book](index.md)
 [Using the zetesis command](reference/commands.md)
+[Benchmarking with zetesis-bench](reference/benchmarking.md)
 
 # Part I — Solver design and architecture
 

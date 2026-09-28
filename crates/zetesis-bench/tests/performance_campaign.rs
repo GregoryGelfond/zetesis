@@ -833,6 +833,7 @@ fn cli_options(
 ) -> zetesis_validation::process::Capture {
     use zetesis_validation::process::{self, Invocation, Limits};
     let mut arguments = vec![
+        "perf".into(),
         fixture.corpus.clone().into_os_string(),
         "--zetesis".into(),
         fixture.native.clone().into_os_string(),
@@ -851,7 +852,7 @@ fn cli_options(
     arguments.extend_from_slice(options);
     let outcome = process::invoke(
         Invocation {
-            executable: Path::new(env!("CARGO_BIN_EXE_zetesis-perf")),
+            executable: Path::new(env!("CARGO_BIN_EXE_zetesis-bench")),
             arguments: &arguments,
             directory: fixture.directory.path(),
         },

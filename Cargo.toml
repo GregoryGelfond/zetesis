@@ -21,6 +21,7 @@ dead_code = "deny"
 pedantic = { level = "deny", priority = -1 }
 
 [workspace.dependencies]
+zetesis-bench = { path = "crates/zetesis-bench" }
 zetesis-presentation = { path = "crates/zetesis-presentation" }
 zetesis-validation = { path = "crates/zetesis-validation" }
 zetesis-experiments = { path = "crates/zetesis-experiments" }

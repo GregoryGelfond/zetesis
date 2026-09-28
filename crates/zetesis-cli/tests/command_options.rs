@@ -16,7 +16,7 @@ fn bare_invocation_displays_task_help() {
     let error = Invocation::try_parse_from(["zetesis"]).unwrap_err();
     assert_eq!(error.kind(), ErrorKind::DisplayHelp);
     let text = error.to_string();
-    for command in ["solve", "test", "bench", "devices", "help", "version"] {
+    for command in ["solve", "test", "devices", "help", "version"] {
         assert!(text.contains(command), "missing {command}");
     }
     assert!(!text.contains("--max-search-work"));

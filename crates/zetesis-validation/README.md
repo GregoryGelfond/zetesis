@@ -8,24 +8,30 @@ comparison and performance measurements. The main command provides:
 | `zetesis test corpus` | Compare the maintained corpus with clingo. |
 | `zetesis test backend` | Check a device against known complete answer families. |
 | `zetesis test scalability` | Qualify maintained authored/corpus workloads across CPU thread counts. |
-| `zetesis bench corpus` | Measure ordinary solver processes. |
-| `zetesis bench compare` | Compare retained measurement reports. |
 
-See the [command guide](../../docs/book/reference/commands.md) for these interfaces.
-The following compatibility tools remain available; the detailed examples below
-also cover their source-integrity and selected-upstream capabilities:
+The separate `zetesis-bench` tool composes this crate's campaigns: `corpus`
+measures ordinary solver processes, `compare` compares retained measurement
+reports, `perf` compares ordinary runs or measures a grounding/backend matrix,
+and `series` compares published series reports. See the
+[command guide](../../docs/book/reference/commands.md) and the
+[benchmarking guide](../../docs/book/reference/benchmarking.md) for these
+interfaces.
+
+This crate also builds two developer tools. They are not installed; build them
+from the checkout with `cargo build --locked --release -p zetesis-validation`
+and run them from `target/release`. The detailed examples below also cover
+their source-integrity and selected-upstream capabilities:
 
 | Command | Purpose |
 |---|---|
 | `zetesis-corpus` | Verify curated source collections or compare selected upstream cases. |
 | `zetesis-validate` | Run the self-contained correctness regression collection against external clingo and zetesis. |
-| `zetesis-perf` | Compare ordinary runs or measure a grounding/backend matrix. |
 
-The production solver neither invokes nor depends on this validation executable.
+The production solver neither invokes nor depends on these validation executables.
 clingo is an external reference. Reports record observations and their limits;
 a process exit alone does not establish answer-set correctness.
 
-See [Install and run](../../README.md#install-and-run) for installation and the
+See [INSTALL.md](../../INSTALL.md) for installation and the
 [contributing guide](../../CONTRIBUTING.md#verification-and-review) for gates.
 Library entry points are documented in [src/lib.rs](src/lib.rs); generate their
 reference with `cargo doc --locked -p zetesis-validation --no-deps --open`.
@@ -149,10 +155,10 @@ See [execution contracts](tests/support/execution_contracts.rs) and
 ## Measure ordinary solves and execution matrices
 
 ```sh
-zetesis-perf examples/correctness --zetesis /path/to/zetesis \
+zetesis-bench perf examples/correctness --zetesis /path/to/zetesis \
   --clingo /path/to/clingo --report target/cpu-comparison.json
 
-zetesis-perf examples/correctness --suite corpus \
+zetesis-bench perf examples/correctness --suite corpus \
   --profile cpu-eager --profile cpu-lazy \
   --profile metal-eager --profile metal-lazy \
   --zetesis /path/to/zetesis --clingo /path/to/clingo \
@@ -269,7 +275,7 @@ The maintained commands select one library-owned workload population:
 
 ```sh
 zetesis test scalability --threads 1,2,4,8,14 --report scalability-check.json
-zetesis bench corpus --suite scalability --grounder eager \
+zetesis-bench corpus --suite scalability --grounder eager \
   --compare-threads 1,2,4,8,14 --repetitions 4 --memory-runs 2 \
   --timeout-seconds 30 --campaign-seconds 1800 --report scalability-timing.json
 ```
@@ -290,8 +296,8 @@ refuses that suite instead of silently running only its three corpus entries.
 `matrix::Plan::qualification` schedules only one reference and one invocation
 per native profile for each workload. It adds no timing, warmup or RSS rounds
 and refuses adding memory rounds. This is the plan used by `test scalability`.
-`bench corpus --compare-threads` retains normal native measurement rounds and
-uses clingo only for qualification. Both preserve the complete workload and
+`zetesis-bench corpus --compare-threads` retains normal native measurement
+rounds and uses clingo only for qualification. Both preserve the complete workload and
 executable identities, typed refusals, cancellation and no-clobber report
 publication. `--stats` on the test controls optional elapsed presentation;
 mandatory route observations remain in its evidence.
@@ -323,7 +329,7 @@ never takes, in particular the closure route; the sizes were measured to keep
 every cell's complete native JSON output under `series::CAPTURE_BYTES`, which
 the library does not check.
 
-`zetesis-perf --suite series` runs the cells through the instrumented matrix.
+`zetesis-bench perf --suite series` runs the cells through the instrumented matrix.
 The `cpu-auto` profile requests the shipped defaults, automatic grounding and
 oracle; the observation retains the grounding mode actually taken, so an
 automatic cell cannot be read as an explicit eager or lazy one. `--time-limit`
@@ -332,7 +338,7 @@ solver polls at every charged unit and is therefore part of the profile's
 identity; `--oracle` requests a reduct procedure explicitly. Cells a change is meant to move, a refusal or a timeout, stay in the
 set: their typed decisions are the observation.
 
-`zetesis-series --report LABEL=PATH …` derives one comparison from published
+`zetesis-bench series --report LABEL=PATH …` derives one comparison from published
 reports over the same cells and profiles: exact integer medians of the timed
 native and reference intervals, later-over-earlier ratios of medians in the
 order given, the counters the native records carry (published models,
@@ -436,7 +442,9 @@ for that cell; the outcome counts remain visible. Memory medians use only
 successfully validated separate memory rounds and are absent when unavailable.
 
 `series::read_compare` reads saved matrix reports within an explicit per-file
-source-byte bound, then calls the existing identity-checked comparison. The
-`zetesis-series` compatibility executable and `zetesis bench compare` use this
-same reader. `process::memory::measure_to_file` is the fresh supervised helper's
-shared no-clobber resource-record adapter, not a cumulative in-process RSS API.
+source-byte bound, then calls the existing identity-checked comparison.
+`zetesis-bench series` and `zetesis-bench compare` use this same reader.
+`process::memory::measure_to_file` is the fresh supervised helper's shared
+no-clobber resource-record adapter, not a cumulative in-process RSS API, and
+`process::memory::run_helper` is the helper's whole behaviour, answered under
+`process::memory::HELPER_COMMAND` by `zetesis-bench`.

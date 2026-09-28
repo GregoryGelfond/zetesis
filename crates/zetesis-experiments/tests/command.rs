@@ -12,7 +12,7 @@ fn invoke(arguments: &[&str]) -> Capture {
         .collect::<Vec<_>>();
     let outcome = process::invoke(
         Invocation {
-            executable: Path::new(env!("CARGO_BIN_EXE_zetesis-bench")),
+            executable: Path::new(env!("CARGO_BIN_EXE_zetesis-experiments")),
             arguments: &arguments,
             directory: Path::new(env!("CARGO_MANIFEST_DIR")),
         },

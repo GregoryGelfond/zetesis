@@ -227,7 +227,8 @@ pub fn run(request: &Request<'_>) -> Result<Report, Error> {
 
 /// Seal the comparison runner as well as both solver executables.
 /// If resource rounds are requested, the absolute runner must implement the
-/// trusted `zetesis-perf __measure-child` protocol. Only [`Phase::Memory`] launches it;
+/// trusted measurement-helper protocol, [`crate::process::memory::run_helper`] under
+/// [`crate::process::memory::HELPER_COMMAND`]. Only [`Phase::Memory`] launches it;
 /// qualification, warmup, timed and diagnostic calls retain their direct path.
 ///
 /// # Errors

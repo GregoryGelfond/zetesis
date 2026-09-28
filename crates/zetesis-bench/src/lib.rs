@@ -1,33 +1,61 @@
-//! Benchmark command adapters over reusable measurement and comparison libraries.
+//! Measure installed zetesis executables: corpus campaigns against clingo,
+//! comparisons of saved reports, the instrumented profile matrix and the
+//! maintained workload series.
 //!
-//! Corpus measurements always capture machine answers and statistics. Human
-//! tables and structured views consume typed observations independently of the
-//! solver's answer renderer. Compatibility executables are never invoked as
-//! wrappers; only the benchmark's bounded solver/reference children are launched.
+//! zetesis-bench measures the `zetesis` it is given, the installed one by
+//! default, as a child process, and links no solver or GPU crate. Reports
+//! record the identity of every executable they measure. Campaigns always
+//! capture machine answers and statistics; human tables and structured views
+//! consume typed observations independently of the solver's answer renderer.
+//! The library holds the commands and their orchestration; the binary only
+//! calls [`entry`].
+#![forbid(unsafe_code)]
 
 mod corpus;
+mod perf;
+mod process;
+mod series;
 mod view;
-#[cfg(feature = "gpu")]
-mod primitives;
 
-use clap::{Args, Subcommand};
+#[cfg(test)]
+#[path = "../tests/support/bounded_writer.rs"]
+mod test_writer;
+
+use clap::{Args, Parser, Subcommand};
 use std::{fmt, io, path::PathBuf, sync::atomic::AtomicBool};
-use zetesis_presentation::{ColorMode, Layout};
-use zetesis_validation::performance::series;
+use zetesis_presentation::{ColorMode, Layout, TrackedWriter};
+use zetesis_validation::performance::series::{Comparison, ReportSource};
 
 pub use corpus::{CorpusOptions, Grounder, NativeInterface, Suite};
-#[cfg(feature = "gpu")]
-pub use primitives::{Primitive, PrimitiveOptions};
+pub use perf::PerfOptions;
+pub use process::entry;
+pub use series::SeriesOptions;
 
-/// Independently scoped benchmark commands, with no optional statistics switch.
+/// The `zetesis-bench` command line.
+#[derive(Debug, Parser)]
+#[command(
+    name = "zetesis-bench",
+    version,
+    about = "Measure installed zetesis executables against clingo, and compare saved reports",
+    subcommand_required = true
+)]
+pub struct Cli {
+    /// The measurement or comparison to run.
+    #[command(subcommand)]
+    pub command: Command,
+}
+
+/// Independently scoped measurement and comparison commands.
 #[derive(Debug, Subcommand)]
-pub enum BenchCommand {
+pub enum Command {
     /// Compare complete selected answer families, timings and memory with clingo.
     Corpus(Box<CorpusOptions>),
-    /// Measure matched relation, aggregate, tight or lazy execution primitives.
-    Primitives(PrimitiveOptions),
-    /// Compare retained reports with matching workload/profile identities.
+    /// Compare saved reports with matching workload and profile identities.
     Compare(CompareOptions),
+    /// Measure a suite with the ordinary campaign or the instrumented profile matrix.
+    Perf(Box<PerfOptions>),
+    /// Compare published series reports: medians, ratios, counters and a scoreboard.
+    Series(SeriesOptions),
 }
 
 /// View policy, separate from measurement configuration.
@@ -58,19 +86,6 @@ pub struct CompareOptions {
     pub view: ViewOptions,
 }
 
-/// CPU-only builds expose an explicit capability refusal rather than loading
-/// the experiment crate, whose primitive profiles currently require wgpu.
-#[cfg(not(feature = "gpu"))]
-#[derive(Debug, Args)]
-pub struct PrimitiveOptions {
-    /// Requested profile arguments, retained only to report the unavailable capability.
-    #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-    pub arguments: Vec<std::ffi::OsString>,
-    /// Human or structured presentation.
-    #[command(flatten)]
-    pub view: ViewOptions,
-}
-
 /// Outcome of the requested command, distinct from its individual observations.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Completion {
@@ -88,9 +103,11 @@ pub enum Error {
     /// Campaign preparation or checked publication failed.
     Campaign(zetesis_validation::performance::Error),
     /// Published input or comparison identity was refused.
-    Comparison(series::ReadError),
+    Comparison(zetesis_validation::performance::series::ReadError),
     /// A labelled report argument was malformed.
     ReportArgument(String),
+    /// The requested options do not form one campaign.
+    Usage(&'static str),
     /// Human table construction failed.
     Table(zetesis_presentation::TableError),
     /// Structured output failed.
@@ -102,11 +119,6 @@ pub enum Error {
         /// A later flush or human view failure.
         secondary: Box<Error>,
     },
-    /// The installed build does not include the requested capability.
-    Unavailable(&'static str),
-    /// A primitive measurement or its observer failed.
-    #[cfg(feature = "gpu")]
-    Primitive(zetesis_experiments::command::Error),
 }
 impl fmt::Display for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -117,15 +129,13 @@ impl fmt::Display for Error {
             Self::ReportArgument(argument) => {
                 write!(formatter, "report must be LABEL=PATH: {argument}")
             }
+            Self::Usage(reason) => formatter.write_str(reason),
             Self::Table(error) => error.fmt(formatter),
             Self::Json(error) => error.fmt(formatter),
-            Self::Unavailable(reason) => formatter.write_str(reason),
             Self::Reporting { primary, secondary } => write!(
                 formatter,
                 "{primary}; secondary reporting failure: {secondary}"
             ),
-            #[cfg(feature = "gpu")]
-            Self::Primitive(error) => error.fmt(formatter),
         }
     }
 }
@@ -138,49 +148,62 @@ impl std::error::Error for Error {
             Self::Table(error) => Some(error),
             Self::Json(error) => Some(error),
             Self::Reporting { primary, .. } => Some(primary.as_ref()),
-            #[cfg(feature = "gpu")]
-            Self::Primitive(error) => Some(error),
-            Self::ReportArgument(_) | Self::Unavailable(_) => None,
+            Self::ReportArgument(_) | Self::Usage(_) => None,
         }
     }
 }
-impl BenchCommand {
+
+impl Command {
     /// Requested human styling; the process adapter supplies terminal evidence.
     #[must_use]
     pub const fn color(&self) -> ColorMode {
-        self.view().color
+        match self.view() {
+            Some(view) => view.color,
+            None => ColorMode::Auto,
+        }
     }
 
     /// Whether the caller requested structured standard output.
     #[must_use]
     pub const fn json(&self) -> bool {
-        self.view().json
+        match self.view() {
+            Some(view) => view.json,
+            None => false,
+        }
     }
 
-    const fn view(&self) -> &ViewOptions {
+    const fn view(&self) -> Option<&ViewOptions> {
         match self {
-            Self::Corpus(options) => &options.view,
-            Self::Primitives(options) => &options.view,
-            Self::Compare(options) => &options.view,
+            Self::Corpus(options) => Some(&options.view),
+            Self::Compare(options) => Some(&options.view),
+            Self::Perf(_) | Self::Series(_) => None,
+        }
+    }
+
+    const fn name(&self) -> &'static str {
+        match self {
+            Self::Corpus(_) => "corpus",
+            Self::Compare(_) => "compare",
+            Self::Perf(_) => "perf",
+            Self::Series(_) => "series",
         }
     }
 }
 
-/// Execute one benchmark with injected presentation sinks and terminal layout.
+/// Execute one command with injected presentation sinks and terminal layout.
 ///
-/// Corpus execution defaults to this installed executable's explicit `solve`
-/// command. Solver and clingo launches use the maintained bounded campaign.
-/// Sources must already exist locally; this adapter never downloads inputs.
-/// A JSON failure before any stdout write attempt publishes one versioned failure
+/// Corpus execution measures the installed `zetesis` unless `--zetesis` names
+/// another executable. Solver and clingo launches use the maintained bounded
+/// campaign; sources must already exist locally, and nothing is downloaded. A
+/// JSON failure before any stdout write attempt publishes one versioned failure
 /// document. No second document is appended after an attempted write, including
-/// a writer that returns an error after modifying its sink. Primitive JSON-lines
-/// streams retain their existing event prefix and never receive a false Complete.
+/// a writer that returns an error after modifying its sink.
 ///
 /// # Errors
-/// Returns typed setup, incomplete primitive measurement or publication errors.
-/// Corpus non-passes remain a successful evidence publication with `NonPass`.
+/// Returns typed setup, measurement, comparison or publication errors. Corpus
+/// non-passes remain a successful evidence publication with `NonPass`.
 pub fn execute(
-    command: &BenchCommand,
+    command: &Command,
     layout: Layout,
     output: &mut impl io::Write,
     diagnostics: &mut impl io::Write,
@@ -197,20 +220,19 @@ pub fn execute(
 /// Execute with caller-owned cancellation of corpus child processes.
 ///
 /// The corpus campaign polls `cancelled`, settles owned children and preserves
-/// cancelled and unattempted positions in its report. This adapter installs no
-/// signal handler. Primitive measurements and saved-report comparison do not
-/// consume this token. Presentation and failure publication follow [`execute`].
+/// cancelled and unattempted positions in its report. This function installs no
+/// signal handler. Presentation and failure publication follow [`execute`].
 ///
 /// # Errors
 /// Returns the same typed setup, measurement and publication errors as [`execute`].
 pub fn execute_with_cancellation(
-    command: &BenchCommand,
+    command: &Command,
     layout: Layout,
     output: &mut impl io::Write,
     diagnostics: &mut impl io::Write,
     cancelled: &AtomicBool,
 ) -> Result<Completion, Error> {
-    let mut tracked = crate::presentation::TrackedWriter::new(output);
+    let mut tracked = TrackedWriter::new(output);
     let result = execute_inner(command, layout, &mut tracked, diagnostics, cancelled);
     let error = match result {
         Ok(completion) => return Ok(completion),
@@ -221,7 +243,7 @@ pub fn execute_with_cancellation(
     }
     let failure = serde_json::json!({
         "schema": 1, "format": "zetesis-benchmark-failure", "status": "failed",
-        "command": match command { BenchCommand::Corpus(_) => "corpus", BenchCommand::Primitives(_) => "primitives", BenchCommand::Compare(_) => "compare" },
+        "command": command.name(),
         "error": { "kind": error.code(), "detail": error.to_string() },
     });
     let publication = serde_json::to_writer_pretty(&mut tracked, &failure)
@@ -246,50 +268,35 @@ impl Error {
             Self::Campaign(_) => "campaign",
             Self::Comparison(_) => "comparison",
             Self::ReportArgument(_) => "report_argument",
+            Self::Usage(_) => "usage",
             Self::Table(_) => "table_shape",
             Self::Json(_) => "json_publication",
             Self::Reporting { .. } => "reporting",
-            Self::Unavailable(_) => "unavailable",
-            #[cfg(feature = "gpu")]
-            Self::Primitive(_) => "primitive",
         }
     }
 }
 
 fn execute_inner(
-    command: &BenchCommand,
+    command: &Command,
     layout: Layout,
     output: &mut impl io::Write,
     diagnostics: &mut impl io::Write,
     cancelled: &AtomicBool,
 ) -> Result<Completion, Error> {
     match command {
-        BenchCommand::Corpus(options) => {
+        Command::Corpus(options) => {
             corpus::execute(options, layout, output, diagnostics, cancelled)
         }
-        BenchCommand::Compare(options) => {
-            use io::Write as _;
-
+        Command::Compare(options) => {
             let comparison = compare(options)?;
             if let Some(path) = &options.output {
-                let mut file = std::fs::OpenOptions::new()
-                    .write(true)
-                    .create_new(true)
-                    .open(path)
-                    .map_err(Error::Io)?;
-                serde_json::to_writer_pretty(&mut file, &comparison).map_err(Error::Json)?;
-                writeln!(file).map_err(Error::Io)?;
-                file.flush().map_err(Error::Io)?;
+                retain(path, &comparison)?;
             }
             view::comparison(&comparison, options.view.json, layout, output)?;
             Ok(Completion::Passed)
         }
-        #[cfg(feature = "gpu")]
-        BenchCommand::Primitives(options) => primitives::execute(options, layout, output),
-        #[cfg(not(feature = "gpu"))]
-        BenchCommand::Primitives(_) => Err(Error::Unavailable(
-            "bench primitives requires a build with the gpu feature; corpus and compare remain available in CPU-only builds",
-        )),
+        Command::Perf(options) => perf::execute(options, output, diagnostics),
+        Command::Series(options) => series::execute(options, output),
     }
 }
 
@@ -297,20 +304,40 @@ fn execute_inner(
 ///
 /// # Errors
 /// Refuses malformed arguments, excessive documents or incompatible identities.
-pub fn compare(options: &CompareOptions) -> Result<series::Comparison, Error> {
-    let sources: Vec<_> = options
-        .reports
+pub fn compare(options: &CompareOptions) -> Result<Comparison, Error> {
+    read_compare(&options.reports, options.report_bytes)
+}
+
+/// Read labelled `LABEL=PATH` reports, each of at most `report_bytes` source
+/// bytes, and compare them in the given order.
+fn read_compare(reports: &[String], report_bytes: u64) -> Result<Comparison, Error> {
+    let sources: Vec<_> = reports
         .iter()
         .map(|argument| {
             let (label, path) = argument
                 .split_once('=')
                 .filter(|(label, path)| !label.is_empty() && !path.is_empty())
                 .ok_or_else(|| Error::ReportArgument(argument.clone()))?;
-            Ok(series::ReportSource {
+            Ok(ReportSource {
                 label,
                 path: std::path::Path::new(path),
             })
         })
         .collect::<Result<_, Error>>()?;
-    series::read_compare(&sources, options.report_bytes).map_err(Error::Comparison)
+    zetesis_validation::performance::series::read_compare(&sources, report_bytes)
+        .map_err(Error::Comparison)
+}
+
+/// Write a derived comparison as JSON to a new file; an existing file is refused.
+fn retain(path: &std::path::Path, comparison: &Comparison) -> Result<(), Error> {
+    use io::Write as _;
+
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(Error::Io)?;
+    serde_json::to_writer_pretty(&mut file, comparison).map_err(Error::Json)?;
+    writeln!(file).map_err(Error::Io)?;
+    file.flush().map_err(Error::Io)
 }

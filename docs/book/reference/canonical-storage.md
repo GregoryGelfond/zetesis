@@ -1,5 +1,7 @@
 # Canonical storage and answer construction
 
+<!-- A dated record: its commands keep the spellings of the binaries it records. -->
+
 This CPU comparison measures the 0.1.5 implementation against the preceding
 0.1.4 executable on unchanged maintained workloads. The current build completes
 all three populations, but takes longer on most series cases and has higher

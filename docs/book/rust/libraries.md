@@ -20,7 +20,7 @@ need a specific capability rather than a complete solve.
 | Evaluate costs and source displays | `zetesis_objective`, admitted-owner observation APIs | [Costs and shown terms](costs-and-output.md) |
 | Observe execution without parsing statistics text | `ExecutionObserver`, `SolveMeasurements`, `SemanticOutcome` | [Observations and measurements](measurements.md) |
 | Publish answers through a custom view | `zetesis_cli::{publish_prepared, PublicationConfig, AnswerRenderer}` | [Answer presentation](outcomes.md#replace-answer-presentation) |
-| Reuse test, benchmark and presentation workflows | `zetesis_validation`, `zetesis_experiments`, `zetesis_presentation` | [Command workflows](workflows.md) |
+| Reuse test, benchmark and presentation workflows | `zetesis_validation`, `zetesis_bench`, `zetesis_experiments`, `zetesis_presentation` | [Command workflows](workflows.md) |
 
 `zetesis-themelios` is zetesis's source-admission crate. The underlying themelios
 libraries provide parsing, logical-program construction and analysis; their
