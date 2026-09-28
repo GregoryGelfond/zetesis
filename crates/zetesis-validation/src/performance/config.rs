@@ -155,6 +155,35 @@ impl Default for Schedule {
         }
     }
 }
+/// Check an explicit selection of manifest-relative cases: one through 94
+/// distinct normal relative paths of 1..=1024 bytes each. Whether each names a
+/// runnable case is decided later, against the admitted corpus.
+///
+/// # Errors
+/// Refuses empty or oversized selections, duplicates and escaping or empty paths.
+pub(super) fn selection(paths: &[String]) -> Result<(), Error> {
+    use std::collections::BTreeSet;
+    use std::path::Component;
+    if paths.is_empty() || paths.len() > 94 {
+        return Err(Error::Configuration("selected cases must be 1..=94"));
+    }
+    let mut seen = BTreeSet::new();
+    for path in paths {
+        if path.is_empty()
+            || path.len() > 1024
+            || !seen.insert(path)
+            || Path::new(path)
+                .components()
+                .any(|part| !matches!(part, Component::Normal(_)))
+        {
+            return Err(Error::Configuration(
+                "selected cases require distinct normal relative paths of 1..=1024 bytes",
+            ));
+        }
+    }
+    Ok(())
+}
+
 impl Schedule {
     /// Select the baseline suite with zero through five warmups and one through
     /// 41 timed repetitions.
@@ -195,25 +224,7 @@ impl Schedule {
         warmups: usize,
         repetitions: usize,
     ) -> Result<Self, Error> {
-        use std::collections::BTreeSet;
-        use std::path::Component;
-        if paths.is_empty() || paths.len() > 94 {
-            return Err(Error::Configuration("selected cases must be 1..=94"));
-        }
-        let mut seen = BTreeSet::new();
-        for path in &paths {
-            if path.is_empty()
-                || path.len() > 1024
-                || !seen.insert(path)
-                || Path::new(path)
-                    .components()
-                    .any(|part| !matches!(part, Component::Normal(_)))
-            {
-                return Err(Error::Configuration(
-                    "selected cases require distinct normal relative paths of 1..=1024 bytes",
-                ));
-            }
-        }
+        selection(&paths)?;
         let mut schedule = Self::new(warmups, repetitions)?;
         schedule.selected = Some(paths.into_iter().map(Case::Selected).collect());
         Ok(schedule)

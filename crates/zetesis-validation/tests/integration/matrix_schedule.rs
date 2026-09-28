@@ -203,6 +203,20 @@ fn matrix_population_has_finite_construction_bounds() {
 }
 
 #[test]
+fn a_selection_refuses_empty_duplicate_and_escaping_paths() {
+    for paths in [
+        vec![],
+        vec!["a.lp".to_owned(), "a.lp".to_owned()],
+        vec!["../a.lp".to_owned()],
+        vec![String::new()],
+    ] {
+        assert!(plan(1).with_cases(paths).is_err());
+    }
+    let selected = plan(1).with_cases(vec!["a.lp".to_owned()]).unwrap();
+    assert_eq!(selected.selection(), Some(&["a.lp".to_owned()][..]));
+}
+
+#[test]
 fn qualification_plans_schedule_one_census_without_measurements() {
     let profiles = zetesis_validation::performance::scalability::profiles(None);
     let plan = Plan::qualification(Suite::Scalability, profiles, NonZeroUsize::MIN).unwrap();

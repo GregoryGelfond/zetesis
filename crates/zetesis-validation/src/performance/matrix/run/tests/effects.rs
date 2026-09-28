@@ -119,14 +119,15 @@ impl Fixture {
     /// which the synthetic producers' answers satisfy.
     fn unchanged(&self) -> Workload {
         let checked = examples::load(&self.corpus, examples::Limits::default()).unwrap();
-        Workload::original(
-            &checked,
-            "scenarios/shortest-path/variant-01/04-no-path.lp",
-            WorkloadLimits::default(),
-        )
-        .unwrap()
+        Workload::original(&checked, UNSAT_CASES[0], WorkloadLimits::default()).unwrap()
     }
 }
+
+/// Corpus entries whose recorded contracts are unsatisfiable.
+const UNSAT_CASES: [&str; 2] = [
+    "scenarios/shortest-path/variant-01/04-no-path.lp",
+    "scenarios/equality-generalized-tsp/03-unreachable-subset-unsat.lp",
+];
 
 fn run_unchanged(fixture: &Fixture, request: &Request<'_>) -> Report {
     crate::performance::matrix::run_workloads(request, &[fixture.unchanged()]).unwrap()
@@ -439,6 +440,53 @@ fn a_reference_changes_the_schedule_only_by_its_own_positions() {
         assert_eq!(natives, without, "{policy:?}");
         assert_eq!(with.len() - natives.len(), references, "{policy:?}");
     }
+}
+
+#[test]
+fn a_case_selection_plans_exactly_the_named_cases() {
+    let fixture = Fixture::new();
+    // Caller order, not manifest order.
+    let selected = vec![UNSAT_CASES[1].to_owned(), UNSAT_CASES[0].to_owned()];
+    let request = Request {
+        plan: Plan::new(
+            Suite::Corpus,
+            vec![crate::selected::NativeExecution::default()],
+            NonZeroUsize::MIN,
+            1,
+            2,
+        )
+        .unwrap()
+        .with_cases(selected.clone())
+        .unwrap(),
+        ..fixture.request()
+    };
+    let report = crate::performance::matrix::run(&request).unwrap();
+    assert_eq!(report.cases(), selected);
+    // Clingo and one profile: census, warmup and two timed rounds per case.
+    assert_eq!(report.samples().len(), 2 * 2 * 4);
+    assert!(report.passed(), "{report:?}");
+}
+
+#[test]
+fn a_selected_case_outside_the_suite_is_refused() {
+    let fixture = Fixture::new();
+    let request = Request {
+        plan: Plan::new(
+            Suite::Queens,
+            vec![crate::selected::NativeExecution::default()],
+            NonZeroUsize::MIN,
+            1,
+            2,
+        )
+        .unwrap()
+        .with_cases(vec![UNSAT_CASES[0].to_owned()])
+        .unwrap(),
+        ..fixture.request()
+    };
+    assert!(matches!(
+        crate::performance::matrix::run(&request),
+        Err(crate::performance::Error::Configuration(_))
+    ));
 }
 
 #[test]

@@ -347,13 +347,38 @@ fn materialize(
     }
     Ok(sealed)
 }
+/// The plan's cases: its selection when it has one, each a case of its suite,
+/// and the whole suite otherwise.
 fn cases<'a>(corpus: &'a examples::Corpus, plan: &Plan) -> Result<Vec<&'a examples::Case>, Error> {
-    let cases: &[super::super::Case] = match plan.suite {
-        Suite::Corpus => return Ok(corpus.cases().iter().collect()),
-        Suite::Baseline | Suite::Scalability => super::super::Suite::Baseline.cases(),
-        Suite::Queens => super::super::Suite::Queens.cases(),
-        Suite::Series => &super::super::series::CORPUS_CASES,
+    let suite: Vec<&examples::Case> = match plan.suite {
+        Suite::Corpus => corpus.cases().iter().collect(),
+        Suite::Baseline | Suite::Scalability => {
+            members(corpus, super::super::Suite::Baseline.cases())?
+        }
+        Suite::Queens => members(corpus, super::super::Suite::Queens.cases())?,
+        Suite::Series => members(corpus, &super::super::series::CORPUS_CASES)?,
     };
+    let Some(selection) = &plan.selection else {
+        return Ok(suite);
+    };
+    selection
+        .iter()
+        .map(|path| {
+            suite
+                .iter()
+                .copied()
+                .find(|case| case.path() == path)
+                .ok_or(Error::Configuration(
+                    "a selected case is not a case of the plan's suite",
+                ))
+        })
+        .collect()
+}
+
+fn members<'a>(
+    corpus: &'a examples::Corpus,
+    cases: &[super::super::Case],
+) -> Result<Vec<&'a examples::Case>, Error> {
     cases
         .iter()
         .map(|selected| {

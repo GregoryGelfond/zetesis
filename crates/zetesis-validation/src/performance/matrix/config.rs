@@ -81,6 +81,10 @@ pub struct Plan {
     /// Separate child-resource rounds per producer and case, after the
     /// timed rounds; zero unless requested.
     pub(super) memory_runs: usize,
+    /// Manifest-relative cases of the suite to run, in caller order; the
+    /// whole suite when absent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) selection: Option<Vec<String>>,
 }
 impl Plan {
     /// Construct up to eight CPU/Metal profiles. Each worker count is bounded
@@ -107,6 +111,7 @@ impl Plan {
             warmups,
             repetitions,
             memory_runs: 0,
+            selection: None,
         })
     }
 
@@ -129,6 +134,7 @@ impl Plan {
             warmups: 0,
             repetitions: 0,
             memory_runs: 0,
+            selection: None,
         })
     }
     /// Request zero through 41 memory rounds per producer and case: each a
@@ -150,6 +156,23 @@ impl Plan {
     #[must_use]
     pub const fn memory_runs(&self) -> usize {
         self.memory_runs
+    }
+    /// Run exactly `paths`, one through 94 distinct manifest-relative cases of
+    /// the plan's suite, in the order given, instead of the whole suite. The
+    /// campaign refuses a path that is not a case of the suite before launching
+    /// anything.
+    ///
+    /// # Errors
+    /// Refuses empty or oversized selections, duplicates and escaping or empty paths.
+    pub fn with_cases(mut self, paths: Vec<String>) -> Result<Self, Error> {
+        super::super::config::selection(&paths)?;
+        self.selection = Some(paths);
+        Ok(self)
+    }
+    /// The selected cases, in order; none when the whole suite runs.
+    #[must_use]
+    pub fn selection(&self) -> Option<&[String]> {
+        self.selection.as_deref()
     }
     /// Ordered requested native profiles, indexed by [`Producer::Native`].
     #[must_use]
