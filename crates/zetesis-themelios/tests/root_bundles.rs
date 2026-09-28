@@ -289,20 +289,25 @@ fn cwd_resolution_is_captured_before_loading_and_retained_for_admission() {
     fixture.write("second.lp", "second.");
     fixture.write("block", "a regular file, not a directory");
     fixture.write("sub/block/data.lp", "not_directory_fallback.");
+    let name = harness_name("cwd_resolution_is_captured_before_loading_and_retained_for_admission");
     let result = Command::new(std::env::current_exe().unwrap())
-        .args([
-            "--exact",
-            "cwd_resolution_is_captured_before_loading_and_retained_for_admission",
-            "--test-threads=1",
-        ])
+        .args(["--exact", name.as_str(), "--test-threads=1"])
         .env(CHILD, "1")
         .current_dir(&fixture.0)
         .stdin(Stdio::null())
         .output()
         .unwrap();
-    assert!(
-        result.status.success(),
-        "{}",
-        String::from_utf8_lossy(&result.stdout)
-    );
+    let output = String::from_utf8_lossy(&result.stdout);
+    assert!(result.status.success(), "{output}");
+    // A name the harness does not know runs nothing and still succeeds.
+    assert!(output.contains("test result: ok. 1 passed"), "{output}");
+}
+
+/// This module's test `function` as the harness names it: the module path
+/// below the test crate's root, then the function.
+fn harness_name(function: &str) -> String {
+    match module_path!().split_once("::") {
+        Some((_, module)) => format!("{module}::{function}"),
+        None => function.to_owned(),
+    }
 }

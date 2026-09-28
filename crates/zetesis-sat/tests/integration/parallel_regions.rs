@@ -304,22 +304,40 @@ fn one_worker_returns_the_scalar_walks_sequence() {
     assert_eq!(family(&mut one), family(&mut scalar));
 }
 
+/// This module's test `function` as the harness names it: the module path
+/// below the test crate's root, then the function.
+fn harness_name(function: &str) -> String {
+    match module_path!().split_once("::") {
+        Some((_, module)) => format!("{module}::{function}"),
+        None => function.to_owned(),
+    }
+}
+
 /// Run a possibly blocking worker lifecycle in a child, so a regression is
-/// killed and reaped instead of stranding a thread in the test runner.
+/// killed and reaped instead of stranding a thread in the test runner. The
+/// child re-runs this module's test `name` alone.
 fn bounded_child(name: &str, run: impl FnOnce()) {
     if std::env::var("ZETESIS_REGION_CHILD").as_deref() == Ok(name) {
         run();
         return;
     }
     let mut child = std::process::Command::new(std::env::current_exe().unwrap())
-        .args(["--exact", name, "--nocapture"])
+        .args(["--exact", harness_name(name).as_str()])
         .env("ZETESIS_REGION_CHILD", name)
+        .stdout(std::process::Stdio::piped())
         .spawn()
         .unwrap();
     let expires = std::time::Instant::now() + std::time::Duration::from_secs(10);
     loop {
         if let Some(status) = child.try_wait().unwrap() {
-            assert!(status.success(), "worker lifecycle failed: {status}");
+            let mut output = String::new();
+            std::io::Read::read_to_string(&mut child.stdout.take().unwrap(), &mut output).unwrap();
+            assert!(
+                status.success(),
+                "worker lifecycle failed: {status}\n{output}"
+            );
+            // A name the harness does not know runs nothing and still succeeds.
+            assert!(output.contains("test result: ok. 1 passed"), "{output}");
             return;
         }
         if std::time::Instant::now() >= expires {
