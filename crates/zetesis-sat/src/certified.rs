@@ -108,7 +108,8 @@ impl From<Verdict> for crate::ferraris::Decision {
 }
 
 impl StableModels {
-    /// Prepare a complete tight certificate for an external membership executor.
+    /// Prepare a complete tight certificate for a membership route outside the
+    /// CPU checker, such as the GPU tight route.
     ///
     /// Uses the same accounted construction as CPU checking, but installs no
     /// CPU membership policy. The immutable plan and its first preparation

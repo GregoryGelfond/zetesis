@@ -31,14 +31,6 @@ pub enum ExecutionObservation<'a> {
         /// Possible instances visited during complete source admission.
         streamed_instances: u64,
     },
-    /// An explicitly supplied executor owns only bounded membership batches.
-    /// Capabilities do not identify hardware or establish successful execution.
-    ExternalExecutor {
-        /// Supported operations declared by this implementation.
-        capabilities: crate::ExecutorCapabilities,
-        /// Selected operation over the original immutable theory.
-        operation: crate::MembershipOperation,
-    },
     /// An admitted static relational representation is available.
     StaticGrounding {
         /// Requested materialization policy.

@@ -762,19 +762,16 @@ ownership, reservation arithmetic, panic/cancellation paths, budget settlement
 before checking and transfer between rounds remain Rust obligations. The two
 abstract laws do not themselves verify that concurrent implementation.
 
-`SessionBuilder::executor` exposes that same formula batch boundary to an
-external `BatchExecutor`; it does not replace the candidate frontier or objective
-owner. The complete original-theory tight certificate, when selected, is shared
-with the executor through `MembershipPlan`. Original satisfaction is checked
-before invocation. `CandidateBatch::finish` and the host receipt consumer retain
-exact theory and candidate-slice association and check result count. Neither
-operation proves the soundness of a verdict or its association with the right
-position within that slice. The batch laws therefore still require a sound
-executor for the selected operation as an explicit premise. Exact residual
-completion uses the existing host checker; a callback interruption, refusal or
-fault cannot discharge its pending candidates. Rust ownership, callback effects,
-resource compliance and transport identities remain implementation obligations,
-with no additional theorem or device qualification claimed by this API.
+The CPU batched completion and the GPU formula routes share one internal batch
+boundary. Original satisfaction is checked before a route sees a candidate, and
+the host receipt consumer retains exact theory and candidate-slice association
+and checks the result count. Neither check proves the soundness of a verdict or
+its association with the right position within that slice, so the batch laws
+take a sound route for the selected operation as an explicit premise; each route
+is zetesis's own and is qualified with it. Exact residual completion uses the
+existing host checker; an interruption or fault cannot discharge its pending
+candidates. Rust ownership, resource compliance and transport identities remain
+implementation obligations.
 
 ## Representation and source laws
 

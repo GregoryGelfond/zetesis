@@ -50,7 +50,7 @@ impl<'a> TerminalSession<'a> {
     pub(crate) fn new(
         owner: &'a TerminalFormula,
         config: &SolveConfig,
-        resources: crate::session::Executors<'_>,
+        resources: &crate::ExecutionResources,
         observations: &mut impl ExecutionSink,
         cancellation: &Cancellation,
         phases: &Recorder,

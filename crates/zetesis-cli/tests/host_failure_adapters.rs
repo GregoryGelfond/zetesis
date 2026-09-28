@@ -28,26 +28,6 @@ impl fmt::Display for External {
 }
 impl Error for External {}
 
-#[test]
-fn executor_failure_keeps_its_external_owner() {
-    let token = Arc::new(());
-    let original = SolveError::Executor(zetesis_solve::ExecutorError::External(Box::new(
-        External(Arc::clone(&token)),
-    )));
-    let adapted = RunError::from(original);
-    let boundary = adapted
-        .source()
-        .unwrap()
-        .downcast_ref::<zetesis_solve::ExecutorError>()
-        .unwrap();
-    let external = boundary
-        .source()
-        .unwrap()
-        .downcast_ref::<External>()
-        .unwrap();
-    assert!(Arc::ptr_eq(&external.0, &token));
-}
-
 struct FailTyped(Arc<()>);
 impl ExecutionObserver for FailTyped {
     type Error = External;

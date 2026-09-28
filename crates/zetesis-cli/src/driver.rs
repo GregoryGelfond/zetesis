@@ -200,7 +200,7 @@ pub enum RunError {
     CompletionUnavailable,
     /// Membership execution ended without exhausted candidate coverage.
     CandidateStreamNotExhausted,
-    /// An injected batch checker violated its ordered result-count contract.
+    /// A membership route violated its ordered result-count contract.
     FormulaBatchShape {
         /// Number of original candidates supplied.
         expected: usize,

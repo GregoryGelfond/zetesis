@@ -51,9 +51,9 @@
 //! compiled formula profile, while every session owns fresh search, residency,
 //! budgets and results. No global device or pipeline cache is installed.
 //!
-//! [`SessionBuilder::executor`] accepts a [`BatchExecutor`] for formula membership.
-//! The session retains candidate coverage, exact residual completion and objectives;
-//! decisive verdicts rely on the executor's documented soundness contract.
+//! Membership is always decided by zetesis's own reduct check, on the CPU or on
+//! a qualified GPU route; the session owns candidate coverage, exact residual
+//! completion and objectives.
 //!
 //! [`ExecutionObserver`] borrows typed facts during setup or a pull. Callback
 //! failures are distinct from device faults and cannot request backend fallback.
@@ -104,10 +104,7 @@ mod phase_timing;
 mod stage_timing;
 mod grounding_timing;
 
-pub use batch_executor::{
-    BatchExecutionStatistics, BatchExecutor, BatchResult, CandidateBatch, ExecutorCapabilities,
-    ExecutorError, ExecutorFailure, MembershipOperation, MembershipPlan,
-};
+pub use batch_executor::ExecutorError;
 pub use closure_execution::{ClosureExecutionStatistics, ClosureJoinStatistics, ClosureRoute};
 pub use completion::{Completion, Interruption, SearchState};
 pub use error::{FailureParts, SolveError, SolveFailure};

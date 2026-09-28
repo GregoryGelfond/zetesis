@@ -34,10 +34,7 @@ fn consumed_base_answer_cannot_escape_a_cancelled_reconstruction() {
     let mut session = TerminalSession::new(
         &owner,
         &config,
-        crate::session::Executors {
-            resources: &resources,
-            executor: None,
-        },
+        &resources,
         &mut Ignore,
         &cancellation,
         &phases,

@@ -67,7 +67,6 @@ row or locating a gate atom does not establish answer-set membership. See
 | Cover and narrow candidate regions | `zetesis_cpu::regions::{Region, Traversal}`, `zetesis_ferraris::{Narrower, producers}` | [Exact execution](../architecture/execution.md) |
 | Enumerate formula answers and complete reduct queries | `zetesis_sat::{StableModels, SearchMethod, check_with, PreparedReduct, ReductWorkspace}` | [Sessions](sessions.md) |
 | Produce parallel candidate batches | `StableModels::with_region_producers`, `next_batch_with_completion` | [Formula plans](sessions.md#formula-membership-plans) |
-| Supply a formula membership executor | `SessionBuilder::executor`, `BatchExecutor`, `MembershipPlan`, `CandidateBatch` | [Custom executors](executors.md) |
 | Share device resources | `zetesis_wgpu::GpuContext`, `GpuFormulaProfile`, `ExecutionResources` | [Device ownership](../architecture/ownership.md#device-resource-scope) |
 | Select relation masks on a device | `zetesis_wgpu::GpuRelationExecutor` | [Relation measurement example](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-experiments/README.md#retained-relation-selection) |
 
@@ -79,8 +78,8 @@ not support a request to replace that graph with lazy grounding.
 Prepared resources can share immutable data and reusable storage. Candidate
 truth, search coverage and resource budgets remain local to the computation.
 Device primitives have explicit capability, limit and failure contracts; enabling
-a feature or selecting a device does not establish that work ran there. Custom
-executors must meet their documented verdict-soundness contract.
+a feature or selecting a device does not establish that work ran there. Every
+answer set a session returns is decided by zetesis's own reduct check.
 
 ## Validation, measurement and presentation
 

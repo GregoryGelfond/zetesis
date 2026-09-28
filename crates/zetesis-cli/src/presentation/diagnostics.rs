@@ -86,8 +86,6 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
     fn observe(&mut self, observation: crate::ExecutionObservation<'_>) -> Result<(), Self::Error> {
         use crate::ExecutionObservation as Event;
         match observation {
-            Event::ExternalExecutor { capabilities, operation } => self.metadata(Label::Backend,
-                format_args!("supplied batch executor; operation: {operation:?}; capabilities: {capabilities:?}")),
             Event::StaticGrounding { requested, atoms, rules, limits } => self.metadata(
                 Label::Grounding,
                 format_args!("requested={}, effective=eager (static atoms={atoms}, rules={rules}; lowering caps atoms={}, rules={}, substitutions={})", requested.label(), limits.max_atoms, limits.max_ground_rules, limits.max_substitutions),

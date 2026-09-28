@@ -1,4 +1,4 @@
-//! Native session capture for injected membership executors.
+//! Native formula session capture for the membership routes' tests.
 
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;

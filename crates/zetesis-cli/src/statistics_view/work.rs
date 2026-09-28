@@ -22,13 +22,6 @@ fn base_execution(semantic: Option<&SemanticOutcome>) -> String {
     if semantic.hybrid_execution().is_some() {
         return "CPU hybrid formula; eager core, streamed constraints".into();
     }
-    if let Some(execution) = semantic.batch_execution() {
-        let operation = match execution.operation {
-            zetesis_solve::MembershipOperation::General => "general reduct",
-            zetesis_solve::MembershipOperation::Tight => "tight support",
-        };
-        return format!("Custom executor ({operation}); hardware unspecified");
-    }
     if let Some(execution) = semantic.formula_execution() {
         return if execution.adapter.is_empty() {
             "CPU batched formula completion".into()
@@ -159,19 +152,6 @@ fn semantic_rows(rows: &mut Vec<Row>, semantic: &SemanticOutcome) {
     }
     if let Some(execution) = semantic.formula_execution() {
         device(rows, execution);
-        completion(rows, &execution.completion);
-    }
-    if let Some(execution) = semantic.batch_execution() {
-        rows.push(count(
-            "Custom checker calls",
-            execution.batches.checker_calls,
-            "includes failed calls; no hardware work implied",
-        ));
-        rows.push(count(
-            "Committed batch candidates",
-            execution.batches.committed,
-            "membership completed and committed",
-        ));
         completion(rows, &execution.completion);
     }
     if let Some(objective) = semantic.incumbent() {

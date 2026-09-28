@@ -23,7 +23,6 @@
 - [Library reference index](rust/libraries.md)
 - [Reusing command workflows](rust/workflows.md)
 - [Preparing source and interpreting analysis](rust/source.md)
-- [Supplying a membership executor](rust/executors.md)
 - [Interpretations and retained atoms](rust/models.md)
 - [Observations and host measurements](rust/measurements.md)
 - [Working with finite reducts](rust/reducts.md)

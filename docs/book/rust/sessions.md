@@ -20,10 +20,6 @@ broader finite formula profile. These are explicit library choices. The ordinary
 source driver provides automatic profile selection; `Session` receives an
 already prepared representation and does not retry admission itself.
 
-An admitted formula session can also use a caller-supplied
-[membership executor](executors.md), while retaining the ordinary candidate,
-reduct, objective and outcome owners.
-
 `SolveConfig::validate` checks representation-independent policy combinations.
 Prepared input adds its profile constraints; the selected executor then checks
 its own resources. CPU closure setup conservatively requires
@@ -40,9 +36,8 @@ privately constructed `AnswerSet` retains its original `Subject`, complete inter
 fully evaluated score. Hidden atoms remain present even when `#show` would omit
 them from human output. `SessionModel` remains a compatibility alias. These are
 completed membership results under the selected implementation, not Lean proof
-objects. A caller-supplied `BatchExecutor` must satisfy its
-[soundness contract](executors.md#state-the-trusted-boundary); the host exactly
-completes residual checks but trusts the executor's decisive verdicts.
+objects. Membership is always decided by zetesis's own reduct check, on the CPU
+or on a qualified GPU route; the library accepts no caller-supplied checker.
 
 `Session::enumerate` streams all answers of the original program, including
 nonoptimal answers. It evaluates objective scores but disables both candidate
@@ -128,8 +123,8 @@ frozen reduct.
 
 An explicit Metal or Vulkan formula session with `Oracle::Auto` uses the same
 accounted tight preparation, then executes `GpuTightOracle` when it succeeds.
-`StableModels::prepare_tight_certificate` exposes the shared immutable plan for
-an external executor without enabling CPU membership. Repeated calls retain the
+`StableModels::prepare_tight_certificate` exposes the shared immutable plan to
+the GPU route without enabling CPU membership. Repeated calls retain the
 first construction attempt and its work; CPU checking can activate that same
 owner before enumeration. Theories without a complete tight certificate continue
 through general device propagation, as does explicit `Oracle::Countermodel`.

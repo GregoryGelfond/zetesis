@@ -52,10 +52,7 @@ impl Fixture {
         let mut session = HybridSession::new(
             &self.owner,
             &self.config,
-            crate::session::Executors {
-                resources: &resources,
-                executor: None,
-            },
+            &resources,
             &mut Ignore,
             &self.cancellation,
             &self.phases,
@@ -195,10 +192,7 @@ fn a_construction_stop_precedes_a_later_source_worker_failure() {
     let mut session = HybridSession::new(
         &fixture.owner,
         &fixture.config,
-        crate::session::Executors {
-            resources: &resources,
-            executor: None,
-        },
+        &resources,
         &mut Ignore,
         &fixture.cancellation,
         &fixture.phases,

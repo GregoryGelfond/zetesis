@@ -5,7 +5,7 @@ use std::num::NonZeroUsize;
 
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
-use zetesis_ferraris::Interpretation;
+use zetesis_ferraris::{Interpretation, Theory};
 use zetesis_sat::{BatchStatistics, BatchVerdict, Incomplete, StableModels, Statistics};
 
 use super::test_harness::{Record, admitted, run, run_consuming};
@@ -15,14 +15,63 @@ use crate::{
     Backend, Completion, Interruption, Oracle, PreparedInput, Session, SolveConfig, SolveError,
 };
 
+/// How the native test route answers each candidate of a batch.
+#[derive(Clone, Copy, Default)]
+enum Answers {
+    /// Leave every candidate to the host's exact completion.
+    #[default]
+    Residual,
+    /// Decide every candidate with the reference reduct checker.
+    Decided,
+    /// Decide even positions and leave odd positions to exact completion.
+    Mixed,
+    /// Contradict the host's own original-model check.
+    NotModel,
+}
+
+/// One deviation the native test route introduces into the batch protocol.
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+enum Fault {
+    #[default]
+    None,
+    /// Exhaust native encoding work on the first candidate.
+    Work,
+    /// Return one verdict fewer than the batch has candidates.
+    OmitVerdict,
+    /// Cancel the session after answering, before the host commits.
+    CancelAfterAnswering,
+    /// Fail every batch after the first.
+    AfterFirst,
+}
+
 #[derive(Default)]
 struct NativeBatch {
     queue: BatchQueue,
     snapshots: Vec<(BatchStatistics, Statistics, usize)>,
     proposed: Vec<Vec<Vec<usize>>>,
-    fail_work: bool,
-    omit_verdict: bool,
     stop: Option<Incomplete>,
+    answers: Answers,
+    fault: Fault,
+}
+
+/// The reference checker's reduct verdict for one original model.
+fn decide(
+    theory: &Theory,
+    candidate: &Interpretation,
+    cancellation: &Cancellation,
+) -> Result<BatchVerdict, Failure> {
+    let check = zetesis_ferraris::check(
+        theory,
+        candidate,
+        zetesis_ferraris::Limits::default(),
+        cancellation,
+    )
+    .map_err(|stop| Failure::Search(stop.into()))?;
+    Ok(match check.verdict() {
+        zetesis_ferraris::Verdict::Stable => BatchVerdict::NoProperSubset,
+        zetesis_ferraris::Verdict::NotModel { .. } => BatchVerdict::NotModel,
+        zetesis_ferraris::Verdict::NonMinimal { .. } => BatchVerdict::Refuted,
+    })
 }
 
 impl MembershipExecution for NativeBatch {
@@ -45,7 +94,7 @@ impl MembershipExecution for NativeBatch {
             if let Some(stop) = self.stop {
                 return Err(Failure::Search(stop));
             }
-            if self.fail_work {
+            if self.fault == Fault::Work {
                 let limits = zetesis_sat::Limits {
                     search: zetesis_sat::SearchLimits {
                         max_work: 0,
@@ -60,15 +109,31 @@ impl MembershipExecution for NativeBatch {
                 }
                 panic!("the selected nonempty source needs native encoding work");
             }
-            // Declining partial propagation sends every original candidate to
-            // the real exact native reduct checker inside StableModels.
+            if self.fault == Fault::AfterFirst && self.proposed.len() > 1 {
+                // A fault on a later batch; the boundary's protocol error stands
+                // in for any fault a route reports.
+                return Err(Failure::from(crate::ExecutorError::ForeignBatch));
+            }
+            // A residual verdict sends the candidate to the real exact native
+            // reduct checker inside StableModels; a decided one is the
+            // reference checker's own reduct verdict.
             let mut verdicts = Vec::new();
             verdicts
                 .try_reserve_exact(candidates.len())
                 .map_err(|_| Failure::Search(Incomplete::Allocation))?;
-            verdicts.resize(candidates.len(), BatchVerdict::Residual);
-            if self.omit_verdict {
+            for (position, candidate) in candidates.iter().enumerate() {
+                verdicts.push(match self.answers {
+                    Answers::Residual => BatchVerdict::Residual,
+                    Answers::NotModel => BatchVerdict::NotModel,
+                    Answers::Mixed if position % 2 == 1 => BatchVerdict::Residual,
+                    Answers::Decided | Answers::Mixed => decide(theory, candidate, cancellation)?,
+                });
+            }
+            if self.fault == Fault::OmitVerdict {
                 verdicts.pop();
+            }
+            if self.fault == Fault::CancelAfterAnswering {
+                cancellation.cancel();
             }
             batch.finish(verdicts).map_err(Failure::from)
         });
@@ -278,7 +343,7 @@ fn bounded_execution_cannot_prove_optimality() {
             0 => config.max_objective_work = 0,
             1 => config.max_optimal_models = 1,
             2 => config.max_batch_bytes = 0,
-            _ => execution.fail_work = true,
+            _ => execution.fault = Fault::Work,
         }
         let capture = run(&owner, &config, &Cancellation::default(), &mut execution);
         assert!(capture.error.is_none());
@@ -324,7 +389,7 @@ fn stopped_checker_preserves_uncommitted_proposals() {
 fn malformed_checker_shape_prevents_answer_delivery() {
     let owner = admitted("{a;b;c}.");
     let mut execution = NativeBatch {
-        omit_verdict: true,
+        fault: Fault::OmitVerdict,
         ..Default::default()
     };
     let capture = run(&owner, &config(), &Cancellation::default(), &mut execution);
@@ -339,4 +404,87 @@ fn malformed_checker_shape_prevents_answer_delivery() {
     assert_eq!(capture.outcome.verified_models(), 0);
     assert_eq!(capture.outcome.completion(), None);
     assert_eq!(execution.snapshots.last().unwrap().0.pending, 3);
+}
+
+#[test]
+fn a_failed_later_batch_retains_the_verified_prefix() {
+    let owner = admitted("{a;b}.");
+    let mut execution = NativeBatch {
+        fault: Fault::AfterFirst,
+        ..Default::default()
+    };
+    let capture = run(&owner, &config(), &Cancellation::default(), &mut execution);
+    assert!(matches!(
+        capture.error,
+        Some(SolveError::Executor(crate::ExecutorError::ForeignBatch))
+    ));
+    assert_eq!(capture.answers.len(), 3);
+    assert_eq!(capture.outcome.verified_models(), 3);
+    assert_eq!(capture.outcome.completion(), None);
+    let (batch, _, _) = execution.snapshots.last().unwrap();
+    assert_eq!(
+        (batch.committed, batch.pending, batch.checker_calls),
+        (3, 1, 2)
+    );
+}
+
+#[test]
+fn cancellation_after_decisive_verdicts_commits_nothing() {
+    let owner = admitted("{a;b}.");
+    let mut execution = NativeBatch {
+        answers: Answers::Decided,
+        fault: Fault::CancelAfterAnswering,
+        ..Default::default()
+    };
+    let capture = run(&owner, &config(), &Cancellation::default(), &mut execution);
+    assert!(capture.error.is_none());
+    assert!(capture.answers.is_empty());
+    assert_eq!(capture.outcome.completion(), Some(Completion::Interrupted));
+    assert_eq!(capture.outcome.verified_models(), 0);
+    let (batch, _, _) = execution.snapshots.last().unwrap();
+    assert_eq!(
+        (batch.committed, batch.propagated, batch.pending),
+        (0, 0, 3)
+    );
+}
+
+#[test]
+fn a_verdict_contradicting_the_original_model_is_incomplete() {
+    let owner = admitted("{a}.");
+    let mut execution = NativeBatch {
+        answers: Answers::NotModel,
+        ..Default::default()
+    };
+    let capture = run(&owner, &config(), &Cancellation::default(), &mut execution);
+    assert!(capture.error.is_none());
+    assert!(capture.answers.is_empty());
+    assert_eq!(
+        capture.outcome.interruption(),
+        Some(Interruption::Countermodel(Incomplete::InvalidWitness))
+    );
+    assert_eq!(capture.outcome.verified_models(), 0);
+    assert_eq!(execution.snapshots.last().unwrap().0.pending, 2);
+}
+
+#[test]
+fn mixed_decisions_and_residuals_share_one_commit() {
+    let owner = admitted("{a;b}.");
+    let mut execution = NativeBatch {
+        answers: Answers::Mixed,
+        ..Default::default()
+    };
+    let capture = run(&owner, &config(), &Cancellation::default(), &mut execution);
+    assert!(capture.error.is_none());
+    assert_eq!(capture.answers.len(), 4);
+    assert_eq!(capture.outcome.completion(), Some(Completion::Exhausted));
+    let (batch, _, _) = execution.snapshots.last().unwrap();
+    assert_eq!(
+        (
+            batch.committed,
+            batch.residuals,
+            batch.propagated,
+            batch.pending
+        ),
+        (4, 1, 3, 0)
+    );
 }
