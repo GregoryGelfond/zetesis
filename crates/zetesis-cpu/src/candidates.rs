@@ -1142,14 +1142,4 @@ impl Iterator for Candidates<'_> {
 impl FusedIterator for Candidates<'_> {}
 
 #[cfg(test)]
-#[path = "../tests/support/selection_cursor.rs"]
-mod selection_tests;
-#[cfg(test)]
-#[path = "../tests/support/narrowing_closures.rs"]
-mod narrowing_tests;
-#[cfg(test)]
-#[path = "../tests/support/supported_carrier.rs"]
-mod supported_carrier_tests;
-#[cfg(test)]
-#[path = "../tests/support/region_bound_closures.rs"]
-mod region_bound_tests;
+mod tests;

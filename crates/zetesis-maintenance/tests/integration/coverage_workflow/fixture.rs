@@ -1,13 +1,13 @@
 //! Isolated shell gates with deterministic Rust tool stand-ins.
-use crate::subprocess::{Command, Output};
+use super::subprocess::{Command, Output};
 use serde_json::{Value, json};
 use std::{
     env, fs,
     path::{Path, PathBuf},
 };
 
-pub const TABLE: &str = include_str!("physical-selection.txt");
-pub const VULKAN_TABLE: &str = include_str!("physical-selection-vulkan.txt");
+pub const TABLE: &str = include_str!("../../support/physical-selection.txt");
+pub const VULKAN_TABLE: &str = include_str!("../../support/physical-selection-vulkan.txt");
 pub struct Fixture {
     pub directory: tempfile::TempDir,
 }
@@ -18,23 +18,23 @@ impl Fixture {
         for (name, bytes) in [
             (
                 "coverage.sh",
-                include_bytes!("../../../../scripts/coverage.sh").as_slice(),
+                include_bytes!("../../../../../scripts/coverage.sh").as_slice(),
             ),
             (
                 "check.sh",
-                include_bytes!("../../../../scripts/check.sh").as_slice(),
+                include_bytes!("../../../../../scripts/check.sh").as_slice(),
             ),
             (
                 "maintenance.sh",
-                include_bytes!("../../../../scripts/maintenance.sh").as_slice(),
+                include_bytes!("../../../../../scripts/maintenance.sh").as_slice(),
             ),
             (
                 "coverage-ratchet.sh",
-                include_bytes!("../../../../scripts/coverage-ratchet.sh").as_slice(),
+                include_bytes!("../../../../../scripts/coverage-ratchet.sh").as_slice(),
             ),
             (
                 "hardware.sh",
-                include_bytes!("../../../../scripts/hardware.sh").as_slice(),
+                include_bytes!("../../../../../scripts/hardware.sh").as_slice(),
             ),
         ] {
             fixture.write(&format!("scripts/{name}"), bytes);
@@ -125,7 +125,10 @@ impl Fixture {
     }
     pub fn coverage(&self, mode: &str, metal: bool, changes: &[(&str, &str)]) -> Output {
         let mut command = self.command("scripts/coverage.sh");
-        command.arg(mode).envs(changes.iter().copied());
+        command.arg(mode);
+        for &(key, value) in changes {
+            command.env(key, value);
+        }
         if metal {
             command.arg("--metal");
         }

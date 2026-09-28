@@ -293,5 +293,4 @@ pub(crate) fn model_contains(
 }
 
 #[cfg(test)]
-#[path = "../../tests/support/region_bound_readings.rs"]
 mod tests;

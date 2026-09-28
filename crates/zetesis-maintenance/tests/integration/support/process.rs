@@ -94,22 +94,6 @@ impl Command {
         self
     }
 
-    /// Set environment variables for this child only.
-    ///
-    /// # Panics
-    /// Refuses empty keys or keys containing `=` or NUL.
-    pub fn envs<I, K, V>(&mut self, variables: I) -> &mut Self
-    where
-        I: IntoIterator<Item = (K, V)>,
-        K: AsRef<OsStr>,
-        V: AsRef<OsStr>,
-    {
-        for (key, value) in variables {
-            self.env(key, value);
-        }
-        self
-    }
-
     /// Remove an inherited environment variable for this child only.
     ///
     /// # Panics

@@ -410,8 +410,7 @@ impl Knowledge {
 }
 
 #[cfg(test)]
-#[path = "../tests/support/knowledge_storage.rs"]
-mod knowledge_storage_tests;
+mod tests;
 
 impl Narrower {
     /// Index the theory's DAG for narrowing.

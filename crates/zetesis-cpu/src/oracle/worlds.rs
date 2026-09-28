@@ -11,7 +11,6 @@ use super::Work;
 use crate::Stop;
 
 #[cfg(test)]
-#[path = "../../tests/support/world_membership.rs"]
 mod tests;
 
 /// Canonical local IDs select round truth while borrowing the committed owner.

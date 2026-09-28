@@ -3,8 +3,7 @@
     feature = "test-fixtures",
     any(target_os = "linux", target_os = "macos")
 ))]
-#[path = "support/process.rs"]
-pub mod subprocess;
+use crate::support::process as subprocess;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::{

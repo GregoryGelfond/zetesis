@@ -2,8 +2,8 @@
 use std::{fmt::Write as _, path::Path};
 use zetesis_maintenance::coverage::{self, Floor, Metadata, Mode, Observation, Tool};
 
-const TABLE: &str = include_str!("support/physical-selection.txt");
-const VULKAN_TABLE: &str = include_str!("support/physical-selection-vulkan.txt");
+const TABLE: &str = include_str!("../support/physical-selection.txt");
+const VULKAN_TABLE: &str = include_str!("../support/physical-selection-vulkan.txt");
 fn output(tests: &[String], library: bool) -> String {
     let mut value = String::new();
     for test in tests {

@@ -7,7 +7,7 @@ use super::{ArgumentBounds, Bound, infer};
 use crate::oracle::{PreparationLimits, Work};
 use crate::{Cancellation, Limits, Stop};
 
-#[path = "../../tests/support/programs.rs"]
+#[path = "argument_bounds_tests/programs.rs"]
 mod programs;
 
 use programs::{fact, number, pattern, program};

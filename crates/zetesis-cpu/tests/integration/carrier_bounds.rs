@@ -7,8 +7,7 @@ use std::collections::BTreeSet;
 use zetesis_core::{Atom, Predicate, Program, Seed, Template, Term, Value};
 use zetesis_cpu::{Cancellation, CandidateLimits, Candidates, Limits, check};
 
-#[path = "support/programs.rs"]
-mod programs;
+use crate::support::programs;
 
 use programs::{fact, number, pattern, program};
 

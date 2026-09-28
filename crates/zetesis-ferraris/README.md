@@ -470,7 +470,7 @@ extreme element values. A fourth test characterizes the six known discrepancies
 below; its successful execution does **not** count as six equivalence passes.
 
 ```sh
-cargo test -p zetesis-ferraris --test extrema_clingo -- --ignored
+cargo test -p zetesis-ferraris --test integration -- --ignored extrema_clingo::
 ```
 
 ### Known clingo numeric-endpoint compatibility gaps
@@ -539,7 +539,7 @@ aggregates:
 
 ```sh
 cargo test -p zetesis-ferraris
-cargo test -p zetesis-ferraris --test aggregate_clingo -- --ignored
+cargo test -p zetesis-ferraris --test integration -- --ignored aggregate_clingo::
 ```
 
 The optional subprocesses use temporary files, a five-second deadline and a

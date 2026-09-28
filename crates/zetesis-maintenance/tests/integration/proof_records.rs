@@ -1,9 +1,7 @@
 //! Independent adversarial records, never invoking Lean or a solver.
-#[path = "support/proof_fixture.rs"]
 mod fixture;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-#[path = "support/process.rs"]
-pub mod subprocess;
+use crate::support::process as subprocess;
 use fixture::Fixture;
 use serde_json::{Value, json};
 use std::{fmt::Write as _, fs};

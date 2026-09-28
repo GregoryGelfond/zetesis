@@ -3,10 +3,8 @@
     any(target_os = "linux", target_os = "macos"),
     feature = "test-fixtures"
 ))]
-#[path = "support/process.rs"]
-pub mod subprocess;
+use crate::support::process as subprocess;
 use subprocess::{Command, Output};
-#[path = "support/coverage_fixture.rs"]
 mod fixture;
 use fixture::{Fixture, groups, vulkan_groups};
 use std::fs;
@@ -383,7 +381,7 @@ fn portable_test_campaigns_collect_target_failures() {
 }
 
 fn workflow_block() -> String {
-    let workflow = include_str!("../../../.github/workflows/checks.yml");
+    let workflow = include_str!("../../../../.github/workflows/checks.yml");
     let lines: Vec<_> = workflow.lines().collect();
     let matches: Vec<_> = lines
         .iter()

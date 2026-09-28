@@ -1,7 +1,6 @@
 //! The test adapter preserves command identity under bounded library capture.
 #![cfg(any(target_os = "linux", target_os = "macos"))]
-#[path = "support/process.rs"]
-pub mod subprocess;
+use crate::support::process as subprocess;
 
 use std::time::Duration;
 use subprocess::{Command, capture};

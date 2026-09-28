@@ -1,7 +1,6 @@
 //! Source inventory boundaries without a compiler or physical device.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-#[path = "support/process.rs"]
-pub mod subprocess;
+use crate::support::process as subprocess;
 use std::{fs, path::Path};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use subprocess::Command;

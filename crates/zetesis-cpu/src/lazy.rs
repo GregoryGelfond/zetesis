@@ -25,8 +25,7 @@ use crate::{Cancellation, Stop, source};
 pub mod shared;
 
 #[cfg(test)]
-#[path = "../tests/support/workspace_lifetime.rs"]
-mod workspace_tests;
+mod tests;
 
 /// Rule header words: head tag and three antecedent lengths.
 pub const RECORD_HEADER_WORDS: usize = 4;

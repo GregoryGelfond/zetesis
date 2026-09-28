@@ -483,7 +483,7 @@ fn empty_universes_and_ranked_chains_keep_every_carrier_atom_explicit() {
         max_work: 0,
     };
     let compiled = TightPlan::compile(&empty, zero, &Cancellation::default()).unwrap();
-    assert_eq!(compiled.ranks(), &[]);
+    assert_eq!(compiled.ranks(), &[] as &[usize]);
     assert!(TightPlan::certify(&empty, &[], zero, &Cancellation::default()).is_ok());
     assert_eq!(
         compiled
