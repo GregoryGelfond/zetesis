@@ -6,8 +6,7 @@ use themelios_program::term::Term;
 use zetesis_domain::terminal::{self, Status};
 use zetesis_domain::{Limits, Resource};
 
-#[path = "terminal/support.rs"]
-mod support;
+use crate::support::terminal as support;
 use support::source;
 
 #[test]

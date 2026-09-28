@@ -7,8 +7,7 @@ use themelios_program::term::Term;
 use zetesis_domain::terminal::{self, Analysis, Status, UnknownReason};
 use zetesis_domain::{Context, Limits};
 
-#[path = "terminal/support.rs"]
-mod support;
+use crate::support::terminal as support;
 use support::source;
 
 fn head(source: &WithProvenance<Statement>) -> &Atom {
@@ -327,7 +326,7 @@ fn already_closed_compound_symbols_are_borrowed_without_source_evaluation() {
 
 #[test]
 fn unchanged_einstein_selects_only_its_terminal_definition() {
-    let program = source(include_str!("../../../examples/einstein-riddle.lp"));
+    let program = source(include_str!("../../../../examples/einstein-riddle.lp"));
     let result = terminal::analyze(&program, Limits::default());
     assert_eq!(result.status(), Status::Complete);
     assert_eq!(result.definitions().len(), 1);
