@@ -273,5 +273,4 @@ impl Progress {
 }
 
 #[cfg(test)]
-#[path = "../tests/support/outcome_authority.rs"]
 mod tests;

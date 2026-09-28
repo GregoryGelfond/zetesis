@@ -1101,5 +1101,4 @@ fn independent_closure(
 }
 
 #[cfg(test)]
-#[path = "../tests/support/statistics_writer_contracts.rs"]
-mod writer_contract_tests;
+mod tests;

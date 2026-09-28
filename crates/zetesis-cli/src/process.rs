@@ -259,5 +259,4 @@ fn read_text(reader: impl Read, limit: usize) -> io::Result<String> {
 }
 
 #[cfg(test)]
-#[path = "../tests/support/process_output.rs"]
-mod output_tests;
+mod tests;

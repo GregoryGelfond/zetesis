@@ -186,17 +186,4 @@ fn acknowledge(
 }
 
 #[cfg(test)]
-#[path = "../tests/support/batch_orchestration.rs"]
-mod batch_publication_tests;
-
-#[cfg(test)]
-#[path = "../tests/support/partial_batch.rs"]
-mod partial_publication_tests;
-
-#[cfg(test)]
-#[path = "../tests/support/prepared_control.rs"]
-mod prepared_control_tests;
-
-#[cfg(test)]
-#[path = "../tests/support/publication_stops.rs"]
-mod stop_tests;
+mod tests;

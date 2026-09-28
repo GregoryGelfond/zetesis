@@ -128,9 +128,9 @@ fn physical_selection_is_a_fixed_contract() {
             "exact_static_oracle_matches_independent_cpu_closures",
         ),
         TABLE
-            .replace("cli-formula|formula_gpu|3|", "cli-formula|formula_gpu|2|")
+            .replace("cli-formula|integration|3|", "cli-formula|integration|2|")
             .replace(
-                " physical::ordinary_metal_table_joins_preserve_complete_answers",
+                " formula_gpu::physical::ordinary_metal_table_joins_preserve_complete_answers",
                 "",
             ),
         TABLE
@@ -383,8 +383,8 @@ fn physical_metadata_retains_the_reviewed_schedule() {
             ["formula", "test", "integration", 2],
             ["aggregate", "test", "integration", 3],
             ["lazy", "test", "integration", 4],
-            ["cli-lazy", "test", "lazy_gpu", 5],
-            ["cli-formula", "test", "formula_gpu", 3],
+            ["cli-lazy", "test", "integration", 5],
+            ["cli-formula", "test", "integration", 3],
             ["world-views", "test", "integration", 4],
             ["aggregate-measurement", "test", "aggregate_measurement", 1],
             ["relation", "test", "integration", 2],
@@ -407,9 +407,9 @@ fn physical_metadata_retains_the_reviewed_schedule() {
     let tests = record["physical_tests"].as_array().unwrap();
     assert_eq!(tests.len(), 60);
     let formula_tests = serde_json::json!([
-        "physical::ordinary_metal_formula_batches_match_complete_cpu_models_costs_and_displays",
-        "physical::ordinary_metal_formula_limits_preserve_partial_coverage_and_writer_errors",
-        "physical::ordinary_metal_table_joins_preserve_complete_answers"
+        "formula_gpu::physical::ordinary_metal_formula_batches_match_complete_cpu_models_costs_and_displays",
+        "formula_gpu::physical::ordinary_metal_formula_limits_preserve_partial_coverage_and_writer_errors",
+        "formula_gpu::physical::ordinary_metal_table_joins_preserve_complete_answers"
     ]);
     assert_eq!(groups[6]["tests"], formula_tests);
     let session_tests = serde_json::json!([

@@ -42,8 +42,8 @@ From the repository root, run the independent formula and native checks, then
 optionally replay all 62 reference modes with an installed clingo:
 
 ```sh
-cargo test --locked -p zetesis-themelios --test disjunction
-CLINGO=clingo cargo test --locked -p zetesis-themelios --test disjunction -- --ignored --nocapture
+cargo test --locked -p zetesis-themelios --test integration disjunction::
+CLINGO=clingo cargo test --locked -p zetesis-themelios --test integration disjunction:: -- --ignored --nocapture
 ```
 
 The replay compares complete full models, optimum costs, priority presence and

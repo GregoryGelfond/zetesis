@@ -1312,13 +1312,11 @@ fn lazy_transport_usage(
 }
 
 #[cfg(test)]
-#[path = "../tests/support/lazy_statistics_fixture.rs"]
 pub(crate) mod fixtures;
 
 #[cfg(test)]
-#[path = "../tests/support/json_document.rs"]
+#[cfg(test)]
 pub(crate) mod document_fixture;
-
 #[cfg(test)]
 mod lazy_tests {
     use super::{Buffer, lazy_statistics};
@@ -1383,17 +1381,4 @@ mod lazy_tests {
 }
 
 #[cfg(test)]
-#[path = "../tests/support/json_failures.rs"]
-mod failure_tests;
-
-#[cfg(test)]
-#[path = "../tests/support/footer_admission.rs"]
-mod footer_admission_tests;
-
-#[cfg(test)]
-#[path = "../tests/support/frontier_output.rs"]
-mod frontier_tests;
-
-#[cfg(test)]
-#[path = "../tests/support/terminal_statistics.rs"]
-mod terminal_tests;
+mod tests;

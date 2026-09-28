@@ -231,8 +231,8 @@ orders. It does not prove the Rust extractor, rank implementation or missing
 lazy source coverage. Tests compare finite trees and their materialized reducts,
 validate rank/root/identity/resource boundaries, and exercise the ordinary
 candidate batch protocol. Two maintained corpus experiments report
-[certificate eligibility](../zetesis-themelios/tests/tight_plans.rs) and
-[complete enumeration comparisons](../zetesis-themelios/tests/tight_completion.rs).
+[certificate eligibility](../zetesis-themelios/tests/integration/tight_plans.rs) and
+[complete enumeration comparisons](../zetesis-themelios/tests/integration/tight_completion.rs).
 The latter checks full model/score equality, optimum ties, candidate counts and
 avoided reduct queries against scalar checking. Their output measures eligibility
 and work counts, not elapsed time or GPU performance; it does not select a
@@ -241,8 +241,8 @@ default execution policy.
 Run them from the repository root and retain the output with the source revision:
 
 ```sh
-cargo test --locked -p zetesis-themelios --test tight_plans original_corpus_eligibility -- --ignored --exact --nocapture --test-threads=1
-cargo test --locked -p zetesis-themelios --test tight_completion unchanged_corpus_complete_batch_experiment -- --ignored --exact --nocapture --test-threads=1
+cargo test --locked -p zetesis-themelios --test integration tight_plans::original_corpus_eligibility -- --ignored --exact --nocapture --test-threads=1
+cargo test --locked -p zetesis-themelios --test integration tight_completion::unchanged_corpus_complete_batch_experiment -- --ignored --exact --nocapture --test-threads=1
 ```
 
 ## Positive producers and original constraints

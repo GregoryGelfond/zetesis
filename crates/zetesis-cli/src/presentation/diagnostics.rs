@@ -163,9 +163,4 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
 }
 
 #[cfg(test)]
-#[path = "../../tests/support/objective_writer_contracts.rs"]
-mod objective_diagnostic_tests;
-
-#[cfg(all(test, feature = "gpu"))]
-#[path = "../../tests/support/backend_writer_contracts.rs"]
-mod backend_diagnostic_tests;
+mod tests;

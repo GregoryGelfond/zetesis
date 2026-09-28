@@ -38,7 +38,6 @@ pub use view::{
 };
 
 #[cfg(test)]
-#[path = "../tests/support/bounded_writer.rs"]
 mod test_writer;
 
 pub use devices::devices;

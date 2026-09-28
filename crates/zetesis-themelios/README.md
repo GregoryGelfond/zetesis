@@ -167,7 +167,7 @@ when another sound finite envelope supplies the required values. The complete
 original guard still runs on those values, including its checked arithmetic.
 If generation requires the unavailable refinement, admission returns a located
 `FormulaFailure::Limit`, distinct from source arithmetic failure.
-The [finite-chain contracts](tests/finite_chains.rs) check
+The [finite-chain contracts](tests/integration/finite_chains.rs) check
 correlation, local scopes, source order, frozen reducts and resource boundaries.
 Finite pools distribute through constructors and checked expressions. Ordinary
 head/body/guard occurrences produce complete rule products; choice, aggregate
@@ -253,7 +253,7 @@ its canonical aggregate formula has constant original and frozen truth. It
 charges formula work and uses no aggregate state/subset enumeration; ordinary
 numeric thresholds retain their existing translation. Optional count planning
 omits any group with a nonnumeric bound from its numeric premise certificates.
-The [logical-bound contracts](tests/logical_bounds.rs) check these boundaries
+The [logical-bound contracts](tests/integration/logical_bounds.rs) check these boundaries
 against independently declared answers and canonical frozen formulas.
 
 Aggregate assignments with acyclic dependencies within each rule may supply later scalar/range instructions,
@@ -366,7 +366,7 @@ the objective query. Ordinary weak-body and guard pools produce complete body
 products; local aggregate/conditional scopes and objective fields expand inside
 their own collection. Nested interval fields reuse scoped data generation.
 Complete weight/priority/tuple keys coalesce by the objective's existing rule.
-The [objective pool contracts](tests/objective_pools.rs) retain located safety and
+The [objective pool contracts](tests/integration/objective_pools.rs) retain located safety and
 resource refusals; the independent pool-free analysis preflight prevents
 unbounded upstream unpooling.
 
@@ -581,8 +581,8 @@ exists. Multiple witnesses do not multiply that contribution, and equal
 concrete alternatives coalesce before counting. External calls, theory
 expressions, anonymous constructed values, unsafe free variables and circular
 aggregate result dependencies remain outside the admitted profile. The
-[binding](tests/observation_bindings.rs), [inverse](tests/observation_inverse.rs)
-and [expression](tests/observation_expressions.rs) contracts retain source
+[binding](tests/integration/observation_bindings.rs), [inverse](tests/integration/observation_inverse.rs)
+and [expression](tests/integration/observation_expressions.rs) contracts retain source
 witnesses, complete results and located failures.
 
 `SourceMetadata::project_selection()` records authored projection declarations.
@@ -638,14 +638,14 @@ cause and evaluation accounting stay unchanged. This diagnostic storage is
 separate from evaluation budgets and bounded by the caller's input limits.
 Terminal styling belongs to the CLI.
 
-Maintained regressions include [preparation](tests/formula_preparation.rs),
-[bindings](tests/structural_bindings.rs),
-[Boolean heads](tests/boolean_heads.rs),
-[count activity](tests/count_head_activity.rs),
-[aggregate consumers](tests/aggregate_consumers.rs),
-[objective presence](tests/objective_extrema_presence.rs),
-[observations](tests/observations.rs) and
-[refusal contracts](tests/refusal_contracts.rs).
+Maintained regressions include [preparation](tests/integration/formula_preparation.rs),
+[bindings](tests/integration/structural_bindings.rs),
+[Boolean heads](tests/integration/boolean_heads.rs),
+[count activity](tests/integration/count_head_activity.rs),
+[aggregate consumers](tests/integration/aggregate_consumers.rs),
+[objective presence](tests/integration/objective_extrema_presence.rs),
+[observations](tests/integration/observations.rs) and
+[refusal contracts](tests/integration/refusal_contracts.rs).
 Original-source clingo comparisons and independent finite original/frozen checks
 are in these test suites. Consult the [contributing guide](../../CONTRIBUTING.md#verification-and-review)
 for portable and external-oracle gates.

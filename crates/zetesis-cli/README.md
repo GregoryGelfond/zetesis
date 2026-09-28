@@ -123,7 +123,7 @@ and terminal record, with an 8 MiB default, and `--max-atoms` bounds the
 table. Integer consumers need lossless parsing. A failed writer can leave a
 truncated document or partial human record; successful semantic checking does
 not imply successful publication. See [JSON views](src/output.rs) and
-[output regression tests](tests/json_output.rs).
+[output regression tests](tests/integration/json_output.rs).
 
 ## Select an execution route
 
@@ -353,7 +353,7 @@ completion savings; unavailable values remain distinct from zero.
 Failed attempts retain available timing/accounting. Timing completeness does not
 prove semantic completeness. Instrumentation is optional and adds overhead.
 See [telemetry](../zetesis-telemetry/README.md) and
-[timing regressions](tests/phase_timing.rs).
+[timing regressions](tests/integration/phase_timing.rs).
 
 Source, expansion, candidate search, witness checks, observations and optimal-model
 retention have independent ceilings listed by `--help-all`. A limit never means
@@ -363,7 +363,7 @@ A retained incumbent remains unproved when search coverage is incomplete.
 Runtime observation diagnostics resolve the failing directive against the loaded
 original source, including included files. The returned typed error retains that
 one source for later rendering; changed disk contents cannot replace its excerpt.
-See the [diagnostic and publication regressions](tests/observation_diagnostics.rs).
+See the [diagnostic and publication regressions](tests/integration/observation_diagnostics.rs).
 
 ## Compose the command adapter
 
@@ -422,10 +422,10 @@ Standard input (`-`) must be the only root and has no implicit include base.
 Use `zetesis -- devices` for a first input literally named `devices`; once
 another solver argument appears, later `devices` arguments are file names.
 
-Maintained controls include [route selection](tests/oracle_selection.rs),
-[source diagnostics](tests/bundles.rs),
-[failure accounting](tests/failure_reports.rs),
-[formula completion](tests/formula_completion.rs) and
-[shared CPU execution](tests/shared_cpu.rs).
+Maintained controls include [route selection](tests/integration/oracle_selection.rs),
+[source diagnostics](tests/integration/bundles.rs),
+[failure accounting](tests/integration/failure_reports.rs),
+[formula completion](tests/integration/formula_completion.rs) and
+[shared CPU execution](tests/integration/shared_cpu.rs).
 Portable regressions and actual physical-device tests have distinct purposes;
 [contributing guide](../../CONTRIBUTING.md#verification-and-review) describes their execution.

@@ -116,7 +116,7 @@ escapes the completed carrier and no known classification is contradicted.
 These laws assume covered proposals; they do not prove the concrete producer
 traversal, DAG-to-query correspondence, slot identities or resource accounting.
 
-[Rich cyclic objective contracts](../../crates/zetesis-themelios/tests/objective_rich_cycles.rs)
+[Rich cyclic objective contracts](../../crates/zetesis-themelios/tests/integration/objective_rich_cycles.rs)
 retain complete scored families, typed values, source-order cases, independent
 carrier refinements and bounded failures. Versioned reference records identify
 zero-cost priority slots that clingo omits. When source activity independently
