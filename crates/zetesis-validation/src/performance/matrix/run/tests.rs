@@ -12,7 +12,10 @@ fn request() -> Request<'static> {
     Request {
         corpus: Path::new("/unused/corpus"),
         native: Path::new("/unused/native"),
-        reference: Path::new("/unused/reference"),
+        reference: Some(crate::performance::matrix::Reference {
+            executable: Path::new("/unused/reference"),
+            policy: crate::performance::matrix::ReferencePolicy::AllPhases,
+        }),
         report: Path::new("/unused/report"),
         plan: Plan::new(
             Suite::Baseline,

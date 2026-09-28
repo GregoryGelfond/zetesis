@@ -80,9 +80,12 @@ fn ordinary_corpus_keeps_reference_measurements() {
     };
     let plan = options.plan().unwrap();
     assert_eq!(plan.profiles().len(), 1);
-    assert_eq!(plan.reference_policy(), matrix::ReferencePolicy::AllPhases);
+    assert_eq!(
+        options.reference_policy(),
+        matrix::ReferencePolicy::AllPhases
+    );
     assert!(
-        plan.slots(1)
+        plan.slots(1, Some(options.reference_policy()))
             .unwrap()
             .iter()
             .any(|slot| slot.producer == matrix::Producer::Reference && slot.phase == Phase::Timed)
@@ -135,10 +138,10 @@ fn grounder_comparison_qualifies_reference_once() {
     };
     let plan = options.plan().unwrap();
     assert_eq!(
-        plan.reference_policy(),
+        options.reference_policy(),
         matrix::ReferencePolicy::QualificationOnly
     );
-    let slots = plan.slots(1).unwrap();
+    let slots = plan.slots(1, Some(options.reference_policy())).unwrap();
     let reference: Vec<_> = slots
         .iter()
         .filter(|slot| slot.producer == matrix::Producer::Reference)

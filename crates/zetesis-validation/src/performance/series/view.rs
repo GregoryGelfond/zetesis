@@ -304,8 +304,9 @@ pub struct Cell {
 pub struct Provenance {
     /// SHA-256 of the native executable the report sealed.
     pub native_sha256: String,
-    /// SHA-256 of the reference executable the report sealed.
-    pub reference_sha256: String,
+    /// SHA-256 of the reference executable the report sealed; none for a
+    /// clingo-free campaign, which seals no reference.
+    pub reference_sha256: Option<String>,
     /// SHA-256 of the corpus manifest the report sealed.
     pub manifest_sha256: String,
     /// When the campaign started, Unix nanoseconds.
@@ -1056,8 +1057,9 @@ fn provenance(labelled: &Labelled<'_>) -> Result<Provenance, ViewError> {
         label: labelled.label.into(),
         field,
     };
-    // The campaign seals the native executable, the reference executable and
-    // the manifest first, in that order, before the sources.
+    // The campaign seals the native executable, the reference executable when
+    // clingo takes part, and the manifest first, in that order, before the
+    // sources. The recorded policy says whether clingo took part.
     let seal = |index: usize, field| {
         labelled.report["report"]["before"]
             .as_array()
@@ -1066,10 +1068,20 @@ fn provenance(labelled: &Labelled<'_>) -> Result<Provenance, ViewError> {
             .map(str::to_owned)
             .ok_or(malformed(field))
     };
+    let clingo_free =
+        labelled.report["report"]["plan"]["reference_policy"].as_str() == Some("clingo_free");
     Ok(Provenance {
         native_sha256: seal(0, "report.before[0].sha256")?,
-        reference_sha256: seal(1, "report.before[1].sha256")?,
-        manifest_sha256: seal(2, "report.before[2].sha256")?,
+        reference_sha256: if clingo_free {
+            None
+        } else {
+            Some(seal(1, "report.before[1].sha256")?)
+        },
+        manifest_sha256: if clingo_free {
+            seal(1, "report.before[1].sha256")?
+        } else {
+            seal(2, "report.before[2].sha256")?
+        },
         started_unix_ns: labelled.report["report"]["started_unix_ns"]
             .as_u64()
             .ok_or(malformed("report.started_unix_ns"))?,

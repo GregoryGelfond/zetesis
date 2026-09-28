@@ -7,8 +7,8 @@ use std::time::Instant;
 
 use super::super::{Capture, Error, Fault, Phase, capture};
 use super::{
-    Decision, NativeInvocation, Plan, Producer, Report, Request, Sample, Slot, Suite, Workload,
-    outcome,
+    Decision, NativeInvocation, Plan, Producer, RecordedPlan, Report, Request, Sample, Slot, Suite,
+    Workload, outcome,
 };
 use crate::selected::{identity, publication};
 use crate::{answers, examples, process};
@@ -73,7 +73,10 @@ pub(super) fn campaign(
         },
         manifest_sha256: examples::MANIFEST_SHA256,
         manifest_scope: "correctness_catalog_context; authored_and_generated_workloads_retain_independent_source_and_contract_identities",
-        plan: request.plan.clone(),
+        plan: RecordedPlan {
+            plan: request.plan.clone(),
+            reference_policy: request.reference.map(|reference| reference.policy),
+        },
         limits: request.limits,
         native_normalization_limits: normalization_limits(request),
         cases: cases
@@ -83,8 +86,8 @@ pub(super) fn campaign(
         workloads: workloads.map(<[Workload]>::to_vec),
         started_unix_ns: started,
         finished_unix_ns: None,
-        wall_scope: "fresh_process_spawn_capture_reap; native_json_and_stats_included; reference_json_included; comparison_hashing_excluded; no_cold_cache_claim",
-        comparison_scope: "complete_selected_displays_with_symbol_and_model_multiplicities; final_optimum_ties_and_costs; full_native_atoms_and_shown_values_compared_across_profiles_and_repeats; hidden_reference_interpretations_unavailable",
+        wall_scope: wall_scope(request.reference.is_some()),
+        comparison_scope: comparison_scope(request.reference.is_some()),
         peak_rss: if request.plan.memory_runs() > 0 {
             "memory_rounds: separate_fresh_helper_RUSAGE_CHILDREN; excludes_helper; may_include_usage_propagated_by_waited_descendants; not_simultaneous_tree_RSS_or_device_memory; macOS_bytes_Linux_KiB_converted_to_bytes"
         } else {
@@ -130,8 +133,28 @@ pub(super) fn campaign(
     Ok(report)
 }
 
-/// Preserve the native/reference/catalog prefix used by retained-report readers,
-/// then seal optional helpers and independent authored sources in the same campaign.
+/// What a sample's wall time covers; clingo's output only when it takes part.
+const fn wall_scope(clingo: bool) -> &'static str {
+    if clingo {
+        "fresh_process_spawn_capture_reap; native_json_and_stats_included; reference_json_included; comparison_hashing_excluded; no_cold_cache_claim"
+    } else {
+        "fresh_process_spawn_capture_reap; native_json_and_stats_included; no_reference; comparison_hashing_excluded; no_cold_cache_claim"
+    }
+}
+
+/// What qualification compares: clingo's census when it takes part, the
+/// recorded contracts otherwise.
+const fn comparison_scope(clingo: bool) -> &'static str {
+    if clingo {
+        "complete_selected_displays_with_symbol_and_model_multiplicities; final_optimum_ties_and_costs; full_native_atoms_and_shown_values_compared_across_profiles_and_repeats; hidden_reference_interpretations_unavailable"
+    } else {
+        "complete_selected_displays_checked_against_recorded_contracts; final_optimum_ties_and_costs; full_native_atoms_and_shown_values_compared_across_profiles_and_repeats; workloads_without_contracts_need_clingo"
+    }
+}
+
+/// Preserve the native, reference (when one takes part) and catalog prefix used
+/// by retained-report readers, then seal optional helpers and independent
+/// authored sources in the same campaign.
 fn seal_inputs(
     corpus: &examples::Corpus,
     sources: &BTreeSet<&str>,
@@ -143,7 +166,7 @@ fn seal_inputs(
         sources,
         request.corpus,
         request.native,
-        request.reference,
+        request.reference.map(|reference| reference.executable),
         request.limits,
     )?;
     if let Some(helper) = request.helper.filter(|_| request.plan.memory_runs() > 0) {
@@ -357,10 +380,23 @@ fn unattempted(slot: Slot, blocked_by: Option<usize>, detail: &str) -> Sample {
         memory: None,
     }
 }
+/// A position a clingo-free campaign cannot qualify: without clingo, only a
+/// recorded contract qualifies a family, and this workload has none.
+fn needs_clingo(slot: Slot) -> Sample {
+    Sample {
+        decision: Decision::NeedsClingo,
+        ..unattempted(
+            slot,
+            None,
+            "no recorded contract; only clingo establishes this workload's family",
+        )
+    }
+}
 fn fill_unattempted(report: &mut Report) -> Result<(), Error> {
     report.samples = report
         .plan
-        .slots(report.cases.len())?
+        .plan
+        .slots(report.cases.len(), report.plan.reference_policy)?
         .into_iter()
         .map(|slot| unattempted(slot, None, "campaign setup prevented execution"))
         .collect();
@@ -373,11 +409,16 @@ fn capture_metadata(
     report: &mut Report,
     invocation: NativeInvocation,
 ) -> bool {
+    let reference = request
+        .reference
+        .map(|reference| (reference.executable, vec!["--version".into()]));
     for (executable, arguments) in [
         (request.native, vec!["--version".into()]),
         (request.native, invocation.help_arguments()),
-        (request.reference, vec!["--version".into()]),
-    ] {
+    ]
+    .into_iter()
+    .chain(reference)
+    {
         let Some(observed) = invoke(executable, arguments, false, directory, schedule, report)
         else {
             return false;
@@ -407,7 +448,8 @@ fn execute(
     let width = request.plan.profiles.len() + 1;
     let mut blocked: Vec<Option<usize>> = vec![None; cases.len() * width];
     let mut stopped = false;
-    for slot in request.plan.slots(cases.len())? {
+    let policy = request.reference.map(|reference| reference.policy);
+    for slot in request.plan.slots(cases.len(), policy)? {
         stopped |= schedule.stopped(report);
         let cell = slot.case * width + slot.producer.index();
         let skipped = if stopped {
@@ -417,7 +459,10 @@ fn execute(
                 Some(previous),
                 "cell disabled by its first non-pass observation",
             ))
-        } else if slot.phase != Phase::Qualification && censuses[slot.case].reference.is_none() {
+        } else if request.reference.is_some()
+            && slot.phase != Phase::Qualification
+            && censuses[slot.case].reference.is_none()
+        {
             Some((
                 blocked[slot.case * width],
                 "reference census did not establish a complete family",
@@ -430,6 +475,11 @@ fn execute(
             continue;
         }
         let selected = &cases[slot.case];
+        if request.reference.is_none() && selected.input.contract().is_none() {
+            blocked[cell] = Some(report.samples.len());
+            report.samples.push(needs_clingo(slot));
+            continue;
+        }
         let case_directory = directory.join(&selected.directory);
         let (executable, arguments) = arguments(
             request,
@@ -494,7 +544,10 @@ fn arguments<'a>(
 ) -> (&'a Path, Vec<OsString>) {
     let (executable, mut arguments): (_, Vec<OsString>) = match producer {
         Producer::Reference => (
-            request.reference,
+            request
+                .reference
+                .expect("the schedule has reference positions only when a reference takes part")
+                .executable,
             vec![
                 "--models=0".into(),
                 "--outf=2".into(),
@@ -624,11 +677,20 @@ fn qualify(
             .check(&parsed)
             .map_err(|e| (Decision::ParityMismatch, e.to_string()))?;
     }
+    // With clingo taking part, its census is the authority; without it, the
+    // recorded contract checked above is, and a family without one is refused.
     if let Some(reference) = reference {
         if !answers::same_displays(reference, &parsed) {
             return Err((
                 Decision::ParityMismatch,
                 "complete selected displays/counts/costs differ from qualified reference".into(),
+            ));
+        }
+    } else if request.reference.is_none() {
+        if contract.is_none() {
+            return Err((
+                Decision::NeedsClingo,
+                "no recorded contract; only clingo establishes this workload's family".into(),
             ));
         }
     } else if sample.slot.producer != Producer::Reference

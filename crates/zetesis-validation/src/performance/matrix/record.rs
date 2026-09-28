@@ -34,6 +34,9 @@ pub enum Decision {
     InvalidTelemetry,
     /// A complete reference was unavailable for comparison.
     ReferenceUnavailable,
+    /// The campaign is clingo-free and the workload has no recorded contract:
+    /// only clingo establishes its family, so it was not launched.
+    NeedsClingo,
     /// Prespecified scheduling policy prevented this position from launching.
     NotAttempted,
     /// A memory round's separate child-resource record was absent, invalid or

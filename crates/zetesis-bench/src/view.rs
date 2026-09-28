@@ -46,7 +46,11 @@ pub(super) fn comparison(
                 provenance.passed.to_string(),
                 provenance.accounted.to_string(),
                 provenance.native_sha256.clone(),
-                provenance.reference_sha256.clone(),
+                // A clingo-free campaign sealed no clingo.
+                provenance
+                    .reference_sha256
+                    .clone()
+                    .unwrap_or_else(|| "not run".into()),
             ])
             .conclusion()
         })

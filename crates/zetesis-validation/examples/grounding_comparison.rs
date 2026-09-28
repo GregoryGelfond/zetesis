@@ -105,6 +105,9 @@ struct Options {
     workers: NonZeroUsize,
 }
 
+/// Clingo establishes each workload's census; only zetesis's grounders are timed.
+const REFERENCE: matrix::ReferencePolicy = matrix::ReferencePolicy::QualificationOnly;
+
 fn plan(workers: NonZeroUsize) -> Result<matrix::Plan, performance::Error> {
     let profile = NativeExecution {
         backend: Backend::Cpu,
@@ -128,7 +131,6 @@ fn plan(workers: NonZeroUsize) -> Result<matrix::Plan, performance::Error> {
         1,
         4,
     )?
-    .with_reference(matrix::ReferencePolicy::QualificationOnly)
     .with_memory(2)
 }
 
@@ -176,7 +178,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let request = matrix::Request {
         corpus: &options.corpus,
         native: &options.zetesis,
-        reference: &options.clingo,
+        reference: Some(matrix::Reference {
+            executable: &options.clingo,
+            policy: REFERENCE,
+        }),
         report: &options.report,
         plan: plan(options.workers)?,
         limits,
@@ -305,7 +310,10 @@ mod tests {
 
     #[test]
     fn reference_census_is_separate_from_native_measurements() {
-        let slots = plan(NonZeroUsize::MIN).unwrap().slots(9).unwrap();
+        let slots = plan(NonZeroUsize::MIN)
+            .unwrap()
+            .slots(9, Some(REFERENCE))
+            .unwrap();
         assert_eq!(slots.len(), 153);
         let reference: Vec<_> = slots
             .iter()
@@ -321,7 +329,10 @@ mod tests {
 
     #[test]
     fn refutation_schedule_accounts_for_all_twenty_cases() {
-        let slots = plan(NonZeroUsize::MIN).unwrap().slots(20).unwrap();
+        let slots = plan(NonZeroUsize::MIN)
+            .unwrap()
+            .slots(20, Some(REFERENCE))
+            .unwrap();
         assert_eq!(slots.len(), 340);
         for case in 0..20 {
             let positions: Vec<_> = slots.iter().filter(|slot| slot.case == case).collect();

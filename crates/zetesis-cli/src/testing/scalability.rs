@@ -105,7 +105,11 @@ pub(super) fn execute(
         &matrix::Request {
             corpus: &options.root,
             native: &native,
-            reference: &reference,
+            // Scalability only qualifies: clingo establishes each census.
+            reference: Some(matrix::Reference {
+                executable: &reference,
+                policy: matrix::ReferencePolicy::QualificationOnly,
+            }),
             report: destination,
             plan: options.plan().map_err(Error::Scalability)?,
             limits,

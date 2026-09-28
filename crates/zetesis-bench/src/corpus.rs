@@ -247,21 +247,25 @@ impl CorpusOptions {
         } else {
             vec![profile]
         };
-        let plan = matrix::Plan::new(
+        matrix::Plan::new(
             self.suite.into(),
             profiles,
             self.clingo_threads,
             self.warmups,
             self.repetitions,
         )?
-        .with_memory(self.memory_runs)?;
-        Ok(
-            if self.compare_grounders || !self.compare_threads.is_empty() {
-                plan.with_reference(matrix::ReferencePolicy::QualificationOnly)
-            } else {
-                plan
-            },
-        )
+        .with_memory(self.memory_runs)
+    }
+
+    /// Clingo is timed beside one profile, and only qualifies when profiles
+    /// are compared.
+    #[must_use]
+    pub fn reference_policy(&self) -> matrix::ReferencePolicy {
+        if self.compare_grounders || !self.compare_threads.is_empty() {
+            matrix::ReferencePolicy::QualificationOnly
+        } else {
+            matrix::ReferencePolicy::AllPhases
+        }
     }
 
     /// Actual interface selection: the explicit `solve` command of whichever
@@ -308,7 +312,10 @@ pub(crate) fn execute(
     let request = matrix::Request {
         corpus: &options.root,
         native: &native,
-        reference: &reference,
+        reference: Some(matrix::Reference {
+            executable: &reference,
+            policy: options.reference_policy(),
+        }),
         report: &options.report,
         plan: options.plan().map_err(Error::Campaign)?,
         limits,

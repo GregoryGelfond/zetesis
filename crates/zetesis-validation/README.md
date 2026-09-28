@@ -241,6 +241,14 @@ an entry path; their content identities must be distinct. Use one request per
 native executable when comparing two zetesis revisions with the same clingo
 reference and workload list.
 
+The request's optional `reference` names clingo and what it is for:
+`ReferencePolicy::AllPhases` times it beside every profile, and
+`QualificationOnly` uses it only to establish each census. Without one, the
+campaign is clingo-free: each native family is qualified against its workload's
+recorded contract, and a workload without a contract, such as an amended board,
+is recorded as needing clingo and is not launched. The report records the policy
+its run used, `clingo_free` included, and rebuilds its schedule from it.
+
 `Workload::original` retains the default corpus contract. `Workload::amended`
 accepts `ConstantAmendment { source_path, name, expected, replacement }` and
 locates the declaration through themelios-syntax. The source must contain exactly
@@ -293,8 +301,8 @@ The reusable `scalability::run_with_cancellation` admits those workloads and
 delegates to the same bounded matrix runner. Its request must select
 `matrix::Suite::Scalability`; a plain matrix run without explicit workloads
 refuses that suite instead of silently running only its three corpus entries.
-`matrix::Plan::qualification` schedules only one reference and one invocation
-per native profile for each workload. It adds no timing, warmup or RSS rounds
+`matrix::Plan::qualification` schedules one invocation per native profile for
+each workload, and one reference invocation when clingo takes part. It adds no timing, warmup or RSS rounds
 and refuses adding memory rounds. This is the plan used by `test scalability`.
 `zetesis-bench corpus --compare-threads` retains normal native measurement
 rounds and uses clingo only for qualification. Both preserve the complete workload and

@@ -53,7 +53,10 @@ impl Fixture {
         matrix::Request {
             corpus: &self.corpus,
             native: &self.native,
-            reference: &self.reference,
+            reference: Some(matrix::Reference {
+                executable: &self.reference,
+                policy: matrix::ReferencePolicy::AllPhases,
+            }),
             report: &self.report,
             plan: Plan::new(
                 suite,

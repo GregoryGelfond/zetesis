@@ -45,7 +45,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let request = matrix::Request {
         corpus: corpus_path,
         native,
-        reference,
+        // An amended board has no recorded contract: clingo establishes its family.
+        reference: Some(matrix::Reference {
+            executable: reference,
+            policy: matrix::ReferencePolicy::AllPhases,
+        }),
         report: destination,
         plan: matrix::Plan::new(
             matrix::Suite::Queens,

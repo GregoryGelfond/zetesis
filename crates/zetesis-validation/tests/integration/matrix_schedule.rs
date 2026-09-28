@@ -36,7 +36,9 @@ fn plan(repetitions: usize) -> Plan {
 }
 #[test]
 fn every_profile_occupies_every_timed_position() {
-    let slots = plan(20).slots(94).unwrap();
+    let slots = plan(20)
+        .slots(94, Some(ReferencePolicy::AllPhases))
+        .unwrap();
     for case in 0..94 {
         let timed: Vec<_> = slots
             .iter()
@@ -63,7 +65,11 @@ fn every_profile_occupies_every_timed_position() {
 }
 #[test]
 fn memory_rounds_follow_the_timed_rounds() {
-    let slots = plan(2).with_memory(3).unwrap().slots(4).unwrap();
+    let slots = plan(2)
+        .with_memory(3)
+        .unwrap()
+        .slots(4, Some(ReferencePolicy::AllPhases))
+        .unwrap();
     let memory: Vec<_> = slots
         .iter()
         .enumerate()
@@ -94,8 +100,7 @@ fn memory_rounds_follow_the_timed_rounds() {
 
 #[test]
 fn reference_census_precedes_native_census() {
-    assert_eq!(plan(1).reference_policy(), ReferencePolicy::AllPhases);
-    let slots = plan(1).slots(6).unwrap();
+    let slots = plan(1).slots(6, Some(ReferencePolicy::AllPhases)).unwrap();
     assert!(
         slots[..30]
             .iter()
@@ -111,11 +116,10 @@ fn reference_census_precedes_native_census() {
 
 #[test]
 fn qualification_only_omits_reference_measurements() {
-    let plan = plan(4)
-        .with_memory(2)
-        .unwrap()
-        .with_reference(ReferencePolicy::QualificationOnly);
-    let slots = plan.slots(2).unwrap();
+    let plan = plan(4).with_memory(2).unwrap();
+    let slots = plan
+        .slots(2, Some(ReferencePolicy::QualificationOnly))
+        .unwrap();
     let reference: Vec<_> = slots
         .iter()
         .filter(|slot| slot.producer == Producer::Reference)
@@ -140,17 +144,12 @@ fn qualification_only_omits_reference_measurements() {
             );
         }
     }
-    assert_eq!(
-        serde_json::to_value(plan).unwrap()["reference_policy"],
-        "qualification_only"
-    );
 }
 
 #[test]
 fn qualification_only_balances_native_positions() {
     let slots = plan(8)
-        .with_reference(ReferencePolicy::QualificationOnly)
-        .slots(3)
+        .slots(3, Some(ReferencePolicy::QualificationOnly))
         .unwrap();
     for case in 0..3 {
         let timed: Vec<_> = slots
@@ -199,15 +198,17 @@ fn matrix_population_has_finite_construction_bounds() {
         ..Default::default()
     };
     assert!(Plan::new(Suite::Queens, vec![too_many_workers], workers, 0, 1).is_err());
-    assert!(plan(1).slots(0).is_err());
-    assert!(plan(1).slots(95).is_err());
+    assert!(plan(1).slots(0, None).is_err());
+    assert!(plan(1).slots(95, None).is_err());
 }
 
 #[test]
 fn qualification_plans_schedule_one_census_without_measurements() {
     let profiles = zetesis_validation::performance::scalability::profiles(None);
     let plan = Plan::qualification(Suite::Scalability, profiles, NonZeroUsize::MIN).unwrap();
-    let slots = plan.slots(10).unwrap();
+    let slots = plan
+        .slots(10, Some(ReferencePolicy::QualificationOnly))
+        .unwrap();
     assert_eq!(slots.len(), 60);
     for (case, census) in slots.chunks_exact(6).enumerate() {
         assert!(census.iter().all(|slot| slot.case == case

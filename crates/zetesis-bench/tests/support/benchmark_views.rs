@@ -33,12 +33,13 @@ fn summary<'a>(cases: &'a [String], profiles: &'a [NativeExecution]) -> matrix::
         cases,
         workloads: None,
         profiles,
-        reference_policy: matrix::ReferencePolicy::AllPhases,
+        reference_policy: Some(matrix::ReferencePolicy::AllPhases),
         before: &[],
         cells: vec![
             matrix::CellSummary {
                 case: 0,
                 producer: matrix::Producer::Reference,
+                qualification: matrix::Qualification::Clingo,
                 decisions: vec![matrix::DecisionCount {
                     decision: matrix::Decision::Pass,
                     positions: 5,
@@ -55,6 +56,7 @@ fn summary<'a>(cases: &'a [String], profiles: &'a [NativeExecution]) -> matrix::
             matrix::CellSummary {
                 case: 0,
                 producer: matrix::Producer::Native { profile: 0 },
+                qualification: matrix::Qualification::Clingo,
                 decisions: vec![matrix::DecisionCount {
                     decision: matrix::Decision::Pass,
                     positions: 5,
@@ -71,6 +73,7 @@ fn summary<'a>(cases: &'a [String], profiles: &'a [NativeExecution]) -> matrix::
             matrix::CellSummary {
                 case: 0,
                 producer: matrix::Producer::Native { profile: 1 },
+                qualification: matrix::Qualification::Clingo,
                 decisions: vec![
                     matrix::DecisionCount {
                         decision: matrix::Decision::Pass,
@@ -192,7 +195,7 @@ fn qualification_only_reference_has_no_measurements_in_either_view() {
     let cases = [reports::CASES[0].to_owned()];
     let profiles = reports::profiles();
     let mut summary = summary(&cases, &profiles);
-    summary.reference_policy = matrix::ReferencePolicy::QualificationOnly;
+    summary.reference_policy = Some(matrix::ReferencePolicy::QualificationOnly);
     let reference = &mut summary.cells[0];
     reference.decisions[0].positions = 1;
     reference.timing = None;
@@ -398,12 +401,13 @@ fn amended_workloads_have_distinct_human_labels() {
         cases: &cases,
         workloads: Some(&workloads),
         profiles: &[],
-        reference_policy: matrix::ReferencePolicy::AllPhases,
+        reference_policy: Some(matrix::ReferencePolicy::AllPhases),
         before: &[],
         cells: (0..2)
             .map(|case| matrix::CellSummary {
                 case,
                 producer: matrix::Producer::Reference,
+                qualification: matrix::Qualification::Clingo,
                 decisions: vec![matrix::DecisionCount {
                     decision: matrix::Decision::NotAttempted,
                     positions: 1,

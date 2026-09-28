@@ -3,10 +3,13 @@
 //! Every native invocation uses JSON and statistics. Wall time includes their
 //! overhead, setup, grounding, solving and captured output. This is distinct from
 //! the legacy uninstrumented CPU protocol and the eventual full uninstrumented
-//! corpus matrix. Selected displays/counts/costs are compared with clingo; native
-//! full families also agree across profiles and repeats, including hidden atoms,
-//! shown values and multiplicities. Hidden clingo interpretations are unavailable.
-//! A qualification-only reference policy leaves all later measurements native.
+//! corpus matrix. Selected displays/counts/costs are compared with clingo when
+//! it takes part, and with each workload's recorded contract when the campaign
+//! is clingo-free; a workload without a contract then needs clingo and is not
+//! launched. Native full families also agree across profiles and repeats,
+//! including hidden atoms, shown values and multiplicities. Hidden clingo
+//! interpretations are unavailable. A qualification-only reference policy leaves
+//! all later measurements native.
 //!
 //! First-observed refusals and failures disable only their cell's later launches;
 //! every fixed schedule position remains recorded. No failed sample is replaced.
@@ -23,11 +26,11 @@ mod record;
 mod run;
 mod serialization;
 mod summary;
-pub use summary::{CellSummary, DecisionCount, Summary};
+pub use summary::{CellSummary, DecisionCount, Qualification, Summary};
 mod telemetry;
 mod workload;
 
-pub use config::{Plan, Producer, ReferencePolicy, Request, Slot, Suite};
+pub use config::{Plan, Producer, Reference, ReferencePolicy, Request, Slot, Suite};
 pub use invocation::NativeInvocation;
 pub use record::{
     Decision, DeviceWork, Execution, FormulaResidualStatistics, HybridStatistics, Observation,
@@ -40,6 +43,16 @@ use super::{Capture, Error, Fault};
 use crate::selected::{Change, FileSeal, publication};
 use serde::Serialize;
 
+/// The plan together with the reference policy its run used, recorded once.
+/// Saved reports keep the policy inside their plan section.
+#[derive(Clone, Debug, Serialize)]
+struct RecordedPlan {
+    #[serde(flatten)]
+    plan: Plan,
+    #[serde(serialize_with = "config::recorded_policy")]
+    reference_policy: Option<ReferencePolicy>,
+}
+
 /// Owned complete matrix evidence, including unlaunched positions and refusals.
 #[derive(Debug, Serialize)]
 pub struct Report {
@@ -47,7 +60,7 @@ pub struct Report {
     protocol: &'static str,
     manifest_sha256: &'static str,
     manifest_scope: &'static str,
-    plan: Plan,
+    plan: RecordedPlan,
     limits: super::Limits,
     native_normalization_limits: serde_json::Value,
     cases: Vec<String>,
@@ -80,19 +93,24 @@ impl Report {
     }
 
     /// Every planned position is represented; this does not require solver parity.
+    /// The schedule is rebuilt from the policy the report records.
     #[must_use]
     pub fn accounted(&self) -> bool {
         self.plan
-            .slots(self.cases.len())
+            .plan
+            .slots(self.cases.len(), self.plan.reference_policy)
             .is_ok_and(|slots| slots.len() == self.samples.len())
     }
-    /// Every requested invocation passed parity/telemetry with unchanged inputs.
-    /// Refused and skipped cells make this false even in a fully accounted report.
+    /// Every requested invocation passed parity/telemetry with unchanged inputs,
+    /// and every metadata capture the run owed completed: zetesis's version and
+    /// help, and clingo's version when clingo took part. Refused, skipped and
+    /// needs-clingo cells make this false even in a fully accounted report.
     #[must_use]
     pub fn passed(&self) -> bool {
+        let owed = 2 + usize::from(self.plan.reference_policy.is_some());
         self.accounted()
             && self.samples.iter().all(|s| s.decision == Decision::Pass)
-            && self.metadata.len() == 3
+            && self.metadata.len() == owed
             && self.metadata.iter().all(|c| c.complete(false))
             && self.after.iter().all(Change::unchanged)
             && self.faults.is_empty()
@@ -122,7 +140,12 @@ impl Report {
     /// Immutable requested profile and schedule configuration.
     #[must_use]
     pub const fn plan(&self) -> &Plan {
-        &self.plan
+        &self.plan.plan
+    }
+    /// The reference policy the run used; none for a clingo-free campaign.
+    #[must_use]
+    pub const fn reference_policy(&self) -> Option<ReferencePolicy> {
+        self.plan.reference_policy
     }
     /// Pre-run primary and private-copy source/executable seals.
     #[must_use]

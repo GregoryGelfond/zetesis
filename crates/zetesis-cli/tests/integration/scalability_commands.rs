@@ -4,7 +4,10 @@ use zetesis_cli::{
     Invocation,
     testing::{self, TestCommand},
 };
-use zetesis_validation::{performance::Phase, selected};
+use zetesis_validation::{
+    performance::{Phase, matrix::ReferencePolicy},
+    selected,
+};
 
 fn test(arguments: &[&str]) -> testing::ScalabilityOptions {
     let Invocation::Test(command) = Invocation::try_parse_from(
@@ -31,7 +34,9 @@ fn scalability_tests_have_only_qualification_positions() {
     let options = test(&["--report", "new.json", "--max-expansion-work", "300000000"]);
     assert!(!options.view.stats);
     let plan = options.plan().unwrap();
-    let slots = plan.slots(9).unwrap();
+    let slots = plan
+        .slots(9, Some(ReferencePolicy::QualificationOnly))
+        .unwrap();
     assert_eq!(slots.len(), 9 * 6);
     assert!(slots.iter().all(|s| s.phase == Phase::Qualification));
     assert!(

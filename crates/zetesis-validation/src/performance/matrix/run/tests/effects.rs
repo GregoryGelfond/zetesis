@@ -1,6 +1,7 @@
 //! Synthetic complete producers exercise report lifecycle, not ASP correctness.
 
 use super::*;
+use crate::performance::matrix::{Reference, ReferencePolicy, WorkloadLimits};
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 
@@ -76,7 +77,10 @@ impl Fixture {
         Request {
             corpus: &self.corpus,
             native: &self.native,
-            reference: &self.reference,
+            reference: Some(Reference {
+                executable: &self.reference,
+                policy: ReferencePolicy::AllPhases,
+            }),
             report: &self.report,
             plan: Plan::new(
                 Suite::Queens,
@@ -94,6 +98,38 @@ impl Fixture {
         crate::performance::matrix::run_workloads(request, std::slice::from_ref(&self.workload))
             .unwrap()
     }
+
+    /// The same campaign over the whole corpus, with no clingo taking part.
+    fn clingo_free(&self) -> Request<'_> {
+        Request {
+            reference: None,
+            plan: Plan::new(
+                Suite::Corpus,
+                vec![crate::selected::NativeExecution::default()],
+                NonZeroUsize::MIN,
+                1,
+                2,
+            )
+            .unwrap(),
+            ..self.request()
+        }
+    }
+
+    /// An unchanged corpus entry whose recorded contract is unsatisfiable,
+    /// which the synthetic producers' answers satisfy.
+    fn unchanged(&self) -> Workload {
+        let checked = examples::load(&self.corpus, examples::Limits::default()).unwrap();
+        Workload::original(
+            &checked,
+            "scenarios/shortest-path/variant-01/04-no-path.lp",
+            WorkloadLimits::default(),
+        )
+        .unwrap()
+    }
+}
+
+fn run_unchanged(fixture: &Fixture, request: &Request<'_>) -> Report {
+    crate::performance::matrix::run_workloads(request, &[fixture.unchanged()]).unwrap()
 }
 
 #[test]
@@ -266,9 +302,10 @@ fn qualification_only_never_launches_a_reference_measurement() {
         ),
     );
     let mut request = fixture.request();
-    request.plan = request
-        .plan
-        .with_reference(crate::performance::matrix::ReferencePolicy::QualificationOnly);
+    request.reference = Some(Reference {
+        executable: &fixture.reference,
+        policy: ReferencePolicy::QualificationOnly,
+    });
     let report = fixture.run(&request);
     assert!(report.passed(), "{report:?}");
     assert_eq!(report.samples().len(), 5);
@@ -282,6 +319,154 @@ fn qualification_only_never_launches_a_reference_measurement() {
     assert_eq!(reference.decisions[0].positions, 1);
     assert!(reference.timing.is_none());
     assert!(reference.peak_rss_bytes.is_none());
+}
+
+#[test]
+fn a_clingo_free_campaign_schedules_no_reference() {
+    let fixture = Fixture::new();
+    let report = run_unchanged(&fixture, &fixture.clingo_free());
+    // One native profile: its census, one warmup and two timed rounds.
+    assert_eq!(report.samples().len(), 4, "{report:?}");
+    assert!(
+        report
+            .samples()
+            .iter()
+            .all(|sample| sample.slot().producer != Producer::Reference)
+    );
+    assert_eq!(report.reference_policy(), None);
+    // Clingo's version is owed only when clingo takes part.
+    assert_eq!(report.metadata().len(), 2);
+}
+
+#[test]
+fn a_clingo_free_campaign_whose_cases_all_qualify_passes() {
+    let fixture = Fixture::new();
+    let report = run_unchanged(&fixture, &fixture.clingo_free());
+    assert!(report.passed(), "{report:?}");
+    assert!(
+        report
+            .summary()
+            .cells
+            .iter()
+            .all(|cell| cell.qualification == crate::performance::matrix::Qualification::Contract)
+    );
+}
+
+#[test]
+fn a_clingo_free_family_must_satisfy_the_recorded_contract() {
+    // The unsatisfiable entry answered satisfiable: the contract is the authority.
+    let fixture = Fixture::new();
+    let (_, stderr) = crate::performance::matrix::fixtures::fixture();
+    executable(
+        &fixture.native,
+        &format!(
+            "printf '%s' {}; printf '%s' {} >&2",
+            quote(&native_family::document(&["a"]).to_string()),
+            quote(&stderr)
+        ),
+    );
+    let report = run_unchanged(&fixture, &fixture.clingo_free());
+    assert_eq!(
+        report.samples()[0].decision,
+        Decision::ParityMismatch,
+        "{report:?}"
+    );
+    assert!(!report.passed());
+}
+
+#[test]
+fn a_workload_without_a_contract_needs_clingo_and_is_not_launched() {
+    let fixture = Fixture::new();
+    // The amended board has no recorded contract; a launched solve would fail.
+    executable(&fixture.native, "exit 70");
+    let report = fixture.run(&fixture.clingo_free());
+    let census = &report.samples()[0];
+    assert_eq!(census.decision, Decision::NeedsClingo, "{report:?}");
+    assert!(census.capture().is_none());
+    assert!(
+        report.samples()[1..]
+            .iter()
+            .all(|sample| sample.decision == Decision::NotAttempted && sample.blocked_by == Some(0))
+    );
+    assert!(report.accounted());
+    assert!(!report.passed());
+    assert!(
+        report.summary().cells.iter().all(
+            |cell| cell.qualification == crate::performance::matrix::Qualification::NeedsClingo
+        )
+    );
+}
+
+#[test]
+fn a_reference_changes_the_schedule_only_by_its_own_positions() {
+    let plan = Plan::new(
+        Suite::Queens,
+        vec![crate::selected::NativeExecution::default(); 2],
+        NonZeroUsize::MIN,
+        1,
+        2,
+    )
+    .unwrap()
+    .with_memory(1)
+    .unwrap();
+    let key = |slot: &Slot| {
+        (
+            slot.case,
+            format!("{:?}", slot.phase),
+            slot.round,
+            slot.producer.index(),
+        )
+    };
+    let mut without = plan.slots(3, None).unwrap();
+    without.sort_by_key(key);
+    assert!(
+        without
+            .iter()
+            .all(|slot| slot.producer != Producer::Reference)
+    );
+    for (policy, references) in [
+        // Every phase: census, warmup, two timed and one memory round per case.
+        (ReferencePolicy::AllPhases, 3 * 5),
+        (ReferencePolicy::QualificationOnly, 3),
+    ] {
+        let with = plan.slots(3, Some(policy)).unwrap();
+        let mut natives: Vec<_> = with
+            .iter()
+            .copied()
+            .filter(|slot| slot.producer != Producer::Reference)
+            .collect();
+        natives.sort_by_key(key);
+        assert_eq!(natives, without, "{policy:?}");
+        assert_eq!(with.len() - natives.len(), references, "{policy:?}");
+    }
+}
+
+#[test]
+fn a_saved_report_records_the_policy_its_run_used() {
+    let fixture = Fixture::new();
+    let clingo_free = run_unchanged(&fixture, &fixture.clingo_free());
+    clingo_free.publish().unwrap();
+    let published: Value = serde_json::from_slice(&fs::read(&fixture.report).unwrap()).unwrap();
+    assert_eq!(
+        published["report"]["plan"]["reference_policy"],
+        "clingo_free"
+    );
+    // The schedule rebuilt from the recorded policy is the one the run executed.
+    assert_eq!(published["accounted"], true);
+
+    let with_clingo_path = fixture.directory.path().join("with-clingo.json");
+    let request = Request {
+        report: &with_clingo_path,
+        ..fixture.request()
+    };
+    let with_clingo = fixture.run(&request);
+    with_clingo.publish().unwrap();
+    let published: Value = serde_json::from_slice(&fs::read(&with_clingo_path).unwrap()).unwrap();
+    assert_eq!(
+        published["report"]["plan"]["reference_policy"],
+        "all_phases"
+    );
+    assert_eq!(published["accounted"], true);
 }
 
 fn changed_hidden_family(profiles: usize) -> Report {

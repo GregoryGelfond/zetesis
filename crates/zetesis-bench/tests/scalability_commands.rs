@@ -66,10 +66,9 @@ fn thread_comparison_varies_only_native_threads() {
 
 #[test]
 fn thread_comparison_only_qualifies_the_reference() {
-    let plan = bench(&["--report", "new.json", "--compare-threads", "1,2"])
-        .plan()
-        .unwrap();
-    let slots = plan.slots(1).unwrap();
+    let options = bench(&["--report", "new.json", "--compare-threads", "1,2"]);
+    let plan = options.plan().unwrap();
+    let slots = plan.slots(1, Some(options.reference_policy())).unwrap();
     let reference = slots
         .iter()
         .filter(|s| s.producer == matrix::Producer::Reference)

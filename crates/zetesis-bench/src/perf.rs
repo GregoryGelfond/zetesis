@@ -355,7 +355,10 @@ fn matrix(
     let request = matrix::Request {
         corpus: &options.root,
         native: &native,
-        reference: &reference,
+        reference: Some(matrix::Reference {
+            executable: &reference,
+            policy: matrix::ReferencePolicy::AllPhases,
+        }),
         report: &options.report,
         plan,
         limits,
