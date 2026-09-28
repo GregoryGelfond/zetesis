@@ -90,6 +90,37 @@ fn default_comparison_preserves_nonpassing_campaigns() {
 }
 
 #[test]
+fn a_clingo_free_report_shows_clingo_as_not_run() {
+    let [before, mut after] = reports::reports();
+    // As a clingo-free campaign writes it: no reference samples, no clingo
+    // seal, and the policy recorded as clingo-free.
+    after["report"]["plan"]["reference_policy"] = serde_json::json!("clingo_free");
+    after["report"]["before"].as_array_mut().unwrap().remove(1);
+    after["report"]["samples"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|sample| sample["slot"]["producer"]["solver"] != "reference");
+    let directory = tempfile::tempdir().unwrap();
+    let command = command(directory.path(), &[before, after], false);
+    let mut output = Vec::new();
+    execute(&command, &mut output).unwrap();
+    let rows: Vec<_> = String::from_utf8(output)
+        .unwrap()
+        .lines()
+        .map(|line| line.split_whitespace().collect::<Vec<_>>().join(" "))
+        .collect();
+    // Clingo's time and memory columns, apart from a missing value's dash.
+    assert!(rows.iter().any(|row| row
+        == "after generated/choice-2 1: cpu/auto (1 threads) 20.000 not run — not run pass"));
+    assert!(
+        rows.iter()
+            .any(|row| row.starts_with("before generated/choice-2 1:") && row.contains(" 5.000 "))
+    );
+    // The identity table: the clingo-free campaign sealed no clingo.
+    assert!(rows.contains(&format!("after true true {} not run", "22".repeat(32))));
+}
+
+#[test]
 fn human_comparison_retains_the_typed_report() {
     let directory = tempfile::tempdir().unwrap();
     let command = command(directory.path(), &reports::reports(), true);

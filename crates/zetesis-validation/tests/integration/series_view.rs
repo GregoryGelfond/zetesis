@@ -992,3 +992,117 @@ fn invalid_json_retains_its_typed_failure() {
         Err(ReadError::Json(_))
     ));
 }
+
+/// The same report as a clingo-free campaign writes it: no reference samples,
+/// no clingo seal, and the policy recorded as `clingo_free`.
+fn clingo_free(mut report: Value) -> Value {
+    report["report"]["plan"]["reference_policy"] = json!("clingo_free");
+    report["report"]["before"].as_array_mut().unwrap().remove(1);
+    report["report"]["samples"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|sample| sample["slot"]["producer"]["solver"] != "reference");
+    report
+}
+
+/// A report with clingo and the same cells as a clingo-free one, compared in that order.
+fn mixed() -> (Value, Value) {
+    let cases = [
+        "generated/chain-1000.lp",
+        "standalone/send-money/send-money.lp",
+    ];
+    let native: &[&[u64]] = &[
+        &[3_000_000, 1_000_000, 2_000_000],
+        &[4_000_000, 4_000_000, 4_000_000],
+    ];
+    (
+        report(&cases, native, &[8_000_000, 15_000_000], None),
+        clingo_free(report(&cases, native, &[8_000_000, 15_000_000], None)),
+    )
+}
+
+fn compare_mixed(
+    with_clingo: &Value,
+    without: &Value,
+) -> zetesis_validation::performance::series::Comparison {
+    compare(&[
+        Labelled {
+            label: "clingo",
+            report: with_clingo,
+        },
+        Labelled {
+            label: "free",
+            report: without,
+        },
+    ])
+    .unwrap()
+}
+
+#[test]
+fn each_cell_records_what_qualified_it_in_each_report() {
+    let (with_clingo, without) = mixed();
+    let encoded = serde_json::to_value(compare_mixed(&with_clingo, &without)).unwrap();
+    for cell in encoded["cells"].as_array().unwrap() {
+        assert_eq!(
+            cell["qualification"],
+            json!({"clingo": "clingo", "free": "contract"})
+        );
+    }
+}
+
+#[test]
+fn a_cell_needing_clingo_records_that_it_does() {
+    let (with_clingo, mut without) = mixed();
+    // Without a recorded contract a clingo-free campaign cannot qualify the
+    // second case: its census needs clingo and its later positions are blocked.
+    for sample in without["report"]["samples"].as_array_mut().unwrap() {
+        if sample["slot"]["case"] == 1 {
+            sample["decision"] = json!(if sample["slot"]["phase"] == "qualification" {
+                "needs_clingo"
+            } else {
+                "not_attempted"
+            });
+        }
+    }
+    let encoded = serde_json::to_value(compare_mixed(&with_clingo, &without)).unwrap();
+    assert_eq!(encoded["cells"][0]["qualification"]["free"], "contract");
+    assert_eq!(encoded["cells"][1]["qualification"]["free"], "needs_clingo");
+}
+
+#[test]
+fn a_clingo_free_report_is_sealed_without_clingo() {
+    let (with_clingo, without) = mixed();
+    let comparison = compare_mixed(&with_clingo, &without);
+    assert_eq!(comparison.provenance["free"].reference_sha256, None);
+    // The manifest follows the native seal directly, and matches the other report's.
+    assert_eq!(
+        comparison.provenance["free"].manifest_sha256,
+        "ef".repeat(32)
+    );
+}
+
+#[test]
+fn only_reports_with_clingo_have_scoreboards() {
+    let (with_clingo, without) = mixed();
+    let comparison = compare_mixed(&with_clingo, &without);
+    assert!(!comparison.scoreboards.is_empty());
+    assert!(
+        comparison
+            .scoreboards
+            .iter()
+            .all(|board| board.report == "clingo")
+    );
+}
+
+#[test]
+fn markdown_says_clingo_did_not_run_for_a_clingo_free_report() {
+    let (with_clingo, without) = mixed();
+    let markdown = compare_mixed(&with_clingo, &without).markdown();
+    // The reference table: clingo's time with clingo, "not run" without it.
+    assert!(
+        markdown.contains("| generated/chain-1000 | 8.000 [8.000, 8.000] | not run |"),
+        "{markdown}"
+    );
+    // The native-over-reference ratio columns likewise.
+    assert!(markdown.contains(" | 0.250 | not run |"), "{markdown}");
+}

@@ -19,6 +19,8 @@ use std::fmt;
 use serde::Serialize;
 use serde_json::Value;
 
+use super::super::matrix::Qualification;
+
 /// A published report under the name it will carry in the comparison.
 #[derive(Clone, Copy, Debug)]
 pub struct Labelled<'a> {
@@ -294,6 +296,11 @@ pub struct Cell {
     /// The reference solver's timing and its own split by report label,
     /// where it passed.
     pub reference: BTreeMap<String, Reference>,
+    /// What qualified the cell's answer family in each report, by label:
+    /// clingo's census where clingo took part, the workload's recorded
+    /// contract in a clingo-free report, or nothing where that report's
+    /// campaign needed clingo for the cell.
+    pub qualification: BTreeMap<String, Qualification>,
     /// Non-pass samples across all scheduled phases, grouped by report and
     /// producer, phase and retained reason. Native profile indices are zero-based.
     pub failure_reasons: BTreeMap<String, BTreeMap<String, usize>>,
@@ -338,7 +345,8 @@ pub struct Comparison {
     /// the method and left out of the profile comparison.
     pub methods: BTreeMap<String, String>,
     /// Each report's and profile's standing against the reference, in report
-    /// order and then profile order.
+    /// order and then profile order; a report whose campaign ran without
+    /// clingo has none.
     pub scoreboards: Vec<Scoreboard>,
 }
 
@@ -399,11 +407,16 @@ pub fn compare(reports: &[Labelled<'_>]) -> Result<Comparison, ViewError> {
     for (index, entry) in entries.iter().enumerate() {
         let label = label(entry, workloads.and_then(|workloads| workloads.get(index)));
         let mut reference = BTreeMap::new();
+        let mut qualification = BTreeMap::new();
         let mut failure_reasons = BTreeMap::new();
         for labelled in reports {
             if let Some(record) = self::reference(labelled, index)? {
                 reference.insert(labelled.label.to_owned(), record);
             }
+            qualification.insert(
+                labelled.label.to_owned(),
+                self::qualification(labelled, index)?,
+            );
             let reasons = self::failure_reasons(labelled, index)?;
             if !reasons.is_empty() {
                 failure_reasons.insert(labelled.label.to_owned(), reasons);
@@ -429,10 +442,17 @@ pub fn compare(reports: &[Labelled<'_>]) -> Result<Comparison, ViewError> {
             label,
             profiles: rows,
             reference,
+            qualification,
             failure_reasons,
         });
     }
-    let scoreboards = scoreboards(&labels, &methods, &cells);
+    // A scoreboard stands a report against clingo, so a clingo-free report has none.
+    let with_clingo: Vec<String> = labels
+        .iter()
+        .filter(|label| provenance[*label].reference_sha256.is_some())
+        .cloned()
+        .collect();
+    let scoreboards = scoreboards(&with_clingo, &methods, &cells);
     Ok(Comparison {
         labels,
         cells,
@@ -442,7 +462,8 @@ pub fn compare(reports: &[Labelled<'_>]) -> Result<Comparison, ViewError> {
     })
 }
 
-/// One scoreboard per report and profile, over the cells where both passed.
+/// One scoreboard per report in `labels` and per profile, over the cells
+/// where both passed.
 fn scoreboards(
     labels: &[String],
     methods: &BTreeMap<String, String>,
@@ -597,6 +618,7 @@ impl fmt::Display for Markdown<'_> {
                 for label in &comparison.labels {
                     match row.reference_ratios.get(label) {
                         Some(ratio) => write!(f, " {ratio:.3} |")?,
+                        None if !clingo_ran(comparison, label) => write!(f, " not run |")?,
                         None => write!(f, " n/a |")?,
                     }
                 }
@@ -604,25 +626,7 @@ impl fmt::Display for Markdown<'_> {
             }
             writeln!(f)?;
         }
-        write!(f, "Reference wall time, ms, same notation.\n\n| Cell |")?;
-        for label in &comparison.labels {
-            write!(f, " {label} |")?;
-        }
-        write!(f, "\n|---|")?;
-        for _ in &comparison.labels {
-            write!(f, "---:|")?;
-        }
-        writeln!(f)?;
-        for cell in &comparison.cells {
-            write!(f, "| {} |", cell.label)?;
-            for label in &comparison.labels {
-                match cell.reference.get(label) {
-                    Some(record) => write!(f, " {} |", timing_cell(&record.timing))?,
-                    None => write!(f, " not passed |")?,
-                }
-            }
-            writeln!(f)?;
-        }
+        reference_table(f, comparison)?;
         writeln!(
             f,
             "\nCounters of report {last}: published models, candidates examined, charged search work, driver median ms.\n\n| Cell | profile | models | candidates | work | driver ms |\n|---|---|---:|---:|---:|---:|"
@@ -654,6 +658,40 @@ impl fmt::Display for Markdown<'_> {
         failure_table(f, comparison)?;
         Ok(())
     }
+}
+
+/// Clingo's wall time per cell and report: "not passed" where it failed,
+/// "not run" where the report's campaign ran without it.
+fn reference_table(f: &mut fmt::Formatter<'_>, comparison: &Comparison) -> fmt::Result {
+    write!(f, "Reference wall time, ms, same notation.\n\n| Cell |")?;
+    for label in &comparison.labels {
+        write!(f, " {label} |")?;
+    }
+    write!(f, "\n|---|")?;
+    for _ in &comparison.labels {
+        write!(f, "---:|")?;
+    }
+    writeln!(f)?;
+    for cell in &comparison.cells {
+        write!(f, "| {} |", cell.label)?;
+        for label in &comparison.labels {
+            match cell.reference.get(label) {
+                Some(record) => write!(f, " {} |", timing_cell(&record.timing))?,
+                None if !clingo_ran(comparison, label) => write!(f, " not run |")?,
+                None => write!(f, " not passed |")?,
+            }
+        }
+        writeln!(f)?;
+    }
+    Ok(())
+}
+
+/// Whether clingo took part in the campaign of the report labelled `label`.
+fn clingo_ran(comparison: &Comparison, label: &str) -> bool {
+    comparison
+        .provenance
+        .get(label)
+        .is_some_and(|provenance| provenance.reference_sha256.is_some())
 }
 
 /// Every retained non-pass phase, independently of the timed population.
@@ -1052,6 +1090,28 @@ fn profile_method(profile: &Value) -> String {
     }
 }
 
+/// Whether the report's campaign ran without clingo, as its plan records.
+fn clingo_free(labelled: &Labelled<'_>) -> bool {
+    labelled.report["report"]["plan"]["reference_policy"].as_str() == Some("clingo_free")
+}
+
+/// What qualified a case in one report: clingo where it took part; without
+/// it, the recorded contract, unless the campaign recorded that the case
+/// needs clingo.
+fn qualification(labelled: &Labelled<'_>, case: usize) -> Result<Qualification, ViewError> {
+    if !clingo_free(labelled) {
+        return Ok(Qualification::Clingo);
+    }
+    let needs_clingo = samples(labelled)?
+        .iter()
+        .any(|sample| sample["slot"]["case"] == case && sample["decision"] == "needs_clingo");
+    Ok(if needs_clingo {
+        Qualification::NeedsClingo
+    } else {
+        Qualification::Contract
+    })
+}
+
 fn provenance(labelled: &Labelled<'_>) -> Result<Provenance, ViewError> {
     let malformed = |field| ViewError::Malformed {
         label: labelled.label.into(),
@@ -1068,8 +1128,7 @@ fn provenance(labelled: &Labelled<'_>) -> Result<Provenance, ViewError> {
             .map(str::to_owned)
             .ok_or(malformed(field))
     };
-    let clingo_free =
-        labelled.report["report"]["plan"]["reference_policy"].as_str() == Some("clingo_free");
+    let clingo_free = clingo_free(labelled);
     Ok(Provenance {
         native_sha256: seal(0, "report.before[0].sha256")?,
         reference_sha256: if clingo_free {

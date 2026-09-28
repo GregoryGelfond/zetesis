@@ -103,18 +103,28 @@ fn comparison_rows(comparison: &Comparison) -> Vec<Row> {
                             ),
                             None => ("—".into(), "—".into(), "unavailable".into(), String::new()),
                         };
-                        let reference = cell.reference.get(label);
+                        // Clingo's columns say "not run" where the campaign ran
+                        // without it, apart from a missing or failed value's dash.
+                        let clingo_ran = comparison
+                            .provenance
+                            .get(label)
+                            .is_some_and(|provenance| provenance.reference_sha256.is_some());
+                        let (clingo_ms, clingo_memory) = match cell.reference.get(label) {
+                            Some(record) => (
+                                milliseconds(record.timing.median_ns),
+                                bytes(record.peak_rss_bytes),
+                            ),
+                            None if clingo_ran => ("—".into(), "—".into()),
+                            None => ("not run".into(), "not run".into()),
+                        };
                         Row::new([
                             label.clone(),
                             cell.label.clone(),
                             format!("{}: {}", profile_index + 1, profile_name(&profile.profile)),
                             native,
-                            reference.map_or_else(
-                                || "—".into(),
-                                |record| milliseconds(record.timing.median_ns),
-                            ),
+                            clingo_ms,
                             memory,
-                            bytes(reference.and_then(|record| record.peak_rss_bytes)),
+                            clingo_memory,
                             outcome,
                             detail,
                         ])
