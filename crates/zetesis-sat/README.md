@@ -143,7 +143,7 @@ queries; `candidate_queries` and the projection history stay zero,
 since no classical query is asked and no exclusion index is kept. Laws:
 `FormulaBounds.lean` for the readings, the closure's rules and the leaf
 (`decided_leaf_models`), `Search.lean` for the tree. See [the proposer](src/regions.rs) and
-[its propositions](tests/regions.rs).
+[its propositions](tests/integration/regions.rs).
 An optimizer must separately prove that excluded stable candidates are dominated
 by an already verified incumbent, and use a non-strict bound to preserve ties.
 

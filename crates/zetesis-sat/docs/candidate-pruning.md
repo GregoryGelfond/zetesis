@@ -31,7 +31,7 @@ a later search restriction. A classical candidate cannot supply an incumbent
 without an acceptance check.
 
 See [the restriction API](../src/ferraris.rs) and
-[transaction tests](../tests/restrictions.rs).
+[transaction tests](../tests/integration/restrictions.rs).
 
 ## Initial necessary support
 
@@ -53,7 +53,7 @@ families; it does not establish a general runtime improvement or eliminate the
 separate relational powerset candidate path.
 
 See [construction](../../zetesis-ferraris/src/support.rs),
-[route/family controls](../tests/candidate_support.rs) and
+[route/family controls](../tests/integration/candidate_support.rs) and
 [accounted optional admission](../src/candidate_support.rs).
 
 ## Failed-literal probing
@@ -142,7 +142,7 @@ truth tables, and indexed filters with linear filters under free auxiliary
 extensions and empty keys. They exercise both trial polarities, assignment
 restoration, two-sided conflict, malformed block rejection, every work cutoff
 of a small traversal, interruption during insertion and fused failures.
-[Ferraris comparisons](../tests/ferraris.rs) retain an independent minimality
+[Ferraris comparisons](../tests/integration/ferraris.rs) retain an independent minimality
 reference.
 
 [IndexedCandidates.lean](../../../proofs/Zetesis/IndexedCandidates.lean) proves

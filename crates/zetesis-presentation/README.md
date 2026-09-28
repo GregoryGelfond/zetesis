@@ -16,5 +16,5 @@ adapter resolves terminal capabilities. Machine views use their own typed
 serializers and do not pass through styled text.
 
 See [workflow views](../../docs/book/rust/workflows.md) for composition with the
-solver, validation and measurement libraries. `tests/tables.rs` checks shape,
+solver, validation and measurement libraries. `tests/integration/tables.rs` checks shape,
 writer failures, control-character escaping and width-sensitive presentation.

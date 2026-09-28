@@ -9,7 +9,7 @@ implementation under test. These are deterministic traversal fixtures, not timin
 or answer-set acceptance evidence.
 
 The six queens inputs are the clean, unchanged N=8 examples included directly
-by `tests/support/watch_traces.rs`. A private test exercises the real formula
+by `src/search/tests/watch_traces.rs`. A private test exercises the real formula
 encoder and retained candidate cursor. Each record contains formula and CNF
 dimensions, ordered semantic candidate identities, all four cumulative search
 counters after candidate construction, and the final exhaustion or stop. Exact

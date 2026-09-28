@@ -80,7 +80,7 @@ The production
 assemble both maintained variants through their actual selector. They verify
 that substitution changes only the gate-transfer region, validate both modules
 with pinned Naga, and compare their device interfaces. The
-[formula interface contracts](../../crates/zetesis-wgpu/tests/formula_interface.rs)
+[formula interface contracts](../../crates/zetesis-wgpu/tests/integration/formula_interface.rs)
 check the expected host buffer bindings, uniform layout and compute entry point.
 Independent finite [Rust checks](tests/contract.rs) cover the relation itself;
 these portable contracts make no physical-device claim.

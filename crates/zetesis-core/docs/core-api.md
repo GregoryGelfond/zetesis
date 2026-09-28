@@ -128,7 +128,7 @@ configured allocation bounds; symbolic programs have no such dense-ID ceiling.
 
 ## Verification
 
-`tests/contracts.rs` checks typed identity and admission, safe/dense variables,
+`tests/integration/contracts.rs` checks typed identity and admission, safe/dense variables,
 canonical carrier enumeration and cloned cursor continuation, sparse construction
 over a 2^32 gate carrier, empty domains, substitution/filter behavior, duplicate
 ground edges, program identity, retained symbolic gate tuples, count overflow,

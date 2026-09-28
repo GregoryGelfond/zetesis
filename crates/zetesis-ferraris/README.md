@@ -115,7 +115,7 @@ Construction retains the existing finite formula/work limits and charged
 failure prefix. No partial restriction escapes opaque-root, resource or control
 refusal. The separate restriction still copies original DAG descriptors before
 adding support nodes; repeated encoding of that copy remains a preparation cost.
-See [support API](src/support.rs) and [complete small-family controls](tests/support.rs).
+See [support API](src/support.rs) and [complete small-family controls](tests/integration/support.rs).
 
 ## Narrowing regions by the theory's readings
 
@@ -193,9 +193,9 @@ needed; the quota may additionally poll control at every read. The existing
 `RegionLimits` methods retain their local-ceiling API. SAT injects its search
 budget into the metered methods, so parallel workers acquire shared permits
 before candidate or frozen-reduct reads and retain their receipts after failure.
-Failed knowledge still must be abandoned. The [metering regressions](tests/region_work.rs)
+Failed knowledge still must be abandoned. The [metering regressions](tests/integration/region_work.rs)
 exercise every prefix of original and frozen narrowing and cancellation.
-The [packed knowledge regressions](tests/support/packed_knowledge.rs) compare
+The [packed knowledge regressions](tests/integration/regions/packed_knowledge.rs) compare
 carried and fresh original/frozen closure over 130 atoms and 132 nodes, including
 descendant conflicts, zero-work refusals and repeated completed closure.
 
@@ -205,7 +205,7 @@ rule sound for stable models on the fragment `DisjunctiveSupport` names
 (`unsupported_cut`, `sole_support_forces`); the
 choice reading and the agreement of the Rust closure with `Known` are Rust
 obligations. See [regions API](src/regions.rs) and
-[the rule propositions](tests/regions.rs).
+[the rule propositions](tests/integration/regions.rs).
 
 ## Checked tight producer plans
 

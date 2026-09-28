@@ -168,15 +168,15 @@ and costs with independent valuation enumeration on tiny generated relations,
 including reversal of template order. Internal condition tests check shared
 authority, invalid catalog coordinates, deep admitted values, exact storage
 ceilings and every callback cutoff. Final signed-cost conversion is checked at
-both `i64` boundaries. `tests/polarity.rs` separately checks both normalization
+both `i64` boundaries. `tests/integration/polarity.rs` separately checks both normalization
 polarities, dynamic weights, normalized cross-direction key identity, ignored
 nonnumeric rows, wide costs, inclusive work ceilings and typed negation overflow.
-`tests/conditions.rs` checks closed-query truth tables, full typed atom identity,
+`tests/integration/conditions.rs` checks closed-query truth tables, full typed atom identity,
 zero priority slots, coalescing with lifted rows, malformed references and exact
 work ceilings. `zetesis-themelios/tests/objective_condition_bounds.rs` compares
 every candidate against every retained score to establish that optional bounds
 preserve closed-query costs and ties without changing the original atom catalog.
-`tests/lookup.rs` checks full typed key families, duplicate eligibility, exact
+`tests/integration/lookup.rs` checks full typed key families, duplicate eligibility, exact
 work-refusal prefixes and the effect of adding unrelated predicates without
 using elapsed-time assertions. Prepared bound lookup is checked separately in
 `zetesis-themelios/tests/objective_bound_lookup.rs`, including independent mask

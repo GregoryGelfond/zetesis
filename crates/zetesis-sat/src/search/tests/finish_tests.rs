@@ -1,6 +1,6 @@
 //! Final witness assembly charges one unit per variable and nothing per clause:
 //! clause satisfaction is the watch scheme's invariant, stated against truth
-//! tables in `tests/cnf.rs` and asserted here in debug builds.
+//! tables in `tests/integration/cnf.rs` and asserted here in debug builds.
 
 use super::{Budget, State};
 use crate::{
