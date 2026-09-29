@@ -1,8 +1,8 @@
 //! Positive tuple matching preserves full source atoms and frozen semantics.
 use crate::support::finite_bindings as reference;
-use reference::{Models, atom_text, exhaustive, external, holds, native, values};
+use reference::{Models, exhaustive, external, holds, native, values};
 use std::collections::BTreeSet;
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{canonical, formula};
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 const PROJECTION: &str = "q((1,x),2).\np(A) :- q((A,_),_).\np(B) :- q((A,_),B).\n";
@@ -109,8 +109,8 @@ fn every_frozen_pair_matches_explicit_ground_rules() {
     for &(source, expanded) in CASES {
         let original = formula(source);
         let reference = formula(expanded);
-        let left: Vec<_> = original.atoms().iter().map(atom_text).collect();
-        let right: Vec<_> = reference.atoms().iter().map(atom_text).collect();
+        let left: Vec<_> = original.atoms().iter().map(canonical).collect();
+        let right: Vec<_> = reference.atoms().iter().map(canonical).collect();
         assert_eq!(
             left.iter().collect::<BTreeSet<_>>(),
             right.iter().collect(),

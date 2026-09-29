@@ -3,9 +3,9 @@
 use crate::support::finite_bindings as reference;
 
 use proptest::prelude::*;
-use reference::{Models, atom_text, exhaustive, holds, native, values};
+use reference::{Models, exhaustive, holds, native, values};
 use themelios_base::source::SourceId;
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{canonical, formula};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
     FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
@@ -132,8 +132,8 @@ fn correlated_chains_preserve_every_frozen_pair() {
 }
 
 fn same_frozen(program: &AdmittedFormula, expanded: &AdmittedFormula) {
-    let names: Vec<_> = program.atoms().iter().map(atom_text).collect();
-    let other: Vec<_> = expanded.atoms().iter().map(atom_text).collect();
+    let names: Vec<_> = program.atoms().iter().map(canonical).collect();
+    let other: Vec<_> = expanded.atoms().iter().map(canonical).collect();
     assert_eq!(
         names.iter().collect::<std::collections::BTreeSet<_>>(),
         other.iter().collect()

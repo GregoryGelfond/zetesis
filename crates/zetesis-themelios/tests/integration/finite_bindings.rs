@@ -1,6 +1,7 @@
 //! Finite candidate domains preserve complete guards, scopes and source evidence.
 
 use crate::support::finite_bindings as reference;
+use crate::support::finite_bindings::remap;
 
 use std::collections::BTreeSet;
 
@@ -113,19 +114,6 @@ fn expansions() -> Vec<(&'static str, &'static str)> {
         ("{p(1);p(2)}.q:-p(X):0<X,X<3.", "{p(1);p(2)}.q:-p(1),p(2)."),
         ("{p(1)}.-p(X):-not not X=1..1.", "{p(1)}.-p(1)."),
     ]
-}
-
-fn remap(
-    mask: usize,
-    from: zetesis_core::catalog::Atoms<'_>,
-    to: zetesis_core::catalog::Atoms<'_>,
-) -> usize {
-    from.iter()
-        .enumerate()
-        .filter(|(index, _)| mask & (1 << index) != 0)
-        .fold(0, |bits, (_, atom)| {
-            bits | (1 << to.iter().position(|other| atom == other).unwrap())
-        })
 }
 
 #[test]

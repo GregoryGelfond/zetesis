@@ -1,5 +1,6 @@
 //! Closed choice ranges preserve one group, local products and every reduct.
 
+use crate::support::finite_bindings::{holds, remap, values};
 use crate::support::objective_dependency_records as objective_dependencies;
 
 use std::collections::BTreeSet;
@@ -11,7 +12,6 @@ use themelios_program::term::EvalError;
 use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
-use zetesis_ferraris::{Node, Theory};
 use zetesis_reference_support::admit;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits,
@@ -32,23 +32,6 @@ fn cases() -> Vec<Json> {
 // Independent topological evaluation: every subtree false in M is falsum in
 // F^M. No production evaluator, reduct mask, SAT search or subset enumeration
 // helper is used to decide these finite stable models.
-fn values(theory: &Theory, mask: usize, frozen: Option<&[bool]>) -> Vec<bool> {
-    let mut result = Vec::new();
-    for (index, node) in theory.nodes().iter().enumerate() {
-        let value = match *node {
-            Node::False => false,
-            Node::Atom(atom) => mask & (1 << atom) != 0,
-            Node::And(left, right) => result[left] && result[right],
-            Node::Or(left, right) => result[left] || result[right],
-            Node::Implies(left, right) => !result[left] || result[right],
-        };
-        result.push(value && frozen.is_none_or(|outer| outer[index]));
-    }
-    result
-}
-fn holds(theory: &Theory, values: &[bool]) -> bool {
-    theory.roots().iter().all(|&root| values[root])
-}
 fn record(admitted: &AdmittedFormula, mask: usize) -> Record {
     let model = Model::from_positions(
         admitted.atom_catalog(),
@@ -228,18 +211,6 @@ fn explicit_single_group_expansions_match_complete_models_and_cost_presence() {
     );
 }
 
-fn remap(
-    mask: usize,
-    from: zetesis_core::catalog::Atoms<'_>,
-    to: zetesis_core::catalog::Atoms<'_>,
-) -> usize {
-    from.iter()
-        .enumerate()
-        .filter(|(index, _)| mask & (1 << index) != 0)
-        .fold(0, |bits, (_, atom)| {
-            bits | (1 << to.iter().position(|other| atom == other).unwrap())
-        })
-}
 #[test]
 fn tiny_expansions_match_every_frozen_pair_including_non_subsets() {
     let mut worlds = 0;

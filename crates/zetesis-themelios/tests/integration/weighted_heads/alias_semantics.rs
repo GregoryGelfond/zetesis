@@ -7,7 +7,7 @@
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
-use super::{atom_text, holds, input, values};
+use super::{canonical, holds, input, values};
 
 #[derive(Clone, Copy)]
 struct World([bool; 4]);
@@ -153,7 +153,7 @@ proptest::proptest! {
         };
         let source = selection.source(positive);
         let admitted = input(&source);
-        let names: Vec<_> = admitted.atoms().iter().map(atom_text).collect();
+        let names: Vec<_> = admitted.atoms().iter().map(canonical).collect();
         proptest::prop_assert_eq!(names.len(), 4, "{}", source);
         let world = |mask: usize| {
             let member = |name| {

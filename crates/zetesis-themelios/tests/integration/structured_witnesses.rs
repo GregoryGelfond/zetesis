@@ -1,8 +1,8 @@
 //! Local witnesses retain complete atoms under structural selection.
 use crate::support::finite_bindings as reference;
-use reference::{Models, atom_text, exhaustive, external, holds, native, values};
+use reference::{Models, exhaustive, external, holds, native, values};
 use std::collections::BTreeSet;
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{canonical, formula};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
     FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
@@ -168,8 +168,8 @@ fn frozen_truth_matches_finite_substitution() {
     for &(source, expanded) in CASES {
         let left = formula(source);
         let right = formula(expanded);
-        let names: Vec<_> = left.atoms().iter().map(atom_text).collect();
-        let other: Vec<_> = right.atoms().iter().map(atom_text).collect();
+        let names: Vec<_> = left.atoms().iter().map(canonical).collect();
+        let other: Vec<_> = right.atoms().iter().map(canonical).collect();
         assert_eq!(
             names.iter().collect::<BTreeSet<_>>(),
             other.iter().collect(),
@@ -221,7 +221,7 @@ fn conditional_truth_matches_quantified_witnesses() {
     for (polarity, sign) in ["", "not ", "not not "].into_iter().enumerate() {
         let source = format!("{{p(f(1));p(f(2));p(g(3));c}}.q:-p(f(X)):{sign}c.");
         let admitted = formula(&source);
-        let names: Vec<_> = admitted.atoms().iter().map(atom_text).collect();
+        let names: Vec<_> = admitted.atoms().iter().map(canonical).collect();
         assert_eq!(names.len(), 5);
         let index = |name: &str| names.iter().position(|found| found == name).unwrap();
         let roots: Vec<_> = admitted

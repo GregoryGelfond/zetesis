@@ -7,9 +7,10 @@ mod logical;
 use std::collections::BTreeSet;
 
 use cases::sources;
-use reference::{Models, atom_text, exhaustive, external, holds, native, values};
+use reference::{Models, exhaustive, external, holds, native, values};
 use themelios_base::source::SourceId;
 use themelios_program::term::EvalError;
+use zetesis_reference_support::canonical;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
     FormulaFailure, FormulaLimits, FormulaResource, admit_formula, prepare_formula,
@@ -59,8 +60,8 @@ fn frozen_truth_matches_finite_substitutions() {
     for (source, expanded) in sources() {
         let left = input(&source);
         let right = input(&expanded);
-        let names: Vec<_> = left.atoms().iter().map(atom_text).collect();
-        let other: Vec<_> = right.atoms().iter().map(atom_text).collect();
+        let names: Vec<_> = left.atoms().iter().map(canonical).collect();
+        let other: Vec<_> = right.atoms().iter().map(canonical).collect();
         assert_eq!(
             names.iter().collect::<BTreeSet<_>>(),
             other.iter().collect(),
@@ -567,7 +568,7 @@ proptest::proptest! {
         let function = if minimum { "#min" } else { "#max" };
         let source = format!("{function}{{{first},k:a;{second},l:b}}{relation}{bound}.");
         let admitted = input(&source);
-        let names: Vec<_> = admitted.atoms().iter().map(atom_text).collect();
+        let names: Vec<_> = admitted.atoms().iter().map(canonical).collect();
         proptest::prop_assert_eq!(names.iter().map(String::as_str).collect::<BTreeSet<_>>(), BTreeSet::from(["a", "b"]));
         for outer in 0..1 << names.len() {
             let selected: Vec<_> = names.iter().enumerate()

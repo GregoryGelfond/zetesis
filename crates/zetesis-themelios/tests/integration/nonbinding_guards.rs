@@ -7,9 +7,10 @@ mod truth;
 use std::collections::BTreeSet;
 
 use cases::sources;
-use reference::{Models, atom_text, exhaustive, external, holds, native, values};
+use reference::{Models, exhaustive, external, holds, native, values};
 use themelios_base::source::SourceId;
 use truth::Truth;
+use zetesis_reference_support::canonical;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
     FormulaResource, FormulaWarning, admit_formula, prepare_formula,
@@ -59,8 +60,8 @@ fn frozen_truth_matches_finite_substitutions() {
     for (source, expanded) in sources() {
         let left = input(&source);
         let right = input(&expanded);
-        let names: Vec<_> = left.atoms().iter().map(atom_text).collect();
-        let other: Vec<_> = right.atoms().iter().map(atom_text).collect();
+        let names: Vec<_> = left.atoms().iter().map(canonical).collect();
+        let other: Vec<_> = right.atoms().iter().map(canonical).collect();
         assert_eq!(
             names.iter().collect::<BTreeSet<_>>(),
             other.iter().collect(),
@@ -323,7 +324,7 @@ proptest::proptest! {
         let sign = ["", "not ", "not not "][negations];
         let source = format!("{{p}}.q(N):-N=#count{{1:p}},Y=N+({offset}),{sign}Y{relation}#count{{1:p}}.");
         let admitted = input(&source);
-        let names: Vec<_> = admitted.atoms().iter().map(atom_text).collect();
+        let names: Vec<_> = admitted.atoms().iter().map(canonical).collect();
         proptest::prop_assert!(names.iter().all(|name| ["p", "q(0)", "q(1)"].contains(&name.as_str())));
         proptest::prop_assert!(names.iter().any(|name| name == "p"));
         for outer in 0..1 << names.len() {

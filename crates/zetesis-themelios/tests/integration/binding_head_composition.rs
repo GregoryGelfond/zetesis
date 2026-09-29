@@ -2,6 +2,7 @@
 
 use std::collections::BTreeSet;
 
+use crate::support::finite_bindings::{holds, remap};
 use zetesis_core::Sign;
 use zetesis_ferraris::{Node, Theory};
 use zetesis_themelios::{
@@ -101,23 +102,6 @@ fn values(theory: &Theory, tested: usize, frozen: Option<&[bool]>) -> Vec<bool> 
         result.push(value && frozen.is_none_or(|outer| outer[index]));
     }
     result
-}
-
-fn holds(theory: &Theory, values: &[bool]) -> bool {
-    theory.roots().iter().all(|&root| values[root])
-}
-
-fn remap(
-    mask: usize,
-    from: zetesis_core::catalog::Atoms<'_>,
-    to: zetesis_core::catalog::Atoms<'_>,
-) -> usize {
-    from.iter()
-        .enumerate()
-        .filter(|(index, _)| mask & (1 << index) != 0)
-        .fold(0, |bits, (_, atom)| {
-            bits | (1 << to.iter().position(|other| atom == other).unwrap())
-        })
 }
 
 fn atom_text<'a>(atom: impl Into<zetesis_core::catalog::AtomRef<'a>>) -> String {

@@ -4,39 +4,12 @@ use serde_json::Value as Json;
 use std::collections::BTreeSet;
 use std::time::Duration;
 use zetesis_clingo_support as oracle;
-use zetesis_core::catalog::AtomRef;
-use zetesis_core::{Sign, ValueNodeRef};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Node, Theory};
+use zetesis_reference_support::canonical;
 use zetesis_themelios::AdmittedFormula;
 
 pub(crate) type Models = BTreeSet<BTreeSet<String>>;
-
-pub(crate) fn atom_text<'a>(atom: impl Into<AtomRef<'a>>) -> String {
-    let atom = atom.into();
-    let sign = if atom.predicate().sign() == Sign::Negative {
-        "-"
-    } else {
-        ""
-    };
-    let name = format!("{sign}{}", atom.predicate().name());
-    if atom.values().is_empty() {
-        return name;
-    }
-    let values: Vec<_> = atom
-        .values()
-        .iter()
-        .map(|value| match value.descriptor() {
-            ValueNodeRef::Number(number) => number.to_string(),
-            ValueNodeRef::Symbol(value) => value.to_owned(),
-            ValueNodeRef::String(value) => serde_json::to_string(value).unwrap(),
-            ValueNodeRef::Infimum => "#inf".into(),
-            ValueNodeRef::Supremum => "#sup".into(),
-            ValueNodeRef::Function { .. } | ValueNodeRef::Tuple { .. } => value.to_string(),
-        })
-        .collect();
-    format!("{name}({})", values.join(","))
-}
 
 pub(crate) fn values(theory: &Theory, mask: usize, frozen: Option<&[bool]>) -> Vec<bool> {
     let mut result = Vec::new();
@@ -85,7 +58,7 @@ pub(crate) fn exhaustive(input: &AdmittedFormula) -> Models {
                         .iter()
                         .enumerate()
                         .filter(|(index, _)| mask & (1 << index) != 0)
-                        .map(|(_, atom)| atom_text(atom))
+                        .map(|(_, atom)| canonical(atom))
                         .collect()
                 )
             );
@@ -108,7 +81,7 @@ pub(crate) fn native(input: &AdmittedFormula) -> Models {
                 model
                     .unwrap()
                     .atoms()
-                    .map(|index| atom_text(input.atoms().at(index).unwrap()))
+                    .map(|index| canonical(input.atoms().at(index).unwrap()))
                     .collect()
             )
         );
@@ -144,4 +117,18 @@ pub(crate) fn external(source: &str, valid: bool) -> Json {
         serde_json::json!({"source": source, "valid": valid, "exit": run.code(), "stdout": String::from_utf8_lossy(run.stdout()), "stderr": diagnostics})
     );
     oracle::json(&run)
+}
+
+/// The mask over `to`'s atoms that holds the atoms `mask` holds over `from`'s.
+pub(crate) fn remap(
+    mask: usize,
+    from: zetesis_core::catalog::Atoms<'_>,
+    to: zetesis_core::catalog::Atoms<'_>,
+) -> usize {
+    from.iter()
+        .enumerate()
+        .filter(|(index, _)| mask & (1 << index) != 0)
+        .fold(0, |bits, (_, atom)| {
+            bits | (1 << to.iter().position(|other| atom == other).unwrap())
+        })
 }

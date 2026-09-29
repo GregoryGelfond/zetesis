@@ -5,7 +5,6 @@ use std::fs::{self};
 use std::time::Duration;
 
 use serde_json::{Value as Json, json};
-use zetesis_ferraris::{Node, Theory};
 use zetesis_reference_support::{admit, canonical};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits,
@@ -41,23 +40,6 @@ fn expected(value: &Json) -> Models {
 // Independent topological evaluation: every subtree false in M is falsum in
 // F^M. No production evaluator, reduct mask, SAT search or subset enumeration
 // helper is used to decide these finite stable models.
-fn values(theory: &Theory, mask: usize, frozen: Option<&[bool]>) -> Vec<bool> {
-    let mut result = Vec::new();
-    for (index, node) in theory.nodes().iter().enumerate() {
-        let value = match *node {
-            Node::False => false,
-            Node::Atom(atom) => mask & (1 << atom) != 0,
-            Node::And(left, right) => result[left] && result[right],
-            Node::Or(left, right) => result[left] || result[right],
-            Node::Implies(left, right) => !result[left] || result[right],
-        };
-        result.push(value && frozen.is_none_or(|outer| outer[index]));
-    }
-    result
-}
-fn holds(theory: &Theory, values: &[bool]) -> bool {
-    theory.roots().iter().all(|&root| values[root])
-}
 fn selected(admitted: &AdmittedFormula, mask: usize) -> Names {
     admitted
         .atoms()
@@ -127,18 +109,6 @@ fn complete_models_match_explicit_source_expansions_and_independent_expected_dat
     }
     assert_eq!(cases().len(), 37);
     assert_eq!(model_count, 68);
-}
-fn remap(
-    mask: usize,
-    from: zetesis_core::catalog::Atoms<'_>,
-    to: zetesis_core::catalog::Atoms<'_>,
-) -> usize {
-    from.iter()
-        .enumerate()
-        .filter(|(index, _)| mask & (1 << index) != 0)
-        .fold(0, |bits, (_, atom)| {
-            bits | (1 << to.iter().position(|other| atom == other).unwrap())
-        })
 }
 #[test]
 fn source_expansions_preserve_every_original_and_frozen_pair() {
@@ -282,6 +252,7 @@ fn excluded_head_forms_remain_located_refusals() {
         assert!(!error.diagnostics().is_empty());
     }
 }
+use crate::support::finite_bindings::{holds, remap, values};
 use crate::support::objective_boundaries;
 use zetesis_clingo_support as oracle;
 

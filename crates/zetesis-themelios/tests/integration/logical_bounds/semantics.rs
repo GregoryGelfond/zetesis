@@ -1,6 +1,6 @@
 //! Original and frozen truth from declared source rows, not compiler nodes.
 
-use super::{atom_text, holds, input, values};
+use super::{canonical, holds, input, values};
 
 #[derive(Clone, Copy)]
 struct Truth {
@@ -99,7 +99,7 @@ pub fn check(bound: &str, relation: &str, accepts: bool, measure: usize, context
         )
     };
     let admitted = input(&source);
-    let names: Vec<_> = admitted.atoms().iter().map(atom_text).collect();
+    let names: Vec<_> = admitted.atoms().iter().map(canonical).collect();
     assert_eq!(names.len(), 4, "{source}");
     for outer in 0..16 {
         let original = values(admitted.theory(), outer, None);

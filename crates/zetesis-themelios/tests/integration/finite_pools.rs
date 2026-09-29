@@ -1,8 +1,8 @@
 //! Source pools retain whole-rule products, local groups and bounded evidence.
 use crate::support::finite_bindings as reference;
-use reference::{Models, atom_text, exhaustive, holds, native, values};
+use reference::{Models, exhaustive, holds, native, values};
 use std::collections::BTreeSet;
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{canonical, formula};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
     FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
@@ -208,8 +208,8 @@ fn complete_models_and_every_frozen_pair_match_handwritten_expansions() {
         let reference = formula(expanded);
         assert_eq!(native(&original), native(&reference), "{source}");
         assert_eq!(native(&original), exhaustive(&original), "{source}");
-        let left: Vec<_> = original.atoms().iter().map(atom_text).collect();
-        let right: Vec<_> = reference.atoms().iter().map(atom_text).collect();
+        let left: Vec<_> = original.atoms().iter().map(canonical).collect();
+        let right: Vec<_> = reference.atoms().iter().map(canonical).collect();
         assert_eq!(
             left.iter().collect::<BTreeSet<_>>(),
             right.iter().collect(),
@@ -257,7 +257,7 @@ fn original_manual_formulas_distinguish_cartesian_rules_from_a_flat_head() {
     // This formula is handwritten without compiling a second source. Additional
     // support constraints are tautologies here because both rules have true bodies.
     let p = formula("p(1;2);q.");
-    let names: Vec<_> = p.atoms().iter().map(atom_text).collect();
+    let names: Vec<_> = p.atoms().iter().map(canonical).collect();
     let bit =
         |mask: usize, name: &str| mask & (1 << names.iter().position(|n| n == name).unwrap()) != 0;
     for outer in 0..8 {
@@ -697,7 +697,7 @@ fn hidden_optimum_ties_and_cancellation_keep_complete_model_identity() {
             )
             .unwrap();
         assert_eq!(shown.text(), "");
-        assert!(full_models.insert(model.atoms().iter().map(atom_text).collect()));
+        assert!(full_models.insert(model.atoms().iter().map(canonical).collect()));
         count += 1;
     }
     assert!(search.exhausted());

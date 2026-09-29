@@ -2,8 +2,9 @@
 
 use crate::support::finite_bindings as reference;
 
-use reference::{atom_text, exhaustive, external, holds, native, values};
+use reference::{exhaustive, external, holds, native, values};
 use zetesis_cpu::Cancellation;
+use zetesis_reference_support::canonical;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, CountPlanLimits, CountPlanStatus, ExpansionLimits,
     FormulaLimits, prepare_formula,
@@ -64,7 +65,7 @@ fn planned_models(admitted: &AdmittedFormula) -> (reference::Models, zetesis_sat
             model
                 .unwrap()
                 .atoms()
-                .map(|atom| atom_text(admitted.atoms().at(atom).unwrap()))
+                .map(|atom| canonical(admitted.atoms().at(atom).unwrap()))
                 .collect()
         })
         .collect();
@@ -145,7 +146,7 @@ fn preproposal_restrictions_preserve_stable_models() {
 #[test]
 fn conditional_activation_cannot_be_dropped() {
     let source = admitted(SOURCES[2], true);
-    let names: Vec<_> = source.atoms().iter().map(atom_text).collect();
+    let names: Vec<_> = source.atoms().iter().map(canonical).collect();
     let candidate = 1 << names.iter().position(|name| name == "a").unwrap();
     assert!(holds(
         source.theory(),
@@ -530,7 +531,7 @@ proptest::proptest! {
         let source=format!("{{e}}.2{{{whole}}}2{body}.{{{first}}}1{body}.{{{second}}}1{body}.");
         let admitted=admitted(&source,true);
         let plan=plan(&admitted);
-        let positions:Vec<_> = admitted.atoms().iter().map(atom_text).collect();
+        let positions:Vec<_> = admitted.atoms().iter().map(canonical).collect();
         for mask in 0..1<<positions.len() {
             let selected = |name:&str| positions.iter().position(|n| n==name).is_some_and(|i| mask & (1<<i)!=0);
             let original = !active || selected("e");

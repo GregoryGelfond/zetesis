@@ -1,6 +1,6 @@
 //! Finite substitutions keep each aggregate equality; proposals are not truth.
 use crate::support::finite_bindings as reference;
-use reference::{Models, atom_text, exhaustive, external, holds, native, values};
+use reference::{Models, exhaustive, external, holds, native, values};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use themelios_base::source::SourceId;
@@ -10,6 +10,7 @@ use zetesis_themelios::{
 };
 
 use crate::support::objective_dependency_records as objective_dependencies;
+use zetesis_reference_support::canonical;
 
 const SOURCE: SourceId = SourceId::new(113);
 fn options() -> AdmissionOptions {
@@ -239,8 +240,8 @@ fn frozen_truth_matches_finite_substitutions() {
     for &(source, expanded) in CASES {
         let left = input(source);
         let right = input(expanded);
-        let names: Vec<_> = left.atoms().iter().map(atom_text).collect();
-        let other: Vec<_> = right.atoms().iter().map(atom_text).collect();
+        let names: Vec<_> = left.atoms().iter().map(canonical).collect();
+        let other: Vec<_> = right.atoms().iter().map(canonical).collect();
         assert_eq!(
             names.iter().collect::<BTreeSet<_>>(),
             other.iter().collect(),

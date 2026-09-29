@@ -1,10 +1,10 @@
 //! Universal rows and existential consequent alternatives have separate scopes.
 use crate::support::finite_bindings as reference;
 use crate::support::upstream;
-use reference::{Models, atom_text, exhaustive, native, values};
+use reference::{Models, exhaustive, native, values};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{canonical, formula};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, AnalysisBasis, ExpansionLimits, FormulaFailure,
     FormulaLimits, admit_formula, prepare_formula,
@@ -298,14 +298,14 @@ fn world(atoms: zetesis_core::catalog::Atoms<'_>, mask: usize) -> BTreeSet<Strin
         .iter()
         .enumerate()
         .filter(|(index, _)| mask & (1 << index) != 0)
-        .map(|(_, atom)| atom_text(atom))
+        .map(|(_, atom)| canonical(atom))
         .collect()
 }
 fn original_rule(program: &AdmittedFormula, head: &str) -> usize {
     let atom = program
         .atoms()
         .iter()
-        .position(|atom| atom_text(atom) == head)
+        .position(|atom| canonical(atom) == head)
         .unwrap();
     let matches: Vec<_> = program
         .theory()
@@ -1217,7 +1217,7 @@ fn conjunction_matches_bounded_completion() {
                     models.insert(
                         model
                             .atoms()
-                            .map(|index| atom_text(admitted.atoms().at(index).unwrap()))
+                            .map(|index| canonical(admitted.atoms().at(index).unwrap()))
                             .collect()
                     )
                 );

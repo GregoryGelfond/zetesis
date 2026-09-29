@@ -9,6 +9,7 @@
 //! Formal references: Ferraris (arXiv:0812.1462),
 //! Proposition 12; Abstract Gringo (arXiv:1507.06576), equation 22 and Theorem 1.
 
+use crate::support::finite_bindings::Models;
 use crate::support::objective_dependency_records as objective_dependencies;
 
 use std::collections::BTreeSet;
@@ -22,8 +23,6 @@ use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
     FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit, admit_formula,
 };
-
-type Models = BTreeSet<BTreeSet<String>>;
 
 struct Case {
     name: String,

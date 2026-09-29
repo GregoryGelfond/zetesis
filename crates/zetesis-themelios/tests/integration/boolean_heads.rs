@@ -1,7 +1,6 @@
 //! Boolean heads retain their original truth without supplying atom support.
 
 use crate::support::objective_dependency_records as objective_dependencies;
-use zetesis_reference_support::{admit, formula};
 
 mod cases;
 mod elements;
@@ -11,7 +10,8 @@ use std::collections::BTreeSet;
 
 use cases::CASES;
 use proptest::prelude::*;
-use reference::{Models, atom_text, exhaustive, external, holds, native, values};
+use reference::{Models, exhaustive, external, holds, native, values};
+use zetesis_reference_support::{admit, canonical, formula};
 use zetesis_themelios::{
     AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionFailure, ExpansionLimits,
     ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, SourceBundle,
@@ -173,7 +173,7 @@ fn original_rules(heads: &[(u8, u8)], body: (u8, u8)) -> (String, Vec<Formula>) 
 
 fn frozen_pairs(source: &str, theory: &[Formula]) {
     let admitted = formula(source);
-    let names: Vec<_> = admitted.atoms().iter().map(atom_text).collect();
+    let names: Vec<_> = admitted.atoms().iter().map(canonical).collect();
     assert_eq!(
         names.iter().map(String::as_str).collect::<BTreeSet<_>>(),
         ATOMS.into()

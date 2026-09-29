@@ -2,9 +2,9 @@
 
 use crate::support::finite_bindings as reference;
 
-use reference::{Models, atom_text, exhaustive, external, holds, native, values};
+use reference::{Models, exhaustive, external, holds, native, values};
 use std::collections::BTreeSet;
-use zetesis_reference_support::{admit, formula};
+use zetesis_reference_support::{admit, canonical, formula};
 use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
 fn expected(records: &[&[&str]]) -> Models {
@@ -143,7 +143,7 @@ fn conditional_instances_preserve_every_frozen_world() {
                 "not ".repeat(head_sign)
             );
             let admitted = formula(&source);
-            let actual_names: Vec<_> = admitted.atoms().iter().map(atom_text).collect();
+            let actual_names: Vec<_> = admitted.atoms().iter().map(canonical).collect();
             assert_eq!(
                 actual_names
                     .iter()

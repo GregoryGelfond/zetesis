@@ -4,7 +4,7 @@
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
-use super::{atom_text, holds, input, values};
+use super::{canonical, holds, input, values};
 
 // This order is deliberately explicit, including the empty extrema. The test
 // oracle compares ordinal positions, never Value::Ord or Value::compare_terms.
@@ -171,7 +171,7 @@ impl Selection {
     pub fn check_frozen(&self) {
         let source = self.source();
         let admitted = input(&source);
-        let names: Vec<_> = admitted.atoms().iter().map(atom_text).collect();
+        let names: Vec<_> = admitted.atoms().iter().map(canonical).collect();
         assert_eq!(names.len(), 4, "{source}");
         let world = |mask: usize| {
             World(["a", "c", "g", "o"].map(|name| {

@@ -6,7 +6,6 @@ use std::time::Duration;
 
 use serde_json::Value as Json;
 use zetesis_core::Sign;
-use zetesis_ferraris::{Node, Theory};
 use zetesis_reference_support::admit;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
@@ -64,23 +63,6 @@ fn expected(value: &Json) -> Models {
 // Independent topological evaluation: every subtree false in M is falsum in
 // F^M. No production evaluator, reduct mask, SAT search or subset enumeration
 // helper is used to decide these finite stable models.
-fn values(theory: &Theory, mask: usize, frozen: Option<&[bool]>) -> Vec<bool> {
-    let mut result = Vec::new();
-    for (index, node) in theory.nodes().iter().enumerate() {
-        let value = match *node {
-            Node::False => false,
-            Node::Atom(atom) => mask & (1 << atom) != 0,
-            Node::And(left, right) => result[left] && result[right],
-            Node::Or(left, right) => result[left] || result[right],
-            Node::Implies(left, right) => !result[left] || result[right],
-        };
-        result.push(value && frozen.is_none_or(|outer| outer[index]));
-    }
-    result
-}
-fn holds(theory: &Theory, values: &[bool]) -> bool {
-    theory.roots().iter().all(|&root| values[root])
-}
 fn selected(admitted: &AdmittedFormula, mask: usize) -> Names {
     admitted
         .atoms()
@@ -387,6 +369,7 @@ fn conditional_negative_disjuncts_require_eligibility() {
         Models::from([Names::from(["c".into()])])
     );
 }
+use crate::support::finite_bindings::{holds, values};
 use crate::support::objective_boundaries;
 use zetesis_clingo_support as oracle;
 

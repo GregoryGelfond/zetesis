@@ -2,6 +2,7 @@
 //! in the original formula. The reference evaluator implements the finite
 //! reduct definition without the production reduct masks or countermodel search.
 
+use crate::support::finite_bindings::{Models, exhaustive, native};
 use crate::support::objective_dependency_records as objective_dependencies;
 
 use std::collections::BTreeSet;
@@ -10,15 +11,11 @@ use std::time::Duration;
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
 use zetesis_clingo_support as oracle;
-use zetesis_cpu::Cancellation;
-use zetesis_ferraris::{Node, Theory};
-use zetesis_reference_support::canonical;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
     FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
 };
 
-type Models = BTreeSet<BTreeSet<String>>;
 const SOURCE: SourceId = SourceId::new(83);
 
 fn options() -> AdmissionOptions {
@@ -55,85 +52,6 @@ fn json_model(values: &Json) -> BTreeSet<String> {
         .map(|atom| atom.as_str().unwrap().to_owned())
         .collect();
     assert_eq!(result.len(), atoms.len(), "full atom identities are unique");
-    result
-}
-
-fn values(theory: &Theory, mask: usize, frozen: Option<&[bool]>) -> Vec<bool> {
-    let mut result = Vec::new();
-    for (index, node) in theory.nodes().iter().enumerate() {
-        let value = match *node {
-            Node::False => false,
-            Node::Atom(atom) => mask & (1 << atom) != 0,
-            Node::And(left, right) => result[left] && result[right],
-            Node::Or(left, right) => result[left] || result[right],
-            Node::Implies(left, right) => !result[left] || result[right],
-        };
-        result.push(value && frozen.is_none_or(|outer| outer[index]));
-    }
-    result
-}
-
-fn holds(theory: &Theory, values: &[bool]) -> bool {
-    theory.roots().iter().all(|&root| values[root])
-}
-
-fn exhaustive(input: &AdmittedFormula) -> Models {
-    assert!(input.atoms().len() <= 12, "bounded independent carrier");
-    let mut result = BTreeSet::new();
-    for mask in 0..1_usize << input.atoms().len() {
-        let outer = values(input.theory(), mask, None);
-        if !holds(input.theory(), &outer) {
-            continue;
-        }
-        let mut subset = mask;
-        let mut countermodel = false;
-        while subset != 0 {
-            subset = (subset - 1) & mask;
-            if holds(
-                input.theory(),
-                &values(input.theory(), subset, Some(&outer)),
-            ) {
-                countermodel = true;
-                break;
-            }
-        }
-        if !countermodel {
-            assert!(
-                result.insert(
-                    input
-                        .atoms()
-                        .iter()
-                        .enumerate()
-                        .filter(|(index, _)| mask & (1 << index) != 0)
-                        .map(|(_, atom)| canonical(atom))
-                        .collect()
-                )
-            );
-        }
-    }
-    result
-}
-
-fn native(input: &AdmittedFormula) -> Models {
-    let mut search = zetesis_sat::StableModels::new(
-        input.theory(),
-        zetesis_sat::Limits::default(),
-        Cancellation::default(),
-    )
-    .unwrap();
-    let mut result = BTreeSet::new();
-    for model in search.by_ref() {
-        assert!(
-            result.insert(
-                model
-                    .unwrap()
-                    .atoms()
-                    .map(|index| canonical(input.atoms().at(index).unwrap()))
-                    .collect()
-            )
-        );
-    }
-    assert!(search.exhausted(), "complete original-theory enumeration");
     result
 }
 

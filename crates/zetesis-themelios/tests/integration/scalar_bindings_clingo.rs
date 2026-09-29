@@ -5,6 +5,7 @@
 
 use std::collections::BTreeSet;
 
+use crate::support::finite_bindings::Models;
 use serde_json::Value as Json;
 use themelios_program::term::EvalError;
 use zetesis_clingo_support as oracle;
@@ -15,7 +16,6 @@ use zetesis_themelios::{
     FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit_formula,
 };
 
-type Models = BTreeSet<BTreeSet<String>>;
 struct Case {
     name: String,
     source: String,

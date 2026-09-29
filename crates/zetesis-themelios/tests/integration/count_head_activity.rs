@@ -7,9 +7,9 @@ use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
 use cases::CASES;
-use reference::{Models, atom_text, exhaustive, external, holds, native, values};
+use reference::{Models, exhaustive, external, holds, native, values};
 use zetesis_cpu::Cancellation;
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{canonical, formula};
 use zetesis_themelios::{
     AdmissionOptions, CountPlanLimits, CountPlanStatus, ExpansionFailure, ExpansionLimits,
     ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
@@ -41,8 +41,8 @@ fn frozen_truth_matches_separate_permissions() {
     for &(source, expanded) in CASES {
         let left = formula(source);
         let right = formula(expanded);
-        let names: Vec<_> = left.atoms().iter().map(atom_text).collect();
-        let other: Vec<_> = right.atoms().iter().map(atom_text).collect();
+        let names: Vec<_> = left.atoms().iter().map(canonical).collect();
+        let other: Vec<_> = right.atoms().iter().map(canonical).collect();
         assert_eq!(
             names.iter().collect::<BTreeSet<_>>(),
             other.iter().collect(),
@@ -332,7 +332,7 @@ proptest::proptest! {
         }
         write!(source, "}}{upper}.").unwrap();
         let admitted = formula(&source);
-        let names: Vec<_> = admitted.atoms().iter().map(atom_text).collect();
+        let names: Vec<_> = admitted.atoms().iter().map(canonical).collect();
         let member = |mask: usize, name: &str| {
             names.iter().position(|atom| atom == name)
                 .is_some_and(|index| mask & (1 << index) != 0)

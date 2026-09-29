@@ -1,10 +1,10 @@
 //! Constructed values remain data in original and frozen source interpretations.
 use crate::support::finite_bindings as reference;
 use crate::support::upstream;
-use reference::{Models, atom_text, exhaustive, holds, native, values};
+use reference::{Models, exhaustive, holds, native, values};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{canonical, formula};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
     ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature,
@@ -228,7 +228,7 @@ fn construction_preserves_every_frozen_pair() {
             .atoms()
             .iter()
             .chain(expanded.atoms())
-            .map(atom_text)
+            .map(canonical)
             .collect();
         assert!(atoms.len() <= 7);
         let names: Vec<_> = atoms.into_iter().collect();
@@ -243,7 +243,7 @@ fn construction_preserves_every_frozen_pair() {
                             bits & (1
                                 << names
                                     .iter()
-                                    .position(|name| *name == atom_text(atom))
+                                    .position(|name| *name == canonical(atom))
                                     .unwrap())
                                 != 0,
                         ) << i)
@@ -498,7 +498,7 @@ fn competition_matches_bounded_completion() {
                     models.insert(
                         model
                             .atoms()
-                            .map(|index| atom_text(admitted.atoms().at(index).unwrap()))
+                            .map(|index| canonical(admitted.atoms().at(index).unwrap()))
                             .collect()
                     )
                 );
@@ -535,7 +535,7 @@ fn constructed_keys_retain_objective_contributions() {
                 .iter()
                 .enumerate()
                 .filter_map(|(position, atom)| {
-                    names.contains(&atom_text(atom)).then_some(position)
+                    names.contains(&canonical(atom)).then_some(position)
                 }),
         )
         .unwrap();

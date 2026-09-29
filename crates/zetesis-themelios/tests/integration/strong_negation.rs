@@ -8,6 +8,7 @@ use serde_json::Value as Json;
 use zetesis_core::{Model, Sign};
 use zetesis_cpu::{Cancellation, CandidateLimits, Candidates};
 use zetesis_ferraris::{Node, Theory};
+use zetesis_reference_support::canonical;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits,
     ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
@@ -30,24 +31,6 @@ fn cases() -> Vec<Json> {
 // This evaluator implements the finite definition independently of the
 // production oracle, reduct mask and SAT search. Signed atoms have ordinary
 // distinct indices; coherence must therefore be present in the supplied roots.
-fn values(theory: &Theory, mask: usize, frozen: Option<&[bool]>) -> Vec<bool> {
-    let mut result = Vec::new();
-    for (index, node) in theory.nodes().iter().enumerate() {
-        let value = match *node {
-            Node::False => false,
-            Node::Atom(atom) => mask & (1 << atom) != 0,
-            Node::And(left, right) => result[left] && result[right],
-            Node::Or(left, right) => result[left] || result[right],
-            Node::Implies(left, right) => !result[left] || result[right],
-        };
-        result.push(value && frozen.is_none_or(|outer| outer[index]));
-    }
-    result
-}
-
-fn holds(theory: &Theory, values: &[bool]) -> bool {
-    theory.roots().iter().all(|&root| values[root])
-}
 
 fn stable_models(input: &AdmittedFormula) -> Vec<Model> {
     assert!(
@@ -87,34 +70,6 @@ fn stable_models(input: &AdmittedFormula) -> Vec<Model> {
 
 // Full-model records do not use the production output renderer. Numeric minus
 // belongs to a value; a predicate sign is serialized before its name.
-fn atom_text<'a>(atom: impl Into<zetesis_core::catalog::AtomRef<'a>>) -> String {
-    let atom = atom.into();
-    let sign = if atom.predicate().sign() == Sign::Negative {
-        "-"
-    } else {
-        ""
-    };
-    let mut text = format!("{sign}{}", atom.predicate().name());
-    if !atom.values().is_empty() {
-        let args: Vec<_> = atom
-            .values()
-            .iter()
-            .map(|value| match value.descriptor() {
-                zetesis_core::ValueNodeRef::Number(number) => number.to_string(),
-                zetesis_core::ValueNodeRef::String(value) => serde_json::to_string(value).unwrap(),
-                zetesis_core::ValueNodeRef::Symbol(value) => value.to_owned(),
-                zetesis_core::ValueNodeRef::Infimum => "#inf".into(),
-                zetesis_core::ValueNodeRef::Supremum => "#sup".into(),
-                zetesis_core::ValueNodeRef::Function { .. }
-                | zetesis_core::ValueNodeRef::Tuple { .. } => value.to_string(),
-            })
-            .collect();
-        text.push('(');
-        text.push_str(&args.join(","));
-        text.push(')');
-    }
-    text
-}
 
 fn record(input: &AdmittedFormula, model: &Model, display: bool) -> Record {
     let mut atoms: Vec<_> = if display {
@@ -137,7 +92,7 @@ fn record(input: &AdmittedFormula, model: &Model, display: bool) -> Record {
             .map(str::to_owned)
             .collect()
     } else {
-        model.atoms().iter().map(atom_text).collect()
+        model.atoms().iter().map(canonical).collect()
     };
     atoms.sort();
     let evaluated = zetesis_objective::evaluate(
@@ -454,6 +409,7 @@ fn signed_atoms_do_not_broaden_unsafe_or_unsupported_value_profiles() {
     }
     assert_eq!(count, 10);
 }
+use crate::support::finite_bindings::{holds, values};
 use crate::support::objective_boundaries;
 use zetesis_clingo_support as oracle;
 

@@ -1,5 +1,6 @@
 //! Complete objective observations through total predicate renamings.
 
+use crate::support::finite_bindings::holds;
 use crate::support::source_cases;
 
 use oracle::records as clingo;
@@ -176,10 +177,6 @@ fn truth(theory: &Theory, mask: usize, frozen: Option<&[bool]>) -> Vec<bool> {
         values.push(value && frozen.is_none_or(|outer| outer[index]));
     }
     values
-}
-
-fn holds(theory: &Theory, values: &[bool]) -> bool {
-    theory.roots().iter().all(|&root| values[root])
 }
 
 #[test]
