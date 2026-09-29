@@ -310,6 +310,7 @@ pub(crate) fn execute(
     )
     .map_err(Error::Io)?;
     let request = matrix::Request {
+        tool: crate::tool(),
         corpus: &options.root,
         native: &native,
         reference: Some(matrix::Reference {

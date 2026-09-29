@@ -71,6 +71,7 @@ pub(super) fn campaign(
         } else {
             "instrumented_explicit_profile_matrix_v1"
         },
+        tool: request.tool.clone(),
         manifest_sha256: examples::MANIFEST_SHA256,
         manifest_scope: "correctness_catalog_context; authored_and_generated_workloads_retain_independent_source_and_contract_identities",
         plan: RecordedPlan {

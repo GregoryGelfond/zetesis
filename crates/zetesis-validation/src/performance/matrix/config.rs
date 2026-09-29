@@ -291,9 +291,22 @@ pub struct Slot {
     /// Requested solver/profile.
     pub producer: Producer,
 }
+/// The tool that runs a campaign and writes its report, with its version: a
+/// report names what produced it beside the executables it measured, as
+/// benchmarking tools' result files do.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct Tool {
+    /// The tool's name, for example `zetesis-bench`.
+    pub name: String,
+    /// The tool's version.
+    pub version: String,
+}
+
 /// Library-owned experiment request, independent of clap and global I/O.
 #[derive(Debug)]
 pub struct Request<'a> {
+    /// The tool that runs the campaign; its report names it.
+    pub tool: Tool,
     /// Verified clean examples/correctness root.
     pub corpus: &'a Path,
     /// Absolute native executable.

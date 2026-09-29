@@ -300,6 +300,14 @@ fn execute_inner(
     }
 }
 
+/// This tool as the reports it writes name it.
+pub(crate) fn tool() -> zetesis_validation::performance::matrix::Tool {
+    zetesis_validation::performance::matrix::Tool {
+        name: "zetesis-bench".into(),
+        version: env!("CARGO_PKG_VERSION").into(),
+    }
+}
+
 /// Load and compare retained reports without launching a solver or writing output.
 ///
 /// # Errors

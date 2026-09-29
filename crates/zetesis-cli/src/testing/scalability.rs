@@ -103,6 +103,10 @@ pub(super) fn execute(
     limits.max_report_bytes = options.report_bytes;
     let report = scalability::run_with_cancellation(
         &matrix::Request {
+            tool: matrix::Tool {
+                name: "zetesis".into(),
+                version: env!("CARGO_PKG_VERSION").into(),
+            },
             corpus: &options.root,
             native: &native,
             // Scalability only qualifies: clingo establishes each census.

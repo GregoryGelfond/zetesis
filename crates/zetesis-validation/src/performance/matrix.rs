@@ -30,7 +30,7 @@ pub use summary::{CellSummary, DecisionCount, Qualification, Summary};
 mod telemetry;
 mod workload;
 
-pub use config::{Plan, Producer, Reference, ReferencePolicy, Request, Slot, Suite};
+pub use config::{Plan, Producer, Reference, ReferencePolicy, Request, Slot, Suite, Tool};
 pub use invocation::NativeInvocation;
 pub use record::{
     Decision, DeviceWork, Execution, FormulaResidualStatistics, HybridStatistics, Observation,
@@ -58,6 +58,7 @@ struct RecordedPlan {
 pub struct Report {
     schema: u32,
     protocol: &'static str,
+    tool: Tool,
     manifest_sha256: &'static str,
     manifest_scope: &'static str,
     plan: RecordedPlan,
@@ -146,6 +147,11 @@ impl Report {
     #[must_use]
     pub const fn reference_policy(&self) -> Option<ReferencePolicy> {
         self.plan.reference_policy
+    }
+    /// The tool that ran the campaign and wrote this report.
+    #[must_use]
+    pub const fn tool(&self) -> &Tool {
+        &self.tool
     }
     /// Pre-run primary and private-copy source/executable seals.
     #[must_use]

@@ -51,6 +51,10 @@ impl Fixture {
     }
     fn request(&self, suite: Suite) -> matrix::Request<'_> {
         matrix::Request {
+            tool: matrix::Tool {
+                name: "zetesis-bench tests".into(),
+                version: env!("CARGO_PKG_VERSION").into(),
+            },
             corpus: &self.corpus,
             native: &self.native,
             reference: Some(matrix::Reference {

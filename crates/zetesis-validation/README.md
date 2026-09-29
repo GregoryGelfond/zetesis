@@ -250,6 +250,8 @@ is recorded as needing clingo and is not launched. The report records the policy
 its run used, `clingo_free` included, and rebuilds its schedule from it.
 `Plan::with_cases` narrows the suite to named cases, run in the order given; a
 path that is not a case of the suite is refused before anything is launched.
+The request's `tool` names what runs the campaign and its version, and the
+report records it beside the executables it measured.
 
 `Workload::original` retains the default corpus contract. `Workload::amended`
 accepts `ConstantAmendment { source_path, name, expected, replacement }` and

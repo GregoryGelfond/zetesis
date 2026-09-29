@@ -10,6 +10,10 @@ mod native_family;
 
 fn request() -> Request<'static> {
     Request {
+        tool: crate::performance::matrix::Tool {
+            name: "zetesis-validation tests".into(),
+            version: env!("CARGO_PKG_VERSION").into(),
+        },
         corpus: Path::new("/unused/corpus"),
         native: Path::new("/unused/native"),
         reference: Some(crate::performance::matrix::Reference {

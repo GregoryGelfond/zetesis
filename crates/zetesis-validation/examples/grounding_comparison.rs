@@ -176,6 +176,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let corpus = examples::load(&options.corpus, limits.corpus)?;
     let workloads = workloads(&corpus, options.study)?;
     let request = matrix::Request {
+        tool: matrix::Tool {
+            name: "grounding_comparison".into(),
+            version: env!("CARGO_PKG_VERSION").into(),
+        },
         corpus: &options.corpus,
         native: &options.zetesis,
         reference: Some(matrix::Reference {

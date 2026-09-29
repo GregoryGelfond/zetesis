@@ -490,6 +490,25 @@ fn a_selected_case_outside_the_suite_is_refused() {
 }
 
 #[test]
+fn a_report_names_the_tool_that_produced_it() {
+    let fixture = Fixture::new();
+    let request = Request {
+        tool: crate::performance::matrix::Tool {
+            name: "zetesis-bench".into(),
+            version: "9.8.7".into(),
+        },
+        ..fixture.request()
+    };
+    let report = fixture.run(&request);
+    report.publish().unwrap();
+    let published: Value = serde_json::from_slice(&fs::read(&fixture.report).unwrap()).unwrap();
+    assert_eq!(
+        published["report"]["tool"],
+        serde_json::json!({"name": "zetesis-bench", "version": "9.8.7"})
+    );
+}
+
+#[test]
 fn a_saved_report_records_the_policy_its_run_used() {
     let fixture = Fixture::new();
     let clingo_free = run_unchanged(&fixture, &fixture.clingo_free());

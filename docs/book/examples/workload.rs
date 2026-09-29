@@ -43,6 +43,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         ..NativeExecution::default()
     };
     let request = matrix::Request {
+        tool: matrix::Tool {
+            name: "book-workload".into(),
+            version: env!("CARGO_PKG_VERSION").into(),
+        },
         corpus: corpus_path,
         native,
         // An amended board has no recorded contract: clingo establishes its family.
