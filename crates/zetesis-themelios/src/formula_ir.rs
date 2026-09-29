@@ -1,17 +1,13 @@
 //! Bounded normalization and explicit global/element-local variable scopes.
 
 #[cfg(test)]
-#[path = "formula_assignment_plan_tests.rs"]
 mod assignment_plan_tests;
 
 #[cfg(test)]
-#[path = "formula_shared_names_tests.rs"]
 mod shared_names_tests;
 
-#[path = "formula_objective_scope.rs"]
 mod objective_scope;
 
-#[path = "formula_ir/domain.rs"]
 mod domain;
 
 use std::collections::{BTreeMap, BTreeSet};

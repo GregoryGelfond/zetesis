@@ -12,7 +12,6 @@ use crate::formula_ir::{HeadIr, HeadLiteral, HeadOperand, LiteralIr, Preparation
 use crate::formula_support::{Counters, GroundingWork, SupportCatalog, components};
 use crate::{AdmissionOptions, ExpansionLimits, FormulaLimits, FormulaResource};
 
-#[path = "tests/policy.rs"]
 mod policy;
 
 fn prepare(text: &str) -> crate::formula::Preparation {

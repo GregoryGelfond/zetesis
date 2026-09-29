@@ -7,7 +7,6 @@ use themelios_program::program::{
     Body, BodyElement, Condition, DefaultNegation, LiteralInner, OptimizeElement, Statement,
     WeakConstraint, Weight,
 };
-#[path = "formula_objective_scope/selection.rs"]
 mod selection;
 use themelios_program::provenance::{Origin, WithProvenance};
 use themelios_program::term::Term;

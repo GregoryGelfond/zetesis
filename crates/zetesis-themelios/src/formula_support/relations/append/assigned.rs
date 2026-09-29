@@ -260,5 +260,4 @@ impl SupportAppend<'_> {
 mod tests;
 
 #[cfg(test)]
-#[path = "assigned_lookup_tests.rs"]
 mod lookup_tests;

@@ -210,5 +210,4 @@ fn boolean_origins(statement: &Statement) -> Option<BTreeSet<Location>> {
 }
 
 #[cfg(test)]
-#[path = "formula_choice_source_tests.rs"]
 mod tests;

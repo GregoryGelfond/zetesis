@@ -5,7 +5,6 @@ use crate::formula_support::Counters;
 use crate::formula_terminal::partition::{policy, selection, workspace::Context};
 use crate::{FormulaFailure, FormulaResource};
 
-#[path = "policy_refusal.rs"]
 mod refusal;
 
 #[test]

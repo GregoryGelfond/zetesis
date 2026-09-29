@@ -309,7 +309,7 @@ fields; a defined false body does not enter head or consequent evaluation.
 The relational comparison exclusion above remains separate from
 rejection by a binder, interval, tuple comparison or aggregate guard; those
 rejections cannot hide required arithmetic in other fields. Closed constants
-and post-solve observations retain their strict checks. The [caller regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/evaluation/tests/callers.rs)
+and post-solve observations retain their strict checks. The [caller regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/evaluation/scratch/tests/callers.rs)
 check these actual consumers as well as their values and failure boundaries.
 
 Formula bindings retain source variable identities in optional slots. A pending

@@ -1,6 +1,5 @@
 //! Source identity, emitted local order and located refusal contracts.
 
-#[path = "count_capture.rs"]
 mod count_capture;
 
 use std::collections::BTreeMap;

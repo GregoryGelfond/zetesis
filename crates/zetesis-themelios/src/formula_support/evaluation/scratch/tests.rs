@@ -1,5 +1,4 @@
 //! Observe live scoped scratch and its cleanup without exposing a test API.
-#[path = "tests/callers.rs"]
 mod callers;
 use super::super::{Evaluation, Expression, Operation};
 use super::RETAINED_CELLS;
