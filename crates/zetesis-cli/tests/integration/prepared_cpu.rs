@@ -1,6 +1,6 @@
 //! Ordinary views preserve prepared CPU ownership evidence and complete models.
 
-use crate::support::spelled;
+use zetesis_test_support::document::spelled;
 
 use std::io::{self, Write};
 
@@ -141,7 +141,7 @@ fn candidate_storage_refusal_follows_admitted_preparation() {
     assert_eq!(complete.completion, Completion::Exhausted);
     assert_eq!(complete.models, 1);
     assert_eq!(
-        serde_json::Value::Array(spelled::spelled(&expected, &expected["models"][0])),
+        serde_json::Value::Array(spelled(&expected, &expected["models"][0])),
         serde_json::json!([
             {"predicate":"a", "sign":"positive", "arguments":[]}
         ])

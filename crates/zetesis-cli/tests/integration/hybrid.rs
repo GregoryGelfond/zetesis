@@ -1,6 +1,6 @@
 //! Explicit lazy formula admission preserves original answers and scopes core work.
 
-use crate::support::spelled;
+use zetesis_test_support::document::spelled;
 
 use std::{fs, io};
 
@@ -79,7 +79,7 @@ fn hybrid_projection_selects_only_original_answers() {
             .as_array()
             .unwrap()
             .iter()
-            .map(|record| spelled::spelled(&document, record))
+            .map(|record| spelled(&document, record))
             .collect();
         assert_eq!(selected.len(), 2);
         assert!(selected.iter().all(|answer| original.contains(answer)));

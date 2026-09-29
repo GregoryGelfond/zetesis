@@ -1,6 +1,6 @@
 //! External consumers distinguish semantic membership from delivery and reuse admission.
 
-use crate::support::spelled;
+use zetesis_test_support::document::spelled;
 
 use std::{
     collections::BTreeSet,
@@ -336,7 +336,7 @@ fn source_and_prepared_objective_costs_agree() {
         assert_eq!(json["models"].as_array().unwrap().len(), models.len());
         let mut raw = BTreeSet::new();
         for (record, model) in json["models"].as_array().unwrap().iter().zip(&models) {
-            let names: Vec<_> = spelled::spelled(&json, record)
+            let names: Vec<_> = spelled(&json, record)
                 .iter()
                 .map(|atom| atom["predicate"].as_str().unwrap().to_string())
                 .collect();

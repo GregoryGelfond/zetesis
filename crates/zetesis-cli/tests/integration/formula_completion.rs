@@ -241,10 +241,8 @@ fn native_parallel_statistics_do_not_claim_scalar_execution() {
 
 #[test]
 fn negative_head_formulas_compose_with_bounded_parallel_completion() {
-    let cases: Vec<serde_json::Value> = serde_json::from_str(include_str!(
-        "../../../zetesis-themelios/tests/fixtures/negative-heads.json"
-    ))
-    .unwrap();
+    let cases: Vec<serde_json::Value> =
+        serde_json::from_str(zetesis_test_support::fixtures::NEGATIVE_HEADS).unwrap();
     for case in cases {
         let mut expected: Vec<Vec<String>> =
             serde_json::from_value(case["models"].clone()).unwrap();

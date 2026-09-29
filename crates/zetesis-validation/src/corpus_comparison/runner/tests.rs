@@ -14,7 +14,7 @@ use zetesis_backend::{Backend, GpuApi};
 use zetesis_test_support::io::Closed;
 
 const NATIVE: &str = "Answer: 1\na\nSATISFIABLE\nCoverage: exhausted\nModels: 1\n";
-const PHASE_TIMINGS: &str = include_str!("../../../tests/support/phase_statistics.txt");
+const PHASE_TIMINGS: &str = zetesis_test_support::fixtures::PHASE_STATISTICS;
 // Fixture publication/execution checks correctness under concurrent suite work,
 // not latency. Deadline regressions retain their separately authored limits.
 const FIXTURE_LIVENESS: Duration = Duration::from_secs(10);

@@ -1,6 +1,6 @@
 //! Process exit requires checked output delivery as well as semantic completion.
 
-use crate::support::spelled;
+use zetesis_test_support::document::spelled;
 
 use std::io::Write;
 #[cfg(unix)]
@@ -100,7 +100,7 @@ fn completed_model_output_reaches_the_reader() {
             let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
             assert_eq!(document["models"].as_array().unwrap().len(), 1);
             assert_eq!(
-                serde_json::Value::Array(spelled::spelled(&document, &document["models"][0])),
+                serde_json::Value::Array(spelled(&document, &document["models"][0])),
                 serde_json::json!([{"predicate": "a", "sign": "positive", "arguments": []}])
             );
             assert_eq!(document["outcome"]["completion"], "exhausted");

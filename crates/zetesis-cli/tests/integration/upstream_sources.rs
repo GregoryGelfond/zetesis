@@ -40,19 +40,15 @@ fn combined_binding_and_head_features_preserve_complete_models() {
 
 #[test]
 fn negative_disjuncts_preserve_complete_models_through_ordinary_solving() {
-    let cases: Vec<Value> = serde_json::from_str(include_str!(
-        "../../../zetesis-themelios/tests/fixtures/negative-heads.json"
-    ))
-    .unwrap();
+    let cases: Vec<Value> =
+        serde_json::from_str(zetesis_test_support::fixtures::NEGATIVE_HEADS).unwrap();
     replay(cases.iter().map(|case| reference(case, "name")), 27, 49);
 }
 
 #[test]
 fn negative_singleton_heads_preserve_complete_models() {
-    let cases: Vec<Value> = serde_json::from_str(include_str!(
-        "../../../zetesis-themelios/tests/fixtures/singleton-heads.json"
-    ))
-    .unwrap();
+    let cases: Vec<Value> =
+        serde_json::from_str(zetesis_test_support::fixtures::SINGLETON_HEADS).unwrap();
     replay(cases.iter().map(|case| reference(case, "name")), 12, 19);
 }
 

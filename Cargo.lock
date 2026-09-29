@@ -1938,6 +1938,7 @@ version = "0.1.5"
 name = "zetesis-test-support"
 version = "0.1.5"
 dependencies = [
+ "serde_json",
  "zetesis-core",
 ]
 

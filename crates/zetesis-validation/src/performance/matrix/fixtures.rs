@@ -28,8 +28,8 @@ pub(crate) fn fixture() -> (Value, String) {
     }});
     let text = format!(
         "Backend: cpu (fixture)\n  effective execution: backend=cpu; oracle=closure; grounder=eager; workers=1\n{}{}",
-        include_str!("../../../tests/support/phase_statistics.txt"),
-        include_str!("../../../tests/support/stage_statistics.txt")
+        zetesis_test_support::fixtures::PHASE_STATISTICS,
+        zetesis_test_support::fixtures::STAGE_STATISTICS
     );
     (document, text)
 }

@@ -88,7 +88,7 @@ fn malformed_duplicate_truncated_and_out_of_range_records_are_refused() {
 
 #[test]
 fn certificate_schema_is_distinct_and_legacy_evidence_remains_readable() {
-    let legacy = include_str!("../../tests/support/phase_statistics.txt");
+    let legacy = zetesis_test_support::fixtures::PHASE_STATISTICS;
     let old = parse(legacy).unwrap().unwrap();
     assert_eq!(old.schema_version, 1);
     assert!(!old.phases.contains_key("certificate_setup"));

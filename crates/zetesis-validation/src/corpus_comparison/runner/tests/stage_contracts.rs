@@ -6,7 +6,7 @@ use super::{NATIVE, PHASE_TIMINGS, check, emitting, loaded, options};
 use crate::corpus_comparison::NativeOracle;
 use zetesis_backend::{Backend, GpuApi};
 
-const STAGES: &str = include_str!("../../../../tests/support/stage_statistics.txt");
+const STAGES: &str = zetesis_test_support::fixtures::STAGE_STATISTICS;
 
 #[test]
 fn stage_evidence_is_retained_independently_of_solver_completion() {

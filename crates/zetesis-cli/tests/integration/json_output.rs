@@ -1,6 +1,6 @@
 //! Typed streaming JSON preserves the ordinary solver's semantic and output contracts.
 
-use crate::support::spelled;
+use zetesis_test_support::document::spelled;
 
 use std::io::{self, Write};
 use std::process::Command;
@@ -110,7 +110,7 @@ fn source_projection_selects_full_representatives() {
     assert_eq!(models.len(), 2);
     let mut keys = std::collections::BTreeSet::new();
     for answer in models {
-        let full = spelled::spelled(&value, answer);
+        let full = spelled(&value, answer);
         keys.insert(full.iter().any(|atom| atom["predicate"] == "p"));
         assert_eq!(answer["model"]["shown"]["atom_indices"], json!([]));
     }
@@ -189,7 +189,7 @@ fn hidden_display_preserves_full_model_identity() {
         let mut full = std::collections::BTreeSet::new();
         for model in models {
             assert_eq!(model["model"]["shown"]["atom_indices"], json!([]));
-            full.insert(Json::Array(spelled::spelled(&value, model)).to_string());
+            full.insert(Json::Array(spelled(&value, model)).to_string());
         }
         assert_eq!(full, expected);
     }
@@ -450,7 +450,7 @@ fn interruption_retains_an_unproved_incumbent() {
     let models = value["models"].as_array().unwrap();
     assert_eq!(models.len(), 1);
     assert_eq!(models[0]["number"], 1);
-    let full = spelled::spelled(&value, &models[0]);
+    let full = spelled(&value, &models[0]);
     assert_eq!(full.len(), 1);
     // Either stable model may be found first; its retained cost must match it.
     let (name, cost) = match full[0]["predicate"].as_str() {

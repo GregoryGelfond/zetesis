@@ -39,7 +39,7 @@ fn input(source: &str) -> Result<AdmittedFormula, FormulaFailure> {
 }
 
 fn cases() -> Vec<Json> {
-    include_str!("../fixtures/comparison-generators.jsonl")
+    zetesis_test_support::fixtures::COMPARISON_GENERATORS
         .lines()
         .map(|line| serde_json::from_str(line).unwrap())
         .collect()

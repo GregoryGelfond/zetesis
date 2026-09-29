@@ -1,6 +1,6 @@
 //! Output capacity cannot retract an already checked CPU conclusion.
 
-mod spelled;
+use zetesis_test_support::document::spelled;
 
 use super::document_fixture::{Document, summary};
 use crate::failure::Progress;
@@ -144,7 +144,7 @@ fn batched_cpu_footer_admission_preserves_exact_completion() {
         .as_array()
         .unwrap()
         .iter()
-        .map(|record| serde_json::Value::Array(spelled::spelled(&parsed, record)))
+        .map(|record| serde_json::Value::Array(spelled(&parsed, record)))
         .collect();
     models.sort_by_cached_key(ToString::to_string);
     assert_eq!(

@@ -9,11 +9,10 @@ use zetesis_cpu::Cancellation;
 
 #[test]
 fn automatic_and_explicit_reduct_routes_preserve_complete_comparison_models() {
-    let cases: Vec<Value> =
-        include_str!("../../../zetesis-themelios/tests/fixtures/comparison-generators.jsonl")
-            .lines()
-            .map(|line| serde_json::from_str(line).unwrap())
-            .collect();
+    let cases: Vec<Value> = zetesis_test_support::fixtures::COMPARISON_GENERATORS
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
     let mut admitted = 0;
     let mut reference_models = 0;
     for case in cases.iter().filter(|case| case["native"] == "admit") {

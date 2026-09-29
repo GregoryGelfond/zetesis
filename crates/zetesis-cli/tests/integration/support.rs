@@ -10,7 +10,6 @@ pub(crate) mod logical_extremum_sources;
 #[cfg(feature = "gpu")]
 pub(crate) mod physical_backend;
 pub(crate) mod projected_conditional_sources;
-pub(crate) mod spelled;
 
 // A helper of `zetesis-themelios`'s integration tests, compiled here too.
 #[path = "../../../zetesis-themelios/tests/integration/support/source_oracle.rs"]

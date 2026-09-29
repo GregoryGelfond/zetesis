@@ -21,10 +21,10 @@ type Names = BTreeSet<String>;
 type Models = BTreeSet<Names>;
 
 fn cases() -> Vec<Json> {
-    serde_json::from_str(include_str!("../fixtures/negative-heads.json")).unwrap()
+    serde_json::from_str(zetesis_test_support::fixtures::NEGATIVE_HEADS).unwrap()
 }
 fn singleton_cases() -> Vec<Json> {
-    serde_json::from_str(include_str!("../fixtures/singleton-heads.json")).unwrap()
+    serde_json::from_str(zetesis_test_support::fixtures::SINGLETON_HEADS).unwrap()
 }
 fn input(source: &str) -> Result<AdmittedFormula, FormulaFailure> {
     limited(

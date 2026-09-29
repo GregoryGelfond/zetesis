@@ -5,5 +5,7 @@
 //! the crates that use it never link a second copy of themselves. It is not
 //! published or installed.
 
+pub mod document;
+pub mod fixtures;
 pub mod io;
 pub mod programs;
