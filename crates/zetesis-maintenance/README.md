@@ -37,7 +37,7 @@ fresh cleanup, ordered commands and incomplete status until both floors pass.
 After both reports exist, both floor commands run independently; `floors.tsv`
 retains their profile names and exit statuses, including failures. This does not
 change either floor or make a below-floor portable population pass.
-The sixteen physical groups contain 59 exact tests; the Rust checker rejects
+The fourteen physical groups contain 58 exact tests; the Rust checker rejects
 selection drift, zero matches and incomplete individual outcomes.
 
 `scripts/maintenance.sh` enters the repository and selects Cargo 1.97.1 before

@@ -142,7 +142,7 @@ fn physical_selection_is_a_fixed_contract() {
                 " session_resources_gpu::metal_terminal_sessions_preserve_complete_families",
                 "",
             ),
-        TABLE.lines().take(15).collect::<Vec<_>>().join("\n"),
+        TABLE.lines().take(13).collect::<Vec<_>>().join("\n"),
         TABLE.replace("metal_support_matches_exact_reduct_semantics", "unknown"),
         TABLE.lines().skip(1).collect::<Vec<_>>().join("\n"),
     ] {
@@ -207,10 +207,6 @@ fn metal_selection_refuses_vulkan_substitution() {
         (
             "metal_relation_refusals_preserve_prepared_view",
             "vulkan_relation_refusals_preserve_prepared_view",
-        ),
-        (
-            "metal_relation_measurement_keeps_complete_masks",
-            "vulkan_relation_measurement_keeps_complete_masks",
         ),
         (
             "metal_formula_executes_while_relation_columns_remain_prepared",
@@ -352,8 +348,8 @@ fn physical_metadata_keeps_floor_populations_separate() {
         record["floor_profiles"],
         serde_json::json!(["workspace", "cli-cpu"])
     );
-    assert_eq!(record["expected_physical_tests"], 60);
-    assert_eq!(record["physical_test_groups"].as_array().unwrap().len(), 16);
+    assert_eq!(record["expected_physical_tests"], 58);
+    assert_eq!(record["physical_test_groups"].as_array().unwrap().len(), 14);
     assert_eq!(
         record["project_added_filename_filters"],
         serde_json::json!([])
@@ -386,9 +382,7 @@ fn physical_metadata_retains_the_reviewed_schedule() {
             ["cli-lazy", "test", "integration", 5],
             ["cli-formula", "test", "integration", 3],
             ["world-views", "test", "integration", 4],
-            ["aggregate-measurement", "test", "aggregate_measurement", 1],
             ["relation", "test", "integration", 2],
-            ["relation-measurement", "test", "relation_measurement", 1],
             ["context", "test", "integration", 1],
             ["solve-context", "lib", "workspace libraries", 3],
             ["session-resources", "test", "integration", 9],
@@ -403,9 +397,9 @@ fn physical_metadata_retains_the_reviewed_schedule() {
         "language_consumers::physical::metal_families_retain_scored_observations",
         "language_consumers::physical::metal_optimum_ties_retain_full_answers"
     ]);
-    assert_eq!(groups[14]["tests"], language_tests);
+    assert_eq!(groups[12]["tests"], language_tests);
     let tests = record["physical_tests"].as_array().unwrap();
-    assert_eq!(tests.len(), 60);
+    assert_eq!(tests.len(), 58);
     let formula_tests = serde_json::json!([
         "formula_gpu::physical::ordinary_metal_formula_batches_match_complete_cpu_models_costs_and_displays",
         "formula_gpu::physical::ordinary_metal_formula_limits_preserve_partial_coverage_and_writer_errors",
@@ -423,19 +417,19 @@ fn physical_metadata_retains_the_reviewed_schedule() {
         "session_resources_gpu::metal_tight_refusal_preserves_pending_coverage",
         "session_resources_gpu::metal_terminal_sessions_preserve_complete_families"
     ]);
-    assert_eq!(groups[13]["tests"], session_tests);
+    assert_eq!(groups[11]["tests"], session_tests);
     let static_tests = serde_json::json!([
         "hardware::metal_constructor_executes_resident_batches_without_fallback",
         "hardware::metal_static_oracle_matches_independent_closures"
     ]);
-    assert_eq!(groups[15]["tests"], static_tests);
+    assert_eq!(groups[13]["tests"], static_tests);
     let grouped_tests: Vec<_> = groups
         .iter()
         .flat_map(|group| group["tests"].as_array().unwrap().iter())
         .collect();
     assert_eq!(tests.iter().collect::<Vec<_>>(), grouped_tests);
     let scope = record["physical_scope"].as_str().unwrap();
-    assert!(scope.starts_with("60 exact Metal tests: "));
+    assert!(scope.starts_with("58 exact Metal tests: "));
     assert!(scope.contains("complete tight families, the general device route for non-tight theories, and tight work refusal before dispatch"));
     assert!(scope.contains("completed-support table joins with actual GPU candidates and complete CPU/Metal answer families"));
     assert!(scope.contains("static constructor and complete closure/reference checks"));

@@ -77,4 +77,4 @@ done <<EOT
 $table
 EOT
 printf '%s\n' passed > "$hardware_dir/$backend-status.txt"
-printf '%s\n' "hardware qualification passed: $backend, 16 groups, 60 exact tests"
+printf '%s\n' "hardware qualification passed: $backend, 14 groups, 58 exact tests"

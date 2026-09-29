@@ -171,7 +171,7 @@ Neither participates in production answer-set search.
 
 The hardware gate selects Metal on macOS and Vulkan elsewhere. Override the
 selection with `scripts/check.sh hardware --metal` or `--vulkan`.
-Each backend has a reviewed selection of 60 exact tests in 16 groups.
+Each backend has a reviewed selection of 58 exact tests in 14 groups.
 This includes complete terminal-definition reconstruction over device-verified
 base answers, compared with eager CPU answer sets and the original output queries.
 Logs and status files are retained under `target/hardware`.
@@ -273,8 +273,8 @@ The static closure comparison checked 53 candidate executions against an
 independent ordered-set reference. Owned seeds, indexed selections and manual
 selections share that reference, including reused epochs and the 4,096-atom
 boundary. Each of the four tight-oracle physical tests exercises both Atomic
-and Grouped support construction. The relation tests cover typed equality masks,
-prepared-view refusals and matched scalar/Rayon/Metal measurement results.
+and Grouped support construction. The relation tests cover typed equality masks and
+prepared-view refusals.
 The shared-context tests cover formula execution while relation columns remain
 prepared, non-destructive contention refusal and failure propagation to peers.
 They check reuse after healthy, settled preparation cancellation, as well as

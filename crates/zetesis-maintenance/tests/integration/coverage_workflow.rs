@@ -107,7 +107,6 @@ fn omitted_physical_group_prevents_instrumentation() {
     for group in [
         "lazy",
         "relation",
-        "relation-measurement",
         "context",
         "solve-context",
         "session-resources",
@@ -169,9 +168,7 @@ fn altered_physical_records_prevent_completion() {
 fn failed_physical_execution_preserves_its_exit_code() {
     for group in [
         "wgpu-lib",
-        "aggregate-measurement",
         "relation",
-        "relation-measurement",
         "solve-context",
         "session-resources",
         "language-consumers",

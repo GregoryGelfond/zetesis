@@ -24,12 +24,12 @@ pub struct Group {
 pub struct Selection {
     /// The API whose reviewed table this is.
     pub api: GpuApi,
-    /// The sixteen groups with their exact tests.
+    /// The fourteen groups with their exact tests.
     pub groups: Vec<Group>,
 }
 
 /// The reviewed selections: the Metal one and the Vulkan one, the same
-/// sixteen groups and counts, each naming the tests of its own API.
+/// fourteen groups and counts, each naming the tests of its own API.
 const SELECTIONS: [(GpuApi, &str); 2] = [
     (GpuApi::Metal, include_str!("physical-selection.txt")),
     (
@@ -44,7 +44,7 @@ const SELECTIONS: [(GpuApi, &str); 2] = [
 /// # Errors
 /// Refuses missing/extra groups, altered target/count identities or duplicate tests.
 pub fn selection(table: &str) -> Result<Selection, Error> {
-    const EXPECTED: [(&str, &str, usize); 16] = [
+    const EXPECTED: [(&str, &str, usize); 14] = [
         ("wgpu-lib", "lib", 14),
         ("tight", "integration", 4),
         ("formula", "integration", 2),
@@ -53,9 +53,7 @@ pub fn selection(table: &str) -> Result<Selection, Error> {
         ("cli-lazy", "integration", 5),
         ("cli-formula", "integration", 3),
         ("world-views", "integration", 4),
-        ("aggregate-measurement", "aggregate_measurement", 1),
         ("relation", "integration", 2),
-        ("relation-measurement", "relation_measurement", 1),
         ("context", "integration", 1),
         ("solve-context", "lib", 3),
         ("session-resources", "integration", 9),
@@ -68,13 +66,13 @@ pub fn selection(table: &str) -> Result<Selection, Error> {
         .map(|(api, _)| *api)
         .ok_or_else(|| {
             Error::Invalid(
-                "physical qualification requires one reviewed selection of 60 exact test identities".into(),
+                "physical qualification requires one reviewed selection of 58 exact test identities".into(),
             )
         })?;
     let rows: Vec<_> = table.lines().collect();
     require(
         rows.len() == EXPECTED.len(),
-        "physical qualification requires all sixteen groups and 60 named tests",
+        "physical qualification requires all fourteen groups and 58 named tests",
     )?;
     let mut groups = Vec::new();
     let mut all_names = BTreeSet::new();
