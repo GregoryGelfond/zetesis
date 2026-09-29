@@ -1,5 +1,6 @@
 //! Integration tests of `zetesis-core`, compiled as one test binary.
 
+mod support;
 mod atom_keys;
 mod atom_lookup;
 mod canonical_carrier;

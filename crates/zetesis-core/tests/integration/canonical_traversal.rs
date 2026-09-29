@@ -1,8 +1,9 @@
 //! Logical traversal and order do not depend on the payload's owner.
 
+use crate::support::canonical::{before, catalog};
 use std::convert::Infallible;
 use zetesis_core::catalog::TermRef;
-use zetesis_core::{Atom, AtomCatalog, Predicate, Sign, Value, ValueLimits, ValueNode as N};
+use zetesis_core::{AtomCatalog, Sign, Value, ValueLimits, ValueNode as N};
 
 fn function(name: &str, arity: usize) -> N {
     N::Function {
@@ -14,21 +15,8 @@ fn function(name: &str, arity: usize) -> N {
 fn tree(nodes: Vec<N>) -> Value {
     Value::from_nodes(nodes, ValueLimits::default()).unwrap()
 }
-fn catalog(value: Value) -> AtomCatalog {
-    AtomCatalog::new(vec![
-        Atom::new(Predicate::new("p", 1).unwrap(), vec![value]).unwrap(),
-    ])
-    .unwrap()
-}
 fn term(catalog: &AtomCatalog) -> TermRef<'_> {
     catalog.atoms().at(0).unwrap().values().at(0).unwrap()
-}
-fn before(remaining: &mut usize) -> Result<(), ()> {
-    if *remaining == 0 {
-        return Err(());
-    }
-    *remaining -= 1;
-    Ok(())
 }
 fn nested() -> Value {
     tree(vec![

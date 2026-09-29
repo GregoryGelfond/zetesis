@@ -2,6 +2,7 @@
 
 use std::convert::Infallible;
 
+use crate::support::canonical::before;
 use zetesis_core::catalog::interner::{AtomInterner, Failure, Limits};
 use zetesis_core::catalog::{AtomCatalog, AtomRef};
 use zetesis_core::{Atom, Model, ModelError, ModelFailure, Predicate, Value};
@@ -25,14 +26,6 @@ fn owner() -> AtomInterner {
             .unwrap();
     }
     owner
-}
-
-fn before(remaining: &mut usize) -> Result<(), ()> {
-    if *remaining == 0 {
-        return Err(());
-    }
-    *remaining -= 1;
-    Ok(())
 }
 
 #[test]

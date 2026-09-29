@@ -2,17 +2,12 @@
 
 use std::{convert::Infallible, fmt};
 
+use crate::support::canonical::catalog;
 use zetesis_core::{
-    Atom, AtomCatalog, Predicate, Sign, Value, ValueError, ValueLimits, ValueNode, ValueResource,
-    ValueWriteError, catalog::TermRef,
+    Sign, Value, ValueError, ValueLimits, ValueNode, ValueResource, ValueWriteError,
+    catalog::TermRef,
 };
 
-fn catalog(value: Value) -> AtomCatalog {
-    AtomCatalog::new(vec![
-        Atom::new(Predicate::new("p", 1).unwrap(), vec![value]).unwrap(),
-    ])
-    .unwrap()
-}
 fn complex() -> Value {
     Value::from_nodes(
         vec![
