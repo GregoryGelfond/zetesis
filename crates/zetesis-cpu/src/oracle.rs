@@ -26,10 +26,8 @@ use block_steps::BlockSteps;
 pub mod source;
 pub(crate) mod worlds;
 #[cfg(test)]
-#[path = "oracle/closure_tests.rs"]
 mod closure_tests;
 #[cfg(test)]
-#[path = "oracle/work_tests.rs"]
 mod work_tests;
 
 /// Exact checking budgets, applied before the next charged operation/insertion.
