@@ -55,20 +55,35 @@ fn default_request_proves_optimum_before_returning_one_model() {
     assert_eq!(unpruned.optimization.unwrap().scored_models, 2);
 }
 
+/// Four stable models, which `#show.` displays alike; two tie at the optimum.
+const HIDDEN_TIES: &str = "{hidden}. {a}. #show. #minimize { -1@2,a:a; 0@7,z:hidden }.";
+
 #[test]
 fn all_optimal_hidden_models_retain_multiplicity_and_fixed_priorities() {
-    let source = "{hidden}. {a}. #show. #minimize { -1@2,a:a; 0@7,z:hidden }.";
-    let (all, text) = solve(source, &["--models", "0"]);
+    // The bound keeps every tie, so these hold for any schedule of the
+    // workers; how many dominated models are scored does not.
+    let (all, text) = solve(HIDDEN_TIES, &["--models", "0"]);
     assert_eq!(all.completion, Completion::Exhausted);
     assert_eq!(all.models, 2);
     let best = all.optimization.unwrap();
     assert_eq!(best.score.costs(), &[(7, 0), (2, -1)]);
     assert_eq!(best.tied_models, 2);
-    assert_eq!(best.scored_models, 4);
     assert_eq!(text.matches("Optimization: 0 -1\n").count(), 2);
-    let (one, _) = solve(source, &[]);
+    let (one, _) = solve(HIDDEN_TIES, &[]);
     assert_eq!(one.models, 1);
     assert_eq!(one.optimization.unwrap().tied_models, 2);
+}
+
+#[test]
+fn every_hidden_model_is_scored_without_bound_pruning() {
+    // With pruning, a dominated model goes unscored when another worker's
+    // incumbent bound reaches it first. Without it, every stable model is
+    // scored exactly once, identical displays included.
+    let (all, _) = solve(
+        HIDDEN_TIES,
+        &["--models", "0", "--max-objective-bound-work", "0"],
+    );
+    assert_eq!(all.optimization.unwrap().scored_models, 4);
 }
 
 #[test]
