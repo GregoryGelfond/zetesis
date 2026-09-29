@@ -1,23 +1,21 @@
-use super::{
-    super::{
-        AggregateGpuCapability as Capability, AggregateGpuError as Error, AggregateGpuPlan,
-        AggregateGpuPlanLimits, preparation::signed,
-    },
-    fixtures,
+use super::super::{
+    AggregateGpuCapability as Capability, AggregateGpuError as Error, AggregateGpuPlan,
+    AggregateGpuPlanLimits, preparation::signed,
 };
 use zetesis_core::Value;
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::native_aggregate::{Bound, Function, Guard};
+use zetesis_theory_support::aggregate as reference;
 
 #[test]
 fn numerical_preparation_preserves_neutral_keys() {
-    let theory = fixtures::theory();
+    let theory = reference::theory();
     for (function, expected) in [
         (Function::Count, [1, 1, 1, 1]),
         (Function::Sum, [-3, 2, 0, 0]),
         (Function::SumPlus, [0, 2, 0, 0]),
     ] {
-        let group = fixtures::operation(
+        let group = reference::operation(
             &theory,
             function,
             vec![
@@ -54,8 +52,8 @@ fn numerical_preparation_preserves_neutral_keys() {
 
 #[test]
 fn cancellation_cannot_hide_an_overflowing_positive_carrier() {
-    let theory = fixtures::theory();
-    let group = fixtures::operation(
+    let theory = reference::theory();
+    let group = reference::operation(
         &theory,
         Function::Sum,
         [i32::MAX, 1, -1]
@@ -79,8 +77,8 @@ fn cancellation_cannot_hide_an_overflowing_positive_carrier() {
 
 #[test]
 fn cancellation_cannot_hide_an_overflowing_negative_carrier() {
-    let theory = fixtures::theory();
-    let group = fixtures::operation(
+    let theory = reference::theory();
+    let group = reference::operation(
         &theory,
         Function::Sum,
         [i32::MIN, -1, 1]
@@ -104,9 +102,9 @@ fn cancellation_cannot_hide_an_overflowing_negative_carrier() {
 
 #[test]
 fn exact_signed_endpoints_are_admitted() {
-    let theory = fixtures::theory();
-    for function in fixtures::FUNCTIONS {
-        let group = fixtures::operation(
+    let theory = reference::theory();
+    for function in reference::FUNCTIONS {
+        let group = reference::operation(
             &theory,
             function,
             [i32::MIN, i32::MAX]
@@ -127,9 +125,9 @@ fn exact_signed_endpoints_are_admitted() {
 
 #[test]
 fn extrema_refuse_nonnumeric_contributions_explicitly() {
-    let theory = fixtures::theory();
+    let theory = reference::theory();
     for function in [Function::Min, Function::Max] {
-        let group = fixtures::operation(
+        let group = reference::operation(
             &theory,
             function,
             vec![Some(Value::Symbol("symbol".into()))],
@@ -149,9 +147,9 @@ fn extrema_refuse_nonnumeric_contributions_explicitly() {
 
 #[test]
 fn numerical_guard_views_have_the_same_wire_representation() {
-    let theory = fixtures::theory();
-    for comparison in fixtures::COMPARISONS {
-        let integer = fixtures::operation(
+    let theory = reference::theory();
+    for comparison in reference::COMPARISONS {
+        let integer = reference::operation(
             &theory,
             Function::Count,
             vec![],
@@ -160,7 +158,7 @@ fn numerical_guard_views_have_the_same_wire_representation() {
                 bound: Bound::Integer(-2),
             }],
         );
-        let term = fixtures::operation(
+        let term = reference::operation(
             &theory,
             Function::Count,
             vec![],
@@ -186,7 +184,7 @@ fn numerical_guard_views_have_the_same_wire_representation() {
 
 #[test]
 fn unsupported_guards_remain_typed_capability_failures() {
-    let theory = fixtures::theory();
+    let theory = reference::theory();
     for (bound, expected) in [
         (
             Bound::Integer(i128::from(i32::MAX) + 1),
@@ -197,12 +195,12 @@ fn unsupported_guards_remain_typed_capability_failures() {
             Capability::NonNumericGuard { guard: 0 },
         ),
     ] {
-        let group = fixtures::operation(
+        let group = reference::operation(
             &theory,
             Function::Count,
             vec![],
             vec![Guard {
-                comparison: fixtures::COMPARISONS[0],
+                comparison: reference::COMPARISONS[0],
                 bound,
             }],
         );
@@ -220,8 +218,8 @@ fn unsupported_guards_remain_typed_capability_failures() {
 
 #[test]
 fn preparation_ceilings_are_inclusive() {
-    let theory = fixtures::theory();
-    let group = fixtures::group(&theory, Function::Sum, 4);
+    let theory = reference::theory();
+    let group = reference::group(&theory, Function::Sum, 4);
     let prepared = AggregateGpuPlan::new(
         &group,
         AggregateGpuPlanLimits::default(),
@@ -261,8 +259,8 @@ fn preparation_ceilings_are_inclusive() {
 
 #[test]
 fn preparation_observes_caller_cancellation() {
-    let theory = fixtures::theory();
-    let group = fixtures::group(&theory, Function::Sum, 0);
+    let theory = reference::theory();
+    let group = reference::group(&theory, Function::Sum, 0);
     let cancellation = Cancellation::default();
     cancellation.cancel();
     assert_eq!(
@@ -274,7 +272,7 @@ fn preparation_observes_caller_cancellation() {
 
 #[test]
 fn borrowed_canonical_group_uses_numeric_preparation() {
-    let theory = fixtures::theory();
+    let theory = reference::theory();
     let mut builder = zetesis_core::catalog::VocabularyBuilder::new(1 << 20).unwrap();
     let key = builder
         .import_term_with(

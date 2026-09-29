@@ -4,10 +4,11 @@ use std::collections::BTreeSet;
 use std::convert::Infallible;
 use std::num::NonZeroUsize;
 
-use zetesis_ferraris::{AdmissionLimits, Interpretation, Node, Theory};
+use zetesis_ferraris::{Interpretation, Node, Theory};
 use zetesis_sat::{
     BatchError, BatchLimits, BatchVerdict, Cancellation, Incomplete, Limits, StableModels,
 };
+use zetesis_theory_support::theories::theory;
 
 /// Enumerate by the clause forms, the subject of the tests below.
 fn by_clauses(
@@ -23,9 +24,6 @@ fn by_clauses(
     )
 }
 
-fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
-    Theory::new(atoms, nodes, roots, AdmissionLimits::default()).unwrap()
-}
 fn choices() -> Theory {
     theory(
         3,

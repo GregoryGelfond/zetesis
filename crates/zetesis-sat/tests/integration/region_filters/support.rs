@@ -6,11 +6,12 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use zetesis_cpu::regions::Region;
-use zetesis_ferraris::{AdmissionLimits, Interpretation, Node, Theory};
+use zetesis_ferraris::{Interpretation, Node, Theory};
 use zetesis_sat::{
     BatchLimits, BatchVerdict, Cancellation, Incomplete, Limits, RegionFeasibility, RegionFilter,
     RegionFilterWorker, StableModels,
 };
+use zetesis_theory_support::theories::theory;
 
 #[derive(Clone, Copy, Debug)]
 pub enum Route {
@@ -74,10 +75,6 @@ fn residual(
     result.try_reserve_exact(candidates.len())?;
     result.resize(candidates.len(), BatchVerdict::Residual);
     Ok(result)
-}
-
-pub fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
-    Theory::new(atoms, nodes, roots, AdmissionLimits::default()).unwrap()
 }
 
 pub fn choices(atoms: usize) -> Theory {

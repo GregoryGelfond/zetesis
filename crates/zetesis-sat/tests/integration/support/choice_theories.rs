@@ -3,7 +3,7 @@
 
 use zetesis_ferraris::{Node, Theory};
 
-use super::formula_theories::theory;
+use zetesis_theory_support::theories::theory;
 
 /// Independent choices: a | not a, for each atom.
 pub fn choices(atoms: usize) -> Theory {

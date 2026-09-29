@@ -177,9 +177,11 @@ internal support crates, each over one dependency closure, so a test build
 compiles only what its tests use and no crate's unit tests link a second copy of
 that crate. `zetesis-test-support`, over `zetesis-core`, holds the sinks that
 fail on purpose, builders of small programs, the reader of a JSON document's
-spelled atoms and the data several crates' tests read. A helper that only one crate's tests use stays in that crate's
-`tests/integration/support`. The support crates are not published, and every
-coverage report skips their sources.
+spelled atoms and the data several crates' tests read. `zetesis-theory-support`,
+over `zetesis-ferraris`, holds the small-theory builder and the CPU reference a
+device's aggregates are compared with. A helper that only one crate's tests use
+stays in that crate's `tests/integration/support`. The support crates are not
+published, and every coverage report skips their sources.
 
 The portable gate's `authored_lints` regression checks literal Rust attributes
 throughout the maintained source roots, including inactive `cfg_attr` branches

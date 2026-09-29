@@ -1,4 +1,3 @@
-pub(in crate::aggregate) mod fixtures;
 mod packing;
 mod preparation;
 

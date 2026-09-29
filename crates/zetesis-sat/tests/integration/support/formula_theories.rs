@@ -1,10 +1,7 @@
 //! Small formula theories the region propositions share.
 
-use zetesis_ferraris::{AdmissionLimits, Node, Theory};
-
-pub fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
-    Theory::new(atoms, nodes, roots, AdmissionLimits::default()).unwrap()
-}
+use zetesis_ferraris::{Node, Theory};
+use zetesis_theory_support::theories::theory;
 
 /// p | q <- d.  d.  r <- not p.  :- q, r.  s | not s.
 pub fn mixed() -> Theory {

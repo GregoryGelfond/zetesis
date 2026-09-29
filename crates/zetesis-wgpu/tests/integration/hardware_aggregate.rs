@@ -1,12 +1,12 @@
 //! Explicit physical numeric aggregate qualification; absence is a hard failure.
 
 use crate::support::physical;
-mod fixtures;
 
 use zetesis_backend::GpuApi;
 use zetesis_core::Value;
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::native_aggregate::{self as native, Function};
+use zetesis_theory_support::aggregate as reference;
 use zetesis_wgpu::{
     AggregateGpuActivity, AggregateGpuError, AggregateGpuEvaluation, AggregateGpuLimits,
     AggregateGpuPlan, AggregateGpuPlanLimits, AggregateGpuValue, GpuAggregateOracle, GpuErrorKind,
@@ -86,12 +86,12 @@ fn vulkan_aggregate_reductions_match_native_occurrences() {
 
 fn qualify_reductions(backend: GpuApi) {
     let mut oracle = oracle(backend);
-    let theory = fixtures::theory();
-    let worlds = fixtures::worlds(&theory);
+    let theory = reference::theory();
+    let worlds = reference::worlds(&theory);
     let mut occurrences = 0;
-    for function in fixtures::FUNCTIONS {
+    for function in reference::FUNCTIONS {
         for count in [0, 1, 31, 32, 33, 63, 64, 65, 129, 1024] {
-            let group = fixtures::group(&theory, function, count);
+            let group = reference::group(&theory, function, count);
             let plan = AggregateGpuPlan::new(
                 &group,
                 AggregateGpuPlanLimits::default(),
@@ -99,7 +99,7 @@ fn qualify_reductions(backend: GpuApi) {
             )
             .unwrap();
             for batch in [1, 3, 31, 32, 33, 65] {
-                let mut records = fixtures::observations(&group, &worlds, batch);
+                let mut records = reference::observations(&group, &worlds, batch);
                 compare(&mut oracle, &plan, &records, AggregateGpuLimits::default());
                 assert_eq!(
                     oracle.last_batch_stats().unwrap().group_uploaded,
@@ -136,9 +136,9 @@ fn vulkan_aggregate_guards_preserve_numeric_boundaries() {
 
 fn qualify_guards(backend: GpuApi) {
     let mut oracle = oracle(backend);
-    let theory = fixtures::theory();
-    let worlds = fixtures::worlds(&theory);
-    for function in fixtures::FUNCTIONS {
+    let theory = reference::theory();
+    let worlds = reference::worlds(&theory);
+    for function in reference::FUNCTIONS {
         let mut carrier = vec![
             Some(Value::Number(i32::MIN)),
             Some(Value::Number(i32::MAX)),
@@ -150,7 +150,7 @@ fn qualify_guards(backend: GpuApi) {
         ) {
             carrier.push(Some(Value::Symbol("neutral".into())));
         }
-        for comparison in fixtures::COMPARISONS {
+        for comparison in reference::COMPARISONS {
             for bound in [i32::MIN, 0, i32::MAX] {
                 // Both numerical bound views are admissible; all declared guards
                 // must be checked even when the first one is false.
@@ -164,7 +164,7 @@ fn qualify_guards(backend: GpuApi) {
                         bound: native::Bound::Term(Value::Number(2)),
                     },
                 ];
-                let group = fixtures::operation(&theory, function, carrier.clone(), guards);
+                let group = reference::operation(&theory, function, carrier.clone(), guards);
                 let plan = AggregateGpuPlan::new(
                     &group,
                     AggregateGpuPlanLimits::default(),
@@ -174,7 +174,7 @@ fn qualify_guards(backend: GpuApi) {
                 compare(
                     &mut oracle,
                     &plan,
-                    &fixtures::observations(&group, &worlds, 41),
+                    &reference::observations(&group, &worlds, 41),
                     AggregateGpuLimits::default(),
                 );
             }
@@ -196,16 +196,16 @@ fn vulkan_aggregate_exact_admission_preserves_cache_lifecycle() {
 
 fn qualify_admission(backend: GpuApi) {
     let mut oracle = oracle(backend);
-    let theory = fixtures::theory();
-    let worlds = fixtures::worlds(&theory);
-    let group = fixtures::group(&theory, Function::Sum, 4);
+    let theory = reference::theory();
+    let worlds = reference::worlds(&theory);
+    let group = reference::group(&theory, Function::Sum, 4);
     let plan = AggregateGpuPlan::new(
         &group,
         AggregateGpuPlanLimits::default(),
         &Cancellation::default(),
     )
     .unwrap();
-    let records = fixtures::observations(&group, &worlds, 3);
+    let records = reference::observations(&group, &worlds, 3);
     compare(&mut oracle, &plan, &records, AggregateGpuLimits::default());
     let stats = *oracle.last_batch_stats().unwrap();
     let exact = AggregateGpuLimits {
@@ -216,8 +216,8 @@ fn qualify_admission(backend: GpuApi) {
         ..Default::default()
     };
     refuse_preflight(&mut oracle, &plan, &records, exact);
-    let equal = fixtures::group(&theory, Function::Sum, 4);
-    let foreign = fixtures::observations(&equal, &worlds, 3);
+    let equal = reference::group(&theory, Function::Sum, 4);
+    let foreign = reference::observations(&equal, &worlds, 3);
     assert!(
         matches!(oracle.check_batch(&plan, &foreign, exact, &Cancellation::default()), Err(AggregateGpuError::Gpu(error)) if error.kind() == GpuErrorKind::Seed)
     );
@@ -277,7 +277,7 @@ fn replace_exact(
     worlds: &[zetesis_ferraris::Interpretation],
 ) {
     let group = plan.group();
-    let large = fixtures::group(theory, Function::Sum, 1024);
+    let large = reference::group(theory, Function::Sum, 1024);
     let large_plan = AggregateGpuPlan::new(
         &large,
         AggregateGpuPlanLimits::default(),
@@ -287,7 +287,7 @@ fn replace_exact(
     compare(
         oracle,
         &large_plan,
-        &fixtures::observations(&large, worlds, 65),
+        &reference::observations(&large, worlds, 65),
         AggregateGpuLimits::default(),
     );
     compare(oracle, plan, records, exact);
@@ -300,7 +300,7 @@ fn replace_exact(
     compare(
         oracle,
         plan,
-        &fixtures::observations(group, worlds, 65),
+        &reference::observations(group, worlds, 65),
         AggregateGpuLimits::default(),
     );
     compare(oracle, plan, records, exact);

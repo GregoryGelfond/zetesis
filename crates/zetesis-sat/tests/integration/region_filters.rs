@@ -8,7 +8,8 @@ use std::sync::atomic::Ordering;
 use zetesis_ferraris::{Node, TightPlanLimits};
 use zetesis_sat::{Cancellation, Incomplete, Limits, SearchMethod, StableModels};
 
-use support::{Condition, Filter, ROUTES, Route, choices, theory};
+use support::{Condition, Filter, ROUTES, Route, choices};
+use zetesis_theory_support::theories::theory;
 
 #[test]
 fn absent_filter_has_no_receipt() {

@@ -2,6 +2,7 @@
 
 use crate::support::choice_theories;
 use crate::support::formula_theories as theories;
+use zetesis_theory_support::theories::theory;
 
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
@@ -72,7 +73,7 @@ fn shared_indexes_preserve_non_tight_answer_families() {
         Node::Implies(left + 1, left),
     ]);
     roots.extend([left + 2, left + 3]);
-    let theory = theories::theory(5, nodes, roots);
+    let theory = theory(5, nodes, roots);
     assert!(matches!(
         zetesis_ferraris::TightPlan::compile(
             &theory,
@@ -245,14 +246,14 @@ fn batched_producers_preserve_the_complete_answer_family() {
     let inputs = [
         theories::mixed(),
         choice_theories::choices(5),
-        theories::theory(
+        theory(
             2,
             vec![Node::Atom(0), Node::Atom(1), Node::Or(0, 1)],
             vec![2],
         ),
-        theories::theory(1, vec![Node::Atom(0), Node::Implies(0, 0)], vec![1]),
-        theories::theory(0, vec![], vec![]),
-        theories::theory(0, vec![Node::False], vec![0]),
+        theory(1, vec![Node::Atom(0), Node::Implies(0, 0)], vec![1]),
+        theory(0, vec![], vec![]),
+        theory(0, vec![Node::False], vec![0]),
     ];
     for theory in inputs {
         let expected = expected(&theory);
@@ -276,7 +277,7 @@ fn batched_producers_preserve_the_complete_answer_family() {
 
 #[test]
 fn producers_leave_nonminimal_models_to_the_checker() {
-    let theory = theories::theory(
+    let theory = theory(
         2,
         vec![
             Node::Atom(0),
@@ -354,7 +355,7 @@ fn candidate_exhaustion_follows_the_completed_prefix() {
 
 #[test]
 fn an_empty_family_needs_no_candidate_allowance() {
-    let theory = theories::theory(0, vec![Node::False], vec![0]);
+    let theory = theory(0, vec![Node::False], vec![0]);
     let mut search = proposed(
         &theory,
         Limits {

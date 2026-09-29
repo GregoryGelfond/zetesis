@@ -7,9 +7,10 @@ use std::collections::BTreeSet;
 
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
-    AdmissionLimits, Interpretation, Limits, Narrower, Narrowing, NarrowingStatistics, Node,
-    Producers, Region, RegionLimits, Theory, check, producers,
+    Interpretation, Limits, Narrower, Narrowing, NarrowingStatistics, Node, Producers, Region,
+    RegionLimits, Theory, check, producers,
 };
+use zetesis_theory_support::theories::theory;
 
 mod packed_knowledge;
 
@@ -32,10 +33,6 @@ fn narrow_fresh(
         limits,
         cancellation,
     )
-}
-
-fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
-    Theory::new(atoms, nodes, roots, AdmissionLimits::default()).unwrap()
 }
 
 /// The stable models of a small theory, as masks over its atoms.

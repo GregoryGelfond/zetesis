@@ -3,8 +3,9 @@
 use std::collections::BTreeSet;
 
 use proptest::prelude::*;
-use zetesis_ferraris::{AdmissionLimits, Interpretation, Node, Theory, Verdict};
+use zetesis_ferraris::{Interpretation, Node, Theory, Verdict};
 use zetesis_sat::{Cancellation, Check, Incomplete, Limits, StableModels, check};
+use zetesis_theory_support::theories::theory;
 
 /// Enumerate by the clause forms, the subject of the tests below.
 fn by_clauses(
@@ -18,10 +19,6 @@ fn by_clauses(
         limits,
         cancellation,
     )
-}
-
-fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
-    Theory::new(atoms, nodes, roots, AdmissionLimits::default()).unwrap()
 }
 
 fn interpretation(theory: &Theory, mask: usize) -> Interpretation {

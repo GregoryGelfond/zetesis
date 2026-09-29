@@ -1,31 +1,29 @@
-use super::{
-    super::{
-        AggregateGpuEvaluation, AggregateGpuLimits, AggregateGpuPlan, AggregateGpuPlanLimits,
-        AggregateGpuValue,
-        packing::{Plan, decode},
-        preparation::bits,
-    },
-    fixtures,
+use super::super::{
+    AggregateGpuEvaluation, AggregateGpuLimits, AggregateGpuPlan, AggregateGpuPlanLimits,
+    AggregateGpuValue,
+    packing::{Plan, decode},
+    preparation::bits,
 };
 use crate::GpuErrorKind;
 use std::time::Duration;
 use zetesis_core::Value;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::native_aggregate::{self as native, Function};
+use zetesis_theory_support::aggregate as reference;
 
 #[test]
 fn packed_eligibility_preserves_each_occurrence() {
-    let theory = fixtures::theory();
-    let worlds = fixtures::worlds(&theory);
+    let theory = reference::theory();
+    let worlds = reference::worlds(&theory);
     for count in [0, 1, 31, 32, 33, 63, 64, 65] {
-        let group = fixtures::group(&theory, Function::Sum, count);
+        let group = reference::group(&theory, Function::Sum, count);
         let prepared = AggregateGpuPlan::new(
             &group,
             AggregateGpuPlanLimits::default(),
             &Cancellation::default(),
         )
         .unwrap();
-        let records = fixtures::observations(&group, &worlds, 33);
+        let records = reference::observations(&group, &worlds, 33);
         let plan = Plan::new(
             &prepared,
             &records,
@@ -123,12 +121,12 @@ fn value(value: native::Value<'_>) -> AggregateGpuValue {
 
 #[test]
 fn readback_preserves_native_reduction_observations() {
-    let theory = fixtures::theory();
-    let worlds = fixtures::worlds(&theory);
-    for function in fixtures::FUNCTIONS {
+    let theory = reference::theory();
+    let worlds = reference::worlds(&theory);
+    for function in reference::FUNCTIONS {
         for count in [0, 1, 33, 65] {
-            for comparison in fixtures::COMPARISONS {
-                let group = fixtures::operation(
+            for comparison in reference::COMPARISONS {
+                let group = reference::operation(
                     &theory,
                     function,
                     (0..count)
@@ -145,7 +143,7 @@ fn readback_preserves_native_reduction_observations() {
                     &Cancellation::default(),
                 )
                 .unwrap();
-                let mut records = fixtures::observations(&group, &worlds, 41);
+                let mut records = reference::observations(&group, &worlds, 41);
                 records.reverse();
                 let plan = Plan::new(
                     &prepared,
@@ -192,16 +190,16 @@ fn readback_preserves_native_reduction_observations() {
 
 #[test]
 fn malformed_readback_returns_no_partial_verdicts() {
-    let theory = fixtures::theory();
-    let worlds = fixtures::worlds(&theory);
-    let group = fixtures::group(&theory, Function::Count, 3);
+    let theory = reference::theory();
+    let worlds = reference::worlds(&theory);
+    let group = reference::group(&theory, Function::Count, 3);
     let prepared = AggregateGpuPlan::new(
         &group,
         AggregateGpuPlanLimits::default(),
         &Cancellation::default(),
     )
     .unwrap();
-    let records = fixtures::observations(&group, &worlds, 3);
+    let records = reference::observations(&group, &worlds, 3);
     let plan = Plan::new(
         &prepared,
         &records,
@@ -263,17 +261,17 @@ fn malformed_readback_returns_no_partial_verdicts() {
 
 #[test]
 fn empty_extrema_require_canonical_absence() {
-    let theory = fixtures::theory();
-    let worlds = fixtures::worlds(&theory);
+    let theory = reference::theory();
+    let worlds = reference::worlds(&theory);
     for function in [Function::Min, Function::Max] {
-        let group = fixtures::group(&theory, function, 0);
+        let group = reference::group(&theory, function, 0);
         let prepared = AggregateGpuPlan::new(
             &group,
             AggregateGpuPlanLimits::default(),
             &Cancellation::default(),
         )
         .unwrap();
-        let records = fixtures::observations(&group, &worlds, 1);
+        let records = reference::observations(&group, &worlds, 1);
         let plan = Plan::new(
             &prepared,
             &records,
@@ -306,12 +304,12 @@ fn empty_extrema_require_canonical_absence() {
 #[test]
 fn batch_ceilings_are_inclusive() {
     let cancellation = Cancellation::default();
-    let theory = fixtures::theory();
-    let worlds = fixtures::worlds(&theory);
-    let group = fixtures::group(&theory, Function::Sum, 65);
+    let theory = reference::theory();
+    let worlds = reference::worlds(&theory);
+    let group = reference::group(&theory, Function::Sum, 65);
     let prepared =
         AggregateGpuPlan::new(&group, AggregateGpuPlanLimits::default(), &cancellation).unwrap();
-    let records = fixtures::observations(&group, &worlds, 33);
+    let records = reference::observations(&group, &worlds, 33);
     let device = wgpu::Limits::default();
     let plan = Plan::new(
         &prepared,
@@ -390,17 +388,17 @@ fn batch_ceilings_are_inclusive() {
 
 #[test]
 fn equal_group_contents_do_not_forge_eligibility_identity() {
-    let theory = fixtures::theory();
-    let worlds = fixtures::worlds(&theory);
-    let group = fixtures::group(&theory, Function::Sum, 4);
-    let other = fixtures::group(&theory, Function::Sum, 4);
+    let theory = reference::theory();
+    let worlds = reference::worlds(&theory);
+    let group = reference::group(&theory, Function::Sum, 4);
+    let other = reference::group(&theory, Function::Sum, 4);
     let prepared = AggregateGpuPlan::new(
         &group,
         AggregateGpuPlanLimits::default(),
         &Cancellation::default(),
     )
     .unwrap();
-    let records = fixtures::observations(&other, &worlds, 1);
+    let records = reference::observations(&other, &worlds, 1);
     assert_eq!(
         Plan::new(
             &prepared,
@@ -419,16 +417,16 @@ fn equal_group_contents_do_not_forge_eligibility_identity() {
 
 #[test]
 fn cancellation_interrupts_host_batch_work() {
-    let theory = fixtures::theory();
-    let worlds = fixtures::worlds(&theory);
-    let group = fixtures::group(&theory, Function::Sum, 4);
+    let theory = reference::theory();
+    let worlds = reference::worlds(&theory);
+    let group = reference::group(&theory, Function::Sum, 4);
     let prepared = AggregateGpuPlan::new(
         &group,
         AggregateGpuPlanLimits::default(),
         &Cancellation::default(),
     )
     .unwrap();
-    let records = fixtures::observations(&group, &worlds, 1);
+    let records = reference::observations(&group, &worlds, 1);
     let plan = Plan::new(
         &prepared,
         &records,
@@ -498,8 +496,8 @@ fn complete_work_bounds_shader_index_arithmetic() {
 
 #[test]
 fn shared_vocabulary_does_not_forge_group_identity() {
-    let theory = fixtures::theory();
-    let worlds = fixtures::worlds(&theory);
+    let theory = reference::theory();
+    let worlds = reference::worlds(&theory);
     let mut builder = zetesis_core::catalog::VocabularyBuilder::new(1 << 20).unwrap();
     let key = builder
         .import_term_with(
@@ -534,7 +532,7 @@ fn shared_vocabulary_does_not_forge_group_identity() {
         &Cancellation::default(),
     )
     .unwrap();
-    let records = fixtures::observations(right, &worlds, 1);
+    let records = reference::observations(right, &worlds, 1);
     let error = Plan::new(
         &prepared,
         &records,

@@ -5,16 +5,13 @@ use zetesis_ferraris::{
     AdmissionLimits, Interpretation, Limits, Node, SupportError, SupportLimits, Theory, check,
     models, support_restriction,
 };
+use zetesis_theory_support::theories::theory;
 
 fn limits() -> SupportLimits {
     SupportLimits {
         admission: AdmissionLimits::default(),
         max_work: 100_000,
     }
-}
-
-fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
-    Theory::new(atoms, nodes, roots, AdmissionLimits::default()).unwrap()
 }
 
 fn restrictions(original: &Theory) -> Theory {

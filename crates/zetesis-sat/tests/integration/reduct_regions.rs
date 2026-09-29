@@ -13,7 +13,8 @@ use zetesis_sat::{
     Cancellation, Check, Incomplete, Limits, SearchLimits, SearchMethod, check_with,
 };
 
-use theories::{mixed, theory};
+use theories::mixed;
+use zetesis_theory_support::theories::theory;
 
 fn interpretation(theory: &Theory, mask: usize) -> Interpretation {
     Interpretation::new(

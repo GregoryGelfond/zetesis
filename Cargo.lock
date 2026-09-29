@@ -1868,6 +1868,7 @@ dependencies = [
  "tempfile",
  "zetesis-core",
  "zetesis-cpu",
+ "zetesis-theory-support",
 ]
 
 [[package]]
@@ -1911,6 +1912,7 @@ dependencies = [
  "zetesis-cpu",
  "zetesis-ferraris",
  "zetesis-themelios",
+ "zetesis-theory-support",
 ]
 
 [[package]]
@@ -1965,6 +1967,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "zetesis-theory-support"
+version = "0.1.5"
+dependencies = [
+ "zetesis-core",
+ "zetesis-cpu",
+ "zetesis-ferraris",
+]
+
+[[package]]
 name = "zetesis-validation"
 version = "0.1.5"
 dependencies = [
@@ -1998,6 +2009,7 @@ dependencies = [
  "zetesis-core",
  "zetesis-cpu",
  "zetesis-ferraris",
+ "zetesis-theory-support",
 ]
 
 [[package]]

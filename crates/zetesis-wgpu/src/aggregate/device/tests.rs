@@ -1,9 +1,9 @@
 use super::*;
 use crate::AggregateGpuPlanLimits;
-use crate::aggregate::tests::fixtures;
 use crate::{GpuErrorKind, GpuSelection};
 use zetesis_backend::GpuApi;
 use zetesis_ferraris::native_aggregate::Function;
+use zetesis_theory_support::aggregate as reference;
 
 #[test]
 fn granted_aggregate_resources_are_checked_individually() {
@@ -85,10 +85,10 @@ fn qualify_failure(backend: GpuApi) {
     let mut oracle = corrupt_identity(GpuSelection { api: backend });
     assert!(oracle.info().is_hardware_gpu());
     assert_eq!(oracle.info().backend(), backend.name());
-    let theory = fixtures::theory();
-    let group = fixtures::group(&theory, Function::Sum, 65);
-    let worlds = fixtures::worlds(&theory);
-    let records = fixtures::observations(&group, &worlds, 33);
+    let theory = reference::theory();
+    let group = reference::group(&theory, Function::Sum, 65);
+    let worlds = reference::worlds(&theory);
+    let records = reference::observations(&group, &worlds, 33);
     let plan = AggregateGpuPlan::new(
         &group,
         AggregateGpuPlanLimits::default(),
@@ -143,10 +143,10 @@ fn invalidates_shared_primitive(backend: GpuApi) {
         )
         .unwrap();
     assert!(empty_batch.checks.is_empty());
-    let theory = fixtures::theory();
-    let group = fixtures::group(&theory, Function::Sum, 1);
-    let worlds = fixtures::worlds(&theory);
-    let records = fixtures::observations(&group, &worlds, 1);
+    let theory = reference::theory();
+    let group = reference::group(&theory, Function::Sum, 1);
+    let worlds = reference::worlds(&theory);
+    let records = reference::observations(&group, &worlds, 1);
     let plan = AggregateGpuPlan::new(
         &group,
         AggregateGpuPlanLimits::default(),
