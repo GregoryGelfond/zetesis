@@ -2,19 +2,27 @@
 //!
 //! Every command in a shell code block, and every tool table's first cell,
 //! whose first word is a zetesis executable must name a binary or package of
-//! the workspace, and `zetesis bench` is not a command. A document carrying
-//! [`RECORD`] is a dated measurement record: its commands keep the spellings
-//! of the binaries it records, so it is not checked. Prose is not checked; it
-//! may name an executable's former spelling on purpose.
+//! the workspace, and `zetesis bench` is not a command. A document with
+//! [`RECORD`] on a line of its own is a dated measurement record: its commands
+//! keep the spellings of the binaries it records, so it is not checked. Prose
+//! is not checked; it may name an executable's former spelling on purpose.
 
 use std::collections::BTreeSet;
 
 use crate::{Error, require, workspace};
 
 /// Marks a dated measurement record, whose commands keep the spellings of the
-/// binaries it records.
+/// binaries it records. A record carries it on a line of its own.
 pub const RECORD: &str =
     "<!-- A dated record: its commands keep the spellings of the binaries it records. -->";
+
+/// Whether `text` is a dated measurement record: a line of it is exactly
+/// [`RECORD`]. A document that quotes the marker, as the contributor guide
+/// does in prose, is not a record.
+#[must_use]
+pub fn is_record(text: &str) -> bool {
+    text.lines().any(|line| line.trim() == RECORD)
+}
 
 /// Code-block languages whose lines are shell commands.
 const SHELLS: [&str; 5] = ["sh", "shell", "bash", "zsh", "console"];
@@ -40,7 +48,7 @@ pub fn check<'a>(
         .collect();
     let mut stale = Vec::new();
     for (path, text) in documents {
-        if text.contains(RECORD) {
+        if is_record(text) {
             continue;
         }
         for (line, command) in commands(text) {

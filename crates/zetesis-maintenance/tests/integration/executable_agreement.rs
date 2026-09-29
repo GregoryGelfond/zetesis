@@ -178,3 +178,17 @@ fn a_dated_record_keeps_the_spellings_it_records() {
     );
     invocations::check([("record.md", record.as_str())], &metadata()).unwrap();
 }
+
+#[test]
+fn a_document_quoting_the_record_marker_is_still_checked() {
+    // The contributor guide names the marker in prose; only a record carries
+    // it on a line of its own.
+    let refusal = invocation_refusal(&format!(
+        "# Contributing\n\nA record carries `{}`.\n\n```sh\nzetesis-perf examples/correctness\n```\n",
+        invocations::RECORD
+    ));
+    assert!(
+        refusal.contains("fixture.md:6: `zetesis-perf`"),
+        "{refusal}"
+    );
+}

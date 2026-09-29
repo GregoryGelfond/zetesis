@@ -86,9 +86,10 @@ readable. The [cancellation API migration](docs/book/rust/outcomes.md#cancellati
 distinguishes the shared token from broader interruption variants and retained
 record vocabulary. Executables follow the same rule: live documentation runs and
 lists only binaries the workspace builds, which a portable-gate regression
-checks, while a page recording a dated measurement begins with the marker
+checks, while a page recording a dated measurement carries the marker
 `<!-- A dated record: its commands keep the spellings of the binaries it records. -->`
-so that its recipes keep the spellings of the binaries they record.
+on a line of its own below its title, so that its recipes keep the spellings of
+the binaries they record.
 
 Design an algorithm with its correctness argument: preconditions, postconditions,
 maintained invariants and a decreasing measure or finite bound for termination.
