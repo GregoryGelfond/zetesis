@@ -2,8 +2,6 @@
 
 use std::collections::BTreeSet;
 use std::fs;
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use themelios_base::source::SourceId;
 use themelios_program::program::Statement;
@@ -170,40 +168,16 @@ fn unsupported_weak_scopes_remain_typed_refusals() {
     );
 }
 
-struct Directory(PathBuf);
-impl Directory {
-    fn new() -> Self {
-        static NEXT: AtomicU64 = AtomicU64::new(0);
-        loop {
-            let path = std::env::temp_dir().join(format!(
-                "zetesis-weak-{}-{}",
-                std::process::id(),
-                NEXT.fetch_add(1, Ordering::Relaxed)
-            ));
-            match fs::create_dir(&path) {
-                Ok(()) => return Self(path),
-                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
-                Err(error) => panic!("temporary fixture: {error}"),
-            }
-        }
-    }
-}
-impl Drop for Directory {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.0).expect("fixture cleanup");
-    }
-}
-
 #[test]
 fn weak_and_minimize_keys_coalesce_across_original_include_sources() {
-    let directory = Directory::new();
+    let directory = tempfile::tempdir().unwrap();
     fs::write(
-        directory.0.join("main.lp"),
+        directory.path().join("main.lp"),
         "#include \"child.lp\". {a;b}. :~a.[2@1,k]",
     )
     .expect("entry source");
-    fs::write(directory.0.join("child.lp"), "#minimize{2@1,k:b}.").expect("child source");
-    let bundle = SourceBundle::load(directory.0.join("main.lp"), BundleLimits::default())
+    fs::write(directory.path().join("child.lp"), "#minimize{2@1,k:b}.").expect("child source");
+    let bundle = SourceBundle::load(directory.path().join("main.lp"), BundleLimits::default())
         .expect("original graph");
     let input = admit_bundle_formula(
         bundle,
@@ -237,6 +211,7 @@ fn weak_and_minimize_keys_coalesce_across_original_include_sources() {
     .expect("global tuple identity");
     assert_eq!(evaluation.score().costs(), &[(1, 2)]);
     assert_eq!(evaluation.contributions().len(), 1);
+    directory.close().expect("fixture cleanup");
 }
 
 #[test]

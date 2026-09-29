@@ -4,8 +4,6 @@ use crate::support::objective_dependency_records as objective_dependencies;
 
 use std::collections::BTreeSet;
 use std::fs::{self};
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use serde_json::Value as Json;
@@ -610,39 +608,22 @@ fn construction_and_streamed_substitution_work_refuse_before_partial_admission()
     }
 }
 
-static NEXT: AtomicU64 = AtomicU64::new(0);
-struct Directory(PathBuf);
-impl Directory {
-    fn new() -> Self {
-        let path = std::env::temp_dir().join(format!(
-            "zetesis-choice-intervals-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        ));
-        fs::create_dir(&path).unwrap();
-        Self(path)
-    }
-}
-impl Drop for Directory {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
-    }
-}
 #[test]
 fn normalized_bundle_constants_and_duplicate_rules_keep_original_origins() {
-    let directory = Directory::new();
+    let directory = tempfile::tempdir().unwrap();
     let rule = "1{p(l..u)}1.";
     fs::write(
-        directory.0.join("entry.lp"),
+        directory.path().join("entry.lp"),
         format!("#include \"data.lp\".\n{rule}"),
     )
     .unwrap();
     fs::write(
-        directory.0.join("data.lp"),
+        directory.path().join("data.lp"),
         format!("#const l=1.#const u=2.\n{rule}"),
     )
     .unwrap();
-    let bundle = SourceBundle::load(directory.0.join("entry.lp"), BundleLimits::default()).unwrap();
+    let bundle =
+        SourceBundle::load(directory.path().join("entry.lp"), BundleLimits::default()).unwrap();
     let admitted = admit_bundle_formula(
         bundle,
         BundleAdmissionOptions::default(),

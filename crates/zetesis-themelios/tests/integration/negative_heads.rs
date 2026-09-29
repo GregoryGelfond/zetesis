@@ -2,8 +2,6 @@
 
 use std::collections::BTreeSet;
 use std::fs::{self};
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use serde_json::Value as Json;
@@ -151,25 +149,6 @@ fn manual_holds(theory: &Json, tested: &Names, frozen: Option<&Names>) -> bool {
         .unwrap()
         .iter()
         .all(|root| truth(root, tested, frozen))
-}
-
-static NEXT: AtomicU64 = AtomicU64::new(0);
-struct Directory(PathBuf);
-impl Directory {
-    fn new() -> Self {
-        let path = std::env::temp_dir().join(format!(
-            "zetesis-negative-heads-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        ));
-        fs::create_dir(&path).unwrap();
-        Self(path)
-    }
-}
-impl Drop for Directory {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
-    }
 }
 
 fn clingo(source: &str) -> Models {
@@ -549,15 +528,16 @@ fn singleton_head_limit_counts_one_literal() {
 
 #[test]
 fn negative_heads_keep_original_duplicate_bundle_origins() {
-    let directory = Directory::new();
+    let directory = tempfile::tempdir().unwrap();
     let rule = "not not a(1..2)|b.";
     fs::write(
-        directory.0.join("entry.lp"),
+        directory.path().join("entry.lp"),
         format!("#include \"other.lp\".\n{rule}"),
     )
     .unwrap();
-    fs::write(directory.0.join("other.lp"), rule).unwrap();
-    let bundle = SourceBundle::load(directory.0.join("entry.lp"), BundleLimits::default()).unwrap();
+    fs::write(directory.path().join("other.lp"), rule).unwrap();
+    let bundle =
+        SourceBundle::load(directory.path().join("entry.lp"), BundleLimits::default()).unwrap();
     let admitted = admit_bundle_formula(
         bundle,
         BundleAdmissionOptions::default(),

@@ -4,8 +4,6 @@ use crate::support::objective_boundaries;
 
 use std::collections::BTreeSet;
 use std::fs;
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use zetesis_clingo_support as oracle;
 use zetesis_core::Atom;
@@ -19,7 +17,6 @@ use zetesis_themelios::{
 };
 
 type Models = BTreeSet<BTreeSet<Atom>>;
-static NEXT: AtomicU64 = AtomicU64::new(0);
 
 fn input(source: &str) -> AdmittedFormula {
     admit_formula(
@@ -397,30 +394,14 @@ fn unchanged_queens_source_admits_eighty_original_atoms_with_output_metadata() {
     );
 }
 
-struct Fixture(PathBuf);
+struct Fixture(tempfile::TempDir);
 impl Fixture {
     fn new() -> Self {
-        loop {
-            let path = std::env::temp_dir().join(format!(
-                "zetesis-formula-{}-{}",
-                std::process::id(),
-                NEXT.fetch_add(1, Ordering::Relaxed)
-            ));
-            match fs::create_dir(&path) {
-                Ok(()) => return Self(path),
-                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
-                Err(error) => panic!("fixture: {error}"),
-            }
-        }
+        Self(tempfile::tempdir().expect("fixture"))
     }
     fn bundle(&self) -> SourceBundle {
-        SourceBundle::load(self.0.join("entry.lp"), BundleLimits::default())
+        SourceBundle::load(self.0.path().join("entry.lp"), BundleLimits::default())
             .expect("original include graph")
-    }
-}
-impl Drop for Fixture {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
     }
 }
 
@@ -428,12 +409,12 @@ impl Drop for Fixture {
 fn bundle_constants_scopes_metadata_and_failures_keep_original_files() {
     let fixture = Fixture::new();
     fs::write(
-        fixture.0.join("entry.lp"),
+        fixture.0.path().join("entry.lp"),
         "#include \"data.lp\". 1{a(X):d(X)}1. #show a/1.",
     )
     .expect("entry");
     fs::write(
-        fixture.0.join("data.lp"),
+        fixture.0.path().join("data.lp"),
         "#const n=2. d(1..n). #defined a/1.",
     )
     .expect("included data");
@@ -464,7 +445,7 @@ fn bundle_constants_scopes_metadata_and_failures_keep_original_files() {
                 .is_ok()
         );
     }
-    fs::write(fixture.0.join("data.lp"), "d(1). 1{b(X):not d(X)}1.")
+    fs::write(fixture.0.path().join("data.lp"), "d(1). 1{b(X):not d(X)}1.")
         .expect("unsafe included source");
     let error = admit_bundle_formula(
         fixture.bundle(),

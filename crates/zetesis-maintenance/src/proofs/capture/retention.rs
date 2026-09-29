@@ -179,33 +179,21 @@ fn write(capture: Capture, stage: &Path, name: &str) -> Result<Retained> {
 
 #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
 mod tests {
-    use std::{
-        path::PathBuf,
-        sync::atomic::{AtomicU64, Ordering},
-    };
-
     use zetesis_validation::process::{self, Invocation, Limits};
 
     use super::*;
 
-    static NEXT: AtomicU64 = AtomicU64::new(0);
-
-    struct Directory(PathBuf);
+    /// A temporary directory holding an empty `raw` directory.
+    struct Directory(tempfile::TempDir);
     impl Directory {
         fn new() -> Self {
-            let path = std::env::temp_dir().join(format!(
-                "zetesis-proof-refresh-{}-{}",
-                std::process::id(),
-                NEXT.fetch_add(1, Ordering::Relaxed)
-            ));
-            fs::create_dir(&path).unwrap();
-            fs::create_dir(path.join("raw")).unwrap();
-            Self(path)
+            let directory = tempfile::tempdir().unwrap();
+            fs::create_dir(directory.path().join("raw")).unwrap();
+            Self(directory)
         }
-    }
-    impl Drop for Directory {
-        fn drop(&mut self) {
-            fs::remove_dir_all(&self.0).unwrap();
+        /// Remove the directory, failing the test if it cannot be removed.
+        fn close(self) {
+            self.0.close().unwrap();
         }
     }
 
@@ -238,12 +226,12 @@ mod tests {
     #[test]
     fn log_write_failure_reaps_the_pending_child() {
         let directory = Directory::new();
-        let outcome = pending(&directory.0, "exec /bin/sleep 5");
+        let outcome = pending(directory.0.path(), "exec /bin/sleep 5");
         let child = outcome.capture().child_id();
         let Err(error) = retain(
             outcome,
-            &directory.0.join("missing"),
-            &directory.0.join("raw"),
+            &directory.0.path().join("missing"),
+            &directory.0.path().join("raw"),
             "build",
         ) else {
             panic!("missing log directory must fail");
@@ -263,18 +251,19 @@ mod tests {
         assert!(failure.cleanup.attempted);
         assert_eq!(failure.cleanup.exit.unwrap().signal, Some(9));
         assert!(failure.cleanup.succeeded());
+        directory.close();
     }
 
     #[test]
     fn encoding_failure_reaps_the_pending_child() {
         let directory = Directory::new();
-        fs::create_dir_all(directory.0.join("verification/current")).unwrap();
-        let outcome = pending(&directory.0, "printf '\\377'; exec /bin/sleep 5");
+        fs::create_dir_all(directory.0.path().join("verification/current")).unwrap();
+        let outcome = pending(directory.0.path(), "printf '\\377'; exec /bin/sleep 5");
         let child = outcome.capture().child_id();
         let Err(error) = retain(
             outcome,
-            &directory.0,
-            &directory.0.join("raw"),
+            directory.0.path(),
+            &directory.0.path().join("raw"),
             "record-regressions",
         ) else {
             panic!("non-UTF-8 record stream must fail");
@@ -282,16 +271,20 @@ mod tests {
         assert!(error.to_string().contains(&format!("child {child}")));
         let failure = error.downcast_ref::<RetentionFailure>().unwrap();
         assert!(failure.cause.as_ref().unwrap().is::<std::str::Utf8Error>());
-        assert_eq!(fs::read(directory.0.join("raw/stdout")).unwrap(), [255]);
+        assert_eq!(
+            fs::read(directory.0.path().join("raw/stdout")).unwrap(),
+            [255]
+        );
         assert!(failure.cleanup.attempted);
         assert_eq!(failure.cleanup.exit.unwrap().signal, Some(9));
         assert!(failure.cleanup.succeeded());
+        directory.close();
     }
 
     #[test]
     fn regression_logs_preserve_both_byte_streams() {
         let directory = Directory::new();
-        fs::create_dir_all(directory.0.join("verification/current")).unwrap();
+        fs::create_dir_all(directory.0.path().join("verification/current")).unwrap();
         let outcome = process::invoke(
             Invocation {
                 executable: Path::new("/bin/sh"),
@@ -299,7 +292,7 @@ mod tests {
                     "-c".into(),
                     "printf 'out\\n\\n'; printf 'err\\n\\n' >&2".into(),
                 ],
-                directory: &directory.0,
+                directory: directory.0.path(),
             },
             Limits {
                 timeout: Duration::from_secs(2),
@@ -310,16 +303,18 @@ mod tests {
         .unwrap();
         let retained = retain(
             outcome,
-            &directory.0,
-            &directory.0.join("raw"),
+            directory.0.path(),
+            &directory.0.path().join("raw"),
             "record-regressions",
         )
         .unwrap();
         let rendered: serde_json::Value =
-            serde_json::from_slice(&fs::read(directory.0.join(retained.log)).unwrap()).unwrap();
+            serde_json::from_slice(&fs::read(directory.0.path().join(retained.log)).unwrap())
+                .unwrap();
         assert_eq!(retained.layout, "json_stdout_and_stderr");
         assert_eq!(rendered, json!({"stdout": "out\n\n", "stderr": "err\n\n"}));
         assert_eq!(retained.output, b"out\n\nerr\n\n");
+        directory.close();
     }
 
     fn completed(directory: &Path, script: &str) -> Outcome {
@@ -341,26 +336,38 @@ mod tests {
     #[test]
     fn failed_child_exit_cannot_claim_success() {
         let directory = Directory::new();
-        fs::create_dir_all(directory.0.join("verification/current")).unwrap();
-        let outcome = completed(&directory.0, "printf 'failure'; exit 7");
-        let error = retain(outcome, &directory.0, &directory.0.join("raw"), "build")
-            .err()
-            .unwrap();
+        fs::create_dir_all(directory.0.path().join("verification/current")).unwrap();
+        let outcome = completed(directory.0.path(), "printf 'failure'; exit 7");
+        let error = retain(
+            outcome,
+            directory.0.path(),
+            &directory.0.path().join("raw"),
+            "build",
+        )
+        .err()
+        .unwrap();
         assert!(error.to_string().contains("code: Some(7)"));
         assert_eq!(
-            fs::read(directory.0.join("verification/current/build.log")).unwrap(),
+            fs::read(directory.0.path().join("verification/current/build.log")).unwrap(),
             b"failure"
         );
+        directory.close();
     }
 
     #[test]
     fn audit_stderr_cannot_claim_success() {
         let directory = Directory::new();
-        fs::create_dir_all(directory.0.join("verification/current")).unwrap();
-        let outcome = completed(&directory.0, "printf 'warning' >&2");
-        let error = retain(outcome, &directory.0, &directory.0.join("raw"), "audit")
-            .err()
-            .unwrap();
+        fs::create_dir_all(directory.0.path().join("verification/current")).unwrap();
+        let outcome = completed(directory.0.path(), "printf 'warning' >&2");
+        let error = retain(
+            outcome,
+            directory.0.path(),
+            &directory.0.path().join("raw"),
+            "audit",
+        )
+        .err()
+        .unwrap();
         assert!(error.to_string().contains("Audit emitted stderr"));
+        directory.close();
     }
 }

@@ -4,7 +4,6 @@ use std::error::Error as _;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use themelios_base::source::{FromBytesRefusal, SourceId};
 use zetesis_core::{Atom, AtomPattern, ConstructionError, Model, Predicate, Value};
@@ -333,30 +332,24 @@ fn formula_resource_failures_keep_the_actual_nested_admission_cause() {
     assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
 }
 
-static TEMPORARY: AtomicUsize = AtomicUsize::new(0);
-struct Fixture(PathBuf);
+struct Fixture(tempfile::TempDir);
 impl Fixture {
+    /// A directory under the canonical temporary directory, so its paths are
+    /// canonical too.
     fn new() -> Self {
-        let path = std::env::temp_dir().join(format!(
-            "zetesis-refusal-{}-{}",
-            std::process::id(),
-            TEMPORARY.fetch_add(1, Ordering::Relaxed)
-        ));
-        fs::create_dir(&path).unwrap();
-        Self(fs::canonicalize(path).unwrap())
+        Self(tempfile::tempdir_in(fs::canonicalize(std::env::temp_dir()).unwrap()).unwrap())
     }
     fn path(&self, name: &str) -> PathBuf {
-        self.0.join(name)
+        self.0.path().join(name)
     }
     fn write(&self, name: &str, bytes: impl AsRef<[u8]>) -> PathBuf {
         let path = self.path(name);
         fs::write(&path, bytes).unwrap();
         path
     }
-}
-impl Drop for Fixture {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.0).unwrap();
+    /// Remove the directory, failing the test if it cannot be removed.
+    fn close(self) {
+        self.0.close().unwrap();
     }
 }
 fn include(path: &Path) -> String {
@@ -405,6 +398,7 @@ fn file_failures_retain_real_operating_system_and_byte_decoding_causes() {
     assert!(matches!(error, BundleError::EmptyRoots));
     assert!(error.to_string().contains("at least one input root"));
     assert!(error.source().is_none());
+    fixture.close();
 }
 
 #[test]
@@ -426,6 +420,7 @@ fn cycle_and_library_refusals_keep_the_closing_source_and_name() {
     assert!(matches!(error, BundleError::LibraryInclude { .. }));
     assert!(error.to_string().contains("<incmode>"));
     assert!(error.source().is_none());
+    fixture.close();
 }
 
 #[test]
@@ -477,6 +472,7 @@ fn bundled_admission_keeps_the_catalog_after_failure_and_moves_program_identity_
     let program = admitted.into_program();
     assert!(program.same_instance(&identity));
     assert_eq!(program.templates().len(), 2);
+    fixture.close();
 }
 
 #[test]
@@ -520,6 +516,7 @@ fn formula_bundle_alias_failure_keeps_a_downcastable_include_cause() {
                 .is_some()
         );
     }
+    fixture.close();
 }
 
 #[cfg(unix)]
@@ -547,6 +544,7 @@ fn a_redirected_include_has_both_lexical_and_canonical_diagnostic_evidence() {
         failure.diagnostics()[0].primary().location.source,
         SourceId::new(0)
     );
+    fixture.close();
 }
 
 #[test]

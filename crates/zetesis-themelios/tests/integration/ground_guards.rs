@@ -3,8 +3,6 @@
 
 use std::collections::BTreeSet;
 use std::fs::{self};
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use serde_json::Value as Json;
@@ -380,9 +378,9 @@ fn incomplete_guard_construction_and_ground_evaluation_have_located_limits() {
 
 #[test]
 fn bundle_guards_keep_original_sources_signatures_and_rule_origins() {
-    let directory = Directory::new();
-    let root = directory.0.join("root.lp");
-    let rules = directory.0.join("rules.lp");
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("root.lp");
+    let rules = directory.path().join("rules.lp");
     let source = "#include \"rules.lp\". d(1..3). #show p/1. #defined d/1.";
     let rule = "p(X):-d(X),not 0<X<3.";
     fs::write(&root, source).unwrap();
@@ -430,25 +428,6 @@ fn bundle_guards_keep_original_sources_signatures_and_rule_origins() {
             .filter(|atom| admitted.metadata().output().includes(*atom))
             .all(|atom| atom.predicate().name() == "p")
     );
-}
-
-static NEXT: AtomicU64 = AtomicU64::new(0);
-struct Directory(PathBuf);
-impl Directory {
-    fn new() -> Self {
-        let path = std::env::temp_dir().join(format!(
-            "zetesis-ground-guards-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        ));
-        fs::create_dir(&path).unwrap();
-        Self(path)
-    }
-}
-impl Drop for Directory {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
-    }
 }
 
 fn external(source: &str) -> Json {

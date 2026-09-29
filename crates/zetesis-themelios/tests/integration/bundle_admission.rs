@@ -4,7 +4,6 @@
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
@@ -17,25 +16,15 @@ use zetesis_themelios::{
     ExpansionLimits, ExpansionResource, InputLimit, SourceBundle, admit, admit_bundle_extended,
 };
 
-static NEXT_DIRECTORY: AtomicU64 = AtomicU64::new(0);
 type Models = BTreeSet<BTreeSet<Atom>>;
 
 struct Fixture {
-    directory: PathBuf,
+    directory: tempfile::TempDir,
 }
 impl Fixture {
     fn new() -> Self {
-        loop {
-            let id = NEXT_DIRECTORY.fetch_add(1, Ordering::Relaxed);
-            let directory = std::env::temp_dir().join(format!(
-                "zetesis-bundle-admission-{}-{id}",
-                std::process::id()
-            ));
-            match fs::create_dir(&directory) {
-                Ok(()) => return Self { directory },
-                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
-                Err(error) => panic!("fixture directory: {error}"),
-            }
+        Self {
+            directory: tempfile::tempdir().expect("fixture directory"),
         }
     }
     fn write(&self, name: &str, source: &str) {
@@ -44,7 +33,7 @@ impl Fixture {
         fs::write(path, source).expect("original fixture source");
     }
     fn path(&self, name: &str) -> PathBuf {
-        self.directory.join(name)
+        self.directory.path().join(name)
     }
     fn bundle(&self) -> SourceBundle {
         SourceBundle::load(self.path("entry.lp"), BundleLimits::default())
@@ -56,12 +45,6 @@ impl Fixture {
             BundleAdmissionOptions::default(),
             ExpansionLimits::default(),
         )
-    }
-}
-impl Drop for Fixture {
-    fn drop(&mut self) {
-        // Only this uniquely created test directory is ever removed.
-        let _ = fs::remove_dir_all(&self.directory);
     }
 }
 
@@ -493,7 +476,7 @@ fn oracle_atom(source: &str) -> Atom {
 
 fn compare(fixture: &Fixture) {
     let input = fixture.admit().expect("supported original bundle");
-    assert_eq!(native(input.program()), external(&fixture.directory));
+    assert_eq!(native(input.program()), external(fixture.directory.path()));
 }
 
 #[test]

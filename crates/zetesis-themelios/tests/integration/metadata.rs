@@ -2,8 +2,6 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
@@ -18,7 +16,6 @@ use zetesis_themelios::{
 
 type Models = BTreeSet<BTreeSet<Atom>>;
 type Displays = BTreeMap<BTreeSet<Atom>, usize>;
-static NEXT_DIRECTORY: AtomicU64 = AtomicU64::new(0);
 
 fn input(source: &str) -> Admitted {
     admit_extended(
@@ -255,32 +252,23 @@ fn strict_s0_and_unsupported_display_forms_still_refuse() {
 }
 
 struct Fixture {
-    directory: PathBuf,
+    directory: tempfile::TempDir,
 }
 impl Fixture {
     fn new() -> Self {
-        loop {
-            let id = NEXT_DIRECTORY.fetch_add(1, Ordering::Relaxed);
-            let directory =
-                std::env::temp_dir().join(format!("zetesis-metadata-{}-{id}", std::process::id()));
-            match fs::create_dir(&directory) {
-                Ok(()) => return Self { directory },
-                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
-                Err(error) => panic!("fixture directory: {error}"),
-            }
+        Self {
+            directory: tempfile::tempdir().expect("fixture directory"),
         }
     }
     fn write(&self, name: &str, source: &str) {
-        fs::write(self.directory.join(name), source).expect("fixture source");
+        fs::write(self.directory.path().join(name), source).expect("fixture source");
     }
     fn bundle(&self) -> SourceBundle {
-        SourceBundle::load(self.directory.join("entry.lp"), BundleLimits::default())
-            .expect("original source graph")
-    }
-}
-impl Drop for Fixture {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.directory);
+        SourceBundle::load(
+            self.directory.path().join("entry.lp"),
+            BundleLimits::default(),
+        )
+        .expect("original source graph")
     }
 }
 
@@ -472,7 +460,7 @@ fn included_signature_metadata_matches_clingo_complete_display_multiplicities() 
         )
         .expect("metadata bundle");
         let run = oracle::run_in(
-            &fixture.directory,
+            fixture.directory.path(),
             ["entry.lp", "0", "--outf=2", "--warn=none"],
             &oracle::DECIDED,
             oracle::Limits::default(),

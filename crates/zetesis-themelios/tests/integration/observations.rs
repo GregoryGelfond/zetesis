@@ -1,8 +1,6 @@
 //! Independent complete display multisets; observation never changes the reduct.
 
 use std::fs::{self};
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use serde_json::Value as Json;
@@ -538,15 +536,15 @@ fn all_source_ceilings_preflight_owned_templates_and_origin_copies() {
 
 #[test]
 fn original_bundle_constants_and_duplicate_locations_remain_separate_from_terms() {
-    let directory = Directory::new();
+    let directory = tempfile::tempdir().unwrap();
     fs::write(
-        directory.0.join("root.lp"),
+        directory.path().join("root.lp"),
         "#include \"other.lp\". #const k=2. p(k). #show. #show f(X):p(X).",
     )
     .unwrap();
-    fs::write(directory.0.join("other.lp"), "#show f(X):p(X).").unwrap();
+    fs::write(directory.path().join("other.lp"), "#show f(X):p(X).").unwrap();
     let bundle = zetesis_themelios::SourceBundle::load(
-        directory.0.join("root.lp"),
+        directory.path().join("root.lp"),
         zetesis_themelios::BundleLimits::default(),
     )
     .unwrap();
@@ -593,6 +591,7 @@ fn original_bundle_constants_and_duplicate_locations_remain_separate_from_terms(
                 .starts_with("#show")
         );
     }
+    directory.close().unwrap();
 }
 
 #[test]
@@ -678,29 +677,6 @@ fn shared_prefix_signature_lookups_charge_each_compared_name() {
     ));
 }
 
-static NEXT: AtomicU64 = AtomicU64::new(0);
-struct Directory(PathBuf);
-impl Directory {
-    fn new() -> Self {
-        loop {
-            let path = std::env::temp_dir().join(format!(
-                "zetesis-observation-oracle-{}-{}",
-                std::process::id(),
-                NEXT.fetch_add(1, Ordering::Relaxed)
-            ));
-            match fs::create_dir(&path) {
-                Ok(()) => return Self(path),
-                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
-                Err(error) => panic!("{error}"),
-            }
-        }
-    }
-}
-impl Drop for Directory {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.0).unwrap();
-    }
-}
 fn oracle(source: &str) -> Json {
     // An undecided run (0) and a refusal (65) are reported, not failures: the
     // caller reads the report's result.

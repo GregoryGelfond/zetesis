@@ -3,8 +3,6 @@
 
 use std::collections::BTreeSet;
 use std::fs;
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use themelios_analysis::{Analysis, Verdict};
 use themelios_base::source::SourceId;
@@ -144,38 +142,16 @@ fn unknown_class_verdict_does_not_remove_the_support_round_ceiling() {
     ));
 }
 
-static NEXT: AtomicU64 = AtomicU64::new(0);
-struct Fixture(PathBuf);
-impl Fixture {
-    fn new() -> Self {
-        loop {
-            let id = NEXT.fetch_add(1, Ordering::Relaxed);
-            let directory =
-                std::env::temp_dir().join(format!("zetesis-analysis-{}-{id}", std::process::id()));
-            match fs::create_dir(&directory) {
-                Ok(()) => return Self(directory),
-                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
-                Err(error) => panic!("fixture directory: {error}"),
-            }
-        }
-    }
-}
-impl Drop for Fixture {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.0).expect("fixture cleanup");
-    }
-}
-
 #[test]
 fn duplicate_bundle_facts_keep_every_source_origin_in_the_analyzed_projection() {
-    let fixture = Fixture::new();
+    let directory = tempfile::tempdir().expect("fixture directory");
     fs::write(
-        fixture.0.join("entry.lp"),
+        directory.path().join("entry.lp"),
         "#include \"child.lp\". p(1). q(X):-p(X).",
     )
     .expect("entry source");
-    fs::write(fixture.0.join("child.lp"), "p(1). #show p/1.").expect("child source");
-    let bundle = SourceBundle::load(fixture.0.join("entry.lp"), BundleLimits::default())
+    fs::write(directory.path().join("child.lp"), "p(1). #show p/1.").expect("child source");
+    let bundle = SourceBundle::load(directory.path().join("entry.lp"), BundleLimits::default())
         .expect("bounded includes");
     let input = admit_bundle_formula(
         bundle,
@@ -220,4 +196,5 @@ fn duplicate_bundle_facts_keep_every_source_origin_in_the_analyzed_projection() 
         }
     }
     assert!(duplicate, "canonical fact merges both original locations");
+    directory.close().expect("fixture cleanup");
 }

@@ -5,7 +5,6 @@ use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Output, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use clap::Parser;
@@ -14,25 +13,13 @@ use zetesis_cli::Options;
 use zetesis_clingo_support as oracle;
 
 type Records = Vec<(BTreeSet<String>, Option<Vec<i64>>)>;
-static NEXT: AtomicU64 = AtomicU64::new(0);
-struct Fixture(PathBuf);
+struct Fixture(tempfile::TempDir);
 impl Fixture {
     fn new() -> Self {
-        loop {
-            let serial = NEXT.fetch_add(1, Ordering::Relaxed);
-            let path = std::env::temp_dir().join(format!(
-                "zetesis-cli-multiple-inputs-{}-{serial}",
-                std::process::id()
-            ));
-            match fs::create_dir(&path) {
-                Ok(()) => return Self(path),
-                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
-                Err(error) => panic!("fixture: {error}"),
-            }
-        }
+        Self(tempfile::tempdir().expect("fixture"))
     }
     fn write(&self, name: &str, source: &str) {
-        let path = self.0.join(name);
+        let path = self.0.path().join(name);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, source).unwrap();
     }
@@ -48,13 +35,12 @@ impl Fixture {
             Command::new(env!("CARGO_BIN_EXE_zetesis"))
                 .args(["--backend", "cpu", "--workers", "1", "--models", "0"])
                 .args(arguments)
-                .current_dir(&self.0),
+                .current_dir(self.0.path()),
         )
     }
-}
-impl Drop for Fixture {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.0).expect("only this fixture's files");
+    /// Remove the directory, failing the test if it cannot be removed.
+    fn close(self) {
+        self.0.close().expect("only this fixture's files");
     }
 }
 
@@ -200,6 +186,7 @@ fn a_subcommand_name_after_a_file_remains_an_original_file() {
         native_records(fixture.native(&["one.lp", "devices"])),
         [(BTreeSet::from(["a".to_owned(), "b".to_owned()]), None)]
     );
+    fixture.close();
 }
 
 #[test]
@@ -225,6 +212,7 @@ fn original_file_sets_match_recorded_complete_models_costs_and_display_counts() 
             "{}",
             case["name"]
         );
+        fixture.close();
     }
 }
 
@@ -253,6 +241,7 @@ fn mixed_and_repeated_standard_input_fail_before_reading_any_source() {
         native_records(child.wait_with_output().unwrap()),
         vec![(BTreeSet::from(["p".into()]), None)]
     );
+    fixture.close();
 }
 
 #[test]
@@ -270,6 +259,7 @@ fn cumulative_source_and_root_limits_refuse_before_model_output() {
         assert!(result.stdout.is_empty());
         assert!(String::from_utf8(result.stderr).unwrap().contains(label));
     }
+    fixture.close();
 }
 
 #[test]
@@ -283,6 +273,7 @@ fn later_original_file_errors_name_the_original_path() {
         assert!(result.stdout.is_empty());
         assert!(String::from_utf8(result.stderr).unwrap().contains("b.lp"));
     }
+    fixture.close();
 }
 
 #[test]
@@ -293,7 +284,7 @@ fn root_aliases_are_explicit_refusals_while_identical_roots_are_shared() {
         native_records(fixture.native(&["a.lp", "a.lp"])),
         vec![(BTreeSet::from(["p(1)".into()]), None)]
     );
-    let absolute = fixture.0.join("a.lp").to_string_lossy().into_owned();
+    let absolute = fixture.0.path().join("a.lp").to_string_lossy().into_owned();
     for second in ["./a.lp", absolute.as_str()] {
         let result = fixture.native(&["a.lp", second]);
         assert_eq!(result.status.code(), Some(2));
@@ -303,6 +294,7 @@ fn root_aliases_are_explicit_refusals_while_identical_roots_are_shared() {
                 .contains("root aliases")
         );
     }
+    fixture.close();
 }
 
 #[test]
@@ -319,7 +311,7 @@ fn original_file_sets_match_fresh_complete_clingo_optima() {
             .map(|root| root.as_str().unwrap())
             .collect();
         let run = oracle::run_in(
-            &fixture.0,
+            fixture.0.path(),
             oracle::ENUMERATION.iter().chain(&roots),
             &oracle::DECIDED,
             oracle::Limits::default(),
@@ -368,6 +360,7 @@ fn original_file_sets_match_fresh_complete_clingo_optima() {
             "{}",
             case["name"]
         );
+        fixture.close();
     }
 }
 
@@ -380,20 +373,20 @@ fn include_lookup_errors_fall_back_but_selected_source_failures_do_not() {
     fixture.write("unreadable.lp", "wrong.");
     fixture.write("sub/unreadable.lp", "fallback.");
     fs::set_permissions(
-        fixture.0.join("unreadable.lp"),
+        fixture.0.path().join("unreadable.lp"),
         fs::Permissions::from_mode(0o0),
     )
     .unwrap();
     // A privileged test process may still read mode-zero files. Its lookup
     // correctly selects that original cwd file instead of the fallback.
-    let expected = if fs::File::open(fixture.0.join("unreadable.lp")).is_ok() {
+    let expected = if fs::File::open(fixture.0.path().join("unreadable.lp")).is_ok() {
         "wrong"
     } else {
         "fallback"
     };
     let result = fixture.native(&["sub/entry.lp"]);
     fs::set_permissions(
-        fixture.0.join("unreadable.lp"),
+        fixture.0.path().join("unreadable.lp"),
         fs::Permissions::from_mode(0o600),
     )
     .unwrap();
@@ -404,7 +397,7 @@ fn include_lookup_errors_fall_back_but_selected_source_failures_do_not() {
 
     fixture.write("sub/loop-entry.lp", "#include \"loop.lp\".");
     fixture.write("sub/loop.lp", "loop_fallback.");
-    symlink("loop.lp", fixture.0.join("loop.lp")).unwrap();
+    symlink("loop.lp", fixture.0.path().join("loop.lp")).unwrap();
     assert_eq!(
         native_records(fixture.native(&["sub/loop-entry.lp"])),
         [(BTreeSet::from(["loop_fallback".to_owned()]), None)]
@@ -423,13 +416,14 @@ fn include_lookup_errors_fall_back_but_selected_source_failures_do_not() {
     assert_eq!(over_limit.status.code(), Some(2));
     assert!(over_limit.stdout.is_empty());
     assert!(String::from_utf8_lossy(&over_limit.stderr).contains("FileBytes"));
+    fixture.close();
 }
 
 #[cfg(unix)]
 #[test]
 fn nonregular_roots_and_includes_are_refused_before_blocking_open() {
     let fixture = Fixture::new();
-    let fifo = fixture.0.join("pipe.lp");
+    let fifo = fixture.0.path().join("pipe.lp");
     assert!(
         Command::new("mkfifo")
             .arg(&fifo)
@@ -444,4 +438,5 @@ fn nonregular_roots_and_includes_are_refused_before_blocking_open() {
         assert!(result.stdout.is_empty());
         assert!(String::from_utf8_lossy(&result.stderr).contains("regular file"));
     }
+    fixture.close();
 }

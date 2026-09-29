@@ -1,13 +1,6 @@
 //! Prepared owners retain semantics independently of source files and execution limits.
 
-use std::{
-    collections::BTreeSet,
-    error::Error,
-    fs,
-    num::NonZeroUsize,
-    path::PathBuf,
-    sync::atomic::{AtomicU64, Ordering},
-};
+use std::{collections::BTreeSet, error::Error, fs, num::NonZeroUsize};
 
 use clap::Parser;
 use zetesis_cli::{
@@ -23,48 +16,22 @@ use zetesis_themelios::{
     admit_formula,
 };
 
-static NEXT_DIRECTORY: AtomicU64 = AtomicU64::new(0);
-const MAX_DIRECTORY_ATTEMPTS: usize = 16;
-
-struct Sources(PathBuf);
+struct Sources(tempfile::TempDir);
 
 impl Sources {
     fn new(body: &str) -> Self {
-        let directory = Self::directory();
-        fs::write(directory.0.join("entry.lp"), "#include \"body.lp\". #show.").unwrap();
-        fs::write(directory.0.join("body.lp"), body).unwrap();
+        let directory = Self(tempfile::tempdir().expect("temporary source directory"));
+        fs::write(
+            directory.0.path().join("entry.lp"),
+            "#include \"body.lp\". #show.",
+        )
+        .unwrap();
+        fs::write(directory.0.path().join("body.lp"), body).unwrap();
         directory
     }
 
-    fn directory() -> Self {
-        for _ in 0..MAX_DIRECTORY_ATTEMPTS {
-            let serial = NEXT_DIRECTORY
-                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
-                    value.checked_add(1)
-                })
-                .expect("temporary source serial exhausted");
-            let path = std::env::temp_dir().join(format!(
-                "zetesis-prepared-boundaries-{}-{serial}",
-                std::process::id()
-            ));
-            match fs::create_dir(&path) {
-                Ok(()) => return Self(path),
-                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
-                Err(error) => panic!("temporary source directory: {error}"),
-            }
-        }
-        panic!("temporary source collision limit reached")
-    }
-
     fn load(&self) -> SourceBundle {
-        SourceBundle::load(self.0.join("entry.lp"), BundleLimits::default()).unwrap()
-    }
-}
-
-impl Drop for Sources {
-    fn drop(&mut self) {
-        // This fixture owns only the directory it created successfully.
-        let _ = fs::remove_dir_all(&self.0);
+        SourceBundle::load(self.0.path().join("entry.lp"), BundleLimits::default()).unwrap()
     }
 }
 
@@ -98,7 +65,7 @@ fn atoms(model: &Model) -> Vec<String> {
 #[test]
 fn relational_bundles_outlive_their_source_files() {
     let sources = Sources::new("a. {b}.");
-    let path = sources.0.clone();
+    let path = sources.0.path().to_path_buf();
     let owner = admit_bundle_extended(
         sources.load(),
         BundleAdmissionOptions::default(),
@@ -134,7 +101,7 @@ fn relational_bundles_outlive_their_source_files() {
 #[test]
 fn formula_bundles_outlive_their_source_files() {
     let sources = Sources::new("hidden. {a}. #minimize{1@2,k:hidden}.");
-    let path = sources.0.clone();
+    let path = sources.0.path().to_path_buf();
     let owner = admit_bundle_formula(
         sources.load(),
         BundleAdmissionOptions::default(),

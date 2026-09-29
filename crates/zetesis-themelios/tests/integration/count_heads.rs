@@ -4,8 +4,6 @@ use crate::support::objective_dependency_records as objective_dependencies;
 
 use std::collections::BTreeSet;
 use std::fs::{self};
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use serde_json::{Value as Json, json};
@@ -511,35 +509,18 @@ fn validation_limits(source: &str) {
     }
 }
 
-static NEXT: AtomicU64 = AtomicU64::new(0);
-struct Directory(PathBuf);
-impl Directory {
-    fn new() -> Self {
-        let path = std::env::temp_dir().join(format!(
-            "zetesis-count-heads-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        ));
-        fs::create_dir(&path).unwrap();
-        Self(path)
-    }
-}
-impl Drop for Directory {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
-    }
-}
 #[test]
 fn duplicate_included_count_groups_retain_each_source_origin() {
-    let directory = Directory::new();
+    let directory = tempfile::tempdir().unwrap();
     let rule = "1#count{X:p(X):X=1..4}2.";
     fs::write(
-        directory.0.join("entry.lp"),
+        directory.path().join("entry.lp"),
         format!("#include \"other.lp\".\n{rule}"),
     )
     .unwrap();
-    fs::write(directory.0.join("other.lp"), rule).unwrap();
-    let bundle = SourceBundle::load(directory.0.join("entry.lp"), BundleLimits::default()).unwrap();
+    fs::write(directory.path().join("other.lp"), rule).unwrap();
+    let bundle =
+        SourceBundle::load(directory.path().join("entry.lp"), BundleLimits::default()).unwrap();
     let admitted = admit_bundle_formula(
         bundle,
         BundleAdmissionOptions::default(),

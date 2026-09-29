@@ -3,7 +3,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use themelios_base::source::SourceId;
 use zetesis_themelios::{
@@ -11,40 +10,29 @@ use zetesis_themelios::{
     ExpansionLimits, IncludeResolution, SourceBundle, admit_bundle_extended,
 };
 
-static NEXT: AtomicU64 = AtomicU64::new(0);
-struct Fixture(PathBuf);
+struct Fixture(tempfile::TempDir);
 impl Fixture {
     fn new() -> Self {
-        loop {
-            let serial = NEXT.fetch_add(1, Ordering::Relaxed);
-            let path = std::env::temp_dir().join(format!(
-                "zetesis-ordered-roots-{}-{serial}",
-                std::process::id()
-            ));
-            match fs::create_dir(&path) {
-                Ok(()) => return Self(path),
-                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
-                Err(error) => panic!("fixture directory: {error}"),
-            }
-        }
+        Self(tempfile::tempdir().expect("fixture directory"))
     }
     fn write(&self, name: &str, source: &str) -> PathBuf {
-        let path = self.0.join(name);
+        let path = self.0.path().join(name);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(&path, source).unwrap();
         path
     }
     fn load(&self, roots: &[&str]) -> SourceBundle {
         SourceBundle::load_many(
-            roots.iter().map(|root| self.0.join(root)),
+            roots.iter().map(|root| self.0.path().join(root)),
             BundleLimits::default(),
         )
         .unwrap()
     }
-}
-impl Drop for Fixture {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.0).expect("only this fixture's original sources");
+    /// Remove the directory, failing the test if it cannot be removed.
+    fn close(self) {
+        self.0
+            .close()
+            .expect("only this fixture's original sources");
     }
 }
 
@@ -65,7 +53,7 @@ fn ordered_occurrences_and_shared_includes_keep_unique_original_sources() {
     assert_eq!(bundle.sources().len(), 3);
     assert_eq!(
         bundle.roots()[1].requested_path(),
-        fixture.0.join("second.lp")
+        fixture.0.path().join("second.lp")
     );
     let expected_bytes: usize = bundle
         .sources()
@@ -88,6 +76,7 @@ fn ordered_occurrences_and_shared_includes_keep_unique_original_sources() {
         .collect();
     assert!(owners.contains(&SourceId::new(0)));
     assert!(owners.contains(&SourceId::new(2)));
+    fixture.close();
 }
 
 #[test]
@@ -118,6 +107,7 @@ fn later_roots_supply_global_constants_without_flattening_evidence() {
             .text(),
         "#const upper=lower+1. #const lower=1."
     );
+    fixture.close();
 }
 
 #[test]
@@ -147,6 +137,7 @@ fn root_occurrences_have_an_independent_inclusive_bound() {
             }) if limit == maximum as u128 && observed == limit + 1));
         }
     }
+    fixture.close();
 }
 
 #[test]
@@ -176,6 +167,7 @@ fn file_and_byte_allowances_apply_across_all_roots_before_parsing() {
         }) if actual == resource && path.ends_with("second.lp"))
         );
     }
+    fixture.close();
 }
 
 #[test]
@@ -184,7 +176,10 @@ fn later_root_parse_and_semantic_refusals_keep_original_source_ids() {
     fixture.write("first.lp", "p.");
     fixture.write("second.lp", "broken(.");
     let error = SourceBundle::load_many(
-        [fixture.0.join("first.lp"), fixture.0.join("second.lp")],
+        [
+            fixture.0.path().join("first.lp"),
+            fixture.0.path().join("second.lp"),
+        ],
         BundleLimits::default(),
     )
     .unwrap_err();
@@ -204,6 +199,7 @@ fn later_root_parse_and_semantic_refusals_keep_original_source_ids() {
             .iter()
             .any(|diagnostic| diagnostic.primary().location.source == SourceId::new(1))
     );
+    fixture.close();
 }
 
 #[test]
@@ -231,6 +227,7 @@ fn root_aliases_do_not_silently_erase_repeated_definitions() {
         error.error(),
         BundleAdmissionError::RootAlias { .. }
     ));
+    fixture.close();
 }
 
 #[test]
@@ -293,7 +290,7 @@ fn cwd_resolution_is_captured_before_loading_and_retained_for_admission() {
     let result = Command::new(std::env::current_exe().unwrap())
         .args(["--exact", name.as_str(), "--test-threads=1"])
         .env(CHILD, "1")
-        .current_dir(&fixture.0)
+        .current_dir(fixture.0.path())
         .stdin(Stdio::null())
         .output()
         .unwrap();
@@ -301,6 +298,7 @@ fn cwd_resolution_is_captured_before_loading_and_retained_for_admission() {
     assert!(result.status.success(), "{output}");
     // A name the harness does not know runs nothing and still succeeds.
     assert!(output.contains("test result: ok. 1 passed"), "{output}");
+    fixture.close();
 }
 
 /// This module's test `function` as the harness names it: the module path

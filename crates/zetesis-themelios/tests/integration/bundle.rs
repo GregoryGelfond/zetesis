@@ -2,51 +2,33 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use themelios_base::source::{SourceId, Sources, check_sources_laws};
 use zetesis_themelios::{
     AdmissionOptions, BundleError, BundleLimits, BundleResource, BundleSource, SourceBundle, admit,
 };
 
-static NEXT_DIRECTORY: AtomicU64 = AtomicU64::new(0);
-
 struct Fixture {
-    directory: PathBuf,
+    directory: tempfile::TempDir,
 }
 
 impl Fixture {
     fn new() -> Self {
-        loop {
-            let id = NEXT_DIRECTORY.fetch_add(1, Ordering::Relaxed);
-            let directory = std::env::temp_dir()
-                .join(format!("zetesis-source-bundle-{}-{id}", std::process::id()));
-            match fs::create_dir(&directory) {
-                Ok(()) => return Self { directory },
-                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
-                Err(error) => panic!("temporary fixture directory: {error}"),
-            }
+        Self {
+            directory: tempfile::tempdir().expect("temporary fixture directory"),
         }
     }
     fn write(&self, name: &str, bytes: impl AsRef<[u8]>) -> PathBuf {
-        let path = self.directory.join(name);
+        let path = self.directory.path().join(name);
         fs::create_dir_all(path.parent().expect("fixture parent")).expect("fixture parents");
         fs::write(&path, bytes).expect("fixture contents");
         path
     }
     fn path(&self, name: &str) -> PathBuf {
-        self.directory.join(name)
+        self.directory.path().join(name)
     }
     fn load(&self, name: &str) -> Result<SourceBundle, BundleError> {
         SourceBundle::load(self.path(name), BundleLimits::default())
-    }
-}
-
-impl Drop for Fixture {
-    fn drop(&mut self) {
-        // This directory was uniquely created above and contains only this
-        // test's files; cleanup never touches a source estate.
-        let _ = fs::remove_dir_all(&self.directory);
     }
 }
 
@@ -264,7 +246,7 @@ fn missing_paths_and_invalid_utf8_are_typed_refusals() {
         Err(BundleError::Source { .. })
     ));
     assert!(matches!(
-        SourceBundle::load(&fixture.directory, BundleLimits::default()),
+        SourceBundle::load(fixture.directory.path(), BundleLimits::default()),
         Err(BundleError::NotRegularFile { .. })
     ));
 }

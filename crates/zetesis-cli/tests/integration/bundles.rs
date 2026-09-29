@@ -2,9 +2,7 @@
 
 use std::fs;
 use std::io::Write;
-use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use clap::Parser;
 use zetesis_cli::{
@@ -13,44 +11,25 @@ use zetesis_cli::{
 use zetesis_cpu::Cancellation;
 use zetesis_themelios::{BundleLimits, SourceBundle};
 
-static NEXT_DIRECTORY: AtomicU64 = AtomicU64::new(0);
-
-struct Fixture(PathBuf);
+struct Fixture(tempfile::TempDir);
 impl Fixture {
     fn new() -> Self {
-        loop {
-            let serial = NEXT_DIRECTORY.fetch_add(1, Ordering::Relaxed);
-            let path = std::env::temp_dir().join(format!(
-                "zetesis-cli-bundle-{}-{serial}",
-                std::process::id()
-            ));
-            match fs::create_dir(&path) {
-                Ok(()) => return Self(path),
-                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
-                Err(error) => panic!("temporary fixture: {error}"),
-            }
-        }
+        Self(tempfile::tempdir().expect("temporary fixture"))
     }
     fn write(&self, name: &str, source: &str) {
-        fs::write(self.0.join(name), source).unwrap();
+        fs::write(self.0.path().join(name), source).unwrap();
     }
     fn bundle(&self) -> SourceBundle {
-        SourceBundle::load(self.0.join("entry.lp"), BundleLimits::default()).unwrap()
+        SourceBundle::load(self.0.path().join("entry.lp"), BundleLimits::default()).unwrap()
     }
     fn process(&self, arguments: &[&str]) -> std::process::Output {
         Command::new(env!("CARGO_BIN_EXE_zetesis"))
             .args(["--backend", "cpu", "--models", "0"])
             .args(arguments)
-            .arg(self.0.join("entry.lp"))
+            .arg(self.0.path().join("entry.lp"))
             .stdin(Stdio::null())
             .output()
             .unwrap()
-    }
-}
-impl Drop for Fixture {
-    fn drop(&mut self) {
-        // Remove only the unique directory created by this fixture.
-        let _ = fs::remove_dir_all(&self.0);
     }
 }
 
@@ -155,8 +134,8 @@ fn later_root_syntax_failure_keeps_its_source_identity() {
     fixture.write("later.lp", MALFORMED_CHOICE);
     let result = Command::new(env!("CARGO_BIN_EXE_zetesis"))
         .args(["--backend", "cpu", "--color", "never"])
-        .arg(fixture.0.join("entry.lp"))
-        .arg(fixture.0.join("later.lp"))
+        .arg(fixture.0.path().join("entry.lp"))
+        .arg(fixture.0.path().join("later.lp"))
         .stdin(Stdio::null())
         .output()
         .unwrap();
@@ -356,7 +335,7 @@ fn files_resolve_original_includes_but_strings_have_no_implicit_base_path() {
             .contains("Answer: 1\np\n")
     );
     let error = run_with_diagnostics(
-        fs::read_to_string(fixture.0.join("entry.lp")).unwrap(),
+        fs::read_to_string(fixture.0.path().join("entry.lp")).unwrap(),
         &options(&["--backend", "cpu"]),
         &mut Vec::new(),
         &mut Vec::new(),

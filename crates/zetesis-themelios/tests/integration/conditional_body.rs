@@ -3,8 +3,6 @@
 
 use std::collections::BTreeSet;
 use std::fs::{self};
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use serde_json::Value as Json;
@@ -168,25 +166,6 @@ fn native(input: &AdmittedFormula) -> Models {
     }
     assert!(search.exhausted(), "complete original-theory enumeration");
     result
-}
-
-static NEXT: AtomicU64 = AtomicU64::new(0);
-struct Directory(PathBuf);
-impl Directory {
-    fn new() -> Self {
-        let path = std::env::temp_dir().join(format!(
-            "zetesis-conditional-body-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        ));
-        fs::create_dir(&path).unwrap();
-        Self(path)
-    }
-}
-impl Drop for Directory {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
-    }
 }
 
 fn external(source: &str, valid: bool) -> Json {
@@ -514,9 +493,9 @@ fn partial_local_iteration_never_certifies_vacuity_and_exact_caps_are_inclusive(
 
 #[test]
 fn included_conditionals_preserve_original_locations_and_output_selection() {
-    let directory = Directory::new();
-    let root = directory.0.join("root.lp");
-    let rules = directory.0.join("rules.lp");
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("root.lp");
+    let rules = directory.path().join("rules.lp");
     let source = "#include \"rules.lp\". d(1..2).p(1..2).#show q/0.";
     let conditional = "q:-p(X):d(X).";
     fs::write(&root, source).unwrap();

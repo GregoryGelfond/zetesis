@@ -2,8 +2,6 @@
 
 use std::collections::BTreeSet;
 use std::fs::{self};
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use serde_json::Value as Json;
@@ -542,35 +540,17 @@ fn coherence_roots_are_bounded_and_keep_both_original_source_locations() {
     );
 }
 
-static NEXT: AtomicU64 = AtomicU64::new(0);
-struct Directory(PathBuf);
-impl Directory {
-    fn new() -> Self {
-        let path = std::env::temp_dir().join(format!(
-            "zetesis-strong-negation-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        ));
-        fs::create_dir(&path).unwrap();
-        Self(path)
-    }
-}
-impl Drop for Directory {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
-    }
-}
-
 #[test]
 fn opposite_signs_across_bundle_files_share_coherence_and_original_provenance() {
-    let directory = Directory::new();
+    let directory = tempfile::tempdir().unwrap();
     fs::write(
-        directory.0.join("entry.lp"),
+        directory.path().join("entry.lp"),
         "#include \"negative.lp\". p(1).",
     )
     .unwrap();
-    fs::write(directory.0.join("negative.lp"), "-p(1).").unwrap();
-    let bundle = SourceBundle::load(directory.0.join("entry.lp"), BundleLimits::default()).unwrap();
+    fs::write(directory.path().join("negative.lp"), "-p(1).").unwrap();
+    let bundle =
+        SourceBundle::load(directory.path().join("entry.lp"), BundleLimits::default()).unwrap();
     let input = admit_bundle_formula(
         bundle,
         BundleAdmissionOptions::default(),

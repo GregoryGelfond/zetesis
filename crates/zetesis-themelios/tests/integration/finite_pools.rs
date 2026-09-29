@@ -559,29 +559,20 @@ fn include_origins_survive_duplicate_rules_and_choice_groups() {
     use zetesis_themelios::{
         BundleAdmissionOptions, BundleLimits, SourceBundle, admit_bundle_formula,
     };
-    struct Directory(std::path::PathBuf);
-    impl Drop for Directory {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
-        }
-    }
-    let directory = Directory(
-        std::env::temp_dir().join(format!("zetesis-pool-origins-{}", std::process::id())),
-    );
-    std::fs::create_dir(&directory.0).unwrap();
+    let directory = tempfile::tempdir().unwrap();
     for rule in ["p(one;2);q.", "1{p(one;2)}1."] {
         std::fs::write(
-            directory.0.join("entry.lp"),
+            directory.path().join("entry.lp"),
             format!("#include \"data.lp\".\n{rule}"),
         )
         .unwrap();
         std::fs::write(
-            directory.0.join("data.lp"),
+            directory.path().join("data.lp"),
             format!("#const one=1.\n{rule}"),
         )
         .unwrap();
         let bundle =
-            SourceBundle::load(directory.0.join("entry.lp"), BundleLimits::default()).unwrap();
+            SourceBundle::load(directory.path().join("entry.lp"), BundleLimits::default()).unwrap();
         let admitted = admit_bundle_formula(
             bundle,
             BundleAdmissionOptions::default(),
