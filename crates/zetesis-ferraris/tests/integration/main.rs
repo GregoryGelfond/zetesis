@@ -3,6 +3,7 @@
 mod aggregate_clingo;
 mod aggregate_families;
 mod aggregates;
+mod candidate_support;
 mod evaluation;
 mod extrema;
 mod extrema_clingo;
@@ -17,7 +18,6 @@ mod refusal_contracts;
 mod region_work;
 mod regions;
 mod semantic_receipts;
-mod support;
 mod tight;
 mod tight_accounting;
 mod value_extrema;
