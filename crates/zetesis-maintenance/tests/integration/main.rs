@@ -5,6 +5,7 @@ mod support;
 mod book_artifacts;
 mod coverage_policy;
 mod coverage_workflow;
+mod documentation_links;
 mod executable_agreement;
 mod process_capture;
 mod proof_capture;

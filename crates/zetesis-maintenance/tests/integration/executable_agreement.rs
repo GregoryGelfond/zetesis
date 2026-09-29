@@ -1,13 +1,10 @@
 //! The installer, INSTALL.md, the live documentation and the workspace's
 //! binaries name one set of executables.
 
-use std::path::{Path, PathBuf};
 use std::process::Command;
 use zetesis_maintenance::{install, invocations};
 
-fn repository() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
+use crate::support::{documents, repository};
 
 fn read(path: &str) -> String {
     std::fs::read_to_string(repository().join(path)).unwrap()
@@ -94,29 +91,6 @@ fn a_cargo_command_for_another_package_is_refused() {
         refusal.starts_with("INSTALL.md's Cargo commands install"),
         "{refusal}"
     );
-}
-
-/// Every Markdown document of the repository, skipping hidden and build
-/// directories, as (path relative to the repository, text).
-fn documents() -> Vec<(String, String)> {
-    fn visit(directory: &Path, root: &Path, documents: &mut Vec<(String, String)>) {
-        for entry in std::fs::read_dir(directory).unwrap() {
-            let path = entry.unwrap().path();
-            let name = path.file_name().unwrap().to_string_lossy();
-            if path.is_dir() {
-                if !name.starts_with('.') && name != "target" {
-                    visit(&path, root, documents);
-                }
-            } else if path.extension().is_some_and(|extension| extension == "md") {
-                let relative = path.strip_prefix(root).unwrap().display().to_string();
-                documents.push((relative, std::fs::read_to_string(&path).unwrap()));
-            }
-        }
-    }
-    let root = repository().canonicalize().unwrap();
-    let mut documents = Vec::new();
-    visit(&root, &root, &mut documents);
-    documents
 }
 
 fn invocation_refusal(document: &str) -> String {

@@ -15,6 +15,7 @@ pub mod coverage;
 pub mod install;
 pub mod inventory;
 pub mod invocations;
+pub mod links;
 pub mod proofs;
 
 use std::{fmt, io, path::PathBuf};
