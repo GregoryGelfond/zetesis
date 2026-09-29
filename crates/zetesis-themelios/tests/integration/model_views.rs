@@ -4,6 +4,7 @@ use serde_json::{Value as Json, json};
 use zetesis_core::catalog::AtomCatalog;
 use zetesis_core::{Atom, Model, Predicate, Sign, Value, ValueLimits, ValueNode};
 use zetesis_cpu::Cancellation;
+use zetesis_test_support::programs::atom;
 use zetesis_themelios::observation::json::{self, AtomTable};
 use zetesis_themelios::observation::{
     Limits, ModelView, ObservationProgram, Symbol, SymbolSign, ViewError, ViewLimits,
@@ -11,10 +12,6 @@ use zetesis_themelios::observation::{
 use zetesis_themelios::{
     AdmissionOptions, ExpansionLimits, FormulaLimits, OutputSelection, admit_formula,
 };
-
-fn atom(name: &str, values: Vec<Value>) -> Atom {
-    Atom::new(Predicate::new(name, values.len()).unwrap(), values).unwrap()
-}
 
 #[test]
 fn evaluated_views_resume_the_original_rendering_budget() {

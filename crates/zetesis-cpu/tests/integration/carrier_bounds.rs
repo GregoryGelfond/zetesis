@@ -4,15 +4,10 @@
 //! omits the first and holds the second.
 
 use std::collections::BTreeSet;
-use zetesis_core::{Atom, Predicate, Program, Seed, Template, Term, Value};
+use zetesis_core::{Atom, Program, Seed, Template, Term};
 use zetesis_cpu::{Cancellation, CandidateLimits, Candidates, Limits, check};
+use zetesis_test_support::programs::{atom, fact, number, pattern, program};
 
-use zetesis_test_support::programs::{fact, number, pattern, program};
-
-fn atom(name: &str, values: Vec<Value>) -> Atom {
-    let predicate = Predicate::new(name, values.len()).expect("nonempty test name");
-    Atom::new(predicate, values).expect("matching arity")
-}
 /// p :- not q.  q :- not p.  r :- p, not s.  s :- t.  u.
 fn gated_program() -> Program {
     let head = |name: &str| pattern(name, vec![]);

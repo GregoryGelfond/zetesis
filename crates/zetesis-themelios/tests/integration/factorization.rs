@@ -8,9 +8,10 @@ use std::fmt::Write;
 
 use stable_models::stable;
 use themelios_base::span::Location;
-use zetesis_core::{Atom, Predicate, Value};
+use zetesis_core::Value;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, models, models_reduct};
+use zetesis_test_support::programs::atom;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, FormulaResource,
     GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork, admit_formula,
@@ -113,10 +114,6 @@ fn independent_constraint_components_and_empty_extensions_are_exact() {
         "{a(1);a(2);b(1);b(2)}. h:-a(X),X!=1,X!=2,b(Y).",
         "{a(1);a(2);b(1);b(2)}.",
     );
-}
-
-fn atom(name: &str, values: Vec<Value>) -> Atom {
-    Atom::new(Predicate::new(name, values.len()).unwrap(), values).unwrap()
 }
 
 #[test]

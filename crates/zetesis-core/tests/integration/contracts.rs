@@ -5,16 +5,10 @@ use zetesis_core::{
     Filter, GroundProgram, Model, Predicate, Program, Seed, SeedError, StaticError, StaticLimits,
     Template, Term, Value, WordError,
 };
-use zetesis_test_support::programs::number;
+use zetesis_test_support::programs::{atom, number, pattern, program};
 
 fn predicate(name: &str, arity: usize) -> Predicate {
     Predicate::new(name, arity).expect("nonempty test predicate")
-}
-fn pattern(name: &str, terms: Vec<Term>) -> AtomPattern {
-    AtomPattern::new(predicate(name, terms.len()), terms).expect("matching test arity")
-}
-fn atom(name: &str, values: Vec<Value>) -> Atom {
-    Atom::new(predicate(name, values.len()), values).expect("matching test arity")
 }
 fn fact(name: &str, value: i32) -> Template {
     Template::new(
@@ -24,9 +18,6 @@ fn fact(name: &str, value: i32) -> Template {
         vec![],
         vec![],
     )
-}
-fn admitted(templates: Vec<Template>) -> Program {
-    Program::new(templates, AdmissionLimits::default()).expect("safe test templates")
 }
 
 #[test]
@@ -84,7 +75,7 @@ fn extrema_surround_finite_terms_without_coercing_printed_spellings() {
             )
         })
         .collect();
-    let source = admitted(templates);
+    let source = program(templates);
     assert_eq!(source.domain().len(), values.len());
     assert_eq!(
         source.domain().iter().next(),
@@ -199,7 +190,7 @@ fn program_preserves_templates_and_scans_filter_only_constants() {
         vec![],
         vec![Filter::Eq(number(7), number(9))],
     );
-    let program = admitted(vec![template.clone(), template.clone()]);
+    let program = program(vec![template.clone(), template.clone()]);
     assert_eq!(program.templates().len(), 2);
     for admitted in program.templates() {
         assert_eq!(admitted, template);
@@ -213,7 +204,7 @@ fn program_preserves_templates_and_scans_filter_only_constants() {
 #[test]
 fn empty_seed_does_not_expand_a_large_symbolic_carrier() {
     let wide = pattern("gate", vec![number(0); 32]);
-    let program = admitted(vec![
+    let program = program(vec![
         fact("d", 0),
         fact("d", 1),
         Template::new(None, vec![], vec![], vec![wide], vec![]),
@@ -251,7 +242,7 @@ fn carrier_iteration_and_cloned_cursors_are_exact() {
             vec![pattern("gate", vec![number(0), number(0)])],
             vec![],
         ));
-        let program = admitted(templates);
+        let program = program(templates);
         let mut cursor = program.gate_atoms();
         let first = cursor.next().expect("one tuple").expect("tuple allocation");
         let rest: Vec<_> = cursor
@@ -279,7 +270,7 @@ fn carrier_iteration_and_cloned_cursors_are_exact() {
 fn empty_domain_has_nullary_atoms_but_no_positive_arity_tuples() {
     let nullary = pattern("a", vec![]);
     let only_variables = pattern("p", vec![Term::Variable(0)]);
-    let program = admitted(vec![
+    let program = program(vec![
         Template::new(Some(nullary.clone()), vec![], vec![nullary], vec![], vec![]),
         Template::new(
             None,
@@ -323,7 +314,7 @@ fn static_filters_and_ground_duplicate_antecedents_are_exact() {
         vec![],
         vec![Filter::Eq(x, y)],
     );
-    let program = admitted(vec![fact("d", 0), fact("d", 1), template]);
+    let program = program(vec![fact("d", 0), fact("d", 1), template]);
     let graph = GroundProgram::compile(&program, StaticLimits::default()).expect("bounded graph");
     assert_eq!(graph.atom_count(), 8);
     assert_eq!(graph.rules().len(), 4);
@@ -351,7 +342,7 @@ fn static_graph_keeps_gate_carrier_even_for_filtered_out_rules() {
         vec![pattern("g", vec![number(0)])],
         vec![Filter::Eq(number(0), number(1))],
     );
-    let program = admitted(vec![template]);
+    let program = program(vec![template]);
     let graph =
         GroundProgram::compile(&program, StaticLimits::default()).expect("two carrier tuples");
     assert!(graph.rules().is_empty());
@@ -373,8 +364,8 @@ fn static_graph_keeps_gate_carrier_even_for_filtered_out_rules() {
 fn seeds_bind_instance_identity_and_reject_foreign_keys() {
     let gate = pattern("a", vec![]);
     let template = Template::new(Some(gate.clone()), vec![], vec![gate], vec![], vec![]);
-    let first = admitted(vec![template.clone()]);
-    let second = admitted(vec![template]);
+    let first = program(vec![template.clone()]);
+    let second = program(vec![template]);
     assert!(first.same_instance(&first.clone()));
     assert!(!first.same_instance(&second));
     let seed = Seed::new(&first, [atom("a", vec![])]).expect("matching carrier");
@@ -394,7 +385,7 @@ fn word_conversion_crosses_the_old_sixty_four_atom_limit() {
             Template::new(Some(p.clone()), vec![], vec![p], vec![], vec![])
         })
         .collect();
-    let program = admitted(templates);
+    let program = program(templates);
     let graph = GroundProgram::compile(&program, StaticLimits::default()).expect("seventy atoms");
     let chosen = [0usize, 31, 32, 63, 64, 69].map(|index| atom(&format!("a{index:02}"), vec![]));
     let seed = Seed::new(&program, chosen.clone()).expect("gate atoms");
@@ -419,7 +410,7 @@ fn word_conversion_crosses_the_old_sixty_four_atom_limit() {
 
 #[test]
 fn empty_graph_word_representation_is_empty() {
-    let program = admitted(vec![]);
+    let program = program(vec![]);
     let graph = GroundProgram::compile(&program, StaticLimits::default()).expect("empty graph");
     assert_eq!(graph.word_count(), 0);
     assert_eq!(graph.model_from_words(&[]), Ok(Model::default()));
@@ -431,7 +422,7 @@ fn empty_graph_word_representation_is_empty() {
 
 #[test]
 fn static_work_limits_and_cartesian_overflow_do_not_become_partial_graphs() {
-    let program = admitted(vec![fact("a", 0)]);
+    let program = program(vec![fact("a", 0)]);
     let limits = StaticLimits {
         max_substitutions: 0,
         ..StaticLimits::default()

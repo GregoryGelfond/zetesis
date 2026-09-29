@@ -1,13 +1,11 @@
 //! Independent closure comparisons and adversarial immutable-round protocols.
 use zetesis_core::{
-    AdmissionLimits, Atom, AtomPattern, GroundProgram, Model, Predicate, Program, Seed,
-    StaticLimits, Template, Term, Value,
+    Atom, AtomPattern, GroundProgram, Model, Predicate, Program, Seed, StaticLimits, Template,
+    Term, Value,
 };
 use zetesis_cpu::{Cancellation, Limits, Stop, check, check_static, lazy, source};
+use zetesis_test_support::programs::{pattern, program};
 
-fn pattern(name: &str, terms: Vec<Term>) -> AtomPattern {
-    AtomPattern::new(Predicate::new(name, terms.len()).unwrap(), terms).unwrap()
-}
 fn nullary(name: &str) -> AtomPattern {
     pattern(name, vec![])
 }
@@ -21,9 +19,6 @@ fn rule(
     no: Vec<AtomPattern>,
 ) -> Template {
     Template::new(head, positive, yes, no, vec![])
-}
-fn program(rules: Vec<Template>) -> Program {
-    Program::new(rules, AdmissionLimits::default()).unwrap()
 }
 fn model(names: &[&str]) -> Model {
     Model::new(names.iter().map(|name| atom(name))).unwrap()

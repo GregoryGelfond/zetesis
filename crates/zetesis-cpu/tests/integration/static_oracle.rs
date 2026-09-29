@@ -4,21 +4,14 @@ use std::num::NonZeroUsize;
 use std::time::Instant;
 
 use zetesis_core::{
-    AdmissionLimits, Atom, AtomPattern, Filter, GroundProgram, Predicate, Program, Seed,
-    StaticLimits, Template, Term, Value,
+    Atom, AtomPattern, Filter, GroundProgram, Predicate, Program, Seed, StaticLimits, Template,
+    Term, Value,
 };
 use zetesis_cpu::{
     BatchError, BatchOracle, Cancellation, CandidateLimits, Candidates, Limits, StaticCheck, Stop,
     check, check_static,
 };
-
-fn pattern(name: &str, terms: Vec<Term>) -> AtomPattern {
-    AtomPattern::new(Predicate::new(name, terms.len()).unwrap(), terms).unwrap()
-}
-
-fn program(rules: Vec<Template>) -> Program {
-    Program::new(rules, AdmissionLimits::default()).unwrap()
-}
+use zetesis_test_support::programs::{pattern, program};
 
 fn compile(source: &Program) -> GroundProgram {
     GroundProgram::compile(source, StaticLimits::default()).unwrap()

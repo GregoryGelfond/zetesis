@@ -15,10 +15,11 @@ use zetesis_cli::{
     SolveConfig, run_with_diagnostics,
 };
 use zetesis_clingo_support as oracle;
-use zetesis_core::{Atom, Predicate, Value, ValueLimits};
+use zetesis_core::{Atom, Value, ValueLimits};
 use zetesis_cpu::Cancellation;
 use zetesis_reference_support::{admit, canonical, exhaustive};
 use zetesis_sat::Incomplete;
+use zetesis_test_support::programs::atom;
 use zetesis_test_support::records::Records;
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
@@ -120,10 +121,6 @@ const EXPECTED: [Expected; language_value_sources::SOURCES.len()] = [
         costs: Some(&[(3, 0)]),
     },
 ];
-
-fn atom(name: &str, values: Vec<Value>) -> Atom {
-    Atom::new(Predicate::new(name, values.len()).unwrap(), values).unwrap()
-}
 
 fn records(expected: &Expected) -> BTreeSet<Record> {
     expected

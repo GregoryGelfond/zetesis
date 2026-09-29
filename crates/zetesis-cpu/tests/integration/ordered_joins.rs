@@ -1,22 +1,11 @@
 //! Ordered lazy probes compared with independently materialized static closure.
 
 use zetesis_core::{
-    AdmissionLimits, Atom, AtomPattern, Filter, GroundProgram, Predicate, Program, Seed,
-    StaticLimits, Template, Term, Value,
+    AdmissionLimits, Atom, Filter, GroundProgram, Predicate, Program, Seed, StaticLimits, Template,
+    Term, Value,
 };
 use zetesis_cpu::{Cancellation, Limits, Stop, check, check_static};
-
-fn pattern(name: &str, terms: Vec<Term>) -> AtomPattern {
-    AtomPattern::new(Predicate::new(name, terms.len()).unwrap(), terms).unwrap()
-}
-
-fn number(n: i32) -> Term {
-    Term::Constant(Value::Number(n))
-}
-
-fn fact(name: &str, terms: Vec<Term>) -> Template {
-    Template::new(Some(pattern(name, terms)), vec![], vec![], vec![], vec![])
-}
+use zetesis_test_support::programs::{fact, number, pattern};
 
 fn source(rows: u8, selectors: u8) -> Program {
     let x = Term::Variable(0);

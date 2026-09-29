@@ -12,9 +12,10 @@ use std::num::NonZeroUsize;
 use zetesis_cli::{
     Backend, Completion, Interruption, Oracle, PreparedInput, SearchMethod, Session, SolveConfig,
 };
-use zetesis_core::{Atom, Predicate, Value, ValueLimits};
+use zetesis_core::{Atom, Value, ValueLimits};
 use zetesis_cpu::Cancellation;
 use zetesis_sat::Incomplete;
+use zetesis_test_support::programs::atom;
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 type Record = (BTreeSet<Atom>, Option<Vec<(i32, i64)>>);
@@ -73,10 +74,6 @@ const CASES: &[Case] = &[
         costs: Some(&[(7, 0)]),
     },
 ];
-
-fn atom(name: &str, values: Vec<Value>) -> Atom {
-    Atom::new(Predicate::new(name, values.len()).unwrap(), values).unwrap()
-}
 
 fn expected(case: &Case) -> BTreeSet<Record> {
     case.models

@@ -1,26 +1,15 @@
 //! Sound source restrictions skip impossible seed intervals without grounding the carrier.
 use std::collections::BTreeSet;
-use zetesis_core::{AdmissionLimits, Atom, AtomPattern, Predicate, Program, Template, Term, Value};
+use zetesis_core::{Atom, AtomPattern, Predicate, Program, Template, Term, Value};
 use zetesis_cpu::{
     Cancellation, CandidateLimits, CandidateRestrictionLimits, CandidateTermination, Candidates,
     Limits, Stop, check,
 };
+use zetesis_test_support::programs::{fact, number, pattern, program};
 
-fn atom(name: &str, terms: Vec<Term>) -> AtomPattern {
-    AtomPattern::new(Predicate::new(name, terms.len()).unwrap(), terms).unwrap()
-}
-fn number(n: i32) -> Term {
-    Term::Constant(Value::Number(n))
-}
-fn fact(name: &str, terms: Vec<Term>) -> Template {
-    Template::new(Some(atom(name, terms)), vec![], vec![], vec![], vec![])
-}
 fn choice(name: &str, terms: Vec<Term>) -> Template {
-    let head = atom(name, terms);
+    let head = pattern(name, terms);
     Template::new(Some(head.clone()), vec![], vec![head], vec![], vec![])
-}
-fn program(templates: Vec<Template>) -> Program {
-    Program::new(templates, AdmissionLimits::default()).unwrap()
 }
 fn restricted(program: &Program) -> Candidates<'_> {
     Candidates::restricted(
@@ -36,9 +25,9 @@ fn path(size: i32) -> Program {
     templates.push(Template::new(
         None,
         vec![
-            atom("edge", vec![Term::Variable(0), Term::Variable(1)]),
-            atom("in", vec![Term::Variable(0)]),
-            atom("in", vec![Term::Variable(1)]),
+            pattern("edge", vec![Term::Variable(0), Term::Variable(1)]),
+            pattern("in", vec![Term::Variable(0)]),
+            pattern("in", vec![Term::Variable(1)]),
         ],
         vec![],
         vec![],
@@ -188,15 +177,15 @@ fn possible_support_is_not_an_unconditional_fact() {
         choice("p", vec![]),
         choice("q", vec![]),
         Template::new(
-            Some(atom("edge", vec![])),
-            vec![atom("p", vec![])],
+            Some(pattern("edge", vec![])),
+            vec![pattern("p", vec![])],
             vec![],
             vec![],
             vec![],
         ),
         Template::new(
             None,
-            vec![atom("edge", vec![]), atom("q", vec![])],
+            vec![pattern("edge", vec![]), pattern("q", vec![])],
             vec![],
             vec![],
             vec![],
@@ -219,9 +208,9 @@ fn negative_gates_remain_for_the_original_oracle() {
         choice("q", vec![]),
         Template::new(
             None,
-            vec![atom("p", vec![])],
+            vec![pattern("p", vec![])],
             vec![],
-            vec![atom("q", vec![])],
+            vec![pattern("q", vec![])],
             vec![],
         ),
     ]);
@@ -235,7 +224,7 @@ fn unbound_fact_side_declines_the_constraint() {
         choice("p", vec![number(1)]),
         Template::new(
             None,
-            vec![atom("p", vec![Term::Variable(0)])],
+            vec![pattern("p", vec![Term::Variable(0)])],
             vec![],
             vec![],
             vec![],
@@ -250,7 +239,7 @@ fn repeated_nullary_premises_name_one_forbidden_atom() {
         choice("p", vec![]),
         Template::new(
             None,
-            vec![atom("p", vec![]), atom("p", vec![])],
+            vec![pattern("p", vec![]), pattern("p", vec![])],
             vec![],
             vec![],
             vec![],
@@ -269,7 +258,7 @@ fn every_small_positive_constraint_family_keeps_exact_seed_order() {
             if family & (1 << (conjunction - 1)) != 0 {
                 let positive = (0..3)
                     .filter(|n| conjunction & (1 << n) != 0)
-                    .map(|n| atom("p", vec![number(n)]))
+                    .map(|n| pattern("p", vec![number(n)]))
                     .collect();
                 templates.push(Template::new(None, positive, vec![], vec![], vec![]));
             }
@@ -300,7 +289,13 @@ fn unconditional_constraints_exhaust_without_a_candidate() {
     let source = program(vec![
         choice("p", vec![]),
         fact("present", vec![]),
-        Template::new(None, vec![atom("present", vec![])], vec![], vec![], vec![]),
+        Template::new(
+            None,
+            vec![pattern("present", vec![])],
+            vec![],
+            vec![],
+            vec![],
+        ),
     ]);
     let mut candidates = restricted(&source);
     assert!(candidates.next().is_none());
@@ -342,7 +337,13 @@ fn typed_gate_values_do_not_coerce() {
     let source = program(vec![
         choice("p", vec![numeric.clone()]),
         choice("p", vec![textual]),
-        Template::new(None, vec![atom("p", vec![numeric])], vec![], vec![], vec![]),
+        Template::new(
+            None,
+            vec![pattern("p", vec![numeric])],
+            vec![],
+            vec![],
+            vec![],
+        ),
     ]);
     let seeds: Vec<_> = restricted(&source).map(Result::unwrap).collect();
     assert_eq!(seeds.len(), 2);
@@ -362,7 +363,7 @@ fn facts_of_gate_predicates_do_not_change_seed_identity() {
     let source = program(vec![
         fact("p", vec![]),
         choice("p", vec![]),
-        Template::new(None, vec![atom("p", vec![])], vec![], vec![], vec![]),
+        Template::new(None, vec![pattern("p", vec![])], vec![], vec![], vec![]),
     ]);
     let seeds: Vec<_> = restricted(&source).map(Result::unwrap).collect();
     assert_eq!(seeds.len(), 1);

@@ -1,13 +1,14 @@
 //! Public native-result identity and retained candidate termination contracts.
 
 use zetesis_core::{
-    AdmissionLimits, Atom, AtomPattern, GroundProgram, Interpretation, Predicate, Program, Seed,
-    StaticLimits, Template,
+    Atom, AtomPattern, GroundProgram, Interpretation, Predicate, Program, Seed, StaticLimits,
+    Template,
 };
 use zetesis_cpu::{
     Cancellation, CandidateLimits, CandidateTermination, Candidates, Limits, Stop, check,
     check_static,
 };
+use zetesis_test_support::programs::program;
 
 fn fact(name: &str) -> Template {
     Template::new(
@@ -17,10 +18,6 @@ fn fact(name: &str) -> Template {
         vec![],
         vec![],
     )
-}
-
-fn program(templates: Vec<Template>) -> Program {
-    Program::new(templates, AdmissionLimits::default()).unwrap()
 }
 
 fn compile(program: &Program) -> GroundProgram {

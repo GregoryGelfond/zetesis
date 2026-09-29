@@ -3,11 +3,8 @@
 use std::hash::{Hash, Hasher};
 
 use zetesis_core::catalog::{AtomCatalog, AtomRef, Catalog, Error, Limits};
-use zetesis_core::{Atom, Model, Predicate, Value};
-
-fn atom(name: &str, values: Vec<Value>) -> Atom {
-    Atom::new(Predicate::new(name, values.len()).unwrap(), values).unwrap()
-}
+use zetesis_core::{Model, Value};
+use zetesis_test_support::programs::atom;
 
 fn fingerprint(value: &impl Hash) -> u64 {
     let mut state = std::collections::hash_map::DefaultHasher::new();

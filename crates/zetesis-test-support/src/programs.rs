@@ -1,6 +1,16 @@
-//! Builders of small test programs over numbers.
+//! Builders of small test atoms and programs.
 
-use zetesis_core::{AdmissionLimits, AtomPattern, Predicate, Program, Template, Term, Value};
+use zetesis_core::{AdmissionLimits, Atom, AtomPattern, Predicate, Program, Template, Term, Value};
+
+/// The atom `name(values…)`, whose arity is the number of values.
+///
+/// # Panics
+/// Panics if `name` is empty.
+#[must_use]
+pub fn atom(name: &str, values: Vec<Value>) -> Atom {
+    let predicate = Predicate::new(name, values.len()).expect("nonempty test name");
+    Atom::new(predicate, values).expect("matching arity")
+}
 
 /// The atom pattern `name(terms…)`, whose arity is the number of terms.
 ///
@@ -39,6 +49,16 @@ pub fn program(templates: Vec<Template>) -> Program {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_atom_takes_its_arity_from_its_values() {
+        let built = atom("p", vec![Value::Number(1), Value::Symbol("a".into())]);
+        assert_eq!(built.predicate().arity(), 2);
+        assert_eq!(
+            built.values(),
+            [Value::Number(1), Value::Symbol("a".into())]
+        );
+    }
 
     #[test]
     fn a_program_holds_the_facts_it_is_built_from() {

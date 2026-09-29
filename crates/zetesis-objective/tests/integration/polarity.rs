@@ -1,17 +1,12 @@
 //! Signed normalization precedes global tuple identity and checked accumulation.
-use zetesis_core::{Atom, AtomPattern, Model, Predicate, Term, Value};
+use zetesis_core::{AtomPattern, Model, Term, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_objective::{
     AdmissionLimits, ErrorKind, Limits, ObjectiveProgram, ObjectiveTemplate, Stop, WeightPolarity,
     evaluate,
 };
+use zetesis_test_support::programs::{atom, number, pattern};
 
-fn pattern(name: &str, terms: Vec<Term>) -> AtomPattern {
-    AtomPattern::new(Predicate::new(name, terms.len()).unwrap(), terms).unwrap()
-}
-fn atom(name: &str, values: Vec<Value>) -> Atom {
-    Atom::new(Predicate::new(name, values.len()).unwrap(), values).unwrap()
-}
 fn row(weight: Term, priority: i32, key: &str, positive: Vec<AtomPattern>) -> ObjectiveTemplate {
     ObjectiveTemplate::new(
         weight,
@@ -20,9 +15,6 @@ fn row(weight: Term, priority: i32, key: &str, positive: Vec<AtomPattern>) -> Ob
         positive,
         vec![],
     )
-}
-fn number(weight: i32) -> Term {
-    Term::Constant(Value::Number(weight))
 }
 fn program(rows: Vec<ObjectiveTemplate>) -> ObjectiveProgram {
     ObjectiveProgram::new(rows, AdmissionLimits::default()).unwrap()

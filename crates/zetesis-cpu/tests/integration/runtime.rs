@@ -4,26 +4,11 @@
 use std::num::NonZeroUsize;
 use std::time::Instant;
 
-use zetesis_core::{
-    AdmissionLimits, Atom, AtomPattern, Predicate, Program, Seed, Template, Term, Value,
-};
+use zetesis_core::{Atom, Predicate, Program, Seed, Template, Term, Value};
 use zetesis_cpu::{
     BatchError, BatchOracle, Cancellation, CandidateLimits, Candidates, Limits, Stop, check,
 };
-
-fn pattern(name: &str, terms: Vec<Term>) -> AtomPattern {
-    AtomPattern::new(Predicate::new(name, terms.len()).expect("name"), terms).expect("arity")
-}
-
-fn fact(name: &str, terms: Vec<Term>) -> Template {
-    Template::new(
-        Some(pattern(name, terms)),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-    )
-}
+use zetesis_test_support::programs::{fact, pattern, program};
 
 fn choice(name: &str) -> Template {
     let head = pattern(name, Vec::new());
@@ -34,10 +19,6 @@ fn choice(name: &str) -> Template {
         Vec::new(),
         Vec::new(),
     )
-}
-
-fn program(templates: Vec<Template>) -> Program {
-    Program::new(templates, AdmissionLimits::default()).expect("admitted templates")
 }
 
 fn empty_seed(program: &Program) -> Seed {

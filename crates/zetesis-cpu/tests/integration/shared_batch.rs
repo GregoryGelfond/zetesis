@@ -3,15 +3,10 @@
 use std::num::NonZeroUsize;
 use std::time::Instant;
 
-use zetesis_core::{
-    AdmissionLimits, Atom, AtomPattern, Model, Predicate, Program, Seed, Template, Term, Value,
-};
+use zetesis_core::{AdmissionLimits, Atom, Model, Predicate, Program, Seed, Template, Term, Value};
 use zetesis_cpu::lazy::{SourceSelection, shared};
 use zetesis_cpu::{BatchError, BatchOracle, Cancellation, Limits, Stop};
-
-fn pattern(name: &str, terms: Vec<Term>) -> AtomPattern {
-    AtomPattern::new(Predicate::new(name, terms.len()).unwrap(), terms).unwrap()
-}
+use zetesis_test_support::programs::pattern;
 
 fn atom(name: &str, values: &[i32]) -> Atom {
     Atom::new(

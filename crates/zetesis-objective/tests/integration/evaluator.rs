@@ -6,24 +6,17 @@ use std::time::{Duration, Instant};
 
 use proptest::prelude::*;
 use zetesis_core::{
-    Atom, AtomPattern, Filter, Model, Predicate, TemplateTerm, Term, Value, ValueLimits,
-    ValueNodeRef,
+    Atom, AtomPattern, Filter, Model, TemplateTerm, Term, Value, ValueLimits, ValueNodeRef,
 };
 use zetesis_cpu::Cancellation;
 use zetesis_objective::{
     AdmissionError, AdmissionLimits, ErrorKind, Limits, ObjectiveProgram, ObjectiveTemplate, Stop,
     evaluate,
 };
-use zetesis_test_support::programs::number;
+use zetesis_test_support::programs::{atom, number, pattern};
 
 fn variable(index: usize) -> Term {
     Term::Variable(index)
-}
-fn pattern(name: &str, terms: Vec<Term>) -> AtomPattern {
-    AtomPattern::new(Predicate::new(name, terms.len()).unwrap(), terms).unwrap()
-}
-fn atom(name: &str, values: Vec<Value>) -> Atom {
-    Atom::new(Predicate::new(name, values.len()).unwrap(), values).unwrap()
 }
 fn fact(name: &str, numbers: &[i32]) -> Atom {
     atom(name, numbers.iter().copied().map(Value::Number).collect())
