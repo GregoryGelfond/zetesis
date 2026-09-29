@@ -5,6 +5,7 @@ use crate::support::language_value_sources;
 use crate::support::projected_conditional_sources;
 
 use crate::support::logical_extremum_sources;
+use crate::support::session_records::Record;
 
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
@@ -15,15 +16,13 @@ use zetesis_cli::{
     SolveConfig, run_with_diagnostics,
 };
 use zetesis_clingo_support as oracle;
-use zetesis_core::{Atom, Value, ValueLimits};
+use zetesis_core::{Value, ValueLimits};
 use zetesis_cpu::Cancellation;
 use zetesis_reference_support::{admit, canonical, exhaustive};
 use zetesis_sat::Incomplete;
 use zetesis_test_support::programs::atom;
 use zetesis_test_support::records::Records;
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
-
-type Record = (BTreeSet<Atom>, Option<Vec<(i32, i64)>>);
 
 #[test]
 #[ignore = "requires an independently installed clingo executable"]

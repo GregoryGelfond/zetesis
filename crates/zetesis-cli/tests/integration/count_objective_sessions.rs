@@ -2,6 +2,7 @@
 
 use crate::support::clingo_report;
 use crate::support::count_objective_sources;
+use crate::support::session_records::Record;
 mod count_objective_dependencies;
 
 use count_objective_sources::{INCONSISTENT, SATISFIABLE};
@@ -12,13 +13,11 @@ use std::num::NonZeroUsize;
 use zetesis_cli::{
     Backend, Completion, Interruption, Oracle, PreparedInput, SearchMethod, Session, SolveConfig,
 };
-use zetesis_core::{Atom, Value, ValueLimits};
+use zetesis_core::{Value, ValueLimits};
 use zetesis_cpu::Cancellation;
 use zetesis_sat::Incomplete;
 use zetesis_test_support::programs::atom;
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
-
-type Record = (BTreeSet<Atom>, Option<Vec<(i32, i64)>>);
 
 struct Case {
     source: &'static str,

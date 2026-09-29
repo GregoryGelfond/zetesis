@@ -10,3 +10,4 @@ pub(crate) mod logical_extremum_sources;
 #[cfg(feature = "gpu")]
 pub(crate) mod physical_backend;
 pub(crate) mod projected_conditional_sources;
+pub(crate) mod session_records;
