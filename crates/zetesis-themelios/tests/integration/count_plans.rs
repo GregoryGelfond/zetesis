@@ -46,6 +46,32 @@ fn plan(source: &AdmittedFormula) -> &zetesis_themelios::CountPlan {
     }
 }
 
+/// The complete family of stable models, enumerated under the plan's candidate
+/// restriction when planning produced one, with the search's statistics.
+fn planned_models(admitted: &AdmittedFormula) -> (reference::Models, zetesis_sat::Statistics) {
+    let mut models = zetesis_sat::StableModels::new(
+        admitted.theory(),
+        zetesis_sat::Limits::default(),
+        Cancellation::default(),
+    )
+    .unwrap();
+    if let CountPlanStatus::Ready(plan) = admitted.count_plan() {
+        models.restrict_candidates(plan.restriction()).unwrap();
+    }
+    let family = models
+        .by_ref()
+        .map(|model| {
+            model
+                .unwrap()
+                .atoms()
+                .map(|atom| atom_text(admitted.atoms().at(atom).unwrap()))
+                .collect()
+        })
+        .collect();
+    assert!(models.exhausted());
+    (family, models.statistics())
+}
+
 #[test]
 fn ordinary_grounding_does_not_request_count_planning() {
     assert!(matches!(
@@ -108,27 +134,9 @@ fn source_theory_entails_each_candidate_restriction() {
 fn preproposal_restrictions_preserve_stable_models() {
     for source in SOURCES {
         let admitted = admitted(source, true);
-        let mut models = zetesis_sat::StableModels::new(
-            admitted.theory(),
-            zetesis_sat::Limits::default(),
-            Cancellation::default(),
-        )
-        .unwrap();
-        models
-            .restrict_candidates(plan(&admitted).restriction())
-            .unwrap();
-        let actual: reference::Models = models
-            .by_ref()
-            .map(|model| {
-                model
-                    .unwrap()
-                    .atoms()
-                    .map(|atom| atom_text(admitted.atoms().at(atom).unwrap()))
-                    .collect()
-            })
-            .collect();
-        assert!(models.exhausted());
-        assert_eq!(models.statistics().candidate_restrictions, 1);
+        plan(&admitted);
+        let (actual, statistics) = planned_models(&admitted);
+        assert_eq!(statistics.candidate_restrictions, 1);
         assert_eq!(actual, native(&admitted), "{source}");
         assert_eq!(actual, exhaustive(&admitted), "{source}");
     }
@@ -703,4 +711,35 @@ fn source_tuple_payload_is_not_retained_by_count_planning() {
         plan(&short).statistics().work
     );
     assert_eq!(native(&long), native(&short));
+}
+
+const QUEENS: [&str; 6] = [
+    include_str!("../../../../examples/correctness/standalone/n-queens/variant-01.lp"),
+    include_str!("../../../../examples/correctness/standalone/n-queens/variant-02.lp"),
+    include_str!("../../../../examples/correctness/standalone/n-queens/variant-03.lp"),
+    include_str!("../../../../examples/correctness/standalone/n-queens/variant-04.lp"),
+    include_str!("../../../../examples/correctness/standalone/n-queens/variant-05.lp"),
+    include_str!("../../../../examples/correctness/standalone/n-queens/variant-06.lp"),
+];
+
+// Requesting a count plan never changes what is admitted or answered. On each
+// of the six eight-queens encodings, the count-planned route admits the same
+// subject as ordinary grounding, and its enumeration, restricted by the plan
+// when there is one, finds the same 92 full models. Planning declines these
+// encodings today, so the subject carries the comparison; a plan they gain
+// later is checked by the same assertions.
+#[test]
+fn count_plans_preserve_the_queens_families() {
+    for (variant, source) in (1..).zip(QUEENS) {
+        let ordinary = admitted(source, false);
+        let planned = admitted(source, true);
+        assert_eq!(planned.source().text(), ordinary.source().text());
+        assert_eq!(planned.atoms(), ordinary.atoms());
+        assert_eq!(planned.theory().nodes(), ordinary.theory().nodes());
+        assert_eq!(planned.theory().roots(), ordinary.theory().roots());
+        assert_eq!(planned.formula_origins(), ordinary.formula_origins());
+        let expected = native(&ordinary);
+        assert_eq!(expected.len(), 92, "variant {variant:02}");
+        assert_eq!(planned_models(&planned).0, expected, "variant {variant:02}");
+    }
 }

@@ -17,6 +17,10 @@ criterion = { version = "0.7", default-features = false, features = ["cargo_benc
 name = "lazy_joins"
 harness = false
 
+[[bench]]
+name = "oracles"
+harness = false
+
 [lints]
 workspace = true
 

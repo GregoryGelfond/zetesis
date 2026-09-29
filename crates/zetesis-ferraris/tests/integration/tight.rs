@@ -522,3 +522,25 @@ fn empty_universes_and_ranked_chains_keep_every_carrier_atom_explicit() {
         Err(TightError::PositiveCycle { .. })
     ));
 }
+
+// A plan keeps one producer per root occurrence: a choice root given three
+// times produces its head three times, a root given once produces its head
+// once, and an atom no root produces has no producer.
+#[test]
+fn a_plan_keeps_one_producer_per_root_occurrence() {
+    let mut nodes = Vec::new();
+    let first = Tree::atom(0).or(Tree::atom(0).neg()).emit(&mut nodes);
+    let second = Tree::atom(1).or(Tree::atom(1).neg()).emit(&mut nodes);
+    let source = Theory::new(
+        3,
+        nodes,
+        vec![first, second, first, first],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
+    let mut producers = [0; 3];
+    for producer in plan(&source).producers() {
+        producers[producer.head()] += 1;
+    }
+    assert_eq!(producers, [3, 1, 0]);
+}

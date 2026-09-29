@@ -7,8 +7,9 @@ use themelios_base::span::Location;
 use zetesis_domain::Status;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, DomainLimits, DomainObservation, ExpansionFailure,
-    ExpansionLimits, FormulaFailure, FormulaLimits, GroundingObserver, GroundingOptions,
-    GroundingOutcome, GroundingPhase, GroundingWork, JoinStrategy, prepare_formula,
+    ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, GroundingObserver,
+    GroundingOptions, GroundingOutcome, GroundingPhase, GroundingWork, JoinStrategy,
+    prepare_formula,
 };
 
 #[derive(Default)]
@@ -436,4 +437,50 @@ fn a_domain_that_admits_every_row_restricts_nothing() {
     let rules = *on.rules.borrow().last().unwrap();
     assert_eq!(rules.domain_guard_rows, Some(0));
     assert_eq!(rules.domain_guard_checks, Some(0));
+}
+
+/// Admit the fact `p(1).` within `max_work` units of formula work, with the
+/// optional domain analysis when `domains` is given.
+fn fact(max_work: u64, domains: Option<DomainLimits>) -> Result<AdmittedFormula, FormulaFailure> {
+    prepare_formula(
+        "p(1).".to_owned(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits {
+            max_work,
+            ..FormulaLimits::default()
+        },
+    )?
+    .with_domain_analysis(domains)
+    .ground()
+}
+
+/// A typed refusal at the work ceiling `limit`, having observed more work.
+fn exceeds_work(failure: &FormulaFailure, ceiling: u64) -> bool {
+    matches!(failure, FormulaFailure::Limit {
+        resource: FormulaResource::Work, limit, observed, ..
+    } if *limit == u128::from(ceiling) && observed > limit)
+}
+
+// Domain analysis is charged as formula work: at the least work that admits
+// the fact without it, admission with it is refused by the typed work limit.
+// The boundary is found by bisection; only typed work refusals move its lower
+// end, so no fixed implementation cost is assumed.
+#[test]
+fn domain_analysis_is_charged_beyond_the_plain_admission_boundary() {
+    let mut upper = FormulaLimits::default().max_work;
+    assert!(fact(upper, None).is_ok());
+    let mut lower = 0;
+    while lower + 1 < upper {
+        let middle = lower + (upper - lower) / 2;
+        match fact(middle, None) {
+            Ok(_) => upper = middle,
+            Err(failure) => {
+                assert!(exceeds_work(&failure, middle), "{failure:?}");
+                lower = middle;
+            }
+        }
+    }
+    let failure = fact(upper, Some(DomainLimits::default())).unwrap_err();
+    assert!(exceeds_work(&failure, upper), "{failure:?}");
 }
