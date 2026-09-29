@@ -142,7 +142,7 @@ See the implementation contracts in
 [`Session`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/src/session.rs),
 [`SemanticOutcome`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/src/semantic_outcome.rs)
 and [`WorldView::collect`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/src/world_view.rs).
-The [world-view regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/tests/world_views.rs)
+The [world-view regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/tests/integration/world_views.rs)
 cover additional search, scoring and storage failures. The
 [source preparation example](source.md) separately checks empty and inconsistent
 programs; neither an empty display nor a retained prefix decides inconsistency.
@@ -227,7 +227,7 @@ capture remain independently bounded; requesting every answer does not make
 those resources unlimited. A smaller explicit work, decision or candidate
 allowance still yields an interrupted prefix when exhausted.
 
-The [streaming regression](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/tests/streaming_defaults.rs)
+The [streaming regression](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/tests/integration/streaming_defaults.rs)
 checks every full answer for independent selections on a 24-vertex path against
 an independently generated bitmask family, using both automatic specialization
 and the general countermodel oracle. The former already completes within the

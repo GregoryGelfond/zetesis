@@ -186,7 +186,7 @@ This requires an available Metal adapter. The selection includes static-oracle
 construction and closure against an independent ordered-set reference, tight and
 general formula checking, resource refusal, reusable sessions, and completed
 table joins composed with GPU checking. Formula tests do not replace the
-[static shader tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/tests/hardware.rs).
+[static shader tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/tests/integration/hardware.rs).
 The coverage snapshot below describes the tests qualified on its stated source;
 today's required selection does not update that snapshot.
 

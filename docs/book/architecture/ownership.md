@@ -249,7 +249,7 @@ readback and error cleanup. Another operation receives `GpuErrorKind::Busy`
 without entering a waiting queue. This is serialized composition of primitives;
 their internal GPU parallelism remains unchanged. Prepared data does not retain
 that execution lease. The
-[composition example](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/tests/hardware_context.rs)
+[composition example](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/tests/integration/hardware_context.rs)
 executes formula checks while relation columns remain prepared on the same
 context, then uses those columns again.
 

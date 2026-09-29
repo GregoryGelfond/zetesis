@@ -340,7 +340,7 @@ policy marker is a readback failure even if the reported verdict agrees; this
 validates the protocol, without proving the shader or device implementation.
 
 The four physical
-[tight-oracle tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/tests/hardware_tight.rs)
+[tight-oracle tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/tests/integration/hardware_tight.rs)
 exercise both policies on Apple M4 Pro Metal. They cover original-root precedence,
 least unsupported atoms, duplicate and skewed producers, packed-word boundaries,
 batch isolation, resource refusals and retained-theory identity. The

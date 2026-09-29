@@ -555,7 +555,7 @@ being the ten-millisecond arithmetic chain. The audit's reproduction pair,
 over `d(1..40)`, run three times per executable with
 `--max-expansion-work 100000000`, median driver wall time and the rows the
 support-completion join reads (the count the
-[join-order tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/join_order.rs)
+[join-order tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/join_order.rs)
 pin):
 
 | Program | main | before | after | clingo | support rows before | support rows after |

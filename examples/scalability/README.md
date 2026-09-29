@@ -94,6 +94,6 @@ expected complete results. `cargo test -p zetesis-validation --test
 authored_examples` checks source integrity and contract registration without
 solving large instances. `scripts/check.sh oracle` also runs the complete clingo
 contracts for both defaults and Einstein. Native default checks live in
-`zetesis-cli/tests/authored_examples.rs`, including Einstein with automatic
+`zetesis-cli/tests/integration/authored_examples.rs`, including Einstein with automatic
 grounding and unchanged resource defaults. These checks run in the portable
 test suite.

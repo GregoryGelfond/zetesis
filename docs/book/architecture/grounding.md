@@ -46,7 +46,7 @@ an atomic occurrence. The tuple contributes once, while only positive atomic
 head occurrences can supply atom permission. Neither a true Boolean nor a
 satisfied bound supplies support for an atom in its condition. The exact three
 answers `{a}`, `{b}` and `{a,b}` are covered by the maintained
-[Boolean element contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/boolean_element_contracts.rs).
+[Boolean element contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/boolean_element_contracts.rs).
 
 `BooleanHeadElements.coalesced_group_in_context` proves preservation for an
 assumed keyed row family and covering atomic permissions;

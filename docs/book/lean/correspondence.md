@@ -268,7 +268,7 @@ For the concrete order bridge, admitted signatures and domain values are sorted
 and unique. `AtomIter` advances the last tuple coordinate fastest, giving the
 same lexicographic tuple order as `Atom::Ord`, within its signature-first order.
 Nullary predicates contribute one tuple even when the domain is empty. The
-[full-carrier control](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/tests/gate_positions.rs)
+[full-carrier control](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/tests/integration/gate_positions.rs)
 compares enumeration with an independently generated, sorted and deduplicated
 product, including signed predicates and typed values. This is executable test
 evidence and a source argument, not a Lean proof of Rust's iterator. Canonical
@@ -643,7 +643,7 @@ consumes its reservation conservatively and yields an incomplete worker failure.
 Returning unused grants before an idle wait, releasing blocked
 sends before joining on iterator drop, and counting joined certificate checks
 are Rust lifecycle and accounting obligations, beyond permit conservation. The
-bounded subprocess regressions in `zetesis-sat/tests/parallel_regions.rs` exercise
+bounded subprocess regressions in `zetesis-sat/tests/integration/parallel_regions.rs` exercise
 shutdown and idle grants; the certificate regressions compare complete scalar
 and parallel work and reject an insufficient shared allowance. An injected
 worker unwind also checks that idle peers wake and coverage remains incomplete.

@@ -119,4 +119,4 @@ The generated API pages for
 [combined book/API build](../building.md). Durable source references are
 [`SolveMeasurements`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/src/measurements.rs),
 [`PhaseTimings`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/src/phase_timing.rs), and the
-[measurement regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/tests/measurements.rs).
+[measurement regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/tests/integration/measurements.rs).

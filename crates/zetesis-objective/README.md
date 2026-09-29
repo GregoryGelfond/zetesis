@@ -173,13 +173,13 @@ polarities, dynamic weights, normalized cross-direction key identity, ignored
 nonnumeric rows, wide costs, inclusive work ceilings and typed negation overflow.
 `tests/integration/conditions.rs` checks closed-query truth tables, full typed atom identity,
 zero priority slots, coalescing with lifted rows, malformed references and exact
-work ceilings. `zetesis-themelios/tests/objective_condition_bounds.rs` compares
+work ceilings. `zetesis-themelios/tests/integration/objective_condition_bounds.rs` compares
 every candidate against every retained score to establish that optional bounds
 preserve closed-query costs and ties without changing the original atom catalog.
 `tests/integration/lookup.rs` checks full typed key families, duplicate eligibility, exact
 work-refusal prefixes and the effect of adding unrelated predicates without
 using elapsed-time assertions. Prepared bound lookup is checked separately in
-`zetesis-themelios/tests/objective_bound_lookup.rs`, including independent mask
+`zetesis-themelios/tests/integration/objective_bound_lookup.rs`, including independent mask
 costs on a shuffled catalog and query work separated from index preparation.
 
 Run `cargo test -p zetesis-objective` and
