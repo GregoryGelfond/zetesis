@@ -1,5 +1,6 @@
 //! Keyed relations: exactly one value per key, from a program's choice rules.
 
+use crate::support::signatures::signature;
 use themelios_base::source::{Source, SourceId};
 use themelios_program::program::{Arguments, Atom, Program};
 use themelios_program::raise::raise;
@@ -14,14 +15,6 @@ fn source(text: &str) -> Program {
     let raised = raise(&parsed);
     assert!(raised.diagnostics().is_empty(), "{text}");
     raised.program().clone()
-}
-
-fn signature(name: &str, arity: u32) -> Signature {
-    Signature {
-        sign: Sign::Positive,
-        name: Name::new(name).unwrap(),
-        arity,
-    }
 }
 
 fn keyed(text: &str) -> Vec<(Signature, usize)> {

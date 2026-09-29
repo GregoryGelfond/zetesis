@@ -2,6 +2,7 @@
 
 use std::collections::BTreeSet;
 
+use crate::support::signatures::signature;
 use proptest::prelude::*;
 use themelios_base::source::{Source, SourceId};
 use themelios_program::program::{
@@ -10,7 +11,7 @@ use themelios_program::program::{
 };
 use themelios_program::provenance::WithProvenance;
 use themelios_program::raise::raise;
-use themelios_program::symbol::{Name, Sign, Signature, Symbol, VarName};
+use themelios_program::symbol::{Name, Sign, Symbol, VarName};
 use themelios_program::term::{Term, Variable};
 use themelios_syntax::{dialect::Dialect, parse::parse};
 use zetesis_domain::{
@@ -32,13 +33,6 @@ fn source(text: &str) -> Program {
         raised.diagnostics()
     );
     raised.program().clone()
-}
-fn signature(name: &str, arity: u32) -> Signature {
-    Signature {
-        sign: Sign::Positive,
-        name: Name::new(name).unwrap(),
-        arity,
-    }
 }
 fn numbers(analysis: &Analysis<'_>, name: &str, index: usize, arity: u32) -> BTreeSet<i32> {
     let Domain::Finite(values) = analysis.domain(&signature(name, arity), index) else {
