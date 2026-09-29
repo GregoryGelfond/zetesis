@@ -1,13 +1,13 @@
 //! Source priority carriers are distinct from realized aggregate values.
 
 use crate::support::source_cases;
-use crate::support::source_oracle;
-use crate::support::source_records;
 
-use source_records::{admit, exhaustive};
 use std::collections::BTreeSet;
 
 use proptest::prelude::*;
+use zetesis_clingo_support as oracle;
+use zetesis_reference_support::{admit, exhaustive};
+use zetesis_test_support::records::Records;
 use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
 const CASES: &str = r#"{"name":"optional_count","source":"{a}.n(N):-N=#count{1:a}.#minimize{1@N:n(N)}.","priorities":[1,0],"records":[[["n(0)"],[0,1]],[["a","n(1)"],[1,0]]]}
@@ -55,12 +55,7 @@ fn source_carriers_preserve_complete_scored_answers() {
 #[ignore = "requires an independently installed clingo"]
 fn original_sources_match_complete_clingo_records() {
     for case in source_cases::cases(CASES.trim()) {
-        assert_eq!(
-            source_oracle::records(&case.source),
-            case.records,
-            "{}",
-            case.name
-        );
+        assert_eq!(oracle::records(&case.source), case.records, "{}", case.name);
     }
 }
 
@@ -138,7 +133,7 @@ fn source_carriers_preserve_original_equalities() {
 fn mixed_source_rows_retain_warnings_and_complete_costs() {
     let source = "{a}.n(N):-N=#sum{2:a;3:a}.#minimize{1@(1/(N-2)):n(N)}.";
     let input = admit(source, &FormulaLimits::default()).unwrap();
-    let expected: source_records::Records = BTreeSet::from([
+    let expected: Records = BTreeSet::from([
         (BTreeSet::from(["n(0)".into()]), Some(vec![0, 1])),
         (
             BTreeSet::from(["a".into(), "n(5)".into()]),
@@ -297,12 +292,7 @@ fn selected_source_carriers_match_fresh_clingo() {
     for case in source_cases::cases(include_str!(
         "../fixtures/objective-filtered-carriers.jsonl"
     )) {
-        assert_eq!(
-            source_oracle::records(&case.source),
-            case.records,
-            "{}",
-            case.name
-        );
+        assert_eq!(oracle::records(&case.source), case.records, "{}", case.name);
     }
 }
 

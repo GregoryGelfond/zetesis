@@ -1,11 +1,10 @@
 //! Delta support coverage agrees with complete finite source substitutions.
 
-use crate::support::source_oracle;
-use crate::support::source_records;
-
 use std::cell::Cell;
 
 use themelios_base::span::Location;
+use zetesis_clingo_support as oracle;
+use zetesis_reference_support as reference;
 use zetesis_themelios::{
     AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
     GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork,
@@ -53,11 +52,11 @@ const CASES: &[(&str, &str)] = &[
 #[test]
 fn delta_support_matches_complete_finite_substitutions() {
     for &(source, expanded) in CASES {
-        let admitted = source_records::admit(source, &FormulaLimits::default()).unwrap();
-        let expanded = source_records::admit(expanded, &FormulaLimits::default()).unwrap();
+        let admitted = reference::admit(source, &FormulaLimits::default()).unwrap();
+        let expanded = reference::admit(expanded, &FormulaLimits::default()).unwrap();
         assert_eq!(
-            source_records::exhaustive(&admitted),
-            source_records::exhaustive(&expanded),
+            reference::exhaustive(&admitted),
+            reference::exhaustive(&expanded),
             "{source}"
         );
     }
@@ -69,19 +68,18 @@ fn delta_completion_excludes_what_a_false_comparison_excludes() {
     // 1=2 is defined and false over every substitution of the rule, so the
     // division over X is never reached, in the first round or the delta
     // round, and the rule adds nothing to the program without it.
-    let expanded =
-        source_records::admit("p. d(1). d(0):-d(1).", &FormulaLimits::default()).unwrap();
+    let expanded = reference::admit("p. d(1). d(0):-d(1).", &FormulaLimits::default()).unwrap();
     for source in [
         "p. d(1). d(0):-d(1). p:-d(X),1=2,1/X=1.",
         "p. d(1). d(0):-d(1). p:-d(X),1/X=1,1=2.",
         "p. d(1). d(0):-d(1). p:-d(X),1=2,not q(1/X).",
         "p. d(1). d(0):-d(1). p:-d(X),not not q(1/X),1=2.",
     ] {
-        let admitted = source_records::admit(source, &FormulaLimits::default())
+        let admitted = reference::admit(source, &FormulaLimits::default())
             .unwrap_or_else(|error| panic!("{source}: {error}"));
         assert_eq!(
-            source_records::exhaustive(&admitted),
-            source_records::exhaustive(&expanded),
+            reference::exhaustive(&admitted),
+            reference::exhaustive(&expanded),
             "{source}"
         );
     }
@@ -94,13 +92,13 @@ fn support_completion_requires_the_final_empty_round() {
         max_support_rounds: 5,
         ..Default::default()
     };
-    assert!(source_records::admit(source, &exact).is_ok());
+    assert!(reference::admit(source, &exact).is_ok());
     let short = FormulaLimits {
         max_support_rounds: 4,
         ..exact
     };
     assert!(matches!(
-        source_records::admit(source, &short),
+        reference::admit(source, &short),
         Err(FormulaFailure::Limit {
             resource: FormulaResource::SupportRounds,
             observed: 5,
@@ -178,17 +176,14 @@ fn negative_noninputs_preserve_positive_delta_work() {
     assert_eq!(negative.join_rows, positive.join_rows);
     assert_eq!(negative.binding_snapshots, positive.binding_snapshots);
     // The same possible support does not mean the original formulas agree.
-    assert_ne!(
-        source_records::exhaustive(&gated),
-        source_records::exhaustive(&full)
-    );
+    assert_ne!(reference::exhaustive(&gated), reference::exhaustive(&full));
 }
 
 #[test]
 fn negative_delta_retains_duplicate_source_origins() {
     let authored = "r(X):-p(X),not blocked(X).";
     let source = format!("p(0). p(1):-p(0). {authored} {authored}");
-    let admitted = source_records::admit(&source, &FormulaLimits::default()).unwrap();
+    let admitted = reference::admit(&source, &FormulaLimits::default()).unwrap();
     let starts: std::collections::BTreeSet<_> = admitted
         .formula_origins()
         .iter()
@@ -200,11 +195,10 @@ fn negative_delta_retains_duplicate_source_origins() {
         })
         .collect();
     assert_eq!(starts.len(), 2);
-    let expected =
-        source_records::admit("p(0).p(1).r(0).r(1).", &FormulaLimits::default()).unwrap();
+    let expected = reference::admit("p(0).p(1).r(0).r(1).", &FormulaLimits::default()).unwrap();
     assert_eq!(
-        source_records::exhaustive(&admitted),
-        source_records::exhaustive(&expected)
+        reference::exhaustive(&admitted),
+        reference::exhaustive(&expected)
     );
 }
 
@@ -239,10 +233,10 @@ fn negative_delta_cannot_publish_a_refused_support_prefix() {
 #[ignore = "requires independently installed clingo"]
 fn delta_sources_match_clingo_complete_models() {
     for &(source, _) in CASES {
-        let admitted = source_records::admit(source, &FormulaLimits::default()).unwrap();
+        let admitted = reference::admit(source, &FormulaLimits::default()).unwrap();
         assert_eq!(
-            source_records::exhaustive(&admitted),
-            source_oracle::records(source),
+            reference::exhaustive(&admitted),
+            oracle::records(source),
             "{source}"
         );
     }

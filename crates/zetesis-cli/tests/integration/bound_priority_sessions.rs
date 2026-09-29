@@ -1,18 +1,18 @@
 //! Independent answer families for logical bounds and resolved priorities.
 
 use crate::support::bound_priority_sources as sources;
-use crate::support::source_oracle;
-use crate::support::source_records;
 
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 
 use clap::Parser;
-use source_records::Records;
 use zetesis_cli::{
     Backend, Completion, Options, Oracle, PreparedInput, Session, SolveConfig, run_with_diagnostics,
 };
+use zetesis_clingo_support as oracle;
 use zetesis_cpu::Cancellation;
+use zetesis_reference_support as reference;
+use zetesis_test_support::records::Records;
 use zetesis_themelios::FormulaLimits;
 
 struct Expected {
@@ -131,8 +131,8 @@ fn expectations() -> [Expected; sources::SOURCES.len()] {
 #[test]
 fn exhaustive_reduct_checks_preserve_answer_families() {
     for (source, expected) in sources::SOURCES.into_iter().zip(expectations()) {
-        let input = source_records::admit(source, &FormulaLimits::default()).unwrap();
-        assert_eq!(source_records::exhaustive(&input), expected.all, "{source}");
+        let input = reference::admit(source, &FormulaLimits::default()).unwrap();
+        assert_eq!(reference::exhaustive(&input), expected.all, "{source}");
     }
 }
 
@@ -140,7 +140,7 @@ fn exhaustive_reduct_checks_preserve_answer_families() {
 fn sessions_preserve_complete_scored_answers() {
     let mut multiple_workers = false;
     for (source, expected) in sources::SOURCES.into_iter().zip(expectations()) {
-        let input = source_records::admit(source, &FormulaLimits::default()).unwrap();
+        let input = reference::admit(source, &FormulaLimits::default()).unwrap();
         assert_eq!(input.objectives().priorities(), expected.priorities);
         for (workers, batch) in [(1, 1), (4, 3)] {
             // The batched completion receipts this test reads belong to the
@@ -175,7 +175,7 @@ fn sessions_preserve_complete_scored_answers() {
                             .interpretation()
                             .atoms()
                             .iter()
-                            .map(source_records::canonical)
+                            .map(reference::canonical)
                             .collect(),
                         costs,
                     ))
@@ -232,7 +232,7 @@ fn json_preserves_hidden_optimum_identity() {
             let shown: Vec<_> = answer
                 .shown_atom_indices()
                 .iter()
-                .map(|&index| source_records::canonical(&answer.full_model()[index]))
+                .map(|&index| reference::canonical(&answer.full_model()[index]))
                 .collect();
             assert_eq!(shown, ["b"]);
             assert!(answer.shown_terms().is_empty());
@@ -241,7 +241,7 @@ fn json_preserves_hidden_optimum_identity() {
                 answer
                     .full_model()
                     .iter()
-                    .map(source_records::canonical)
+                    .map(reference::canonical)
                     .collect(),
                 Some(vec![0, 0]),
             )
@@ -295,7 +295,7 @@ fn json_preserves_complete_optimum_answers() {
                         answer
                             .full_model()
                             .iter()
-                            .map(source_records::canonical)
+                            .map(reference::canonical)
                             .collect(),
                         costs
                     ))
@@ -310,7 +310,7 @@ fn json_preserves_complete_optimum_answers() {
 #[ignore = "requires an independently installed clingo executable"]
 fn original_sources_match_independent_answers() {
     for (source, expected) in sources::SOURCES.into_iter().zip(expectations()) {
-        let actual = source_oracle::records(source);
+        let actual = oracle::records(source);
         println!("source={source:?} complete_answers={}", actual.len());
         assert_eq!(actual, expected.all, "{source}");
     }

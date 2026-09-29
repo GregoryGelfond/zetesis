@@ -48,7 +48,7 @@ floor=$(scripts/maintenance.sh coverage-floor --mode "$mode" --path scripts/cove
 # The test-support crates hold test code. Every report skips their sources, as
 # cargo-llvm-cov already skips tests/ directories, so the floors measure product
 # code.
-support_sources='/crates/zetesis-(test|theory)-support/'
+support_sources='/crates/zetesis-(test|theory|clingo|reference)-support/'
 
 tool_version=$(cargo +1.97.1 llvm-cov --version)
 if [ "$tool_version" != 'cargo-llvm-cov 0.8.7' ]; then

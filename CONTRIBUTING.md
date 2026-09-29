@@ -179,9 +179,13 @@ that crate. `zetesis-test-support`, over `zetesis-core`, holds the sinks that
 fail on purpose, builders of small programs, the reader of a JSON document's
 spelled atoms and the data several crates' tests read. `zetesis-theory-support`,
 over `zetesis-ferraris`, holds the small-theory builder and the CPU reference a
-device's aggregates are compared with. A helper that only one crate's tests use
-stays in that crate's `tests/integration/support`. The support crates are not
-published, and every coverage report skips their sources.
+device's aggregates are compared with. `zetesis-clingo-support`, over
+`zetesis-validation` alone, finds clingo, runs it within bounds and decodes its
+reports, so a comparison reaches clingo without compiling a solver.
+`zetesis-reference-support`, over `zetesis-themelios`, enumerates a small
+program's answer sets through the reduct check. A helper that only one crate's
+tests use stays in that crate's `tests/integration/support`. The support crates
+are not published, and every coverage report skips their sources.
 
 The portable gate's `authored_lints` regression checks literal Rust attributes
 throughout the maintained source roots, including inactive `cfg_attr` branches

@@ -1,15 +1,15 @@
 //! Complete objective observations through total predicate renamings.
 
 use crate::support::source_cases;
-use crate::support::source_oracle;
-use crate::support::source_records;
 
+use oracle::records as clingo;
 use source_cases::cases;
-use source_oracle::records as clingo;
-use source_records::{Records, admit, canonical, exhaustive};
+use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Node, Theory};
+use zetesis_reference_support::{admit, canonical, exhaustive};
+use zetesis_test_support::records::Records;
 use zetesis_themelios::{
     AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
     prepare_formula,

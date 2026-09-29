@@ -10,11 +10,11 @@ use zetesis_themelios::{
 };
 
 use crate::support::source_cases;
-use crate::support::source_oracle;
-use crate::support::source_records;
+use zetesis_clingo_support as oracle;
+use zetesis_reference_support as reference;
 
 fn input(source: &str) -> AdmittedFormula {
-    source_records::admit(source, &FormulaLimits::default())
+    reference::admit(source, &FormulaLimits::default())
         .unwrap_or_else(|error| panic!("{source}: {error}"))
 }
 
@@ -30,7 +30,7 @@ fn complete_mixed_direction_costs_match_independent_recorded_models() {
     for case in cases {
         count += case.records.len();
         assert_eq!(
-            source_records::exhaustive(&input(&case.source)),
+            reference::exhaustive(&input(&case.source)),
             case.records,
             "{}: {}",
             case.name,
@@ -54,7 +54,7 @@ fn objective_directions_leave_the_original_atom_catalog_and_reduct_dag_unchanged
             assert_eq!(optimized.theory().nodes(), original.theory().nodes());
             assert_eq!(optimized.theory().roots(), original.theory().roots());
             let models = |program: &AdmittedFormula| {
-                source_records::exhaustive(program)
+                reference::exhaustive(program)
                     .into_iter()
                     .map(|(model, _)| model)
                     .collect::<BTreeSet<_>>()
@@ -112,7 +112,7 @@ fn eligible_minimum_integer_is_a_located_compatibility_refusal() {
         "a. #maximize{(-2147483647-1)@1,k:a}.",
         "v(-2147483647-1).v(1). #maximize{W@1,k:v(W)}.",
     ] {
-        let error = source_records::admit(source, &FormulaLimits::default()).unwrap_err();
+        let error = reference::admit(source, &FormulaLimits::default()).unwrap_err();
         assert!(
             matches!(
                 error,
@@ -136,7 +136,7 @@ fn minimum_integer_literal_retains_the_pinned_frontends_located_refusal() {
         "#maximize{-2147483648@1,k:absent}.",
         "v(-2147483648). #maximize{W@1,k:v(W),W!=(-2147483647-1)}.",
     ] {
-        let error = source_records::admit(source, &FormulaLimits::default()).unwrap_err();
+        let error = reference::admit(source, &FormulaLimits::default()).unwrap_err();
         assert!(
             matches!(
                 error,
@@ -154,7 +154,7 @@ fn maximizing_occurrences_obey_the_original_objective_element_ceiling() {
         "{a}. #maximize{2@1,k:a}. #maximize{2@1,k:a}.",
         "{a}. #maximize{2@1,k:a}. #minimize{-2@1,k:a}.",
     ] {
-        let result = source_records::admit(
+        let result = reference::admit(
             source,
             &FormulaLimits {
                 objective: zetesis_objective::AdmissionLimits {
@@ -182,11 +182,6 @@ fn maximizing_occurrences_obey_the_original_objective_element_ceiling() {
 #[ignore = "requires independent clingo; 242 bounded complete model/cost cases"]
 fn fresh_clingo_confirms_every_recorded_mixed_direction_contract() {
     for case in cases() {
-        assert_eq!(
-            source_oracle::records(&case.source),
-            case.records,
-            "{}",
-            case.name
-        );
+        assert_eq!(oracle::records(&case.source), case.records, "{}", case.name);
     }
 }

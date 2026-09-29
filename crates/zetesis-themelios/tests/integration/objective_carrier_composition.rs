@@ -1,8 +1,8 @@
 //! Independent observers preserve previously established source carriers.
 
 use crate::support::priority_contracts;
-use crate::support::source_records;
 
+use zetesis_reference_support as reference;
 use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
 const CASES: &str = include_str!("../fixtures/objective-carrier-composition.jsonl");
@@ -22,9 +22,8 @@ fn composed_carriers_match_fresh_raw_clingo() {
 fn composed_carrier_limits_are_inclusive() {
     let source =
         "n(N):-N=#max{1;word}.c(X):-n(X).p(N):-n(N),N=1.#minimize{N:n(N);N@2:c(N);1@3:p(N)}.";
-    let expected = source_records::exhaustive(
-        &source_records::admit(source, &FormulaLimits::default()).unwrap(),
-    );
+    let expected =
+        reference::exhaustive(&reference::admit(source, &FormulaLimits::default()).unwrap());
     for resource in [
         FormulaResource::ObjectivePresenceEntries,
         FormulaResource::Work,
@@ -38,7 +37,7 @@ fn composed_carrier_limits_are_inclusive() {
                 FormulaResource::Work => limits.max_work = maximum as u64,
                 _ => unreachable!("selected carrier resources"),
             }
-            source_records::admit(source, &limits)
+            reference::admit(source, &limits)
         };
         let (mut lower, mut upper) = (0, 65536);
         assert!(attempt(upper).is_ok());
@@ -55,7 +54,7 @@ fn composed_carrier_limits_are_inclusive() {
         // Carrier preparation still runs under both inclusive ceilings even
         // though no numeric objective row survives source activity.
         assert!(input.objectives().priorities().is_empty());
-        assert_eq!(source_records::exhaustive(&input), expected);
+        assert_eq!(reference::exhaustive(&input), expected);
         let failure = attempt(upper - 1).unwrap_err();
         assert!(
             matches!(failure,

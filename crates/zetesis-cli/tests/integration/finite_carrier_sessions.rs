@@ -1,18 +1,18 @@
 //! Independent complete answers for finite bindings and source measure carriers.
 
 use crate::support::finite_carrier_sources as sources;
-use crate::support::source_oracle;
-use crate::support::source_records;
 
 use std::num::NonZeroUsize;
 
 use clap::Parser;
-use source_records::Records;
 use zetesis_cli::{
     Backend, Completion, Options, Oracle, PreparedInput, SearchMethod, Session, SolveConfig,
     run_with_diagnostics,
 };
+use zetesis_clingo_support as oracle;
 use zetesis_cpu::Cancellation;
+use zetesis_reference_support as reference;
+use zetesis_test_support::records::Records;
 use zetesis_themelios::FormulaLimits;
 
 struct Expected {
@@ -121,13 +121,13 @@ fn expectations() -> [Expected; sources::SOURCES.len()] {
 #[test]
 fn reduct_checks_preserve_complete_answer_families() {
     for (source, expected) in sources::SOURCES.into_iter().zip(expectations()) {
-        let input = source_records::admit(source, &FormulaLimits::default()).unwrap();
+        let input = reference::admit(source, &FormulaLimits::default()).unwrap();
         assert_eq!(
             input.objectives().priorities(),
             expected.priorities,
             "{source}"
         );
-        assert_eq!(source_records::exhaustive(&input), expected.all, "{source}");
+        assert_eq!(reference::exhaustive(&input), expected.all, "{source}");
     }
 }
 
@@ -135,7 +135,7 @@ fn reduct_checks_preserve_complete_answer_families() {
 fn sessions_preserve_scored_answer_families() {
     let mut parallel_completion = false;
     for (source, expected) in sources::SOURCES.into_iter().zip(expectations()) {
-        let input = source_records::admit(source, &FormulaLimits::default()).unwrap();
+        let input = reference::admit(source, &FormulaLimits::default()).unwrap();
         for (workers, batch) in [(1, 1), (4, 3)] {
             let config = SolveConfig {
                 backend: Backend::Cpu,
@@ -170,7 +170,7 @@ fn sessions_preserve_scored_answer_families() {
                             .interpretation()
                             .atoms()
                             .iter()
-                            .map(source_records::canonical)
+                            .map(reference::canonical)
                             .collect(),
                         costs,
                     ))
@@ -246,7 +246,7 @@ fn json_preserves_complete_optimum_answers() {
                         answer
                             .full_model()
                             .iter()
-                            .map(source_records::canonical)
+                            .map(reference::canonical)
                             .collect(),
                         costs,
                     ))
@@ -261,7 +261,7 @@ fn json_preserves_complete_optimum_answers() {
 #[ignore = "requires an independently installed clingo executable"]
 fn original_sources_match_independent_answers() {
     for (source, expected) in sources::SOURCES.into_iter().zip(expectations()) {
-        let actual = source_oracle::records(source);
+        let actual = oracle::records(source);
         println!("source={source:?} complete_answers={}", actual.len());
         assert_eq!(actual, expected.all, "{source}");
     }

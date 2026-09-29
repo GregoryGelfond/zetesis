@@ -5,16 +5,15 @@
 //! other reached arithmetic failures refuse the program. Incomplete
 //! relational prefixes have no such duty.
 
-use crate::support::source_oracle;
-use crate::support::source_records;
-
 use std::collections::BTreeSet;
+use zetesis_clingo_support as oracle;
+use zetesis_reference_support as reference;
 use zetesis_themelios::{
     ExpansionFailure, FormulaFailure, FormulaLimits, observation::EvaluationError,
 };
 
 fn refused(source: &str, expected: &EvaluationError) {
-    let Err(failure) = source_records::admit(source, &FormulaLimits::default()) else {
+    let Err(failure) = reference::admit(source, &FormulaLimits::default()) else {
         panic!("{source}: admission succeeded; expected {expected}");
     };
     assert!(
@@ -37,8 +36,8 @@ fn refused(source: &str, expected: &EvaluationError) {
 }
 
 fn admitted(source: &str) -> BTreeSet<(BTreeSet<String>, Option<Vec<i64>>)> {
-    let admitted = source_records::admit(source, &FormulaLimits::default()).unwrap();
-    source_records::exhaustive(&admitted)
+    let admitted = reference::admit(source, &FormulaLimits::default()).unwrap();
+    reference::exhaustive(&admitted)
 }
 
 fn family(atoms: &[&str]) -> BTreeSet<(BTreeSet<String>, Option<Vec<i64>>)> {
@@ -147,15 +146,15 @@ const EMPTY_EXTENSIONS: &[&str] = &[
 #[test]
 fn incomplete_positive_prefixes_do_not_raise_errors() {
     for source in EMPTY_EXTENSIONS {
-        let admitted = source_records::admit(source, &FormulaLimits::default()).unwrap();
-        let original = source_records::admit(
+        let admitted = reference::admit(source, &FormulaLimits::default()).unwrap();
+        let original = reference::admit(
             source.split("p(X,Y):-").next().unwrap(),
             &FormulaLimits::default(),
         )
         .unwrap();
         assert_eq!(
-            source_records::exhaustive(&admitted),
-            source_records::exhaustive(&original),
+            reference::exhaustive(&admitted),
+            reference::exhaustive(&original),
             "{source}"
         );
     }
@@ -213,14 +212,14 @@ const DEFINED: &[&str] = &[
 #[test]
 fn defined_filters_preserve_complete_families() {
     for (index, source) in DEFINED.iter().enumerate() {
-        let admitted = source_records::admit(source, &FormulaLimits::default()).unwrap();
+        let admitted = reference::admit(source, &FormulaLimits::default()).unwrap();
         let atoms = if index == 2 {
             ["d(1)", "d(2)", "p(1)"].as_slice()
         } else {
             ["d(1)", "d(2)"].as_slice()
         };
         assert_eq!(
-            source_records::exhaustive(&admitted),
+            reference::exhaustive(&admitted),
             BTreeSet::from([(atoms.iter().map(|atom| (*atom).to_owned()).collect(), None)]),
             "{source}"
         );
@@ -231,10 +230,10 @@ fn defined_filters_preserve_complete_families() {
 #[ignore = "requires independent clingo 5.8.2"]
 fn defined_and_empty_join_families_match_clingo() {
     for source in DEFINED.iter().chain(EMPTY_EXTENSIONS) {
-        let admitted = source_records::admit(source, &FormulaLimits::default()).unwrap();
+        let admitted = reference::admit(source, &FormulaLimits::default()).unwrap();
         assert_eq!(
-            source_records::exhaustive(&admitted),
-            source_oracle::records(source),
+            reference::exhaustive(&admitted),
+            oracle::records(source),
             "{source}"
         );
     }
@@ -247,7 +246,7 @@ fn all_undefined_families_differ_from_clingo() {
     // nonempty source family lacking any jointly defined substitution.
     let source = "d(0).p(X):-d(X),1/X=1.";
     refused(source, &EvaluationError::Undefined);
-    assert_eq!(source_oracle::records(source), family(&["d(0)"]));
+    assert_eq!(oracle::records(source), family(&["d(0)"]));
 }
 
 #[test]
@@ -262,7 +261,7 @@ fn excluded_substitutions_match_clingo() {
         "a(0).b(1).p:-a(X),1/X>0,b(Y),Y=2.",
         "a.b.p(N):-N=#sum{2147483647:a;1:b},1=2.",
     ] {
-        assert_eq!(admitted(source), source_oracle::records(source), "{source}");
+        assert_eq!(admitted(source), oracle::records(source), "{source}");
     }
 }
 
@@ -290,12 +289,12 @@ fn scoped_guards_are_reached_only_on_substitutions_nothing_excludes() {
 
 #[test]
 fn rejected_scopes_do_not_add_theory_or_objectives() {
-    let original = source_records::admit("d(1).", &FormulaLimits::default()).unwrap();
+    let original = reference::admit("d(1).", &FormulaLimits::default()).unwrap();
     for source in [
         "d(1).p:-d(X),1=2,#count{1:a}>1/X.",
         "d(1).:~d(X),1=2,#count{1:a}>1/X.[1]",
     ] {
-        let admitted = source_records::admit(source, &FormulaLimits::default()).unwrap();
+        let admitted = reference::admit(source, &FormulaLimits::default()).unwrap();
         assert_eq!(admitted.atoms(), original.atoms(), "{source}");
         assert_eq!(
             admitted.theory().nodes(),
@@ -308,8 +307,8 @@ fn rejected_scopes_do_not_add_theory_or_objectives() {
             "{source}"
         );
         assert_eq!(
-            source_records::exhaustive(&admitted),
-            source_records::exhaustive(&original),
+            reference::exhaustive(&admitted),
+            reference::exhaustive(&original),
             "{source}"
         );
         assert!(admitted.objectives().templates().is_empty(), "{source}");
@@ -323,12 +322,11 @@ fn missing_positive_extensions_skip_scoped_validation() {
         ":~d(X),e(X,Y),1=2,#count{}>1/X.[1]",
     ] {
         let source = format!("d(0).e(1,1).e(2,2).{tail}");
-        let admitted = source_records::admit(&source, &FormulaLimits::default()).unwrap();
-        let original =
-            source_records::admit("d(0).e(1,1).e(2,2).", &FormulaLimits::default()).unwrap();
+        let admitted = reference::admit(&source, &FormulaLimits::default()).unwrap();
+        let original = reference::admit("d(0).e(1,1).e(2,2).", &FormulaLimits::default()).unwrap();
         assert_eq!(
-            source_records::exhaustive(&admitted),
-            source_records::exhaustive(&original),
+            reference::exhaustive(&admitted),
+            reference::exhaustive(&original),
             "{source}"
         );
     }
@@ -342,7 +340,7 @@ fn rule_validation_uses_no_objective_scratch_allowance() {
         ..FormulaLimits::default()
     };
     let source = "d(1).p:-d(X),1=2,#count{1:a}>1/X.";
-    assert!(source_records::admit(source, &limits).is_ok());
+    assert!(reference::admit(source, &limits).is_ok());
 }
 
 #[test]
@@ -374,11 +372,11 @@ const STAGED_HEADS: &[(&str, &str)] = &[
 #[test]
 fn head_values_follow_scalar_body_selection() {
     for (source, expanded) in STAGED_HEADS {
-        let admitted = source_records::admit(source, &FormulaLimits::default()).unwrap();
-        let expanded = source_records::admit(expanded, &FormulaLimits::default()).unwrap();
+        let admitted = reference::admit(source, &FormulaLimits::default()).unwrap();
+        let expanded = reference::admit(expanded, &FormulaLimits::default()).unwrap();
         assert_eq!(
-            source_records::exhaustive(&admitted),
-            source_records::exhaustive(&expanded),
+            reference::exhaustive(&admitted),
+            reference::exhaustive(&expanded),
             "{source}"
         );
     }
@@ -413,10 +411,10 @@ fn body_values_keep_their_validation_scope() {
 #[ignore = "requires independent clingo 5.8.2"]
 fn staged_head_families_match_clingo() {
     for (source, _) in STAGED_HEADS {
-        let admitted = source_records::admit(source, &FormulaLimits::default()).unwrap();
+        let admitted = reference::admit(source, &FormulaLimits::default()).unwrap();
         assert_eq!(
-            source_records::exhaustive(&admitted),
-            source_oracle::records(source),
+            reference::exhaustive(&admitted),
+            oracle::records(source),
             "{source}"
         );
     }
@@ -429,9 +427,9 @@ fn head_generation_charges_only_selected_rows() {
         ..FormulaLimits::default()
     };
     for source in ["d(0).p(X+1):-d(X),1=2.", "d(0).{p(X+1):d(X),1=2}."] {
-        let admitted = source_records::admit(source, &limits).unwrap();
+        let admitted = reference::admit(source, &limits).unwrap();
         assert_eq!(
-            source_records::exhaustive(&admitted),
+            reference::exhaustive(&admitted),
             BTreeSet::from([(["d(0)".to_owned()].into(), None)]),
             "{source}"
         );
@@ -443,7 +441,7 @@ fn head_generation_charges_only_selected_rows() {
     ] {
         assert!(
             matches!(
-                source_records::admit(source, &limits),
+                reference::admit(source, &limits),
                 Err(FormulaFailure::Limit {
                     resource: zetesis_themelios::FormulaResource::GeneratedValues,
                     limit: 0,
@@ -508,10 +506,10 @@ fn a_valid_outer_binding_does_not_rescue_an_undefined_local_family() {
 #[test]
 fn missing_local_facts_leave_an_empty_silent_family() {
     let source = "k(0;1).d(1,1).p(K):-k(K),1=#count{X:d(K,X),1/X=1}.";
-    let result = source_records::admit(source, &FormulaLimits::default()).unwrap();
+    let result = reference::admit(source, &FormulaLimits::default()).unwrap();
     assert!(result.warnings().is_empty());
     assert_eq!(
-        source_records::exhaustive(&result),
+        reference::exhaustive(&result),
         family(&["k(0)", "k(1)", "d(1,1)", "p(1)"])
     );
 }
@@ -531,9 +529,9 @@ fn source_arithmetic_uses_complete_family_evidence() {
         ("p(1/X):-d(X).", family(&["d(0)", "d(1)", "p(1)"])),
     ] {
         let source = format!("d(0;1).{rule}");
-        let result = source_records::admit(&source, &FormulaLimits::default()).unwrap();
+        let result = reference::admit(&source, &FormulaLimits::default()).unwrap();
         assert_eq!(result.warnings().len(), 1);
-        assert_eq!(source_records::exhaustive(&result), expected);
+        assert_eq!(reference::exhaustive(&result), expected);
     }
 }
 
@@ -564,10 +562,10 @@ fn false_tuple_shape_does_not_hide_a_separate_zero_divisor() {
 #[test]
 fn explicit_outer_guards_exclude_undefined_local_families() {
     let source = "d(0;1).e(0,0).e(1,1).p(K):-d(K),K!=0,#count{1/X:e(K,X)}>0.";
-    let result = source_records::admit(source, &FormulaLimits::default()).unwrap();
+    let result = reference::admit(source, &FormulaLimits::default()).unwrap();
     assert!(result.warnings().is_empty());
     assert_eq!(
-        source_records::exhaustive(&result),
+        reference::exhaustive(&result),
         family(&["d(0)", "d(1)", "e(0,0)", "e(1,1)", "p(1)"])
     );
 }
@@ -575,18 +573,18 @@ fn explicit_outer_guards_exclude_undefined_local_families() {
 #[test]
 fn local_pool_alternatives_share_their_original_family() {
     let source = "d(0).p:-1=#count{X:d(X),1/(X;1)>0}.";
-    let result = source_records::admit(source, &FormulaLimits::default()).unwrap();
+    let result = reference::admit(source, &FormulaLimits::default()).unwrap();
     assert_eq!(result.warnings().len(), 1);
-    assert_eq!(source_records::exhaustive(&result), family(&["d(0)", "p"]));
+    assert_eq!(reference::exhaustive(&result), family(&["d(0)", "p"]));
 }
 
 #[test]
 fn pooled_choice_heads_share_their_original_local_family() {
     let source = "d(0).{p(1/X;1):d(X)}.";
-    let result = source_records::admit(source, &FormulaLimits::default()).unwrap();
+    let result = reference::admit(source, &FormulaLimits::default()).unwrap();
     assert_eq!(result.warnings().len(), 1);
     assert_eq!(
-        source_records::exhaustive(&result),
+        reference::exhaustive(&result),
         BTreeSet::from([
             (BTreeSet::from(["d(0)".to_owned()]), None),
             (BTreeSet::from(["d(0)".to_owned(), "p(1)".to_owned()]), None),
@@ -605,10 +603,10 @@ fn an_independent_fatal_branch_survives_an_unavailable_generated_input() {
 #[test]
 fn conditional_local_bindings_share_the_original_family() {
     let source = "d(0;1).q(1).p:-q(1/X):d(X).";
-    let result = source_records::admit(source, &FormulaLimits::default()).unwrap();
+    let result = reference::admit(source, &FormulaLimits::default()).unwrap();
     assert_eq!(result.warnings().len(), 1);
     assert_eq!(
-        source_records::exhaustive(&result),
+        reference::exhaustive(&result),
         family(&["d(0)", "d(1)", "q(1)", "p"])
     );
 }
@@ -616,10 +614,10 @@ fn conditional_local_bindings_share_the_original_family() {
 #[test]
 fn conditional_condition_pool_alternatives_share_the_original_family() {
     let source = "d(0).q(0).p:-q(X):d(X),1/(X;1)>0.";
-    let result = source_records::admit(source, &FormulaLimits::default()).unwrap();
+    let result = reference::admit(source, &FormulaLimits::default()).unwrap();
     assert_eq!(result.warnings().len(), 1);
     assert_eq!(
-        source_records::exhaustive(&result),
+        reference::exhaustive(&result),
         family(&["d(0)", "q(0)", "p"])
     );
 }

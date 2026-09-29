@@ -3,7 +3,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     num::NonZeroUsize,
-    path::{Path, PathBuf},
+    path::Path,
     time::Duration,
 };
 
@@ -546,24 +546,11 @@ mod physical {
     }
 }
 
-fn clingo() -> PathBuf {
-    std::env::var_os("CLINGO")
-        .map(PathBuf::from)
-        .or_else(|| {
-            std::env::split_paths(&std::env::var_os("PATH")?)
-                .map(|directory| directory.join("clingo"))
-                .find(|path| path.is_file())
-        })
-        .expect("independently installed clingo")
-        .canonicalize()
-        .unwrap()
-}
-
 #[test]
 #[ignore = "requires independently installed clingo"]
 fn original_sources_retain_declared_reference_results() {
     let directory = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let executable = clingo();
+    let executable = zetesis_clingo_support::executable();
     for case in cases() {
         let source = directory
             .join("tests/fixtures/language-consumers")

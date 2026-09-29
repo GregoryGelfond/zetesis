@@ -1,7 +1,7 @@
 //! Original sources and complete records decoded from campaign fixtures.
 use serde_json::Value as Json;
-
-use super::source_records::{Records, atoms, costs};
+use zetesis_clingo_support::{atoms, costs};
+use zetesis_test_support::records::Records;
 
 pub struct Case {
     pub name: String,

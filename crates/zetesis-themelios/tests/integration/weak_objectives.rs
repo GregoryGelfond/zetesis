@@ -16,11 +16,11 @@ use zetesis_themelios::{
 };
 
 use crate::support::source_cases;
-use crate::support::source_oracle;
-use crate::support::source_records;
+use zetesis_clingo_support as oracle;
+use zetesis_reference_support as reference;
 
 fn input(source: &str) -> AdmittedFormula {
-    source_records::admit(source, &FormulaLimits::default())
+    reference::admit(source, &FormulaLimits::default())
         .unwrap_or_else(|error| panic!("{source}: {error}"))
 }
 fn cases() -> Vec<source_cases::Case> {
@@ -34,7 +34,7 @@ fn complete_model_cost_records_match_independent_clingo_evidence() {
     for case in cases {
         count += case.records.len();
         assert_eq!(
-            source_records::exhaustive(&input(&case.source)),
+            reference::exhaustive(&input(&case.source)),
             case.records,
             "{}",
             case.name
@@ -243,11 +243,6 @@ fn weak_and_minimize_keys_coalesce_across_original_include_sources() {
 #[ignore = "requires independent clingo; 49 bounded complete model/cost cases"]
 fn fresh_clingo_confirms_every_recorded_weak_contract() {
     for case in cases() {
-        assert_eq!(
-            source_oracle::records(&case.source),
-            case.records,
-            "{}",
-            case.name
-        );
+        assert_eq!(oracle::records(&case.source), case.records, "{}", case.name);
     }
 }

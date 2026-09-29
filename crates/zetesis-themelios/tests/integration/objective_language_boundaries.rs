@@ -5,9 +5,6 @@
 //! families and cyclic objective scores. Complete objective-free families remain
 //! checked independently; reference observations do not define native semantics.
 
-use crate::support::source_oracle_records;
-use crate::support::source_records;
-
 use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -15,6 +12,9 @@ use std::time::Duration;
 
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
+use zetesis_clingo_support as oracle;
+use zetesis_reference_support::{admit, exhaustive};
+use zetesis_test_support::records::Records;
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 use zetesis_validation::process::{Exit, Invocation, Limits, PendingChild, Stop, invoke};
 
@@ -60,7 +60,7 @@ fn missing_extremum_witnesses_have_no_answers() {
         .unwrap();
         assert_eq!(input.source().id(), SOURCE);
         assert_eq!(input.source().text(), source);
-        assert!(source_records::exhaustive(&input).is_empty());
+        assert!(exhaustive(&input).is_empty());
         let mut search = zetesis_sat::StableModels::new(
             input.theory(),
             zetesis_sat::Limits::default(),
@@ -94,26 +94,15 @@ fn boundary_sources_have_declared_scored_answers() {
             "cyclic-multiple-observer" => (vec![1], serde_json::json!([[["n(1,2)", "p"], [2]]])),
             name => panic!("unclassified boundary source {name}"),
         };
-        let input =
-            source_records::admit(case["source"].as_str().unwrap(), &FormulaLimits::default())
-                .unwrap_or_else(|error| panic!("{}: {error}", case["name"]));
+        let input = admit(case["source"].as_str().unwrap(), &FormulaLimits::default())
+            .unwrap_or_else(|error| panic!("{}: {error}", case["name"]));
         let expected = records
             .as_array()
             .unwrap()
             .iter()
-            .map(|row| {
-                (
-                    source_records::atoms(&row[0]),
-                    source_records::costs(&row[1]),
-                )
-            })
+            .map(|row| (oracle::atoms(&row[0]), oracle::costs(&row[1])))
             .collect();
-        assert_eq!(
-            source_records::exhaustive(&input),
-            expected,
-            "{}",
-            case["name"]
-        );
+        assert_eq!(exhaustive(&input), expected, "{}", case["name"]);
         assert_eq!(
             input.objectives().priorities(),
             priorities,
@@ -141,20 +130,15 @@ fn cyclic_objectives_preserve_original_answers() {
                 .0,
             original
         );
-        let input = source_records::admit(original, &FormulaLimits::default()).unwrap();
+        let input = admit(original, &FormulaLimits::default()).unwrap();
         assert!(input.objectives().templates().is_empty());
-        let expected: source_records::Records = case["original_records"]
+        let expected: Records = case["original_records"]
             .as_array()
             .unwrap()
             .iter()
-            .map(|record| {
-                (
-                    source_records::atoms(&record[0]),
-                    source_records::costs(&record[1]),
-                )
-            })
+            .map(|record| (oracle::atoms(&record[0]), oracle::costs(&record[1])))
             .collect();
-        assert_eq!(source_records::exhaustive(&input), expected, "{original}");
+        assert_eq!(exhaustive(&input), expected, "{original}");
         originals += 1;
     }
     assert_eq!(originals, 4);
@@ -225,8 +209,8 @@ fn original_boundary_sources_retain_reference_outcomes() {
             assert_eq!(actual[field], reference[field], "{source}: {field}");
         }
         assert_eq!(
-            source_oracle_records::model_records(&actual),
-            source_oracle_records::model_records(&reference),
+            oracle::model_records(&actual),
+            oracle::model_records(&reference),
             "{source}"
         );
         // The original capture used stdin. Normalize only the corresponding

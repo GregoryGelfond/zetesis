@@ -1,10 +1,9 @@
 //! Finite priorities partition complete eligible objective rows.
 
 use crate::support::source_cases;
-use crate::support::source_oracle;
-use crate::support::source_records;
 
-use source_records::{admit, exhaustive};
+use zetesis_clingo_support as oracle;
+use zetesis_reference_support::{admit, exhaustive};
 use zetesis_themelios::{
     AdmissionFailure, ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource,
     ProfileFeature,
@@ -147,11 +146,6 @@ fn specialization_limits_are_inclusive() {
 #[ignore = "requires an independently installed clingo"]
 fn priority_sources_match_complete_clingo_records() {
     for case in source_cases::cases(CASES.trim()) {
-        assert_eq!(
-            source_oracle::records(&case.source),
-            case.records,
-            "{}",
-            case.name
-        );
+        assert_eq!(oracle::records(&case.source), case.records, "{}", case.name);
     }
 }

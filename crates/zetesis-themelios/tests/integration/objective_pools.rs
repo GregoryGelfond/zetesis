@@ -2,9 +2,9 @@
 
 use crate::support::priority_contracts;
 use crate::support::source_cases;
-use crate::support::source_records;
 
 use themelios_program::program::{Arguments, BodyElement, LiteralInner, Statement};
+use zetesis_reference_support as reference;
 use zetesis_themelios::{AnalysisBasis, FormulaFailure, FormulaLimits, FormulaResource};
 
 const CASES: &str = include_str!("../fixtures/objective-pools.jsonl");
@@ -31,12 +31,12 @@ fn conditional_pools_match_fresh_clingo() {
 #[test]
 fn analysis_projection_preserves_the_original_subject() {
     for case in source_cases::cases(CASES) {
-        let original = source_records::admit(
+        let original = reference::admit(
             case.source.split(":~").next().unwrap(),
             &FormulaLimits::default(),
         )
         .unwrap();
-        let observed = source_records::admit(&case.source, &FormulaLimits::default()).unwrap();
+        let observed = reference::admit(&case.source, &FormulaLimits::default()).unwrap();
         assert_eq!(
             observed.analysis_basis(),
             AnalysisBasis::DependencyProjection
@@ -80,7 +80,7 @@ fn analysis_projection_retains_complete_weak_fields() {
                 _ => None,
             })
             .collect();
-        let input = source_records::admit(&case.source, &FormulaLimits::default()).unwrap();
+        let input = reference::admit(&case.source, &FormulaLimits::default()).unwrap();
         let projected: Vec<_> = input
             .analyzed_program()
             .statements()
@@ -122,7 +122,7 @@ fn analysis_projection_retains_complete_weak_fields() {
 #[test]
 fn projected_analysis_keeps_parsed_objective_evidence() {
     let source = "d(1;2).p(1).p(3).:~p(X;X+1):d(X).[1]";
-    let input = source_records::admit(source, &FormulaLimits::default()).unwrap();
+    let input = reference::admit(source, &FormulaLimits::default()).unwrap();
     let declarations = input.objective_declarations();
     assert_eq!(declarations.len(), 1);
     assert_eq!(
@@ -142,7 +142,7 @@ fn projected_analysis_keeps_parsed_objective_evidence() {
 fn pooled_local_variables_cannot_bind_outer_fields() {
     for fields in ["X", "1@X", "1,X"] {
         let source = format!("d(1;2).p(1).p(3).:~p(X;X+1):d(X).[{fields}]");
-        let error = source_records::admit(&source, &FormulaLimits::default()).unwrap_err();
+        let error = reference::admit(&source, &FormulaLimits::default()).unwrap_err();
         assert!(
             matches!(error, FormulaFailure::UnsafeVariable { .. }),
             "{error}"
@@ -160,7 +160,7 @@ fn mixed_pooled_rows_preserve_complete_costs_and_warnings() {
         ("1@symbol", None),
     ] {
         let source = format!("d(0).p(0).:~p(X;1/X):d(X).[{fields}]");
-        let input = source_records::admit(&source, &FormulaLimits::default()).unwrap();
+        let input = reference::admit(&source, &FormulaLimits::default()).unwrap();
         assert_eq!(input.warnings().len(), 1, "{source}");
         assert_eq!(
             input.objectives().priorities(),
@@ -171,7 +171,7 @@ fn mixed_pooled_rows_preserve_complete_costs_and_warnings() {
             std::collections::BTreeSet::from(["d(0)".into(), "p(0)".into()]),
             costs,
         )]);
-        assert_eq!(source_records::exhaustive(&input), expected, "{source}");
+        assert_eq!(reference::exhaustive(&input), expected, "{source}");
     }
 }
 
@@ -180,7 +180,7 @@ fn retained_pooled_conditions_still_obey_their_node_limit() {
     let source = "d(0).p(0).:~p(X;1/X):d(X).[1]";
     let mut limits = FormulaLimits::default();
     limits.objective.max_condition_nodes = 0;
-    let error = source_records::admit(source, &limits).unwrap_err();
+    let error = reference::admit(source, &limits).unwrap_err();
     assert!(
         matches!(
             error,
@@ -203,7 +203,7 @@ fn retained_pooled_conditions_still_obey_their_node_limit() {
 fn projected_analysis_has_an_inclusive_node_limit() {
     let source = "d(1;2).p(1).p(3).:~p(X;X+1):d(X).[1]";
     let attempt = |maximum| {
-        source_records::admit(
+        reference::admit(
             source,
             &FormulaLimits {
                 max_analysis_nodes: maximum,
@@ -222,7 +222,7 @@ fn projected_analysis_has_an_inclusive_node_limit() {
         }
     }
     assert_eq!(
-        source_records::exhaustive(&attempt(upper).unwrap()),
+        reference::exhaustive(&attempt(upper).unwrap()),
         source_cases::cases(CASES)[0].records
     );
     let failure = attempt(upper - 1).unwrap_err();
@@ -280,12 +280,12 @@ fn finite_objective_occurrences_preserve_complete_scored_families() {
             "{p(f(1));p(f(2))}.:~p(f(1)).[1]:~p(f(1)).[2]:~p(f(2)).[1]:~p(f(2)).[2]",
         ),
     ] {
-        let original = source_records::admit(source, &FormulaLimits::default())
+        let original = reference::admit(source, &FormulaLimits::default())
             .unwrap_or_else(|error| panic!("{source}: {error}"));
-        let expanded = source_records::admit(expanded, &FormulaLimits::default()).unwrap();
-        let actual = source_records::exhaustive(&original);
+        let expanded = reference::admit(expanded, &FormulaLimits::default()).unwrap();
+        let actual = reference::exhaustive(&original);
         assert!(!actual.is_empty(), "nonempty finite family: {source}");
-        assert_eq!(actual, source_records::exhaustive(&expanded), "{source}");
+        assert_eq!(actual, reference::exhaustive(&expanded), "{source}");
         assert_eq!(original.source().text(), source);
     }
 }
@@ -293,7 +293,7 @@ fn finite_objective_occurrences_preserve_complete_scored_families() {
 #[test]
 fn local_pool_alternatives_do_not_borrow_another_alternatives_binder() {
     let source = "d(1;2).p(1).p(3).:~p(X):d(X;X+1).[1]";
-    let error = source_records::admit(source, &FormulaLimits::default()).unwrap_err();
+    let error = reference::admit(source, &FormulaLimits::default()).unwrap_err();
     assert!(
         matches!(error, FormulaFailure::UnboundArgumentInput { .. }),
         "{error}"
@@ -340,7 +340,7 @@ fn projected_source_payload_has_independent_limits() {
             }
         }
         assert_eq!(
-            source_records::exhaustive(&attempt(upper).unwrap()),
+            reference::exhaustive(&attempt(upper).unwrap()),
             source_cases::cases(CASES)[0].records
         );
         let failure = attempt(upper - 1).unwrap_err();

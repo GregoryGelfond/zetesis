@@ -27,6 +27,8 @@ zetesis-validation = { path = "crates/zetesis-validation" }
 zetesis-solve = { path = "crates/zetesis-solve", default-features = false }
 zetesis-telemetry = { path = "crates/zetesis-telemetry" }
 zetesis-test-support = { path = "crates/zetesis-test-support" }
+zetesis-clingo-support = { path = "crates/zetesis-clingo-support" }
+zetesis-reference-support = { path = "crates/zetesis-reference-support" }
 zetesis-theory-support = { path = "crates/zetesis-theory-support" }
 zetesis-core = { path = "crates/zetesis-core" }
 zetesis-backend = { path = "crates/zetesis-backend" }

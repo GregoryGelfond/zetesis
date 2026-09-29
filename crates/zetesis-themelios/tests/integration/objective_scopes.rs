@@ -2,7 +2,6 @@
 
 use crate::support::priority_contracts;
 use crate::support::source_cases;
-use crate::support::source_records;
 
 const CASES: &str = include_str!("../fixtures/objective-scopes.jsonl");
 
@@ -18,6 +17,7 @@ fn scoped_objectives_match_fresh_raw_clingo() {
     priority_contracts::fresh(CASES);
 }
 
+use zetesis_reference_support as reference;
 use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
 #[test]
@@ -34,8 +34,8 @@ fn scoped_objectives_keep_the_original_reduct_subject() {
             .split("#maximize")
             .next()
             .unwrap();
-        let original = source_records::admit(program, &FormulaLimits::default()).unwrap();
-        let observed = source_records::admit(&case.source, &FormulaLimits::default()).unwrap();
+        let original = reference::admit(program, &FormulaLimits::default()).unwrap();
+        let observed = reference::admit(&case.source, &FormulaLimits::default()).unwrap();
         assert_eq!(original.atoms(), observed.atoms(), "{}", case.name);
         assert_eq!(
             original.theory().nodes(),
@@ -65,7 +65,7 @@ fn scoped_local_variables_cannot_bind_objective_fields() {
         "d(1).q(1).:~q(X):d(X).[1@X]",
         "d(1).q(1).:~q(X):d(X).[1,X]",
     ] {
-        let error = source_records::admit(source, &FormulaLimits::default()).unwrap_err();
+        let error = reference::admit(source, &FormulaLimits::default()).unwrap_err();
         assert!(
             matches!(error, FormulaFailure::UnsafeVariable { .. }),
             "{source}: {error}"
@@ -80,9 +80,9 @@ fn ignored_scoped_rows_retain_no_query_nodes() {
         let source = format!("{{a}}.:~#count{{1:a}}>0.[{field}]");
         let mut limits = FormulaLimits::default();
         limits.objective.max_condition_nodes = 0;
-        let input = source_records::admit(&source, &limits).unwrap();
+        let input = reference::admit(&source, &limits).unwrap();
         assert!(input.objectives().templates().is_empty());
-        let records = source_records::exhaustive(&input);
+        let records = reference::exhaustive(&input);
         assert_eq!(records.len(), 2);
         assert!(records.iter().all(|(_, costs)| costs.is_none()));
     }
@@ -94,7 +94,7 @@ fn scoped_numeric_zero_retains_its_query() {
     limits.objective.max_condition_nodes = 0;
     let source = "{a}.:~#count{1:a}>0.[0]";
     assert!(matches!(
-        source_records::admit(source, &limits).unwrap_err(),
+        reference::admit(source, &limits).unwrap_err(),
         FormulaFailure::Objective {
             error: zetesis_objective::AdmissionError::Limit {
                 resource: zetesis_objective::AdmissionResource::ConditionNodes,
@@ -103,10 +103,10 @@ fn scoped_numeric_zero_retains_its_query() {
             ..
         }
     ));
-    let input = source_records::admit(source, &FormulaLimits::default()).unwrap();
+    let input = reference::admit(source, &FormulaLimits::default()).unwrap();
     assert_eq!(input.objectives().templates().len(), 1);
     assert!(
-        source_records::exhaustive(&input)
+        reference::exhaustive(&input)
             .iter()
             .all(|(_, costs)| *costs == Some(vec![0]))
     );
@@ -118,7 +118,7 @@ fn scoped_validation_precedes_numeric_selection() {
         let source = format!("d(0).{{a}}.:~d(X),#count{{1:a}}>1/X.[{field}]");
         let mut limits = FormulaLimits::default();
         limits.objective.max_condition_nodes = 0;
-        let error = source_records::admit(&source, &limits).unwrap_err();
+        let error = reference::admit(&source, &limits).unwrap_err();
         assert!(
             matches!(
                 error,
@@ -136,7 +136,7 @@ fn scoped_validation_precedes_activity_exclusion() {
             let source = format!("d(0).a.:~{body}.[{field}]");
             let mut limits = FormulaLimits::default();
             limits.objective.max_condition_nodes = 0;
-            let error = source_records::admit(&source, &limits).unwrap_err();
+            let error = reference::admit(&source, &limits).unwrap_err();
             assert!(
                 matches!(
                     error,
@@ -156,11 +156,11 @@ fn absent_scoped_rows_retain_no_query_nodes() {
         let source = format!("d(1).a.:~d(X),not a,#count{{}}>1/X.[{field}]");
         let mut limits = FormulaLimits::default();
         limits.objective.max_condition_nodes = 0;
-        let input = source_records::admit(&source, &limits).unwrap();
+        let input = reference::admit(&source, &limits).unwrap();
         assert!(input.objectives().templates().is_empty());
         limits.max_objective_formula_nodes = 0;
         assert!(matches!(
-            source_records::admit(&source, &limits).unwrap_err(),
+            reference::admit(&source, &limits).unwrap_err(),
             FormulaFailure::Limit {
                 resource: FormulaResource::ObjectiveFormulaNodes,
                 ..
@@ -172,23 +172,22 @@ fn absent_scoped_rows_retain_no_query_nodes() {
 #[test]
 fn scoped_formula_limits_do_not_change_the_theory_cap() {
     let base = "{a}.";
-    let original = source_records::admit(base, &FormulaLimits::default()).unwrap();
+    let original = reference::admit(base, &FormulaLimits::default()).unwrap();
     let mut limits = FormulaLimits::default();
     limits.theory.max_atoms = original.atoms().len();
     limits.theory.max_nodes = original.theory().nodes().len();
     let source = format!("{base}:~N=#sum{{1:a;2:a;4:a;8:a}}.[N]");
-    let input = source_records::admit(&source, &limits).unwrap();
+    let input = reference::admit(&source, &limits).unwrap();
     assert_eq!(input.atoms(), original.atoms());
     assert_eq!(input.theory().nodes(), original.theory().nodes());
-    assert_eq!(source_records::exhaustive(&input).len(), 2);
+    assert_eq!(reference::exhaustive(&input).len(), 2);
 }
 
 #[test]
 fn scoped_formula_limits_are_inclusive() {
     let source = "d(1;2).{q(1);q(2)}.:~q(X):d(X).[1]";
-    let expected = source_records::exhaustive(
-        &source_records::admit(source, &FormulaLimits::default()).unwrap(),
-    );
+    let expected =
+        reference::exhaustive(&reference::admit(source, &FormulaLimits::default()).unwrap());
     for resource in [
         FormulaResource::ObjectiveFormulaAtoms,
         FormulaResource::ObjectiveFormulaNodes,
@@ -208,7 +207,7 @@ fn scoped_formula_limits_are_inclusive() {
                 FormulaResource::Substitutions => limits.max_substitutions = maximum as u64,
                 _ => unreachable!("selected scratch resources"),
             }
-            source_records::admit(source, &limits)
+            reference::admit(source, &limits)
         };
         let (mut lower, mut upper) = (0, 65536);
         assert!(attempt(upper).is_ok());
@@ -220,10 +219,7 @@ fn scoped_formula_limits_are_inclusive() {
                 lower = middle;
             }
         }
-        assert_eq!(
-            source_records::exhaustive(&attempt(upper).unwrap()),
-            expected
-        );
+        assert_eq!(reference::exhaustive(&attempt(upper).unwrap()), expected);
         let failure = attempt(upper - 1).unwrap_err();
         assert!(
             matches!(failure, FormulaFailure::Limit { resource: actual, observed, limit, .. }
@@ -241,7 +237,7 @@ fn scoped_aggregate_nodes_keep_typed_refusals() {
         max_objective_formula_nodes: 5,
         ..FormulaLimits::default()
     };
-    let error = source_records::admit(source, &limits).unwrap_err();
+    let error = reference::admit(source, &limits).unwrap_err();
     assert!(matches!(error, FormulaFailure::Aggregate { error, .. }
         if error.kind() == zetesis_ferraris::AggregateErrorKind::NodeLimit));
     assert!(!error.diagnostics().is_empty());
@@ -266,7 +262,7 @@ fn scoped_binders_retain_source_shape_limits() {
             }
             _ => unreachable!("selected source shape limits"),
         }
-        let error = source_records::admit(source, &limits).unwrap_err();
+        let error = reference::admit(source, &limits).unwrap_err();
         assert!(
             matches!(error, FormulaFailure::Objective { error: zetesis_objective::AdmissionError::Limit {
             resource: actual, actual: 1, limit: 0, .. }, .. } if actual == resource),
@@ -279,7 +275,7 @@ fn scoped_binders_retain_source_shape_limits() {
 fn scoped_declarations_retain_original_analysis_nodes() {
     use themelios_program::program::Statement;
     let source = "{a}. :~#count{1:a}>0.[1]";
-    let input = source_records::admit(source, &FormulaLimits::default()).unwrap();
+    let input = reference::admit(source, &FormulaLimits::default()).unwrap();
     let statements: Vec<_> = input.analyzed_program().statements().collect();
     assert_eq!(statements.len(), 2);
     assert_eq!(

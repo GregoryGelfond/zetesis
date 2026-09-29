@@ -1,10 +1,11 @@
 //! Evaluated objective fields share one complete source binding.
 
 use crate::support::source_cases;
-use crate::support::source_oracle;
-use crate::support::source_records;
 
 use std::collections::BTreeSet;
+use zetesis_clingo_support as oracle;
+use zetesis_reference_support as reference;
+use zetesis_test_support::records::Records;
 use zetesis_themelios::FormulaLimits;
 
 const CASES: &str = include_str!("../fixtures/objective-field-expressions.jsonl");
@@ -15,14 +16,9 @@ fn evaluated_fields_preserve_full_scored_answers() {
     assert_eq!(cases.len(), 18);
     for (case, row) in cases.into_iter().zip(CASES.lines()) {
         let expected: serde_json::Value = serde_json::from_str(row).unwrap();
-        let input = source_records::admit(&case.source, &FormulaLimits::default())
+        let input = reference::admit(&case.source, &FormulaLimits::default())
             .unwrap_or_else(|error| panic!("{}: {error}", case.name));
-        assert_eq!(
-            source_records::exhaustive(&input),
-            case.records,
-            "{}",
-            case.name
-        );
+        assert_eq!(reference::exhaustive(&input), case.records, "{}", case.name);
         assert_eq!(
             serde_json::to_value(input.objectives().priorities()).unwrap(),
             expected["priorities"],
@@ -46,8 +42,8 @@ fn evaluated_fields_keeps_the_original_reduct_subject() {
             .split(":~")
             .next()
             .unwrap();
-        let original = source_records::admit(program, &FormulaLimits::default()).unwrap();
-        let observed = source_records::admit(&case.source, &FormulaLimits::default()).unwrap();
+        let original = reference::admit(program, &FormulaLimits::default()).unwrap();
+        let observed = reference::admit(&case.source, &FormulaLimits::default()).unwrap();
         assert_eq!(original.atoms(), observed.atoms(), "{}", case.name);
         assert_eq!(
             original.theory().nodes(),
@@ -74,12 +70,7 @@ fn evaluated_fields_keeps_the_original_reduct_subject() {
 #[ignore = "requires independent clingo for 18 original expression sources"]
 fn evaluated_fields_match_fresh_clingo() {
     for case in source_cases::cases(CASES) {
-        assert_eq!(
-            source_oracle::records(&case.source),
-            case.records,
-            "{}",
-            case.name
-        );
+        assert_eq!(oracle::records(&case.source), case.records, "{}", case.name);
     }
 }
 
@@ -90,7 +81,7 @@ fn eligible_field_arithmetic_keeps_located_failures() {
         "d(0).#minimize{1,1/X:d(X)}.",
         "d(2147483647).#minimize{X+1:d(X)}.",
     ] {
-        let error = source_records::admit(source, &FormulaLimits::default()).unwrap_err();
+        let error = reference::admit(source, &FormulaLimits::default()).unwrap_err();
         assert!(
             matches!(
                 error,
@@ -107,12 +98,12 @@ fn eligible_field_arithmetic_keeps_located_failures() {
 #[test]
 fn mixed_field_carriers_preserve_complete_scored_answers() {
     let source = "{a}.n(N):-N=#count{1:a;2:a}.#minimize{1/(N-1):n(N)}.";
-    let input = source_records::admit(source, &FormulaLimits::default()).unwrap();
-    let expected: source_records::Records = BTreeSet::from([
+    let input = reference::admit(source, &FormulaLimits::default()).unwrap();
+    let expected: Records = BTreeSet::from([
         (BTreeSet::from(["n(0)".into()]), Some(vec![-1])),
         (BTreeSet::from(["a".into(), "n(2)".into()]), Some(vec![1])),
     ]);
-    assert_eq!(source_records::exhaustive(&input), expected);
+    assert_eq!(reference::exhaustive(&input), expected);
     assert_eq!(input.objectives().priorities(), [0]);
     let [warning] = input.warnings() else {
         panic!("one omitted source-carrier instance");
@@ -133,8 +124,8 @@ fn source_exclusion_precedes_field_evaluation() {
         "a.n(N):-N=#count{1:a}.#minimize{1/N:n(N)}.",
         "a.n(N):-N=#count{1:a;2:a}.#minimize{1/(N-1):n(N)}.",
     ] {
-        let input = source_records::admit(source, &FormulaLimits::default()).unwrap();
-        let records = source_records::exhaustive(&input);
+        let input = reference::admit(source, &FormulaLimits::default()).unwrap();
+        let records = reference::exhaustive(&input);
         assert_eq!(records.len(), 1);
         assert_eq!(
             records.iter().next().unwrap().1,
@@ -161,14 +152,14 @@ fn resolved_fields_retain_template_ceiling() {
     let mut limits = FormulaLimits::default();
     limits.objective.max_templates = 2;
     limits.objective.max_tuple_width = 1;
-    let input = source_records::admit(source, &limits).unwrap();
+    let input = reference::admit(source, &limits).unwrap();
     assert_eq!(input.objectives().templates().len(), 2);
     assert_eq!(
-        source_records::exhaustive(&input).iter().next().unwrap().1,
+        reference::exhaustive(&input).iter().next().unwrap().1,
         Some(vec![5])
     );
     limits.objective.max_templates = 1;
-    let error = source_records::admit(source, &limits).unwrap_err();
+    let error = reference::admit(source, &limits).unwrap_err();
     assert!(matches!(
         error,
         zetesis_themelios::FormulaFailure::Limit {
@@ -185,15 +176,15 @@ fn resolved_fields_retain_tuple_width_ceiling() {
     let source = "p(1;2).#minimize{X+1,X+1:p(X)}.";
     let mut limits = FormulaLimits::default();
     limits.objective.max_tuple_width = 1;
-    let input = source_records::admit(source, &limits).unwrap();
+    let input = reference::admit(source, &limits).unwrap();
     assert_eq!(input.objectives().templates().len(), 2);
     assert_eq!(
-        source_records::exhaustive(&input).iter().next().unwrap().1,
+        reference::exhaustive(&input).iter().next().unwrap().1,
         Some(vec![5])
     );
     limits.objective.max_tuple_width = 0;
     assert!(matches!(
-        source_records::admit(source, &limits).unwrap_err(),
+        reference::admit(source, &limits).unwrap_err(),
         zetesis_themelios::FormulaFailure::Objective {
             error: zetesis_objective::AdmissionError::Limit {
                 resource: zetesis_objective::AdmissionResource::TupleWidth,

@@ -1,12 +1,12 @@
 //! A disequality over a keyed value asks for the one atom the key admits.
 
-use crate::support::source_oracle;
-use crate::support::source_records;
 use crate::support::stable_models;
 
 use std::collections::BTreeSet;
 
 use stable_models::stable;
+use zetesis_clingo_support as oracle;
+use zetesis_reference_support::{admit, canonical, exhaustive};
 use zetesis_themelios::{
     AdmittedFormula, AnalysisBasis, ExpansionFailure, FormulaFailure, FormulaLimits, KeyAnalysis,
     observation::EvaluationError,
@@ -17,8 +17,7 @@ const CHOICES: &str = "letter(a;b;c). digit(0..9). carry_value(0;1). idx(1). \
     1 { carry(I,V) : carry_value(V) } 1 :- idx(I). ";
 
 fn admitted(source: &str) -> AdmittedFormula {
-    source_records::admit(source, &FormulaLimits::default())
-        .unwrap_or_else(|error| panic!("{source}: {error}"))
+    admit(source, &FormulaLimits::default()).unwrap_or_else(|error| panic!("{source}: {error}"))
 }
 
 /// The two programs ground to theories of the same shape and the same family.
@@ -179,11 +178,7 @@ fn every_interpretation_of_a_small_asked_program_matches_clingo() {
     let source = "letter(a;b). digit(0..1). 1 { assign(L,D) : digit(D) } 1 :- letter(L). \
         :- assign(a,X), assign(b,Y), X != Y.";
     let admitted = admitted(source);
-    assert_eq!(
-        source_records::exhaustive(&admitted),
-        source_oracle::records(source),
-        "{source}"
-    );
+    assert_eq!(exhaustive(&admitted), oracle::records(source), "{source}");
 }
 
 #[test]
@@ -199,9 +194,9 @@ fn a_constraint_with_an_anonymous_key_matches_clingo_as_written() {
         assert_eq!(admitted(&source).keyed_constraints(), 0, "{source}");
         let family: BTreeSet<_> = stable(&admitted(&source))
             .into_iter()
-            .map(|atoms| (atoms.iter().map(source_records::canonical).collect(), None))
+            .map(|atoms| (atoms.iter().map(canonical).collect(), None))
             .collect();
-        assert_eq!(family, source_oracle::records(&source), "{source}");
+        assert_eq!(family, oracle::records(&source), "{source}");
     }
 }
 
@@ -221,9 +216,9 @@ fn asked_constraints_match_clingo() {
         assert_eq!(admitted(&source).keyed_constraints(), 1, "{source}");
         let family: BTreeSet<_> = stable(&admitted(&source))
             .into_iter()
-            .map(|atoms| (atoms.iter().map(source_records::canonical).collect(), None))
+            .map(|atoms| (atoms.iter().map(canonical).collect(), None))
             .collect();
-        assert_eq!(family, source_oracle::records(&source), "{source}");
+        assert_eq!(family, oracle::records(&source), "{source}");
     }
 }
 
@@ -269,7 +264,7 @@ fn a_stopped_key_analysis_leaves_every_constraint_written_and_is_reported() {
     // to the term work: against no step at all the receipt differs by three.
     let written = format!("{CHOICES} :- assign(a,X), assign(b,Y), X != Y + 1.");
     let under = |max_key_work| {
-        source_records::admit(
+        admit(
             &written,
             &FormulaLimits {
                 max_key_work,
@@ -328,7 +323,7 @@ fn a_keyed_column_preserves_checked_overflow() {
         1 { p(Y) : digit(Y) } 1. 1 { q(C) : carry_value(C) } 1. \
         :- p(Y), q(C), 0 != Y + 2*C.";
     for max_key_work in [0, FormulaLimits::default().max_key_work] {
-        let Err(failure) = source_records::admit(
+        let Err(failure) = admit(
             source,
             &FormulaLimits {
                 max_key_work,
@@ -358,7 +353,7 @@ fn a_keyed_column_keeps_nonnumeric_comparisons_defined() {
     // A symbol differs from every numeric sum; no arithmetic operation is
     // applied to the symbol in the source.
     for max_key_work in [0, FormulaLimits::default().max_key_work] {
-        let input = source_records::admit(
+        let input = admit(
             source,
             &FormulaLimits {
                 max_key_work,
@@ -374,7 +369,7 @@ fn a_keyed_column_keeps_nonnumeric_comparisons_defined() {
 fn a_keyed_comparison_keeps_its_excluded_substitutions_unreached() {
     let source = "val(1). 1 { p(Y) : val(Y) } 1. d(0). \
         :- d(X), p(Y), Y != 1, 1/X=1.";
-    let written = source_records::admit(
+    let written = admit(
         source,
         &FormulaLimits {
             max_key_work: 0,
@@ -383,7 +378,7 @@ fn a_keyed_comparison_keeps_its_excluded_substitutions_unreached() {
     )
     .unwrap();
     assert_eq!(
-        source_records::exhaustive(&written),
+        exhaustive(&written),
         BTreeSet::from([(["val(1)", "p(1)", "d(0)"].map(str::to_owned).into(), None,)]),
     );
     assert_eq!(stable(&admitted(source)), stable(&written));
@@ -391,7 +386,7 @@ fn a_keyed_comparison_keeps_its_excluded_substitutions_unreached() {
 
 fn same_evaluation_failure(source: &str, expected: &EvaluationError) {
     for max_key_work in [0, FormulaLimits::default().max_key_work] {
-        let Err(failure) = source_records::admit(
+        let Err(failure) = admit(
             source,
             &FormulaLimits {
                 max_key_work,
@@ -448,7 +443,7 @@ fn a_safe_column_at_the_integer_boundary_is_asked() {
     let source = "digit(1). carry_value(1073741823). \
         1 { p(Y) : digit(Y) } 1. 1 { q(C) : carry_value(C) } 1. \
         :- p(Y), q(C), 2147483647 != Y + 2*C.";
-    let written = source_records::admit(
+    let written = admit(
         source,
         &FormulaLimits {
             max_key_work: 0,
@@ -466,7 +461,7 @@ fn a_safe_column_at_the_integer_boundary_is_asked() {
 fn independently_safe_arithmetic_guards_allow_asking() {
     let source = "value(0;1). input(1;2). 1 { p(Y) : value(Y) } 1. \
         :- p(Y), input(X), Y != 1, 1/X=1.";
-    let written = source_records::admit(
+    let written = admit(
         source,
         &FormulaLimits {
             max_key_work: 0,
@@ -483,7 +478,7 @@ fn independently_safe_arithmetic_guards_allow_asking() {
 fn an_arithmetic_bound_from_a_comparison_is_not_assumed() {
     let source = "value(0;1). input(0;1). 1 { p(Y) : value(Y) } 1. \
         :- p(Y), input(X), X>0, Y != 1, 1/X=1.";
-    let written = source_records::admit(
+    let written = admit(
         source,
         &FormulaLimits {
             max_key_work: 0,

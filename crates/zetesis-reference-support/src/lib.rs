@@ -1,30 +1,30 @@
-//! Complete native model and objective records for bounded source campaigns.
-use std::collections::BTreeSet;
+//! The native reference the zetesis workspace's tests compare with clingo:
+//! every answer set of a small program, found by checking each candidate
+//! against the reduct.
+//!
+//! [`admit`] admits a source under the default options, and [`exhaustive`]
+//! enumerates every subset of its atoms, keeping those the reduct check
+//! (`zetesis_ferraris::check`) accepts, each with its objective's costs; atoms
+//! are spelled as clingo spells them ([`canonical`]). The crate stands above
+//! `zetesis-themelios`, so only the tests that compare a native enumeration
+//! compile it. It is not published or installed.
 
-use serde_json::Value as Json;
 use zetesis_core::{Model, Sign};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
+use zetesis_test_support::records::Records;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
     admit_formula,
 };
 
-pub type Records = BTreeSet<(BTreeSet<String>, Option<Vec<i64>>)>;
-pub(crate) fn atoms(values: &Json) -> BTreeSet<String> {
-    values
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|atom| atom.as_str().unwrap().into())
-        .collect()
-}
-pub(crate) fn costs(values: &Json) -> Option<Vec<i64>> {
-    values
-        .as_array()
-        .map(|values| values.iter().map(|v| v.as_i64().unwrap()).collect())
-}
-pub(crate) fn canonical<'a>(atom: impl Into<zetesis_core::catalog::AtomRef<'a>>) -> String {
+/// An atom as clingo spells it: a leading `-` for strong negation, and
+/// arguments in clingo's notation, strings quoted.
+///
+/// # Panics
+/// Panics if a string argument cannot be quoted as JSON, which never happens.
+#[must_use]
+pub fn canonical<'a>(atom: impl Into<zetesis_core::catalog::AtomRef<'a>>) -> String {
     let atom = atom.into();
     let sign = if atom.predicate().sign() == Sign::Negative {
         "-"
@@ -51,6 +51,12 @@ pub(crate) fn canonical<'a>(atom: impl Into<zetesis_core::catalog::AtomRef<'a>>)
         format!("{name}({})", arguments.join(","))
     }
 }
+
+/// `source` admitted as a formula program under the default options and
+/// expansion limits, and `limits`.
+///
+/// # Errors
+/// Returns the admission's refusal.
 pub fn admit(source: &str, limits: &FormulaLimits) -> Result<AdmittedFormula, FormulaFailure> {
     admit_formula(
         source.into(),
@@ -59,6 +65,14 @@ pub fn admit(source: &str, limits: &FormulaLimits) -> Result<AdmittedFormula, Fo
         *limits,
     )
 }
+
+/// Every answer set of `input`, each with its objective's costs: every subset
+/// of its atoms the reduct check accepts.
+///
+/// # Panics
+/// Panics if `input` has more than twelve atoms, since the enumeration visits
+/// every subset, or if a candidate's check or evaluation is refused.
+#[must_use]
 pub fn exhaustive(input: &AdmittedFormula) -> Records {
     let count = input.atoms().len();
     assert!(count <= 12, "small independent subset enumeration");
@@ -96,4 +110,27 @@ pub fn exhaustive(input: &AdmittedFormula) -> Records {
         assert!(records.insert((atoms.iter().copied().map(canonical).collect(), costs)));
     }
     records
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_choice_has_the_empty_and_the_full_answer_set() {
+        let admitted = admit("{a}.", &FormulaLimits::default()).unwrap();
+        let expected: Records = [([].into(), None), (["a".to_owned()].into(), None)].into();
+        assert_eq!(exhaustive(&admitted), expected);
+    }
+
+    #[test]
+    fn an_objective_gives_every_answer_set_its_costs() {
+        let admitted = admit("{a}. #minimize{1:a}.", &FormulaLimits::default()).unwrap();
+        let expected: Records = [
+            ([].into(), Some(vec![0])),
+            (["a".to_owned()].into(), Some(vec![1])),
+        ]
+        .into();
+        assert_eq!(exhaustive(&admitted), expected);
+    }
 }

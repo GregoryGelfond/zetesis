@@ -9,3 +9,4 @@ pub mod document;
 pub mod fixtures;
 pub mod io;
 pub mod programs;
+pub mod records;

@@ -2,10 +2,10 @@
 
 use crate::support::priority_contracts;
 use crate::support::source_cases;
-use crate::support::source_oracle;
-use crate::support::source_records;
 
 use serde_json::Value as Json;
+use zetesis_clingo_support as oracle;
+use zetesis_reference_support as reference;
 use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
 const BOUNDARIES: &str = include_str!("../fixtures/objective-language-boundaries.jsonl");
@@ -24,14 +24,13 @@ fn boundaries() -> Vec<Json> {
 #[test]
 fn cyclic_objectives_keep_the_original_reduct_subject() {
     for case in boundaries() {
-        let original = source_records::admit(
+        let original = reference::admit(
             case["original_source"].as_str().unwrap(),
             &FormulaLimits::default(),
         )
         .unwrap();
         let observed =
-            source_records::admit(case["source"].as_str().unwrap(), &FormulaLimits::default())
-                .unwrap();
+            reference::admit(case["source"].as_str().unwrap(), &FormulaLimits::default()).unwrap();
         assert_eq!(original.atoms(), observed.atoms(), "{}", case["name"]);
         assert_eq!(
             original.theory().nodes(),
@@ -68,8 +67,8 @@ fn rich_cycles_match_fresh_clingo() {
         let recorded: Json =
             serde_json::from_str(case["reference_stdout"].as_str().unwrap()).unwrap();
         assert_eq!(
-            source_oracle::records(case["source"].as_str().unwrap()),
-            source_oracle::model_records(&recorded),
+            oracle::records(case["source"].as_str().unwrap()),
+            oracle::model_records(&recorded),
             "{}",
             case["name"]
         );
@@ -79,9 +78,8 @@ fn rich_cycles_match_fresh_clingo() {
 #[test]
 fn cyclic_completion_limits_are_inclusive() {
     let source = "{n(1)}.n(N):-N=#count{1:n(1)}.#minimize{N@N:n(N)}.";
-    let expected = source_records::exhaustive(
-        &source_records::admit(source, &FormulaLimits::default()).unwrap(),
-    );
+    let expected =
+        reference::exhaustive(&reference::admit(source, &FormulaLimits::default()).unwrap());
     for resource in [
         FormulaResource::SupportRounds,
         FormulaResource::AssignmentValues,
@@ -103,7 +101,7 @@ fn cyclic_completion_limits_are_inclusive() {
                 FormulaResource::Work => limits.max_work = maximum,
                 _ => unreachable!("selected completion resources"),
             }
-            source_records::admit(source, &limits)
+            reference::admit(source, &limits)
         };
         let (mut lower, mut upper) = (0, 65_536);
         assert!(attempt(upper).is_ok());
@@ -125,10 +123,7 @@ fn cyclic_completion_limits_are_inclusive() {
                 Err(error) => panic!("{resource:?}: unexpected refusal {error}"),
             }
         }
-        assert_eq!(
-            source_records::exhaustive(&attempt(upper).unwrap()),
-            expected
-        );
+        assert_eq!(reference::exhaustive(&attempt(upper).unwrap()), expected);
         let error = attempt(upper - 1).unwrap_err();
         assert!(
             matches!(error,
@@ -149,7 +144,7 @@ fn growing_value_feedback_never_yields_a_program() {
             max_support_rounds: maximum,
             ..FormulaLimits::default()
         };
-        let error = source_records::admit(source, &limits).unwrap_err();
+        let error = reference::admit(source, &limits).unwrap_err();
         assert!(
             matches!(error,
             FormulaFailure::Limit { resource: FormulaResource::SupportRounds, limit, observed, .. }
@@ -171,24 +166,24 @@ fn recursive_mixed_arithmetic_retains_the_complete_empty_family() {
             &[0][..],
         ),
     ] {
-        let input = source_records::admit(source, &FormulaLimits::default()).unwrap();
+        let input = reference::admit(source, &FormulaLimits::default()).unwrap();
         assert_eq!(input.warnings().len(), 1, "{source}");
         assert_eq!(input.objectives().priorities(), priorities, "{source}");
         assert!(
             input
                 .atoms()
                 .iter()
-                .any(|atom| source_records::canonical(atom) == "r(1)")
+                .any(|atom| reference::canonical(atom) == "r(1)")
         );
         // n(0) holds exactly when p does not, while p requires n(0):
         // there is no stable model, including after the undefined r row is omitted.
-        assert!(source_records::exhaustive(&input).is_empty(), "{source}");
+        assert!(reference::exhaustive(&input).is_empty(), "{source}");
         let guarded = source.replace("V=1/N", "N!=0,V=1/N");
-        let guarded = source_records::admit(&guarded, &FormulaLimits::default()).unwrap();
+        let guarded = reference::admit(&guarded, &FormulaLimits::default()).unwrap();
         assert!(guarded.warnings().is_empty());
         assert_eq!(
-            source_records::exhaustive(&input),
-            source_records::exhaustive(&guarded)
+            reference::exhaustive(&input),
+            reference::exhaustive(&guarded)
         );
     }
 }
@@ -211,8 +206,8 @@ fn source_order_preserves_cyclic_objective_families() {
         ),
     ] {
         let expected = &cases.iter().find(|case| case.name == name).unwrap().records;
-        let input = source_records::admit(source, &FormulaLimits::default()).unwrap();
-        assert_eq!(&source_records::exhaustive(&input), expected, "{name}");
+        let input = reference::admit(source, &FormulaLimits::default()).unwrap();
+        assert_eq!(&reference::exhaustive(&input), expected, "{name}");
     }
 }
 
@@ -222,7 +217,7 @@ fn rich_cycles_preserve_independent_carrier_precision() {
         "n(N):-N=#max{1;word}.p(N):-n(N),N=1.r:-#count{1:r}>=0.#minimize{N:n(N);1@3:p(N);2@5:r}.",
         "#minimize{2@5:r;1@3:p(N);N:n(N)}.r:-#count{1:r}>=0.p(N):-n(N),N=1.n(N):-N=#max{word;1}.",
     ] {
-        let input = source_records::admit(source, &FormulaLimits::default()).unwrap();
+        let input = reference::admit(source, &FormulaLimits::default()).unwrap();
         // The shared source fold proves p(1) absent: the required symbolic
         // maximum prevents n(1). Its redundant priority 3 is not published;
         // the independent required cyclic producer still contributes at 5.
@@ -232,13 +227,8 @@ fn rich_cycles_preserve_independent_carrier_precision() {
             .as_array()
             .unwrap()
             .iter()
-            .map(|row| {
-                (
-                    source_records::atoms(&row[0]),
-                    source_records::costs(&row[1]),
-                )
-            })
+            .map(|row| (oracle::atoms(&row[0]), oracle::costs(&row[1])))
             .collect();
-        assert_eq!(source_records::exhaustive(&input), expected);
+        assert_eq!(reference::exhaustive(&input), expected);
     }
 }

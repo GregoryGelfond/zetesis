@@ -5,12 +5,7 @@
 //! interpretations. Its ordinary optN replay rule also applies to the scored
 //! fixture; no alternative report parser or representative-selection rule is used.
 
-use std::{
-    collections::BTreeSet,
-    num::NonZeroUsize,
-    path::{Path, PathBuf},
-    time::Duration,
-};
+use std::{collections::BTreeSet, num::NonZeroUsize, path::Path, time::Duration};
 
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
@@ -186,19 +181,6 @@ fn records(report: &answers::ReportedAnswers) -> Family {
     }
     assert_eq!(usize::try_from(report.model_count()).unwrap(), result.len());
     result
-}
-
-fn clingo() -> PathBuf {
-    std::env::var_os("CLINGO")
-        .map(PathBuf::from)
-        .or_else(|| {
-            std::env::split_paths(&std::env::var_os("PATH")?)
-                .map(|directory| directory.join("clingo"))
-                .find(|path| path.is_file())
-        })
-        .expect("independently installed clingo")
-        .canonicalize()
-        .unwrap()
 }
 
 fn reference(case: &Case, executable: &Path, projected: bool) -> answers::ReportedAnswers {
@@ -386,7 +368,7 @@ fn check_native(case: &Case, selected: &Family, expected: &Family) {
 #[test]
 #[ignore = "requires independently installed clingo 5.8.2"]
 fn projected_classes_match_complete_reference_families() {
-    let executable = clingo();
+    let executable = zetesis_clingo_support::executable();
     for case in CASES {
         check(case, &executable);
     }

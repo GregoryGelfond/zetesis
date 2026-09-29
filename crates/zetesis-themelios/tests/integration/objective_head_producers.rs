@@ -1,20 +1,21 @@
 //! Aggregate-head permission is independent of the bound's contribution.
 
 use crate::support::source_cases;
-use crate::support::source_records;
 
+use zetesis_reference_support as reference;
+use zetesis_test_support::records::Records;
 use zetesis_themelios::FormulaLimits;
 
 #[test]
 fn every_positive_head_supplies_objective_eligibility() {
     for case in source_cases::cases(include_str!("../fixtures/objective-head-producers.jsonl")) {
         let program = &case.source;
-        let original = source_records::admit(program, &FormulaLimits::default()).unwrap();
+        let original = reference::admit(program, &FormulaLimits::default()).unwrap();
         for (condition, enabled) in [("a", true), ("not a", false)] {
             let source = format!("{program}#minimize{{1@0:{condition}}}.");
-            let observed = source_records::admit(&source, &FormulaLimits::default()).unwrap();
+            let observed = reference::admit(&source, &FormulaLimits::default()).unwrap();
             assert_eq!(observed.objectives().priorities(), &[0]);
-            let expected: source_records::Records = case
+            let expected: Records = case
                 .records
                 .iter()
                 .map(|(model, _)| {
@@ -23,7 +24,7 @@ fn every_positive_head_supplies_objective_eligibility() {
                 })
                 .collect();
             assert_eq!(
-                source_records::exhaustive(&observed),
+                reference::exhaustive(&observed),
                 expected,
                 "{}: {condition}",
                 case.name

@@ -1,11 +1,11 @@
 //! Extremal symbols remain typed closed values across source consumers.
 
-use crate::support::source_oracle;
-use crate::support::source_records;
-
-use source_records::{Records, canonical, exhaustive};
+use zetesis_clingo_support as oracle;
 use zetesis_core::{Term, Value};
 use zetesis_cpu::{Cancellation, CandidateLimits, CandidateTermination, Candidates, Limits, check};
+use zetesis_reference_support as reference;
+use zetesis_reference_support::{canonical, exhaustive};
+use zetesis_test_support::records::Records;
 use zetesis_themelios::{AdmissionOptions, FormulaLimits, admit};
 
 #[test]
@@ -120,7 +120,7 @@ fn ordinary_extremal_sources_preserve_complete_models() {
 #[test]
 fn formula_extremal_sources_preserve_complete_models() {
     for &(source, wanted) in ORDINARY.iter().chain(FORMULA) {
-        let input = source_records::admit(source, &FormulaLimits::default()).unwrap();
+        let input = reference::admit(source, &FormulaLimits::default()).unwrap();
         assert_eq!(exhaustive(&input), expected(wanted), "{source}");
         assert_eq!(input.source().text(), source);
     }
@@ -138,12 +138,12 @@ const OBJECTIVES: &[&str] = &[
 
 #[test]
 fn extremal_objective_fields_supply_no_numeric_contribution() {
-    let ordinary = source_records::admit(OBJECTIVE_BASE, &FormulaLimits::default()).unwrap();
+    let ordinary = reference::admit(OBJECTIVE_BASE, &FormulaLimits::default()).unwrap();
     let wanted = expected(&[&[], &["p(#inf)"], &["p(#sup)"], &["p(#inf)", "p(#sup)"]]);
     assert_eq!(exhaustive(&ordinary), wanted);
     for objective in OBJECTIVES {
         let source = format!("{OBJECTIVE_BASE}{objective}");
-        let input = source_records::admit(&source, &FormulaLimits::default()).unwrap();
+        let input = reference::admit(&source, &FormulaLimits::default()).unwrap();
         assert!(!input.objectives().is_present(), "{source}");
         assert_eq!(input.atoms(), ordinary.atoms(), "{source}");
         assert_eq!(
@@ -180,11 +180,11 @@ fn extremal_values_keep_their_term_order() {
 #[ignore = "requires independent clingo 5.8.2; complete extremal-value families"]
 fn extremal_sources_match_clingo() {
     for &(source, wanted) in ORDINARY.iter().chain(FORMULA) {
-        assert_eq!(source_oracle::records(source), expected(wanted), "{source}");
+        assert_eq!(oracle::records(source), expected(wanted), "{source}");
     }
     let wanted = expected(&[&[], &["p(#inf)"], &["p(#sup)"], &["p(#inf)", "p(#sup)"]]);
     for objective in OBJECTIVES {
         let source = format!("{OBJECTIVE_BASE}{objective}");
-        assert_eq!(source_oracle::records(&source), wanted, "{source}");
+        assert_eq!(oracle::records(&source), wanted, "{source}");
     }
 }

@@ -1,10 +1,9 @@
 //! Invariant aggregate values discharge generated priority obligations.
 
 use crate::support::source_cases;
-use crate::support::source_oracle;
-use crate::support::source_records;
 
-use source_records::{admit, exhaustive};
+use zetesis_clingo_support as oracle;
+use zetesis_reference_support::{admit, exhaustive};
 use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
 const CASES: &str = r#"{"name":"mandatory_count","source":"a.n(N):-N=#count{1:a}.#minimize{1@N:n(N)}.","priorities":[1],"records":[[["a","n(1)"],[1]]]}
@@ -112,11 +111,6 @@ fn original_sources_match_complete_clingo_records() {
         .into_iter()
         .chain(source_cases::cases(CHANGING_ORDER.trim()))
     {
-        assert_eq!(
-            source_oracle::records(&case.source),
-            case.records,
-            "{}",
-            case.name
-        );
+        assert_eq!(oracle::records(&case.source), case.records, "{}", case.name);
     }
 }

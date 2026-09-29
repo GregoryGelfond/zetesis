@@ -14,13 +14,13 @@ use zetesis_cli::{
     Backend, Completion, Interruption, Options, Oracle, PreparedInput, SearchMethod, Session,
     SolveConfig, run_with_diagnostics,
 };
+use zetesis_clingo_support as oracle;
 use zetesis_core::{Atom, Predicate, Value, ValueLimits};
 use zetesis_cpu::Cancellation;
+use zetesis_reference_support::{admit, canonical, exhaustive};
 use zetesis_sat::Incomplete;
+use zetesis_test_support::records::Records;
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
-
-use crate::support::source_oracle;
-use crate::support::source_records;
 
 type Record = (BTreeSet<Atom>, Option<Vec<(i32, i64)>>);
 
@@ -28,12 +28,8 @@ type Record = (BTreeSet<Atom>, Option<Vec<(i32, i64)>>);
 #[ignore = "requires an independently installed clingo executable"]
 fn projected_conditionals_match_original_source_records() {
     for source in projected_conditional_sources::SOURCES {
-        let admitted = source_records::admit(source, &FormulaLimits::default()).unwrap();
-        assert_eq!(
-            source_records::exhaustive(&admitted),
-            source_oracle::records(source),
-            "{source}"
-        );
+        let admitted = admit(source, &FormulaLimits::default()).unwrap();
+        assert_eq!(exhaustive(&admitted), oracle::records(source), "{source}");
     }
 }
 
@@ -46,12 +42,8 @@ enum Observer {
 #[ignore = "requires an independently installed clingo executable"]
 fn logical_extrema_match_original_source_records() {
     for source in logical_extremum_sources::SOURCES {
-        let admitted = source_records::admit(source, &FormulaLimits::default()).unwrap();
-        assert_eq!(
-            source_records::exhaustive(&admitted),
-            source_oracle::records(source),
-            "{source}"
-        );
+        let admitted = admit(source, &FormulaLimits::default()).unwrap();
+        assert_eq!(exhaustive(&admitted), oracle::records(source), "{source}");
     }
 }
 
@@ -301,7 +293,7 @@ fn stopped_composition_preserves_objective_presence() {
     // Each pair contrasts absent objectives with a retained numeric-zero
     // priority, first for literals and then for proved extremum exclusions.
     for index in [0, 2, 8, 9] {
-        let input = source_records::admit(
+        let input = admit(
             language_value_sources::SOURCES[index],
             &FormulaLimits::default(),
         )
@@ -376,13 +368,13 @@ fn stopped_composition_preserves_objective_presence() {
 #[ignore = "requires an independently installed clingo executable"]
 fn original_sources_match_complete_reference_records() {
     for (source, expected) in language_value_sources::SOURCES.into_iter().zip(&EXPECTED) {
-        let reference = source_oracle::records(source);
-        let input = source_records::admit(source, &FormulaLimits::default()).unwrap();
-        assert_eq!(source_records::exhaustive(&input), reference, "{source}");
+        let reference = oracle::records(source);
+        let input = admit(source, &FormulaLimits::default()).unwrap();
+        assert_eq!(exhaustive(&input), reference, "{source}");
         // The external campaign enumerates every model and score. Lexicographic
         // minimum selects all optimum ties; absent scores retain every model.
         let minimum = reference.iter().map(|(_, costs)| costs).min();
-        let selected: source_records::Records = reference
+        let selected: Records = reference
             .iter()
             .filter(|(_, costs)| Some(costs) == minimum)
             .cloned()
@@ -391,7 +383,7 @@ fn original_sources_match_complete_reference_records() {
             .into_iter()
             .map(|(atoms, costs)| {
                 (
-                    atoms.iter().map(source_records::canonical).collect(),
+                    atoms.iter().map(canonical).collect(),
                     costs.map(|values| values.into_iter().map(|(_, value)| value).collect()),
                 )
             })

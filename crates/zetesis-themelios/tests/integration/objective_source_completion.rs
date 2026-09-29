@@ -1,9 +1,9 @@
 //! Source grounding eligibility remains separate from complete-model truth.
 
 use crate::support::source_cases;
-use crate::support::source_oracle;
-use crate::support::source_records;
 
+use zetesis_clingo_support as oracle;
+use zetesis_reference_support as reference;
 use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
 const CASES: &str = include_str!("../fixtures/objective-source-completion.jsonl");
@@ -14,14 +14,9 @@ fn source_eligibility_preserves_full_scored_answers() {
     assert_eq!(cases.len(), 36);
     for (case, row) in cases.into_iter().zip(CASES.lines()) {
         let expected: serde_json::Value = serde_json::from_str(row).unwrap();
-        let input = source_records::admit(&case.source, &FormulaLimits::default())
+        let input = reference::admit(&case.source, &FormulaLimits::default())
             .unwrap_or_else(|error| panic!("{}: {error}", case.name));
-        assert_eq!(
-            source_records::exhaustive(&input),
-            case.records,
-            "{}",
-            case.name
-        );
+        assert_eq!(reference::exhaustive(&input), case.records, "{}", case.name);
         assert_eq!(
             serde_json::to_value(input.objectives().priorities()).unwrap(),
             expected["priorities"],
@@ -45,8 +40,8 @@ fn source_eligibility_keeps_the_original_reduct_subject() {
             .split(":~")
             .next()
             .unwrap();
-        let original = source_records::admit(program, &FormulaLimits::default()).unwrap();
-        let observed = source_records::admit(&case.source, &FormulaLimits::default()).unwrap();
+        let original = reference::admit(program, &FormulaLimits::default()).unwrap();
+        let observed = reference::admit(&case.source, &FormulaLimits::default()).unwrap();
         assert_eq!(original.atoms(), observed.atoms(), "{}", case.name);
         assert_eq!(
             original.theory().nodes(),
@@ -78,9 +73,8 @@ fn source_eligibility_limits_are_inclusive() {
         "d(1;2).{q(1);q(2)}.p:-q(X):d(X).#minimize{1:not p}.",
         "d(1;2).{p(1);p(2)}.n(K,N):-d(K),N=#count{X:p(X),X=K}.#minimize{N@K:n(K,N),not not n(K,N)}.",
     ] {
-        let expected = source_records::exhaustive(
-            &source_records::admit(source, &FormulaLimits::default()).unwrap(),
-        );
+        let expected =
+            reference::exhaustive(&reference::admit(source, &FormulaLimits::default()).unwrap());
         for resource in [
             FormulaResource::Work,
             FormulaResource::Substitutions,
@@ -96,7 +90,7 @@ fn source_eligibility_limits_are_inclusive() {
                     }
                     _ => unreachable!("selected source resources"),
                 }
-                source_records::admit(source, &limits)
+                reference::admit(source, &limits)
             };
             let (mut lower, mut upper) = (0, 65_536);
             assert!(attempt(upper).is_ok());
@@ -108,19 +102,13 @@ fn source_eligibility_limits_are_inclusive() {
                     lower = middle;
                 }
             }
-            assert_eq!(
-                source_records::exhaustive(&attempt(upper).unwrap()),
-                expected
-            );
+            assert_eq!(reference::exhaustive(&attempt(upper).unwrap()), expected);
             let failure = attempt(upper - 1).unwrap_err();
             assert!(
                 matches!(failure, FormulaFailure::Limit { resource: actual, observed, limit, .. } if actual == resource && observed == u128::from(upper) && limit == u128::from(upper - 1))
             );
             assert!(!failure.diagnostics().is_empty());
-            assert_eq!(
-                source_records::exhaustive(&attempt(upper).unwrap()),
-                expected
-            );
+            assert_eq!(reference::exhaustive(&attempt(upper).unwrap()), expected);
         }
     }
 }
@@ -129,12 +117,7 @@ fn source_eligibility_limits_are_inclusive() {
 #[ignore = "requires independent clingo for 36 original source-eligibility cases"]
 fn source_eligibility_matches_fresh_clingo() {
     for case in source_cases::cases(CASES) {
-        assert_eq!(
-            source_oracle::records(&case.source),
-            case.records,
-            "{}",
-            case.name
-        );
+        assert_eq!(oracle::records(&case.source), case.records, "{}", case.name);
     }
 }
 
@@ -146,7 +129,7 @@ fn producer_activity_does_not_consume_query_capacity() {
     ] {
         let mut limits = FormulaLimits::default();
         limits.objective.max_condition_nodes = 5;
-        let input = source_records::admit(source, &limits).unwrap();
+        let input = reference::admit(source, &limits).unwrap();
         assert_eq!(input.objectives().templates().len(), 1);
         assert_eq!(
             input
@@ -159,13 +142,12 @@ fn producer_activity_does_not_consume_query_capacity() {
                 .len(),
             5
         );
-        let expected = source_records::exhaustive(
-            &source_records::admit(source, &FormulaLimits::default()).unwrap(),
-        );
-        assert_eq!(source_records::exhaustive(&input), expected);
+        let expected =
+            reference::exhaustive(&reference::admit(source, &FormulaLimits::default()).unwrap());
+        assert_eq!(reference::exhaustive(&input), expected);
         limits.objective.max_condition_nodes = 4;
         assert!(matches!(
-            source_records::admit(source, &limits).unwrap_err(),
+            reference::admit(source, &limits).unwrap_err(),
             FormulaFailure::Objective {
                 error: zetesis_objective::AdmissionError::Limit {
                     resource: zetesis_objective::AdmissionResource::ConditionNodes,
@@ -183,10 +165,10 @@ fn producer_activity_does_not_consume_query_capacity() {
 fn absent_rows_retain_no_query_capacity() {
     let mut limits = FormulaLimits::default();
     limits.objective.max_condition_nodes = 0;
-    let input = source_records::admit("a.b.c.p:-a,b,c.#minimize{1:not p}.", &limits).unwrap();
+    let input = reference::admit("a.b.c.p:-a,b,c.#minimize{1:not p}.", &limits).unwrap();
     assert!(input.objectives().templates().is_empty());
     assert!(input.objectives().priorities().is_empty());
-    let records = source_records::exhaustive(&input);
+    let records = reference::exhaustive(&input);
     assert_eq!(records.len(), 1);
     assert_eq!(records.iter().next().unwrap().1, None);
 }
@@ -202,9 +184,9 @@ fn ignored_values_do_not_retain_query_capacity() {
     ] {
         let mut limits = FormulaLimits::default();
         limits.objective.max_condition_nodes = 0;
-        let input = source_records::admit(source, &limits).unwrap();
+        let input = reference::admit(source, &limits).unwrap();
         assert!(input.objectives().templates().is_empty(), "{source}");
-        let records = source_records::exhaustive(&input);
+        let records = reference::exhaustive(&input);
         assert_eq!(records.len(), 2, "{source}");
         assert!(records.iter().all(|(_, costs)| costs.is_none()));
     }
@@ -215,7 +197,7 @@ fn numeric_zero_retains_its_model_query() {
     let mut limits = FormulaLimits::default();
     limits.objective.max_condition_nodes = 5;
     let source = "{a}.#minimize{symbol:not not a;0:not not a;1@symbol:not not a}.";
-    let input = source_records::admit(source, &limits).unwrap();
+    let input = reference::admit(source, &limits).unwrap();
     assert_eq!(input.objectives().templates().len(), 1);
     assert_eq!(
         input
@@ -229,12 +211,12 @@ fn numeric_zero_retains_its_model_query() {
         5
     );
     assert_eq!(input.objectives().priorities(), &[0]);
-    let records = source_records::exhaustive(&input);
+    let records = reference::exhaustive(&input);
     assert_eq!(records.len(), 2);
     assert!(records.iter().all(|(_, costs)| *costs == Some(vec![0])));
     limits.objective.max_condition_nodes = 0;
     assert!(matches!(
-        source_records::admit(source, &limits).unwrap_err(),
+        reference::admit(source, &limits).unwrap_err(),
         FormulaFailure::Objective {
             error: zetesis_objective::AdmissionError::Limit {
                 resource: zetesis_objective::AdmissionResource::ConditionNodes,
@@ -256,7 +238,7 @@ fn source_arithmetic_precedes_query_materialization() {
         limits.objective.max_condition_nodes = 0;
         assert!(
             matches!(
-                source_records::admit(source, &limits).unwrap_err(),
+                reference::admit(source, &limits).unwrap_err(),
                 FormulaFailure::Expansion(zetesis_themelios::ExpansionFailure::Evaluation { .. })
             ),
             "{source}"

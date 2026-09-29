@@ -1,16 +1,16 @@
 //! Closed nonnumeric weights supply neither a numeric key nor a priority slot.
 
 use crate::support::source_cases;
-use crate::support::source_oracle;
-use crate::support::source_records;
 mod sources;
 
-use source_records::{Records, admit, exhaustive};
 use sources::{DIRECTIONS, PROGRAM, WEIGHTS, cases, directive};
 use std::collections::BTreeSet;
+use zetesis_clingo_support as oracle;
 use zetesis_core::{Model, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_objective::{AdmissionError, AdmissionLimits, AdmissionResource};
+use zetesis_reference_support::{admit, exhaustive};
+use zetesis_test_support::records::Records;
 use zetesis_themelios::{
     AdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure,
     FormulaLimits, FormulaResource, admit_formula,
@@ -230,74 +230,6 @@ fn endpoint_filters_preserve_nonnumeric_weight_absence() {
     }
 }
 
-#[derive(Default)]
-struct EndlessOutput {
-    consumed: usize,
-}
-
-impl std::io::Read for EndlessOutput {
-    fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
-        output.fill(b'x');
-        self.consumed += output.len();
-        Ok(output.len())
-    }
-}
-
-#[test]
-fn completed_capture_preserves_exact_combined_output() {
-    for (stdout, stderr) in [("", ""), ("abc", ""), ("", "def"), ("abc", "def")] {
-        let maximum = stdout.len() + stderr.len();
-        let (actual, diagnostics) =
-            source_oracle::read_capture(stdout.as_bytes(), stderr.as_bytes(), maximum).unwrap();
-        assert_eq!(actual, stdout.as_bytes());
-        assert_eq!(diagnostics, stderr.as_bytes());
-    }
-}
-
-#[test]
-fn completed_capture_bounds_stdout_reads() {
-    let mut stdout = EndlessOutput::default();
-    let mut stderr = EndlessOutput::default();
-    let error = source_oracle::read_capture(&mut stdout, &mut stderr, 16).unwrap_err();
-    assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
-    assert_eq!(stdout.consumed, 17);
-    assert_eq!(stderr.consumed, 0);
-}
-
-#[test]
-fn completed_capture_bounds_stderr_reads() {
-    let mut stderr = EndlessOutput::default();
-    let error = source_oracle::read_capture("12345678".as_bytes(), &mut stderr, 16).unwrap_err();
-    assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
-    assert_eq!(stderr.consumed, 9);
-}
-
-#[test]
-fn completed_capture_propagates_read_failures() {
-    struct FailedOutput;
-    impl std::io::Read for FailedOutput {
-        fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
-            Err(std::io::Error::other("capture read failed"))
-        }
-    }
-    let mut stderr = EndlessOutput::default();
-    let error = source_oracle::read_capture(FailedOutput, &mut stderr, 16).unwrap_err();
-    assert_eq!(error.kind(), std::io::ErrorKind::Other);
-    assert_eq!(stderr.consumed, 0);
-    let error = source_oracle::read_capture("retained".as_bytes(), FailedOutput, 16).unwrap_err();
-    assert_eq!(error.kind(), std::io::ErrorKind::Other);
-}
-
-#[test]
-fn completed_capture_refuses_unrepresentable_limits() {
-    let mut stdout = EndlessOutput::default();
-    let mut stderr = EndlessOutput::default();
-    let error = source_oracle::read_capture(&mut stdout, &mut stderr, usize::MAX).unwrap_err();
-    assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
-    assert_eq!(stdout.consumed, 0);
-    assert_eq!(stderr.consumed, 0);
-}
-
 #[test]
 fn literal_admission_limits_are_inclusive() {
     let source = "{a;b}.#minimize{f(1,\"text\")@7,k:a;0@3,k:b}.";
@@ -414,26 +346,26 @@ fn literal_weight_sources_match_fresh_clingo() {
             &exhaustive(&admit(source, &FormulaLimits::default()).unwrap()),
         );
         assert_eq!(
-            source_oracle::records(source),
+            oracle::records(source),
             exhaustive(&admit(source, &FormulaLimits::default()).unwrap())
         );
     }
 }
 
 fn external(name: &str, source: &str, expected: &Records) {
-    let capture = source_oracle::capture(source);
-    let output = source_oracle::output(&capture);
-    let records = source_oracle::model_records(&output);
+    let run = oracle::run(source, &oracle::ENUMERATION, oracle::Limits::default());
+    let output = oracle::json(&run);
+    let records = oracle::model_records(&output);
     assert_eq!(&records, expected, "{name}");
     println!(
         "reference_json: {}",
         serde_json::json!({
             "name": name,
             "source": source,
-            "arguments": ["0", "--outf=2", "--opt-mode=enum", "--warn=none"],
-            "status": capture.status.code().expect("normal oracle exit checked"),
+            "arguments": oracle::ENUMERATION,
+            "status": run.code(),
             "stdout": output,
-            "stderr": std::str::from_utf8(&capture.stderr).expect("UTF-8 oracle diagnostics"),
+            "stderr": std::str::from_utf8(run.stderr()).expect("UTF-8 oracle diagnostics"),
         })
     );
 }

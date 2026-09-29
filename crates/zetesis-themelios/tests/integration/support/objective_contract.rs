@@ -1,8 +1,9 @@
 //! Exact scored-family contracts for a preserved source with appended objectives.
 
-use crate::support::source_records;
-
 use serde_json::Value as Json;
+use zetesis_clingo_support as oracle;
+use zetesis_reference_support as reference;
+use zetesis_test_support::records::Records;
 use zetesis_themelios::FormulaLimits;
 
 pub(crate) fn check(fixture: &str, source: &str) {
@@ -17,25 +18,15 @@ pub(crate) fn check(fixture: &str, source: &str) {
         rows.next().is_none(),
         "duplicate objective contract: {source}"
     );
-    let expected: source_records::Records = row["records"]
+    let expected: Records = row["records"]
         .as_array()
         .unwrap()
         .iter()
-        .map(|record| {
-            (
-                source_records::atoms(&record[0]),
-                source_records::costs(&record[1]),
-            )
-        })
+        .map(|record| (oracle::atoms(&record[0]), oracle::costs(&record[1])))
         .collect();
-    let input = source_records::admit(source, &FormulaLimits::default()).unwrap();
+    let input = reference::admit(source, &FormulaLimits::default()).unwrap();
     assert_eq!(input.source().text(), source);
-    assert_eq!(
-        source_records::exhaustive(&input),
-        expected,
-        "{}",
-        row["name"]
-    );
+    assert_eq!(reference::exhaustive(&input), expected, "{}", row["name"]);
     assert_eq!(
         serde_json::to_value(input.objectives().priorities()).unwrap(),
         row["priorities"]
@@ -47,7 +38,7 @@ pub(crate) fn check(fixture: &str, source: &str) {
         .flatten()
         .min()
         .expect("the preserved source has an appended objective");
-    let original = source_records::admit(&source[..objective], &FormulaLimits::default()).unwrap();
+    let original = reference::admit(&source[..objective], &FormulaLimits::default()).unwrap();
     assert_eq!(input.atoms(), original.atoms());
     assert_eq!(input.theory().nodes(), original.theory().nodes());
     assert_eq!(input.theory().roots(), original.theory().roots());

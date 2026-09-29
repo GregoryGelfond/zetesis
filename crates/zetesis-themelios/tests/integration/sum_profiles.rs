@@ -1,10 +1,9 @@
 //! Positive sums and ignored tuple contributions retain original reduct semantics.
 use crate::support::source_cases;
-use crate::support::source_oracle;
-use crate::support::source_records;
 
-use source_oracle::records as clingo;
-use source_records::{admit, exhaustive};
+use oracle::records as clingo;
+use zetesis_clingo_support as oracle;
+use zetesis_reference_support::{admit, exhaustive};
 use zetesis_themelios::FormulaLimits;
 
 fn cases() -> Vec<source_cases::Case> {

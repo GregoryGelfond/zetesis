@@ -1816,11 +1816,13 @@ dependencies = [
  "tempfile",
  "zetesis-backend",
  "zetesis-bench",
+ "zetesis-clingo-support",
  "zetesis-core",
  "zetesis-cpu",
  "zetesis-ferraris",
  "zetesis-objective",
  "zetesis-presentation",
+ "zetesis-reference-support",
  "zetesis-sat",
  "zetesis-solve",
  "zetesis-telemetry",
@@ -1828,6 +1830,16 @@ dependencies = [
  "zetesis-themelios",
  "zetesis-validation",
  "zetesis-wgpu",
+]
+
+[[package]]
+name = "zetesis-clingo-support"
+version = "0.1.5"
+dependencies = [
+ "serde_json",
+ "tempfile",
+ "zetesis-test-support",
+ "zetesis-validation",
 ]
 
 [[package]]
@@ -1904,6 +1916,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "zetesis-reference-support"
+version = "0.1.5"
+dependencies = [
+ "serde_json",
+ "zetesis-core",
+ "zetesis-cpu",
+ "zetesis-ferraris",
+ "zetesis-objective",
+ "zetesis-test-support",
+ "zetesis-themelios",
+]
+
+[[package]]
 name = "zetesis-sat"
 version = "0.1.5"
 dependencies = [
@@ -1921,6 +1946,7 @@ version = "0.1.5"
 dependencies = [
  "rayon",
  "zetesis-backend",
+ "zetesis-clingo-support",
  "zetesis-core",
  "zetesis-cpu",
  "zetesis-ferraris",
@@ -1956,11 +1982,13 @@ dependencies = [
  "themelios-base",
  "themelios-program",
  "themelios-syntax",
+ "zetesis-clingo-support",
  "zetesis-core",
  "zetesis-cpu",
  "zetesis-domain",
  "zetesis-ferraris",
  "zetesis-objective",
+ "zetesis-reference-support",
  "zetesis-sat",
  "zetesis-test-support",
  "zetesis-validation",

@@ -1,20 +1,18 @@
 //! Complete source families, raw priority reports and aligned objective orders.
-use super::{source_cases, source_oracle, source_records};
+use super::source_cases;
 use serde_json::Value as Json;
 use std::collections::{BTreeMap, BTreeSet};
+use zetesis_clingo_support as oracle;
+use zetesis_reference_support::{admit, exhaustive};
+use zetesis_test_support::records::Records;
 use zetesis_themelios::FormulaLimits;
 
-fn reference(row: &Json) -> source_records::Records {
+fn reference(row: &Json) -> Records {
     row["reference_records"]
         .as_array()
         .unwrap()
         .iter()
-        .map(|record| {
-            (
-                source_records::atoms(&record[0]),
-                source_records::costs(&record[1]),
-            )
-        })
+        .map(|record| (oracle::atoms(&record[0]), oracle::costs(&record[1])))
         .collect()
 }
 
@@ -22,14 +20,9 @@ pub fn check(fixture: &str) {
     let cases = source_cases::cases(fixture);
     for (case, line) in cases.into_iter().zip(fixture.lines()) {
         let row: Json = serde_json::from_str(line).unwrap();
-        let input = source_records::admit(&case.source, &FormulaLimits::default())
+        let input = admit(&case.source, &FormulaLimits::default())
             .unwrap_or_else(|error| panic!("{}: {error}", case.name));
-        assert_eq!(
-            source_records::exhaustive(&input),
-            case.records,
-            "{}",
-            case.name
-        );
+        assert_eq!(exhaustive(&input), case.records, "{}", case.name);
         assert_eq!(
             serde_json::to_value(input.objectives().priorities()).unwrap(),
             row["priorities"]
@@ -108,7 +101,7 @@ pub fn fresh(fixture: &str) {
     for line in fixture.lines() {
         let row: Json = serde_json::from_str(line).unwrap();
         assert_eq!(
-            source_oracle::records(row["source"].as_str().unwrap()),
+            oracle::records(row["source"].as_str().unwrap()),
             reference(&row)
         );
     }

@@ -1,9 +1,9 @@
 //! Rich finite producer cones preserve original model truth and objective order.
 
 use crate::support::source_cases;
-use crate::support::source_records;
 
 use crate::support::priority_contracts;
+use zetesis_reference_support as reference;
 
 const CASES: &str = include_str!("../fixtures/objective-rich-producers.jsonl");
 
@@ -24,10 +24,9 @@ fn rich_producers_keep_the_original_reduct_subject() {
     for case in source_cases::cases(CASES) {
         let program = case.source.split("#minimize").next().unwrap();
         let original =
-            source_records::admit(program, &zetesis_themelios::FormulaLimits::default()).unwrap();
+            reference::admit(program, &zetesis_themelios::FormulaLimits::default()).unwrap();
         let observed =
-            source_records::admit(&case.source, &zetesis_themelios::FormulaLimits::default())
-                .unwrap();
+            reference::admit(&case.source, &zetesis_themelios::FormulaLimits::default()).unwrap();
         assert_eq!(original.atoms(), observed.atoms(), "{}", case.name);
         assert_eq!(
             original.theory().nodes(),

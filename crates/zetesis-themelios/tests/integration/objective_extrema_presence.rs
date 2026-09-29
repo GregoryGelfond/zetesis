@@ -1,11 +1,11 @@
 //! Completed priority presence for flat extrema observers.
 
 use crate::support::source_cases;
-use crate::support::source_oracle;
-use crate::support::source_records;
 
 use source_cases::cases;
-use source_records::{admit, exhaustive};
+use zetesis_clingo_support as oracle;
+use zetesis_reference_support as reference;
+use zetesis_reference_support::{admit, exhaustive};
 use zetesis_themelios::{
     AdmissionFailure, ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource,
 };
@@ -53,7 +53,7 @@ fn presence_keeps_the_original_reduct_subject() {
             observed
                 .atoms()
                 .iter()
-                .any(|atom| source_records::canonical(atom) == "n(2)")
+                .any(|atom| reference::canonical(atom) == "n(2)")
         );
     }
 }
@@ -207,18 +207,22 @@ proptest::proptest! {
 #[ignore = "requires independent clingo for complete original records"]
 fn flat_presence_sources_match_fresh_clingo() {
     for case in flat_cases() {
-        let capture = source_oracle::capture(&case.source);
-        let output = source_oracle::output(&capture);
-        let records = source_oracle::model_records(&output);
+        let run = oracle::run(
+            &case.source,
+            &oracle::ENUMERATION,
+            oracle::Limits::default(),
+        );
+        let output = oracle::json(&run);
+        let records = oracle::model_records(&output);
         assert_eq!(records, case.records, "{}", case.name);
         println!(
             "reference_json: {}",
             serde_json::json!({
                 "name":case.name,"source":case.source,"stdout":output,
-                "stderr":std::str::from_utf8(&capture.stderr).expect("UTF-8 oracle diagnostics"),"status":capture.status.code().expect("normal oracle exit checked"),
-                "arguments":["0","--outf=2","--opt-mode=enum","--warn=none"]
+                "stderr":std::str::from_utf8(run.stderr()).expect("UTF-8 oracle diagnostics"),"status":run.code(),
+                "arguments":oracle::ENUMERATION
             })
         );
-        assert_eq!(source_oracle::records(&case.source), case.records);
+        assert_eq!(oracle::records(&case.source), case.records);
     }
 }
